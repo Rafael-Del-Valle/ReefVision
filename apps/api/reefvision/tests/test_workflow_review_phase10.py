@@ -8,13 +8,12 @@ from sqlalchemy import select
 
 from reefvision.db.models import (
     ModelRegistration,
-    WorkflowArtifact,
     WorkflowNodeRun,
     WorkflowRun,
 )
 from reefvision.jobs.workflow import process_workflow_run_job
-from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project
+from reefvision.tests.workflow_review_test_support import seed_review_upstream_artifacts
 
 
 def _review_graph(model_id: str) -> dict[str, object]:
@@ -152,19 +151,14 @@ def _queue_seeded_review_run(client: TestClient) -> tuple[dict[str, object], str
                 select(WorkflowNodeRun).where(WorkflowNodeRun.workflow_run_id == run_id)
             )
         }
-        for node_id in ("project", "images", "model", "detect", "consensus"):
-            nodes[node_id].status = "succeeded"
-        artifact = WorkflowArtifact(
-            workflow_run_id=run_id,
-            producer_node_run_id=nodes["consensus"].id,
-            producer_port_id="consensus",
-            data_type="detection_consensus",
-            payload_json=consensus_payload,
-            payload_sha256=canonical_json_sha256(consensus_payload),
+        seed_review_upstream_artifacts(
+            session,
+            run_id=run_id,
+            nodes=nodes,
+            project_id=str(project["id"]),
+            model_id=model_id,
+            consensus_payload=consensus_payload,
         )
-        session.add(artifact)
-        session.flush()
-        nodes["consensus"].output_artifact_ids_json = [artifact.id]
         session.commit()
 
     return project, run_id, job_id

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -71,6 +72,12 @@ def _set_waiting_for_review(
         details = dict(review.details)
         requested_node_id = str(details.get("node_run_id") or "")
         node_run = session.get(WorkflowNodeRun, requested_node_id) if requested_node_id else None
+        # A review adapter may supply a persisted node ID. Never let a stale
+        # or incorrect ID pause another run or overwrite completed science.
+        if requested_node_id and (
+            node_run is None or node_run.workflow_run_id != run_id or node_run.status != "running"
+        ):
+            raise RuntimeError("Workflow review pause requires an active node in this run")
         if node_run is None:
             node_run = session.scalar(
                 select(WorkflowNodeRun)
@@ -212,6 +219,27 @@ def process_workflow_run_job(
             job.completed_at = _now()
             session.commit()
             return False
+        # A stale queued job must not reopen completed, failed, or cancelled
+        # scientific work. Check terminal state before validating job ownership:
+        # even a corrupted cross-project job must not rewrite frozen science.
+        if run.status in {"succeeded", "failed", "cancelled"}:
+            job.status = "failed"
+            job.error_message = "Workflow run is already terminal; refusing queued job replay"
+            job.completed_at = _now()
+            session.commit()
+            return False
+        # A queued job and its run must remain in the same project. A stale
+        # or corrupted job ownership field must not execute another project's
+        # saved scientific workflow under the wrong job identity.
+        if job.project_id != run.project_id:
+            job.status = "failed"
+            job.error_message = "Workflow job project ownership no longer matches run"
+            job.completed_at = _now()
+            run.status = "failed"
+            run.error_message = job.error_message
+            run.completed_at = job.completed_at
+            session.commit()
+            return False
         graph_record = session.get(WorkflowGraphRecord, run.workflow_graph_record_id)
         if graph_record is None:
             job.status = "failed"
@@ -222,7 +250,20 @@ def process_workflow_run_job(
             run.completed_at = job.completed_at
             session.commit()
             return False
-        graph = WorkflowGraphRequest.model_validate(graph_record.graph_json)
+        # A persisted graph can become malformed after queueing (for example,
+        # through an interrupted migration). Fail the queued job explicitly
+        # instead of leaving it queued after an uncaught Pydantic exception.
+        try:
+            graph = WorkflowGraphRequest.model_validate(graph_record.graph_json)
+        except PydanticValidationError:
+            job.status = "failed"
+            job.error_message = "Saved workflow graph revision is invalid"
+            job.completed_at = _now()
+            run.status = "failed"
+            run.error_message = job.error_message
+            run.completed_at = job.completed_at
+            session.commit()
+            return False
         if canonical_json_sha256(graph.model_dump(mode="json")) != run.graph_sha256:
             job.status = "failed"
             job.error_message = "Workflow graph checksum no longer matches the queued run"
@@ -232,10 +273,36 @@ def process_workflow_run_job(
             run.completed_at = job.completed_at
             session.commit()
             return False
+        # A parseable graph can still lose its saved revision or project lineage
+        # after queueing. Verify the raw stored JSON as well as the pinned run
+        # digest: Pydantic may discard unknown keys during model validation.
+        if (
+            graph_record.project_id != run.project_id
+            or graph_record.graph_key != graph.graph_id
+            or graph_record.schema_version != graph.schema_version
+            or graph_record.graph_sha256 != run.graph_sha256
+            or canonical_json_sha256(graph_record.graph_json) != graph_record.graph_sha256
+        ):
+            job.status = "failed"
+            job.error_message = "Workflow graph provenance checksum failed"
+            job.completed_at = _now()
+            run.status = "failed"
+            run.error_message = job.error_message
+            run.completed_at = job.completed_at
+            session.commit()
+            return False
         plan = WorkflowGraphService(session).plan(run.project_id, graph)
         if not plan.valid:
             job.status = "failed"
-            job.error_message = "Workflow graph no longer validates"
+            first_error = next((issue for issue in plan.issues if issue.severity == "error"), None)
+            job.error_message = (
+                "Workflow graph no longer validates"
+                if first_error is None
+                else (
+                    f"Workflow graph no longer validates ({first_error.code}): "
+                    f"{first_error.message}"
+                )
+            )
             job.completed_at = _now()
             run.status = "failed"
             run.error_message = job.error_message
@@ -430,6 +497,10 @@ def process_workflow_run_job(
                 job.completed_at = now
 
             session.flush()
+            # SQLite can discard timezone information when persisting a UTC
+            # datetime. Reload the stored value before freezing its ISO form,
+            # so a later provenance read hashes the same completed_at value.
+            session.refresh(run, attribute_names=["completed_at"])
 
             provenance = build_workflow_run_provenance(
                 session,

@@ -22,8 +22,8 @@ from reefvision.services.workflow_auto_label import (
     ensure_disagreement_active_learning_round,
     materialize_consensus_annotations,
 )
-from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project, import_one
+from reefvision.tests.workflow_review_test_support import seed_review_upstream_artifacts
 
 
 def _graph(model_id: str) -> dict[str, object]:
@@ -210,29 +210,16 @@ def _seed_valid_consensus_review(
                 select(WorkflowNodeRun).where(WorkflowNodeRun.workflow_run_id == run_id)
             )
         }
-        for node_id in ("project", "images", "model", "detect", "consensus"):
-            nodes[node_id].status = "succeeded"
-        consensus = WorkflowArtifact(
-            workflow_run_id=run_id,
-            producer_node_run_id=nodes["consensus"].id,
-            producer_port_id="consensus",
-            data_type="detection_consensus",
-            payload_json=consensus_payload,
-            payload_sha256=canonical_json_sha256(consensus_payload),
+        consensus_id, disagreement_id = seed_review_upstream_artifacts(
+            session,
+            run_id=run_id,
+            nodes=nodes,
+            project_id=str(project["id"]),
+            model_id=model_id,
+            consensus_payload=consensus_payload,
+            disagreement_payload=disagreement_payload,
         )
-        disagreement = WorkflowArtifact(
-            workflow_run_id=run_id,
-            producer_node_run_id=nodes["consensus"].id,
-            producer_port_id="disagreements",
-            data_type="detection_disagreements",
-            payload_json=disagreement_payload,
-            payload_sha256=canonical_json_sha256(disagreement_payload),
-        )
-        session.add_all([consensus, disagreement])
-        session.flush()
-        nodes["consensus"].output_artifact_ids_json = [consensus.id, disagreement.id]
-        consensus_id = consensus.id
-        disagreement_id = disagreement.id
+        assert disagreement_id is not None
         session.commit()
 
     return project, image_id, class_id, run_id, job_id, consensus_id, disagreement_id

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 from uuid import uuid4
 
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -47,6 +48,13 @@ from reefvision.services.workflow_classification import (
 from reefvision.services.workflow_consensus import build_detection_consensus
 from reefvision.services.workflow_datasets import create_workflow_dataset_version
 from reefvision.services.workflow_graphs import WorkflowGraphService
+from reefvision.services.workflow_provenance import (
+    build_workflow_run_provenance,
+    verify_completed_run_artifact_ownership,
+    verify_succeeded_node_artifacts,
+    verify_workflow_artifact,
+    verify_workflow_run_node_graph_lineage,
+)
 from reefvision.services.workflow_runtime_adapters import (
     RUNTIME_ADAPTER_NODE_TYPES,
     execute_runtime_adapter,
@@ -124,6 +132,16 @@ class WorkflowExecutionService:
                 )
             )
         )
+        # A saved revision is scientific provenance, not just a UI listing.
+        # Reject altered graphs before clients can select or reuse them.
+        for record in records:
+            if (
+                not isinstance(record.graph_json, dict)
+                or record.graph_key != record.graph_json.get("graph_id")
+                or record.schema_version != record.graph_json.get("schema_version")
+                or canonical_json_sha256(record.graph_json) != record.graph_sha256
+            ):
+                raise ConflictError("Workflow graph revision checksum failed")
         return [WorkflowGraphRecordResponse.model_validate(record) for record in records]
 
     def save_graph(
@@ -141,15 +159,28 @@ class WorkflowExecutionService:
 
         graph_json = request.graph.model_dump(mode="json")
         checksum = canonical_json_sha256(graph_json)
-        latest = self.session.scalar(
-            select(WorkflowGraphRecord)
-            .where(
-                WorkflowGraphRecord.project_id == project_id,
-                WorkflowGraphRecord.graph_key == request.graph.graph_id,
+        revisions = list(
+            self.session.scalars(
+                select(WorkflowGraphRecord)
+                .where(
+                    WorkflowGraphRecord.project_id == project_id,
+                    WorkflowGraphRecord.graph_key == request.graph.graph_id,
+                )
+                .order_by(WorkflowGraphRecord.revision.desc())
             )
-            .order_by(WorkflowGraphRecord.revision.desc())
-            .limit(1)
         )
+        # Every predecessor remains part of the scientific audit trail.
+        # Checking only the newest revision would let a valid new save hide
+        # a corrupted older graph still referenced by historical runs.
+        for revision in revisions:
+            if (
+                not isinstance(revision.graph_json, dict)
+                or revision.graph_key != revision.graph_json.get("graph_id")
+                or revision.schema_version != revision.graph_json.get("schema_version")
+                or canonical_json_sha256(revision.graph_json) != revision.graph_sha256
+            ):
+                raise ConflictError("Workflow graph revision checksum failed")
+        latest = revisions[0] if revisions else None
         if latest is not None and latest.graph_sha256 == checksum:
             return WorkflowGraphRecordResponse.model_validate(latest)
 
@@ -180,6 +211,35 @@ class WorkflowExecutionService:
 
     def get_run_detail(self, run_id: str) -> WorkflowRunDetailResponse:
         run = self._run(run_id)
+        # The run-detail API exposes persisted scientific evidence just like
+        # provenance export. Reject malformed JSON instead of returning a 500
+        # from response serialization (or coercing key/value pairs).
+        if run.input_json is not None and not isinstance(run.input_json, dict):
+            raise ConflictError("Workflow run inputs must be a JSON object")
+        if run.result_json is not None and not isinstance(run.result_json, dict):
+            raise ConflictError("Workflow run result must be a JSON object")
+        # Recovery events are scientific audit evidence. The run-detail API
+        # must not expose malformed history that provenance export rejects.
+        result = run.result_json or {}
+        history = result.get("recovery_history", [])
+        if "recovery_history" in result and not isinstance(history, list):
+            raise ConflictError("Workflow recovery history must be a list")
+        if any(not isinstance(entry, dict) for entry in history):
+            raise ConflictError("Workflow recovery history entries must be JSON objects")
+        # Run-detail retrieval must enforce the same saved-graph lineage as
+        # provenance export. Artifact checksums alone cannot establish which
+        # workflow produced a scientific result after its graph is altered.
+        graph = self.session.get(WorkflowGraphRecord, run.workflow_graph_record_id)
+        if (
+            graph is None
+            or graph.project_id != run.project_id
+            or not isinstance(graph.graph_json, dict)
+            or graph.graph_key != graph.graph_json.get("graph_id")
+            or graph.schema_version != graph.graph_json.get("schema_version")
+            or graph.graph_sha256 != run.graph_sha256
+            or canonical_json_sha256(graph.graph_json) != run.graph_sha256
+        ):
+            raise ConflictError("Workflow graph provenance checksum failed")
         nodes = list(
             self.session.scalars(
                 select(WorkflowNodeRun)
@@ -187,6 +247,7 @@ class WorkflowExecutionService:
                 .order_by(WorkflowNodeRun.execution_order, WorkflowNodeRun.node_id)
             )
         )
+        verify_workflow_run_node_graph_lineage(graph, nodes)
         artifacts = list(
             self.session.scalars(
                 select(WorkflowArtifact)
@@ -194,6 +255,47 @@ class WorkflowExecutionService:
                 .order_by(WorkflowArtifact.created_at, WorkflowArtifact.id)
             )
         )
+        # A run-detail response is a scientific-data read path. Do not return
+        # altered persisted artifacts as if they were verified workflow output.
+        for artifact in artifacts:
+            verify_workflow_artifact(artifact, expected_run_id=run.id)
+        # A completed scientific run must claim every saved artifact, even
+        # when a historical node result has no output-summary declaration.
+        verify_completed_run_artifact_ownership(run, nodes, artifacts)
+        # Checksums authenticate payload bytes, not which completed node made
+        # them. Verify the saved producer/output lineage before exposing it.
+        for node in nodes:
+            # A saved node's parameters are scientific provenance, not an
+            # iterable of pairs that may be silently coerced on read.
+            if node.parameters_json is not None and not isinstance(node.parameters_json, dict):
+                raise ConflictError("Workflow node parameters must be a JSON object")
+            if node.status == "succeeded":
+                verify_succeeded_node_artifacts(self.session, run_id=run.id, node_run=node)
+            # Review approvals are scientific audit evidence. The run-detail
+            # endpoint must reject malformed saved approvals just as the
+            # provenance exporter does, instead of displaying them as valid.
+            if isinstance(node.result_json, dict):
+                approval = node.result_json.get("review_approval")
+                if approval is not None and not isinstance(approval, dict):
+                    raise ConflictError("Workflow node review approval must be a JSON object")
+        # A terminal run's saved provenance must still describe the persisted
+        # scientist approvals, graph, and artifact lineage. Valid JSON and
+        # artifact hashes alone cannot detect edits to review evidence.
+        if run.status == "succeeded" and (
+            "provenance_manifest" in result or "provenance_sha256" in result
+        ):
+            manifest = result.get("provenance_manifest")
+            digest = result.get("provenance_sha256")
+            live_provenance = build_workflow_run_provenance(self.session, run_id=run.id)
+            if (
+                not isinstance(manifest, dict)
+                or not isinstance(digest, str)
+                or canonical_json_sha256(manifest) != digest
+                or canonical_json_sha256(live_provenance) != digest
+            ):
+                raise ConflictError(
+                    "Workflow run saved provenance no longer matches persisted science"
+                )
         return WorkflowRunDetailResponse(
             run=WorkflowRunResponse.model_validate(run),
             nodes=[WorkflowNodeRunResponse.model_validate(node) for node in nodes],
@@ -209,7 +311,22 @@ class WorkflowExecutionService:
         record = self._graph_record(request.graph_record_id)
         if record.project_id != project_id:
             raise ValidationError("Workflow graph revision does not belong to this project")
-        graph = WorkflowGraphRequest.model_validate(record.graph_json)
+        try:
+            graph = WorkflowGraphRequest.model_validate(record.graph_json)
+        except PydanticValidationError as exc:
+            raise ValidationError("Saved workflow graph revision is invalid") from exc
+        # A saved revision may have been altered since it was persisted. Reject
+        # structurally valid but modified graphs before queueing a run whose
+        # pinned provenance would otherwise fail only after dequeue.
+        if (
+            record.graph_key != graph.graph_id
+            or record.schema_version != graph.schema_version
+            or canonical_json_sha256(record.graph_json) != record.graph_sha256
+            or canonical_json_sha256(graph.model_dump(mode="json")) != record.graph_sha256
+        ):
+            raise ValidationError(
+                "Workflow graph revision checksum no longer matches saved contents"
+            )
         plan = self.graphs.plan(project_id, graph)
         if not plan.valid:
             raise ValidationError("Workflow graph is no longer valid")

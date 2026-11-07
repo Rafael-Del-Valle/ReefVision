@@ -33,6 +33,7 @@ from reefvision.services.workflow_auto_label import (
     ensure_disagreement_active_learning_round,
     materialize_consensus_annotations,
 )
+from reefvision.services.workflow_provenance import verify_workflow_artifact
 
 REVIEW_GATE_NODE_TYPES = {
     "detection_review_gate",
@@ -56,14 +57,24 @@ def _now() -> datetime:
 
 
 def _input_artifacts(session: Session, node_run: WorkflowNodeRun) -> list[WorkflowArtifact]:
-    artifact_ids = [str(value) for value in node_run.input_artifact_ids_json or []]
-    if not artifact_ids:
+    raw_ids = node_run.input_artifact_ids_json
+    if raw_ids is None:
+        raw_ids = []
+    if not isinstance(raw_ids, list) or any(
+        not isinstance(value, str) or not value for value in raw_ids
+    ):
+        raise ConflictError("Workflow review input artifact IDs are invalid")
+    if not raw_ids:
         return []
     artifacts = list(
-        session.scalars(select(WorkflowArtifact).where(WorkflowArtifact.id.in_(artifact_ids)))
+        session.scalars(select(WorkflowArtifact).where(WorkflowArtifact.id.in_(raw_ids)))
     )
     by_id = {artifact.id: artifact for artifact in artifacts}
-    return [by_id[artifact_id] for artifact_id in artifact_ids if artifact_id in by_id]
+    if len(by_id) != len(set(raw_ids)):
+        raise ConflictError("Workflow review input artifact is missing")
+    for artifact in artifacts:
+        verify_workflow_artifact(artifact, expected_run_id=node_run.workflow_run_id)
+    return [by_id[artifact_id] for artifact_id in raw_ids]
 
 
 def _pending_review_count(session: Session, artifacts: list[WorkflowArtifact]) -> int:
@@ -184,29 +195,44 @@ def pose_temporal_review_status(
 
     raw_track_ids = payload.get("track_ids", [])
 
-    if not isinstance(raw_track_ids, list):
+    if not isinstance(raw_track_ids, list) or any(
+        not isinstance(value, str) or not value for value in raw_track_ids
+    ):
         raise ValidationError("Pose Review artifact track_ids are invalid")
+    if len(set(raw_track_ids)) != len(raw_track_ids):
+        raise ValidationError("Pose Review artifact track_ids contain duplicates")
 
-    track_ids = list(
-        dict.fromkeys(str(value) for value in raw_track_ids if isinstance(value, str) and value)
-    )
+    track_ids = raw_track_ids
 
     if not track_ids:
         raise ValidationError("Pose Review requires at least one temporal pose track")
 
     expected_revisions: dict[str, int] = {}
 
-    raw_builds = payload.get("builds", [])
-    if isinstance(raw_builds, list):
-        for raw in raw_builds:
-            if not isinstance(raw, dict):
-                continue
+    # A missing or malformed build revision must not silently bypass the
+    # stale-track check when a scientist approves persisted temporal evidence.
+    raw_builds = payload.get("builds")
+    if not isinstance(raw_builds, list):
+        raise ValidationError("Pose Review source track revisions are missing")
+    for raw in raw_builds:
+        if not isinstance(raw, dict):
+            raise ValidationError("Pose Review source track revisions are invalid")
 
-            track_id = str(raw.get("parent_video_track_id") or "")
-            revision = raw.get("source_track_revision")
+        track_id = raw.get("parent_video_track_id")
+        revision = raw.get("source_track_revision")
+        if (
+            not isinstance(track_id, str)
+            or track_id not in track_ids
+            or track_id in expected_revisions
+            or not isinstance(revision, int)
+            or isinstance(revision, bool)
+            or revision < 1
+        ):
+            raise ValidationError("Pose Review source track revisions are invalid")
+        expected_revisions[track_id] = revision
 
-            if track_id and isinstance(revision, int) and revision >= 1:
-                expected_revisions[track_id] = revision
+    if set(expected_revisions) != set(track_ids):
+        raise ValidationError("Pose Review requires a revision for every source track")
 
     service = PoseTemporalTrackingService(session)
 
@@ -341,6 +367,23 @@ def pose_active_learning_review_status(
 
     if manifest.project_id != project_id:
         raise ValidationError("Pose Active Learning round belongs to another project")
+
+    if payload.get("selection_sha256") != manifest.selection_sha256:
+        raise ValidationError(
+            "Pose Active Learning Review selection differs from saved workflow evidence"
+        )
+
+    candidate_ids = payload.get("candidate_ids")
+    if (
+        not isinstance(candidate_ids, list)
+        or any(not isinstance(value, str) or not value for value in candidate_ids)
+        or len(candidate_ids) != len(set(candidate_ids))
+        or set(candidate_ids) != {candidate["candidate_id"] for candidate in manifest.candidates}
+        or payload.get("candidate_count") != len(candidate_ids)
+    ):
+        raise ValidationError(
+            "Pose Active Learning Review candidates differ from saved workflow evidence"
+        )
 
     ready = manifest.status == "complete" and manifest.retraining_ready
 

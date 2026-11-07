@@ -6,12 +6,16 @@ from collections import Counter, defaultdict, deque
 from collections.abc import Callable
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import (
     DatasetVersion,
     LabelClass,
     ModelRegistration,
+    PoseLandmarkSchema,
+    PoseLandmarkSchemaRevision,
+    PoseTrainingDataset,
     Project,
     VideoAsset,
 )
@@ -25,8 +29,10 @@ from reefvision.schemas.workflow_graphs import (
     WorkflowPlanInputBinding,
     WorkflowPlanStep,
 )
+from reefvision.services.pose_training_datasets import frozen_pose_item_fingerprints_match
 from reefvision.services.workflow_node_registry import workflow_node_registry
 from reefvision.services.workflow_vlm import SUPPORTED_VLM_PROVIDERS
+from reefvision.storage.datasets import canonical_json_sha256
 
 SUPPORTED_GRAPH_SCHEMA = "workflow-graph-0001"
 _WORKFLOW_TRAINING_TASKS = {"detect", "segment", "semantic_segment"}
@@ -122,6 +128,9 @@ _ACTIONS: dict[str, str] = {
     "pose_training_export": (
         "Export the immutable pose dataset through the validated Phase 9 exporters."
     ),
+    "pose_training_dataset": (
+        "Resolve a frozen scientist-verified pose dataset with schema and manifest lineage."
+    ),
     "pose_model_training": (
         "Retrain an Ultralytics pose checkpoint from immutable scientist-verified pose truth."
     ),
@@ -200,6 +209,163 @@ class WorkflowGraphService:
                     node_id=node_id,
                 )
             )
+
+    def _validate_pose_dataset_source(
+        self,
+        project_id: str,
+        node_id: str,
+        parameters: dict[str, Any],
+        issues: list[WorkflowGraphIssue],
+    ) -> None:
+        dataset_id = str(parameters.get("dataset_id") or "").strip()
+        if not dataset_id:
+            return  # Required-parameter validation reports the missing ID.
+        expected_manifest = str(parameters.get("manifest_sha256") or "").strip()
+        dataset = self.session.get(PoseTrainingDataset, dataset_id)
+        if dataset is None or dataset.project_id != project_id:
+            issues.append(
+                self._issue(
+                    "error",
+                    "pose_dataset_scope_mismatch",
+                    "Frozen pose dataset does not belong to this project",
+                    node_id=node_id,
+                )
+            )
+        elif (
+            dataset.status != "complete"
+            or (dataset.item_count or 0) < 1
+            or not dataset.manifest_sha256
+        ):
+            issues.append(
+                self._issue(
+                    "error",
+                    "pose_dataset_incomplete",
+                    "Frozen pose dataset must be complete and contain verified items",
+                    node_id=node_id,
+                )
+            )
+        elif not isinstance(dataset.manifest_json, dict):
+            issues.append(
+                self._issue(
+                    "error",
+                    "pose_dataset_manifest_corrupt",
+                    "Frozen pose dataset manifest must be a JSON object",
+                    node_id=node_id,
+                )
+            )
+        elif canonical_json_sha256(dataset.manifest_json) != dataset.manifest_sha256:
+            issues.append(
+                self._issue(
+                    "error",
+                    "pose_dataset_manifest_corrupt",
+                    "Frozen pose dataset manifest checksum does not match its stored contents",
+                    node_id=node_id,
+                )
+            )
+        elif (
+            dataset.manifest_json.get("dataset_id") != dataset.id
+            or dataset.manifest_json.get("project_id") != dataset.project_id
+            or dataset.manifest_json.get("source_round_id") != dataset.source_round_id
+            or dataset.manifest_json.get("source_selection_sha256")
+            != dataset.source_selection_sha256
+            or dataset.manifest_json.get("source_retraining_manifest_sha256")
+            != dataset.source_retraining_manifest_sha256
+            or not isinstance(dataset.manifest_json.get("pose_schema"), dict)
+            or dataset.manifest_json["pose_schema"].get("schema_id") != dataset.pose_schema_id
+            or dataset.manifest_json["pose_schema"].get("schema_revision")
+            != dataset.pose_schema_revision
+            or dataset.manifest_json["pose_schema"].get("content_hash")
+            != dataset.pose_schema_content_hash
+        ):
+            issues.append(
+                self._issue(
+                    "error",
+                    "pose_dataset_lineage_mismatch",
+                    "Frozen pose dataset manifest lineage differs from persisted truth",
+                    node_id=node_id,
+                )
+            )
+        elif (
+            dataset.manifest_json.get("truth_policy") != "scientist_verified_only"
+            or dataset.manifest_json.get("skipped_candidates_included") is not False
+            or dataset.manifest_json.get("pending_candidates_included") is not False
+        ):
+            issues.append(
+                self._issue(
+                    "error",
+                    "pose_dataset_truth_policy_mismatch",
+                    "Frozen pose dataset manifest must contain only scientist-verified items",
+                    node_id=node_id,
+                )
+            )
+        elif (
+            not isinstance(dataset.manifest_json.get("items"), list)
+            or dataset.manifest_json.get("item_count") != dataset.item_count
+            or len(dataset.manifest_json["items"]) != dataset.item_count
+        ):
+            issues.append(
+                self._issue(
+                    "error",
+                    "pose_dataset_item_count_mismatch",
+                    "Frozen pose dataset item count differs from its signed manifest",
+                    node_id=node_id,
+                )
+            )
+        elif not frozen_pose_item_fingerprints_match(self.session, dataset):
+            issues.append(
+                self._issue(
+                    "error",
+                    "pose_dataset_item_lineage_mismatch",
+                    "Frozen pose item fingerprints differ from persisted verified items",
+                    node_id=node_id,
+                )
+            )
+        elif expected_manifest and expected_manifest != dataset.manifest_sha256:
+            issues.append(
+                self._issue(
+                    "error",
+                    "pose_dataset_manifest_mismatch",
+                    "Frozen pose dataset manifest differs from the saved workflow",
+                    node_id=node_id,
+                )
+            )
+        else:
+            schema = self.session.get(PoseLandmarkSchema, dataset.pose_schema_id)
+            revision = self.session.scalar(
+                select(PoseLandmarkSchemaRevision).where(
+                    PoseLandmarkSchemaRevision.schema_id == dataset.pose_schema_id,
+                    PoseLandmarkSchemaRevision.revision == dataset.pose_schema_revision,
+                )
+            )
+            if (
+                schema is None
+                or schema.project_id != project_id
+                or revision is None
+                or revision.content_hash != dataset.pose_schema_content_hash
+            ):
+                issues.append(
+                    self._issue(
+                        "error",
+                        "pose_dataset_schema_mismatch",
+                        (
+                            "Frozen pose dataset landmark schema revision no longer "
+                            "matches saved truth"
+                        ),
+                        node_id=node_id,
+                    )
+                )
+            elif not expected_manifest:
+                # Keep existing unpinned graphs executable, but make the
+                # reproducibility risk explicit before researchers save a run.
+                issues.append(
+                    self._issue(
+                        "warning",
+                        "pose_dataset_manifest_unpinned",
+                        "Frozen pose dataset has no pinned manifest_sha256; "
+                        "save the current checksum for reproducible reruns",
+                        node_id=node_id,
+                    )
+                )
 
     def _validate_model_source(
         self,
@@ -382,6 +548,13 @@ class WorkflowGraphService:
                     node.parameters,
                     issues,
                     referenced_dataset_ids,
+                )
+            elif node.node_type == "pose_training_dataset":
+                self._validate_pose_dataset_source(
+                    project_id,
+                    node.node_id,
+                    node.parameters,
+                    issues,
                 )
             elif node.node_type == "registered_model_source":
                 self._validate_model_source(

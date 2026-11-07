@@ -4,22 +4,28 @@ import hashlib
 import io
 import zipfile
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import (
+    ExperimentRecord,
     Job,
     ModelRegistration,
+    PoseLandmarkSchema,
+    PoseLandmarkSchemaRevision,
     PoseModelSchemaBinding,
     PoseTrainingDataset,
+    PoseTrainingDatasetItem,
     Project,
     TrainingRun,
 )
+from reefvision.domain.errors import ValidationError
 from reefvision.jobs.pose_training import (
     materialize_pose_training_exports,
 )
@@ -28,6 +34,7 @@ from reefvision.jobs.training import (
 )
 from reefvision.services.workflow_pose_training import (
     create_pose_workflow_training_result,
+    execute_pose_training_dataset_adapter,
 )
 from reefvision.services.workflow_runtime_adapters import (
     RUNTIME_ADAPTER_NODE_TYPES,
@@ -35,7 +42,14 @@ from reefvision.services.workflow_runtime_adapters import (
 from reefvision.storage.projects import (
     resolve_managed_project_path,
 )
+from reefvision.tests.test_annotations import create_project
+from reefvision.tests.test_pose_active_learning_phase8 import (
+    _build_temporal,
+    _first_class,
+    _track,
+)
 from reefvision.tests.test_pose_training_datasets_phase9 import (
+    _persist_test_pose_schema,
     _verified_round,
 )
 
@@ -245,6 +259,140 @@ def _fake_pose_processor(
     return True
 
 
+def test_pose_workflow_replay_checks_secondary_checkpoint_bytes(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Freeze scientist-reviewed pose truth through the real API, then exercise
+    # persisted checkpoint provenance with a lightweight training worker.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+    secondary_bytes = b"phase10-secondary-pose-checkpoint"
+
+    def processor_with_secondary_checkpoint(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        assert _fake_pose_processor(settings, factory, job_id)
+        with factory() as session:
+            job = session.get(Job, job_id)
+            assert job is not None
+            run = session.get(TrainingRun, str(job.request_json["training_run_id"]))
+            assert run is not None and run.result_checkpoint_path is not None
+            assert run.result_checkpoint_path.endswith("/best.pt")
+            last_path = run.result_checkpoint_path.removesuffix("best.pt") + "last.pt"
+            resolve_managed_project_path(settings, last_path).write_bytes(secondary_bytes)
+            run.artifact_manifest_json = {
+                **dict(run.artifact_manifest_json or {}),
+                "last_checkpoint_path": last_path,
+            }
+            # The worker must persist the same artifact evidence in its
+            # experiment record before Workflow Builder pins checkpoint hashes.
+            experiment = session.scalar(
+                select(ExperimentRecord).where(ExperimentRecord.training_run_id == run.id)
+            )
+            assert experiment is not None
+            experiment.artifact_manifest_json = dict(run.artifact_manifest_json)
+            session.commit()
+        return True
+
+    def execute(processor: Any) -> dict[str, Any]:
+        with app.state.session_factory() as session:
+            return create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=payload,
+                parameters={"device": "cpu", "training_config": {"epochs": 1}},
+                workflow_run_id="secondary-checkpoint-workflow",
+                workflow_node_run_id="secondary-checkpoint-node",
+                processor=processor,
+            )
+
+    result = execute(processor_with_secondary_checkpoint)
+    with app.state.session_factory() as session:
+        run = session.get(TrainingRun, result["training_run_id"])
+        assert run is not None
+        manifest = dict(run.artifact_manifest_json or {})
+    assert manifest["best_checkpoint_sha256"] == result["result_checkpoint_sha256"]
+    assert manifest["last_checkpoint_sha256"] == hashlib.sha256(secondary_bytes).hexdigest()
+
+    last_checkpoint = resolve_managed_project_path(
+        test_settings, str(manifest["last_checkpoint_path"])
+    )
+    try:
+        last_checkpoint.write_bytes(b"altered-secondary-checkpoint")
+        with pytest.raises(ValidationError, match="checkpoint artifact checksum changed"):
+            execute(processor_with_secondary_checkpoint)
+    finally:
+        last_checkpoint.write_bytes(secondary_bytes)
+
+    replayed = execute(processor_with_secondary_checkpoint)
+    assert replayed["training_run_id"] == result["training_run_id"]
+
+    # A current workflow must not become unchecked when a secondary checkpoint
+    # digest is removed while its advertised file path remains intact.
+    for digest_field in ("best_checkpoint_sha256", "last_checkpoint_sha256"):
+        with app.state.session_factory() as session:
+            run = session.get(TrainingRun, result["training_run_id"])
+            assert run is not None
+            original_manifest = dict(run.artifact_manifest_json or {})
+            tampered_manifest = dict(original_manifest)
+            tampered_manifest.pop(digest_field)
+            run.artifact_manifest_json = tampered_manifest
+            session.commit()
+
+        with pytest.raises(ValidationError, match="checkpoint artifact checksum is missing"):
+            execute(processor_with_secondary_checkpoint)
+
+        with app.state.session_factory() as session:
+            run = session.get(TrainingRun, result["training_run_id"])
+            assert run is not None
+            run.artifact_manifest_json = original_manifest
+            session.commit()
+
+        assert (
+            execute(processor_with_secondary_checkpoint)["training_run_id"]
+            == result["training_run_id"]
+        )
+
+    # A persisted digest without its corresponding checkpoint path is not
+    # verifiable lineage. Removing the path must not downgrade replay checks.
+    for path_field in ("best_checkpoint_path", "last_checkpoint_path"):
+        with app.state.session_factory() as session:
+            run = session.get(TrainingRun, result["training_run_id"])
+            assert run is not None
+            original_manifest = dict(run.artifact_manifest_json or {})
+            tampered_manifest = dict(original_manifest)
+            tampered_manifest.pop(path_field)
+            run.artifact_manifest_json = tampered_manifest
+            session.commit()
+
+        with pytest.raises(ValidationError, match="checkpoint artifact path is missing"):
+            execute(processor_with_secondary_checkpoint)
+
+        with app.state.session_factory() as session:
+            run = session.get(TrainingRun, result["training_run_id"])
+            assert run is not None
+            run.artifact_manifest_json = original_manifest
+            session.commit()
+
+        assert (
+            execute(processor_with_secondary_checkpoint)["training_run_id"]
+            == result["training_run_id"]
+        )
+
+    with app.state.session_factory() as session:
+        assert session.scalars(select(TrainingRun.id)).all() == [result["training_run_id"]]
+
+
 def _pose_export_zip(
     marker: bytes,
 ) -> bytes:
@@ -363,6 +511,109 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     )
 
     with app.state.session_factory() as session:
+        seed = session.get(ModelRegistration, model_id)
+        assert seed is not None
+        seed_sha256 = seed.sha256
+        # These are the fields emitted by the real registered_model_source node.
+        seed_reference = {
+            "project_id": str(project["id"]),
+            "model_id": model_id,
+            "model_sha256": seed.sha256,
+            "purpose": seed.purpose,
+            "task": seed.task,
+            "provider_name": seed.provider_name,
+            "provider_version": seed.provider_version,
+        }
+
+    # A saved model-reference artifact pins both project ownership and
+    # registered checkpoint bytes. Neither assertion may be silently ignored
+    # even when the model ID itself still resolves to a valid local model.
+    for seed_artifact, expected_error in (
+        (
+            {"model_id": model_id, "project_id": "unrelated-project"},
+            "seed artifact project lineage changed",
+        ),
+        (
+            {"model_id": model_id, "sha256": "0" * 64},
+            "seed artifact checksum changed",
+        ),
+        (
+            {"model_id": model_id, "source_model_sha256": "0" * 64},
+            "seed artifact checksum changed",
+        ),
+        (
+            {"model_id": model_id, "model_sha256": "0" * 64},
+            "seed artifact checksum changed",
+        ),
+        (
+            {"model_id": model_id, "purpose": "classifier"},
+            "seed artifact metadata changed",
+        ),
+        (
+            {"model_id": model_id, "task": "detect"},
+            "seed artifact metadata changed",
+        ),
+        (
+            {"model_id": model_id, "provider_name": "other-provider"},
+            "seed artifact metadata changed",
+        ),
+        (
+            {"model_id": model_id, "provider_version": "unexpected-version"},
+            "seed artifact metadata changed",
+        ),
+    ):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match=expected_error),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload={
+                    "project_id": project["id"],
+                    "dataset_id": dataset["id"],
+                    "manifest_sha256": dataset["manifest_sha256"],
+                },
+                initial_model_payload=seed_artifact,
+                parameters={"device": "cpu", "training_config": {"epochs": 1}},
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert session.scalars(select(TrainingRun.id)).all() == []
+
+    # Reuse the actual API-frozen scientist-reviewed dataset. A partial or
+    # blank saved-workflow identity must never launch an untraceable training
+    # job or bypass node-level replay protection.
+    for saved_run_id, saved_node_id in (
+        ("saved-pose-run", None),
+        (None, "saved-pose-node"),
+        (" ", "saved-pose-node"),
+        ("saved-pose-run", " "),
+    ):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="workflow lineage requires both non-blank IDs"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload={
+                    "project_id": project["id"],
+                    "dataset_id": dataset["id"],
+                    "manifest_sha256": dataset["manifest_sha256"],
+                },
+                parameters={"device": "cpu", "training_config": {"epochs": 1}},
+                workflow_run_id=saved_run_id,
+                workflow_node_run_id=saved_node_id,
+                processor=_fake_pose_processor,
+            )
+    with app.state.session_factory() as session:
+        assert session.scalars(select(TrainingRun.id)).all() == []
+
+    with app.state.session_factory() as session:
         result = create_pose_workflow_training_result(
             session,
             test_settings,
@@ -372,9 +623,7 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
                 "dataset_id": (dataset["id"]),
                 "manifest_sha256": (dataset["manifest_sha256"]),
             },
-            initial_model_payload={
-                "model_id": model_id,
-            },
+            initial_model_payload={**seed_reference, "sha256": seed_sha256},
             parameters={
                 "run_name": ("phase10-pose-retrain"),
                 "device": "cpu",
@@ -410,6 +659,1024 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
         "no separate frozen validation dataset" in warning.casefold()
         for warning in result["warnings"]
     )
+
+    # The real persisted run must pin its model bytes, not just calculate a
+    # new digest each time Workflow Builder retries a completed node.
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        assert (
+            persisted.artifact_manifest_json["result_checkpoint_sha256"]
+            == result["result_checkpoint_sha256"]
+        )
+        assert (
+            persisted.artifact_manifest_json["result_checkpoint_path"]
+            == result["result_checkpoint_path"]
+        )
+        experiment = session.scalar(
+            select(ExperimentRecord).where(
+                ExperimentRecord.training_run_id == result["training_run_id"]
+            )
+        )
+        assert experiment is not None
+        assert experiment.project_id == project["id"]
+        assert experiment.summary_metrics_json == result["metrics"]
+        assert experiment.comparison_warnings_json == result["warnings"]
+        assert (
+            experiment.artifact_manifest_json["result_checkpoint_path"]
+            == result["result_checkpoint_path"]
+        )
+        assert (
+            experiment.artifact_manifest_json["result_checkpoint_sha256"]
+            == result["result_checkpoint_sha256"]
+        )
+        assert (
+            experiment.artifact_manifest_json["best_checkpoint_sha256"]
+            == result["result_checkpoint_sha256"]
+        )
+
+    def retry_completed_node(
+        *, run_name: str = "phase10-pose-retrain", notes: Any = None
+    ) -> dict[str, Any]:
+        with app.state.session_factory() as session:
+            return create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload={
+                    "project_id": project["id"],
+                    "dataset_id": dataset["id"],
+                    "manifest_sha256": dataset["manifest_sha256"],
+                },
+                initial_model_payload={"model_id": model_id},
+                parameters={
+                    "run_name": run_name,
+                    "notes": notes,
+                    "device": "cpu",
+                    "precision": "fp32",
+                    "random_seed": 31,
+                    "training_config": {"epochs": 1},
+                },
+                workflow_run_id="phase10-workflow",
+                workflow_node_run_id="phase10-pose-training-node",
+                processor=_fake_pose_processor,
+            )
+
+    reused = retry_completed_node()
+    assert reused["training_run_id"] == result["training_run_id"]
+    assert reused["result_checkpoint_sha256"] == result["result_checkpoint_sha256"]
+
+    # The saved workflow must retain the provider parameter-registry version
+    # used to configure this actual scientist-verified training run. Neither
+    # rewriting the run nor removing its frozen assertion may authorize replay.
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        original_registry = persisted.parameter_registry_version
+        original_snapshot = dict(persisted.draft_snapshot_json or {})
+        assert original_snapshot["schema_version"] == "pose-workflow-training-snapshot-0003"
+        assert original_snapshot["parameter_registry_version"] == original_registry
+        persisted.parameter_registry_version = "substituted-provider-registry"
+        session.commit()
+
+    with pytest.raises(ValidationError, match="provider registry version changed"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        persisted.parameter_registry_version = original_registry
+        persisted.draft_snapshot_json = {
+            key: value
+            for key, value in original_snapshot.items()
+            if key != "parameter_registry_version"
+        }
+        session.commit()
+
+    with pytest.raises(ValidationError, match="provider registry version changed"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        persisted.draft_snapshot_json = original_snapshot
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
+    # A completed v3 snapshot cannot evade its frozen metric history or
+    # provider-registry assertions by changing only the schema marker.
+    for downgraded_schema in (
+        "pose-workflow-training-snapshot-0001",
+        "pose-workflow-training-snapshot-0002",
+        None,
+    ):
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            persisted.draft_snapshot_json = {
+                **original_snapshot,
+                "schema_version": downgraded_schema,
+            }
+            session.commit()
+
+        with pytest.raises(ValidationError, match="snapshot schema changed"):
+            retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        persisted.draft_snapshot_json = original_snapshot
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
+    # A saved Workflow Builder replay must not return altered epoch-level
+    # metrics merely because its final experiment summary still matches.
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        original_history = dict(persisted.metrics_history_json or {})
+        assert original_snapshot["metrics_history_sha256"]
+        persisted.metrics_history_json = {**original_history, "epoch": [999]}
+        session.commit()
+
+    with pytest.raises(ValidationError, match="metrics history changed"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        persisted.metrics_history_json = original_history
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
+    # JSON arrays of key/value pairs convert to the original dict and would
+    # pass a hash check that silently coerces malformed epoch-level evidence.
+    # The saved scientist-verified training run must reject that type change.
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        persisted.metrics_history_json = [[key, value] for key, value in original_history.items()]
+        session.commit()
+
+    with pytest.raises(ValidationError, match="metrics history changed"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        persisted.metrics_history_json = original_history
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
+    # A persisted JSON array of metric pairs must not be silently coerced
+    # into the original summary dictionary during scientific replay.
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        original_summary = dict(persisted.metrics_json or {})
+        persisted.metrics_json = [[key, value] for key, value in original_summary.items()]
+        session.commit()
+
+    with pytest.raises(ValidationError, match="summary metrics must be a JSON object"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        persisted.metrics_json = original_summary
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
+    # A malformed array of key/value pairs must not be accepted as an
+    # unchanged frozen checkpoint manifest during completed-node replay.
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        original_manifest = dict(persisted.artifact_manifest_json or {})
+        persisted.artifact_manifest_json = [
+            [key, value] for key, value in original_manifest.items()
+        ]
+        session.commit()
+
+    with pytest.raises(ValidationError, match="artifact manifest must be a JSON object"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        persisted.artifact_manifest_json = original_manifest
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
+    # The experiment registry is a second persisted scientific record, not
+    # merely an ID to expose downstream. A replay must reject inconsistent
+    # metadata or checkpoint evidence without starting another training run.
+    # Removing a digest or frozen dataset identity is also a provenance change.
+    missing_checkpoint_digest = dict(result["artifact_manifest"])
+    missing_checkpoint_digest.pop("result_checkpoint_sha256")
+    missing_dataset_identity = dict(result["artifact_manifest"])
+    missing_dataset_identity.pop("pose_training_dataset_id")
+    for field, corrupt_value in (
+        ("provider_id", "unrelated-provider"),
+        ("summary_metrics_json", {"metrics/mAP50-95(P)": 0.01}),
+        ("comparison_warnings_json", ["altered scientific warning"]),
+        (
+            "artifact_manifest_json",
+            {
+                **result["artifact_manifest"],
+                "native_results_rows": [{"epoch": 1, "metrics/mAP50-95(P)": 0.01}],
+            },
+        ),
+        (
+            "artifact_manifest_json",
+            {**result["artifact_manifest"], "result_checkpoint_sha256": "0" * 64},
+        ),
+        ("artifact_manifest_json", missing_checkpoint_digest),
+        ("artifact_manifest_json", missing_dataset_identity),
+    ):
+        with app.state.session_factory() as session:
+            experiment = session.scalar(
+                select(ExperimentRecord).where(
+                    ExperimentRecord.training_run_id == result["training_run_id"]
+                )
+            )
+            assert experiment is not None
+            original_value = getattr(experiment, field)
+            setattr(experiment, field, corrupt_value)
+            session.commit()
+
+        with pytest.raises(ValidationError, match="experiment provenance changed"):
+            retry_completed_node()
+
+        with app.state.session_factory() as session:
+            experiment = session.scalar(
+                select(ExperimentRecord).where(
+                    ExperimentRecord.training_run_id == result["training_run_id"]
+                )
+            )
+            assert experiment is not None
+            setattr(experiment, field, original_value)
+            session.commit()
+
+        assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
+    # A persisted manifest must not advertise an optional checkpoint that
+    # disappeared after training. The selected best.pt remains intact here,
+    # so its valid digest alone must not authorize a missing last.pt artifact.
+    missing_last = str(result["result_checkpoint_path"]).removesuffix("best.pt") + "last.pt"
+    assert missing_last != result["result_checkpoint_path"]
+    assert not resolve_managed_project_path(test_settings, missing_last).is_file()
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        original_manifest = dict(persisted.artifact_manifest_json or {})
+        persisted.artifact_manifest_json = {
+            **original_manifest,
+            "last_checkpoint_path": missing_last,
+        }
+        session.commit()
+
+    with pytest.raises(ValidationError, match="checkpoint artifact path changed or is missing"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        persisted.artifact_manifest_json = original_manifest
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
+    # Changing the saved node's requested run name cannot relabel or reuse
+    # an already completed scientist-verified training result.
+    with pytest.raises(ValidationError, match="configuration changed"):
+        retry_completed_node(run_name="different-scientific-run")
+
+    # A saved workflow replay must not reuse weights after its experiment
+    # notes change, even if all frozen training inputs remain identical.
+    with pytest.raises(ValidationError, match="configuration changed"):
+        retry_completed_node(notes="different-experimental-context")
+
+    # Explicit non-string notes previously became None or coerced text,
+    # allowing a saved workflow to silently reuse an unrelated checkpoint.
+    for invalid_notes in (False, 0, [], {}, 2.5):
+        with pytest.raises(ValidationError, match="notes must be a string or null"):
+            retry_completed_node(notes=invalid_notes)
+
+    with app.state.session_factory() as session:
+        matching_runs = session.scalars(
+            select(TrainingRun.id).where(TrainingRun.project_id == str(project["id"]))
+        ).all()
+        assert matching_runs == [result["training_run_id"]]
+
+    # Simulate a worker retry while this same persisted child job is still
+    # training. Replaying the saved node must not queue a second GPU job.
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None and persisted.job_id is not None
+        child_job = session.get(Job, persisted.job_id)
+        assert child_job is not None
+        persisted.status = "training"
+        child_job.status = "running"
+        session.commit()
+
+    with pytest.raises(ValidationError, match="already has an active child run"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        matching_runs = session.scalars(
+            select(TrainingRun.id).where(TrainingRun.project_id == str(project["id"]))
+        ).all()
+        assert matching_runs == [result["training_run_id"]]
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None and persisted.job_id is not None
+        child_job = session.get(Job, persisted.job_id)
+        assert child_job is not None
+        persisted.status = "completed"
+        child_job.status = "succeeded"
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
+    # The recovered child job must still belong to this project's saved run.
+    # Exercise a real persisted job against a second valid project, then
+    # restore it to verify that the original frozen result remains reusable.
+    foreign_project = create_project(client, "Phase 10 foreign job ownership")
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None and persisted.job_id is not None
+        child_job = session.get(Job, persisted.job_id)
+        assert child_job is not None
+        original_project_id = child_job.project_id
+        child_job.project_id = str(foreign_project["id"])
+        session.commit()
+
+    with pytest.raises(ValidationError, match="job project ownership changed"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None and persisted.job_id is not None
+        child_job = session.get(Job, persisted.job_id)
+        assert child_job is not None
+        child_job.project_id = original_project_id
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
+    # A successful child job must remain linked to the exact saved workflow
+    # node, not merely to a job with a matching project and success status.
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None and persisted.job_id is not None
+        child_job = session.get(Job, persisted.job_id)
+        assert child_job is not None
+        original_request = dict(child_job.request_json or {})
+        child_job.request_json = {
+            **original_request,
+            "workflow_node_run_id": "unrelated-node",
+        }
+        session.commit()
+
+    with pytest.raises(ValidationError, match="child job lineage changed"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None and persisted.job_id is not None
+        child_job = session.get(Job, persisted.job_id)
+        assert child_job is not None
+        child_job.request_json = original_request
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
+    # A real API-frozen, scientist-reviewed pose dataset underlies this run.
+    # Corrupt only the persisted child-run snapshot and verify that replay
+    # cannot silently return its checkpoint with falsified dataset lineage.
+    for field, corrupt_value in (
+        ("pose_training_dataset_manifest_sha256", "0" * 64),
+        ("pose_schema_id", "corrupted-schema-id"),
+        ("split_manifest", {"schema_version": "tampered"}),
+    ):
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            original_snapshot = dict(persisted.draft_snapshot_json or {})
+            persisted.draft_snapshot_json = {
+                **original_snapshot,
+                field: corrupt_value,
+            }
+            session.commit()
+
+        with pytest.raises(ValidationError, match="frozen provenance changed"):
+            retry_completed_node()
+
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            persisted.draft_snapshot_json = original_snapshot
+            session.commit()
+
+        assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
+    # The real registered seed's frozen identity must not be silently
+    # relabeled during completed-node replay, even with intact model bytes.
+    for field, corrupt_value in (
+        ("initialization_mode", "random"),
+        ("seed_model_id", "substituted-seed-model"),
+        ("seed_model_sha256", "0" * 64),
+    ):
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            original_snapshot = dict(persisted.draft_snapshot_json or {})
+            persisted.draft_snapshot_json = {
+                **original_snapshot,
+                field: corrupt_value,
+            }
+            session.commit()
+
+        with pytest.raises(ValidationError, match="seed provenance changed"):
+            retry_completed_node()
+
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            persisted.draft_snapshot_json = original_snapshot
+            session.commit()
+
+        assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
+    # Altering or removing the snapshot schema marker must not downgrade a
+    # current scientist-verified run into unchecked legacy checkpoint replay.
+    for version, expected_error in (
+        ("pose-workflow-training-snapshot-9999", "snapshot schema changed"),
+        (None, "snapshot schema changed"),
+    ):
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            original_snapshot = dict(persisted.draft_snapshot_json or {})
+            original_manifest = dict(persisted.artifact_manifest_json or {})
+            tampered_snapshot = dict(original_snapshot)
+            tampered_manifest = dict(original_manifest)
+            if version is None:
+                tampered_snapshot.pop("schema_version")
+            else:
+                tampered_snapshot["schema_version"] = version
+            persisted.draft_snapshot_json = tampered_snapshot
+            persisted.artifact_manifest_json = tampered_manifest
+            session.commit()
+
+        with pytest.raises(ValidationError, match=expected_error):
+            retry_completed_node()
+
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            persisted.draft_snapshot_json = original_snapshot
+            persisted.artifact_manifest_json = original_manifest
+            session.commit()
+
+        assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
+    # The persisted training run must agree with the scientist-frozen dataset
+    # and the recorded validation policy, not just its workflow snapshot.
+    for field, corrupt_value, error in (
+        ("dataset_manifest_sha256", "0" * 64, "dataset checksum changed"),
+        ("initial_checkpoint_source", "scratch", "seed model changed"),
+        (
+            "resolved_model_asset_id",
+            "builtin_architecture:yolo11n-pose.yaml",
+            "seed model changed",
+        ),
+        ("provider_id", "corrupted-provider", "configuration changed"),
+        ("run_name", "corrupted-run-name", "configuration changed"),
+        ("resource_limits_json", {"max_gpu_memory_mb": 1024}, "configuration changed"),
+        (
+            "evaluation_config_json",
+            {"validation_mode": "separate_frozen_pose_dataset"},
+            "validation mode changed",
+        ),
+    ):
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            original_value = getattr(persisted, field)
+            setattr(persisted, field, corrupt_value)
+            session.commit()
+
+        with pytest.raises(ValidationError, match=error):
+            retry_completed_node()
+
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            setattr(persisted, field, original_value)
+            session.commit()
+
+        assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
+    # The artifact manifest is itself returned to downstream Workflow Builder
+    # nodes; a corrupted copy must not be mistaken for frozen provenance.
+    for field, corrupt_value in (
+        ("pose_training_dataset_id", "substituted-frozen-dataset"),
+        ("pose_split_manifest_sha256", "0" * 64),
+        ("pose_split_manifest", {"schema_version": "tampered"}),
+    ):
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            original_manifest = dict(persisted.artifact_manifest_json or {})
+            persisted.artifact_manifest_json = {
+                **original_manifest,
+                field: corrupt_value,
+            }
+            session.commit()
+
+        with pytest.raises(ValidationError, match="artifact provenance changed"):
+            retry_completed_node()
+
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            persisted.artifact_manifest_json = original_manifest
+            session.commit()
+
+        assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
+    # Removing the stored digest or path must not bypass checkpoint integrity
+    # for this newly completed, scientist-verified workflow training run.
+    for missing_field in ("result_checkpoint_sha256", "result_checkpoint_path"):
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            original_manifest = dict(persisted.artifact_manifest_json or {})
+            tampered_manifest = dict(original_manifest)
+            tampered_manifest.pop(missing_field)
+            persisted.artifact_manifest_json = tampered_manifest
+            session.commit()
+
+        with pytest.raises(ValidationError, match="checkpoint provenance is missing"):
+            retry_completed_node()
+
+        with app.state.session_factory() as session:
+            persisted = session.get(TrainingRun, result["training_run_id"])
+            assert persisted is not None
+            persisted.artifact_manifest_json = original_manifest
+            session.commit()
+
+        assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
+    checkpoint = resolve_managed_project_path(test_settings, result["result_checkpoint_path"])
+    original_checkpoint_bytes = checkpoint.read_bytes()
+    checkpoint.write_bytes(b"changed-after-scientist-verified-pose-training")
+    with pytest.raises(ValidationError, match=r"checkpoint (?:artifact )?checksum changed"):
+        retry_completed_node()
+    checkpoint.write_bytes(original_checkpoint_bytes)
+
+    # A newly completed workflow always creates a persisted experiment.
+    # Losing that registry record must not silently publish experiment_id=None
+    # on replay of this scientist-reviewed frozen training dataset.
+    with app.state.session_factory() as session:
+        experiment = session.scalar(
+            select(ExperimentRecord).where(
+                ExperimentRecord.training_run_id == result["training_run_id"]
+            )
+        )
+        assert experiment is not None
+        session.delete(experiment)
+        session.commit()
+
+    with pytest.raises(ValidationError, match="experiment registry record is missing"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        assert session.scalars(select(TrainingRun.id)).all() == [result["training_run_id"]]
+
+
+def test_pose_workflow_rejects_explicitly_invalid_frozen_manifest_digest(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Use a real scientist-reviewed, API-frozen pose dataset. A persisted
+    # Workflow Builder artifact cannot bypass its checksum by supplying an
+    # explicitly false or empty digest.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+    parameters = {
+        "initialization_mode": "random",
+        "architecture": "yolo11n-pose.yaml",
+        "training_config": {"epochs": 1},
+    }
+
+    for invalid_digest in (False, 0, "", None, "0" * 64):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="manifest no longer matches persisted truth"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload={**payload, "manifest_sha256": invalid_digest},
+                parameters=parameters,
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert (
+            session.scalar(
+                select(TrainingRun.id).where(TrainingRun.project_id == str(project["id"]))
+            )
+            is None
+        )
+        valid = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=payload,
+            parameters=parameters,
+            processor=_fake_pose_processor,
+        )
+    assert valid["pose_training_dataset_id"] == dataset["id"]
+
+
+def test_pose_workflow_preserves_api_frozen_source_lineage_in_artifacts(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Produce the actual Workflow Builder dataset artifact from scientist-reviewed
+    # truth, then check that downstream training enforces its source lineage.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    project_id = str(project["id"])
+    with app.state.session_factory() as session:
+        produced = execute_pose_training_dataset_adapter(
+            session,
+            test_settings,
+            project_id,
+            {
+                "dataset_id": str(dataset["id"]),
+                "manifest_sha256": str(dataset["manifest_sha256"]),
+            },
+            {},
+        )
+    payload = produced[0]["payload"]
+    source_fields = (
+        "source_round_id",
+        "source_selection_sha256",
+        "source_retraining_manifest_sha256",
+    )
+    assert all(field in payload for field in source_fields)
+    parameters = {
+        "initialization_mode": "random",
+        "architecture": "yolo11n-pose.yaml",
+        "training_config": {"epochs": 1},
+    }
+
+    # A persisted artifact that explicitly asserts null/false/foreign project
+    # ownership must not be accepted as if its project_id were omitted.
+    for invalid_project_id in (None, False, "foreign-project"):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="dataset belongs to another project"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=project_id,
+                dataset_payload={**payload, "project_id": invalid_project_id},
+                parameters=parameters,
+                processor=_fake_pose_processor,
+            )
+
+    for field in source_fields:
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="source lineage no longer matches frozen truth"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=project_id,
+                dataset_payload={**payload, field: f"tampered-{field}"},
+                parameters=parameters,
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert (
+            session.scalar(select(TrainingRun.id).where(TrainingRun.project_id == project_id))
+            is None
+        )
+        result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters=parameters,
+            processor=_fake_pose_processor,
+        )
+    assert result["pose_training_dataset_id"] == dataset["id"]
+
+
+def test_pose_workflow_rejects_falsy_non_object_resource_limits_from_verified_truth(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Freeze real scientist-reviewed pose annotations through the API.
+    # Invalid resource limits must fail before a training job is persisted.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    # An explicitly null policy must not silently remove GPU/resource limits.
+    for invalid_limits in (None, [], "", 0, False):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="resource_limits must be an object"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload={
+                    "project_id": project["id"],
+                    "dataset_id": dataset["id"],
+                    "manifest_sha256": dataset["manifest_sha256"],
+                },
+                parameters={
+                    "initialization_mode": "random",
+                    "architecture": "yolo11n-pose.yaml",
+                    "training_config": {"epochs": 1},
+                    "resource_limits": invalid_limits,
+                },
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert (
+            session.scalar(
+                select(TrainingRun.id).where(TrainingRun.project_id == str(project["id"]))
+            )
+            is None
+        )
+
+
+def test_pose_workflow_rejects_null_training_config_from_verified_truth(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A persisted graph's explicit null cannot silently become the defaults.
+    # The input dataset is frozen from scientist-reviewed annotations via API.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    dataset_payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="training_config must be an object"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters={"training_config": None},
+            processor=_fake_pose_processor,
+        )
+
+    with app.state.session_factory() as session:
+        assert session.scalar(select(TrainingRun.id)) is None
+        # Truly omitted configuration still receives the supported defaults.
+        result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters={"device": "cpu"},
+            processor=_fake_pose_processor,
+        )
+    assert result["pose_training_dataset_id"] == dataset["id"]
+
+
+def test_pose_workflow_rejects_lossy_run_names_from_verified_truth(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The dataset was frozen through the scientist-review API, not fabricated.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    dataset_payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+    parameters = {
+        "initialization_mode": "random",
+        "architecture": "yolo11n-pose.yaml",
+        "training_config": {"epochs": 1},
+    }
+    for invalid_name, expected_error in (
+        (False, "run_name must be a string"),
+        (0, "run_name must be a string"),
+        ([], "run_name must be a string"),
+        ({}, "run_name must be a string"),
+        ("", "run_name cannot be blank"),
+        ("   ", "run_name cannot be blank"),
+    ):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match=expected_error),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=dataset_payload,
+                parameters={**parameters, "run_name": invalid_name},
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert (
+            session.scalar(
+                select(TrainingRun.id).where(TrainingRun.project_id == str(project["id"]))
+            )
+            is None
+        )
+        result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters=parameters,
+            processor=_fake_pose_processor,
+        )
+    assert result["run_name"] == "workflow-pose-retrain"
+
+
+def test_pose_workflow_rejects_lossy_device_from_verified_truth(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Use a scientist-reviewed pose dataset frozen through the real API.
+    # A non-string or empty device must fail before a training job is queued.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    dataset_payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+    parameters = {
+        "initialization_mode": "random",
+        "architecture": "yolo11n-pose.yaml",
+        "training_config": {"epochs": 1},
+    }
+    for invalid_device in (False, 0, None, [], {}, "", "   "):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="device must be a non-blank string"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=dataset_payload,
+                parameters={**parameters, "device": invalid_device},
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert (
+            session.scalar(
+                select(TrainingRun.id).where(TrainingRun.project_id == str(project["id"]))
+            )
+            is None
+        )
+        result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters={**parameters, "device": " cpu "},
+            processor=_fake_pose_processor,
+        )
+    assert result["device"] == "cpu"
+
+
+def test_pose_workflow_rejects_lossy_random_seeds_from_verified_truth(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Use an API-frozen scientist-reviewed dataset, not a synthetic manifest.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    dataset_payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+    parameters = {
+        "initialization_mode": "random",
+        "architecture": "yolo11n-pose.yaml",
+        "training_config": {"epochs": 1},
+    }
+    # Unicode superscript digits cannot be parsed as integers; huge seeds
+    # must not overflow the persisted signed 64-bit training-run column.
+    for invalid_seed in (True, False, -1, 2.5, "2.5", "invalid", "²", 2**63, "9" * 5000):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="random_seed must be a non-negative integer"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=dataset_payload,
+                parameters={**parameters, "random_seed": invalid_seed},
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert (
+            session.scalar(
+                select(TrainingRun.id).where(TrainingRun.project_id == str(project["id"]))
+            )
+            is None
+        )
+
+    # Zero is a legitimate reproducible seed, not a missing configuration.
+    with app.state.session_factory() as session:
+        result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters={**parameters, "random_seed": 0},
+            processor=_fake_pose_processor,
+        )
+    assert result["random_seed"] == 0
+
+    # The worker accepts a seed in Ultralytics training_config as well as
+    # ReefVision's top-level random_seed. A saved scientific run must never
+    # advertise one seed while its training arguments execute with another.
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match=r"training_config\.seed must match random_seed"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters={
+                **parameters,
+                "random_seed": 8,
+                "training_config": {"epochs": 1, "seed": 7},
+            },
+            processor=_fake_pose_processor,
+        )
+
+    # A legacy graph that specifies only training_config.seed must persist
+    # the effective worker seed in the TrainingRun and downstream artifact.
+    with app.state.session_factory() as session:
+        configured_result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters={**parameters, "training_config": {"epochs": 1, "seed": 7}},
+            processor=_fake_pose_processor,
+        )
+    assert configured_result["random_seed"] == 7
+    with app.state.session_factory() as session:
+        saved_run = session.get(TrainingRun, configured_result["training_run_id"])
+        assert saved_run is not None
+        assert saved_run.random_seed == 7
+        assert saved_run.training_config_json["seed"] == 7
 
 
 def test_pose_training_can_require_separate_validation_truth(
@@ -460,3 +1727,950 @@ def test_pose_training_can_require_separate_validation_truth(
             },
             processor=(_fake_pose_processor),
         )
+
+    # A persisted Workflow Builder parameter must be an actual boolean:
+    # "false" is truthy in Python, while 0/[] previously became False.
+    for invalid_flag in ("false", "true", 0, 1, []):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(
+                ValidationError,
+                match="require_validation_dataset must be a boolean",
+            ),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload={
+                    "project_id": project["id"],
+                    "dataset_id": dataset["id"],
+                    "manifest_sha256": dataset["manifest_sha256"],
+                },
+                initial_model_payload={"model_id": model_id},
+                parameters={
+                    "require_validation_dataset": invalid_flag,
+                    "training_config": {"epochs": 1},
+                },
+                processor=_fake_pose_processor,
+            )
+
+    # The saved node must not silently override a requested validation mode.
+    # This dataset was frozen through the scientist-review API.
+    for invalid_val in (True, "false", 0, None):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match=r"training_config\.val must match"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload={
+                    "project_id": project["id"],
+                    "dataset_id": dataset["id"],
+                    "manifest_sha256": dataset["manifest_sha256"],
+                },
+                initial_model_payload={"model_id": model_id},
+                parameters={"training_config": {"epochs": 1, "val": invalid_val}},
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert (
+            session.scalar(
+                select(TrainingRun.id).where(TrainingRun.project_id == str(project["id"]))
+            )
+            is None
+        )
+
+    # Explicit False remains valid and does not claim independent validation.
+    with app.state.session_factory() as session:
+        result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload={
+                "project_id": project["id"],
+                "dataset_id": dataset["id"],
+                "manifest_sha256": dataset["manifest_sha256"],
+            },
+            initial_model_payload={"model_id": model_id},
+            parameters={
+                "require_validation_dataset": False,
+                "training_config": {"epochs": 1, "val": False},
+            },
+            processor=_fake_pose_processor,
+        )
+    assert result["validation_mode"] == "none"
+
+
+def test_pose_validation_rejects_second_verified_round_from_same_video(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Freeze two independently reviewed rounds via the real API, but reuse
+    # the same source video. Separate dataset IDs cannot prevent video leakage.
+    project, training = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, str(training["id"]))
+        assert frozen is not None
+        item = frozen.manifest_json["items"][0]
+        video_id = item["video_id"]
+        track_id = item["video_track_id"]
+
+    created = client.post(
+        f"/api/v1/projects/{project['id']}/pose-active-learning-rounds",
+        json={
+            "name": "Independent review, same source video",
+            "video_id": video_id,
+            "track_ids": [track_id],
+            "selection_unit": "frame",
+            "requested_size": 1,
+            "minimum_frame_spacing": 1,
+        },
+    )
+    assert created.status_code == 201, created.text
+    round_id = created.json()["id"]
+    candidate_response = client.get(f"/api/v1/pose-active-learning-rounds/{round_id}/candidates")
+    assert candidate_response.status_code == 200, candidate_response.text
+    candidate_id = candidate_response.json()[0]["id"]
+    reviewed = client.put(
+        f"/api/v1/pose-active-learning-candidates/{candidate_id}/review",
+        json={"action": "verify", "reviewed_by": "scientist"},
+    )
+    assert reviewed.status_code == 200, reviewed.text
+    frozen_validation = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_id}/training-dataset",
+        json={"name": "Validation from reused source video", "created_by": "scientist"},
+    )
+    assert frozen_validation.status_code == 201, frozen_validation.text
+    validation = frozen_validation.json()
+    assert validation["id"] != training["id"]
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="independent source videos"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload={
+                "project_id": project["id"],
+                "dataset_id": training["id"],
+                "manifest_sha256": training["manifest_sha256"],
+            },
+            validation_dataset_payload={
+                "project_id": project["id"],
+                "dataset_id": validation["id"],
+                "manifest_sha256": validation["manifest_sha256"],
+            },
+            parameters={"training_config": {"epochs": 1}},
+            processor=_fake_pose_processor,
+        )
+
+
+def test_pose_validation_rejects_distinct_schema_identity_with_matching_content(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Freeze two scientist-reviewed datasets from independent source videos.
+    # Equal landmark definitions are not enough when their schema IDs differ.
+    project, training = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+
+    imported = client.post(
+        f"/api/v1/projects/{project['id']}/imports/videos",
+        files={
+            "file": (
+                "independent-validation.mp4",
+                io.BytesIO(b"independent-pose-validation-video"),
+                "video/mp4",
+            )
+        },
+    )
+    assert imported.status_code == 201, imported.text
+    video_id = imported.json()["id"]
+    track = _track(client, str(video_id), _first_class(project))
+    _build_temporal(client, str(track["id"]))
+    _persist_test_pose_schema(
+        client,
+        project_id=str(project["id"]),
+        track_id=str(track["id"]),
+    )
+
+    created = client.post(
+        f"/api/v1/projects/{project['id']}/pose-active-learning-rounds",
+        json={
+            "name": "Independent validation with distinct schema identity",
+            "video_id": video_id,
+            "track_ids": [track["id"]],
+            "selection_unit": "frame",
+            "requested_size": 1,
+            "minimum_frame_spacing": 0,
+        },
+    )
+    assert created.status_code == 201, created.text
+    round_id = created.json()["id"]
+    candidates = client.get(f"/api/v1/pose-active-learning-rounds/{round_id}/candidates")
+    assert candidates.status_code == 200, candidates.text
+    reviewed = client.put(
+        f"/api/v1/pose-active-learning-candidates/{candidates.json()[0]['id']}/review",
+        json={"action": "verify", "reviewed_by": "scientist"},
+    )
+    assert reviewed.status_code == 200, reviewed.text
+    frozen = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_id}/training-dataset",
+        json={"name": "Independent validation truth", "created_by": "scientist"},
+    )
+    assert frozen.status_code == 201, frozen.text
+    validation = frozen.json()
+    assert training["pose_schema_content_hash"] == validation["pose_schema_content_hash"]
+    assert training["pose_schema_id"] != validation["pose_schema_id"]
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="same landmark schema identity and revision"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload={
+                "project_id": project["id"],
+                "dataset_id": training["id"],
+                "manifest_sha256": training["manifest_sha256"],
+            },
+            validation_dataset_payload={
+                "project_id": project["id"],
+                "dataset_id": validation["id"],
+                "manifest_sha256": validation["manifest_sha256"],
+            },
+            parameters={"training_config": {"epochs": 1}},
+            processor=_fake_pose_processor,
+        )
+
+    with app.state.session_factory() as session:
+        assert session.scalar(select(TrainingRun.id)) is None
+
+
+def test_pose_seed_rejects_distinct_schema_identity_with_matching_content(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The dataset is frozen from a real scientist-verified active-learning round.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    model_id = _seed_model(app, project, dataset)
+
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, str(dataset["id"]))
+        assert frozen is not None
+        source_revision = session.scalar(
+            select(PoseLandmarkSchemaRevision).where(
+                PoseLandmarkSchemaRevision.schema_id == frozen.pose_schema_id,
+                PoseLandmarkSchemaRevision.revision == frozen.pose_schema_revision,
+            )
+        )
+        assert source_revision is not None
+
+        # Two project schemas can describe identical landmarks yet represent
+        # different scientist-managed identities and review lineage.
+        other_schema = PoseLandmarkSchema(
+            project_id=str(project["id"]),
+            name="Independent schema with identical landmarks",
+        )
+        session.add(other_schema)
+        session.flush()
+        session.add(
+            PoseLandmarkSchemaRevision(
+                schema_id=other_schema.id,
+                revision=1,
+                schema_version=source_revision.schema_version,
+                groups_json=source_revision.groups_json,
+                expanded_labels_json=source_revision.expanded_labels_json,
+                keypoint_count=source_revision.keypoint_count,
+                allows_repeated_labels=source_revision.allows_repeated_labels,
+                content_hash=source_revision.content_hash,
+            )
+        )
+        binding = session.get(PoseModelSchemaBinding, model_id)
+        assert binding is not None
+        binding.schema_id = other_schema.id
+        binding.schema_revision = 1
+        session.commit()
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="schema identity does not match"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload={
+                "project_id": project["id"],
+                "dataset_id": dataset["id"],
+                "manifest_sha256": dataset["manifest_sha256"],
+            },
+            initial_model_payload={"model_id": model_id},
+            parameters={"training_config": {"epochs": 1}},
+            processor=_fake_pose_processor,
+        )
+
+
+def test_pose_workflow_rejects_lossy_initialization_mode_from_verified_truth(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The dataset was frozen through scientist review, not a synthetic manifest.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    dataset_payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+    for invalid_mode in (None, False, 0, [], {}, ""):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(
+                ValidationError,
+                match="initialization_mode must be random or registered_model",
+            ),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=dataset_payload,
+                parameters={
+                    "initialization_mode": invalid_mode,
+                    "training_config": {"epochs": 1},
+                },
+                processor=_fake_pose_processor,
+            )
+
+    # Even with a seed artifact, False must not silently select registered_model.
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="initialization_mode must be"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            initial_model_payload={"model_id": "unused"},
+            parameters={"initialization_mode": False},
+            processor=_fake_pose_processor,
+        )
+
+    # A connected but empty seed-model artifact must not be interpreted as
+    # an unconnected optional port and silently produce random-init science.
+    for requested_parameters, expected_error in (
+        (
+            {"training_config": {"epochs": 1}},
+            "Pose retraining requires a registered seed model",
+        ),
+        (
+            {"initialization_mode": "random", "training_config": {"epochs": 1}},
+            "Random initialization cannot use an initial model",
+        ),
+    ):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match=expected_error),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=dataset_payload,
+                initial_model_payload={},
+                parameters=requested_parameters,
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert session.scalar(select(TrainingRun.id)) is None
+        result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters={"training_config": {"epochs": 1}},
+            processor=_fake_pose_processor,
+        )
+    assert result["initialization_mode"] == "random"
+
+
+def test_pose_workflow_rejects_lossy_architecture_from_verified_truth(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Use scientist-reviewed, API-frozen truth: architecture is model provenance.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    dataset_payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+    parameters = {"training_config": {"epochs": 1}}
+
+    for invalid_architecture in (None, False, 0, [], {}, "", "   ", 123):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="architecture must be a non-blank string"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=dataset_payload,
+                parameters={**parameters, "architecture": invalid_architecture},
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert session.scalar(select(TrainingRun.id)) is None
+        result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters=parameters,
+            processor=_fake_pose_processor,
+        )
+
+    assert result["architecture"] == "yolo11n-pose.yaml"
+
+
+def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The training input is frozen through scientist review and the real API.
+    # A completed worker must not relabel another workflow node's job before
+    # the first result artifact is returned (not just on a later retry).
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    project_id = str(project["id"])
+    payload = {
+        "project_id": project_id,
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+
+    def substituted_job_processor(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        assert _fake_pose_processor(settings, factory, job_id)
+        with factory() as session:
+            job = session.get(Job, job_id)
+            assert job is not None
+            job.request_json = {
+                **dict(job.request_json),
+                "workflow_node_run_id": "substituted-pose-node",
+            }
+            session.commit()
+        return True
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="child job lineage changed"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={"training_config": {"epochs": 1}},
+            workflow_run_id="saved-pose-run",
+            workflow_node_run_id="original-pose-node",
+            processor=substituted_job_processor,
+        )
+
+    # A different successful job with copied request metadata must not
+    # replace the exact child job queued by this saved workflow node.
+    def substituted_job_identity_processor(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        assert _fake_pose_processor(settings, factory, job_id)
+        with factory() as child_session:
+            original = child_session.get(Job, job_id)
+            assert original is not None
+            replacement = Job(
+                project_id=original.project_id,
+                job_type="training",
+                status="succeeded",
+                progress_current=original.progress_current,
+                progress_total=original.progress_total,
+                request_json=dict(original.request_json),
+                result_json=dict(original.result_json or {}),
+            )
+            child_session.add(replacement)
+            child_session.flush()
+            run = child_session.get(TrainingRun, str(original.request_json["training_run_id"]))
+            assert run is not None
+            run.job_id = replacement.id
+            child_session.commit()
+        return True
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="child job identity changed"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={"training_config": {"epochs": 1}},
+            workflow_run_id="saved-pose-run",
+            workflow_node_run_id="substituted-job-identity-node",
+            processor=substituted_job_identity_processor,
+        )
+
+    # The first result must also reject a worker-mutated frozen artifact
+    # manifest, before a downstream node can consume the false schema lineage.
+    substituted_artifact_run_ids: list[str] = []
+
+    def substituted_artifact_processor(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        assert _fake_pose_processor(settings, factory, job_id)
+        with factory() as child_session:
+            job = child_session.get(Job, job_id)
+            assert job is not None
+            run = child_session.get(TrainingRun, str(job.request_json["training_run_id"]))
+            assert run is not None
+            substituted_artifact_run_ids.append(run.id)
+            run.artifact_manifest_json = {
+                **dict(run.artifact_manifest_json or {}),
+                "pose_schema_id": "substituted-pose-schema",
+            }
+            child_session.commit()
+        return True
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="artifact provenance changed"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={"training_config": {"epochs": 1}},
+            workflow_run_id="saved-pose-run",
+            workflow_node_run_id="tampered-artifact-node",
+            processor=substituted_artifact_processor,
+        )
+
+    # Rejected first-completion replay must roll back checkpoint finalization.
+    # The worker's completed run remains intact for scientific forensics.
+    assert len(substituted_artifact_run_ids) == 1
+    with app.state.session_factory() as session:
+        run = session.get(TrainingRun, substituted_artifact_run_ids[0])
+        assert run is not None and run.status == "completed"
+        assert run.artifact_manifest_json["pose_schema_id"] == "substituted-pose-schema"
+        assert "result_checkpoint_sha256" not in run.artifact_manifest_json
+
+    # A completed worker may leave an experiment record with altered frozen
+    # schema lineage even when the training run itself is still intact.
+    # Finalization must reject that independent evidence before syncing digests.
+    def altered_experiment_lineage_processor(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        assert _fake_pose_processor(settings, factory, job_id)
+        with factory() as child_session:
+            job = child_session.get(Job, job_id)
+            assert job is not None
+            run_id = str(job.request_json["training_run_id"])
+            experiment = child_session.scalar(
+                select(ExperimentRecord).where(ExperimentRecord.training_run_id == run_id)
+            )
+            assert experiment is not None
+            experiment.artifact_manifest_json = {
+                **dict(experiment.artifact_manifest_json or {}),
+                "pose_schema_content_hash": "altered-experiment-schema",
+            }
+            child_session.commit()
+        return True
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="experiment artifact provenance changed"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={"training_config": {"epochs": 1}},
+            workflow_run_id="saved-pose-run",
+            workflow_node_run_id="tampered-experiment-artifact-node",
+            processor=altered_experiment_lineage_processor,
+        )
+
+    # The worker's experiment registry also copies native training rows.
+    # If those rows change independently, first completion must reject the
+    # record instead of overwriting it with the training run's manifest.
+    altered_native_run_ids: list[str] = []
+
+    def altered_experiment_native_metrics_processor(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        assert _fake_pose_processor(settings, factory, job_id)
+        with factory() as child_session:
+            job = child_session.get(Job, job_id)
+            assert job is not None
+            run_id = str(job.request_json["training_run_id"])
+            altered_native_run_ids.append(run_id)
+            experiment = child_session.scalar(
+                select(ExperimentRecord).where(ExperimentRecord.training_run_id == run_id)
+            )
+            assert experiment is not None
+            experiment.artifact_manifest_json = {
+                **dict(experiment.artifact_manifest_json or {}),
+                "native_results_rows": [{"epoch": 1, "metrics/mAP50-95(P)": 0.0}],
+            }
+            child_session.commit()
+        return True
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="experiment artifact provenance changed"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={"training_config": {"epochs": 1}},
+            workflow_run_id="saved-pose-run",
+            workflow_node_run_id="tampered-experiment-native-metrics-node",
+            processor=altered_experiment_native_metrics_processor,
+        )
+    assert len(altered_native_run_ids) == 1
+    with app.state.session_factory() as session:
+        run = session.get(TrainingRun, altered_native_run_ids[0])
+        assert run is not None
+        assert "result_checkpoint_sha256" not in dict(run.artifact_manifest_json or {})
+
+    # The first completion must not commit newly pinned checkpoint digests
+    # when the worker's independent experiment summary contradicts its run.
+    # Exercise both comparison metrics and warnings from the API-frozen truth.
+    for field, corrupted in (
+        ("summary_metrics_json", {"metrics/mAP50-95(P)": 0.0}),
+        ("comparison_warnings_json", ["altered-scientific-warning"]),
+    ):
+        created_run_ids: list[str] = []
+
+        def altered_experiment_summary_processor(
+            settings: Settings,
+            factory: sessionmaker[Session],
+            job_id: str,
+            summary_field: str = field,
+            summary_value: Any = corrupted,
+            run_ids: list[str] = created_run_ids,
+        ) -> bool:
+            assert _fake_pose_processor(settings, factory, job_id)
+            with factory() as child_session:
+                job = child_session.get(Job, job_id)
+                assert job is not None
+                run_id = str(job.request_json["training_run_id"])
+                run_ids.append(run_id)
+                experiment = child_session.scalar(
+                    select(ExperimentRecord).where(ExperimentRecord.training_run_id == run_id)
+                )
+                assert experiment is not None
+                setattr(experiment, summary_field, summary_value)
+                child_session.commit()
+            return True
+
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="experiment summary provenance changed"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=project_id,
+                dataset_payload=payload,
+                parameters={"training_config": {"epochs": 1}},
+                workflow_run_id="saved-pose-run",
+                workflow_node_run_id=f"altered-experiment-{field}",
+                processor=altered_experiment_summary_processor,
+            )
+        assert len(created_run_ids) == 1
+        with app.state.session_factory() as session:
+            run = session.get(TrainingRun, created_run_ids[0])
+            assert run is not None
+            assert run.status == "completed"
+            assert "result_checkpoint_sha256" not in dict(run.artifact_manifest_json or {})
+
+    # A worker may assert a checkpoint digest or path before completion.
+    # Finalization must reject contradictory assertions rather than replacing
+    # them with the current file identity and concealing provenance drift.
+    for field, corrupted_value, expected_error in (
+        ("result_checkpoint_sha256", "0" * 64, "worker checkpoint checksum changed"),
+        (
+            "result_checkpoint_path",
+            "substituted-training-output/weights/best.pt",
+            "worker checkpoint path changed",
+        ),
+        (
+            "best_checkpoint_path",
+            "substituted-training-output/weights/best.pt",
+            "checkpoint artifact path changed",
+        ),
+        (
+            "last_checkpoint_path",
+            "substituted-training-output/weights/last.pt",
+            "checkpoint artifact path changed",
+        ),
+    ):
+
+        def conflicting_checkpoint_manifest_processor(
+            settings: Settings,
+            factory: sessionmaker[Session],
+            job_id: str,
+            *,
+            manifest_field: str = field,
+            manifest_value: str = corrupted_value,
+        ) -> bool:
+            assert _fake_pose_processor(settings, factory, job_id)
+            with factory() as child_session:
+                job = child_session.get(Job, job_id)
+                assert job is not None
+                run = child_session.get(TrainingRun, str(job.request_json["training_run_id"]))
+                assert run is not None
+                run.artifact_manifest_json = {
+                    **dict(run.artifact_manifest_json or {}),
+                    manifest_field: manifest_value,
+                }
+                child_session.commit()
+            return True
+
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match=expected_error),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=project_id,
+                dataset_payload=payload,
+                parameters={"training_config": {"epochs": 1}},
+                workflow_run_id="saved-pose-run",
+                workflow_node_run_id=f"conflicting-{field}-node",
+                processor=conflicting_checkpoint_manifest_processor,
+            )
+
+    # A worker must not silently relabel the model architecture after training
+    # and expose a checkpoint under different scientific configuration.
+    def substituted_configuration_processor(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        assert _fake_pose_processor(settings, factory, job_id)
+        with factory() as child_session:
+            job = child_session.get(Job, job_id)
+            assert job is not None
+            run = child_session.get(TrainingRun, str(job.request_json["training_run_id"]))
+            assert run is not None
+            run.architecture = "yolo11x-pose.yaml"
+            child_session.commit()
+        return True
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="configuration changed"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={"training_config": {"epochs": 1}},
+            workflow_run_id="saved-pose-run",
+            workflow_node_run_id="tampered-config-node",
+            processor=substituted_configuration_processor,
+        )
+
+    # Frozen review evidence can be changed by a worker after preflight.
+    # First completion must recheck the persisted items before publishing
+    # the checkpoint, even when the dataset manifest itself was not changed.
+    original_review: dict[str, Any] | None = None
+
+    def tampered_frozen_truth_processor(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        nonlocal original_review
+        assert _fake_pose_processor(settings, factory, job_id)
+        with factory() as child_session:
+            frozen_item = child_session.scalar(
+                select(PoseTrainingDatasetItem).where(
+                    PoseTrainingDatasetItem.dataset_id == str(dataset["id"])
+                )
+            )
+            assert frozen_item is not None
+            original_review = dict(frozen_item.review_provenance_json)
+            frozen_item.review_provenance_json = {
+                **original_review,
+                "action": "unverified_after_training",
+            }
+            child_session.commit()
+        return True
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="item fingerprints no longer match"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={"training_config": {"epochs": 1}},
+            workflow_run_id="saved-pose-run",
+            workflow_node_run_id="tampered-frozen-truth-node",
+            processor=tampered_frozen_truth_processor,
+        )
+
+    assert original_review is not None
+    with app.state.session_factory() as session:
+        frozen_item = session.scalar(
+            select(PoseTrainingDatasetItem).where(
+                PoseTrainingDatasetItem.dataset_id == str(dataset["id"])
+            )
+        )
+        assert frozen_item is not None
+        frozen_item.review_provenance_json = original_review
+        session.commit()
+
+    # A copied, checksummed checkpoint from a different output directory is
+    # not the trained artifact of this node, even when its bytes are identical.
+    def substituted_checkpoint_processor(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        assert _fake_pose_processor(settings, factory, job_id)
+        with factory() as child_session:
+            job = child_session.get(Job, job_id)
+            assert job is not None
+            run = child_session.get(TrainingRun, str(job.request_json["training_run_id"]))
+            assert run is not None
+            assert run.result_checkpoint_path is not None
+            original = resolve_managed_project_path(settings, run.result_checkpoint_path)
+            substituted_relative = (
+                f"{project['storage_root']}/training/{run.id}/runs/other/weights/best.pt"
+            )
+            substituted = resolve_managed_project_path(settings, substituted_relative)
+            substituted.parent.mkdir(parents=True, exist_ok=True)
+            substituted.write_bytes(original.read_bytes())
+            run.result_checkpoint_path = substituted_relative
+            child_session.commit()
+        return True
+
+    # A rejected, out-of-run checkpoint must never reach the file hasher,
+    # even if the worker copied legitimate bytes into that other directory.
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            "reefvision.services.workflow_pose_training.hash_model_file",
+            lambda _path: pytest.fail("Rejected pose checkpoint was hashed"),
+        )
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="checkpoint belongs to another output"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=project_id,
+                dataset_payload=payload,
+                parameters={"training_config": {"epochs": 1}},
+                workflow_run_id="saved-pose-run",
+                workflow_node_run_id="substituted-checkpoint-node",
+                processor=substituted_checkpoint_processor,
+            )
+
+    # Training can finish after another writer changes the registered seed
+    # checkpoint. First completion must reject that drift, not publish the
+    # output as though it used the originally verified seed bytes.
+    seed_model_id = _seed_model(app, project, dataset)
+    with app.state.session_factory() as session:
+        seed = session.get(ModelRegistration, seed_model_id)
+        assert seed is not None
+        seed_checkpoint = resolve_managed_project_path(test_settings, seed.managed_path)
+    original_seed_bytes = seed_checkpoint.read_bytes()
+
+    def changed_seed_processor(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        assert _fake_pose_processor(settings, factory, job_id)
+        seed_checkpoint.write_bytes(b"modified-after-pose-training-started")
+        return True
+
+    try:
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="seed checkpoint checksum changed"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=project_id,
+                dataset_payload=payload,
+                initial_model_payload={"model_id": seed_model_id},
+                parameters={"training_config": {"epochs": 1}},
+                workflow_run_id="saved-pose-run",
+                workflow_node_run_id="changed-seed-checkpoint-node",
+                processor=changed_seed_processor,
+            )
+    finally:
+        seed_checkpoint.write_bytes(original_seed_bytes)
+
+    # The legitimate saved-node lineage must still complete and expose a
+    # checksummed checkpoint when its worker has not changed the child job.
+    with app.state.session_factory() as session:
+        valid = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={"training_config": {"epochs": 1}},
+            workflow_run_id="saved-pose-run",
+            workflow_node_run_id="legitimate-pose-node",
+            processor=_fake_pose_processor,
+        )
+    assert valid["workflow_node_run_id"] == "legitimate-pose-node"
+    assert valid["pose_training_dataset_id"] == dataset["id"]
+    assert len(valid["result_checkpoint_sha256"]) == 64

@@ -10,16 +10,23 @@ from typing import cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 
 from reefvision.db.models import (
+    PoseActiveLearningCandidate,
+    PoseActiveLearningRound,
+    PoseLandmarkCorrection,
     PoseLandmarkObservation,
     PoseLandmarkSchema,
     PoseLandmarkSchemaRevision,
     PoseLandmarkTrack,
     PoseTrainingDataset,
     PoseTrainingDatasetItem,
+    VideoAsset,
     VideoTrack,
 )
+from reefvision.services.pose_training_datasets import frozen_pose_item_evidence_sha256
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_pose_active_learning_phase8 import (
     _build_temporal,
@@ -270,6 +277,29 @@ def test_verified_pose_round_freezes_immutable_training_dataset(
     assert frozen_again["item_sha256"] == frozen["item_sha256"]
 
 
+def test_freeze_rejects_blank_dataset_name_without_persisting_record(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "   ", "created_by": "scientist"},
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == "Pose training dataset name cannot be blank"
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        assert (
+            session.query(PoseTrainingDataset)
+            .filter_by(source_round_id=str(round_payload["id"]))
+            .count()
+            == 0
+        )
+
+
 def test_verified_pose_without_immutable_schema_is_rejected(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -319,6 +349,15 @@ def test_training_dataset_creation_is_idempotent_per_round(
     assert second.status_code == 201
     assert second.json()["id"] == first.json()["id"]
     assert second.json()["manifest_sha256"] == first.json()["manifest_sha256"]
+    # Repeating a freeze must not create duplicate immutable item rows.
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        datasets = session.query(PoseTrainingDataset).all()
+        assert len(datasets) == 1
+        dataset_id = first.json()["id"]
+        items = session.query(PoseTrainingDatasetItem).filter_by(dataset_id=dataset_id).all()
+        assert len(items) == first.json()["item_count"]
+        assert len(items) > 0
 
 
 def test_unreviewed_pose_round_cannot_become_training_truth(
@@ -393,6 +432,381 @@ def test_training_dataset_blocks_pose_changed_after_verification(
     assert "changed after scientist verification" in (response.text)
 
 
+@pytest.mark.parametrize("changed_record", ["correction", "candidate", "timestamp"])
+def test_freeze_rejects_changed_scientist_review_attribution(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    changed_record: str,
+) -> None:
+    # Exercise the actual scientist-review API path, then corrupt one of its
+    # independently persisted audit records before freezing any training data.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        correction = session.get(PoseLandmarkCorrection, candidate.correction_id)
+        assert correction is not None
+        assert correction.actor == candidate.reviewed_by == "scientist"
+        if changed_record == "correction":
+            correction.actor = "different-reviewer"
+        elif changed_record == "candidate":
+            candidate.reviewed_by = "different-reviewer"
+        elif changed_record == "timestamp":
+            candidate.reviewed_at = None
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={},
+    )
+    assert response.status_code == 409, response.text
+    assert "scientist review attribution changed" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+
+
+@pytest.mark.parametrize(
+    "changed_field",
+    ["source_track_revision", "candidate_provenance_sha256", "verified_pose_sha256"],
+)
+def test_freeze_rejects_modified_scientist_correction_evidence(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    changed_field: str,
+) -> None:
+    # Reuse a real saved scientist-verification round, not a synthetic
+    # correction: independently altered audit evidence must block freezing.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        correction = session.get(PoseLandmarkCorrection, candidate.correction_id)
+        assert correction is not None
+        if changed_field == "verified_pose_sha256":
+            after = dict(correction.after_json)
+            after[changed_field] = "0" * 64
+            correction.after_json = after
+        else:
+            before = dict(correction.before_json)
+            before[changed_field] = -1 if changed_field == "source_track_revision" else "0" * 64
+            correction.before_json = before
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={},
+    )
+    assert response.status_code == 409, response.text
+    assert "scientist correction evidence changed" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+
+
+@pytest.mark.parametrize("invalid_score", [float("nan"), float("inf"), -float("inf")])
+def test_database_rejects_nonfinite_persisted_acquisition_score(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    invalid_score: float,
+) -> None:
+    # Validate the actual database constraint on a reviewed persisted round.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        candidate.acquisition_score = invalid_score
+        # SQLite rejects NaN via NOT NULL and infinities via the score CHECK
+        # constraint before the freeze endpoint can read these values.
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
+        assert session.query(PoseTrainingDataset).count() == 0
+
+
+def test_freeze_rejects_changed_candidate_acquisition_provenance(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Exercise the real reviewed-round API path before any dataset exists.
+    # Editing the candidate's source metadata must not create frozen truth
+    # under the original acquisition fingerprint.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        original_sha = candidate.provenance_sha256
+        candidate.provenance_json = {
+            **dict(candidate.provenance_json),
+            "altered_after_review": True,
+        }
+        assert candidate.provenance_sha256 == original_sha
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Must not freeze altered acquisition evidence"},
+    )
+    assert response.status_code == 409, response.text
+    assert "acquisition provenance changed after selection" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement", "expected_error"),
+    [
+        ("video_sha256", None, "Source video checksum changed after acquisition"),
+        ("video_sha256", "A" * 64, "Source video checksum changed after acquisition"),
+        ("video_sha256", "a" * 63, "Source video checksum changed after acquisition"),
+        ("video_id", "wrong-video", "does not match verified source"),
+        ("video_track_id", "wrong-track", "does not match verified source"),
+        ("focus_frame", -1, "does not match verified source"),
+    ],
+)
+def test_freeze_rejects_resigned_acquisition_with_invalid_source_identity(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    replacement: object,
+    expected_error: str,
+) -> None:
+    # Use a real verified round and re-sign the candidate's acquisition
+    # evidence. A frozen dataset must be valid on its first read, even when
+    # the candidate digest has been updated to match corrupted source IDs.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        acquisition = dict(candidate.provenance_json)
+        assert field in acquisition
+        if replacement is None:
+            acquisition.pop(field)
+        else:
+            acquisition[field] = replacement
+        candidate.provenance_json = acquisition
+        candidate.provenance_sha256 = canonical_json_sha256(acquisition)
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Must not freeze invalid source identity"},
+    )
+    assert response.status_code == 409, response.text
+    assert expected_error in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+
+
+@pytest.mark.parametrize("resign_selection", [False, True])
+def test_freeze_rejects_changed_saved_selection_lineage(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    resign_selection: bool,
+) -> None:
+    # Reuse a real completed scientist-review round, not a fabricated dataset.
+    # Both an unsigned selection edit and a re-signed selection with identities
+    # that disagree with its persisted candidates must fail before freezing.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        round_record = session.get(PoseActiveLearningRound, str(round_payload["id"]))
+        assert round_record is not None
+        selection = copy.deepcopy(round_record.selection_manifest_json)
+        selection["items"][0]["focus_frame"] = -1
+        round_record.selection_manifest_json = selection
+        if resign_selection:
+            identity = {
+                **selection,
+                "schema_version": "pose-active-learning-selection-identity-0001",
+            }
+            round_record.selection_sha256 = canonical_json_sha256(identity)
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Reject changed saved selection"},
+    )
+    assert response.status_code == 409, response.text
+    expected = (
+        "selected candidate identities changed"
+        if resign_selection
+        else "selection manifest checksum changed"
+    )
+    assert expected in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+
+
+def test_freeze_rejects_blank_video_digest_even_when_acquisition_agrees(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A re-signed acquisition and a damaged source video can both carry an
+    # empty checksum. Equality alone does not establish scientific lineage.
+    _, video, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        source = session.get(VideoAsset, str(video["id"]))
+        assert source is not None and source.sha256
+        source.sha256 = ""
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        acquisition = {**candidate.provenance_json, "video_sha256": ""}
+        candidate.provenance_json = acquisition
+        candidate.provenance_sha256 = canonical_json_sha256(acquisition)
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={},
+    )
+    assert response.status_code == 409, response.text
+    assert "Source video checksum changed after acquisition" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+
+
+@pytest.mark.parametrize("schema_location", ["dataset", "manifest"])
+def test_frozen_dataset_rejects_resigned_incompatible_schema_version(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    schema_location: str,
+) -> None:
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={},
+    )
+    assert response.status_code == 201, response.text
+    dataset_id = response.json()["id"]
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        dataset = session.get(PoseTrainingDataset, dataset_id)
+        assert dataset is not None
+        if schema_location == "dataset":
+            dataset.schema_version = "pose-training-dataset-unsupported"
+        else:
+            manifest = copy.deepcopy(dataset.manifest_json)
+            manifest["schema_version"] = "pose-training-dataset-manifest-unsupported"
+            dataset.manifest_json = manifest
+            dataset.manifest_sha256 = canonical_json_sha256(manifest)
+        session.commit()
+
+    response = client.get(f"/api/v1/pose-training-datasets/{dataset_id}/manifest")
+    assert response.status_code == 409, response.text
+    assert "manifest lineage" in response.text
+
+
+def test_frozen_dataset_rejects_resigned_blank_video_digest(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Exercise an actual scientist-verified frozen dataset, then re-sign its
+    # persisted manifest and review evidence around a missing video digest.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={},
+    )
+    assert response.status_code == 201, response.text
+    dataset_id = response.json()["id"]
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        dataset = session.get(PoseTrainingDataset, dataset_id)
+        assert dataset is not None
+        item = session.query(PoseTrainingDatasetItem).filter_by(dataset_id=dataset_id).one()
+        item.video_sha256 = ""
+        acquisition = {**item.acquisition_provenance_json, "video_sha256": ""}
+        item.acquisition_provenance_json = acquisition
+        review = copy.deepcopy(item.review_provenance_json)
+        review["before"]["candidate_provenance_sha256"] = canonical_json_sha256(acquisition)
+        item.review_provenance_json = review
+        manifest = copy.deepcopy(dataset.manifest_json)
+        summary = manifest["items"][0]
+        summary["video_sha256"] = ""
+        summary["candidate_provenance_sha256"] = canonical_json_sha256(acquisition)
+        summary["frozen_evidence_sha256"] = frozen_pose_item_evidence_sha256(item)
+        dataset.manifest_json = manifest
+        dataset.manifest_sha256 = canonical_json_sha256(manifest)
+        session.commit()
+
+    response = client.get(f"/api/v1/pose-training-datasets/{dataset_id}/manifest")
+    assert response.status_code == 409, response.text
+    assert "item lineage" in response.text
+
+
+@pytest.mark.parametrize(
+    ("field", "malformed"),
+    [
+        ("source_models_json", ["not-a-model-snapshot"]),
+        ("source_models_json", [{}]),
+        ("source_models_json", [{"model_id": ""}]),
+        ("source_models_json", [{"model_id": None}]),
+        ("source_models_json", [{"model_id": " model-with-space "}]),
+        ("source_job_ids_json", [" job-with-space "]),
+        ("source_job_ids_json", {"job-id": "not-a-list"}),
+        ("source_job_ids_json", [None]),
+        ("source_models_json", [{"model_id": "same"}, {"model_id": "same"}]),
+        ("source_job_ids_json", ["same-job", "same-job"]),
+    ],
+)
+def test_frozen_dataset_rejects_resigned_malformed_source_lineage(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    malformed: object,
+) -> None:
+    # Freeze a persisted, scientist-verified round, then simulate corrupt
+    # stored lineage even when an attacker re-signs the manifest evidence.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    created = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={},
+    )
+    assert created.status_code == 201, created.text
+    dataset_id = created.json()["id"]
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        dataset = session.get(PoseTrainingDataset, dataset_id)
+        assert dataset is not None
+        item = session.query(PoseTrainingDatasetItem).filter_by(dataset_id=dataset_id).one()
+        setattr(item, field, malformed)
+        manifest = copy.deepcopy(dataset.manifest_json)
+        manifest["items"][0]["frozen_evidence_sha256"] = frozen_pose_item_evidence_sha256(item)
+        dataset.manifest_json = manifest
+        dataset.manifest_sha256 = canonical_json_sha256(manifest)
+        session.commit()
+
+    response = client.get(f"/api/v1/pose-training-datasets/{dataset_id}/manifest")
+    assert response.status_code == 409, response.text
+    assert "item lineage" in response.text
+
+
 def test_native_pose_training_package_is_deterministic_and_verified_only(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -415,6 +829,10 @@ def test_native_pose_training_package_is_deterministic_and_verified_only(
     assert first.content == second.content
     assert (
         first.headers["x-reefvision-pose-dataset-package-sha256"]
+        == hashlib.sha256(first.content).hexdigest()
+    )
+    assert (
+        first.headers["x-reefvision-pose-dataset-package-sha256"]
         == second.headers["x-reefvision-pose-dataset-package-sha256"]
     )
 
@@ -425,7 +843,16 @@ def test_native_pose_training_package_is_deterministic_and_verified_only(
             "reefvision-pose-training-manifest.json",
             "items.jsonl",
             "README.txt",
+            "SHA256SUMS",
         }
+
+        # Exported ZIP metadata must not vary with the host OS or clock.
+        # Check the actual scientist-verified package, not a mock archive.
+        for member in archive.infolist():
+            assert member.date_time == (1980, 1, 1, 0, 0, 0)
+            assert member.create_system == 3
+            assert member.external_attr >> 16 == 0o100644
+            assert member.compress_type == zipfile.ZIP_DEFLATED
 
         manifest = json.loads(archive.read("reefvision-pose-training-manifest.json"))
 
@@ -435,11 +862,52 @@ def test_native_pose_training_package_is_deterministic_and_verified_only(
             if line.strip()
         ]
 
+        # Validate the exported checksum index against the actual package bytes,
+        # rather than only comparing two ZIP downloads from the same code path.
+        checksum_lines = archive.read("SHA256SUMS").decode("ascii").splitlines()
+        indexed_files = {}
+        for line in checksum_lines:
+            digest, separator, filename = line.partition("  ")
+            assert separator and len(digest) == 64
+            assert filename in names and filename != "SHA256SUMS"
+            assert filename not in indexed_files
+            assert hashlib.sha256(archive.read(filename)).hexdigest() == digest
+            indexed_files[filename] = digest
+        assert set(indexed_files) == names - {"SHA256SUMS"}
+
     assert manifest["truth_policy"] == "scientist_verified_only"
     assert manifest["pending_candidates_included"] is False
     assert manifest["skipped_candidates_included"] is False
     assert len(rows) == 1
     assert rows[0]["review_provenance"]["actor"] == "scientist"
+
+    # Exercise the *persisted* scientist-verified dataset, not an artificial
+    # item fixture. Even if both the review fingerprint and manifest are
+    # re-signed, source video identity must remain bound to the frozen row.
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        dataset_row = session.get(PoseTrainingDataset, dataset["id"])
+        assert dataset_row is not None
+        item = session.query(PoseTrainingDatasetItem).filter_by(dataset_id=dataset["id"]).one()
+        source = copy.deepcopy(item.acquisition_provenance_json)
+        assert source["video_sha256"] == item.video_sha256
+        source["video_sha256"] = "0" * 64 if item.video_sha256 != "0" * 64 else "1" * 64
+        item.acquisition_provenance_json = source
+
+        review = copy.deepcopy(item.review_provenance_json)
+        review["before"]["candidate_provenance_sha256"] = canonical_json_sha256(source)
+        item.review_provenance_json = review
+
+        manifest = copy.deepcopy(dataset_row.manifest_json)
+        manifest["items"][0]["candidate_provenance_sha256"] = canonical_json_sha256(source)
+        manifest["items"][0]["frozen_evidence_sha256"] = frozen_pose_item_evidence_sha256(item)
+        dataset_row.manifest_json = manifest
+        dataset_row.manifest_sha256 = canonical_json_sha256(manifest)
+        session.commit()
+
+    tampered_export = client.get(f"/api/v1/pose-training-datasets/{dataset['id']}/native-package")
+    assert tampered_export.status_code == 409, tampered_export.text
+    assert "item lineage" in tampered_export.text
 
 
 def test_pose_training_dataset_rows_are_persisted(
@@ -472,3 +940,396 @@ def test_pose_training_dataset_rows_are_persisted(
         item_rows[0].verified_pose_sha256
         == dataset_row.manifest_json["items"][0]["verified_pose_sha256"]
     )
+
+
+def test_freeze_rejects_nonlist_canonical_keyframes_without_persisting_dataset(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The persisted scientist review remains valid, but corrupted source
+    # keyframes cannot be treated as a training-ready canonical pose.
+    _, _, track, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        source = session.get(VideoTrack, str(track["id"]))
+        assert source is not None
+        assert isinstance(source.keyframes_json, list)
+        source.keyframes_json = {"frame": 0}
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Must reject malformed canonical keyframes"},
+    )
+    assert response.status_code == 409, response.text
+    assert "keyframes must be a list" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+
+
+def test_freeze_rejects_duplicate_canonical_frame_without_persisting_dataset(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Start with an actually persisted, scientist-verified Active Learning round.
+    # A duplicated canonical frame must not be chosen by JSON list order.
+    _, _, track, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        source = session.get(VideoTrack, str(track["id"]))
+        assert source is not None
+        frames = copy.deepcopy(source.keyframes_json)
+        assert isinstance(frames, list) and frames
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        matching = [
+            frame
+            for frame in frames
+            if isinstance(frame, dict) and frame.get("frame") == candidate.focus_frame
+        ]
+        assert len(matching) == 1
+        frames.append(copy.deepcopy(matching[0]))
+        source.keyframes_json = frames
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Must reject ambiguous canonical frame"},
+    )
+    assert response.status_code == 409, response.text
+    assert "exactly once" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+
+
+@pytest.mark.parametrize("field", ["pose_observations", "keypoints", "bbox"])
+def test_freeze_rejects_nonlist_canonical_landmarks_without_persisting_dataset(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+) -> None:
+    # A completed scientist review must not make a subsequently corrupted
+    # canonical landmark collection eligible for frozen training.
+    _, _, track, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        source = session.get(VideoTrack, str(track["id"]))
+        assert source is not None
+        frames = copy.deepcopy(source.keyframes_json)
+        assert isinstance(frames, list)
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        matching = [
+            frame
+            for frame in frames
+            if isinstance(frame, dict)
+            and type(frame.get("frame")) is int
+            and frame["frame"] == candidate.focus_frame
+        ]
+        assert len(matching) == 1
+        matching[0][field] = {"unexpected": "mapping"}
+        source.keyframes_json = frames
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Reject malformed canonical landmarks"},
+    )
+    assert response.status_code == 409, response.text
+    expected = (
+        "canonical pose bbox must be a list"
+        if field == "bbox"
+        else "canonical pose landmarks must be lists"
+    )
+    assert expected in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+
+
+@pytest.mark.parametrize("field", ["groups_json", "expanded_labels_json"])
+def test_freeze_rejects_nonlist_persisted_schema_labels_without_dataset(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+) -> None:
+    # Review through the real API, then damage the persisted immutable schema.
+    # Neither a mapping's keys nor a partial dataset may become training truth.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        revision = (
+            session.query(PoseLandmarkSchemaRevision)
+            .filter_by(
+                schema_id=candidate.pose_schema_id,
+                revision=candidate.pose_schema_revision,
+            )
+            .one()
+        )
+        assert isinstance(getattr(revision, field), list)
+        setattr(revision, field, {"unexpected": "mapping"})
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Reject damaged persisted schema"},
+    )
+    assert response.status_code == 409, response.text
+    assert "malformed label collections" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+        assert session.query(PoseTrainingDatasetItem).count() == 0
+
+
+@pytest.mark.parametrize("bad_ids", [{"unexpected": "mapping"}, [None], [""]])
+def test_freeze_rejects_malformed_source_model_ids_without_dataset(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    bad_ids: object,
+) -> None:
+    # A persisted scientist verification cannot legitimize malformed source
+    # model references, even when the candidate has no usable model ID.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        candidate.source_model_ids_json = bad_ids
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Reject malformed source model provenance"},
+    )
+    assert response.status_code == 409, response.text
+    assert "source model IDs must be nonempty, trimmed strings" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+        assert session.query(PoseTrainingDatasetItem).count() == 0
+
+
+@pytest.mark.parametrize("bad_ids", [{"unexpected": "mapping"}, [None], [""]])
+def test_freeze_rejects_malformed_source_job_ids_without_dataset(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    bad_ids: object,
+) -> None:
+    # Persisted source training-job lineage must not be silently coerced into
+    # dictionary keys or invalid identifiers during scientist-verified freeze.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        candidate.source_job_ids_json = bad_ids
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Reject malformed source job provenance"},
+    )
+    assert response.status_code == 409, response.text
+    assert "source job IDs must be nonempty, trimmed strings" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+        assert session.query(PoseTrainingDatasetItem).count() == 0
+
+
+@pytest.mark.parametrize("bad_provenance", [[["project_id", "fake"]], ["invalid"], "invalid"])
+def test_freeze_rejects_nonobject_acquisition_provenance_without_dataset(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    bad_provenance: object,
+) -> None:
+    # Exercise an actual persisted scientist-verified round. Re-signing the
+    # candidate checksum must not make a malformed acquisition record valid.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        candidate.provenance_json = bad_provenance
+        candidate.provenance_sha256 = canonical_json_sha256(bad_provenance)
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Reject malformed acquisition provenance"},
+    )
+    assert response.status_code == 409, response.text
+    assert "acquisition provenance must be a JSON object" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+        assert session.query(PoseTrainingDatasetItem).count() == 0
+
+
+def test_freeze_rejects_boolean_acquisition_frame_even_with_resigned_checksum(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # JSON booleans compare equal to Python integers (True == 1). A saved
+    # acquisition frame must retain its integer type before becoming truth.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate)
+            .filter_by(round_id=str(round_payload["id"]))
+            .one()
+        )
+        provenance = copy.deepcopy(candidate.provenance_json)
+        assert type(provenance["focus_frame"]) is int
+        provenance["focus_frame"] = bool(provenance["focus_frame"])
+        candidate.provenance_json = provenance
+        candidate.provenance_sha256 = canonical_json_sha256(provenance)
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={"name": "Reject boolean acquisition frame"},
+    )
+    assert response.status_code == 409, response.text
+    assert "acquisition provenance does not match verified source" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+        assert session.query(PoseTrainingDatasetItem).count() == 0
+
+
+def test_verified_pose_freeze_accepts_last_recorded_video_frame(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A verified selection on the final recorded frame remains eligible.
+    _, video, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate).filter_by(round_id=round_payload["id"]).one()
+        )
+        asset = session.get(VideoAsset, str(video["id"]))
+        assert asset is not None
+        assert candidate.focus_frame >= 0
+        asset.frame_count = candidate.focus_frame + 1
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["item_count"] == 1
+
+
+def test_verified_pose_freeze_rejects_frame_past_recorded_video_end(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A verified observation at frame_count is outside the zero-based
+    # recorded timeline, even when its review and acquisition hashes agree.
+    _, video, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        candidate = (
+            session.query(PoseActiveLearningCandidate).filter_by(round_id=round_payload["id"]).one()
+        )
+        asset = session.get(VideoAsset, str(video["id"]))
+        assert asset is not None
+        assert candidate.focus_frame > 0
+        asset.frame_count = candidate.focus_frame
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={},
+    )
+    assert response.status_code == 409, response.text
+    assert "outside the source video timeline" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+        assert session.query(PoseTrainingDatasetItem).count() == 0
+
+
+def test_verified_pose_freeze_rejects_negative_recorded_video_frame_count(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Invalid persisted source-video metadata must never be frozen into
+    # immutable scientist-reviewed pose training evidence.
+    _, video, _, round_payload = _verified_round(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        asset = session.get(VideoAsset, str(video["id"]))
+        assert asset is not None
+        asset.frame_count = -1
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={},
+    )
+    assert response.status_code == 409, response.text
+    assert "invalid recorded frame count" in response.text
+    with app.state.session_factory() as session:
+        assert session.query(PoseTrainingDataset).count() == 0
+        assert session.query(PoseTrainingDatasetItem).count() == 0
+
+
+def test_frozen_dataset_database_rejects_negative_frame_index(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The persisted database must reject a negative frame identity even when
+    # all associated scientific evidence and manifest hashes are re-signed.
+    _, _, _, round_payload = _verified_round(client, monkeypatch)
+    created = client.post(
+        f"/api/v1/pose-active-learning-rounds/{round_payload['id']}/training-dataset",
+        json={},
+    )
+    assert created.status_code == 201, created.text
+    dataset_id = created.json()["id"]
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        dataset = session.get(PoseTrainingDataset, dataset_id)
+        assert dataset is not None
+        item = session.query(PoseTrainingDatasetItem).filter_by(dataset_id=dataset_id).one()
+        item.frame_index = -1
+        canonical = copy.deepcopy(item.canonical_pose_json)
+        canonical["frame_index"] = -1
+        item.canonical_pose_json = canonical
+        acquisition = copy.deepcopy(item.acquisition_provenance_json)
+        acquisition["focus_frame"] = -1
+        item.acquisition_provenance_json = acquisition
+        review = copy.deepcopy(item.review_provenance_json)
+        review["before"]["candidate_provenance_sha256"] = canonical_json_sha256(acquisition)
+        item.review_provenance_json = review
+        manifest = copy.deepcopy(dataset.manifest_json)
+        manifest["items"][0]["frame_index"] = -1
+        manifest["items"][0]["candidate_provenance_sha256"] = canonical_json_sha256(acquisition)
+        manifest["items"][0]["frozen_evidence_sha256"] = frozen_pose_item_evidence_sha256(item)
+        dataset.manifest_json = manifest
+        dataset.manifest_sha256 = canonical_json_sha256(manifest)
+        with pytest.raises(IntegrityError, match="ck_pose_training_item_frame"):
+            session.commit()
+        session.rollback()
+
+    response = client.get(f"/api/v1/pose-training-datasets/{dataset_id}/manifest")
+    assert response.status_code == 200, response.text
