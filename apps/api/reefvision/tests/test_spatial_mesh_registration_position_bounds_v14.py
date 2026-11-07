@@ -208,3 +208,28 @@ def test_zero_caller_error_bounds_preserve_exact_signed_component_intervals() ->
         assert observed == pytest.approx(expected)
     assert result["provenance"]["coordinate_registration_verified"] is False
     assert "registered_centroid_caller_interval_not_a_confidence_interval" in result["qc_warnings"]
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid"),
+    [
+        ("source_centroid_position_error_bound_m", float("inf")),
+        ("target_centroid_position_error_bound_m", float("nan")),
+        ("registration_alignment_error_bound_m", -0.01),
+    ],
+)
+def test_mutated_prevalidated_evidence_rejects_all_bound_fields(
+    field: str, invalid: float
+) -> None:
+    """A mutable evidence model cannot bypass validation after construction."""
+    evidence = MeshRegistrationEvidence.model_validate(
+        {
+            **_registration(),
+            "source_centroid_position_error_bound_m": 0.1,
+            "target_centroid_position_error_bound_m": 0.2,
+            "registration_alignment_error_bound_m": 0.05,
+        }
+    )
+    setattr(evidence, field, invalid)
+    with pytest.raises(ValueError, match="Invalid pairwise registration evidence"):
+        _compare(evidence)
