@@ -123,7 +123,7 @@ _ACTIONS: dict[str, str] = {
         "Export the immutable pose dataset through the validated Phase 9 exporters."
     ),
     "pose_model_training": (
-        "Retrain an Ultralytics pose checkpoint from immutable scientist-verified pose truth."
+        "Train a provider-native pose checkpoint from immutable scientist-verified pose truth."
     ),
     "project_exchange_export": "Build a Phase 9 checksummed project exchange export inline.",
 }

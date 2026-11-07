@@ -506,8 +506,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         display_name="Train Pose Model",
         category="Training",
         description=(
-            "Train a YOLO11 pose architecture or continue a registered model from an immutable, "
-            "scientist-verified ReefVision pose dataset."
+            "Train native ReefPose-S or YOLO11 pose, or continue a provider-matched registered "
+            "model from an immutable, scientist-verified ReefVision pose dataset."
         ),
         input_ports=[
             WorkflowPortDefinition(
@@ -539,6 +539,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         ],
         required_parameters=[],
         optional_parameters={
+            "provider_id": "ultralytics",
             "initialization_mode": None,
             "architecture": "yolo11n-pose.yaml",
             "run_name": "workflow-pose-retrain",

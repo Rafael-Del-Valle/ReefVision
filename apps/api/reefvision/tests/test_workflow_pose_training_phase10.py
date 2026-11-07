@@ -460,3 +460,117 @@ def test_pose_training_can_require_separate_validation_truth(
             },
             processor=(_fake_pose_processor),
         )
+
+
+def test_pose_training_workflow_exposes_provider_without_changing_legacy_default(
+    client: TestClient,
+) -> None:
+    response = client.get("/api/v1/workflow-graphs/node-registry")
+
+    assert response.status_code == 200, response.text
+    node = next(item for item in response.json() if item["node_type"] == "pose_model_training")
+
+    assert node["optional_parameters"]["provider_id"] == "ultralytics"
+    assert node["optional_parameters"]["architecture"] == "yolo11n-pose.yaml"
+    assert "ReefPose-S" in node["description"]
+
+
+def test_reefpose_workflow_training_supports_random_initialization(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload={
+                "project_id": project["id"],
+                "dataset_id": dataset["id"],
+                "manifest_sha256": dataset["manifest_sha256"],
+            },
+            parameters={
+                "provider_id": "reefpose",
+                "architecture": "reefpose-s",
+                "device": "cpu",
+                "precision": "fp32",
+                "random_seed": 47,
+                "training_config": {"epochs": 1, "batch": 2, "input_height": 64},
+            },
+            workflow_run_id="phase2a-workflow",
+            workflow_node_run_id="phase2a-training-node",
+            processor=_fake_pose_processor,
+        )
+
+        run = session.get(TrainingRun, str(result["training_run_id"]))
+        assert run is not None
+        assert run.provider_id == "reefpose"
+        assert run.architecture == "reefpose-s"
+        assert run.initial_checkpoint_source == "scratch"
+        assert run.parameter_registry_version
+        assert run.training_config_json["batch"] == 2
+        assert run.training_config_json["input_height"] == 64
+        assert run.training_config_json["input_width"] == 256
+
+    assert result["provider_id"] == "reefpose"
+    assert result["initialization_mode"] == "random"
+
+
+def test_reefpose_workflow_rejects_wrong_architecture_and_cross_provider_replay(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    dataset_payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+
+    with app.state.session_factory() as session:
+        with pytest.raises(Exception, match="ReefPose training requires architecture reefpose-s"):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=dataset_payload,
+                parameters={
+                    "provider_id": "reefpose",
+                    "architecture": "yolo11n-pose.yaml",
+                    "training_config": {"epochs": 1},
+                },
+                processor=_fake_pose_processor,
+            )
+
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters={"training_config": {"epochs": 1}},
+            workflow_run_id="provider-replay-workflow",
+            workflow_node_run_id="provider-replay-node",
+            processor=_fake_pose_processor,
+        )
+
+        with pytest.raises(Exception, match="provider changed"):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=dataset_payload,
+                parameters={
+                    "provider_id": "reefpose",
+                    "architecture": "reefpose-s",
+                    "training_config": {"epochs": 1},
+                },
+                workflow_run_id="provider-replay-workflow",
+                workflow_node_run_id="provider-replay-node",
+                processor=_fake_pose_processor,
+            )
