@@ -294,3 +294,22 @@ def test_comprehension_revision_bindings_fail_closed(
     with pytest.raises(ValueError, match="comprehension rebinds revision"):
         load_audit()([root])
     assert file.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from package import *\n",
+        "if True:\n    from package import *\n",
+    ],
+)
+def test_wildcard_import_cannot_silently_rebind_revision(
+    tmp_path: Path, source: str
+) -> None:
+    root = tmp_path / "versions"
+    file = migration(root, "0038.py", "0038")
+    file.write_text(file.read_text(encoding="utf-8") + source, encoding="utf-8")
+    before = file.read_bytes()
+    with pytest.raises(ValueError, match="wildcard import may rebind revision"):
+        load_audit()([root])
+    assert file.read_bytes() == before
