@@ -13,6 +13,7 @@ from PIL import Image
 from reefvision.ml.reefpose.data import (
     PoseRecord,
     ReefPoseDataset,
+    _record_from_annotation,
     _validate_archive,
     group_aware_split,
     load_reefvision_pose_export,
@@ -154,6 +155,65 @@ def _single_landmark_schema() -> AnatomySchema:
 
 
 class ReefVisionPoseExportTests(unittest.TestCase):
+    def test_stable_ids_preserve_reordered_repeated_landmark_coordinates(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            image_path = root / "frame.png"
+            Image.new("RGB", (16, 10)).save(image_path)
+            schema = AnatomySchema(
+                schema_id="jellyfish",
+                name="Jellyfish",
+                revision=2,
+                landmarks=(
+                    LandmarkDefinition(
+                        landmark_id="tentacle_right",
+                        name="Tentacle",
+                        occurrence_index=1,
+                    ),
+                    LandmarkDefinition(
+                        landmark_id="tentacle_left",
+                        name="Tentacle",
+                        occurrence_index=0,
+                    ),
+                ),
+            )
+            annotation = {
+                "item_id": "item-1",
+                "source_frame_index": 0,
+                "canonical_pose": {
+                    "pose_observations": [
+                        {
+                            "landmark_id": "tentacle_right",
+                            "semantic_label": "Tentacle",
+                            "occurrence_index": 0,
+                            "x": 12,
+                            "y": 7,
+                            "status": "visible",
+                        },
+                        {
+                            "landmark_id": "tentacle_left",
+                            "semantic_label": "Tentacle",
+                            "occurrence_index": 1,
+                            "x": 3,
+                            "y": 6,
+                            "status": "visible",
+                        },
+                    ]
+                },
+            }
+
+            record = _record_from_annotation(
+                annotation,
+                root=root,
+                frame_paths={0: Path("frame.png")},
+                schema=schema,
+                source_width=16,
+                source_height=10,
+                group_id="video-1",
+            )
+
+            self.assertEqual(record.keypoints, ((12.0, 7.0), (3.0, 6.0)))
+
     def test_verified_export_preserves_repeated_landmarks_and_builds_targets(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)

@@ -30,7 +30,11 @@ def _legacy_id(label: str, occurrence: int, total: int) -> str:
     return slug if total == 1 else f"{slug}_{occurrence + 1}"
 
 
-def _legacy_definition(revision: PoseLandmarkSchemaRevision) -> dict[str, Any]:
+def definition_for_revision(revision: PoseLandmarkSchemaRevision) -> dict[str, Any]:
+    """Return a canonical definition without mutating legacy stored revisions."""
+
+    if revision.definition_json is not None:
+        return dict(revision.definition_json)
     totals = Counter(str(label) for label in revision.expanded_labels_json)
     seen: Counter[str] = Counter()
     landmarks: list[dict[str, Any]] = []
@@ -87,7 +91,7 @@ class PoseSchemaService:
         revision: PoseLandmarkSchemaRevision,
     ) -> AnatomySchemaRevisionResponse:
         legacy = revision.definition_json is None
-        definition = dict(revision.definition_json or _legacy_definition(revision))
+        definition = definition_for_revision(revision)
         return AnatomySchemaRevisionResponse.model_validate(
             {
                 "id": schema.id,

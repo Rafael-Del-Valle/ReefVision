@@ -115,6 +115,57 @@ describe("poseKeyframeAdapter", () => {
     ]);
   });
 
+  it("restores stable IDs on persisted model observations that predate ID persistence", () => {
+    const anatomicalSchema: PoseLandmarkSchema = {
+      ...schema,
+      landmarks: [
+        { id: "bell_center", name: "bell_center", required: true },
+        { id: "tentacle_right", name: "tentacle", required: true },
+        { id: "tentacle_left", name: "tentacle", required: true },
+      ],
+      edges: [
+        { from_id: "bell_center", to_id: "tentacle_right" },
+        { from_id: "bell_center", to_id: "tentacle_left" },
+      ],
+    };
+    const persisted: VideoTrackKeyframe = {
+      ...keyframe,
+      pose_observations: [
+        {
+          id: "bell",
+          semantic_label: "bell_center",
+          occurrence_index: 0,
+          x: 50,
+          y: 60,
+          confidence: 0.95,
+          status: "visible",
+          source: "model",
+        },
+        {
+          id: "right",
+          semantic_label: "tentacle",
+          occurrence_index: 0,
+          x: 70,
+          y: 80,
+          confidence: 0.72,
+          status: "visible",
+          source: "model",
+        },
+      ],
+    };
+
+    const pose = poseInstanceFromVideoKeyframe(
+      track,
+      persisted,
+      anatomicalSchema,
+    );
+
+    expect(pose.observations.map((item) => item.landmark_id)).toEqual([
+      "bell_center",
+      "tentacle_right",
+    ]);
+  });
+
   it("converts model keypoints into editable semantic observations", () => {
     const pose = poseInstanceFromVideoKeyframe(track, keyframe, schema);
 

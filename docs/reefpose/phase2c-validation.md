@@ -21,7 +21,9 @@ scientific pose accuracy is made.
   metadata, and inference results retain stable IDs and connectivity; native
   checkpoints also retain symmetry and required/optional semantics.
 - Existing legacy pose schemas are projected deterministically without changing
-  their stored revisions. SLEAP and Ultralytics provider paths remain intact.
+  their stored revisions. Pre-Phase-2C ReefPose anatomy hashes remain loadable,
+  and reordered repeated landmarks resolve training targets by stable ID.
+  SLEAP and Ultralytics provider paths remain intact.
 
 The automated integration chain covers custom schema definition, verified
 manual observations, frozen dataset creation, native ReefPose training,
@@ -57,12 +59,12 @@ two-keypoint repeated-anatomy dataset, trained ReefPose-S for one epoch with AMP
 registered the checkpoint, reloaded it on CUDA, and returned two checkpoint
 predictions for a 96 x 64 source image.
 
-- Workflow time (training, registration, load, and inference): 2.0230 s
+- Workflow time (training, registration, load, and inference): 2.2291 s
 - Peak allocated CUDA memory: 18,968,064 bytes (18.09 MiB)
 - Training loss / best selection loss: 0.170955 / 0.170955
 - Checkpoint SHA-256:
-  `79763d7dd28357eb20ad61f1a5a48d9e6641574fc1a3fd03dc941274f466bc55`
-- Registered model ID: `08c8f251-beb9-45fa-b899-aba55ae82d34`
+  `76258ae465e0f836210c986a55996809acb18465c11ea6de92db92f935df28d8`
+- Registered model ID: `0121361e-cbea-4660-8118-5d2ccc8aee32`
 
 This is engineering validation only; the elapsed value is not a standalone
 inference-latency benchmark and must not be interpreted as biological accuracy.
@@ -72,7 +74,7 @@ inference-latency benchmark and must not be interpreted as biological accuracy.
 - Frontend lockfile policy: passed.
 - Prettier format check: passed.
 - TypeScript project check: passed.
-- Vitest: 94 files, 495 tests passed.
+- Vitest: 94 files, 498 tests passed.
 - Production Vite build: passed (existing large-chunk advisory remains).
 - Ruff format: 696 files passed.
 - Ruff lint: passed.
@@ -80,7 +82,7 @@ inference-latency benchmark and must not be interpreted as biological accuracy.
 - Focused custom-schema/checkpoint tests: passed.
 - Explicit CUDA workflow/register/inference test: passed.
 - Backend suite excluding the unavailable real interoperability runtime module:
-  1,414 passed, 33 opt-in skips.
+  1,418 passed, 33 opt-in skips.
 
 The unfiltered backend run initially reported 1,413 passed, 38 skipped, and
 seven failures. One was an introduced hard-coded migration-head expectation and

@@ -173,6 +173,78 @@ def test_legacy_schema_revision_is_serialized_with_deterministic_stable_ids(
     assert revision["legacy_projection"] is True
 
 
+def test_manual_video_track_can_bind_projected_legacy_anatomy(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Legacy annotation binding")
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        schema = PoseLandmarkSchema(project_id=project["id"], name="Legacy fish")
+        session.add(schema)
+        session.flush()
+        session.add(
+            PoseLandmarkSchemaRevision(
+                schema_id=schema.id,
+                revision=1,
+                groups_json=[{"name": "fin", "count": 2}],
+                expanded_labels_json=["fin", "fin"],
+                keypoint_count=2,
+                allows_repeated_labels=True,
+                content_hash="a" * 64,
+            )
+        )
+        session.commit()
+        schema_id = schema.id
+
+    video = _import_video(client, str(project["id"]), monkeypatch)
+    label_class_id = str(project["label_classes"][0]["id"])
+    track = client.post(
+        f"/api/v1/videos/{video['id']}/tracks",
+        json={
+            "label_class_id": label_class_id,
+            "keyframes": [{"frame": 0, "bbox": [5, 5, 40, 40]}],
+            "status": "draft",
+        },
+    ).json()
+
+    updated = client.put(
+        f"/api/v1/video-tracks/{track['id']}",
+        json={
+            "base_revision": track["revision"],
+            "label_class_id": label_class_id,
+            "keyframes": [
+                {
+                    "frame": 0,
+                    "bbox": [5, 5, 40, 40],
+                    "pose_observations": [
+                        {
+                            "id": "manual-fin",
+                            "landmark_id": "fin_1",
+                            "semantic_label": "fin",
+                            "occurrence_index": 0,
+                            "x": 20,
+                            "y": 20,
+                            "status": "visible",
+                            "source": "manual",
+                        }
+                    ],
+                }
+            ],
+            "status": "draft",
+            "pose_schema_binding": {
+                "schema_id": schema_id,
+                "schema_revision": 1,
+                "content_hash": "a" * 64,
+            },
+        },
+    )
+
+    assert updated.status_code == 200, updated.text
+    stored = updated.json()["metadata_json"]["pose_landmark_schema"]
+    assert [item["id"] for item in stored["landmarks"]] == ["fin_1", "fin_2"]
+
+
 def test_manual_video_track_binds_exact_custom_anatomy_revision(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,

@@ -16,10 +16,15 @@ interface AnatomySkeletonDesignerProps {
   onSchemaSelected?: (schema: AnatomySchemaRevision) => void;
 }
 
-function emptyLandmark(index: number): AnatomyLandmarkDefinition {
+function emptyLandmark(
+  landmarks: AnatomyLandmarkDefinition[],
+): AnatomyLandmarkDefinition {
+  const used = new Set(landmarks.map((item) => item.id));
+  let number = 1;
+  while (used.has(`landmark_${number}`)) number += 1;
   return {
-    id: `landmark_${index + 1}`,
-    name: `Landmark ${index + 1}`,
+    id: `landmark_${number}`,
+    name: `Landmark ${number}`,
     description: null,
     group: null,
     repeat_group: null,
@@ -278,7 +283,7 @@ export function AnatomySkeletonDesigner({
 
       <div className="annotation-selection-list">
         {landmarks.map((landmark, index) => (
-          <fieldset key={`${landmark.id}-${index}`}>
+          <fieldset key={`landmark-editor-${index}`}>
             <legend>Landmark {index + 1}</legend>
             <label>
               Stable landmark ID
@@ -407,7 +412,7 @@ export function AnatomySkeletonDesigner({
       <button
         type="button"
         onClick={() =>
-          setLandmarks((current) => [...current, emptyLandmark(current.length)])
+          setLandmarks((current) => [...current, emptyLandmark(current)])
         }
       >
         Add landmark

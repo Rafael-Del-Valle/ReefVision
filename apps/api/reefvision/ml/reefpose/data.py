@@ -324,16 +324,27 @@ def _record_from_annotation(
     pose = _required_mapping(annotation.get("canonical_pose"), "canonical pose")
     observations = _required_list(pose.get("pose_observations"), "pose observations")
     by_slot: dict[tuple[str, int], dict[str, Any]] = {}
+    by_id: dict[str, dict[str, Any]] = {}
     if observations:
         for raw in observations:
             observation = _required_mapping(raw, "pose observation")
+            landmark_id = str(observation.get("landmark_id") or "").strip()
             key = (
                 str(observation.get("semantic_label", "")).strip(),
                 int(observation.get("occurrence_index", -1)),
             )
-            if not key[0] or key[1] < 0 or key in by_slot:
+            if not key[0] or key[1] < 0:
                 raise ReefPoseValidationError("Frozen pose observation identities are invalid")
-            by_slot[key] = observation
+            if landmark_id:
+                if landmark_id in by_id:
+                    raise ReefPoseValidationError(
+                        "Frozen pose stable landmark identities are duplicated"
+                    )
+                by_id[landmark_id] = observation
+            else:
+                if key in by_slot:
+                    raise ReefPoseValidationError("Frozen pose observation identities are invalid")
+                by_slot[key] = observation
     else:
         legacy_keypoints = _required_list(pose.get("keypoints"), "legacy pose keypoints")
         if len(legacy_keypoints) != schema.keypoint_count:
@@ -359,7 +370,15 @@ def _record_from_annotation(
     visibility_states: list[str] = []
     for landmark in schema.landmarks:
         slot = (landmark.name, landmark.occurrence_index)
-        matched_observation = by_slot.pop(slot) if slot in by_slot else None
+        matched_observation = by_id.pop(landmark.landmark_id, None)
+        if matched_observation is not None and (
+            str(matched_observation.get("semantic_label", "")).strip() != landmark.name
+        ):
+            raise ReefPoseValidationError(
+                "Frozen pose stable landmark ID conflicts with its anatomical name"
+            )
+        if matched_observation is None:
+            matched_observation = by_slot.pop(slot) if slot in by_slot else None
         if matched_observation is None:
             keypoints.append((0.0, 0.0))
             visibility.append(0)
@@ -374,7 +393,7 @@ def _record_from_annotation(
         )
         visibility.append(_visibility_value(state))
         visibility_states.append(state)
-    if by_slot:
+    if by_id or by_slot:
         raise ReefPoseValidationError("Frozen pose contains landmarks outside its schema")
 
     raw_bbox = pose.get("bbox")

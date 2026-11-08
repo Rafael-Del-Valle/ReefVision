@@ -79,6 +79,40 @@ export function addPoseObservation(
   imageSize: ImageSize,
   id: string,
 ): PoseInstance {
+  if (schema.landmarks) {
+    const usedIds = new Set(
+      pose.observations
+        .map((observation) => observation.landmark_id)
+        .filter((value): value is string => Boolean(value)),
+    );
+    const matching = schema.landmarks.filter(
+      (landmark) => landmark.name === semanticLabel,
+    );
+    const landmark = matching.find((candidate) => !usedIds.has(candidate.id));
+    if (!landmark) {
+      return pose;
+    }
+    const fallbackOccurrence = matching.findIndex(
+      (candidate) => candidate.id === landmark.id,
+    );
+    return {
+      ...pose,
+      observations: [
+        ...pose.observations,
+        {
+          id,
+          landmark_id: landmark.id,
+          semantic_label: semanticLabel,
+          occurrence_index: landmark.repeat_index ?? fallbackOccurrence,
+          x: clamp(point.x, 0, imageSize.width),
+          y: clamp(point.y, 0, imageSize.height),
+          confidence: null,
+          status: "visible",
+          source: "manual",
+        },
+      ],
+    };
+  }
   const occurrenceIndex = nextAvailableOccurrenceIndex(
     schema,
     pose.observations,
@@ -94,9 +128,6 @@ export function addPoseObservation(
       ...pose.observations,
       {
         id,
-        landmark_id: schema.landmarks?.filter(
-          (landmark) => landmark.name === semanticLabel,
-        )[occurrenceIndex]?.id,
         semantic_label: semanticLabel,
         occurrence_index: occurrenceIndex,
         x: clamp(point.x, 0, imageSize.width),

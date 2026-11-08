@@ -313,6 +313,31 @@ def test_pose_keyframes_emit_repeated_labels_and_absent_landmarks() -> None:
     ]
 
 
+def test_pose_keyframes_emit_stable_ids_from_bound_custom_anatomy() -> None:
+    observation = TrackObservation(
+        frame=4,
+        provider_track_id=2,
+        class_name="jellyfish",
+        confidence=0.9,
+        bbox=(1.0, 2.0, 30.0, 40.0),
+        keypoints=((5.0, 6.0, 0.95), (9.0, 10.0, 0.75)),
+    )
+    schema: dict[str, object] = {
+        "expanded_labels": ["Tentacle", "Tentacle"],
+        "landmarks": [
+            {"id": "tentacle_right", "name": "Tentacle"},
+            {"id": "tentacle_left", "name": "Tentacle"},
+        ],
+    }
+
+    keyframe = _keyframes([observation], schema)[0]
+
+    assert [item["landmark_id"] for item in keyframe["pose_observations"]] == [
+        "tentacle_right",
+        "tentacle_left",
+    ]
+
+
 def test_ultralytics_multitask_adapter_declares_pose_support() -> None:
     provider = UltralyticsMultitaskProvider()
 

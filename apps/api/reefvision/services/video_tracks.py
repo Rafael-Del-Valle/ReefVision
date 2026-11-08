@@ -33,6 +33,7 @@ from reefvision.schemas.videos import (
     VideoTrackUpdate,
 )
 from reefvision.services.georeferenced_observations import GeoReferencedObservationService
+from reefvision.services.pose_schemas import definition_for_revision
 from reefvision.services.video_observation_location import (
     select_video_observation_image_location,
 )
@@ -194,7 +195,7 @@ class VideoTrackService:
                 )
             if revision.content_hash != binding.content_hash:
                 raise ValidationError("Pose anatomy schema content hash does not match")
-            definition = dict(revision.definition_json or {})
+            definition = definition_for_revision(revision)
             known_ids = {
                 str(item.get("id"))
                 for item in definition.get("landmarks", [])

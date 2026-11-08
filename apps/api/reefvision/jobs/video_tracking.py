@@ -107,6 +107,10 @@ def _keyframes(
         pose_landmark_schema.get("expanded_labels") if pose_landmark_schema is not None else None
     )
     expanded_labels = [str(item) for item in labels_raw] if isinstance(labels_raw, list) else None
+    landmarks_raw = (
+        pose_landmark_schema.get("landmarks") if pose_landmark_schema is not None else None
+    )
+    landmarks = landmarks_raw if isinstance(landmarks_raw, list) else None
 
     keyframes: list[dict[str, object]] = []
     for item in observations:
@@ -163,6 +167,14 @@ def _keyframes(
                             ),
                             "status": "visible" if visible else "absent",
                             "source": "model",
+                            **(
+                                {"landmark_id": str(landmarks[index]["id"])}
+                                if landmarks is not None
+                                and index < len(landmarks)
+                                and isinstance(landmarks[index], dict)
+                                and landmarks[index].get("id")
+                                else {}
+                            ),
                         }
                     )
                 payload["pose_observations"] = pose_observations

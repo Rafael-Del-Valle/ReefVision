@@ -16,6 +16,29 @@ function renderDesigner() {
 }
 
 describe("AnatomySkeletonDesigner", () => {
+  it("generates a collision-free default ID after removing a landmark", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    renderDesigner();
+    await screen.findByText("No saved anatomy templates yet.");
+    fireEvent.click(screen.getByRole("button", { name: "Add landmark" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add landmark" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add landmark" }));
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Remove landmark" })[1],
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Add landmark" }));
+
+    const ids = screen
+      .getAllByLabelText("Stable landmark ID")
+      .map((input) => (input as HTMLInputElement).value);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
   it("creates arbitrary repeated anatomy with symmetry and skeleton edges", async () => {
     const requests: Array<{ url: string; body?: Record<string, unknown> }> = [];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {

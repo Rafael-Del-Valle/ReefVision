@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import unittest
 
 from reefvision.ml.reefpose.errors import ReefPoseValidationError
@@ -11,6 +13,47 @@ from reefvision.ml.reefpose.schema import (
 
 
 class AnatomySchemaTests(unittest.TestCase):
+    def test_pre_phase2c_schema_hash_remains_loadable(self) -> None:
+        payload = {
+            "schema_version": "reefpose-anatomy-0001",
+            "schema_id": "legacy-fish",
+            "name": "Legacy fish",
+            "description": None,
+            "revision": 1,
+            "landmarks": [
+                {
+                    "landmark_id": "head",
+                    "name": "head",
+                    "description": None,
+                    "group": None,
+                    "occurrence_index": 0,
+                    "allowed_visibility": [
+                        "absent",
+                        "occluded",
+                        "visible",
+                        "uncertain",
+                        "out_of_frame",
+                    ],
+                    "default_visibility": "visible",
+                }
+            ],
+            "skeleton": [],
+        }
+        payload["integrity_hash"] = hashlib.sha256(
+            json.dumps(
+                payload,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode("utf-8")
+        ).hexdigest()
+
+        restored = AnatomySchema.from_dict(payload)
+
+        self.assertEqual(restored.landmarks[0].landmark_id, "head")
+        self.assertTrue(restored.landmarks[0].required)
+        self.assertIsNone(restored.landmarks[0].symmetric_with)
+
     def test_repeated_reefvision_groups_get_distinct_stable_ids(self) -> None:
         groups = [
             {"name": "bell_center", "count": 1, "description": "Bell center"},

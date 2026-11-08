@@ -64,12 +64,27 @@ export function poseInstanceFromVideoKeyframe(
   const editorSchema = editorSchemaForVideoTrack(track, schema);
   const persisted = keyframe.pose_observations;
   if (persisted && persisted.length > 0) {
+    const indexes = occurrenceIndexes(schema.expanded_labels);
     return {
       id: `${track.id}:frame:${keyframe.frame}`,
       revision: track.revision,
       schema_id: editorSchema.id,
       schema_revision: editorSchema.revision,
-      observations: persisted.map((observation) => ({ ...observation })),
+      observations: persisted.map((observation) => {
+        if (observation.landmark_id || !schema.landmarks) {
+          return { ...observation };
+        }
+        const schemaIndex = schema.expanded_labels.findIndex(
+          (label, index) =>
+            label === observation.semantic_label &&
+            indexes[index] === observation.occurrence_index,
+        );
+        return {
+          ...observation,
+          landmark_id:
+            schemaIndex >= 0 ? schema.landmarks[schemaIndex]?.id : undefined,
+        };
+      }),
     };
   }
 

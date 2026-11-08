@@ -136,7 +136,8 @@ class SkeletonEdge:
 class AnatomySchema:
     """Versioned canonical anatomy shared by data, models, and predictions."""
 
-    SCHEMA_VERSION: ClassVar[str] = "reefpose-anatomy-0001"
+    SCHEMA_VERSION: ClassVar[str] = "reefpose-anatomy-0002"
+    LEGACY_SCHEMA_VERSION: ClassVar[str] = "reefpose-anatomy-0001"
 
     schema_id: str
     name: str
@@ -214,7 +215,8 @@ class AnatomySchema:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> AnatomySchema:
-        if payload.get("schema_version", cls.SCHEMA_VERSION) != cls.SCHEMA_VERSION:
+        source_version = str(payload.get("schema_version", cls.SCHEMA_VERSION))
+        if source_version not in {cls.LEGACY_SCHEMA_VERSION, cls.SCHEMA_VERSION}:
             raise ReefPoseValidationError("Unsupported ReefPose anatomy schema version")
         raw_landmarks = payload.get("landmarks")
         raw_skeleton = payload.get("skeleton", [])
@@ -231,8 +233,37 @@ class AnatomySchema:
             skeleton=tuple(SkeletonEdge.from_dict(item) for item in raw_skeleton),
         )
         expected_hash = payload.get("integrity_hash")
-        if expected_hash is not None and str(expected_hash) != schema.integrity_hash:
-            raise ReefPoseValidationError("ReefPose anatomy schema integrity hash does not match")
+        if expected_hash is not None:
+            valid_hashes = {schema.integrity_hash}
+            if source_version == cls.LEGACY_SCHEMA_VERSION:
+                extended = schema._canonical_payload()
+                extended["schema_version"] = cls.LEGACY_SCHEMA_VERSION
+                legacy = {
+                    **extended,
+                    "landmarks": [
+                        {
+                            key: value
+                            for key, value in landmark.to_dict().items()
+                            if key not in {"symmetric_with", "required"}
+                        }
+                        for landmark in schema.landmarks
+                    ],
+                }
+                for candidate in (extended, legacy):
+                    valid_hashes.add(
+                        hashlib.sha256(
+                            json.dumps(
+                                candidate,
+                                sort_keys=True,
+                                separators=(",", ":"),
+                                ensure_ascii=False,
+                            ).encode("utf-8")
+                        ).hexdigest()
+                    )
+            if str(expected_hash) not in valid_hashes:
+                raise ReefPoseValidationError(
+                    "ReefPose anatomy schema integrity hash does not match"
+                )
         return schema
 
     @classmethod

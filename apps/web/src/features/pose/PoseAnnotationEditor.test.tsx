@@ -192,6 +192,55 @@ describe("PoseAnnotationEditor", () => {
     expect(screen.queryAllByTestId(/pose-skeleton-/)).toHaveLength(0);
   });
 
+  it("keeps explicit repeated slots stable after landmark reorder", async () => {
+    const reordered: PoseLandmarkSchema = {
+      ...stableSchema,
+      revision: 2,
+      landmarks: [
+        stableSchema.landmarks![0],
+        stableSchema.landmarks![2],
+        stableSchema.landmarks![1],
+      ],
+    };
+    const onSave = vi.fn(async (request: PoseSaveRequest) =>
+      savedPose(request),
+    );
+    render(
+      <PoseAnnotationEditor
+        imageUrl="data:image/png;base64,"
+        imageWidth={900}
+        imageHeight={600}
+        schema={reordered}
+        poses={[
+          {
+            id: "reordered-pose",
+            revision: 1,
+            schema_id: reordered.id,
+            schema_revision: reordered.revision,
+            observations: [],
+          },
+        ]}
+        onSave={onSave}
+      />,
+    );
+    const stage = installStageBounds();
+    fireEvent.click(screen.getByRole("button", { name: "Place Tentacle" }));
+    fireEvent.pointerDown(stage, { button: 0, clientX: 300, clientY: 300 });
+    fireEvent.pointerDown(stage, { button: 0, clientX: 500, clientY: 300 });
+    fireEvent.click(screen.getByRole("button", { name: "Save pose" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(
+      onSave.mock.calls[0][0].observations.map((item) => ({
+        id: item.landmark_id,
+        occurrence: item.occurrence_index,
+      })),
+    ).toEqual([
+      { id: "tentacle_2", occurrence: 1 },
+      { id: "tentacle_1", occurrence: 0 },
+    ]);
+  });
+
   it("stores eight repeated tentacles under one semantic label", async () => {
     const onSave = vi.fn(async (request: PoseSaveRequest) =>
       savedPose(request),
