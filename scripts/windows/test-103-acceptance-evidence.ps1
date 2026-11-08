@@ -54,6 +54,17 @@ try {
     if ($changedMsi.Count -ne 1 -or $changedMsi[0].sha256 -cne $changedHash -or $changedMsi[0].sha256 -ceq $originalHash) {
         throw 'Modified MSI bytes did not invalidate the previous evidence hash.'
     }
+    # An arbitrary binary must not be mislabeled as a verified MSI/CAB.
+    $wrongExtension = Join-Path $fixture 'not-an-installer.bin'
+    [System.IO.File]::WriteAllBytes($wrongExtension, [byte[]](1, 2, 3))
+    foreach ($artifactKind in @('MsiPath', 'CabPath')) {
+        $mislabeledRejected = $false
+        try {
+            $params = @{ CandidateSha = $sha; $artifactKind = $wrongExtension }
+            $null = & $collector @params 2>&1
+        } catch { $mislabeledRejected = $true }
+        if (-not $mislabeledRejected) { throw "Arbitrary binary was incorrectly accepted as $artifactKind evidence." }
+    }
     $directoryRejected = $false
     try { $null = & $collector -CandidateSha $sha -CabPath $fixture 2>&1 } catch { $directoryRejected = $true }
     if (-not $directoryRejected) { throw 'Directory was incorrectly accepted as a CAB artifact.' }
