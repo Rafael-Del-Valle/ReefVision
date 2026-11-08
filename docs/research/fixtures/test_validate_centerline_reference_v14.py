@@ -75,6 +75,15 @@ class CenterlineReferenceIntegrityTests(unittest.TestCase):
             lambda data: data["cases"][0]["nodes"].append(["orphan", 8, 8, 8])
         )
 
+    def test_disconnected_centerline_requires_explicit_gap_review(self) -> None:
+        data = copy.deepcopy(self.reference)
+        data["cases"][4].pop("missing_edge")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "unreviewed_gap.json"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            with self.assertRaisesRegex(AssertionError, "unreviewed disconnected graph"):
+                validate_reference(path)
+
     def test_nonfinite_coordinate_is_rejected(self) -> None:
         self.check_mutation_rejected(
             lambda data: data["cases"][0]["nodes"][0].__setitem__(1, float("nan"))
