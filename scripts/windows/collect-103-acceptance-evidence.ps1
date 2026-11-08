@@ -18,6 +18,13 @@ function Get-ArtifactEvidence([string]$Path, [string]$Kind) {
     $resolved = Resolve-Path -LiteralPath $Path -ErrorAction Stop
     $file = Get-Item -LiteralPath $resolved.Path -ErrorAction Stop
     if ($file.PSIsContainer) { throw "$Kind path is a directory." }
+    # Do not label an arbitrary file as an installer artifact merely because it
+    # was supplied in the MSI/CAB argument. This is an extension check, not
+    # signature verification or proof of a successful installer build.
+    $expectedExtension = if ($Kind -eq 'msi') { '.msi' } elseif ($Kind -eq 'cab') { '.cab' } else { throw "Unknown artifact kind: $Kind" }
+    if (-not [string]::Equals($file.Extension, $expectedExtension, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "$Kind artifact must have the $expectedExtension extension."
+    }
     return [pscustomobject]@{
         kind = $Kind
         status = 'hashed'
