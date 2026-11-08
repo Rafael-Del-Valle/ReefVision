@@ -109,6 +109,10 @@ def measure_triangle_mesh(
     area_bound = max(upper_area - nominal_area, nominal_area - lower_area)
     if not math.isfinite(area_bound):
         raise ValueError("nonfinite calibrated mesh uncertainty")
+    # A positive calibration bound must never be represented as a zero
+    # surface-area error bar due to endpoint rounding/cancellation.
+    if delta > 0 and area_bound == 0:
+        raise ValueError("calibrated mesh surface area uncertainty underflow")
     return MeshMeasurement(
         triangle_area_units2=raw_area,
         surface_area_m2=nominal_area,
