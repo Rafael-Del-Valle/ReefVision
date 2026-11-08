@@ -1169,6 +1169,14 @@ def test_completed_native_reefpose_checkpoint_registers_and_runs_inference(
         registered.metadata_json["source_pose_schema_content_hash"]
         == dataset["pose_schema_content_hash"]
     )
+    pose_schema = registered.metadata_json["pose_landmark_schema"]
+    assert pose_schema["schema_name"] == "Phase 9 repeated tentacle schema"
+    assert pose_schema["keypoint_count"] == 2
+    assert registered.metadata_json["source_training_config"]["epochs"] == 1
+    assert registered.metadata_json["source_device"] == "cpu"
+    assert registered.metadata_json["source_precision"] == "fp32"
+    assert registered.metadata_json["source_checkpoint_sha256"] == registered.sha256
+    assert registered.metadata_json["source_checkpoint_size_bytes"] > 0
 
     image_path = tmp_path / "synthetic-animal.png"
     Image.new("RGB", (80, 48), color=(32, 64, 96)).save(image_path)

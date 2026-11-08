@@ -109,6 +109,8 @@ class RuntimeProviderStatus:
     supports_cpu: bool
     supports_cuda: bool
     notes: tuple[str, ...]
+    cuda_available: bool | None = None
+    cuda_device_name: str | None = None
 
 
 def _package_version(distribution_name: str) -> str | None:
@@ -116,6 +118,19 @@ def _package_version(distribution_name: str) -> str | None:
         return version(distribution_name)
     except PackageNotFoundError:
         return None
+
+
+def _torch_cuda_status() -> tuple[bool, str | None]:
+    """Return live CUDA availability without making torch a hard dependency."""
+
+    try:
+        import torch
+
+        if not bool(torch.cuda.is_available()):
+            return False, None
+        return True, str(torch.cuda.get_device_name(0))
+    except (ImportError, RuntimeError, AssertionError):
+        return False, None
 
 
 def _packages_from_preflight(
@@ -1002,6 +1017,12 @@ def _runtime_provider_statuses_uncached() -> list[RuntimeProviderStatus]:
 
     torch_version = _package_version("torch")
     torch_available = torch_version is not None
+    cuda_available, cuda_device_name = _torch_cuda_status() if torch_available else (False, None)
+    pytorch_cuda_note = (
+        f"Live CUDA device: {cuda_device_name}."
+        if cuda_available and cuda_device_name
+        else "Live CUDA is unavailable in this process."
+    )
     statuses.append(
         RuntimeProviderStatus(
             runtime_id="pytorch",
@@ -1012,9 +1033,11 @@ def _runtime_provider_statuses_uncached() -> list[RuntimeProviderStatus]:
             status="ready" if torch_available else "missing",
             supports_cpu=True,
             supports_cuda=torch_available,
+            cuda_available=cuda_available,
+            cuda_device_name=cuda_device_name,
             notes=(
                 "Reference runtime for the implemented ReefVision providers.",
-                "Live CUDA verification is deferred until launch-time preflight.",
+                pytorch_cuda_note,
             ),
         )
     )
@@ -1029,6 +1052,8 @@ def _runtime_provider_statuses_uncached() -> list[RuntimeProviderStatus]:
             status="ready" if torch_available else "missing",
             supports_cpu=True,
             supports_cuda=torch_available,
+            cuda_available=cuda_available,
+            cuda_device_name=cuda_device_name,
             notes=(
                 "Runtime metadata is surfaced for future validated exports; arbitrary TorchScript files are not yet registered in ReefVision.",
             ),

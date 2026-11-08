@@ -927,6 +927,8 @@ export interface RuntimeProviderStatus {
   status: string;
   supports_cpu: boolean;
   supports_cuda: boolean;
+  cuda_available: boolean | null;
+  cuda_device_name: string | null;
   notes: string[];
 }
 

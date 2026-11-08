@@ -191,6 +191,10 @@ class SemanticModelService(SegmentationModelService):
         if revision.content_hash != schema_hash:
             raise ValidationError("Frozen pose landmark-schema content hash changed")
 
+        schema = self.session.get(PoseLandmarkSchema, schema_id)
+        if schema is None or schema.project_id != project_id:
+            raise ValidationError("Frozen pose landmark schema no longer belongs to this project")
+
         validation_dataset_id = (
             str(
                 artifact_manifest.get("pose_validation_dataset_id")
@@ -242,7 +246,7 @@ class SemanticModelService(SegmentationModelService):
         if not source_path.is_file():
             raise ValidationError("Trained pose checkpoint is missing")
 
-        actual_checkpoint_sha256, _ = hash_model_file(source_path)
+        actual_checkpoint_sha256, actual_checkpoint_size = hash_model_file(source_path)
         expected_checkpoint_sha256 = str(artifact_manifest.get("best_checkpoint_sha256") or "")
         if expected_checkpoint_sha256 and actual_checkpoint_sha256 != expected_checkpoint_sha256:
             raise ValidationError("Trained pose checkpoint checksum changed after completion")
@@ -307,6 +311,7 @@ class SemanticModelService(SegmentationModelService):
         schema_snapshot = {
             "schema_version": revision.schema_version,
             "schema_id": revision.schema_id,
+            "schema_name": schema.name,
             "schema_revision": revision.revision,
             "groups": list(revision.groups_json),
             "expanded_labels": list(revision.expanded_labels_json),
@@ -326,6 +331,11 @@ class SemanticModelService(SegmentationModelService):
             "source_split_manifest_sha256": (run.split_manifest_sha256),
             "source_result_checkpoint_path": (run.result_checkpoint_path),
             "source_metrics": dict(run.metrics_json or {}),
+            "source_training_config": dict(run.training_config_json or {}),
+            "source_device": run.device,
+            "source_precision": run.precision,
+            "source_checkpoint_sha256": actual_checkpoint_sha256,
+            "source_checkpoint_size_bytes": actual_checkpoint_size,
             "source_experiment_id": (experiment.id if experiment is not None else None),
             "source_pose_training_dataset_id": (training_dataset.id),
             "source_pose_training_dataset_manifest_sha256": (training_dataset.manifest_sha256),
