@@ -87,7 +87,9 @@ def _single_payload(
 
     payload = artifacts[0].payload_json
     if not isinstance(payload, dict):
-        raise ValidationError(f"Pose Model Training '{port_id}' artifact payload must be a JSON object")
+        raise ValidationError(
+            f"Pose Model Training '{port_id}' artifact payload must be a JSON object"
+        )
     return dict(payload)
 
 
@@ -113,7 +115,9 @@ def _optional_payload(
 
     payload = artifacts[0].payload_json
     if not isinstance(payload, dict):
-        raise ValidationError(f"Pose Model Training '{port_id}' artifact payload must be a JSON object")
+        raise ValidationError(
+            f"Pose Model Training '{port_id}' artifact payload must be a JSON object"
+        )
     return dict(payload)
 
 
