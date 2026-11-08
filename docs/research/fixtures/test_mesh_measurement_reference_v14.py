@@ -59,5 +59,16 @@ class MeshMeasurementReferenceTests(unittest.TestCase):
                     meters_per_unit=1, absolute_scale_bound=0,
                 )
 
+    def test_unreferenced_vertices_do_not_inflate_dimensions(self) -> None:
+        vertices = [(0, 0, 0), (2, 0, 0), (0, 3, 0), (1000, -500, 900)]
+        result = measure_triangle_mesh(
+            vertices, [(0, 1, 2)],
+            meters_per_unit=0.01, absolute_scale_bound=0.001,
+        )
+        self.assertAlmostEqual(result.surface_area_m2, 0.0003)
+        self.assertEqual(result.dimensions_m, (0.02, 0.03, 0.0))
+        self.assertEqual(result.dimensions_scale_bound_m, (0.002, 0.003, 0.0))
+        self.assertEqual(result.triangle_count, 1)
+
 if __name__ == "__main__":
     unittest.main()
