@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 from uuid import NAMESPACE_URL, uuid5
@@ -26,6 +28,13 @@ def _optional_text(value: str | None) -> str | None:
         return None
     normalized = str(value).strip()
     return normalized or None
+
+
+def _legacy_projected_id(label: str, occurrence: int, total: int) -> str:
+    slug = re.sub(r"[^a-z0-9_-]+", "_", label.casefold()).strip("_") or "landmark"
+    if not slug[0].isalpha():
+        slug = f"landmark_{slug}"
+    return slug if total == 1 else f"{slug}_{occurrence + 1}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,6 +200,33 @@ class AnatomySchema:
     @property
     def expanded_names(self) -> tuple[str, ...]:
         return tuple(item.name for item in self.landmarks)
+
+    @property
+    def legacy_projected_id_aliases(self) -> dict[str, str]:
+        """Map GUI legacy IDs to historical UUID slots when this is a legacy projection."""
+
+        totals = Counter(item.name for item in self.landmarks)
+        aliases: dict[str, str] = {}
+        for landmark in self.landmarks:
+            expected_native_id = str(
+                uuid5(
+                    NAMESPACE_URL,
+                    (
+                        f"reefvision-pose:{self.schema_id}:"
+                        f"{landmark.name.casefold()}:{landmark.occurrence_index}"
+                    ),
+                )
+            )
+            if landmark.landmark_id != expected_native_id:
+                return {}
+            aliases[
+                _legacy_projected_id(
+                    landmark.name,
+                    landmark.occurrence_index,
+                    totals[landmark.name],
+                )
+            ] = landmark.landmark_id
+        return aliases
 
     def _canonical_payload(self) -> dict[str, Any]:
         return {

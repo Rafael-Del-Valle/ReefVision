@@ -155,6 +155,53 @@ def _single_landmark_schema() -> AnatomySchema:
 
 
 class ReefVisionPoseExportTests(unittest.TestCase):
+    def test_projected_legacy_ids_convert_to_historical_native_slots(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            Image.new("RGB", (16, 10)).save(root / "frame.png")
+            schema = AnatomySchema.from_reefvision_groups(
+                name="Legacy fish",
+                revision=1,
+                groups=[{"name": "fin", "count": 2}],
+                schema_id="legacy-schema",
+            )
+            annotation = {
+                "item_id": "item-1",
+                "source_frame_index": 0,
+                "canonical_pose": {
+                    "pose_observations": [
+                        {
+                            "landmark_id": "fin_1",
+                            "semantic_label": "fin",
+                            "occurrence_index": 0,
+                            "x": 3,
+                            "y": 4,
+                            "status": "visible",
+                        },
+                        {
+                            "landmark_id": "fin_2",
+                            "semantic_label": "fin",
+                            "occurrence_index": 1,
+                            "x": 12,
+                            "y": 6,
+                            "status": "visible",
+                        },
+                    ]
+                },
+            }
+
+            record = _record_from_annotation(
+                annotation,
+                root=root,
+                frame_paths={0: Path("frame.png")},
+                schema=schema,
+                source_width=16,
+                source_height=10,
+                group_id="video-1",
+            )
+
+            self.assertEqual(record.keypoints, ((3.0, 4.0), (12.0, 6.0)))
+
     def test_stable_ids_preserve_reordered_repeated_landmark_coordinates(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 import unittest
@@ -41,6 +42,50 @@ def _batch(count: int = 2) -> dict[str, torch.Tensor]:
 
 
 class CheckpointAndTrainingTests(unittest.TestCase):
+    def test_historical_v1_checkpoint_hashes_load_and_match_expected_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            model = ReefPoseS(
+                ReefPoseConfig(
+                    num_keypoints=2,
+                    input_height=64,
+                    input_width=64,
+                    base_channels=8,
+                )
+            )
+            for historical in (True, False):
+                with self.subTest(historical=historical):
+                    path = root / f"v1-{historical}.pt"
+                    save_checkpoint(path, model=model, schema=_schema(), epoch=0, global_step=0)
+                    payload = torch.load(path, map_location="cpu", weights_only=True)
+                    anatomy = payload["anatomy_schema"]
+                    anatomy["schema_version"] = "reefpose-anatomy-0001"
+                    if historical:
+                        for landmark in anatomy["landmarks"]:
+                            landmark.pop("symmetric_with", None)
+                            landmark.pop("required", None)
+                    anatomy.pop("integrity_hash")
+                    v1_hash = hashlib.sha256(
+                        json.dumps(
+                            anatomy,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                            ensure_ascii=False,
+                        ).encode("utf-8")
+                    ).hexdigest()
+                    anatomy["integrity_hash"] = v1_hash
+                    payload["anatomy_integrity_hash"] = v1_hash
+                    torch.save(payload, path)
+
+                    state = load_checkpoint(
+                        path,
+                        device="cpu",
+                        expected_schema_hash=v1_hash,
+                    )
+
+                    self.assertEqual(state.schema.schema_id, "schema-1")
+                    self.assertEqual(state.schema.SCHEMA_VERSION, "reefpose-anatomy-0002")
+
     def test_checkpoint_round_trip_restores_schema_model_and_optimizer_state(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             path = Path(raw) / "checkpoint.pt"

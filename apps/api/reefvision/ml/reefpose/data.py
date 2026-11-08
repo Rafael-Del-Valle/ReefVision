@@ -325,10 +325,12 @@ def _record_from_annotation(
     observations = _required_list(pose.get("pose_observations"), "pose observations")
     by_slot: dict[tuple[str, int], dict[str, Any]] = {}
     by_id: dict[str, dict[str, Any]] = {}
+    legacy_aliases = schema.legacy_projected_id_aliases
     if observations:
         for raw in observations:
             observation = _required_mapping(raw, "pose observation")
             landmark_id = str(observation.get("landmark_id") or "").strip()
+            landmark_id = legacy_aliases.get(landmark_id, landmark_id)
             key = (
                 str(observation.get("semantic_label", "")).strip(),
                 int(observation.get("occurrence_index", -1)),

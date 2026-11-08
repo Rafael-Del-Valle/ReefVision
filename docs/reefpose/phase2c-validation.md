@@ -59,12 +59,12 @@ two-keypoint repeated-anatomy dataset, trained ReefPose-S for one epoch with AMP
 registered the checkpoint, reloaded it on CUDA, and returned two checkpoint
 predictions for a 96 x 64 source image.
 
-- Workflow time (training, registration, load, and inference): 2.2291 s
+- Workflow time (training, registration, load, and inference): 2.0002 s
 - Peak allocated CUDA memory: 18,968,064 bytes (18.09 MiB)
 - Training loss / best selection loss: 0.170955 / 0.170955
 - Checkpoint SHA-256:
-  `76258ae465e0f836210c986a55996809acb18465c11ea6de92db92f935df28d8`
-- Registered model ID: `0121361e-cbea-4660-8118-5d2ccc8aee32`
+  `6e222188cc70833d61c383847c27b9089581e60faa435e4253d2e1ff32e856d4`
+- Registered model ID: `6a91312c-cd79-4202-994c-fcd9ef96e0bc`
 
 This is engineering validation only; the elapsed value is not a standalone
 inference-latency benchmark and must not be interpreted as biological accuracy.
@@ -82,7 +82,7 @@ inference-latency benchmark and must not be interpreted as biological accuracy.
 - Focused custom-schema/checkpoint tests: passed.
 - Explicit CUDA workflow/register/inference test: passed.
 - Backend suite excluding the unavailable real interoperability runtime module:
-  1,418 passed, 33 opt-in skips.
+  1,420 passed, 33 opt-in skips.
 
 The unfiltered backend run initially reported 1,413 passed, 38 skipped, and
 seven failures. One was an introduced hard-coded migration-head expectation and

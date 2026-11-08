@@ -135,9 +135,13 @@ def load_checkpoint(
         if not isinstance(schema_payload, dict) or not isinstance(config_payload, dict):
             raise TypeError
         schema = AnatomySchema.from_dict(schema_payload)
-        if payload.get("anatomy_integrity_hash") != schema.integrity_hash:
+        serialized_schema_hash = schema_payload.get("integrity_hash")
+        valid_schema_hashes = {schema.integrity_hash}
+        if isinstance(serialized_schema_hash, str):
+            valid_schema_hashes.add(serialized_schema_hash)
+        if payload.get("anatomy_integrity_hash") not in valid_schema_hashes:
             raise ReefPoseValidationError("Checkpoint anatomy integrity hash does not match")
-        if expected_schema_hash is not None and schema.integrity_hash != expected_schema_hash:
+        if expected_schema_hash is not None and expected_schema_hash not in valid_schema_hashes:
             raise ReefPoseValidationError("Checkpoint anatomy differs from the expected schema")
         config = ReefPoseConfig.from_dict(config_payload)
         if config.num_keypoints != schema.keypoint_count:
