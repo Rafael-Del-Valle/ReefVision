@@ -143,6 +143,20 @@ class MeshMeasurementReferenceTests(unittest.TestCase):
                 meters_per_unit=1, absolute_scale_bound=0,
             )
 
+    def test_small_patch_rejected_in_either_face_order(self) -> None:
+        # Face order must not determine whether a real observed patch is lost.
+        vertices = [
+            (0, 0, 0), (1, 0, 0), (0, 1, 0),
+            (2, 0, 0), (2 + 1e-10, 0, 0), (2, 1e-10, 0),
+        ]
+        for faces in [[(0, 1, 2), (3, 4, 5)], [(3, 4, 5), (0, 1, 2)]]:
+            with self.subTest(faces=faces), self.assertRaisesRegex(
+                ValueError, "observed triangle area lost to numeric precision"
+            ):
+                measure_triangle_mesh(
+                    vertices, faces, meters_per_unit=1, absolute_scale_bound=0,
+                )
+
     def test_positive_area_uncertainty_cannot_round_to_zero(self) -> None:
         # Positive calibration uncertainty can be smaller than the ULP
         # of the squared scale, silently reporting an exact area.
