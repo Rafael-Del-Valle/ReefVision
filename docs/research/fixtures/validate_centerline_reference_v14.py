@@ -64,6 +64,9 @@ def validate_reference(path: Path = REFERENCE) -> list[str]:
                     frontier.append(neighbor)
         has_cycle = len(edges) > len(nodes) - components
         has_gap = "missing_edge" in case
+        # Disconnected geometry is not a complete observed centerline unless an
+        # explicit missing-edge/occlusion annotation explains the gap.
+        assert components == 1 or has_gap, f"unreviewed disconnected graph in {name}"
         if has_gap:
             a, b = case["missing_edge"]
             assert a in nodes and b in nodes and tuple(sorted((a, b))) not in edges
