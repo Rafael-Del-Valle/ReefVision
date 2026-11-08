@@ -218,6 +218,45 @@ describe("gallery preferences", () => {
     }
   });
 
+  it("rejects malformed UTF-16 camera IDs without discarding valid supplementary Unicode", () => {
+    const storage = memoryStorage();
+    const key = "reefvision.gallery.project-a.v1";
+    const validId = "Sony 📷/DSC_0123.JPG";
+    writeGalleryPreference(storage, "project-a", {
+      imageId: validId,
+      page: 2,
+      wrap: true,
+    });
+    const saved = storage.getItem(key);
+
+    for (const invalidId of [
+      "camera-\uD800.JPG",
+      "camera-\uDC00.JPG",
+      "camera-📷\uD800.JPG",
+      "camera-\uDC00📷.JPG",
+    ]) {
+      writeGalleryPreference(storage, "project-a", {
+        imageId: invalidId,
+        page: 3,
+        wrap: false,
+      });
+      expect(storage.getItem(key)).toBe(saved);
+      storage.setItem(key, JSON.stringify({ imageId: invalidId, page: 3, wrap: false }));
+      expect(readGalleryPreference(storage, "project-a")).toEqual({
+        imageId: null,
+        page: 1,
+        wrap: false,
+      });
+      storage.setItem(key, saved!);
+    }
+
+    expect(readGalleryPreference(storage, "project-a")).toEqual({
+      imageId: validId,
+      page: 2,
+      wrap: true,
+    });
+  });
+
   it("persists the recent image and page per project", () => {
     const storage = memoryStorage();
 
