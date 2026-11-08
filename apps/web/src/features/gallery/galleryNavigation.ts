@@ -27,7 +27,8 @@ function validGalleryImageId(value: unknown): value is string {
     value.trim().length > 0 &&
     !/[\x00-\x1f\x7f-\x9f\u200b-\u200f\u2028-\u202e\u2060\u2066-\u2069\ufeff]/.test(value) &&
     // Keep valid supplementary Unicode (e.g. emoji in camera labels), but
-    // reject unpaired UTF-16 surrogate halves from corrupted preferences.\n    // Unicode-mode matching treats valid surrogate pairs as one code point.
+    // reject unpaired UTF-16 surrogate halves from corrupted preferences.
+    // Unicode-mode matching treats valid surrogate pairs as one code point.
     !/[\ud800-\udfff]/u.test(value)
   );
 }
