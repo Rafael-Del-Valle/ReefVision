@@ -1,0 +1,237 @@
+{
+  "schema": "reefvision.track_c.centerline_reference.v1",
+  "status": "synthetic_reference_only_not_anatomical_validation",
+  "units": "raw_coordinate_units",
+  "calibration": {
+    "meters_per_unit": 0.01,
+    "absolute_scale_bound_meters_per_unit": 0.0002,
+    "review_state": "provisional"
+  },
+  "interpretation": "Observed unique-edge lengths only. Scale-only absolute bound; not a confidence interval or total uncertainty.",
+  "cases": [
+    {
+      "id": "straight",
+      "nodes": [
+        [
+          "root",
+          0,
+          0,
+          0
+        ],
+        [
+          "tip",
+          3,
+          4,
+          0
+        ]
+      ],
+      "edges": [
+        [
+          "root",
+          "tip"
+        ]
+      ],
+      "expected": {
+        "unique_edge_total_raw": 5,
+        "observed_length_m": 0.05,
+        "scale_only_bound_m": 0.001,
+        "branch_count": 1,
+        "unresolved": false
+      }
+    },
+    {
+      "id": "y_shared_trunk",
+      "nodes": [
+        [
+          "root",
+          0,
+          0,
+          0
+        ],
+        [
+          "junction",
+          0,
+          3,
+          0
+        ],
+        [
+          "tip_a",
+          4,
+          3,
+          0
+        ],
+        [
+          "tip_b",
+          -4,
+          3,
+          0
+        ]
+      ],
+      "edges": [
+        [
+          "root",
+          "junction"
+        ],
+        [
+          "junction",
+          "tip_a"
+        ],
+        [
+          "junction",
+          "tip_b"
+        ]
+      ],
+      "expected": {
+        "unique_edge_total_raw": 11,
+        "observed_length_m": 0.11,
+        "scale_only_bound_m": 0.0022,
+        "branch_count": 3,
+        "unresolved": false
+      },
+      "note": "Sum of root-to-tip paths would incorrectly give 14 raw units."
+    },
+    {
+      "id": "degree_two_node",
+      "nodes": [
+        [
+          "root",
+          0,
+          0,
+          0
+        ],
+        [
+          "middle",
+          0,
+          2,
+          0
+        ],
+        [
+          "tip",
+          0,
+          5,
+          0
+        ]
+      ],
+      "edges": [
+        [
+          "root",
+          "middle"
+        ],
+        [
+          "middle",
+          "tip"
+        ]
+      ],
+      "expected": {
+        "unique_edge_total_raw": 5,
+        "observed_length_m": 0.05,
+        "scale_only_bound_m": 0.001,
+        "branch_count": 1,
+        "unresolved": false
+      }
+    },
+    {
+      "id": "loop_requires_review",
+      "nodes": [
+        [
+          "a",
+          0,
+          0,
+          0
+        ],
+        [
+          "b",
+          3,
+          0,
+          0
+        ],
+        [
+          "c",
+          3,
+          4,
+          0
+        ]
+      ],
+      "edges": [
+        [
+          "a",
+          "b"
+        ],
+        [
+          "b",
+          "c"
+        ],
+        [
+          "c",
+          "a"
+        ]
+      ],
+      "expected": {
+        "unique_edge_total_raw": 12,
+        "observed_length_m": 0.12,
+        "scale_only_bound_m": 0.0024,
+        "unresolved": true
+      },
+      "note": "Do not silently prune loop into a tree or assign a branch count."
+    },
+    {
+      "id": "occluded_unresolved",
+      "nodes": [
+        [
+          "root",
+          0,
+          0,
+          0
+        ],
+        [
+          "visible_end",
+          0,
+          2,
+          0
+        ],
+        [
+          "other_visible_start",
+          0,
+          5,
+          0
+        ],
+        [
+          "tip",
+          0,
+          7,
+          0
+        ]
+      ],
+      "edges": [
+        [
+          "root",
+          "visible_end"
+        ],
+        [
+          "other_visible_start",
+          "tip"
+        ]
+      ],
+      "missing_edge": [
+        "visible_end",
+        "other_visible_start"
+      ],
+      "expected": {
+        "unique_edge_total_raw": 4,
+        "observed_length_m": 0.04,
+        "scale_only_bound_m": 0.0008,
+        "unresolved": true
+      },
+      "note": "Do not impute the missing three-unit gap as observed growth or length."
+    }
+  ],
+  "required_workflow_checks": [
+    "execute standalone engine",
+    "save typed graph revision",
+    "reload graph",
+    "execute graph",
+    "compare lengths and units",
+    "compare QC and provisional reviewer status",
+    "compare immutable artifact hashes"
+  ]
+}
