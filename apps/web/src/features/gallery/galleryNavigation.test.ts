@@ -1167,3 +1167,33 @@ describe("resolveGalleryNavigation", () => {
     }
   });
 });
+
+describe("gallery navigation during asynchronous page refresh", () => {
+  it("never requests a stale or out-of-range image after the final page shrinks", () => {
+    const current = {
+      index: 3,
+      itemCount: 1,
+      page: 2,
+      pages: 2,
+      wrap: true,
+    };
+    for (const action of ["first", "last", "previous", "next"] as const) {
+      expect(resolveGalleryNavigation({ ...current, action })).toBeNull();
+    }
+  });
+
+  it("does not issue page requests while a refreshed gallery is empty", () => {
+    for (const action of ["first", "last", "previous", "next"] as const) {
+      expect(
+        resolveGalleryNavigation({
+          action,
+          index: 0,
+          itemCount: 0,
+          page: 1,
+          pages: 1,
+          wrap: true,
+        }),
+      ).toBeNull();
+    }
+  });
+});
