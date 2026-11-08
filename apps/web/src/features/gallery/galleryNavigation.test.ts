@@ -198,6 +198,28 @@ describe("browser gallery storage access", () => {
 });
 
 describe("gallery preferences", () => {
+  it("ignores throwing runtime preference getters without disrupting a saved image", () => {
+    const storage = memoryStorage();
+    const key = "reefvision.gallery.project-a.v1";
+    writeGalleryPreference(storage, "project-a", {
+      imageId: "DSC_0042.JPG",
+      page: 2,
+      wrap: true,
+    });
+    const saved = storage.getItem(key);
+    const malformed = {
+      get page(): number {
+        throw new Error("stale gallery preference");
+      },
+      imageId: "DSC_9999.JPG",
+      wrap: false,
+    };
+    expect(() =>
+      writeGalleryPreference(storage, "project-a", malformed),
+    ).not.toThrow();
+    expect(storage.getItem(key)).toBe(saved);
+  });
+
   it("ignores malformed runtime preference objects without losing the saved camera image", () => {
     const storage = memoryStorage();
     writeGalleryPreference(storage, "project-a", {
