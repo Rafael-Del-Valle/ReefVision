@@ -87,6 +87,7 @@ def validate_reference(path: Path = REFERENCE) -> list[str]:
         if "branch_count" in expected:
             assert not has_cycle and not has_gap and components == 1, name
             # Count maximal chains, not degree-two sampling vertices.
+            assert type(expected["branch_count"]) is int and expected["branch_count"] >= 0, (name, "branch_count must be a nonnegative integer")
             branch_count = sum(len(adjacency[n]) for n in nodes if len(adjacency[n]) != 2) // 2
             assert branch_count == expected["branch_count"], name
     assert seen == {
