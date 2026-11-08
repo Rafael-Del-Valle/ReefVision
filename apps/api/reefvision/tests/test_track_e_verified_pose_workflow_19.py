@@ -181,9 +181,8 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         assert frozen is not None
         assert payload["source_round_id"] == frozen.source_round_id
         assert payload["source_selection_sha256"] == frozen.source_selection_sha256
-        assert (
-            payload["source_retraining_manifest_sha256"]
-            == frozen.source_retraining_manifest_sha256
+        assert payload["source_retraining_manifest_sha256"] == (
+            frozen.source_retraining_manifest_sha256
         )
     assert type(payload["item_count"]) is int
     assert payload["item_count"] == dataset["item_count"]
