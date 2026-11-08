@@ -70,5 +70,22 @@ class MeshMeasurementReferenceTests(unittest.TestCase):
         self.assertEqual(result.dimensions_scale_bound_m, (0.002, 0.003, 0.0))
         self.assertEqual(result.triangle_count, 1)
 
+    def test_finite_inputs_cannot_produce_infinite_dimensions(self) -> None:
+        vertices = [(-1e308, 0, 0), (1e308, 0, 0), (0, 1e-308, 0)]
+        with self.assertRaisesRegex(ValueError, "nonfinite observed mesh dimensions"):
+            measure_triangle_mesh(
+                vertices, [(0, 1, 2)],
+                meters_per_unit=1, absolute_scale_bound=0,
+            )
+
+    def test_calibration_cannot_overflow_physical_dimensions(self) -> None:
+        vertices = [(0, 0, 0), (1e200, 0, 0), (0, 1e-200, 0)]
+        with self.assertRaisesRegex(ValueError, "nonfinite calibrated mesh measurement"):
+            measure_triangle_mesh(
+                vertices, [(0, 1, 2)],
+                meters_per_unit=1e200, absolute_scale_bound=0,
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
