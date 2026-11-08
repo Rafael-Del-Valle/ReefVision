@@ -87,6 +87,10 @@ def measure_triangle_mesh(
     nominal_area = (raw_area * scale) * scale
     upper_area = (raw_area * (scale + delta)) * (scale + delta)
     lower_area = (raw_area * (scale - delta)) * (scale - delta)
+    # A positive observed surface can underflow to zero after calibration.
+    # Zero would misrepresent a nonzero coral surface as absent.
+    if nominal_area == 0:
+        raise ValueError("calibrated mesh surface area underflow")
     if not math.isfinite(nominal_area) or any(
         not math.isfinite(span * scale) or not math.isfinite(span * delta)
         for span in spans
