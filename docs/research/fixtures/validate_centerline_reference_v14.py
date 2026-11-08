@@ -19,6 +19,8 @@ def validate_reference(path: Path = REFERENCE) -> list[str]:
     data = json.loads(path.read_text(encoding="utf-8"))
     assert data["schema"] == "reefvision.track_c.centerline_reference.v1"
     assert data["status"] == "synthetic_reference_only_not_anatomical_validation"
+    assert data["calibration"]["review_state"] == "provisional", "synthetic calibration must remain provisional"
+    assert data["interpretation"].startswith("Observed unique-edge lengths only."), "reference interpretation must not claim total uncertainty"
     scale = data["calibration"]["meters_per_unit"]
     bound = data["calibration"]["absolute_scale_bound_meters_per_unit"]
     assert math.isfinite(scale) and scale > 0
