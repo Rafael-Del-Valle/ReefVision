@@ -46,7 +46,7 @@ def measure_triangle_mesh(
         raise ValueError("nonempty vertices and triangles required")
     if any(len(v) != 3 or any(not math.isfinite(x) for x in v) for v in vertices):
         raise ValueError("vertices must be finite 3D coordinates")
-    raw_area = 0.0
+    face_areas: list[float] = []
     referenced_vertices: set[int] = set()
     seen_faces: set[tuple[int, int, int]] = set()
     for face in triangles:
@@ -69,8 +69,13 @@ def measure_triangle_mesh(
         area = math.hypot(*cross) / 2
         if not math.isfinite(area) or area <= 0:
             raise ValueError("degenerate or overflowing triangle")
-        # Detect loss of a real observed patch to floating-point summation.
-        # Otherwise a small coral surface can disappear beside a large patch.
+        face_areas.append(area)
+    # Validate every observed patch against the largest-first accumulation.
+    # The former input-order check missed a tiny patch listed before a large
+    # triangle: adding the large triangle changed the running sum while
+    # silently discarding the earlier patch.
+    raw_area = 0.0
+    for area in sorted(face_areas, reverse=True):
         next_area = raw_area + area
         if next_area == raw_area:
             raise ValueError("observed triangle area lost to numeric precision")
