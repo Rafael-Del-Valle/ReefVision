@@ -2076,3 +2076,31 @@ def test_frozen_pose_artifact_rejects_false_item_count_lineage(
             },
             role="training",
         )
+
+
+@pytest.mark.parametrize("advertised_revision", [True, "1", 1.0])
+def test_frozen_pose_artifact_rejects_coerced_schema_revision(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    advertised_revision: bool | str | float,
+) -> None:
+    # Use an actual API-frozen scientist-verified dataset. Persisted graph
+    # artifacts must not coerce strings, floats, or booleans into a revision.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    from reefvision.services.workflow_pose_training import _pose_dataset
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="landmark schema metadata no longer matches"),
+    ):
+        _pose_dataset(
+            session,
+            project_id=str(project["id"]),
+            payload={
+                "dataset_id": str(dataset["id"]),
+                "manifest_sha256": dataset["manifest_sha256"],
+                "pose_schema_revision": advertised_revision,
+            },
+            role="training",
+        )
