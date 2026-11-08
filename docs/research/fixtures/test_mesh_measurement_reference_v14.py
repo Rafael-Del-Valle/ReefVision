@@ -88,9 +88,9 @@ class MeshMeasurementReferenceTests(unittest.TestCase):
 
 
     def test_uncertainty_overflow_rejected_even_when_nominal_area_is_finite(self) -> None:
-        # Nominal scale squared is finite, but the upper uncertainty
-        # endpoint squared overflows; never return an infinite error bar.
-        vertices = [(0, 0, 0), (1e-154, 0, 0), (0, 1e-154, 0)]
+        # Nominal area is finite (~1e308 m²), but the upper scale
+        # endpoint overflows; never return an infinite error bar.
+        vertices = [(0, 0, 0), (2, 0, 0), (0, 1, 0)]
         with self.assertRaisesRegex(ValueError, "nonfinite calibrated mesh uncertainty"):
             measure_triangle_mesh(
                 vertices, [(0, 1, 2)],
