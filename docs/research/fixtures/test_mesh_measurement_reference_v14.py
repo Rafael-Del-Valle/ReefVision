@@ -97,6 +97,16 @@ class MeshMeasurementReferenceTests(unittest.TestCase):
                 meters_per_unit=1e-100, absolute_scale_bound=0,
             )
 
+    def test_nonzero_axis_cannot_underflow_to_zero_after_calibration(self) -> None:
+        # Area remains representable, but the tiny observed Z extent would
+        # otherwise be falsely reported as an exactly planar surface.
+        vertices = [(0, 0, 0), (1, 0, 0), (0, 1, 1e-200)]
+        with self.assertRaisesRegex(ValueError, "calibrated mesh dimension underflow"):
+            measure_triangle_mesh(
+                vertices, [(0, 1, 2)],
+                meters_per_unit=1e-150, absolute_scale_bound=0,
+            )
+
     def test_uncertainty_overflow_rejected_even_when_nominal_area_is_finite(self) -> None:
         # Nominal area is finite (~1e308 m²), but the upper scale
         # endpoint overflows; never return an infinite error bar.
