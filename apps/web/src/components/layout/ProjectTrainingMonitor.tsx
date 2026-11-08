@@ -5,6 +5,7 @@ import { getRuntimeContext, openDesktopTrainingConsole } from "../../runtime";
 import {
   cancelTrainingRun,
   getTrainingRuns,
+  retryJob,
   type TrainingRun,
 } from "../../api/client";
 import {
@@ -47,6 +48,10 @@ function metricEntries(run: TrainingRun): Array<[string, number]> {
   }
 
   const preferred = [
+    "train_loss",
+    "validation_loss",
+    "selection_loss",
+    "learning_rate",
     "train/box_loss",
     "train/cls_loss",
     "train/dfl_loss",
@@ -120,6 +125,11 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
       );
     },
   });
+  const resumeMutation = useMutation({
+    mutationFn: (jobId: string) => retryJob(jobId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["training_runs", projectId] }),
+  });
 
   const runs = useMemo(
     () =>
@@ -188,6 +198,11 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
           {visibleRuns.map((run) => {
             const active = trainingRunIsActive(run);
             const canCancel = active && run.status !== "cancel_requested";
+            const canResume =
+              run.provider_id === "reefpose" &&
+              ["failed", "cancelled"].includes(run.status) &&
+              Boolean(run.job_id) &&
+              typeof run.artifact_manifest.resume_checkpoint_path === "string";
             const metrics = metricEntries(run);
 
             return (
@@ -301,6 +316,22 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
                       : "Cancel run"}
                   </button>
                 )}
+                {canResume && run.job_id && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={
+                      resumeMutation.isPending &&
+                      resumeMutation.variables === run.job_id
+                    }
+                    onClick={() => resumeMutation.mutate(run.job_id as string)}
+                  >
+                    {resumeMutation.isPending &&
+                    resumeMutation.variables === run.job_id
+                      ? "Resuming…"
+                      : "Resume run"}
+                  </button>
+                )}
               </article>
             );
           })}
@@ -316,6 +347,11 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
       {cancelMutation.error && (
         <p className="form-error" role="alert">
           {cancelMutation.error.message}
+        </p>
+      )}
+      {resumeMutation.error && (
+        <p className="form-error" role="alert">
+          {resumeMutation.error.message}
         </p>
       )}
 
