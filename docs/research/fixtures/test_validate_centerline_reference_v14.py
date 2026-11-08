@@ -65,6 +65,16 @@ class CenterlineReferenceIntegrityTests(unittest.TestCase):
             )
         )
 
+    def test_zero_length_edge_is_rejected(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["cases"][0]["nodes"][1].__setitem__(slice(1, 4), [0, 0, 0])
+        )
+
+    def test_isolated_vertex_is_rejected(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["cases"][0]["nodes"].append(["orphan", 8, 8, 8])
+        )
+
     def test_nonfinite_coordinate_is_rejected(self) -> None:
         self.check_mutation_rejected(
             lambda data: data["cases"][0]["nodes"][0].__setitem__(1, float("nan"))
