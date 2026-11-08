@@ -673,6 +673,14 @@ describe("VideoTrackingWorkspace", () => {
         name: /I confirm external frame indices correspond to this video/,
       }),
     );
+    // Wait for the asynchronously loaded video and file selection before submitting.
+    // A heading alone does not guarantee the selected video is ready for import.
+    await waitFor(() => {
+      expect(screen.getByRole("combobox", { name: "Video" })).toHaveValue(
+        "video-1",
+      );
+      expect(screen.getByRole("button", { name: "Import pose" })).toBeEnabled();
+    });
     fireEvent.click(screen.getByRole("button", { name: "Import pose" }));
 
     await waitFor(() =>
