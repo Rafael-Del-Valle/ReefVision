@@ -90,6 +90,8 @@ def measure_triangle_mesh(
     # Max absolute departure from nominal area over the bounded scale interval.
     area_bound = raw_area * max((scale + delta) ** 2 - scale ** 2,
                                 scale ** 2 - (scale - delta) ** 2)
+    if not math.isfinite(area_bound):
+        raise ValueError("nonfinite calibrated mesh uncertainty")
     return MeshMeasurement(
         triangle_area_units2=raw_area,
         surface_area_m2=raw_area * scale ** 2,
