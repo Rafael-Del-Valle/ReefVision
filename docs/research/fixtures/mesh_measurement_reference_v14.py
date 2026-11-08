@@ -47,6 +47,7 @@ def measure_triangle_mesh(
     if any(len(v) != 3 or any(not math.isfinite(x) for x in v) for v in vertices):
         raise ValueError("vertices must be finite 3D coordinates")
     raw_area = 0.0
+    referenced_vertices: set[int] = set()
     seen_faces: set[tuple[int, int, int]] = set()
     for face in triangles:
         if len(face) != 3 or any(type(i) is not int or i < 0 or i >= len(vertices) for i in face):
@@ -59,6 +60,7 @@ def measure_triangle_mesh(
         if face_key in seen_faces:
             raise ValueError("duplicate triangle surface")
         seen_faces.add(face_key)
+        referenced_vertices.update(face)
         u = tuple(b[i] - a[i] for i in range(3))
         v = tuple(c[i] - a[i] for i in range(3))
         cross = (u[1] * v[2] - u[2] * v[1],
@@ -70,7 +72,10 @@ def measure_triangle_mesh(
         raw_area += area
     if not math.isfinite(raw_area):
         raise ValueError("nonfinite surface area")
-    spans = tuple(max(v[i] for v in vertices) - min(v[i] for v in vertices) for i in range(3))
+    # Unreferenced vertices are not part of the observed triangular surface.
+    # Including them would silently inflate reported coral dimensions.
+    observed = [vertices[index] for index in sorted(referenced_vertices)]
+    spans = tuple(max(v[i] for v in observed) - min(v[i] for v in observed) for i in range(3))
     scale = meters_per_unit
     delta = absolute_scale_bound
     # Max absolute departure from nominal area over the bounded scale interval.
