@@ -2125,6 +2125,11 @@ def test_resigned_frozen_manifest_rejects_boolean_schema_revision(
             "pose_schema": {**frozen.manifest_json["pose_schema"], "schema_revision": True},
         }
         frozen.manifest_json = altered
+        # SQLAlchemy JSON compares True == 1; force persistence of this
+        # intentionally malformed manifest so the lineage guard is exercised.
+        from sqlalchemy.orm.attributes import flag_modified
+
+        flag_modified(frozen, "manifest_json")
         frozen.manifest_sha256 = canonical_json_sha256(altered)
         session.commit()
 
