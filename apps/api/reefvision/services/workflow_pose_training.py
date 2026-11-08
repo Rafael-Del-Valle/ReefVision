@@ -1629,6 +1629,7 @@ def execute_pose_training_dataset_adapter(
                 "project_id": project_id,
                 "dataset_id": dataset.id,
                 "manifest_sha256": dataset.manifest_sha256,
+                "item_count": dataset.item_count,
                 "source_round_id": dataset.source_round_id,
                 "source_selection_sha256": dataset.source_selection_sha256,
                 "source_retraining_manifest_sha256": dataset.source_retraining_manifest_sha256,
