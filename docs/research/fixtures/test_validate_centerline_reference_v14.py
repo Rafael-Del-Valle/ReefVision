@@ -90,6 +90,20 @@ class CenterlineReferenceIntegrityTests(unittest.TestCase):
 
         self.check_mutation_rejected(mutate)
 
+    def test_one_gap_cannot_explain_three_components(self) -> None:
+        data = copy.deepcopy(self.reference)
+        case = data["cases"][4]
+        case["nodes"].extend([["island_a", 10, 0, 0], ["island_b", 11, 0, 0]])
+        case["edges"].append(["island_a", "island_b"])
+        case["expected"]["unique_edge_total_raw"] = 5
+        case["expected"]["observed_length_m"] = 0.05
+        case["expected"]["scale_only_bound_m"] = 0.001
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "unexplained_island.json"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            with self.assertRaisesRegex(AssertionError, "one missing edge cannot explain 3 components"):
+                validate_reference(path)
+
     def test_spurious_gap_on_connected_graph_is_rejected(self) -> None:
         def mutate(data) -> None:
             data["cases"][2]["missing_edge"] = ["root", "tip"]
