@@ -1,0 +1,36 @@
+name: Track C Synthetic Centerline Reference
+
+on:
+  pull_request:
+    paths:
+      - "docs/research/fixtures/centerline_reference_v14.json"
+      - "docs/research/fixtures/validate_centerline_reference_v14.py"
+      - "docs/research/fixtures/test_validate_centerline_reference_v14.py"
+      - ".github/workflows/track-c-centerline-reference.yml"
+  push:
+    branches:
+      - "develop/reefvision-1.4"
+    paths:
+      - "docs/research/fixtures/centerline_reference_v14.json"
+      - "docs/research/fixtures/validate_centerline_reference_v14.py"
+      - "docs/research/fixtures/test_validate_centerline_reference_v14.py"
+      - ".github/workflows/track-c-centerline-reference.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-reference-integrity:
+    name: Synthetic reference integrity (not biological validation)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate reference fixture
+        run: python docs/research/fixtures/validate_centerline_reference_v14.py
+      - name: Execute mutation regressions
+        run: python -m unittest discover -s docs/research/fixtures -p 'test_validate_centerline_reference_v14.py' -v
