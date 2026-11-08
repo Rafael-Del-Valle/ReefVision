@@ -2104,3 +2104,37 @@ def test_frozen_pose_artifact_rejects_coerced_schema_revision(
             },
             role="training",
         )
+
+
+def test_resigned_frozen_manifest_rejects_boolean_schema_revision(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The manifest checksum alone cannot establish schema identity: a
+    # re-signed boolean revision must not compare equal to integer revision 1.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    from reefvision.services.workflow_pose_training import _pose_dataset
+
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, str(dataset["id"]))
+        assert frozen is not None
+        assert frozen.pose_schema_revision == 1
+        altered = {
+            **frozen.manifest_json,
+            "pose_schema": {**frozen.manifest_json["pose_schema"], "schema_revision": True},
+        }
+        frozen.manifest_json = altered
+        frozen.manifest_sha256 = canonical_json_sha256(altered)
+        session.commit()
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="manifest lineage no longer matches"),
+    ):
+        _pose_dataset(
+            session,
+            project_id=str(project["id"]),
+            payload={"dataset_id": str(dataset["id"])},
+            role="training",
+        )
