@@ -524,6 +524,13 @@ def _completed_workflow_pose_training_run(
         ):
             raise ValidationError("Recovered pose-training seed model changed")
 
+        # Persisted training settings must remain JSON objects. Coercing a
+        # list of key/value pairs with dict() can disguise corrupted lineage.
+        if not isinstance(candidate.training_config_json, dict) or not isinstance(
+            candidate.resource_limits_json, dict
+        ):
+            raise ValidationError("Recovered pose-training configuration must be JSON objects")
+
         if (
             candidate.provider_id != "ultralytics"
             or candidate.architecture != architecture
