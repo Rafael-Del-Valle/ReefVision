@@ -186,6 +186,7 @@ def _pose_dataset(
 
     if (
         not isinstance(dataset.manifest_json.get("items"), list)
+        or type(dataset.manifest_json.get("item_count")) is not int
         or dataset.manifest_json.get("item_count") != dataset.item_count
         or len(dataset.manifest_json["items"]) != dataset.item_count
     ):
