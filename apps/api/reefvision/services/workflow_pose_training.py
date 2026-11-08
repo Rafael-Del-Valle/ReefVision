@@ -480,6 +480,7 @@ def _completed_workflow_pose_training_run(
             or snapshot.get("pose_validation_dataset_manifest_sha256")
             != (validation_dataset.manifest_sha256 if validation_dataset else None)
             or snapshot.get("pose_schema_id") != dataset.pose_schema_id
+            or type(snapshot.get("pose_schema_revision")) is not int
             or snapshot.get("pose_schema_revision") != dataset.pose_schema_revision
             or snapshot.get("pose_schema_content_hash") != dataset.pose_schema_content_hash
             or not isinstance(snapshot.get("split_manifest"), dict)
