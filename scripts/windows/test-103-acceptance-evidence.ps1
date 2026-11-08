@@ -27,13 +27,27 @@ try {
     if (-not @($record.limitations | Where-Object { $_ -match 'does not prove installation' }).Count) {
         throw 'Evidence must explicitly disclaim installation acceptance.'
     }
+    # Both installer artifact kinds must be independently hashed; neither implies install success.
+    $cabSample = Join-Path $fixture 'camera cabinet.cab'
+    $cabBytes = [byte[]](255, 0, 17, 34, 51)
+    [System.IO.File]::WriteAllBytes($cabSample, $cabBytes)
+    $withCab = (& $collector -CandidateSha $sha -MsiPath $sample -CabPath $cabSample | Out-String | ConvertFrom-Json)
+    $cabEvidence = @($withCab.artifacts | Where-Object { $_.kind -eq 'cab' })
+    $expectedCabHash = (Get-FileHash -LiteralPath $cabSample -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($cabEvidence.Count -ne 1 -or $cabEvidence[0].status -ne 'hashed' -or
+        $cabEvidence[0].sha256 -cne $expectedCabHash -or $cabEvidence[0].bytes -ne $cabBytes.Length) {
+        throw 'CAB artifact evidence does not match the input bytes.'
+    }
+    $directoryRejected = $false
+    try { $null = & $collector -CandidateSha $sha -CabPath $fixture 2>&1 } catch { $directoryRejected = $true }
+    if (-not $directoryRejected) { throw 'Directory was incorrectly accepted as a CAB artifact.' }
     $invalidRejected = $false
     try { $null = & $collector -CandidateSha 'not-a-commit' 2>&1 } catch { $invalidRejected = $true }
     if (-not $invalidRejected) { throw 'Invalid candidate SHA was accepted.' }
     $missingRejected = $false
     try { $null = & $collector -CandidateSha $sha -MsiPath (Join-Path $fixture 'missing.msi') 2>&1 } catch { $missingRejected = $true }
     if (-not $missingRejected) { throw 'Missing MSI was incorrectly treated as validated.' }
-    Write-Output 'PASS: SHA validation, artifact bytes/hash, absent CAB, and evidence limitations.'
+    Write-Output 'PASS: SHA validation, MSI/CAB bytes and hashes, absent CAB, directory rejection, and evidence limitations.'
 } finally {
     Remove-Item -LiteralPath $fixture -Recurse -Force -ErrorAction SilentlyContinue
 }
