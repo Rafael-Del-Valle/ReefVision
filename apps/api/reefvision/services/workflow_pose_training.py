@@ -226,8 +226,7 @@ def _pose_dataset(
     # A persisted dataset artifact may pin the frozen item count. Treat an
     # explicitly supplied count as lineage, not advisory display metadata.
     if "item_count" in payload and (
-        type(payload["item_count"]) is not int
-        or payload["item_count"] != dataset.item_count
+        type(payload["item_count"]) is not int or payload["item_count"] != dataset.item_count
     ):
         raise ValidationError(
             f"Pose {role} dataset artifact item count no longer matches frozen truth"
