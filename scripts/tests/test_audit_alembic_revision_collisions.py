@@ -451,3 +451,22 @@ def test_explicit_builtins_dynamic_execution_fails_closed(
     with pytest.raises(ValueError, match="dynamic execution may rebind revision"):
         load_audit()([root])
     assert file.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from builtins import exec as run\nrun(\"revision = '0039'\")\n",
+        "from builtins import globals as namespace\nnamespace()['revision'] = '0039'\n",
+        "import builtins as b\nb.exec(\"revision = '0039'\")\n",
+        "import builtins as b\nb.globals()['revision'] = '0039'\n",
+    ],
+)
+def test_aliased_builtins_namespace_access_fails_closed(tmp_path: Path, source: str) -> None:
+    root = tmp_path / "versions"
+    file = migration(root, "0038.py", "0038")
+    file.write_text(file.read_text(encoding="utf-8") + source, encoding="utf-8")
+    before = file.read_bytes()
+    with pytest.raises(ValueError, match="dynamic (builtins import|execution) may rebind revision"):
+        load_audit()([root])
+    assert file.read_bytes() == before
