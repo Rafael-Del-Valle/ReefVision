@@ -1206,38 +1206,44 @@ it("publishes timeline context and handles inspector seek commands without movin
 });
 
 it("selects a registered pose model from a Model Hub workspace command", async () => {
-  vi.mocked(api.getTrackingModels).mockResolvedValue([
-    {
-      id: "reefpose-model-1",
-      project_id: project.id,
-      purpose: "detector",
-      display_name: "Fish ReefPose-S",
-      source_filename: "best.pt",
-      managed_path: "projects/project-1/models/best.pt",
-      sha256: "f".repeat(64),
-      file_size_bytes: 4096,
-      framework: "pytorch",
-      task: "pose",
-      provider_name: "reefpose",
-      provider_version: "1",
-      class_map_json: {},
-      input_size_json: { width: 256, height: 256 },
-      metadata_json: {
-        pose_landmark_schema: {
-          schema_id: "schema-1",
-          schema_revision: 1,
-          content_hash: "a".repeat(64),
-          groups: [{ name: "head", count: 1 }],
-          expanded_labels: ["head"],
-          keypoint_count: 1,
-          allows_repeated_labels: false,
-        },
+  const model = {
+    id: "reefpose-model-1",
+    project_id: project.id,
+    purpose: "detector",
+    display_name: "Fish ReefPose-S",
+    source_filename: "best.pt",
+    managed_path: "projects/project-1/models/best.pt",
+    sha256: "f".repeat(64),
+    file_size_bytes: 4096,
+    framework: "pytorch",
+    task: "pose",
+    provider_name: "reefpose",
+    provider_version: "1",
+    class_map_json: {},
+    input_size_json: { width: 256, height: 256 },
+    metadata_json: {
+      pose_landmark_schema: {
+        schema_id: "schema-1",
+        schema_revision: 1,
+        content_hash: "a".repeat(64),
+        groups: [{ name: "head", count: 1 }],
+        expanded_labels: ["head"],
+        keypoint_count: 1,
+        allows_repeated_labels: false,
       },
-      notes: null,
-      created_at: "2026-11-07T00:00:00Z",
-      updated_at: "2026-11-07T00:00:00Z",
     },
-  ]);
+    notes: null,
+    created_at: "2026-11-07T00:00:00Z",
+    updated_at: "2026-11-07T00:00:00Z",
+  };
+  let resolveModels!: (
+    models: Awaited<ReturnType<typeof api.getTrackingModels>>,
+  ) => void;
+  vi.mocked(api.getTrackingModels).mockReturnValue(
+    new Promise((resolve) => {
+      resolveModels = resolve;
+    }),
+  );
   const handled = vi.fn();
   renderWorkspace({
     workspaceCommand: {
@@ -1248,6 +1254,8 @@ it("selects a registered pose model from a Model Hub workspace command", async (
     onWorkspaceCommandHandled: handled,
   });
 
+  expect(handled).not.toHaveBeenCalled();
+  resolveModels([model]);
   await waitFor(() => expect(handled).toHaveBeenCalledWith(9));
   expect(await screen.findByLabelText("Tracking model")).toHaveValue(
     "reefpose-model-1",

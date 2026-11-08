@@ -51,7 +51,15 @@ test.describe("ReefPose Phase 2B live GUI", () => {
     await page.getByLabel("Input height").fill("64");
     await page.getByLabel("Input width").fill("64");
 
+    const queuedWorkflow = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        /\/projects\/[^/]+\/workflow-runs$/.test(
+          new URL(response.url()).pathname,
+        ),
+    );
     await page.getByRole("button", { name: "Save & run" }).click();
+    const workflowRunId = String((await (await queuedWorkflow).json()).id);
     const runInspection = page
       .getByRole("heading", { name: "Run inspection" })
       .locator("..");
@@ -59,11 +67,32 @@ test.describe("ReefPose Phase 2B live GUI", () => {
       "Status: succeeded",
       { timeout: 120_000 },
     );
+    const runDetail = await (
+      await page.request.get(
+        `http://127.0.0.1:8000/api/v1/workflow-runs/${workflowRunId}`,
+      )
+    ).json();
+    const modelReference = runDetail.artifacts.find(
+      (artifact: { data_type: string }) =>
+        artifact.data_type === "model_reference",
+    ).payload_json as { model_id: string; project_id: string };
+    const modelHub = await (
+      await page.request.get(
+        `http://127.0.0.1:8000/api/v1/projects/${modelReference.project_id}/model-hub/bootstrap`,
+      )
+    ).json();
+    const registeredModel = modelHub.models.find(
+      (model: { id: string }) => model.id === modelReference.model_id,
+    ) as { display_name: string };
+    expect(registeredModel).toBeTruthy();
 
     await page.getByRole("tab", { name: "Models & AI" }).click();
     await page.getByRole("tab", { name: "Model Hub" }).click();
     const modelCard = page
-      .getByRole("heading", { name: /pose-from-scratch pose/ })
+      .getByRole("heading", {
+        name: registeredModel.display_name,
+        exact: true,
+      })
       .last()
       .locator("xpath=ancestor::article");
     const reefPoseDetails = modelCard.getByText(
@@ -89,19 +118,40 @@ test.describe("ReefPose Phase 2B live GUI", () => {
       name: /Run pose/,
     });
     await expect(runPoseButton).toBeEnabled();
+    const trackingResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        /\/videos\/[^/]+\/tracking-jobs$/.test(
+          new URL(response.url()).pathname,
+        ),
+    );
     await runPoseButton.click();
+    const queuedTracking = await trackingResponse;
+    expect(queuedTracking.request().postDataJSON().model_id).toBe(
+      modelReference.model_id,
+    );
+    const trackingJobId = String((await queuedTracking.json()).id);
     await expect(
-      automatedTracking.getByRole("row").filter({ hasText: "completed" }),
-    ).toBeVisible({ timeout: 120_000 });
+      automatedTracking
+        .getByRole("row")
+        .filter({ hasText: trackingJobId.slice(0, 8) }),
+    ).toContainText("completed", { timeout: 120_000 });
 
+    const trackingVideoId = new URL(queuedTracking.url()).pathname.split(
+      "/",
+    )[4];
+    const videoTracks = await (
+      await page.request.get(
+        `http://127.0.0.1:8000/api/v1/videos/${trackingVideoId}/tracks`,
+      )
+    ).json();
+    const generatedTrack = videoTracks.find(
+      (track: { source_job_id: string | null }) =>
+        track.source_job_id === trackingJobId,
+    ) as { id: string };
+    expect(generatedTrack).toBeTruthy();
     const trackSelect = page.getByLabel("Existing track");
-    const machineTrackId = await trackSelect
-      .locator("option")
-      .filter({ hasText: "machine_generated" })
-      .last()
-      .getAttribute("value");
-    expect(machineTrackId).toBeTruthy();
-    await trackSelect.selectOption(machineTrackId!);
+    await trackSelect.selectOption(generatedTrack.id);
     await page.getByLabel("Enable source-coordinate overlay").check();
     await expect(
       page.getByText("Pose landmarks on this frame: 2"),

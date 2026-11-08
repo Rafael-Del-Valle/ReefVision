@@ -1246,6 +1246,14 @@ export function VideoTrackingWorkspace({
     ) {
       return;
     }
+    if (
+      workspaceCommand.type === "select_model" &&
+      !(modelsQuery.data ?? []).some(
+        (model) => model.id === workspaceCommand.modelId,
+      )
+    ) {
+      return;
+    }
 
     lastWorkspaceCommandIdRef.current = workspaceCommand.id;
 

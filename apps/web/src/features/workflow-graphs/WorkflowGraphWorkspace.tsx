@@ -1,5 +1,5 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 
 import { getModelHubBootstrap, type Project } from "../../api/client";
 import { getPoseTrainingDatasets } from "../video/poseActiveLearningApi";
@@ -55,6 +55,7 @@ export function WorkflowGraphWorkspace({
   project,
   initialPoseArchitecture,
 }: WorkflowGraphWorkspaceProps) {
+  const queryClient = useQueryClient();
   const [graphJson, setGraphJson] = useState(() =>
     JSON.stringify(
       initialPoseArchitecture
@@ -181,6 +182,16 @@ export function WorkflowGraphWorkspace({
     resumeReviewMutation.error ??
     cancelMutation.error;
   const selectedRun = runDetailQuery.data?.run;
+  useEffect(() => {
+    if (selectedRun?.status === "succeeded") {
+      void queryClient.invalidateQueries({
+        queryKey: ["model_hub_bootstrap", project.id],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["video-tracking-models", project.id],
+      });
+    }
+  }, [project.id, queryClient, selectedRun?.status]);
   const selectedProvenanceSha =
     typeof selectedRun?.result_json.provenance_sha256 === "string"
       ? selectedRun.result_json.provenance_sha256
