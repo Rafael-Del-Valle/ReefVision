@@ -198,6 +198,26 @@ describe("browser gallery storage access", () => {
 });
 
 describe("gallery preferences", () => {
+  it("snapshots changing preference getters before persisting a camera selection", () => {
+    const storage = memoryStorage();
+    let reads = 0;
+    const preference = {
+      imageId: "DSC_0042.JPG",
+      get page(): number {
+        reads += 1;
+        return reads === 1 ? 2 : Number.POSITIVE_INFINITY;
+      },
+      wrap: true,
+    };
+    writeGalleryPreference(storage, "project-a", preference);
+    expect(reads).toBe(1);
+    expect(readGalleryPreference(storage, "project-a")).toEqual({
+      imageId: "DSC_0042.JPG",
+      page: 2,
+      wrap: true,
+    });
+  });
+
   it("ignores throwing runtime preference getters without disrupting a saved image", () => {
     const storage = memoryStorage();
     const key = "reefvision.gallery.project-a.v1";
