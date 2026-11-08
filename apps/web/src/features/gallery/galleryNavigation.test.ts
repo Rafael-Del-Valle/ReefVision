@@ -770,6 +770,33 @@ describe("gallery partial final-page navigation", () => {
   });
 });
 
+describe("single-image first-open gallery navigation", () => {
+  it("does not issue redundant page fetches for any action on a one-image project", () => {
+    for (const action of ["first", "last", "previous", "next"] as const) {
+      expect(
+        resolveGalleryNavigation({
+          action,
+          index: 0,
+          itemCount: 1,
+          page: 1,
+          pages: 1,
+          wrap: false,
+        }),
+      ).toBeNull();
+      expect(
+        resolveGalleryNavigation({
+          action,
+          index: 0,
+          itemCount: 1,
+          page: 1,
+          pages: 1,
+          wrap: true,
+        }),
+      ).toBeNull();
+    }
+  });
+});
+
 describe("resolveGalleryNavigation", () => {
   it("does not navigate using stale or malformed pagination state", () => {
     const valid = {
