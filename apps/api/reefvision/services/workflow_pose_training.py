@@ -223,6 +223,16 @@ def _pose_dataset(
         ):
             raise ValidationError(f"Pose {role} dataset manifest no longer matches persisted truth")
 
+    # A persisted dataset artifact may pin the frozen item count. Treat an
+    # explicitly supplied count as lineage, not advisory display metadata.
+    if "item_count" in payload and (
+        type(payload["item_count"]) is not int
+        or payload["item_count"] != dataset.item_count
+    ):
+        raise ValidationError(
+            f"Pose {role} dataset artifact item count no longer matches frozen truth"
+        )
+
     # Explicit source-round and active-learning digests are scientific
     # lineage assertions, even when the dataset ID and manifest still resolve.
     source_lineage_fields = (
