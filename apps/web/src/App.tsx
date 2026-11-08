@@ -388,6 +388,16 @@ function ReefVisionMainApp() {
     });
   }, []);
 
+  const handlePoseModelSelect = useCallback((modelId: string) => {
+    videoWorkspaceCommandSequenceRef.current += 1;
+    setVideoWorkspaceCommand({
+      id: videoWorkspaceCommandSequenceRef.current,
+      type: "select_model",
+      modelId,
+    });
+    setActiveView("video");
+  }, []);
+
   const handleVideoWorkspaceCommandHandled = useCallback(
     (commandId: number) => {
       setVideoWorkspaceCommand((current) =>
@@ -955,6 +965,7 @@ function ReefVisionMainApp() {
                   setTrainingCatalogModelId(catalogId);
                   setActiveView("training");
                 }}
+                onUsePoseModel={handlePoseModelSelect}
               />
             )}
             {activeView === "training" && (

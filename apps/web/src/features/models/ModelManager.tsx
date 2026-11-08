@@ -36,9 +36,11 @@ const optionalModelProviders = [
 function ModelRow({
   model,
   onDelete,
+  onUsePoseModel,
 }: {
   model: ModelRegistration;
   onDelete: (modelId: string) => void;
+  onUsePoseModel?: (modelId: string) => void;
 }) {
   const labelEntries = useMemo(() => {
     const labels = Array.isArray(model.class_map_json.labels)
@@ -54,6 +56,14 @@ function ModelRow({
       mapped: mapping[label] ?? null,
     }));
   }, [model.class_map_json]);
+  const rawPoseSchema = model.metadata_json.pose_landmark_schema;
+  const poseSchema =
+    rawPoseSchema &&
+    !Array.isArray(rawPoseSchema) &&
+    typeof rawPoseSchema === "object"
+      ? (rawPoseSchema as Record<string, unknown>)
+      : null;
+  const reefpose = model.provider_name === "reefpose" && model.task === "pose";
 
   return (
     <article className="image-card">
@@ -87,7 +97,91 @@ function ModelRow({
           </div>
         )}
         {model.notes && <p>{model.notes}</p>}
+        {reefpose && poseSchema && (
+          <details>
+            <summary>ReefPose anatomy and provenance</summary>
+            <p>
+              <strong>
+                {String(poseSchema.schema_name ?? poseSchema.schema_id)} ·
+                revision {String(poseSchema.schema_revision)}
+              </strong>
+            </p>
+            <p>{String(poseSchema.keypoint_count)} anatomical keypoints</p>
+            <dl className="training-provenance-list">
+              <div>
+                <dt>Architecture</dt>
+                <dd>
+                  {String(
+                    model.metadata_json.source_architecture ?? "reefpose-s",
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Schema integrity</dt>
+                <dd>{String(poseSchema.content_hash ?? "Unavailable")}</dd>
+              </div>
+              <div>
+                <dt>Training run</dt>
+                <dd>
+                  {String(
+                    model.metadata_json.source_training_run_id ?? "Unavailable",
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Frozen pose dataset</dt>
+                <dd>
+                  {String(
+                    model.metadata_json.source_pose_training_dataset_id ??
+                      "Unavailable",
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Dataset integrity</dt>
+                <dd>
+                  {String(
+                    model.metadata_json
+                      .source_pose_training_dataset_manifest_sha256 ??
+                      "Unavailable",
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Checkpoint integrity</dt>
+                <dd>
+                  {String(
+                    model.metadata_json.source_checkpoint_sha256 ??
+                      model.sha256,
+                  )}{" "}
+                  · {model.file_size_bytes} bytes
+                </dd>
+              </div>
+            </dl>
+            <p>Training configuration</p>
+            <pre className="json-block">
+              {JSON.stringify(
+                model.metadata_json.source_training_config ?? {},
+                null,
+                2,
+              )}
+            </pre>
+            <p>Available metrics</p>
+            <pre className="json-block">
+              {JSON.stringify(
+                model.metadata_json.source_metrics ?? {},
+                null,
+                2,
+              )}
+            </pre>
+          </details>
+        )}
         <div className="image-card-actions">
+          {model.task === "pose" && onUsePoseModel && (
+            <button type="button" onClick={() => onUsePoseModel(model.id)}>
+              Use in Pose Tracking
+            </button>
+          )}
           <button
             type="button"
             className="danger-ghost"
@@ -235,11 +329,13 @@ export function ModelManager({
   onSelectCatalogModel,
   onTrainPoseArchitecture,
   onTrainClassificationArchitecture,
+  onUsePoseModel,
 }: {
   project: Project;
   onSelectCatalogModel?: (catalogId: string) => void;
   onTrainPoseArchitecture?: (architecture: string) => void;
   onTrainClassificationArchitecture?: (architecture: string) => void;
+  onUsePoseModel?: (modelId: string) => void;
 }) {
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
@@ -440,7 +536,7 @@ export function ModelManager({
   useEffect(() => {
     if (!catalogQuery.data?.models.length) return;
     setCachedCatalog(catalogQuery.data);
-    window.localStorage.setItem(
+    window.localStorage?.setItem(
       cachedCatalogKey(project.id),
       JSON.stringify(catalogQuery.data),
     );
@@ -1251,6 +1347,7 @@ export function ModelManager({
           <ModelRow
             key={model.id}
             model={model}
+            onUsePoseModel={onUsePoseModel}
             onDelete={(modelId) => deleteMutation.mutate(modelId)}
           />
         ))}

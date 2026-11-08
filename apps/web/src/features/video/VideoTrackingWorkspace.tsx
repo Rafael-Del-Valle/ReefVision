@@ -1270,6 +1270,17 @@ export function VideoTrackingWorkspace({
       }
     }
 
+    if (workspaceCommand.type === "select_model") {
+      if (
+        (modelsQuery.data ?? []).some(
+          (model) => model.id === workspaceCommand.modelId,
+        )
+      ) {
+        setTrackingModelId(workspaceCommand.modelId);
+        setTrackingMode("auto");
+      }
+    }
+
     if (workspaceCommand.type === "seek_frame" && selectedVideo) {
       const clampedFrame = Math.min(
         Math.max(0, Math.round(workspaceCommand.frameIndex)),
@@ -1286,6 +1297,7 @@ export function VideoTrackingWorkspace({
     onWorkspaceCommandHandled?.(workspaceCommand.id);
   }, [
     onWorkspaceCommandHandled,
+    modelsQuery.data,
     selectedVideo,
     tracksQuery.data,
     videosQuery.data,

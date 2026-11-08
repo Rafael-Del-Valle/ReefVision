@@ -162,7 +162,7 @@ function renderManager(onSelectCatalogModel = vi.fn()) {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  window.localStorage.clear();
+  window.localStorage?.clear();
 });
 
 describe("ModelManager catalog", () => {
@@ -291,6 +291,78 @@ describe("ModelManager catalog", () => {
       within(card).getByText(`Project: ${project.id}`),
     ).toBeInTheDocument();
     expect(within(card).getByText(/Registered: /)).toBeInTheDocument();
+  });
+
+  it("shows ReefPose anatomy and training provenance and offers pose inference", async () => {
+    const response = bootstrap(catalog("Available"));
+    const usePoseModel = vi.fn();
+    const registered = {
+      id: "reefpose-model-1",
+      project_id: project.id,
+      purpose: "detector",
+      display_name: "Fish ReefPose-S",
+      source_filename: "best.pt",
+      managed_path: "projects/project-1/models/best.pt",
+      file_size_bytes: 4096,
+      framework: "pytorch",
+      task: "pose",
+      provider_name: "reefpose",
+      provider_version: "1",
+      sha256: "f".repeat(64),
+      class_map_json: {},
+      input_size_json: { width: 256, height: 256 },
+      metadata_json: {
+        source_architecture: "reefpose-s",
+        source_training_run_id: "run-1",
+        source_pose_training_dataset_id: "dataset-1",
+        source_pose_training_dataset_manifest_sha256: "d".repeat(64),
+        source_training_config: { epochs: 10, batch: 4 },
+        source_metrics: { validation_loss: 0.42 },
+        source_checkpoint_sha256: "f".repeat(64),
+        source_checkpoint_size_bytes: 4096,
+        pose_landmark_schema: {
+          schema_name: "Fish anatomy",
+          schema_id: "schema-1",
+          schema_revision: 3,
+          content_hash: "a".repeat(64),
+          keypoint_count: 7,
+        },
+      },
+      created_at: "2026-11-07T12:00:00Z",
+      updated_at: "2026-11-07T12:00:00Z",
+      notes: null,
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input).includes("/model-hub/bootstrap"))
+        return jsonResponse({ ...response, models: [registered] });
+      if (String(input).includes("/model-catalog"))
+        return jsonResponse(response.catalog);
+      return new Promise<Response>(() => undefined);
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ModelManager project={project} onUsePoseModel={usePoseModel} />
+      </QueryClientProvider>,
+    );
+
+    const card = (
+      await screen.findByRole("heading", { name: "Fish ReefPose-S" })
+    ).closest("article")!;
+    expect(
+      within(card).getByText(/Fish anatomy.*revision 3/),
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByText(/7 anatomical keypoints/),
+    ).toBeInTheDocument();
+    expect(within(card).getByText(/run-1/)).toBeInTheDocument();
+    expect(within(card).getByText(/validation_loss/)).toBeInTheDocument();
+    await userEvent.click(
+      within(card).getByRole("button", { name: "Use in Pose Tracking" }),
+    );
+    expect(usePoseModel).toHaveBeenCalledWith("reefpose-model-1");
   });
 
   it("routes pose architectures to their schema-aware workflow", async () => {
