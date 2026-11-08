@@ -379,6 +379,13 @@ def _completed_workflow_pose_training_run(
     expected_validation_id = validation_dataset.id if validation_dataset is not None else None
 
     for candidate in candidates:
+        # Persisted snapshot provenance must be a JSON object. A list of
+        # key/value pairs can be coerced by dict() and impersonate frozen
+        # workflow lineage during completed-node recovery.
+        if candidate.draft_snapshot_json is not None and not isinstance(
+            candidate.draft_snapshot_json, dict
+        ):
+            raise ValidationError("Recovered pose-training node snapshot must be a JSON object")
         snapshot = dict(candidate.draft_snapshot_json or {})
 
         if (
