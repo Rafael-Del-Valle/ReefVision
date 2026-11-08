@@ -176,12 +176,15 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert payload["manifest_sha256"] == dataset["manifest_sha256"]
     # Saved workflow artifacts must preserve active-learning source lineage,
     # including explicit nulls for scientist-verified datasets without a round.
-    assert payload["source_round_id"] == dataset["source_round_id"]
-    assert payload["source_selection_sha256"] == dataset["source_selection_sha256"]
-    assert (
-        payload["source_retraining_manifest_sha256"]
-        == dataset["source_retraining_manifest_sha256"]
-    )
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, dataset_id)
+        assert frozen is not None
+        assert payload["source_round_id"] == frozen.source_round_id
+        assert payload["source_selection_sha256"] == frozen.source_selection_sha256
+        assert (
+            payload["source_retraining_manifest_sha256"]
+            == frozen.source_retraining_manifest_sha256
+        )
     assert type(payload["item_count"]) is int
     assert payload["item_count"] == dataset["item_count"]
     assert payload["pose_schema_id"] == dataset["pose_schema_id"]
