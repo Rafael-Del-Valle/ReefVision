@@ -134,6 +134,23 @@ def revision_from_source(path: Path, source: bytes | None = None) -> str | None:
             raise ValueError(f"{path}: pattern rebinds revision")
         if isinstance(statement, ast.MatchMapping) and statement.rest == "revision":
             raise ValueError(f"{path}: pattern rebinds revision")
+    # Aliased imports provide the same dynamic namespace access as direct
+    # builtins calls. Reject dangerous from-imports and track module aliases
+    # without importing or executing any migration code.
+    builtins_names = {"builtins"}
+    for statement in ast.walk(tree):
+        if isinstance(statement, ast.Import):
+            builtins_names.update(
+                alias.asname or "builtins"
+                for alias in statement.names
+                if alias.name == "builtins"
+            )
+        elif isinstance(statement, ast.ImportFrom) and statement.module == "builtins":
+            if any(
+                alias.name in {"exec", "eval", "globals", "locals", "vars"}
+                for alias in statement.names
+            ):
+                raise ValueError(f"{path}: dynamic builtins import may rebind revision")
     # Dynamic execution can mutate the module namespace after a literal
     # revision assignment. Static inspection cannot establish its outcome.
     # Namespace-introspection calls can also expose mutable dictionaries that
@@ -147,9 +164,9 @@ def revision_from_source(path: Path, source: bytes | None = None) -> str | None:
         ) or (
             isinstance(statement, ast.Call)
             and isinstance(statement.func, ast.Attribute)
-            and statement.func.attr in {"exec", "eval"}
+            and statement.func.attr in {"exec", "eval", "globals", "locals", "vars"}
             and isinstance(statement.func.value, ast.Name)
-            and statement.func.value.id == "builtins"
+            and statement.func.value.id in builtins_names
         ):
             raise ValueError(f"{path}: dynamic execution may rebind revision")
     if len(revisions) > 1:
