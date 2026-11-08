@@ -69,7 +69,18 @@ def validate_reference(path: Path = REFERENCE) -> list[str]:
         assert components == 1 or has_gap, f"unreviewed disconnected graph in {name}"
         if has_gap:
             a, b = case["missing_edge"]
-            assert a in nodes and b in nodes and tuple(sorted((a, b))) not in edges
+            assert a in nodes and b in nodes and a != b, name
+            assert tuple(sorted((a, b))) not in edges, name
+            # A declared missing edge must explain a disconnected reconstruction,
+            # not excuse an unrelated disconnected island.
+            assert components > 1, f"spurious gap annotation in {name}"
+            reachable = {a}
+            frontier = [a]
+            while frontier:
+                for neighbor in adjacency[frontier.pop()] - reachable:
+                    reachable.add(neighbor)
+                    frontier.append(neighbor)
+            assert b not in reachable, f"gap endpoints already connected in {name}"
         assert expected["unresolved"] == (has_cycle or has_gap), name
         if "branch_count" in expected:
             assert not has_cycle and not has_gap and components == 1, name
