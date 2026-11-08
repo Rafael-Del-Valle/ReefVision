@@ -833,6 +833,33 @@ describe("gallery partial final-page navigation", () => {
   });
 });
 
+describe("single-page camera gallery wrap navigation", () => {
+  it("moves between images without requesting another page", () => {
+    const base = {
+      action: "next" as const,
+      index: 0,
+      itemCount: 3,
+      page: 1,
+      pages: 1,
+      wrap: true,
+    };
+    expect(resolveGalleryNavigation(base)).toEqual({
+      page: 1,
+      edge: "index",
+      index: 1,
+    });
+    expect(
+      resolveGalleryNavigation({ ...base, action: "previous" }),
+    ).toEqual({ page: 1, edge: "last" });
+    expect(
+      resolveGalleryNavigation({ ...base, index: 2 }),
+    ).toEqual({ page: 1, edge: "first" });
+    expect(
+      resolveGalleryNavigation({ ...base, index: 2, wrap: false }),
+    ).toBeNull();
+  });
+});
+
 describe("single-image first-open gallery navigation", () => {
   it("does not issue redundant page fetches for any action on a one-image project", () => {
     for (const action of ["first", "last", "previous", "next"] as const) {
