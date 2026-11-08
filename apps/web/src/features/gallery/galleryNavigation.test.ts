@@ -988,10 +988,20 @@ describe("resolveGalleryNavigation", () => {
       resolveGalleryNavigation({ ...base, action: "previous", index: 0 }),
     ).toEqual({ page: 1, edge: "last" });
     expect(
-      resolveGalleryNavigation({ ...base, action: "next", index: 2, wrap: false }),
+      resolveGalleryNavigation({
+        ...base,
+        action: "next",
+        index: 2,
+        wrap: false,
+      }),
     ).toBeNull();
     expect(
-      resolveGalleryNavigation({ ...base, action: "previous", index: 0, wrap: false }),
+      resolveGalleryNavigation({
+        ...base,
+        action: "previous",
+        index: 0,
+        wrap: false,
+      }),
     ).toBeNull();
   });
 
@@ -1081,6 +1091,7 @@ describe("resolveGalleryNavigation", () => {
       }),
     ).toBeNull();
   });
+
   it("rejects blank and control-character camera IDs without losing a valid saved selection", () => {
     const values = new Map<string, string>();
     const storage = {
@@ -1107,7 +1118,10 @@ describe("resolveGalleryNavigation", () => {
       "frame\u0000second",
       "frame\u007fsecond",
     ]) {
-      values.set(key, JSON.stringify({ imageId: invalid, page: 4, wrap: true }));
+      values.set(
+        key,
+        JSON.stringify({ imageId: invalid, page: 4, wrap: true }),
+      );
       expect(readGalleryPreference(storage, project)).toEqual({
         imageId: null,
         page: 1,
@@ -1155,7 +1169,10 @@ describe("resolveGalleryNavigation", () => {
       `bad${String.fromCharCode(0xd800)}`,
       `bad${String.fromCharCode(0xdc00)}`,
     ]) {
-      values.set(key, JSON.stringify({ imageId: malformed, page: 2, wrap: true }));
+      values.set(
+        key,
+        JSON.stringify({ imageId: malformed, page: 2, wrap: true }),
+      );
       expect(readGalleryPreference(storage, project).imageId).toBeNull();
       values.set(key, saved!);
       writeGalleryPreference(storage, project, {
