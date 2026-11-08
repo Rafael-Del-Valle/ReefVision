@@ -76,8 +76,17 @@ def measure_triangle_mesh(
     # Including them would silently inflate reported coral dimensions.
     observed = [vertices[index] for index in sorted(referenced_vertices)]
     spans = tuple(max(v[i] for v in observed) - min(v[i] for v in observed) for i in range(3))
+    # Finite source coordinates can still overflow during subtraction or
+    # conversion to physical units; never publish infinite measurements.
+    if any(not math.isfinite(span) for span in spans):
+        raise ValueError("nonfinite observed mesh dimensions")
     scale = meters_per_unit
     delta = absolute_scale_bound
+    if not math.isfinite(raw_area * scale ** 2) or any(
+        not math.isfinite(span * scale) or not math.isfinite(span * delta)
+        for span in spans
+    ):
+        raise ValueError("nonfinite calibrated mesh measurement")
     # Max absolute departure from nominal area over the bounded scale interval.
     area_bound = raw_area * max((scale + delta) ** 2 - scale ** 2,
                                 scale ** 2 - (scale - delta) ** 2)
