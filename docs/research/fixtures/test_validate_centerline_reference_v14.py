@@ -73,6 +73,18 @@ class CenterlineReferenceIntegrityTests(unittest.TestCase):
             lambda data: data["cases"][3]["expected"].update(unresolved=False)
         )
 
+    def test_numeric_unresolved_status_is_rejected(self) -> None:
+        # Python considers 1 == True, but a review status must be explicitly boolean.
+        self.check_mutation_rejected(
+            lambda data: data["cases"][3]["expected"].update(unresolved=1)
+        )
+
+    def test_numeric_resolved_status_is_rejected(self) -> None:
+        # Likewise 0 == False must not pass scientific review-state validation.
+        self.check_mutation_rejected(
+            lambda data: data["cases"][0]["expected"].update(unresolved=0)
+        )
+
     def test_occlusion_cannot_be_silently_marked_resolved(self) -> None:
         self.check_mutation_rejected(
             lambda data: data["cases"][4]["expected"].update(unresolved=False)
