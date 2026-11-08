@@ -2047,7 +2047,20 @@ def test_frozen_pose_artifact_rejects_false_item_count_lineage(
     project, dataset = _frozen_dataset(client, monkeypatch)
     assert dataset["item_count"] == 1
     app = cast(FastAPI, client.app)
-    from reefvision.services.workflow_pose_training import _pose_dataset
+    from reefvision.services.workflow_pose_training import (
+        _pose_dataset,
+        execute_pose_training_dataset_adapter,
+    )
+
+    with app.state.session_factory() as session:
+        artifacts = execute_pose_training_dataset_adapter(
+            session,
+            app.state.settings,
+            str(project["id"]),
+            {"dataset_id": str(dataset["id"]), "manifest_sha256": dataset["manifest_sha256"]},
+            {},
+        )
+        assert artifacts[0]["payload"]["item_count"] == dataset["item_count"]
 
     with (
         app.state.session_factory() as session,
