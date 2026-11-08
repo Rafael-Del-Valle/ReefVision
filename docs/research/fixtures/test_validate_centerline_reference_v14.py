@@ -84,6 +84,18 @@ class CenterlineReferenceIntegrityTests(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, "unreviewed disconnected graph"):
                 validate_reference(path)
 
+    def test_gap_annotation_must_bridge_disconnected_components(self) -> None:
+        def mutate(data) -> None:
+            data["cases"][4]["missing_edge"] = ["root", "visible_end"]
+
+        self.check_mutation_rejected(mutate)
+
+    def test_spurious_gap_on_connected_graph_is_rejected(self) -> None:
+        def mutate(data) -> None:
+            data["cases"][0]["missing_edge"] = ["root", "tip"]
+
+        self.check_mutation_rejected(mutate)
+
     def test_nonfinite_coordinate_is_rejected(self) -> None:
         self.check_mutation_rejected(
             lambda data: data["cases"][0]["nodes"][0].__setitem__(1, float("nan"))
