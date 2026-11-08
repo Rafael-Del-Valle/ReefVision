@@ -70,9 +70,9 @@ class MeshMeasurementReferenceTests(unittest.TestCase):
         self.assertEqual(result.dimensions_scale_bound_m, (0.002, 0.003, 0.0))
         self.assertEqual(result.triangle_count, 1)
 
-    def test_finite_inputs_cannot_produce_infinite_dimensions(self) -> None:
+    def test_extreme_finite_coordinates_reject_overflowing_geometry(self) -> None:
         vertices = [(-1e308, 0, 0), (1e308, 0, 0), (0, 1e-308, 0)]
-        with self.assertRaisesRegex(ValueError, "nonfinite observed mesh dimensions"):
+        with self.assertRaisesRegex(ValueError, "degenerate or overflowing triangle"):
             measure_triangle_mesh(
                 vertices, [(0, 1, 2)],
                 meters_per_unit=1, absolute_scale_bound=0,
