@@ -23,6 +23,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { cancelJob, retryJob, type Project } from "../../api/client";
 import { PoseAnnotationEditor } from "../pose/PoseAnnotationEditor";
+import { AnatomySkeletonDesigner } from "../pose/AnatomySkeletonDesigner";
 import type { PoseSaveRequest } from "../pose/types";
 import {
   correctedVideoKeyframeFromPoseSave,
@@ -1366,6 +1367,7 @@ export function VideoTrackingWorkspace({
           </div>
         </div>
       </section>
+      <AnatomySkeletonDesigner projectId={project.id} />
       <section className="management-card">
         <p className="eyebrow">Research workflow</p>
         <h3>Managed videos</h3>
