@@ -31,6 +31,7 @@ def validate_reference(path: Path = REFERENCE) -> list[str]:
         nodes = {row[0]: tuple(row[1:]) for row in case["nodes"]}
         assert len(nodes) == len(case["nodes"]), f"duplicate node in {name}"
         assert all(len(p) == 3 and all(math.isfinite(x) for x in p) for p in nodes.values())
+        assert nodes, f"empty centerline graph in {name}"
         edges: set[tuple[str, str]] = set()
         adjacency: dict[str, set[str]] = defaultdict(set)
         total = 0.0
@@ -38,10 +39,12 @@ def validate_reference(path: Path = REFERENCE) -> list[str]:
             assert a in nodes and b in nodes and a != b, name
             key = tuple(sorted((a, b)))
             assert key not in edges, f"duplicate undirected edge in {name}"
+            assert math.dist(nodes[a], nodes[b]) > 0, f"zero-length edge in {name}"
             edges.add(key)
             adjacency[a].add(b)
             adjacency[b].add(a)
             total += math.dist(nodes[a], nodes[b])
+        assert all(adjacency[node] for node in nodes), f"isolated node in {name}"
         expected = case["expected"]
         for key, observed in (
             ("unique_edge_total_raw", total),
