@@ -428,3 +428,26 @@ def test_callable_parameters_cannot_shadow_revision(tmp_path: Path, source: str)
     with pytest.raises(ValueError, match="parameter shadows revision"):
         load_audit()([root])
     assert file.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "dynamic_source",
+    [
+        """import builtins
+builtins.exec("revision = '0039'")
+""",
+        """import builtins
+builtins.eval("globals().__setitem__('revision', '0039')")
+""",
+    ],
+)
+def test_explicit_builtins_dynamic_execution_fails_closed(
+    tmp_path: Path, dynamic_source: str
+) -> None:
+    root = tmp_path / "versions"
+    file = migration(root, "0038.py", "0038")
+    file.write_text(file.read_text(encoding="utf-8") + dynamic_source, encoding="utf-8")
+    before = file.read_bytes()
+    with pytest.raises(ValueError, match="dynamic execution may rebind revision"):
+        load_audit()([root])
+    assert file.read_bytes() == before
