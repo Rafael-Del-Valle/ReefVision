@@ -157,6 +157,11 @@ test.describe("ReefPose Phase 2B live GUI", () => {
       page.getByText("Pose landmarks on this frame: 2"),
     ).toBeVisible();
     await expect(page.getByText("Landmark schema: tentacle × 2")).toBeVisible();
-    await expect(page.getByLabel("Status")).toHaveValue("machine_generated");
+    const trackEditor = page
+      .getByRole("heading", { name: "Identities and keyframes" })
+      .locator("..");
+    await expect(trackEditor.getByRole("combobox").nth(3)).toHaveValue(
+      "machine_generated",
+    );
   });
 });
