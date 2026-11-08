@@ -470,3 +470,20 @@ def test_aliased_builtins_namespace_access_fails_closed(tmp_path: Path, source: 
     with pytest.raises(ValueError, match="dynamic (builtins import|execution) may rebind revision"):
         load_audit()([root])
     assert file.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "dynamic_call",
+    [
+        'import builtins as b; getattr(b, "exec")("revision = 2")',
+        'import builtins as b; b.__dict__["exec"]("revision = 2")',
+    ],
+)
+def test_reflective_builtins_access_fails_closed(tmp_path: Path, dynamic_call: str) -> None:
+    root = tmp_path / "versions"
+    file = migration(root, "0038.py", "0038")
+    file.write_text(file.read_text(encoding="utf-8") + dynamic_call + "\n", encoding="utf-8")
+    before = file.read_bytes()
+    with pytest.raises(ValueError, match="reflective builtins access"):
+        load_audit()([root])
+    assert file.read_bytes() == before
