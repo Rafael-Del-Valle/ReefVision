@@ -2674,3 +2674,43 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
     assert valid["workflow_node_run_id"] == "legitimate-pose-node"
     assert valid["pose_training_dataset_id"] == dataset["id"]
     assert len(valid["result_checkpoint_sha256"]) == 64
+
+
+def test_pose_workflow_replay_rejects_non_object_snapshot(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Exercise persisted, scientist-reviewed dataset provenance rather than
+    # constructing a synthetic TrainingRun without its child job.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+
+    def execute() -> dict[str, Any]:
+        with app.state.session_factory() as session:
+            return create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=payload,
+                parameters={"device": "cpu", "training_config": {"epochs": 1}},
+                workflow_run_id="snapshot-object-workflow",
+                workflow_node_run_id="snapshot-object-node",
+                processor=_fake_pose_processor,
+            )
+
+    result = execute()
+    with app.state.session_factory() as session:
+        run = session.get(TrainingRun, result["training_run_id"])
+        assert run is not None
+        original = dict(run.draft_snapshot_json or {})
+        run.draft_snapshot_json = list(original.items())
+        session.commit()
+
+    with pytest.raises(ValidationError, match="snapshot must be a JSON object"):
+        execute()
