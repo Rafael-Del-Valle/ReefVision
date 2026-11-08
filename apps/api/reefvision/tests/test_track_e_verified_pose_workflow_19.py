@@ -2034,3 +2034,32 @@ def test_resigned_review_cannot_change_scientist_or_correction_evidence(
         execute_pose_training_dataset_adapter(
             session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
         )
+
+
+@pytest.mark.parametrize("advertised_count", [True, "1", 2])
+def test_frozen_pose_artifact_rejects_false_item_count_lineage(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    advertised_count: bool | str | int,
+) -> None:
+    # Use the API-frozen scientist-verified dataset rather than a fabricated
+    # manifest. The artifact count must agree with its persisted frozen truth.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    assert dataset["item_count"] == 1
+    app = cast(FastAPI, client.app)
+    from reefvision.services.workflow_pose_training import _pose_dataset
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="artifact item count no longer matches"),
+    ):
+        _pose_dataset(
+            session,
+            project_id=str(project["id"]),
+            payload={
+                "dataset_id": str(dataset["id"]),
+                "manifest_sha256": dataset["manifest_sha256"],
+                "item_count": advertised_count,
+            },
+            role="training",
+        )
