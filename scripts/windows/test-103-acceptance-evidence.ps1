@@ -38,6 +38,23 @@ try {
         $cabEvidence[0].sha256 -cne $expectedCabHash -or $cabEvidence[0].bytes -ne $cabBytes.Length) {
         throw 'CAB artifact evidence does not match the input bytes.'
     }
+    # Windows installer paths are case-insensitive and may contain spaces. The
+    # collector must hash uppercase extensions without modifying either file.
+    $uppercaseMsi = Join-Path $fixture 'Camera Build.MSI'
+    $uppercaseCab = Join-Path $fixture 'Camera Payload.CAB'
+    [System.IO.File]::WriteAllBytes($uppercaseMsi, $bytes)
+    [System.IO.File]::WriteAllBytes($uppercaseCab, $cabBytes)
+    $upperEvidence = (& $collector -CandidateSha $sha -MsiPath $uppercaseMsi -CabPath $uppercaseCab | Out-String | ConvertFrom-Json)
+    foreach ($artifact in @($upperEvidence.artifacts)) {
+        $expectedFile = if ($artifact.kind -eq 'msi') { $uppercaseMsi } else { $uppercaseCab }
+        $expectedBytes = if ($artifact.kind -eq 'msi') { $bytes } else { $cabBytes }
+        if ($artifact.status -ne 'hashed' -or
+            $artifact.sha256 -cne (Get-FileHash -LiteralPath $expectedFile -Algorithm SHA256).Hash.ToLowerInvariant() -or
+            $artifact.bytes -ne $expectedBytes.Length -or
+            -not [System.Linq.Enumerable]::SequenceEqual([byte[]][System.IO.File]::ReadAllBytes($expectedFile), [byte[]]$expectedBytes)) {
+            throw "Uppercase extension, spaced path, or read-only artifact contract failed for $($artifact.kind)."
+        }
+    }
     # Missing artifacts must remain explicitly unverified, not silently omitted.
     $withoutArtifacts = (& $collector -CandidateSha $sha | Out-String | ConvertFrom-Json)
     $absent = @($withoutArtifacts.artifacts)
