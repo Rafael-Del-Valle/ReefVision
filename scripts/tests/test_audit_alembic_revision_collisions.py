@@ -420,9 +420,7 @@ def test_dynamic_namespace_access_cannot_bypass_revision_audit(
         "worker = lambda revision: revision\n",
     ],
 )
-def test_callable_parameters_cannot_shadow_revision(
-    tmp_path: Path, source: str
-) -> None:
+def test_callable_parameters_cannot_shadow_revision(tmp_path: Path, source: str) -> None:
     root = tmp_path / "versions"
     file = migration(root, "0038.py", "0038")
     file.write_text(file.read_text(encoding="utf-8") + source, encoding="utf-8")
