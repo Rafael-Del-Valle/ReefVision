@@ -110,6 +110,23 @@ def revision_from_source(path: Path, source: bytes | None = None) -> str | None:
             for name in ast.walk(statement.name)
         ):
             raise ValueError(f"{path}: type alias rebinds revision")
+    # Parameter bindings can shadow revision inside executable nested scopes.
+    # Reject these rather than interpreting nested runtime behavior as a
+    # trustworthy, static migration identifier. This includes lambda,
+    # positional-only, keyword-only, vararg and kwarg parameters.
+    for statement in ast.walk(tree):
+        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            parameters = statement.args
+            names = [
+                *parameters.posonlyargs,
+                *parameters.args,
+                *parameters.kwonlyargs,
+            ]
+            if any(parameter.arg == "revision" for parameter in names) or any(
+                parameter is not None and parameter.arg == "revision"
+                for parameter in (parameters.vararg, parameters.kwarg)
+            ):
+                raise ValueError(f"{path}: parameter shadows revision")
     # Structural pattern matching can bind revision without an Assign node.
     # Capture names occur in MatchAs/MatchStar/MatchMapping patterns.
     for statement in ast.walk(tree):
