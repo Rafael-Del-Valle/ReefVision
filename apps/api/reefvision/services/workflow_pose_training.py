@@ -498,10 +498,11 @@ def _completed_workflow_pose_training_run(
         expected_validation_mode = (
             "separate_frozen_pose_dataset" if validation_dataset is not None else "none"
         )
-        if (
-            dict(candidate.evaluation_config_json or {}).get("validation_mode")
-            != expected_validation_mode
-        ):
+        # Persisted evaluation configuration is provenance, not an iterable
+        # that may be coerced into a mapping during completed-run recovery.
+        if not isinstance(candidate.evaluation_config_json, dict):
+            raise ValidationError("Recovered pose-training evaluation config must be a JSON object")
+        if candidate.evaluation_config_json.get("validation_mode") != expected_validation_mode:
             raise ValidationError("Recovered pose-training node validation mode changed")
 
         # The persisted run's seed source and asset identity are returned to
