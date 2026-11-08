@@ -467,7 +467,7 @@ def test_aliased_builtins_namespace_access_fails_closed(tmp_path: Path, source: 
     file = migration(root, "0038.py", "0038")
     file.write_text(file.read_text(encoding="utf-8") + source, encoding="utf-8")
     before = file.read_bytes()
-    with pytest.raises(ValueError, match="dynamic (builtins import|execution) may rebind revision"):
+    with pytest.raises(ValueError, match=r"dynamic (builtins import|execution) may rebind revision"):
         load_audit()([root])
     assert file.read_bytes() == before
 
