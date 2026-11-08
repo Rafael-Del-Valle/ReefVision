@@ -108,7 +108,7 @@ def test_cli_rejects_symlinked_migration_file_without_reading_target(tmp_path: P
     result = _run(root)
 
     assert result.returncode != 0
-    assert "Migration file is a symbolic link" in result.stderr
+    assert "Migration tree contains a symbolic link" in result.stderr
     assert external.read_bytes() == before
 
 
@@ -124,5 +124,5 @@ def test_cli_rejects_symlinked_migration_directory(tmp_path: Path) -> None:
     result = _run(linked)
 
     assert result.returncode != 0
-    assert "Migration directory is a symbolic link" in result.stderr
+    assert "Migration directory has a symbolic-link ancestor" in result.stderr
     assert source.read_bytes() == before
