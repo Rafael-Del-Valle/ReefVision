@@ -96,6 +96,10 @@ def measure_triangle_mesh(
         for span in spans
     ):
         raise ValueError("nonfinite calibrated mesh measurement")
+    # A nonzero observed axis must not silently become zero in physical units.
+    # This is distinct from an actually planar mesh with a zero source span.
+    if any(span > 0 and span * scale == 0 for span in spans):
+        raise ValueError("calibrated mesh dimension underflow")
     if not math.isfinite(upper_area) or not math.isfinite(lower_area):
         raise ValueError("nonfinite calibrated mesh uncertainty")
     area_bound = max(upper_area - nominal_area, nominal_area - lower_area)
