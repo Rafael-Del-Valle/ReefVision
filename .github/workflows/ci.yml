@@ -61,3 +61,15 @@ jobs:
         working-directory: apps/web
       - run: npm run build
         working-directory: apps/web
+
+  windows-acceptance-collector:
+    # Validate the evidence collector on a real Windows runner; this is NOT
+    # MSI installation, WebView2 GUI, or GPU/scientific acceptance.
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Regression-test read-only MSI/CAB evidence collection
+        shell: pwsh
+        run: ./scripts/windows/test-103-acceptance-evidence.ps1
