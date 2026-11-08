@@ -69,7 +69,12 @@ def measure_triangle_mesh(
         area = math.hypot(*cross) / 2
         if not math.isfinite(area) or area <= 0:
             raise ValueError("degenerate or overflowing triangle")
-        raw_area += area
+        # Detect loss of a real observed patch to floating-point summation.
+        # Otherwise a small coral surface can disappear beside a large patch.
+        next_area = raw_area + area
+        if next_area == raw_area:
+            raise ValueError("observed triangle area lost to numeric precision")
+        raw_area = next_area
     if not math.isfinite(raw_area):
         raise ValueError("nonfinite surface area")
     # Unreferenced vertices are not part of the observed triangular surface.
