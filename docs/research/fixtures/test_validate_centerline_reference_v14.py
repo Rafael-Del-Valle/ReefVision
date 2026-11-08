@@ -58,6 +58,16 @@ class CenterlineReferenceIntegrityTests(unittest.TestCase):
             lambda data: data["cases"][2]["expected"].update(branch_count=2)
         )
 
+    def test_fractional_branch_count_is_rejected(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["cases"][1]["expected"].update(branch_count=3.0)
+        )
+
+    def test_boolean_branch_count_is_rejected(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["cases"][1]["expected"].update(branch_count=True)
+        )
+
     def test_cycle_cannot_be_silently_marked_resolved(self) -> None:
         self.check_mutation_rejected(
             lambda data: data["cases"][3]["expected"].update(unresolved=False)
