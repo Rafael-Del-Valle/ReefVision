@@ -144,6 +144,12 @@ def revision_from_source(path: Path, source: bytes | None = None) -> str | None:
             isinstance(statement, ast.Call)
             and isinstance(statement.func, ast.Name)
             and statement.func.id in {"exec", "eval", "globals", "locals", "vars"}
+        ) or (
+            isinstance(statement, ast.Call)
+            and isinstance(statement.func, ast.Attribute)
+            and statement.func.attr in {"exec", "eval"}
+            and isinstance(statement.func.value, ast.Name)
+            and statement.func.value.id == "builtins"
         ):
             raise ValueError(f"{path}: dynamic execution may rebind revision")
     if len(revisions) > 1:
