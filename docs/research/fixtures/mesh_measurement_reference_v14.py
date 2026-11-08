@@ -82,19 +82,24 @@ def measure_triangle_mesh(
         raise ValueError("nonfinite observed mesh dimensions")
     scale = meters_per_unit
     delta = absolute_scale_bound
-    if not math.isfinite(raw_area * scale ** 2) or any(
+    # Multiply in a stable order: exponentiation can raise OverflowError
+    # even when the observed area is tiny enough to yield a finite result.
+    nominal_area = (raw_area * scale) * scale
+    upper_area = (raw_area * (scale + delta)) * (scale + delta)
+    lower_area = (raw_area * (scale - delta)) * (scale - delta)
+    if not math.isfinite(nominal_area) or any(
         not math.isfinite(span * scale) or not math.isfinite(span * delta)
         for span in spans
     ):
         raise ValueError("nonfinite calibrated mesh measurement")
-    # Max absolute departure from nominal area over the bounded scale interval.
-    area_bound = raw_area * max((scale + delta) ** 2 - scale ** 2,
-                                scale ** 2 - (scale - delta) ** 2)
+    if not math.isfinite(upper_area) or not math.isfinite(lower_area):
+        raise ValueError("nonfinite calibrated mesh uncertainty")
+    area_bound = max(upper_area - nominal_area, nominal_area - lower_area)
     if not math.isfinite(area_bound):
         raise ValueError("nonfinite calibrated mesh uncertainty")
     return MeshMeasurement(
         triangle_area_units2=raw_area,
-        surface_area_m2=raw_area * scale ** 2,
+        surface_area_m2=nominal_area,
         surface_area_scale_bound_m2=area_bound,
         dimensions_m=tuple(s * scale for s in spans),
         dimensions_scale_bound_m=tuple(s * delta for s in spans),
