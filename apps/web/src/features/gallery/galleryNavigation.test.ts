@@ -205,6 +205,7 @@ describe("gallery preferences", () => {
       "IMG_0123.JPEG",
       "Canon EOS RP/IMG 0007.JpG",
       "Sony α7R III/DSC 0008.JPEG",
+      "Sony 📷/DSC 0009.JPG",
     ]) {
       writeGalleryPreference(storage, "camera-project", {
         imageId,
