@@ -169,6 +169,23 @@ def revision_from_source(path: Path, source: bytes | None = None) -> str | None:
             and statement.func.value.id in builtins_names
         ):
             raise ValueError(f"{path}: dynamic execution may rebind revision")
+    # Reflective access can retrieve dynamic execution from builtins without
+    # a direct exec/eval call. Never evaluate migration source to resolve it.
+    for statement in ast.walk(tree):
+        if (
+            isinstance(statement, ast.Call)
+            and isinstance(statement.func, ast.Name)
+            and statement.func.id == "getattr"
+            and statement.args
+            and isinstance(statement.args[0], ast.Name)
+            and statement.args[0].id in builtins_names
+        ) or (
+            isinstance(statement, ast.Attribute)
+            and statement.attr == "__dict__"
+            and isinstance(statement.value, ast.Name)
+            and statement.value.id in builtins_names
+        ):
+            raise ValueError(f"{path}: reflective builtins access may rebind revision")
     if len(revisions) > 1:
         raise ValueError(f"{path}: multiple revision assignments")
     return revisions[0] if revisions else None
