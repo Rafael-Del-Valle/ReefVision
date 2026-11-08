@@ -107,6 +107,16 @@ class MeshMeasurementReferenceTests(unittest.TestCase):
                 meters_per_unit=1e-150, absolute_scale_bound=0,
             )
 
+    def test_nonzero_dimension_uncertainty_cannot_underflow(self) -> None:
+        # The observed Z extent and nominal dimension are representable,
+        # but a positive scale uncertainty would otherwise become zero.
+        vertices = [(0, 0, 0), (1, 0, 0), (0, 1, 1e-200)]
+        with self.assertRaisesRegex(ValueError, "calibrated mesh dimension uncertainty underflow"):
+            measure_triangle_mesh(
+                vertices, [(0, 1, 2)],
+                meters_per_unit=1, absolute_scale_bound=1e-150,
+            )
+
     def test_uncertainty_overflow_rejected_even_when_nominal_area_is_finite(self) -> None:
         # Nominal area is finite (~1e308 m²), but the upper scale
         # endpoint overflows; never return an infinite error bar.
