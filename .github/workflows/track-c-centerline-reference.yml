@@ -1,4 +1,4 @@
-name: Track C Synthetic Centerline Reference
+name: Track C Synthetic Geometry References
 
 on:
   pull_request:
@@ -6,6 +6,8 @@ on:
       - "docs/research/fixtures/centerline_reference_v14.json"
       - "docs/research/fixtures/validate_centerline_reference_v14.py"
       - "docs/research/fixtures/test_validate_centerline_reference_v14.py"
+      - "docs/research/fixtures/mesh_measurement_reference_v14.py"
+      - "docs/research/fixtures/test_mesh_measurement_reference_v14.py"
       - ".github/workflows/track-c-centerline-reference.yml"
   push:
     branches:
@@ -14,6 +16,8 @@ on:
       - "docs/research/fixtures/centerline_reference_v14.json"
       - "docs/research/fixtures/validate_centerline_reference_v14.py"
       - "docs/research/fixtures/test_validate_centerline_reference_v14.py"
+      - "docs/research/fixtures/mesh_measurement_reference_v14.py"
+      - "docs/research/fixtures/test_mesh_measurement_reference_v14.py"
       - ".github/workflows/track-c-centerline-reference.yml"
   workflow_dispatch:
 
@@ -33,4 +37,4 @@ jobs:
       - name: Validate reference fixture
         run: python docs/research/fixtures/validate_centerline_reference_v14.py
       - name: Execute mutation regressions
-        run: python -m unittest discover -s docs/research/fixtures -p 'test_validate_centerline_reference_v14.py' -v
+        run: python -m unittest discover -s docs/research/fixtures -p 'test_*reference_v14.py' -v
