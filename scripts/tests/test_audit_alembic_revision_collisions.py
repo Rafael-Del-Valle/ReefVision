@@ -391,9 +391,9 @@ def test_collision_fingerprint_uses_the_same_bytes_as_revision_parsing(
 @pytest.mark.parametrize(
     "dynamic_source",
     [
-        "globals()['revision'] = '0039'\\n",
-        "locals().update({'revision': '0039'})\\n",
-        "vars()['revision'] = '0039'\\n",
+        "globals()['revision'] = '0039'\n",
+        "locals().update({'revision': '0039'})\n",
+        "vars()['revision'] = '0039'\n",
     ],
 )
 def test_dynamic_namespace_access_cannot_bypass_revision_audit(
