@@ -73,7 +73,7 @@ def validate_reference(path: Path = REFERENCE) -> list[str]:
             assert tuple(sorted((a, b))) not in edges, name
             # A declared missing edge must explain a disconnected reconstruction,
             # not excuse an unrelated disconnected island.
-            assert components > 1, f"spurious gap annotation in {name}"
+            assert components == 2, f"one missing edge cannot explain {components} components in {name}"
             reachable = {a}
             frontier = [a]
             while frontier:
