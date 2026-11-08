@@ -128,5 +128,18 @@ class MeshMeasurementReferenceTests(unittest.TestCase):
             )
 
 
+    def test_positive_area_uncertainty_cannot_round_to_zero(self) -> None:
+        # Positive calibration uncertainty can be smaller than the ULP
+        # of the squared scale, silently reporting an exact area.
+        vertices = [(0, 0, 0), (1, 0, 0), (0, 1, 0)]
+        with self.assertRaisesRegex(
+            ValueError, "calibrated mesh surface area uncertainty underflow"
+        ):
+            measure_triangle_mesh(
+                vertices, [(0, 1, 2)],
+                meters_per_unit=1, absolute_scale_bound=1e-20,
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
