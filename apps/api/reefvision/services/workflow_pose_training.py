@@ -254,7 +254,8 @@ def _pose_dataset(
         "pose_schema_content_hash",
     )
     if any(
-        str(payload[field]) != str(getattr(dataset, field))
+        payload[field] != getattr(dataset, field)
+        or (field == "pose_schema_revision" and type(payload[field]) is not int)
         for field in schema_fields
         if field in payload
     ):
