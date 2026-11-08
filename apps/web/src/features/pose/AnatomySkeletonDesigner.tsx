@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import {
   createAnatomyRevision,
   createAnatomySchema,
+  getAnatomySchema,
   listAnatomySchemas,
   type AnatomyLandmarkDefinition,
   type AnatomySchemaRevision,
@@ -68,6 +69,12 @@ export function AnatomySkeletonDesigner({
   const [edgeTo, setEdgeTo] = useState("");
   const [message, setMessage] = useState<string | null>(null);
 
+  const historyQuery = useQuery({
+    queryKey: ["pose_anatomy_schema", selectedId],
+    queryFn: ({ signal }) => getAnatomySchema(selectedId, signal),
+    enabled: Boolean(selectedId),
+  });
+
   const selectedSchema = (schemasQuery.data ?? []).find(
     (item) => item.id === selectedId,
   );
@@ -93,6 +100,9 @@ export function AnatomySkeletonDesigner({
       setMessage(`Saved revision ${schema.revision}`);
       await queryClient.invalidateQueries({
         queryKey: ["pose_anatomy_schemas", projectId],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["pose_anatomy_schema", schema.id],
       });
       onSchemaSelected?.(schema);
     },
@@ -242,10 +252,28 @@ export function AnatomySkeletonDesigner({
         />
       </label>
       {selectedSchema && (
-        <p className="annotation-helper">
-          Editing revision {selectedSchema.revision} · integrity{" "}
-          {selectedSchema.content_hash.slice(0, 12)}…
-        </p>
+        <>
+          <p className="annotation-helper">
+            Editing revision {selectedSchema.revision} · integrity{" "}
+            {selectedSchema.content_hash.slice(0, 12)}…
+          </p>
+          <details>
+            <summary>Revision history</summary>
+            {historyQuery.isLoading && <p>Loading revision history…</p>}
+            {historyQuery.isError && (
+              <p role="alert">Could not load revision history.</p>
+            )}
+            <ol aria-label="Anatomy revision history">
+              {(historyQuery.data?.revisions ?? []).map((revision) => (
+                <li key={revision.revision}>
+                  Revision {revision.revision} · {revision.keypoint_count}{" "}
+                  landmarks · {revision.content_hash.slice(0, 12)}… ·{" "}
+                  {new Date(revision.created_at).toLocaleString()}
+                </li>
+              ))}
+            </ol>
+          </details>
+        </>
       )}
 
       <div className="annotation-selection-list">

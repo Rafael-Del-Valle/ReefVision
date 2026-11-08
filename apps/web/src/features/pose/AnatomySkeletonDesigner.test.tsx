@@ -47,6 +47,17 @@ describe("AnatomySkeletonDesigner", () => {
           { status: 201, headers: { "Content-Type": "application/json" } },
         );
       }
+      if (url.includes("/pose-schemas/schema-1")) {
+        return new Response(
+          JSON.stringify({
+            id: "schema-1",
+            project_id: "project-1",
+            name: "Moon jelly anatomy",
+            revisions: [],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
       return new Response(JSON.stringify([]), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -151,10 +162,25 @@ describe("AnatomySkeletonDesigner", () => {
           },
         );
       }
-      return new Response(JSON.stringify([revision]), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify(
+          url.includes("/pose-schemas/schema-1")
+            ? {
+                id: "schema-1",
+                project_id: "project-1",
+                name: "Fish anatomy",
+                revisions: [
+                  { ...revision, revision: 1, content_hash: "a".repeat(64) },
+                  revision,
+                ],
+              }
+            : [revision],
+        ),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     });
 
     renderDesigner();
@@ -162,6 +188,9 @@ describe("AnatomySkeletonDesigner", () => {
     fireEvent.change(screen.getByLabelText("Saved template"), {
       target: { value: "schema-1" },
     });
+    expect(
+      await screen.findByText(/Revision 1 · 2 landmarks/),
+    ).toBeInTheDocument();
     const names = screen.getAllByLabelText("Anatomical name");
     fireEvent.change(names[0], { target: { value: "Rostrum" } });
     fireEvent.click(

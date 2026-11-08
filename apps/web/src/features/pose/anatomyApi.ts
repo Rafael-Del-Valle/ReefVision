@@ -35,6 +35,13 @@ export interface AnatomySchemaRevision extends AnatomyRevisionPayload {
   created_at: string;
 }
 
+export interface AnatomySchemaDetail {
+  id: string;
+  project_id: string;
+  name: string;
+  revisions: AnatomySchemaRevision[];
+}
+
 async function anatomyRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
@@ -71,6 +78,15 @@ export function createAnatomySchema(
     `/projects/${encodeURIComponent(projectId)}/pose-schemas`,
     { method: "POST", body: JSON.stringify(payload) },
   );
+}
+
+export function getAnatomySchema(
+  schemaId: string,
+  signal?: AbortSignal,
+): Promise<AnatomySchemaDetail> {
+  return anatomyRequest(`/pose-schemas/${encodeURIComponent(schemaId)}`, {
+    signal,
+  });
 }
 
 export function createAnatomyRevision(
