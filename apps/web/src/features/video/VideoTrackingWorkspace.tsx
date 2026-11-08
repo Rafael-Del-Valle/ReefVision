@@ -24,11 +24,13 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cancelJob, retryJob, type Project } from "../../api/client";
 import { PoseAnnotationEditor } from "../pose/PoseAnnotationEditor";
 import { AnatomySkeletonDesigner } from "../pose/AnatomySkeletonDesigner";
+import type { AnatomySchemaRevision } from "../pose/anatomyApi";
 import type { PoseSaveRequest } from "../pose/types";
 import {
   correctedVideoKeyframeFromPoseSave,
   editorSchemaForVideoTrack,
   poseInstanceFromVideoKeyframe,
+  videoSchemaFromAnatomy,
 } from "./poseKeyframeAdapter";
 import {
   benchmarkVideoTracking,
@@ -193,6 +195,8 @@ export function VideoTrackingWorkspace({
   const [everyNFrames, setEveryNFrames] = useState(1);
   const [frameIndex, setFrameIndex] = useState(0);
   const [selectedTrackId, setSelectedTrackId] = useState("");
+  const [selectedAnatomySchema, setSelectedAnatomySchema] =
+    useState<AnatomySchemaRevision | null>(null);
   const [
     activePoseActiveLearningCandidate,
     setActivePoseActiveLearningCandidate,
@@ -342,6 +346,11 @@ export function VideoTrackingWorkspace({
   const selectedTrackPoseSchema = poseLandmarkSchemaFromMetadata(
     selectedTrack?.metadata_json,
   );
+  const activeTrackPoseSchema =
+    selectedTrackPoseSchema ??
+    (selectedAnatomySchema
+      ? videoSchemaFromAnatomy(selectedAnatomySchema)
+      : null);
 
   const videoWorkspaceContext = useMemo<VideoWorkspaceContext>(() => {
     const videos = (videosQuery.data ?? []).map((video) => ({
@@ -989,21 +998,21 @@ export function VideoTrackingWorkspace({
   );
   const poseEditorSchema = useMemo(
     () =>
-      selectedTrack && selectedTrackPoseSchema
-        ? editorSchemaForVideoTrack(selectedTrack, selectedTrackPoseSchema)
+      selectedTrack && activeTrackPoseSchema
+        ? editorSchemaForVideoTrack(selectedTrack, activeTrackPoseSchema)
         : null,
-    [selectedTrack, selectedTrackPoseSchema],
+    [activeTrackPoseSchema, selectedTrack],
   );
   const poseEditorPose = useMemo(
     () =>
-      selectedTrack && poseFrame && selectedTrackPoseSchema
+      selectedTrack && poseFrame && activeTrackPoseSchema
         ? poseInstanceFromVideoKeyframe(
             selectedTrack,
             poseFrame,
-            selectedTrackPoseSchema,
+            activeTrackPoseSchema,
           )
         : null,
-    [poseFrame, selectedTrack, selectedTrackPoseSchema],
+    [activeTrackPoseSchema, poseFrame, selectedTrack],
   );
   const extractionStride = Number(
     selectedVideo?.metadata_json.extraction_every_n_frames ?? everyNFrames,
@@ -1024,7 +1033,7 @@ export function VideoTrackingWorkspace({
     trackingRunsQuery.error;
 
   async function savePoseFrameReview(request: PoseSaveRequest) {
-    if (!selectedTrack || !selectedTrackPoseSchema || !poseFrame) {
+    if (!selectedTrack || !activeTrackPoseSchema || !poseFrame) {
       throw new Error("Select a persisted pose track keyframe first");
     }
 
@@ -1040,7 +1049,7 @@ export function VideoTrackingWorkspace({
 
     const correctedFrame = correctedVideoKeyframeFromPoseSave(
       poseFrame,
-      selectedTrackPoseSchema,
+      activeTrackPoseSchema,
       request,
     );
     const correctedFrames = sortedKeyframes(
@@ -1054,6 +1063,15 @@ export function VideoTrackingWorkspace({
       keyframes: correctedFrames,
       interpolation: selectedTrack.interpolation === "hold" ? "hold" : "linear",
       status: selectedTrack.status,
+      ...(selectedAnatomySchema && !selectedTrackPoseSchema
+        ? {
+            pose_schema_binding: {
+              schema_id: selectedAnatomySchema.id,
+              schema_revision: selectedAnatomySchema.revision,
+              content_hash: selectedAnatomySchema.content_hash,
+            },
+          }
+        : {}),
     });
     const persistedFrame = updatedTrack.keyframes_json.find(
       (frame) => frame.frame === poseFrame.frame,
@@ -1116,7 +1134,7 @@ export function VideoTrackingWorkspace({
     return poseInstanceFromVideoKeyframe(
       updatedTrack,
       persistedFrame,
-      selectedTrackPoseSchema,
+      activeTrackPoseSchema,
     );
   }
 
@@ -1367,7 +1385,10 @@ export function VideoTrackingWorkspace({
           </div>
         </div>
       </section>
-      <AnatomySkeletonDesigner projectId={project.id} />
+      <AnatomySkeletonDesigner
+        projectId={project.id}
+        onSchemaSelected={setSelectedAnatomySchema}
+      />
       <section className="management-card">
         <p className="eyebrow">Research workflow</p>
         <h3>Managed videos</h3>
@@ -1741,10 +1762,10 @@ export function VideoTrackingWorkspace({
                   Pose landmarks on this frame:{" "}
                   {poseFrame?.keypoints?.length ?? 0}
                 </p>
-                {selectedTrackPoseSchema && (
+                {activeTrackPoseSchema && (
                   <p className="annotation-helper">
                     Landmark schema:{" "}
-                    {selectedTrackPoseSchema.groups
+                    {activeTrackPoseSchema.groups
                       .map((group) => `${group.name} × ${group.count}`)
                       .join(" · ")}
                   </p>
@@ -1765,11 +1786,10 @@ export function VideoTrackingWorkspace({
 
             {selectedVideo.frame_directory_path &&
               selectedTrack &&
-              selectedTrackPoseSchema &&
+              activeTrackPoseSchema &&
               poseEditorSchema &&
               poseEditorPose &&
-              ((poseFrame?.keypoints?.length ?? 0) > 0 ||
-                (poseFrame?.pose_observations?.length ?? 0) > 0) && (
+              poseFrame && (
                 <div className="workspace-guide compact">
                   <div>
                     <strong>Pose review editor</strong>
@@ -1796,7 +1816,7 @@ export function VideoTrackingWorkspace({
                   />
                 </div>
               )}
-            {selectedTrack && selectedTrackPoseSchema && (
+            {selectedTrack && activeTrackPoseSchema && (
               <PoseTemporalReviewPanel
                 trackId={selectedTrack.id}
                 frameIndex={frameIndex}
@@ -1806,7 +1826,7 @@ export function VideoTrackingWorkspace({
                 }}
               />
             )}
-            {selectedTrack && selectedTrackPoseSchema && (
+            {selectedTrack && activeTrackPoseSchema && (
               <PoseVisualizationPanel
                 trackId={selectedTrack.id}
                 frameIndex={previewFrameIndex}

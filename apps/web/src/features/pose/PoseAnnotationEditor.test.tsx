@@ -28,6 +28,36 @@ const oldSchema: PoseLandmarkSchema = {
   edges: [{ from: "bell_center", to: "tentacle" }],
 };
 
+const stableSchema: PoseLandmarkSchema = {
+  id: "stable-jellyfish-schema",
+  revision: 1,
+  groups: [
+    { name: "Bell center", count: 1 },
+    { name: "Tentacle", count: 2 },
+  ],
+  landmarks: [
+    { id: "bell_center", name: "Bell center", required: true },
+    {
+      id: "tentacle_1",
+      name: "Tentacle",
+      repeat_group: "tentacle",
+      repeat_index: 0,
+      required: true,
+    },
+    {
+      id: "tentacle_2",
+      name: "Tentacle",
+      repeat_group: "tentacle",
+      repeat_index: 1,
+      required: true,
+    },
+  ],
+  edges: [
+    { from: "bell_center", to: "tentacle_1" },
+    { from: "bell_center", to: "tentacle_2" },
+  ],
+};
+
 const oldPose: PoseInstance = {
   id: "pose-old",
   revision: 2,
@@ -128,6 +158,40 @@ function savedPose(
 }
 
 describe("PoseAnnotationEditor", () => {
+  it("assigns stable landmark IDs to repeated anatomical placements", async () => {
+    const onSave = vi.fn(async (request: PoseSaveRequest) =>
+      savedPose(request),
+    );
+    const blankPose: PoseInstance = {
+      id: "stable-pose",
+      revision: 1,
+      schema_id: stableSchema.id,
+      schema_revision: stableSchema.revision,
+      observations: [],
+    };
+    render(
+      <PoseAnnotationEditor
+        imageUrl="data:image/png;base64,"
+        imageWidth={900}
+        imageHeight={600}
+        schema={stableSchema}
+        poses={[blankPose]}
+        onSave={onSave}
+      />,
+    );
+    const stage = installStageBounds();
+    fireEvent.click(screen.getByRole("button", { name: "Place Tentacle" }));
+    fireEvent.pointerDown(stage, { button: 0, clientX: 300, clientY: 300 });
+    fireEvent.pointerDown(stage, { button: 0, clientX: 500, clientY: 300 });
+    fireEvent.click(screen.getByRole("button", { name: "Save pose" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(
+      onSave.mock.calls[0][0].observations.map((item) => item.landmark_id),
+    ).toEqual(["tentacle_1", "tentacle_2"]);
+    expect(screen.queryAllByTestId(/pose-skeleton-/)).toHaveLength(0);
+  });
+
   it("stores eight repeated tentacles under one semantic label", async () => {
     const onSave = vi.fn(async (request: PoseSaveRequest) =>
       savedPose(request),

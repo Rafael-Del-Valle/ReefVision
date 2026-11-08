@@ -9,10 +9,22 @@ export interface PoseSkeletonEdge {
   to: string;
 }
 
+export interface PoseLandmarkDefinition {
+  id: string;
+  name: string;
+  description?: string | null;
+  group?: string | null;
+  repeat_group?: string | null;
+  repeat_index?: number | null;
+  symmetric_with?: string | null;
+  required?: boolean;
+}
+
 export interface PoseLandmarkSchema {
   id: string;
   revision: number;
   groups: PoseLandmarkGroup[];
+  landmarks?: PoseLandmarkDefinition[];
   edges?: PoseSkeletonEdge[];
 }
 
@@ -21,6 +33,7 @@ export type PoseLandmarkStatus =
 
 export interface PoseLandmarkObservation {
   id: string;
+  landmark_id?: string;
   semantic_label: string;
   occurrence_index: number;
   x: number;

@@ -13,6 +13,8 @@ from sqlalchemy.orm import Session
 from reefvision.db.models import (
     GeoReferencedObservation,
     LabelClass,
+    PoseLandmarkSchema,
+    PoseLandmarkSchemaRevision,
     VideoAsset,
     VideoTrack,
 )
@@ -57,7 +59,8 @@ def _keyframe_payload(item: VideoTrackKeyframe) -> dict[str, object]:
         ]
     if item.pose_observations is not None:
         payload["pose_observations"] = [
-            observation.model_dump(mode="json") for observation in item.pose_observations
+            observation.model_dump(mode="json", exclude_none=True)
+            for observation in item.pose_observations
         ]
     return payload
 
@@ -170,7 +173,52 @@ class VideoTrackService:
         track.keyframes_json = [_keyframe_payload(item) for item in payload.keyframes]
         track.interpolation = payload.interpolation
         track.status = payload.status
-        track.metadata_json = {**dict(track.metadata_json or {}), "last_editor": "local_user"}
+        metadata = {**dict(track.metadata_json or {}), "last_editor": "local_user"}
+        if payload.pose_schema_binding is not None:
+            binding = payload.pose_schema_binding
+            revision = self.session.scalar(
+                select(PoseLandmarkSchemaRevision)
+                .join(
+                    PoseLandmarkSchema,
+                    PoseLandmarkSchema.id == PoseLandmarkSchemaRevision.schema_id,
+                )
+                .where(
+                    PoseLandmarkSchemaRevision.schema_id == binding.schema_id,
+                    PoseLandmarkSchemaRevision.revision == binding.schema_revision,
+                    PoseLandmarkSchema.project_id == video.project_id,
+                )
+            )
+            if revision is None:
+                raise ValidationError(
+                    "Pose anatomy schema revision does not belong to this project"
+                )
+            if revision.content_hash != binding.content_hash:
+                raise ValidationError("Pose anatomy schema content hash does not match")
+            definition = dict(revision.definition_json or {})
+            known_ids = {
+                str(item.get("id"))
+                for item in definition.get("landmarks", [])
+                if isinstance(item, dict) and item.get("id")
+            }
+            for keyframe in payload.keyframes:
+                for observation in keyframe.pose_observations or []:
+                    if observation.landmark_id and observation.landmark_id not in known_ids:
+                        raise ValidationError(
+                            "Pose observation landmark ID is not present in the bound anatomy"
+                        )
+            metadata["pose_landmark_schema"] = {
+                "schema_version": "pose-landmarks-0001",
+                "schema_id": revision.schema_id,
+                "schema_revision": revision.revision,
+                "content_hash": revision.content_hash,
+                "groups": list(revision.groups_json),
+                "expanded_labels": list(revision.expanded_labels_json),
+                "keypoint_count": revision.keypoint_count,
+                "allows_repeated_labels": revision.allows_repeated_labels,
+                "landmarks": list(definition.get("landmarks", [])),
+                "edges": list(definition.get("edges", [])),
+            }
+        track.metadata_json = metadata
         track.revision += 1
         video.revision += 1
         self.session.commit()

@@ -61,6 +61,7 @@ class VideoAssetResponse(BaseModel):
 
 class VideoPoseObservation(BaseModel):
     id: str = Field(min_length=1, max_length=200)
+    landmark_id: str | None = Field(default=None, min_length=1, max_length=100)
     semantic_label: str = Field(min_length=1, max_length=100)
     occurrence_index: int = Field(ge=0, le=999)
     x: FiniteFloat = Field(ge=0)
@@ -144,12 +145,19 @@ class VideoTrackCreate(BaseModel):
         return self
 
 
+class VideoPoseSchemaBinding(BaseModel):
+    schema_id: str = Field(min_length=1, max_length=36)
+    schema_revision: int = Field(ge=1)
+    content_hash: str = Field(min_length=64, max_length=64)
+
+
 class VideoTrackUpdate(BaseModel):
     base_revision: int = Field(ge=1)
     label_class_id: str = Field(min_length=1, max_length=36)
     keyframes: list[VideoTrackKeyframe] = Field(min_length=1, max_length=100000)
     interpolation: TrackInterpolation = "linear"
     status: str = Field(default="verified", min_length=1, max_length=30)
+    pose_schema_binding: VideoPoseSchemaBinding | None = None
 
     @model_validator(mode="after")
     def unique_ordered_frames(self) -> VideoTrackUpdate:

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.db.models import PoseLandmarkSchema, PoseLandmarkSchemaRevision
 from reefvision.tests.test_annotations import create_project
+from reefvision.tests.test_video_tracking_phase6 import _import_video
 
 
 def _jellyfish_definition() -> dict[str, object]:
@@ -169,3 +171,83 @@ def test_legacy_schema_revision_is_serialized_with_deterministic_stable_ids(
         "fin_2",
     ]
     assert revision["legacy_projection"] is True
+
+
+def test_manual_video_track_binds_exact_custom_anatomy_revision(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Manual custom anatomy")
+    created = client.post(
+        f"/api/v1/projects/{project['id']}/pose-schemas",
+        json=_jellyfish_definition(),
+    ).json()
+    video = _import_video(client, str(project["id"]), monkeypatch)
+    label_class_id = str(project["label_classes"][0]["id"])
+    track = client.post(
+        f"/api/v1/videos/{video['id']}/tracks",
+        json={
+            "label_class_id": label_class_id,
+            "keyframes": [{"frame": 0, "bbox": [5, 5, 40, 40]}],
+            "status": "draft",
+        },
+    ).json()
+
+    updated = client.put(
+        f"/api/v1/video-tracks/{track['id']}",
+        json={
+            "base_revision": track["revision"],
+            "label_class_id": label_class_id,
+            "keyframes": [
+                {
+                    "frame": 0,
+                    "bbox": [5, 5, 40, 40],
+                    "pose_observations": [
+                        {
+                            "id": "manual-bell",
+                            "landmark_id": "bell_center",
+                            "semantic_label": "Bell center",
+                            "occurrence_index": 0,
+                            "x": 20,
+                            "y": 20,
+                            "status": "visible",
+                            "source": "manual",
+                        }
+                    ],
+                }
+            ],
+            "status": "draft",
+            "pose_schema_binding": {
+                "schema_id": created["id"],
+                "schema_revision": created["revision"],
+                "content_hash": created["content_hash"],
+            },
+        },
+    )
+
+    assert updated.status_code == 200, updated.text
+    stored = updated.json()["metadata_json"]["pose_landmark_schema"]
+    assert stored["schema_id"] == created["id"]
+    assert stored["schema_revision"] == 1
+    assert stored["content_hash"] == created["content_hash"]
+    assert stored["landmarks"][1]["id"] == "tentacle_1"
+    assert (
+        updated.json()["keyframes_json"][0]["pose_observations"][0]["landmark_id"] == "bell_center"
+    )
+
+    mismatch = client.put(
+        f"/api/v1/video-tracks/{track['id']}",
+        json={
+            "base_revision": updated.json()["revision"],
+            "label_class_id": label_class_id,
+            "keyframes": [{"frame": 0, "bbox": [5, 5, 40, 40]}],
+            "status": "draft",
+            "pose_schema_binding": {
+                "schema_id": created["id"],
+                "schema_revision": 1,
+                "content_hash": "f" * 64,
+            },
+        },
+    )
+    assert mismatch.status_code == 400
+    assert "hash" in mismatch.text.lower()

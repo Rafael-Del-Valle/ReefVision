@@ -94,6 +94,9 @@ export function addPoseObservation(
       ...pose.observations,
       {
         id,
+        landmark_id: schema.landmarks?.filter(
+          (landmark) => landmark.name === semanticLabel,
+        )[occurrenceIndex]?.id,
         semantic_label: semanticLabel,
         occurrence_index: occurrenceIndex,
         x: clamp(point.x, 0, imageSize.width),
@@ -167,6 +170,18 @@ export function poseSkeletonSegments(
   const segments: PoseSkeletonSegment[] = [];
 
   (schema.edges ?? []).forEach((edge, edgeIndex) => {
+    if (schema.landmarks) {
+      const from = pose.observations.find(
+        (observation) => observation.landmark_id === edge.from,
+      );
+      const to = pose.observations.find(
+        (observation) => observation.landmark_id === edge.to,
+      );
+      if (from && to && from.id !== to.id) {
+        segments.push({ key: `${edgeIndex}:${from.id}:${to.id}`, from, to });
+      }
+      return;
+    }
     const fromGroup = schema.groups.find((group) => group.name === edge.from);
     if (!fromGroup || fromGroup.count !== 1) {
       return;
@@ -208,8 +223,19 @@ export function validatePoseAgainstSchema(
     schema.groups.map((group) => [group.name, group.count]),
   );
   const seenSlots = new Set<string>();
+  const knownLandmarkIds = new Set(
+    (schema.landmarks ?? []).map((landmark) => landmark.id),
+  );
 
   pose.observations.forEach((observation) => {
+    if (
+      observation.landmark_id &&
+      knownLandmarkIds.size > 0 &&
+      !knownLandmarkIds.has(observation.landmark_id)
+    ) {
+      errors.push(`Unknown stable landmark ID: ${observation.landmark_id}`);
+      return;
+    }
     const count = knownGroups.get(observation.semantic_label);
     if (count === undefined) {
       errors.push(`Unknown landmark group: ${observation.semantic_label}`);
@@ -224,7 +250,9 @@ export function validatePoseAgainstSchema(
       );
       return;
     }
-    const slot = `${observation.semantic_label}:${observation.occurrence_index}`;
+    const slot =
+      observation.landmark_id ??
+      `${observation.semantic_label}:${observation.occurrence_index}`;
     if (seenSlots.has(slot)) {
       errors.push(`Duplicate landmark slot: ${slot}`);
       return;

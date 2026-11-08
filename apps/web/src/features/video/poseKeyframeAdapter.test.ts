@@ -64,6 +64,57 @@ describe("poseKeyframeAdapter", () => {
     });
   });
 
+  it("preserves stable landmark IDs from an anatomical definition", () => {
+    const anatomicalSchema: PoseLandmarkSchema = {
+      ...schema,
+      schema_id: "schema-jellyfish",
+      schema_revision: 3,
+      content_hash: "c".repeat(64),
+      landmarks: [
+        { id: "bell_center", name: "Bell center", required: true },
+        {
+          id: "tentacle_1",
+          name: "Tentacle",
+          repeat_group: "tentacle",
+          repeat_index: 0,
+          required: true,
+        },
+        {
+          id: "tentacle_2",
+          name: "Tentacle",
+          repeat_group: "tentacle",
+          repeat_index: 1,
+          required: true,
+        },
+      ],
+      edges: [
+        { from_id: "bell_center", to_id: "tentacle_1" },
+        { from_id: "bell_center", to_id: "tentacle_2" },
+      ],
+    };
+
+    const editorSchema = editorSchemaForVideoTrack(track, anatomicalSchema);
+    const pose = poseInstanceFromVideoKeyframe(
+      track,
+      keyframe,
+      anatomicalSchema,
+    );
+
+    expect(editorSchema.landmarks?.map((item) => item.id)).toEqual([
+      "bell_center",
+      "tentacle_1",
+      "tentacle_2",
+    ]);
+    expect(editorSchema.edges).toEqual([
+      { from: "bell_center", to: "tentacle_1" },
+      { from: "bell_center", to: "tentacle_2" },
+    ]);
+    expect(pose.observations.map((item) => item.landmark_id)).toEqual([
+      "bell_center",
+      "tentacle_1",
+    ]);
+  });
+
   it("converts model keypoints into editable semantic observations", () => {
     const pose = poseInstanceFromVideoKeyframe(track, keyframe, schema);
 

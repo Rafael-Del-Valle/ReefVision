@@ -6,7 +6,7 @@ from reefvision.domain.errors import ValidationError
 from reefvision.jobs.video_tracking import _keyframes, _validate_reefpose_schema_binding
 from reefvision.ml.video_tracking import TrackObservation
 from reefvision.schemas.models import PoseLandmarkSchemaUpdateRequest
-from reefvision.schemas.videos import VideoTrackKeyframe
+from reefvision.schemas.videos import VideoPoseObservation, VideoTrackKeyframe
 from reefvision.services.video_tracks import _keyframe_payload
 
 
@@ -51,6 +51,24 @@ def test_reefpose_video_rejects_same_count_reordered_schema() -> None:
 
     with pytest.raises(ValidationError, match="checkpoint anatomy order"):
         _validate_reefpose_schema_binding(metadata, reordered)
+
+
+def test_video_pose_observation_preserves_stable_landmark_id() -> None:
+    observation = VideoPoseObservation.model_validate(
+        {
+            "id": "observation-1",
+            "landmark_id": "tentacle_2",
+            "semantic_label": "Tentacle",
+            "occurrence_index": 1,
+            "x": 123.5,
+            "y": 87.25,
+            "confidence": None,
+            "status": "occluded",
+            "source": "manual",
+        }
+    )
+
+    assert observation.model_dump()["landmark_id"] == "tentacle_2"
 
 
 def test_pose_keypoints_survive_track_edit_schema_validation() -> None:
