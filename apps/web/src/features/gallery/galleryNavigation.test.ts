@@ -241,7 +241,10 @@ describe("gallery preferences", () => {
         wrap: false,
       });
       expect(storage.getItem(key)).toBe(saved);
-      storage.setItem(key, JSON.stringify({ imageId: invalidId, page: 3, wrap: false }));
+      storage.setItem(
+        key,
+        JSON.stringify({ imageId: invalidId, page: 3, wrap: false }),
+      );
       expect(readGalleryPreference(storage, "project-a")).toEqual({
         imageId: null,
         page: 1,
