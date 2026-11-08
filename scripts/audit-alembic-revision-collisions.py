@@ -141,9 +141,7 @@ def revision_from_source(path: Path, source: bytes | None = None) -> str | None:
     for statement in ast.walk(tree):
         if isinstance(statement, ast.Import):
             builtins_names.update(
-                alias.asname or "builtins"
-                for alias in statement.names
-                if alias.name == "builtins"
+                alias.asname or "builtins" for alias in statement.names if alias.name == "builtins"
             )
         elif (
             isinstance(statement, ast.ImportFrom)
