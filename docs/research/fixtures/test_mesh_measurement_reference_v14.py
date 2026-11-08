@@ -128,6 +128,21 @@ class MeshMeasurementReferenceTests(unittest.TestCase):
             )
 
 
+    def test_small_observed_patch_cannot_disappear_in_area_sum(self) -> None:
+        # Both triangles are nondegenerate and disjoint. A 5e-21-unit²
+        # patch would otherwise be rounded away when added to 0.5-unit².
+        vertices = [
+            (0, 0, 0), (1, 0, 0), (0, 1, 0),
+            (2, 0, 0), (2 + 1e-10, 0, 0), (2, 1e-10, 0),
+        ]
+        with self.assertRaisesRegex(
+            ValueError, "observed triangle area lost to numeric precision"
+        ):
+            measure_triangle_mesh(
+                vertices, [(0, 1, 2), (3, 4, 5)],
+                meters_per_unit=1, absolute_scale_bound=0,
+            )
+
     def test_positive_area_uncertainty_cannot_round_to_zero(self) -> None:
         # Positive calibration uncertainty can be smaller than the ULP
         # of the squared scale, silently reporting an exact area.
