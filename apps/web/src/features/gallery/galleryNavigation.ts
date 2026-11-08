@@ -112,23 +112,24 @@ export function writeGalleryPreference(
     // Runtime callers may supply proxy objects or getters that throw. Keep
     // validation inside the storage boundary so preference persistence can
     // never interrupt image browsing or annotation work.
+    if (!preference || typeof preference !== "object") return;
+    // Snapshot each field exactly once. Proxy getters can change between
+    // validation and serialization; never persist an unvalidated second value.
+    const { imageId, page, wrap } = preference;
     if (
-      !preference ||
-      typeof preference !== "object" ||
-      !Number.isSafeInteger(preference.page) ||
-      preference.page < 1 ||
-      (preference.imageId !== null && !validGalleryImageId(preference.imageId)) ||
-      typeof preference.wrap !== "boolean"
+      !Number.isSafeInteger(page) ||
+      page < 1 ||
+      (imageId !== null && !validGalleryImageId(imageId)) ||
+      typeof wrap !== "boolean"
     ) {
       return;
     }
     const serialized = JSON.stringify({
       // Persist only the versioned preference contract, not arbitrary fields
       // accidentally attached to a runtime object (e.g. image metadata).
-      imageId:
-        typeof preference.imageId === "string" ? preference.imageId.trim() : null,
-      page: preference.imageId === null ? 1 : preference.page,
-      wrap: preference.wrap,
+      imageId: typeof imageId === "string" ? imageId.trim() : null,
+      page: imageId === null ? 1 : page,
+      wrap,
     });
     // Keep writes compatible with the bounded reader. An oversized camera ID
     // must not overwrite a previously restorable first-image selection.
