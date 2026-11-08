@@ -406,3 +406,27 @@ def test_dynamic_namespace_access_cannot_bypass_revision_audit(
     with pytest.raises(ValueError, match="dynamic execution may rebind revision"):
         load_audit()([root])
     assert file.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "def worker(revision):\n    return revision\n",
+        "def worker(revision, /):\n    return revision\n",
+        "def worker(*, revision):\n    return revision\n",
+        "def worker(*revision):\n    return revision\n",
+        "def worker(**revision):\n    return revision\n",
+        "async def worker(revision):\n    return revision\n",
+        "worker = lambda revision: revision\n",
+    ],
+)
+def test_callable_parameters_cannot_shadow_revision(
+    tmp_path: Path, source: str
+) -> None:
+    root = tmp_path / "versions"
+    file = migration(root, "0038.py", "0038")
+    file.write_text(file.read_text(encoding="utf-8") + source, encoding="utf-8")
+    before = file.read_bytes()
+    with pytest.raises(ValueError, match="parameter shadows revision"):
+        load_audit()([root])
+    assert file.read_bytes() == before
