@@ -119,12 +119,12 @@ def revision_from_source(path: Path, source: bytes | None = None) -> str | None:
             raise ValueError(f"{path}: pattern rebinds revision")
     # Dynamic execution can mutate the module namespace after a literal
     # revision assignment. Static inspection cannot establish its outcome.
-    # Reject it without running any migration code or imported modules.
+    # Namespace-introspection calls can also expose mutable dictionaries that\n    # rewrite revision indirectly. Reject these calls without executing code.\n    # Reject it without running any migration code or imported modules.
     for statement in ast.walk(tree):
         if (
             isinstance(statement, ast.Call)
             and isinstance(statement.func, ast.Name)
-            and statement.func.id in {"exec", "eval"}
+            and statement.func.id in {"exec", "eval", "globals", "locals", "vars"}
         ):
             raise ValueError(f"{path}: dynamic execution may rebind revision")
     if len(revisions) > 1:
