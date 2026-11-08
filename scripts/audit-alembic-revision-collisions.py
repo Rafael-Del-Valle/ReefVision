@@ -145,12 +145,15 @@ def revision_from_source(path: Path, source: bytes | None = None) -> str | None:
                 for alias in statement.names
                 if alias.name == "builtins"
             )
-        elif isinstance(statement, ast.ImportFrom) and statement.module == "builtins":
-            if any(
+        elif (
+            isinstance(statement, ast.ImportFrom)
+            and statement.module == "builtins"
+            and any(
                 alias.name in {"exec", "eval", "globals", "locals", "vars"}
                 for alias in statement.names
-            ):
-                raise ValueError(f"{path}: dynamic builtins import may rebind revision")
+            )
+        ):
+            raise ValueError(f"{path}: dynamic builtins import may rebind revision")
     # Dynamic execution can mutate the module namespace after a literal
     # revision assignment. Static inspection cannot establish its outcome.
     # Namespace-introspection calls can also expose mutable dictionaries that
