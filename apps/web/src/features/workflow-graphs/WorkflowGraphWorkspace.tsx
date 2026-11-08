@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import type { Project } from "../../api/client";
+import { getModelHubBootstrap, type Project } from "../../api/client";
 import { getPoseTrainingDatasets } from "../video/poseActiveLearningApi";
 import {
   cancelWorkflowRunJob,
@@ -35,7 +35,8 @@ function statusIsActive(status: string | undefined): boolean {
   );
 }
 
-function shortHash(value: string): string {
+function shortHash(value: string | undefined): string {
+  if (!value) return "unavailable";
   return value.length > 12 ? `${value.slice(0, 12)}…` : value;
 }
 
@@ -82,6 +83,11 @@ export function WorkflowGraphWorkspace({
   const poseDatasets = useQuery({
     queryKey: ["pose-training-datasets", project.id],
     queryFn: ({ signal }) => getPoseTrainingDatasets(project.id, signal),
+    enabled: poseDatasetSources.length > 0,
+  });
+  const modelHubQuery = useQuery({
+    queryKey: ["model-hub-bootstrap", project.id],
+    queryFn: ({ signal }) => getModelHubBootstrap(project.id, signal),
     enabled: poseDatasetSources.length > 0,
   });
 
@@ -184,6 +190,19 @@ export function WorkflowGraphWorkspace({
     !Array.isArray(selectedRun.result_json.provenance_manifest) &&
     typeof selectedRun.result_json.provenance_manifest === "object"
       ? (selectedRun.result_json.provenance_manifest as Record<string, unknown>)
+      : null;
+  const pytorchRuntime = modelHubQuery.data?.runtime_statuses?.find(
+    (runtime) => runtime.runtime_id === "pytorch",
+  );
+  const reefposeCudaRequested = graphNodes.some(
+    (node) =>
+      node.node_type === "pose_model_training" &&
+      node.parameters?.provider_id === "reefpose" &&
+      String(node.parameters?.device ?? "auto").startsWith("cuda"),
+  );
+  const guiConfigurationIssue =
+    reefposeCudaRequested && pytorchRuntime?.cuda_available === false
+      ? "CUDA was selected for ReefPose, but the PyTorch runtime reports that CUDA is unavailable."
       : null;
 
   return (
@@ -306,6 +325,20 @@ export function WorkflowGraphWorkspace({
                   </option>
                 ))}
               </select>
+              {(() => {
+                const dataset = poseDatasets.data?.find(
+                  (item) =>
+                    item.id === String(source.parameters?.dataset_id ?? ""),
+                );
+                return dataset ? (
+                  <small>
+                    Immutable manifest {shortHash(dataset.manifest_sha256)} ·
+                    schema {shortHash(dataset.pose_schema_id)} revision{" "}
+                    {dataset.pose_schema_revision} · integrity{" "}
+                    {shortHash(dataset.pose_schema_content_hash)}
+                  </small>
+                ) : null;
+              })()}
             </label>
           ))}
           {poseDatasets.isPending && <p>Loading frozen pose datasets...</p>}
@@ -329,6 +362,9 @@ export function WorkflowGraphWorkspace({
             registry={registryQuery.data ?? []}
             plan={planMutation.data ?? null}
             runDetail={runDetailQuery.data ?? null}
+            poseDatasets={poseDatasets.data ?? []}
+            registeredModels={modelHubQuery.data?.models ?? []}
+            runtimeStatuses={modelHubQuery.data?.runtime_statuses ?? []}
             onChange={(graph) => setGraphJson(JSON.stringify(graph, null, 2))}
           />
         ) : (
@@ -391,13 +427,18 @@ export function WorkflowGraphWorkspace({
             <button
               type="button"
               onClick={() => saveAndRunMutation.mutate()}
-              disabled={saveAndRunMutation.isPending}
+              disabled={
+                saveAndRunMutation.isPending || guiConfigurationIssue !== null
+              }
             >
               Save &amp; run
             </button>
           </div>
           {mutationError && (
             <p className="form-error">{mutationError.message}</p>
+          )}
+          {guiConfigurationIssue && (
+            <p className="form-error">{guiConfigurationIssue}</p>
           )}
           <p className="muted-copy">
             Review gates pause safely. Complete the requested review in

@@ -900,6 +900,7 @@ const poseActiveLearningRetrain = {
 export function createPoseArchitectureWorkflow(
   architecture = "yolo11n-pose.yaml",
 ) {
+  const nativeReefPose = architecture === "reefpose-s";
   return {
     graph_id: "pose-architecture-training",
     name: "Pose architecture training",
@@ -917,11 +918,22 @@ export function createPoseArchitectureWorkflow(
         node_type: "pose_model_training",
         parameters: {
           run_name: "pose-from-scratch",
+          provider_id: nativeReefPose ? "reefpose" : "ultralytics",
           initialization_mode: "random",
           architecture,
           device: "auto",
-          precision: "fp32",
-          training_config: { epochs: 50, batch: 8, imgsz: 640, workers: 2 },
+          precision: nativeReefPose ? "amp" : "fp32",
+          training_config: nativeReefPose
+            ? {
+                epochs: 50,
+                batch: 8,
+                input_height: 256,
+                input_width: 256,
+                learning_rate: 0.0003,
+                weight_decay: 0.0001,
+                workers: 2,
+              }
+            : { epochs: 50, batch: 8, imgsz: 640, workers: 2 },
         },
         position: { x: 360, y: 80 },
       },
@@ -971,6 +983,13 @@ export const workflowTemplates: WorkflowTemplate[] = [
     description:
       "Choose a frozen scientist-verified pose dataset and a YOLO11 pose architecture. Train from random initialization, then register the output with its landmark schema and provenance.",
     graph: createPoseArchitectureWorkflow(),
+  },
+  {
+    id: "reefpose-native-training",
+    name: "Native ReefPose training",
+    description:
+      "Train ReefPose-S from random initialization on an immutable verified pose dataset and register the completed checkpoint.",
+    graph: createPoseArchitectureWorkflow("reefpose-s"),
   },
   {
     id: "pose-active-learning-retrain",

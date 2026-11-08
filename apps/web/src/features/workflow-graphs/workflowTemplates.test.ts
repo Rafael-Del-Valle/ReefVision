@@ -27,6 +27,33 @@ describe("workflowTemplates", () => {
     );
   });
 
+  it("includes a native ReefPose random-initialization template", () => {
+    const template = workflowTemplates.find(
+      (item) => item.id === "reefpose-native-training",
+    );
+    const nodes = template?.graph.nodes as
+      | Array<{ node_type: string; parameters?: Record<string, unknown> }>
+      | undefined;
+    const train = nodes?.find(
+      (node) => node.node_type === "pose_model_training",
+    );
+
+    expect(train?.parameters).toMatchObject({
+      provider_id: "reefpose",
+      architecture: "reefpose-s",
+      initialization_mode: "random",
+      device: "auto",
+      precision: "amp",
+      training_config: expect.objectContaining({
+        epochs: 50,
+        batch: 8,
+        input_height: 256,
+        input_width: 256,
+        learning_rate: 0.0003,
+      }),
+    });
+  });
+
   it("explicitly continues the researcher registered model in the pose retraining template", () => {
     const template = workflowTemplates.find(
       (item) => item.id === "pose-active-learning-retrain",
