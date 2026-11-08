@@ -37,6 +37,8 @@ class LandmarkDefinition:
     description: str | None = None
     group: str | None = None
     occurrence_index: int = 0
+    symmetric_with: str | None = None
+    required: bool = True
     allowed_visibility: tuple[VisibilityState, ...] = (
         "absent",
         "occluded",
@@ -51,6 +53,7 @@ class LandmarkDefinition:
         object.__setattr__(self, "name", _required_text(self.name, "landmark name"))
         object.__setattr__(self, "description", _optional_text(self.description))
         object.__setattr__(self, "group", _optional_text(self.group))
+        object.__setattr__(self, "symmetric_with", _optional_text(self.symmetric_with))
         if self.occurrence_index < 0:
             raise ReefPoseValidationError("Landmark occurrence indices cannot be negative")
         allowed = tuple(dict.fromkeys(str(item).strip() for item in self.allowed_visibility))
@@ -69,6 +72,8 @@ class LandmarkDefinition:
             "description": self.description,
             "group": self.group,
             "occurrence_index": self.occurrence_index,
+            "symmetric_with": self.symmetric_with,
+            "required": self.required,
             "allowed_visibility": list(self.allowed_visibility),
             "default_visibility": self.default_visibility,
         }
@@ -83,6 +88,12 @@ class LandmarkDefinition:
             ),
             group=str(payload["group"]) if payload.get("group") is not None else None,
             occurrence_index=int(payload.get("occurrence_index", 0)),
+            symmetric_with=(
+                str(payload["symmetric_with"])
+                if payload.get("symmetric_with") is not None
+                else None
+            ),
+            required=bool(payload.get("required", True)),
             allowed_visibility=tuple(
                 str(item) for item in payload.get("allowed_visibility", VISIBILITY_STATES)
             ),
@@ -153,6 +164,16 @@ class AnatomySchema:
                 "Repeated landmark names must use a unique occurrence index"
             )
         known = set(landmark_ids)
+        by_id = {item.landmark_id: item for item in self.landmarks}
+        for landmark in self.landmarks:
+            partner_id = landmark.symmetric_with
+            if partner_id is None:
+                continue
+            partner = by_id.get(partner_id)
+            if partner is None or partner.symmetric_with != landmark.landmark_id:
+                raise ReefPoseValidationError(
+                    "Symmetry relationships must reference reciprocal landmark IDs"
+                )
         edge_keys: set[frozenset[str]] = set()
         for edge in self.skeleton:
             if edge.source_id not in known or edge.target_id not in known:

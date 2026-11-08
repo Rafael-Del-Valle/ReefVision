@@ -47,6 +47,8 @@ class AnatomySchemaTests(unittest.TestCase):
                 description="Anterior point",
                 group="axis",
                 occurrence_index=0,
+                symmetric_with="tail",
+                required=False,
                 allowed_visibility=("absent", "occluded", "visible"),
                 default_visibility="visible",
             ),
@@ -55,6 +57,7 @@ class AnatomySchemaTests(unittest.TestCase):
                 name="tail",
                 group="axis",
                 occurrence_index=0,
+                symmetric_with="head",
             ),
         )
         base = AnatomySchema(
@@ -68,6 +71,8 @@ class AnatomySchemaTests(unittest.TestCase):
 
         self.assertEqual(restored, base)
         self.assertEqual(restored.integrity_hash, base.integrity_hash)
+        self.assertEqual(restored.landmarks[0].symmetric_with, "tail")
+        self.assertFalse(restored.landmarks[0].required)
         self.assertEqual(len(base.integrity_hash), 64)
 
         changed = AnatomySchema(
@@ -95,6 +100,20 @@ class AnatomySchemaTests(unittest.TestCase):
                 name="head",
                 allowed_visibility=("absent",),
                 default_visibility="visible",
+            )
+
+        with self.assertRaisesRegex(ReefPoseValidationError, "Symmetry relationship"):
+            AnatomySchema(
+                schema_id="invalid",
+                name="Invalid",
+                revision=1,
+                landmarks=(
+                    LandmarkDefinition(
+                        landmark_id="left",
+                        name="fin",
+                        symmetric_with="missing",
+                    ),
+                ),
             )
 
     def test_duplicate_ids_and_duplicate_occurrences_are_rejected(self) -> None:

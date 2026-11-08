@@ -248,6 +248,12 @@ def _schema_from_manifest(payload: dict[str, Any]) -> tuple[AnatomySchema, str]:
                     ),
                     group=(str(item["group"]) if item.get("group") is not None else None),
                     occurrence_index=int(occurrence),
+                    symmetric_with=(
+                        str(item["symmetric_with"])
+                        if item.get("symmetric_with") is not None
+                        else None
+                    ),
+                    required=bool(item.get("required", True)),
                 )
             )
         edges = tuple(
