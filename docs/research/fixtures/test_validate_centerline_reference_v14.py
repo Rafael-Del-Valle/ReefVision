@@ -28,6 +28,16 @@ class CenterlineReferenceIntegrityTests(unittest.TestCase):
             with self.assertRaises((AssertionError, KeyError, TypeError, ValueError)):
                 validate_reference(path)
 
+    def test_verified_calibration_claim_is_rejected(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["calibration"].update(review_state="verified")
+        )
+
+    def test_total_uncertainty_claim_is_rejected(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data.update(interpretation="Validated total anatomical uncertainty.")
+        )
+
     def test_unmodified_reference_passes(self) -> None:
         self.assertEqual(len(validate_reference()), 5)
 
