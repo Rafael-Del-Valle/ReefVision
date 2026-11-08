@@ -28,8 +28,8 @@ function validGalleryImageId(value: unknown): value is string {
     !/[\x00-\x1f\x7f-\x9f\u200b-\u200f\u2028-\u202e\u2060\u2066-\u2069\ufeff]/.test(value) &&
     // Keep valid supplementary Unicode (e.g. emoji in camera labels), but
     // reject malformed UTF-16 surrogate halves from corrupted preferences.
-    !Array.from(value).some((character) =>
-      character.length === 1 && /[\ud800-\udfff]/.test(character),
+    !Array.from(value).some(
+      (character) => character.length === 1 && /[\ud800-\udfff]/.test(character),
     )
   );
 }
