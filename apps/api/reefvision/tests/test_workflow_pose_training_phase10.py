@@ -4,6 +4,7 @@ import hashlib
 import io
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -33,6 +34,8 @@ from reefvision.jobs.training import (
     _complete_training_run,
 )
 from reefvision.services.workflow_pose_training import (
+    _optional_payload,
+    _single_payload,
     create_pose_workflow_training_result,
     execute_pose_training_dataset_adapter,
 )
@@ -2714,3 +2717,13 @@ def test_pose_workflow_replay_rejects_non_object_snapshot(
 
     with pytest.raises(ValidationError, match="snapshot must be a JSON object"):
         execute()
+
+
+@pytest.mark.parametrize("payload", [None, [], [["dataset_id", "forged"]], "text", 7])
+def test_pose_training_rejects_non_object_input_artifact_payloads(payload: object) -> None:
+    # A persisted JSON list of pairs must not be coerced into trusted lineage.
+    artifact = SimpleNamespace(payload_json=payload)
+    with pytest.raises(ValidationError, match="must be a JSON object"):
+        _single_payload({"training_dataset": [artifact]}, "training_dataset")
+    with pytest.raises(ValidationError, match="must be a JSON object"):
+        _optional_payload({"validation_dataset": [artifact]}, "validation_dataset")
