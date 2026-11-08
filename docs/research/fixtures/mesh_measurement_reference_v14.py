@@ -47,12 +47,18 @@ def measure_triangle_mesh(
     if any(len(v) != 3 or any(not math.isfinite(x) for x in v) for v in vertices):
         raise ValueError("vertices must be finite 3D coordinates")
     raw_area = 0.0
+    seen_faces: set[tuple[int, int, int]] = set()
     for face in triangles:
         if len(face) != 3 or any(type(i) is not int or i < 0 or i >= len(vertices) for i in face):
             raise ValueError("invalid triangle indices")
         a, b, c = (vertices[i] for i in face)
         if len(set(face)) != 3:
             raise ValueError("repeated triangle vertex")
+        # Winding is immaterial to surface area; repeated faces inflate it.
+        face_key = tuple(sorted(face))
+        if face_key in seen_faces:
+            raise ValueError("duplicate triangle surface")
+        seen_faces.add(face_key)
         u = tuple(b[i] - a[i] for i in range(3))
         v = tuple(c[i] - a[i] for i in range(3))
         cross = (u[1] * v[2] - u[2] * v[1],
