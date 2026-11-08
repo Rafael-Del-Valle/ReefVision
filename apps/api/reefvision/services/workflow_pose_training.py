@@ -168,6 +168,7 @@ def _pose_dataset(
         != dataset.source_retraining_manifest_sha256
         or not isinstance(manifest_schema, dict)
         or manifest_schema.get("schema_id") != dataset.pose_schema_id
+        or type(manifest_schema.get("schema_revision")) is not int
         or manifest_schema.get("schema_revision") != dataset.pose_schema_revision
         or manifest_schema.get("content_hash") != dataset.pose_schema_content_hash
     ):
