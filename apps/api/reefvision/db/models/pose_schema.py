@@ -96,6 +96,10 @@ class PoseLandmarkSchemaRevision(Base):
     expanded_labels_json: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     keypoint_count: Mapped[int] = mapped_column(Integer, nullable=False)
     allows_repeated_labels: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    definition_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
