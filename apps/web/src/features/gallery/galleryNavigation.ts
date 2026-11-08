@@ -108,17 +108,20 @@ export function writeGalleryPreference(
   // Never persist invalid pagination state that could hide the initial image
   // on the next project open. Ignore stale UI writes rather than poisoning
   // an otherwise valid preference from an earlier gallery selection.
-  if (
-    !preference ||
-    typeof preference !== "object" ||
-    !Number.isSafeInteger(preference.page) ||
-    preference.page < 1 ||
-    (preference.imageId !== null && !validGalleryImageId(preference.imageId)) ||
-    typeof preference.wrap !== "boolean"
-  ) {
-    return;
-  }
   try {
+    // Runtime callers may supply proxy objects or getters that throw. Keep
+    // validation inside the storage boundary so preference persistence can
+    // never interrupt image browsing or annotation work.
+    if (
+      !preference ||
+      typeof preference !== "object" ||
+      !Number.isSafeInteger(preference.page) ||
+      preference.page < 1 ||
+      (preference.imageId !== null && !validGalleryImageId(preference.imageId)) ||
+      typeof preference.wrap !== "boolean"
+    ) {
+      return;
+    }
     const serialized = JSON.stringify({
       // Persist only the versioned preference contract, not arbitrary fields
       // accidentally attached to a runtime object (e.g. image metadata).
