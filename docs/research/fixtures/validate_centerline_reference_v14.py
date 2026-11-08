@@ -83,6 +83,7 @@ def validate_reference(path: Path = REFERENCE) -> list[str]:
                     reachable.add(neighbor)
                     frontier.append(neighbor)
             assert b not in reachable, f"gap endpoints already connected in {name}"
+        assert type(expected["unresolved"]) is bool, (name, "unresolved must be boolean")
         assert expected["unresolved"] == (has_cycle or has_gap), name
         if "branch_count" in expected:
             assert not has_cycle and not has_gap and components == 1, name
