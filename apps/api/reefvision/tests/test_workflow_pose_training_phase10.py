@@ -1172,6 +1172,10 @@ def test_completed_native_reefpose_checkpoint_registers_and_runs_inference(
     pose_schema = registered.metadata_json["pose_landmark_schema"]
     assert pose_schema["schema_name"] == "Phase 9 repeated tentacle schema"
     assert pose_schema["keypoint_count"] == 2
+    assert [item["id"] for item in pose_schema["definition"]["landmarks"]] == [
+        "tentacle_1",
+        "tentacle_2",
+    ]
     assert registered.metadata_json["source_training_config"]["epochs"] == 1
     assert registered.metadata_json["source_device"] == "cpu"
     assert registered.metadata_json["source_precision"] == "fp32"
@@ -1192,6 +1196,10 @@ def test_completed_native_reefpose_checkpoint_registers_and_runs_inference(
     assert len(predictions) == 1
     assert len(predictions[0].keypoints or ()) == 2
     assert predictions[0].pose_schema["schema_revision"] == dataset["pose_schema_revision"]
+    assert [item.landmark_id for item in predictions[0].keypoints or ()] == [
+        "tentacle_1",
+        "tentacle_2",
+    ]
 
 
 def test_saved_native_reefpose_workflow_executes_and_replays(

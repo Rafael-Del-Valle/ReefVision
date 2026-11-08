@@ -157,6 +157,11 @@ class PoseTrainingDatasetService:
             "keypoint_count": revision.keypoint_count,
             "allows_repeated_labels": (revision.allows_repeated_labels),
             "content_hash": revision.content_hash,
+            **(
+                {"definition": dict(revision.definition_json)}
+                if revision.definition_json is not None
+                else {}
+            ),
         }
 
     def _model_snapshots(
@@ -505,6 +510,15 @@ class PoseTrainingDatasetService:
             pose_schema_content_hash,
         ) = next(iter(schema_identities))
 
+        schema_revision_row = self.session.scalar(
+            select(PoseLandmarkSchemaRevision).where(
+                PoseLandmarkSchemaRevision.schema_id == pose_schema_id,
+                PoseLandmarkSchemaRevision.revision == pose_schema_revision,
+            )
+        )
+        if schema_revision_row is None:
+            raise ConflictError("Verified pose schema revision no longer exists")
+
         source_retraining_manifest = retraining_manifest.model_dump(mode="json")
         source_retraining_manifest_sha256 = canonical_json_sha256(source_retraining_manifest)
 
@@ -519,6 +533,11 @@ class PoseTrainingDatasetService:
                 "schema_id": pose_schema_id,
                 "schema_revision": (pose_schema_revision),
                 "content_hash": (pose_schema_content_hash),
+                **(
+                    {"definition": dict(schema_revision_row.definition_json)}
+                    if schema_revision_row.definition_json is not None
+                    else {}
+                ),
             },
             "truth_policy": ("scientist_verified_only"),
             "skipped_candidates_included": False,

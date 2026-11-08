@@ -318,6 +318,15 @@ class SemanticModelService(SegmentationModelService):
             "keypoint_count": (revision.keypoint_count),
             "allows_repeated_labels": (revision.allows_repeated_labels),
             "content_hash": (revision.content_hash),
+            **(
+                {
+                    "definition": dict(revision.definition_json),
+                    "landmarks": list(revision.definition_json.get("landmarks", [])),
+                    "edges": list(revision.definition_json.get("edges", [])),
+                }
+                if revision.definition_json is not None
+                else {}
+            ),
         }
 
         metadata_overrides: dict[

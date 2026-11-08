@@ -54,17 +54,30 @@ def _persist_test_pose_schema(
         "tentacle",
     ]
 
-    payload = {
-        "schema_version": "pose-landmarks-0001",
-        "groups": groups,
-        "expanded_labels": expanded_labels,
-        "keypoint_count": 2,
-        "allows_repeated_labels": True,
+    definition = {
+        "schema_version": "pose-anatomy-0002",
+        "landmarks": [
+            {
+                "id": "tentacle_1",
+                "name": "tentacle",
+                "repeat_group": "tentacle",
+                "repeat_index": 0,
+                "required": True,
+            },
+            {
+                "id": "tentacle_2",
+                "name": "tentacle",
+                "repeat_group": "tentacle",
+                "repeat_index": 1,
+                "required": True,
+            },
+        ],
+        "edges": [{"from_id": "tentacle_1", "to_id": "tentacle_2"}],
     }
 
     content_hash = hashlib.sha256(
         json.dumps(
-            payload,
+            definition,
             sort_keys=True,
             separators=(",", ":"),
         ).encode("utf-8")
@@ -87,6 +100,7 @@ def _persist_test_pose_schema(
             expanded_labels_json=expanded_labels,
             keypoint_count=2,
             allows_repeated_labels=True,
+            definition_json=definition,
             content_hash=content_hash,
         )
 
@@ -440,6 +454,7 @@ def test_native_pose_training_package_is_deterministic_and_verified_only(
     assert manifest["skipped_candidates_included"] is False
     assert len(rows) == 1
     assert rows[0]["review_provenance"]["actor"] == "scientist"
+    assert manifest["pose_schema"]["definition"]["landmarks"][1]["id"] == "tentacle_2"
 
 
 def test_pose_training_dataset_rows_are_persisted(

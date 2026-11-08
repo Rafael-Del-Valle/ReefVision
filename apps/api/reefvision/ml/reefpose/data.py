@@ -21,7 +21,7 @@ from torch.utils.data import Dataset
 
 from reefvision.ml.reefpose.errors import ReefPoseValidationError
 from reefvision.ml.reefpose.geometry import letterbox_tensor
-from reefvision.ml.reefpose.schema import AnatomySchema
+from reefvision.ml.reefpose.schema import AnatomySchema, LandmarkDefinition, SkeletonEdge
 from reefvision.ml.reefpose.targets import generate_gaussian_heatmaps
 
 EXPORT_MANIFEST_FILENAME = "reefvision-pose-training-export-manifest.json"
@@ -221,6 +221,52 @@ def _schema_from_manifest(payload: dict[str, Any]) -> tuple[AnatomySchema, str]:
         "allows_repeated_labels": bool(payload.get("allows_repeated_labels", False)),
     }
     content_hash = str(payload.get("content_hash", ""))
+    definition_raw = payload.get("definition")
+    if definition_raw is not None:
+        definition = _required_mapping(definition_raw, "pose anatomy definition")
+        if _canonical_hash(definition) != content_hash:
+            raise ReefPoseValidationError(
+                "ReefVision pose anatomy integrity checksum does not match"
+            )
+        landmarks_raw = _required_list(definition.get("landmarks"), "anatomy landmarks")
+        edges_raw = _required_list(definition.get("edges", []), "anatomy edges")
+        landmarks: list[LandmarkDefinition] = []
+        occurrence_counts: dict[str, int] = {}
+        for raw in landmarks_raw:
+            item = _required_mapping(raw, "anatomy landmark")
+            name = str(item.get("name", ""))
+            occurrence = item.get("repeat_index")
+            if occurrence is None:
+                occurrence = occurrence_counts.get(name.casefold(), 0)
+            occurrence_counts[name.casefold()] = int(occurrence) + 1
+            landmarks.append(
+                LandmarkDefinition(
+                    landmark_id=str(item.get("id", "")),
+                    name=name,
+                    description=(
+                        str(item["description"]) if item.get("description") is not None else None
+                    ),
+                    group=(str(item["group"]) if item.get("group") is not None else None),
+                    occurrence_index=int(occurrence),
+                )
+            )
+        edges = tuple(
+            SkeletonEdge(
+                source_id=str(_required_mapping(raw, "anatomy edge").get("from_id", "")),
+                target_id=str(_required_mapping(raw, "anatomy edge").get("to_id", "")),
+            )
+            for raw in edges_raw
+        )
+        schema = AnatomySchema(
+            schema_id=str(payload.get("schema_id", "")),
+            name=str(payload.get("name") or "ReefVision pose landmarks"),
+            revision=int(payload.get("schema_revision", 0)),
+            landmarks=tuple(landmarks),
+            skeleton=edges,
+        )
+        if list(schema.expanded_names) != [str(item) for item in expanded]:
+            raise ReefPoseValidationError("ReefVision expanded landmark order is inconsistent")
+        return schema, content_hash
     if _canonical_hash(legacy_payload) != content_hash:
         raise ReefPoseValidationError("ReefVision pose schema integrity checksum does not match")
     skeleton_raw = payload.get("skeleton", [])
