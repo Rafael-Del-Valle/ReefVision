@@ -692,6 +692,11 @@ export function updateVideoTrack(
     keyframes: VideoTrackKeyframe[];
     interpolation: "linear" | "hold";
     status: string;
+    pose_schema_binding?: {
+      schema_id: string;
+      schema_revision: number;
+      content_hash: string;
+    };
   },
 ): Promise<VideoTrackRecord> {
   return request<VideoTrackRecord>(
