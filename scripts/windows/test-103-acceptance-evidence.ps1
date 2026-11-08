@@ -51,7 +51,7 @@ try {
         if ($artifact.status -ne 'hashed' -or
             $artifact.sha256 -cne (Get-FileHash -LiteralPath $expectedFile -Algorithm SHA256).Hash.ToLowerInvariant() -or
             $artifact.bytes -ne $expectedBytes.Length -or
-            -not [System.Linq.Enumerable]::SequenceEqual([byte[]][System.IO.File]::ReadAllBytes($expectedFile), [byte[]]$expectedBytes)) {
+            -not ([Convert]::ToBase64String([System.IO.File]::ReadAllBytes($expectedFile)) -ceq [Convert]::ToBase64String($expectedBytes))) {
             throw "Uppercase extension, spaced path, or read-only artifact contract failed for $($artifact.kind)."
         }
     }
