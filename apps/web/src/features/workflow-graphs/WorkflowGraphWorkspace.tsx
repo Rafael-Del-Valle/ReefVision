@@ -87,7 +87,7 @@ export function WorkflowGraphWorkspace({
     enabled: poseDatasetSources.length > 0,
   });
   const modelHubQuery = useQuery({
-    queryKey: ["model-hub-bootstrap", project.id],
+    queryKey: ["model_hub_bootstrap", project.id],
     queryFn: ({ signal }) => getModelHubBootstrap(project.id, signal),
     enabled: poseDatasetSources.length > 0,
   });

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import cast
 from uuid import uuid4
 
@@ -125,3 +127,76 @@ def test_pose_landmark_schema_revisions_are_canonical_and_immutable(
             "tentacle",
             "tentacle",
         ]
+
+
+def test_native_reefpose_schema_cannot_reorder_checkpoint_anatomy(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Immutable ReefPose anatomy")
+    project_id = str(project["id"])
+    model_id = str(uuid4())
+    schema_payload = {
+        "schema_version": "pose-landmarks-0001",
+        "groups": [
+            {"name": "head", "count": 1},
+            {"name": "tail", "count": 1},
+        ],
+        "expanded_labels": ["head", "tail"],
+        "keypoint_count": 2,
+        "allows_repeated_labels": False,
+    }
+    content_hash = hashlib.sha256(
+        json.dumps(schema_payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        session.add(
+            ModelRegistration(
+                id=model_id,
+                project_id=project_id,
+                purpose="detector",
+                display_name="Native ReefPose",
+                source_filename="reefpose.pt",
+                managed_path=f"projects/{project_id}/models/{model_id}.pt",
+                sha256="b" * 64,
+                file_size_bytes=1,
+                framework="reefpose",
+                task="pose",
+                provider_name="reefpose",
+                provider_version="1.0",
+                class_map_json={},
+                input_size_json={"width": 64, "height": 64},
+                metadata_json={
+                    "pose_keypoint_shape": [2, 3],
+                    "pose_landmark_labels": ["head", "tail"],
+                    "reefpose_anatomy_schema": {
+                        "schema_id": "anatomy-1",
+                        "revision": 1,
+                        "landmarks": [{"name": "head"}, {"name": "tail"}],
+                    },
+                    "source_pose_schema_id": "anatomy-1",
+                    "source_pose_schema_revision": 1,
+                    "source_pose_schema_content_hash": content_hash,
+                    "pose_landmark_schema": {
+                        **schema_payload,
+                        "schema_id": "anatomy-1",
+                        "schema_revision": 1,
+                        "content_hash": content_hash,
+                    },
+                },
+            )
+        )
+        session.commit()
+
+    response = client.put(
+        f"/api/v1/models/{model_id}/pose-landmark-schema",
+        json={
+            "groups": [
+                {"name": "tail", "count": 1},
+                {"name": "head", "count": 1},
+            ]
+        },
+    )
+
+    assert response.status_code == 400, response.text
+    assert "checkpoint anatomy" in response.text.lower()

@@ -81,13 +81,16 @@ describe("pose architecture training workflow", () => {
   });
 
   it("invalidates Model Hub data when a workflow registers its completed model", async () => {
+    let modelHubRequests = 0;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       const method = init?.method ?? "GET";
       let payload: unknown = [];
       let status = 200;
 
-      if (url.endsWith("/plan") && method === "POST") {
+      if (url.endsWith("/model-hub/bootstrap")) {
+        modelHubRequests += 1;
+      } else if (url.endsWith("/plan") && method === "POST") {
         payload = { valid: true, executable: true, issues: [] };
       } else if (url.endsWith("/workflow-graphs") && method === "POST") {
         payload = { id: "graph-1" };
@@ -128,12 +131,7 @@ describe("pose architecture training workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save & run" }));
 
     await screen.findByText("Status:");
-    await waitFor(() =>
-      expect(
-        client.getQueryState(["model_hub_bootstrap", "project-1"])
-          ?.isInvalidated,
-      ).toBe(true),
-    );
+    await waitFor(() => expect(modelHubRequests).toBeGreaterThanOrEqual(2));
     expect(
       client.getQueryState(["video-tracking-models", "project-1"])
         ?.isInvalidated,

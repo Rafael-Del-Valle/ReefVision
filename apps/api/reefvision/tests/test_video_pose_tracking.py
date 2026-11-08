@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from reefvision.jobs.video_tracking import _keyframes
+import pytest
+
+from reefvision.domain.errors import ValidationError
+from reefvision.jobs.video_tracking import _keyframes, _validate_reefpose_schema_binding
 from reefvision.ml.video_tracking import TrackObservation
 from reefvision.schemas.models import PoseLandmarkSchemaUpdateRequest
 from reefvision.schemas.videos import VideoTrackKeyframe
@@ -30,6 +33,24 @@ def test_pose_keypoints_are_persisted_in_machine_track_keyframes() -> None:
         [20.0, 30.0, 0.72],
         [0.0, 0.0, 0.0],
     ]
+
+
+def test_reefpose_video_rejects_same_count_reordered_schema() -> None:
+    metadata: dict[str, object] = {
+        "pose_landmark_labels": ["head", "tail"],
+        "source_pose_schema_id": "schema-1",
+        "source_pose_schema_revision": 2,
+        "source_pose_schema_content_hash": "a" * 64,
+    }
+    reordered: dict[str, object] = {
+        "expanded_labels": ["tail", "head"],
+        "schema_id": "schema-1",
+        "schema_revision": 2,
+        "content_hash": "b" * 64,
+    }
+
+    with pytest.raises(ValidationError, match="checkpoint anatomy order"):
+        _validate_reefpose_schema_binding(metadata, reordered)
 
 
 def test_pose_keypoints_survive_track_edit_schema_validation() -> None:

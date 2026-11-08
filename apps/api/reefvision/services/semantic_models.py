@@ -554,6 +554,24 @@ class SemanticModelService(SegmentationModelService):
             ).encode("utf-8")
         ).hexdigest()
 
+        if model.provider_name == "reefpose":
+            checkpoint_labels = metadata.get("pose_landmark_labels")
+            if (
+                isinstance(checkpoint_labels, list)
+                and [str(item) for item in checkpoint_labels] != expanded_labels
+            ):
+                raise ValidationError(
+                    "ReefPose landmark order cannot differ from the checkpoint anatomy"
+                )
+            current_schema = metadata.get("pose_landmark_schema")
+            immutable_hash = metadata.get("source_pose_schema_content_hash")
+            if immutable_hash is None and isinstance(current_schema, dict):
+                immutable_hash = current_schema.get("content_hash")
+            if isinstance(immutable_hash, str) and immutable_hash != content_hash:
+                raise ValidationError(
+                    "ReefPose landmark schema cannot differ from the checkpoint anatomy"
+                )
+
         binding = self.session.get(PoseModelSchemaBinding, model.id)
         if binding is None:
             schema = PoseLandmarkSchema(

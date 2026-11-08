@@ -10,6 +10,8 @@ Persisted workflow/job state supplies epoch progress, train/validation losses wh
 
 Workflow completion invalidates both Model Hub and video-tracking model caches. A delayed workspace command remains pending until the newly registered checkpoint is actually available, preventing inference from silently using the previous compatible model.
 
+Native checkpoint anatomy is enforced at both schema-binding and video-job boundaries: a same-count landmark reorder or a source schema identity/revision/hash mismatch is rejected before inference. Provider discovery also treats a missing or unloadable Torch/CUDA runtime as an unavailable capability instead of breaking Model Hub bootstrap, and the ReefPose capability descriptor now accurately advertises the implemented single-animal video path.
+
 ## Actual live GUI acceptance
 
 The guarded Playwright test `apps/web/tests/e2e/reefpose-phase2b-live.spec.ts` exercised the rendered React application against live Vite and FastAPI services with the real background worker and an isolated synthetic dataset. It performed:
@@ -35,7 +37,7 @@ Latest acceptance evidence:
 - Training: CUDA AMP, one synthetic sample, two repeated anatomical landmarks, one epoch, selection/train loss `0.4947185516`; no independent validation dataset.
 - Tracking job: `5eca2193-0e09-4f2f-b3e6-d961b1555c1e`, explicitly bound to the newly registered model, CUDA device 0.
 - Tracking result: 30 decoded frames, 18 retained observations, one machine track, 18 pose keyframes, 36 persisted temporal landmark observations.
-- Playwright result: `1 passed` in 13.2 seconds on the final recorded run.
+- Playwright result: `1 passed` in 13.2 seconds on the final post-commit run after the checkpoint-anatomy integrity fixes.
 
 The Windows computer-control harness could not run a separate manual desktop walkthrough because its current browser URL-policy guard stops Windows browser automation. The acceptance above is nevertheless an actual rendered-browser workflow against live local services, not mocked component data. No desktop-only claim is made.
 
@@ -48,7 +50,7 @@ All fixtures and losses above are synthetic engineering evidence. They do not va
 - Frontend Prettier: passed.
 - Frontend production build: passed. Vite reports the existing 1.17 MB main-chunk size warning.
 - Frontend lockfile policy: passed; `npm ci` did not change the lockfile. npm reported two moderate and two high audit findings; no automatic audit fix was applied.
-- Backend ReefPose/provider/video/workflow focus: 42 passed, one explicit GPU test skipped in the CPU-default invocation.
+- Backend ReefPose/provider/video/workflow focus: 57 passed, one explicit GPU test skipped in the CPU-default invocation.
 - Explicit Phase 2A CUDA train/register/image-inference test: passed on the RTX 3090 with 18,968,064 peak allocated bytes.
 - Backend Ruff format: 691 files formatted.
 - Backend Ruff lint: passed.

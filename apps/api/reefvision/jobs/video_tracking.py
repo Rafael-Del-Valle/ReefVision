@@ -70,6 +70,35 @@ def _project_class_mapping(model: ModelRegistration) -> dict[str, str]:
     return {}
 
 
+def _validate_reefpose_schema_binding(
+    metadata: dict[str, object],
+    pose_landmark_schema: dict[str, object],
+) -> None:
+    """Keep checkpoint landmark order bound to its immutable registration."""
+
+    expected_labels = metadata.get("pose_landmark_labels")
+    actual_labels = pose_landmark_schema.get("expanded_labels")
+    if isinstance(expected_labels, list) and (
+        not isinstance(actual_labels, list)
+        or [str(item) for item in actual_labels] != [str(item) for item in expected_labels]
+    ):
+        raise ValidationError(
+            "ReefPose landmark schema does not match the checkpoint anatomy order"
+        )
+
+    identity_fields = (
+        ("source_pose_schema_id", "schema_id"),
+        ("source_pose_schema_revision", "schema_revision"),
+        ("source_pose_schema_content_hash", "content_hash"),
+    )
+    for source_field, schema_field in identity_fields:
+        expected = metadata.get(source_field)
+        if expected is not None and pose_landmark_schema.get(schema_field) != expected:
+            raise ValidationError(
+                "ReefPose landmark schema identity does not match the checkpoint anatomy"
+            )
+
+
 def _keyframes(
     observations: list[TrackObservation],
     pose_landmark_schema: dict[str, object] | None = None,
@@ -326,7 +355,8 @@ def process_video_tracking_job(
         model_id = model.id
         model_task = "hybrid" if hybrid else model.task
         secondary_model_id = secondary.id if secondary is not None else None
-        raw_pose_landmark_schema = dict(model.metadata_json or {}).get("pose_landmark_schema")
+        model_metadata = dict(model.metadata_json or {})
+        raw_pose_landmark_schema = model_metadata.get("pose_landmark_schema")
         pose_landmark_schema = (
             dict(raw_pose_landmark_schema) if isinstance(raw_pose_landmark_schema, dict) else None
         )
@@ -438,6 +468,8 @@ def process_video_tracking_job(
             )
 
     try:
+        if provider_name == "reefpose" and pose_landmark_schema is not None:
+            _validate_reefpose_schema_binding(model_metadata, pose_landmark_schema)
         report_progress(
             VideoTrackingProgress(
                 frames_processed=0,

@@ -135,6 +135,8 @@ import reefvision.ml.provider_hub
         descriptor = get_model_provider(REEFPOSE_PROVIDER_ID)
 
         self.assertEqual(descriptor.supported_tasks, ("pose",))
+        self.assertIn("video", descriptor.supported_input_types)
+        self.assertTrue(descriptor.video_support)
         self.assertTrue(descriptor.training_support)
         self.assertTrue(descriptor.registerable)
         self.assertIsInstance(

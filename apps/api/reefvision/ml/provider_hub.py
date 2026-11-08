@@ -129,7 +129,7 @@ def _torch_cuda_status() -> tuple[bool, str | None]:
         if not bool(torch.cuda.is_available()):
             return False, None
         return True, str(torch.cuda.get_device_name(0))
-    except (ImportError, RuntimeError, AssertionError):
+    except (ImportError, OSError, RuntimeError, AssertionError):
         return False, None
 
 
@@ -398,12 +398,17 @@ def _reefpose_descriptor() -> ModelProviderDescriptor:
         package_version=torch_version,
         supported_model_families=("Native ReefPose-S heatmap checkpoints",),
         supported_tasks=("pose",),
-        supported_input_types=("image",),
-        supported_output_types=("prediction_proposals", "keypoints", "visibility"),
+        supported_input_types=("image", "video"),
+        supported_output_types=(
+            "prediction_proposals",
+            "keypoints",
+            "visibility",
+            "instance_tracks",
+        ),
         cpu_support=True,
         cuda_support=True,
         supported_precision_modes=("fp32", "amp"),
-        video_support=False,
+        video_support=True,
         training_support=True,
         tiling_support=False,
         supported_execution_runtimes=("pytorch",),
@@ -431,7 +436,7 @@ def _reefpose_descriptor() -> ModelProviderDescriptor:
         known_limitations=(
             "Phase 1 is single-animal and does not detect multiple instances.",
             "Still-image review stores full keypoints in proposal provenance while the current editor displays the derived bounding box.",
-            "Workflow Builder training dispatch remains Ultralytics-specific pending provider-neutral routing.",
+            "Video inference is single-animal and emits one stable provider track identity.",
             "No pretrained checkpoints are downloaded automatically.",
         ),
         desktop_packaging_state="source_provider_not_yet_bundled",
