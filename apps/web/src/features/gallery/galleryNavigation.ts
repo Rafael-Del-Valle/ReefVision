@@ -109,6 +109,8 @@ export function writeGalleryPreference(
   // on the next project open. Ignore stale UI writes rather than poisoning
   // an otherwise valid preference from an earlier gallery selection.
   if (
+    !preference ||
+    typeof preference !== "object" ||
     !Number.isSafeInteger(preference.page) ||
     preference.page < 1 ||
     (preference.imageId !== null && !validGalleryImageId(preference.imageId)) ||
