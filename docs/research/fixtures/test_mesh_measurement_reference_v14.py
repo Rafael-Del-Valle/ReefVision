@@ -48,5 +48,16 @@ class MeshMeasurementReferenceTests(unittest.TestCase):
                                       absolute_scale_bound=0)
 
 
+    def test_duplicate_faces_rejected_regardless_of_winding(self) -> None:
+        vertices = [(0, 0, 0), (1, 0, 0), (0, 1, 0)]
+        for duplicate in [(0, 1, 2), (2, 1, 0), (1, 2, 0)]:
+            with self.subTest(duplicate=duplicate), self.assertRaisesRegex(
+                ValueError, "duplicate triangle surface"
+            ):
+                measure_triangle_mesh(
+                    vertices, [(0, 1, 2), duplicate],
+                    meters_per_unit=1, absolute_scale_bound=0,
+                )
+
 if __name__ == "__main__":
     unittest.main()
