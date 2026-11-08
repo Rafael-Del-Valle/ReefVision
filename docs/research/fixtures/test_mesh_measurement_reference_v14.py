@@ -87,6 +87,16 @@ class MeshMeasurementReferenceTests(unittest.TestCase):
             )
 
 
+    def test_nonzero_surface_cannot_underflow_to_zero_after_calibration(self) -> None:
+        # Source triangle is nondegenerate; extremely small scale would
+        # otherwise silently report zero physical area.
+        vertices = [(0, 0, 0), (1e-100, 0, 0), (0, 1e-100, 0)]
+        with self.assertRaisesRegex(ValueError, "calibrated mesh surface area underflow"):
+            measure_triangle_mesh(
+                vertices, [(0, 1, 2)],
+                meters_per_unit=1e-100, absolute_scale_bound=0,
+            )
+
     def test_uncertainty_overflow_rejected_even_when_nominal_area_is_finite(self) -> None:
         # Nominal area is finite (~1e308 m²), but the upper scale
         # endpoint overflows; never return an infinite error bar.
