@@ -53,4 +53,3 @@ Dataset freezing embeds the complete immutable definition and its hash. Existing
 ## Validation
 
 Backend API/integrity tests, frontend designer/editor tests, frozen-dataset and training compatibility tests, live browser workflow, and explicit RTX 3090 training/inference. Synthetic fixtures are engineering evidence only.
-
