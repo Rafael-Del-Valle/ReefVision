@@ -100,6 +100,10 @@ def measure_triangle_mesh(
     # This is distinct from an actually planar mesh with a zero source span.
     if any(span > 0 and span * scale == 0 for span in spans):
         raise ValueError("calibrated mesh dimension underflow")
+    # A positive supplied calibration uncertainty must not disappear merely
+    # because its physical interval is smaller than float resolution.
+    if delta > 0 and any(span > 0 and span * delta == 0 for span in spans):
+        raise ValueError("calibrated mesh dimension uncertainty underflow")
     if not math.isfinite(upper_area) or not math.isfinite(lower_area):
         raise ValueError("nonfinite calibrated mesh uncertainty")
     area_bound = max(upper_area - nominal_area, nominal_area - lower_area)
