@@ -92,7 +92,7 @@ class CenterlineReferenceIntegrityTests(unittest.TestCase):
 
     def test_spurious_gap_on_connected_graph_is_rejected(self) -> None:
         def mutate(data) -> None:
-            data["cases"][0]["missing_edge"] = ["root", "tip"]
+            data["cases"][2]["missing_edge"] = ["root", "tip"]
 
         self.check_mutation_rejected(mutate)
 
