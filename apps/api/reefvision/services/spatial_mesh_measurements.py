@@ -11,7 +11,7 @@ def triangle_area(
     c: tuple[float, float, float],
 ) -> float:
     """Return uncalibrated surface area for one triangle."""
-    if any(len(point) != 3 for point in (a, b, c)):
+    if any(not isinstance(point, (tuple, list)) or len(point) != 3 for point in (a, b, c)):
         raise ValueError("3D coordinates must contain exactly three components")
     if any(type(x) not in (int, float) or not isfinite(x) for point in (a, b, c) for x in point):
         raise ValueError("3D coordinates must be finite real numbers")
