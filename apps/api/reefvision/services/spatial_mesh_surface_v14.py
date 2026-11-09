@@ -94,7 +94,10 @@ def measure_mesh_preview(
         raise ValueError("Mesh preview vertex/face count is outside supported bounds")
     if type(meters_per_unit) not in (int, float):
         raise ValueError("meters_per_unit must be a real numeric value")
-    scale = float(meters_per_unit)
+    try:
+        scale = float(meters_per_unit)
+    except OverflowError as exc:
+        raise ValueError("meters_per_unit must be finite, positive, and within bounds") from exc
     if not isfinite(scale) or not 0 < scale <= 1_000_000:
         raise ValueError("meters_per_unit must be finite, positive, and within bounds")
     if calibration_method not in {
