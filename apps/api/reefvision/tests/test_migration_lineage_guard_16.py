@@ -361,14 +361,19 @@ def test_revision_0039_rejects_permissive_event_checks_without_writes(
         connection.execute(text("INSERT INTO alembic_version VALUES ('0039')"))
         connection.execute(
             text(
-                f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}, "
-                f"CONSTRAINT ck_review_queue_item_event_type CHECK ({expression}))"
+                f"CREATE TABLE review_queue_item_events ({_REVIEW_REQUEST_SCHEMA}, "
+                f"CONSTRAINT ck_review_queue_item_event_type CHECK ({expression}), "
+                "CONSTRAINT uq_review_queue_item_event_request "
+                "UNIQUE (review_queue_item_id, client_request_id))"
             )
         )
         connection.execute(
             text(
-                "INSERT INTO review_queue_item_events (id, event_type) "
-                "VALUES ('preserved-event', 'triage_start')"
+                "INSERT INTO review_queue_item_events "
+                "(id, review_queue_id, review_queue_item_id, project_id, "
+                "client_request_id, event_type, actor, created_at) "
+                "VALUES ('preserved-event', 'queue-1', 'item-1', 'project-1', "
+                "'request-1', 'triage_start', 'researcher', '2026-11-09')"
             )
         )
         schema_before = connection.scalar(
@@ -424,9 +429,11 @@ def test_revision_0040_requires_exact_completion_check_without_writes(
         connection.execute(text("INSERT INTO preserved VALUES ('research assets')"))
         connection.execute(
             text(
-                f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}, "
+                f"CREATE TABLE review_queue_item_events ({_REVIEW_REQUEST_SCHEMA}, "
                 "CONSTRAINT ck_review_queue_item_event_type "
-                f"CHECK (event_type IN ({allowed})))"
+                f"CHECK (event_type IN ({allowed})), "
+                "CONSTRAINT uq_review_queue_item_event_request "
+                "UNIQUE (review_queue_item_id, client_request_id))"
             )
         )
         if should_reject:
