@@ -120,3 +120,25 @@ If the build embeds CAB data inside the MSI, a separate CAB may not exist; recor
 On a clean Windows account or VM snapshot, record Windows build, architecture, WebView2 runtime, installation command and exit code, installer log, application startup, first image rendering, gallery scrolling, JPG/JPEG import, and read-only training monitor launch. For an interactive MSI install with verbose logging, an operator may use `msiexec.exe /i "<absolute MSI path>" /L*V "<absolute log path>"`; do **not** invoke this automatically from CI on a shared machine. Record installed product/version, WebView2 initialization errors, and any missing runtime dependencies. Reboot only if explicitly required and record it.
 
 Repeat on a supported upgrade target containing a backed-up project and verify that original media SHA-256 hashes, annotation counts, dataset identity, migrations, and provenance are unchanged after upgrade and reopen. Uninstall and verify that user-owned project data remains intact. A successful build, a zero `msiexec` exit code, and a working first launch are **separate** gates; report each independently as PASS / FAIL / NOT RUN / BLOCKED with UTC timestamps and evidence paths.
+
+
+## Exact-head CI failure triage — 2026-11-09 UTC
+
+At commit `ae39787ba9d358c305f26e91f8003e9c98943583`, push workflow [42565146980](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/42565146980) completed **FAILURE**. The backend and Windows acceptance-collector jobs succeeded; frontend job [128989942475](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/42565146980/job/128989942475) failed at `npm run format:check` (`prettier --check .`, exit 1). This is **not** a passing frontend test run: subsequent frontend gates were not reached. The job also reported 2 moderate and 2 high npm audit vulnerabilities, which require independent dependency triage rather than automatic unreviewed upgrades.
+
+Prettier reported exactly these ten files (paths relative to `apps/web`):
+
+```text
+src/App.test.tsx
+src/features/annotation-editor/ImageViewport.test.tsx
+src/features/annotation-editor/ImageViewport.tsx
+src/features/gallery/Gallery.test.tsx
+src/features/gallery/Gallery.tsx
+src/features/gallery/galleryNavigation.test.ts
+src/features/gallery/galleryNavigation.ts
+src/features/training/TrainingRunDetail.test.tsx
+src/features/training/TrainingRunDetail.tsx
+tests/e2e/gallery-viewport-103.spec.ts
+```
+
+Remediation on this branch: run `npm ci` in `apps/web`, run `npx prettier --write` **only** on the ten listed files, review the diff to ensure formatting-only changes, then run `npm run format:check`, frontend typecheck/unit/E2E gates, and exact-new-HEAD Actions. Do not use `--ignore-path`, weaken `format:check`, or call older SHA checks green. This entry is a **diagnostic record**, not evidence that the formatting failure has been resolved. Windows installer, physical camera, WebView2, and GPU acceptance remain separate BLOCKED/NOT RUN gates until independently evidenced.
