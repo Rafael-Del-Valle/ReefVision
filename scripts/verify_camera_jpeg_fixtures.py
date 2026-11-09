@@ -32,6 +32,7 @@ def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
         tail = b""
         size = 0
         try:
+            before = path.stat()
             with path.open("rb") as stream:
                 for block in iter(lambda: stream.read(1024 * 1024), b""):
                     if not first:
@@ -39,8 +40,15 @@ def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
                     tail = (tail + block)[-2:]
                     size += len(block)
                     digest.update(block)
+            after = path.stat()
         except OSError as exc:
             errors.append(f"cannot read JPEG fixture: {relative}: {type(exc).__name__}")
+            continue
+        if (before.st_size != size or after.st_size != size or
+                before.st_mtime_ns != after.st_mtime_ns or
+                before.st_ctime_ns != after.st_ctime_ns or
+                before.st_ino != after.st_ino or before.st_dev != after.st_dev):
+            errors.append(f"JPEG fixture changed during inventory: {relative}")
             continue
         signature_ok = first == JPEG_SOI and tail == JPEG_EOI
         if not signature_ok:
