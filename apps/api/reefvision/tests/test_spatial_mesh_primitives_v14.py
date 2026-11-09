@@ -50,6 +50,20 @@ def test_triangle_area_rejects_cross_product_integer_overflow() -> None:
         triangle_area((0, 0, 0), (huge, 0, 0), (0, huge, 0))
 
 
+def test_mesh_preview_rejects_oversized_integer_vertex_as_validation_error() -> None:
+    """Oversized integer imports must not escape as float conversion overflow."""
+    from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
+
+    with pytest.raises(ValueError, match="bounded finite coordinates"):
+        measure_mesh_preview(
+            vertices=[[0, 0, 0], [10**1000, 0, 0], [0, 1, 0]],
+            faces=[[0, 1, 2]],
+            meters_per_unit=1.0,
+            calibration_method="ruler",
+            calibration_evidence="Synthetic invalid import reference",
+        )
+
+
 def test_independent_calibrated_cube_reference_area_and_extent() -> None:
     """A 2-unit cube has six faces, independent of its 12 triangle facets."""
     from math import sqrt
