@@ -49,6 +49,7 @@ def measure_triangle_mesh(
     face_areas: list[float] = []
     referenced_vertices: set[int] = set()
     seen_faces: set[tuple[int, int, int]] = set()
+    seen_surfaces: set[tuple[Point, Point, Point]] = set()
     for face in triangles:
         if len(face) != 3 or any(type(i) is not int or i < 0 or i >= len(vertices) for i in face):
             raise ValueError("invalid triangle indices")
@@ -60,6 +61,12 @@ def measure_triangle_mesh(
         if face_key in seen_faces:
             raise ValueError("duplicate triangle surface")
         seen_faces.add(face_key)
+        # Separate vertex indices may still describe the same physical patch.
+        # Re-imported seam vertices must not double-count coincident triangles.
+        surface_key = tuple(sorted((a, b, c)))
+        if surface_key in seen_surfaces:
+            raise ValueError("duplicate triangle surface")
+        seen_surfaces.add(surface_key)
         referenced_vertices.update(face)
         u = tuple(b[i] - a[i] for i in range(3))
         v = tuple(c[i] - a[i] for i in range(3))
