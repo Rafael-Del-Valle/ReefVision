@@ -90,6 +90,17 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
                 f"{event_type_check})"
             )
         )
+        # Already-at-head startup must preserve existing biological QC notes.
+        connection.execute(
+            text(
+                "INSERT INTO review_queue_item_events "
+                "(id, review_queue_id, review_queue_item_id, project_id, "
+                "client_request_id, event_type, actor, comment, created_at) "
+                "VALUES ('event-preserved', 'queue-1', 'item-1', 'project-1', "
+                "'request-1', 'comment', 'researcher', "
+                "'biological observation', '2026-11-09')"
+            )
+        )
         if revision == "0041":
             connection.execute(
                 text(
@@ -106,6 +117,9 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
 
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+        assert connection.execute(
+            text("SELECT id, comment FROM review_queue_item_events")
+        ).one() == ("event-preserved", "biological observation")
 
 
 @pytest.mark.parametrize("revision", ["0038", "0039", "0040"])
