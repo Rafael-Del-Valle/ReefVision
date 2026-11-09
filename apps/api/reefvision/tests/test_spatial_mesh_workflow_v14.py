@@ -744,3 +744,75 @@ def test_saved_obj_workflow_calibration_scaling_reference(client: TestClient, sc
         artifact["provenance"]["geometry_sha256"]
         == standalone.json()["provenance"]["geometry_sha256"]
     )
+
+
+def test_saved_obj_workflow_enforces_source_byte_binding(client: TestClient) -> None:
+    """A saved mesh graph must retain the exact imported bytes it was reviewed against."""
+    project_id = str(create_project(client, "Mesh source integrity workflow")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    original = client.post(f"{base}/spatial/mesh-preview", json=MESH)
+    assert original.status_code == 200, original.text
+    source_sha = original.json()["provenance"]["source_payload_sha256"]
+    assert isinstance(source_sha, str) and len(source_sha) == 64
+
+    bound = {**MESH, "expected_source_payload_sha256": source_sha}
+    verified_transport = client.post(f"{base}/spatial/mesh-preview", json=bound)
+    assert verified_transport.status_code == 200, verified_transport.text
+    assert verified_transport.json()["provenance"]["source_payload_integrity_checked"] is True
+    assert verified_transport.json()["provenance"]["calibration_verified"] is False
+
+    # Equivalent triangles with different source bytes are not the same reviewed import.
+    changed = {
+        **bound,
+        "obj_text": MESH["obj_text"] + "# changed source bytes\\n",
+    }
+    rejected = client.post(f"{base}/spatial/mesh-preview", json=changed)
+    assert rejected.status_code == 400, rejected.text
+
+    graph = {
+        "graph_id": "mesh-source-binding-v14",
+        "name": "Exact imported OBJ byte binding",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": bound},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    assert saved.json()["graph_json"]["nodes"][1]["parameters"][
+        "expected_source_payload_sha256"
+    ] == source_sha
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["provenance"]["source_payload_sha256"] == source_sha
+    assert artifact["provenance"]["source_payload_integrity_checked"] is True
+    assert artifact["provenance"]["geometry_sha256"] == original.json()["provenance"][
+        "geometry_sha256"
+    ]
+    assert artifact["surface_area_m2"] == pytest.approx(original.json()["surface_area_m2"])
+    assert artifact["measurement_status"] == "caller_supplied_unverified"
+    assert artifact["provenance"]["calibration_verified"] is False
