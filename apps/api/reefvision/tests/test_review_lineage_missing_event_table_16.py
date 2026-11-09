@@ -27,12 +27,31 @@ def test_stamped_review_revision_without_event_table_preserves_biology(
             )
             connection.execute(text("INSERT INTO observations VALUES ('coral-1', 12.5)"))
             before = tuple(connection.execute(text("SELECT * FROM observations")).all())
+            schema_before = tuple(
+                connection.execute(
+                    text(
+                        "SELECT type, name, tbl_name, sql FROM sqlite_master "
+                        "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
+                    )
+                ).all()
+            )
             for _ in range(2):
                 with pytest.raises(
                     RuntimeError, match=r"not the ReefVision 1\.6 review-events lineage"
                 ):
                     assert_compatible_revision_0038(connection)
                 assert tuple(connection.execute(text("SELECT * FROM observations")).all()) == before
+                assert (
+                    tuple(
+                        connection.execute(
+                            text(
+                                "SELECT type, name, tbl_name, sql FROM sqlite_master "
+                                "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
+                            )
+                        ).all()
+                    )
+                    == schema_before
+                )
                 assert (
                     connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
                 )
