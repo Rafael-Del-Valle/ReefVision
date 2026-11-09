@@ -155,6 +155,18 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual((actual / "camera.jpg").read_bytes(),
                              b"\xff\xd8payload\xff\xd9")
 
+    def test_cli_missing_directory_reports_usage_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            missing = Path(directory) / "missing-camera-fixtures"
+            output = io.StringIO()
+            with mock.patch("sys.argv", [str(SCRIPT), str(missing)]):
+                with contextlib.redirect_stderr(output):
+                    with self.assertRaises(SystemExit) as caught:
+                        MODULE.main()
+            self.assertEqual(caught.exception.code, 2)
+            self.assertIn("cannot resolve camera fixture directory: FileNotFoundError", output.getvalue())
+            self.assertFalse(missing.exists())
+
     def test_empty_fixture_directory_is_not_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             records, errors = MODULE.inventory(Path(directory))
