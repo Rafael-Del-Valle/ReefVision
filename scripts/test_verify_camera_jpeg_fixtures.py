@@ -78,7 +78,7 @@ class CameraFixtureInventoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             fixture = root / "camera.JPG"
-            original = b"\\xff\\xd8payload\\xff\\xd9"
+            original = bytes.fromhex("ffd8") + b"payload" + bytes.fromhex("ffd9")
             fixture.write_bytes(original)
             output = io.StringIO()
             with mock.patch("sys.argv", [str(SCRIPT), str(root)]):
