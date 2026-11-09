@@ -23,6 +23,13 @@ def test_triangle_area_rejects_implicit_coordinate_coercion(invalid: object) -> 
         triangle_area((0, 0, 0), (invalid, 0, 0), (0, 1, 0))  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("invalid", [(0, 1), (0, 1, 2, 3), ()])
+def test_triangle_area_rejects_wrong_coordinate_dimensions(invalid: tuple[int, ...]) -> None:
+    """Reject truncated or padded geometry instead of silently changing its meaning."""
+    with pytest.raises(ValueError, match="exactly three components"):
+        triangle_area((0, 0, 0), invalid, (0, 1, 0))  # type: ignore[arg-type]
+
+
 def test_independent_calibrated_cube_reference_area_and_extent() -> None:
     """A 2-unit cube has six faces, independent of its 12 triangle facets."""
     from math import sqrt
