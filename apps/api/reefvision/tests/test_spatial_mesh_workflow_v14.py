@@ -791,9 +791,10 @@ def test_saved_obj_workflow_enforces_source_byte_binding(client: TestClient) -> 
     assert plan.json()["executable"] is True
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    assert saved.json()["graph_json"]["nodes"][1]["parameters"][
-        "expected_source_payload_sha256"
-    ] == source_sha
+    assert (
+        saved.json()["graph_json"]["nodes"][1]["parameters"]["expected_source_payload_sha256"]
+        == source_sha
+    )
     run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
@@ -810,9 +811,10 @@ def test_saved_obj_workflow_enforces_source_byte_binding(client: TestClient) -> 
     )
     assert artifact["provenance"]["source_payload_sha256"] == source_sha
     assert artifact["provenance"]["source_payload_integrity_checked"] is True
-    assert artifact["provenance"]["geometry_sha256"] == original.json()["provenance"][
-        "geometry_sha256"
-    ]
+    assert (
+        artifact["provenance"]["geometry_sha256"]
+        == original.json()["provenance"]["geometry_sha256"]
+    )
     assert artifact["surface_area_m2"] == pytest.approx(original.json()["surface_area_m2"])
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
