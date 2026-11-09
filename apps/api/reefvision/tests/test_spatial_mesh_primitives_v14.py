@@ -16,6 +16,14 @@ def test_nonfinite_coordinate():
         triangle_area((0, 0, 0), (1, 0, 0), (float("nan"), 1, 0))
 
 
+
+@pytest.mark.parametrize("invalid", [True, False, "1", None, 1 + 0j])
+def test_triangle_area_rejects_implicit_coordinate_coercion(invalid: object) -> None:
+    """The shared primitive must not treat flags or text as physical coordinates."""
+    with pytest.raises(ValueError, match="finite real numbers"):
+        triangle_area((0, 0, 0), (invalid, 0, 0), (0, 1, 0))  # type: ignore[arg-type]
+
+
 def test_independent_calibrated_cube_reference_area_and_extent() -> None:
     """A 2-unit cube has six faces, independent of its 12 triangle facets."""
     from math import sqrt
