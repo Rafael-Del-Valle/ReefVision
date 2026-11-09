@@ -25,9 +25,7 @@ def test_stamped_review_revision_without_event_table_preserves_biology(
             connection.execute(
                 text("CREATE TABLE observations (id TEXT PRIMARY KEY, measurement REAL NOT NULL)")
             )
-            connection.execute(
-                text("INSERT INTO observations VALUES ('coral-1', 12.5)")
-            )
+            connection.execute(text("INSERT INTO observations VALUES ('coral-1', 12.5)"))
             before = tuple(connection.execute(text("SELECT * FROM observations")).all())
             for _ in range(2):
                 with pytest.raises(
@@ -38,11 +36,14 @@ def test_stamped_review_revision_without_event_table_preserves_biology(
                 assert (
                     connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
                 )
-                assert connection.scalar(
-                    text(
-                        "SELECT count(*) FROM sqlite_master WHERE type='table' "
-                        "AND name='review_queue_item_events'"
+                assert (
+                    connection.scalar(
+                        text(
+                            "SELECT count(*) FROM sqlite_master WHERE type='table' "
+                            "AND name='review_queue_item_events'"
+                        )
                     )
-                ) == 0
+                    == 0
+                )
     finally:
         engine.dispose()
