@@ -119,7 +119,9 @@ def measure_mesh_preview(
             not isinstance(vertex, (list, tuple))
             or len(vertex) != 3
             or any(
-                type(value) not in (int, float) or not isfinite(value) or abs(value) > 1_000_000_000
+                type(value) not in (int, float)
+                or abs(value) > 1_000_000_000
+                or not isfinite(value)
                 for value in vertex
             )
         ):
