@@ -832,3 +832,18 @@ def test_mesh_preview_rejects_oversized_integer_calibration() -> None:
             calibration_method="ruler",
             calibration_evidence="Unverified test calibration",
         )
+
+
+def test_mesh_preview_rejects_oversized_integer_scale_uncertainty() -> None:
+    """Unbounded integer uncertainty must fail scientific validation, not overflow."""
+    from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
+
+    with pytest.raises(ValueError, match="relative_scale_uncertainty must be between 0 and 1"):
+        measure_mesh_preview(
+            vertices=[[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+            faces=[[0, 1, 2]],
+            meters_per_unit=0.01,
+            calibration_method="ruler",
+            calibration_evidence="Unverified test calibration",
+            relative_scale_uncertainty=10**1000,
+        )
