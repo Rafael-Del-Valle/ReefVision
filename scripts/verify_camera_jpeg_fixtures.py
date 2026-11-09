@@ -69,6 +69,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path, help="Camera fixture directory (read-only)")
     args = parser.parse_args()
+    # Reject a linked root before resolve() can silently follow it outside the
+    # owner-approved camera fixture directory.
+    if args.directory.is_symlink():
+        parser.error("camera fixture directory must not be a symbolic link")
     root = args.directory.resolve(strict=True)
     if not root.is_dir():
         parser.error("directory must be a directory")
