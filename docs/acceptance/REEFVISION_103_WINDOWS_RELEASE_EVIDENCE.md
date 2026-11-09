@@ -64,7 +64,8 @@ if ($expected.Count -eq 0) { throw 'Empty source manifest' }
 $seen = [Collections.Generic.HashSet[string]::new([StringComparer]::OrdinalIgnoreCase)
 foreach ($entry in $expected) {
   $relative = [string]$entry.RelativePath
-  if ([IO.Path]::IsPathRooted($relative) -or $relative -split '[\\/]' | Where-Object { $_ -eq '..' }) {
+  $segments = @($relative -split '[\\/]')
+  if ([IO.Path]::IsPathRooted($relative) -or ($segments -contains '..')) {
     throw "Unsafe manifest path: $relative"
   }
   if (-not $seen.Add($relative)) { throw "Duplicate manifest path: $relative" }
