@@ -133,10 +133,10 @@ def _pose_dataset(
     if "project_id" in payload and str(payload["project_id"]) != project_id:
         raise ValidationError(f"Pose {role} dataset belongs to another project")
 
-    dataset_id = str(payload.get("dataset_id") or "")
+    dataset_id = payload.get("dataset_id")
 
-    if not dataset_id:
-        raise ValidationError(f"Pose {role} dataset artifact is missing dataset_id")
+    if not isinstance(dataset_id, str) or not dataset_id:
+        raise ValidationError(f"Pose {role} dataset artifact requires a nonempty string dataset_id")
 
     dataset = session.get(
         PoseTrainingDataset,
