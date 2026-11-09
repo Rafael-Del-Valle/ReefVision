@@ -354,6 +354,10 @@ def _seed_pose_model(
     if not checkpoint.is_file():
         raise ValidationError("Pose retraining seed checkpoint is missing")
 
+    # An empty file has a stable SHA-256 but cannot initialize a pose model.
+    if checkpoint.stat().st_size == 0:
+        raise ValidationError("Pose retraining seed checkpoint is empty")
+
     actual_sha, _ = hash_model_file(checkpoint)
 
     if actual_sha != model.sha256:
