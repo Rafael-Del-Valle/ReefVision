@@ -134,6 +134,27 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual(fixture.read_bytes(), original)
             self.assertEqual(len(original), 11)
 
+    def test_cli_rejects_symlink_root_without_inspecting_target(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            actual = parent / "actual"
+            actual.mkdir()
+            (actual / "camera.jpg").write_bytes(b"\\xff\\xd8payload\\xff\\xd9")
+            linked = parent / "linked"
+            try:
+                linked.symlink_to(actual, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("Directory symlinks unavailable on this platform")
+            output = io.StringIO()
+            with mock.patch("sys.argv", [str(SCRIPT), str(linked)]):
+                with contextlib.redirect_stderr(output):
+                    with self.assertRaises(SystemExit) as caught:
+                        MODULE.main()
+            self.assertEqual(caught.exception.code, 2)
+            self.assertIn("must not be a symbolic link", output.getvalue())
+            self.assertEqual((actual / "camera.jpg").read_bytes(),
+                             b"\\xff\\xd8payload\\xff\\xd9")
+
     def test_empty_fixture_directory_is_not_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             records, errors = MODULE.inventory(Path(directory))
