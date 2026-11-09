@@ -85,6 +85,12 @@ def mesh_edge_paths(
             path_vertices_in_source_frame_m = [
                 [coordinate * scale for coordinate in points[index]] for index in route
             ]
+            if any(
+                not isfinite(coordinate)
+                for vertex in path_vertices_in_source_frame_m
+                for coordinate in vertex
+            ):
+                raise ValueError("Calibrated mesh path vertex coordinate overflowed")
             # Preserve every traversed geometric edge for independent route
             # inspection. These are mesh-edge distances, not coral centerlines.
             path_edge_lengths_m = [adjacency[a][b] * scale for a, b in pairwise(route)]
