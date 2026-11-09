@@ -1459,9 +1459,7 @@ def create_pose_workflow_training_result(
     # overwrite conflicting evidence when finalizing a saved workflow node.
     # Otherwise first completion could conceal an altered worker manifest,
     # while a subsequent replay would appear to have valid provenance.
-    if run.artifact_manifest_json is not None and not isinstance(
-        run.artifact_manifest_json, dict
-    ):
+    if run.artifact_manifest_json is not None and not isinstance(run.artifact_manifest_json, dict):
         raise ValidationError("Completed pose training worker manifest must be a JSON object")
     worker_manifest = dict(run.artifact_manifest_json or {})
     if (
