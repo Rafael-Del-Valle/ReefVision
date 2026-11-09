@@ -1553,7 +1553,9 @@ def create_pose_workflow_training_result(
     # artifact evidence while pinning checkpoint digests at first completion.
     # Replay already requires complete manifest equality, so enforce the
     # same contract before the first provenance commit.
-    experiment_manifest = dict(experiment.artifact_manifest_json or {})
+    if not isinstance(experiment.artifact_manifest_json, dict):
+        raise ValidationError("Completed pose training experiment manifest must be a JSON object")
+    experiment_manifest = dict(experiment.artifact_manifest_json)
     if experiment_manifest != worker_manifest:
         raise ValidationError("Completed pose training experiment artifact provenance changed")
 
