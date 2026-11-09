@@ -58,6 +58,8 @@ def mesh_edge_paths(
                     break
                 for neighbor, edge_length in sorted(adjacency[vertex].items()):
                     candidate = length + edge_length
+                    if not isfinite(candidate):
+                        raise ValueError("Accumulated mesh path length overflowed")
                     if candidate < shortest.get(neighbor, float("inf")):
                         shortest[neighbor] = candidate
                         parent[neighbor] = vertex
