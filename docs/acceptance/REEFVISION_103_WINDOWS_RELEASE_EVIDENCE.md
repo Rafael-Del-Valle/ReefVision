@@ -26,3 +26,30 @@ For every gate, record **PASS / FAIL / NOT RUN / BLOCKED**, exact commit SHA, UT
 ## Release decision
 
 Keep **HOLD** until all required gates above and the versioned roadmap are complete with reproducible evidence. A CI green status alone is insufficient for physical-camera, clean-install, WebView2, or GPU acceptance. No merge, tag, publication, release, or installer deployment is authorized by this document.
+
+## Camera JPEG acceptance: reproducible original-file manifest
+
+Before importing any camera files, create an immutable source manifest in PowerShell (run in a directory containing **copies** of original camera media, never in the only source directory):
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$root = (Resolve-Path -LiteralPath '.').Path
+$files = @(Get-ChildItem -LiteralPath $root -File -Recurse |
+  Where-Object { $_.Extension -match '^(?i:\.(jpg|jpeg|jpe|jfif))$' } |
+  Sort-Object FullName)
+if ($files.Count -eq 0) { throw 'No original JPEG camera samples found' }
+$manifest = @($files | ForEach-Object {
+  [pscustomobject]@{
+    RelativePath = [IO.Path]::GetRelativePath($root, $_.FullName)
+    Extension = $_.Extension
+    Bytes = $_.Length
+    SHA256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+  }
+})
+$manifest | Export-Csv -LiteralPath (Join-Path $root 'jpeg-source-manifest.csv') -NoTypeInformation -Encoding UTF8
+$manifest | Format-Table -AutoSize
+```
+
+Use separate physical camera originals for `.jpg`, `.JPG`, `.jpeg`, and `.JPEG` when available. For `.jpe` and `.jfif`, record whether the sample is genuinely camera-generated or an explicitly labeled **alias copy**; renaming a file only exercises extension routing and does **not** validate decoder compatibility. Record EXIF orientation, ICC profile (including CMYK if present), dimensions, and camera model from a trusted metadata reader; never infer them from the extension. Test import, thumbnail, first-image viewport, full-resolution image, navigation, annotation overlay, and reopen for every sample. Unsupported color profiles or aliases must produce a clear recoverable error rather than a blank viewport.
+
+After import, rerun `Get-FileHash` against the source paths and compare to the manifest. Record the exact application commit, Windows/WebView2 version, per-file observed result, screenshots and any decode error. Treat missing real-camera samples as **BLOCKED**, not PASS. The manifest script records file identity only; it does not test the application, and its CSV is an output artifact that must not be imported as an image.
