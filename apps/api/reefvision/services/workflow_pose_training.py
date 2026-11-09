@@ -661,7 +661,9 @@ def _reused_pose_training_result(
     # as the original scientific result. Legacy runs without a recorded digest
     # remain readable; newly completed runs always persist one below.
     frozen_checkpoint = dict(run.artifact_manifest_json or {})
-    snapshot = dict(run.draft_snapshot_json or {})
+    if not isinstance(run.draft_snapshot_json, dict):
+        raise ValidationError("Recovered pose-training snapshot must be a JSON object")
+    snapshot = dict(run.draft_snapshot_json)
     current_snapshot_versions = {
         "pose-workflow-training-snapshot-0001",
         "pose-workflow-training-snapshot-0002",
