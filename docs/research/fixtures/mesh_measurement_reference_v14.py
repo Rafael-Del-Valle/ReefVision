@@ -44,8 +44,17 @@ def measure_triangle_mesh(
         raise ValueError("absolute_scale_bound must be finite and less than scale")
     if not vertices or not triangles:
         raise ValueError("nonempty vertices and triangles required")
-    if any(len(v) != 3 or any(not math.isfinite(x) for x in v) for v in vertices):
-        raise ValueError("vertices must be finite 3D coordinates")
+    if any(
+        len(v) != 3
+        or any(
+            isinstance(x, bool)
+            or not isinstance(x, (int, float))
+            or not math.isfinite(x)
+            for x in v
+        )
+        for v in vertices
+    ):
+        raise ValueError("vertices must be finite numeric 3D coordinates")
     face_areas: list[float] = []
     referenced_vertices: set[int] = set()
     seen_faces: set[tuple[int, int, int]] = set()
