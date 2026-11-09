@@ -25,14 +25,18 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             nested.mkdir()
             (root / "capture.JPG").write_bytes(b"\xff\xd8payload\xff\xd9")
             (nested / "second.JpEg").write_bytes(b"\xff\xd8other\xff\xd9")
+            (root / "third.JPE").write_bytes(b"\xff\xd8third\xff\xd9")
+            (root / "fourth.JFIF").write_bytes(b"\xff\xd8fourth\xff\xd9")
+            (root / "fifth.JFI").write_bytes(b"\xff\xd8fifth\xff\xd9")
+            (root / "sixth.JiF").write_bytes(b"\xff\xd8sixth\xff\xd9")
             (root / "ignore.png").write_bytes(b"\xff\xd8payload\xff\xd9")
             records, errors = MODULE.inventory(root)
             self.assertEqual(errors, [])
             self.assertEqual({record["path"] for record in records},
-                             {"capture.JPG", "camera/second.JpEg"})
+                             {"capture.JPG", "camera/second.JpEg", "third.JPE", "fourth.JFIF", "fifth.JFI", "sixth.JiF"})
             self.assertTrue(all(record["jpeg_boundary_markers"] for record in records))
-            self.assertEqual({record["extension"] for record in records}, {".jpg", ".jpeg"})
-            self.assertEqual(len({record["sha256"] for record in records}), 2)
+            self.assertEqual({record["extension"] for record in records}, {".jpg", ".jpeg", ".jpe", ".jfif", ".jfi", ".jif"})
+            self.assertEqual(len({record["sha256"] for record in records}), 6)
 
     def test_corrupt_markers_are_reported_without_changing_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -50,7 +54,7 @@ class CameraFixtureInventoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             records, errors = MODULE.inventory(Path(directory))
             self.assertEqual(records, [])
-            self.assertEqual(errors, ["no JPG/JPEG fixtures found"])
+            self.assertEqual(errors, ["no JPEG-family fixtures found"])
 
     def test_symlink_is_rejected_without_reading_target(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
