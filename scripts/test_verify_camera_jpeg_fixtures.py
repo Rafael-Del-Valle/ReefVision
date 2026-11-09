@@ -74,6 +74,24 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual(errors, ["cannot read JPEG fixture: blocked.jpg: PermissionError"])
             self.assertEqual(blocked.read_bytes(), b"\xff\xd8blocked\xff\xd9")
 
+    def test_only_unreadable_jpeg_reports_read_error_not_empty_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            blocked = root / "locked.JPG"
+            blocked.write_bytes(bytes.fromhex("ffd8") + b"payload" + bytes.fromhex("ffd9"))
+            original_open = Path.open
+
+            def deny_fixture(path: Path, *args: object, **kwargs: object):
+                if path == blocked:
+                    raise PermissionError("camera file locked")
+                return original_open(path, *args, **kwargs)
+
+            with mock.patch.object(Path, "open", deny_fixture):
+                records, errors = MODULE.inventory(root)
+            self.assertEqual(records, [])
+            self.assertEqual(errors, ["cannot read JPEG fixture: locked.JPG: PermissionError"])
+            self.assertEqual(blocked.read_bytes(), bytes.fromhex("ffd8") + b"payload" + bytes.fromhex("ffd9"))
+
     def test_cli_emits_machine_readable_manifest_and_success_exit(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
