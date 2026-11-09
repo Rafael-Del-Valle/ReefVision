@@ -60,7 +60,9 @@ def test_earlier_review_revision_rejects_missing_event_request_uniqueness(
                 assert connection.scalar(text("SELECT value FROM observations")) == (
                     "preserved biological observation"
                 )
-                assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+                assert (
+                    connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+                )
     finally:
         engine.dispose()
 
@@ -276,6 +278,8 @@ def test_earlier_review_revision_rejects_altered_event_request_identity(
                     == before
                 )
                 assert connection.scalar(text("SELECT value FROM observations")) == "preserved"
-                assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+                assert (
+                    connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+                )
     finally:
         engine.dispose()
