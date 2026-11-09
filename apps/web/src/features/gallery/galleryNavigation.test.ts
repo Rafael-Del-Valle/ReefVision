@@ -242,6 +242,51 @@ describe("gallery navigation across sparse camera pages", () => {
   });
 });
 
+describe("gallery navigation with uneven camera page sizes", () => {
+  it("advances through images before crossing into a sparse final page", () => {
+    expect(
+      resolveGalleryNavigation({
+        action: "next",
+        index: 0,
+        itemCount: 3,
+        page: 1,
+        pages: 2,
+        wrap: false,
+      }),
+    ).toEqual({ page: 1, edge: "index", index: 1 });
+    expect(
+      resolveGalleryNavigation({
+        action: "next",
+        index: 2,
+        itemCount: 3,
+        page: 1,
+        pages: 2,
+        wrap: false,
+      }),
+    ).toEqual({ page: 2, edge: "first" });
+    expect(
+      resolveGalleryNavigation({
+        action: "previous",
+        index: 0,
+        itemCount: 1,
+        page: 2,
+        pages: 2,
+        wrap: false,
+      }),
+    ).toEqual({ page: 1, edge: "last" });
+    expect(
+      resolveGalleryNavigation({
+        action: "next",
+        index: 0,
+        itemCount: 1,
+        page: 2,
+        pages: 2,
+        wrap: false,
+      }),
+    ).toBeNull();
+  });
+});
+
 describe("gallery preferences", () => {
   it("snapshots changing preference getters before persisting a camera selection", () => {
     const storage = memoryStorage();
