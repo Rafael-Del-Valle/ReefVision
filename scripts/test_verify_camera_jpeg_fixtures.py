@@ -8,6 +8,7 @@ import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPT = Path(__file__).with_name("verify_camera_jpeg_fixtures.py")
@@ -49,6 +50,26 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertFalse(records[0]["jpeg_boundary_markers"])
             self.assertEqual(errors, ["invalid JPEG boundary markers: broken.jpeg"])
             self.assertEqual(fixture.read_bytes(), original)
+
+    def test_unreadable_file_is_reported_and_other_files_are_inventoried(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            blocked = root / "blocked.jpg"
+            good = root / "good.jpeg"
+            blocked.write_bytes(b"\\xff\\xd8blocked\\xff\\xd9")
+            good.write_bytes(b"\\xff\\xd8good\\xff\\xd9")
+            original_open = Path.open
+
+            def selective_open(path: Path, *args: object, **kwargs: object):
+                if path == blocked:
+                    raise PermissionError("fixture is locked")
+                return original_open(path, *args, **kwargs)
+
+            with mock.patch.object(Path, "open", selective_open):
+                records, errors = MODULE.inventory(root)
+            self.assertEqual([record["path"] for record in records], ["good.jpeg"])
+            self.assertEqual(errors, ["cannot read JPEG fixture: blocked.jpg: PermissionError"])
+            self.assertEqual(blocked.read_bytes(), b"\\xff\\xd8blocked\\xff\\xd9")
 
     def test_empty_fixture_directory_is_not_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
