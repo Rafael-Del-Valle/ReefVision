@@ -86,3 +86,37 @@ if ($after.CreationDate -ne $beforeIdentity.CreationDate) {
 ```
 
 Also exercise a nonexistent run ID, path traversal characters, PowerShell metacharacters, unauthorized access, unavailable backend, and log contents containing terminal escape sequences. Confirm that the monitor neither executes log text nor exposes credentials, write endpoints, shell control, or arbitrary filesystem reads. Document actual outputs and access-denial behavior. The PID continuity check alone cannot prove training progressed or that the console is secure; retain independent checkpoint/epoch evidence and code-level command allowlist/argument-escaping review. If no real training run or external monitor is available, record **BLOCKED**, not PASS.
+
+
+## Windows MSI/CAB candidate integrity and clean-install evidence
+
+Run the following **after** a successful Windows installer build, from a dedicated staging directory containing only artifacts from the candidate build. This is an integrity and provenance collector, **not** a substitute for installing and launching the application. Record the exact source commit and build workflow URL separately; artifact filenames do not prove which commit produced them.
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$staging = (Resolve-Path -LiteralPath '.').Path
+$artifacts = @(Get-ChildItem -LiteralPath $staging -File -Recurse |
+  Where-Object { $_.Extension -match '^(?i:\.(msi|cab))$' } |
+  Sort-Object FullName)
+if (-not ($artifacts | Where-Object { $_.Extension -ieq '.msi' })) {
+  throw 'BLOCKED: no MSI found; do not report installer acceptance'
+}
+$records = @($artifacts | ForEach-Object {
+  $signature = Get-AuthenticodeSignature -LiteralPath $_.FullName
+  [pscustomobject]@{
+    RelativePath = [IO.Path]::GetRelativePath($staging, $_.FullName)
+    Bytes = $_.Length
+    SHA256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+    SignatureStatus = [string]$signature.Status
+    Signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { '' }
+  }
+})
+$records | Export-Csv -LiteralPath (Join-Path $staging 'installer-artifact-manifest.csv') -NoTypeInformation -Encoding UTF8
+$records | Format-Table -AutoSize
+```
+
+If the build embeds CAB data inside the MSI, a separate CAB may not exist; record that packaging fact instead of inventing a CAB artifact. An unsigned development MSI must be labeled **unsigned**; a signature status alone is not proof of a trusted publisher or successful installation. Preserve the manifest alongside the exact build logs and immutable artifact copies.
+
+On a clean Windows account or VM snapshot, record Windows build, architecture, WebView2 runtime, installation command and exit code, installer log, application startup, first image rendering, gallery scrolling, JPG/JPEG import, and read-only training monitor launch. For an interactive MSI install with verbose logging, an operator may use `msiexec.exe /i "<absolute MSI path>" /L*V "<absolute log path>"`; do **not** invoke this automatically from CI on a shared machine. Record installed product/version, WebView2 initialization errors, and any missing runtime dependencies. Reboot only if explicitly required and record it.
+
+Repeat on a supported upgrade target containing a backed-up project and verify that original media SHA-256 hashes, annotation counts, dataset identity, migrations, and provenance are unchanged after upgrade and reopen. Uninstall and verify that user-owned project data remains intact. A successful build, a zero `msiexec` exit code, and a working first launch are **separate** gates; report each independently as PASS / FAIL / NOT RUN / BLOCKED with UTC timestamps and evidence paths.
