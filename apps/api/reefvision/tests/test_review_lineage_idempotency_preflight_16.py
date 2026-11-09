@@ -45,13 +45,22 @@ def test_earlier_review_revision_rejects_missing_event_request_uniqueness(
                     "'comment', 'researcher', 'observed', NULL, '2026-11-04')"
                 )
             )
-            before = connection.execute(text("SELECT * FROM review_queue_item_events")).all()
-            with pytest.raises(RuntimeError, match="idempotency UNIQUE constraint"):
-                assert_compatible_revision_0038(connection)
-            assert (
-                connection.execute(text("SELECT * FROM review_queue_item_events")).all() == before
+            connection.execute(text("CREATE TABLE observations (value TEXT NOT NULL)"))
+            connection.execute(
+                text("INSERT INTO observations VALUES ('preserved biological observation')")
             )
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+            before = tuple(connection.execute(text("SELECT * FROM review_queue_item_events")))
+            for _ in range(2):
+                with pytest.raises(RuntimeError, match="idempotency UNIQUE constraint"):
+                    assert_compatible_revision_0038(connection)
+                assert (
+                    tuple(connection.execute(text("SELECT * FROM review_queue_item_events")))
+                    == before
+                )
+                assert connection.scalar(text("SELECT value FROM observations")) == (
+                    "preserved biological observation"
+                )
+                assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
     finally:
         engine.dispose()
 
