@@ -5,6 +5,9 @@ Run: python -m unittest discover -s scripts -p 'test_verify_camera_jpeg_fixtures
 from __future__ import annotations
 
 import importlib.util
+import contextlib
+import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -70,6 +73,38 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual([record["path"] for record in records], ["good.jpeg"])
             self.assertEqual(errors, ["cannot read JPEG fixture: blocked.jpg: PermissionError"])
             self.assertEqual(blocked.read_bytes(), b"\xff\xd8blocked\xff\xd9")
+
+    def test_cli_emits_machine_readable_manifest_and_success_exit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = root / "camera.JPG"
+            original = b"\\xff\\xd8payload\\xff\\xd9"
+            fixture.write_bytes(original)
+            output = io.StringIO()
+            with mock.patch("sys.argv", [str(SCRIPT), str(root)]):
+                with contextlib.redirect_stdout(output):
+                    exit_code = MODULE.main()
+            manifest = json.loads(output.getvalue())
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(manifest["errors"], [])
+            self.assertEqual(len(manifest["files"]), 1)
+            self.assertEqual(manifest["files"][0]["path"], "camera.JPG")
+            self.assertEqual(manifest["files"][0]["bytes"], len(original))
+            self.assertEqual(fixture.read_bytes(), original)
+
+    def test_cli_reports_corrupt_fixture_with_nonzero_exit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = root / "bad.jfif"
+            fixture.write_bytes(b"not a jpeg")
+            output = io.StringIO()
+            with mock.patch("sys.argv", [str(SCRIPT), str(root)]):
+                with contextlib.redirect_stdout(output):
+                    exit_code = MODULE.main()
+            manifest = json.loads(output.getvalue())
+            self.assertEqual(exit_code, 1)
+            self.assertEqual(manifest["files"][0]["jpeg_boundary_markers"], False)
+            self.assertEqual(manifest["errors"], ["invalid JPEG boundary markers: bad.jfif"])
 
     def test_empty_fixture_directory_is_not_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
