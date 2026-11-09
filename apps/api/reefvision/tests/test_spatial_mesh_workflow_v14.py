@@ -818,3 +818,17 @@ def test_saved_obj_workflow_enforces_source_byte_binding(client: TestClient) -> 
     assert artifact["surface_area_m2"] == pytest.approx(original.json()["surface_area_m2"])
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
+
+
+def test_mesh_preview_rejects_oversized_integer_calibration() -> None:
+    """Direct scientific API must not leak float conversion overflow."""
+    from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
+
+    with pytest.raises(ValueError, match="meters_per_unit must be finite"):
+        measure_mesh_preview(
+            vertices=[[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+            faces=[[0, 1, 2]],
+            meters_per_unit=10**1000,
+            calibration_method="ruler",
+            calibration_evidence="Unverified test calibration",
+        )
