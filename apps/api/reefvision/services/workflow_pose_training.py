@@ -658,6 +658,8 @@ def _reused_pose_training_result(
     checkpoint_sha256, checkpoint_size = (
         checkpoint_integrity if checkpoint_integrity is not None else hash_model_file(checkpoint)
     )
+    if checkpoint_size == 0:
+        raise ValidationError("Recovered pose training checkpoint is empty")
 
     # Completed workflow retries must not silently relabel changed model bytes
     # as the original scientific result. Legacy runs without a recorded digest
