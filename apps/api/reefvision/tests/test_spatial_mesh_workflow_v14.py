@@ -746,7 +746,6 @@ def test_saved_obj_workflow_calibration_scaling_reference(client: TestClient, sc
     )
 
 
-
 def test_obj_calibration_changes_units_not_source_geometry(client: TestClient) -> None:
     """A revised caller scale cannot silently rewrite source geometry identity."""
     project = create_project(client, "Calibration provenance invariance")
@@ -767,9 +766,7 @@ def test_obj_calibration_changes_units_not_source_geometry(client: TestClient) -
         == second["provenance"]["source_payload_sha256"]
     )
     assert second["surface_area_m2"] == pytest.approx(4 * first["surface_area_m2"])
-    assert second["boundary_edge_length_m"] == pytest.approx(
-        2 * first["boundary_edge_length_m"]
-    )
+    assert second["boundary_edge_length_m"] == pytest.approx(2 * first["boundary_edge_length_m"])
     assert second["axis_aligned_dimensions_m"] == pytest.approx(
         [2 * value for value in first["axis_aligned_dimensions_m"]]
     )
