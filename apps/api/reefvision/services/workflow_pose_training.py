@@ -778,7 +778,9 @@ def _reused_pose_training_result(
             experiment.dataset_version_id != run.dataset_version_id
             or not isinstance(experiment.summary_metrics_json, dict)
             or experiment.summary_metrics_json != run.metrics_json
-            or list(experiment.comparison_warnings_json or []) != list(run.warnings_json or [])
+            or not isinstance(experiment.comparison_warnings_json, list)
+            or not isinstance(run.warnings_json, list)
+            or experiment.comparison_warnings_json != run.warnings_json
         ):
             raise ValidationError("Recovered pose-training experiment provenance changed")
 
