@@ -1378,3 +1378,38 @@ describe("gallery navigation during asynchronous page refresh", () => {
     }
   });
 });
+
+describe("camera gallery wrap across paginated image sets", () => {
+  it("wraps between the first and last camera pages without producing an invalid index", () => {
+    expect(
+      resolveGalleryNavigation({
+        action: "previous",
+        index: 0,
+        itemCount: 2,
+        page: 1,
+        pages: 4,
+        wrap: true,
+      }),
+    ).toEqual({ page: 4, edge: "last" });
+    expect(
+      resolveGalleryNavigation({
+        action: "next",
+        index: 0,
+        itemCount: 1,
+        page: 4,
+        pages: 4,
+        wrap: true,
+      }),
+    ).toEqual({ page: 1, edge: "first" });
+    expect(
+      resolveGalleryNavigation({
+        action: "next",
+        index: 0,
+        itemCount: 1,
+        page: 4,
+        pages: 4,
+        wrap: false,
+      }),
+    ).toBeNull();
+  });
+});
