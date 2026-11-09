@@ -56,8 +56,8 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             root = Path(directory)
             blocked = root / "blocked.jpg"
             good = root / "good.jpeg"
-            blocked.write_bytes(b"\\xff\\xd8blocked\\xff\\xd9")
-            good.write_bytes(b"\\xff\\xd8good\\xff\\xd9")
+            blocked.write_bytes(b"\xff\xd8blocked\xff\xd9")
+            good.write_bytes(b"\xff\xd8good\xff\xd9")
             original_open = Path.open
 
             def selective_open(path: Path, *args: object, **kwargs: object):
@@ -69,7 +69,7 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                 records, errors = MODULE.inventory(root)
             self.assertEqual([record["path"] for record in records], ["good.jpeg"])
             self.assertEqual(errors, ["cannot read JPEG fixture: blocked.jpg: PermissionError"])
-            self.assertEqual(blocked.read_bytes(), b"\\xff\\xd8blocked\\xff\\xd9")
+            self.assertEqual(blocked.read_bytes(), b"\xff\xd8blocked\xff\xd9")
 
     def test_empty_fixture_directory_is_not_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
