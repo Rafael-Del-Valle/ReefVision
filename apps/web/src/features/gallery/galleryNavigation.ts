@@ -145,6 +145,10 @@ export function parseGalleryPageDraft(
   draft: string,
   totalPages: number,
 ): number | null {
+  // WebView2 event payloads and restored UI state can violate TypeScript's
+  // compile-time string contract. Never let a malformed page draft interrupt
+  // the gallery or its initial-image viewport.
+  if (typeof draft !== "string") return null;
   if (!Number.isSafeInteger(totalPages) || totalPages < 1) return null;
   // Reject oversized input before trimming so pasted whitespace cannot force
   // an unnecessary full-string normalization on the gallery UI thread.
