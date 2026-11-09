@@ -60,7 +60,10 @@ def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
             "sha256": digest.hexdigest(),
             "jpeg_boundary_markers": signature_ok,
         })
-    if not records:
+    # A read failure is not evidence that the fixture directory is empty.
+    # Preserve the actionable read/integrity error without adding a false
+    # missing-fixtures diagnosis when matching camera files were encountered.
+    if not records and not errors:
         errors.append("no JPEG-family fixtures found")
     return records, errors
 
