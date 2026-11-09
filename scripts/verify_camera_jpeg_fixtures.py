@@ -12,7 +12,7 @@ import hashlib
 import json
 from pathlib import Path
 
-JPEG_SUFFIXES = {".jpg", ".jpeg"}
+JPEG_SUFFIXES = {".jpg", ".jpeg", ".jpe", ".jfif", ".jfi", ".jif"}
 JPEG_SOI = b"\xff\xd8"
 JPEG_EOI = b"\xff\xd9"
 
@@ -49,7 +49,7 @@ def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
             "jpeg_boundary_markers": signature_ok,
         })
     if not records:
-        errors.append("no JPG/JPEG fixtures found")
+        errors.append("no JPEG-family fixtures found")
     return records, errors
 
 
