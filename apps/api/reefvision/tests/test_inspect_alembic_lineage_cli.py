@@ -137,7 +137,6 @@ def test_partial_migration_families_never_imply_safe_upgrade(tmp_path, tables, e
     assert path.read_bytes() == before
 
 
-
 @pytest.mark.parametrize(
     ("revision_value", "expected_warning"),
     [
