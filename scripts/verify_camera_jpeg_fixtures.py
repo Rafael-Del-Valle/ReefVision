@@ -31,13 +31,17 @@ def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
         first = b""
         tail = b""
         size = 0
-        with path.open("rb") as stream:
-            for block in iter(lambda: stream.read(1024 * 1024), b""):
-                if not first:
-                    first = block[:2]
-                tail = (tail + block)[-2:]
-                size += len(block)
-                digest.update(block)
+        try:
+            with path.open("rb") as stream:
+                for block in iter(lambda: stream.read(1024 * 1024), b""):
+                    if not first:
+                        first = block[:2]
+                    tail = (tail + block)[-2:]
+                    size += len(block)
+                    digest.update(block)
+        except OSError as exc:
+            errors.append(f"cannot read JPEG fixture: {relative}: {type(exc).__name__}")
+            continue
         signature_ok = first == JPEG_SOI and tail == JPEG_EOI
         if not signature_ok:
             errors.append(f"invalid JPEG boundary markers: {relative}")
