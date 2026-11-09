@@ -16,7 +16,6 @@ def test_nonfinite_coordinate():
         triangle_area((0, 0, 0), (1, 0, 0), (float("nan"), 1, 0))
 
 
-
 @pytest.mark.parametrize("invalid", [True, False, "1", None, 1 + 0j])
 def test_triangle_area_rejects_implicit_coordinate_coercion(invalid: object) -> None:
     """The shared primitive must not treat flags or text as physical coordinates."""
