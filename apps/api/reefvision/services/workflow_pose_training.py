@@ -281,10 +281,10 @@ def _seed_pose_model(
     if "project_id" in payload and payload["project_id"] != project_id:
         raise ValidationError("Pose retraining seed artifact project lineage changed")
 
-    model_id = str(payload.get("model_id") or "")
+    model_id = payload.get("model_id")
 
-    if not model_id:
-        raise ValidationError("Pose retraining requires a registered seed model")
+    if not isinstance(model_id, str) or not model_id.strip():
+        raise ValidationError("Pose retraining requires a nonempty string registered seed model ID")
 
     model = session.get(
         ModelRegistration,
