@@ -130,7 +130,7 @@ def _pose_dataset(
 ) -> PoseTrainingDataset:
     # A connected artifact's explicit project identity is a provenance assertion.
     # Null must not be interpreted as an omitted project when replaying a graph.
-    if "project_id" in payload and str(payload["project_id"]) != project_id:
+    if "project_id" in payload and payload["project_id"] != project_id:
         raise ValidationError(f"Pose {role} dataset belongs to another project")
 
     dataset_id = payload.get("dataset_id")
