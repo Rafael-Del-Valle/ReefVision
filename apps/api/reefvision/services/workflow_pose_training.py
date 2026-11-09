@@ -1624,6 +1624,13 @@ def execute_pose_model_training_adapter(
         "validation_dataset",
     )
 
+    # Execution lineage identifiers must not be silently stringified from
+    # malformed workflow parameters (for example, numeric or object values).
+    for lineage_key in ("__workflow_run_id", "__workflow_node_run_id"):
+        lineage_id = parameters.get(lineage_key)
+        if lineage_id is not None and (not isinstance(lineage_id, str) or not lineage_id.strip()):
+            raise ValidationError(f"Pose training {lineage_key} must be a nonempty string")
+
     result = create_pose_workflow_training_result(
         session,
         settings,
