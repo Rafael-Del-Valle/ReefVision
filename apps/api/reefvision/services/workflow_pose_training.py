@@ -825,6 +825,8 @@ def _reused_pose_training_result(
             ):
                 raise ValidationError("Recovered pose-training experiment provenance changed")
 
+    if is_current_snapshot and not isinstance(run.evaluation_config_json, dict):
+        raise ValidationError("Recovered pose-training evaluation config must be a JSON object")
     validation_mode = str(dict(run.evaluation_config_json or {}).get("validation_mode") or "none")
 
     return {
