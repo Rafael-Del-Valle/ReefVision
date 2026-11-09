@@ -70,7 +70,7 @@ foreach ($entry in $expected) {
   }
   if (-not $seen.Add($relative)) { throw "Duplicate manifest path: $relative" }
   $full = [IO.Path]::GetFullPath((Join-Path $root $relative))
-  $withinRoot = $full.StartsWith($root.TrimEnd('\\') + '\\', [StringComparison]::OrdinalIgnoreCase)
+  $withinRoot = $full.StartsWith($root.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)
   if (-not $withinRoot -or -not (Test-Path -LiteralPath $full -PathType Leaf)) {
     throw "Missing or escaped source file: $relative"
   }
@@ -81,7 +81,7 @@ foreach ($entry in $expected) {
   }
 }
 $actual = @(Get-ChildItem -LiteralPath $root -File -Recurse |
-  Where-Object { $_.Extension -match '^(?i:\\.(jpg|jpeg|jpe|jfif))$' })
+  Where-Object { $_.Extension -match '^(?i:\.(jpg|jpeg|jpe|jfif))$' })
 if ($actual.Count -ne $expected.Count) { throw 'JPEG source set changed since manifest creation' }
 "PASS: $($expected.Count) original JPEG files match pre-import SHA-256 and size"
 ```
