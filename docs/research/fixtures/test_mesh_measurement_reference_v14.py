@@ -59,6 +59,25 @@ class MeshMeasurementReferenceTests(unittest.TestCase):
                     meters_per_unit=1, absolute_scale_bound=0,
                 )
 
+    def test_coincident_faces_with_distinct_indices_rejected(self) -> None:
+        # Mesh exporters can duplicate seam vertices. Distinct indices do not
+        # imply distinct observed coral surface patches.
+        vertices = [
+            (0, 0, 0), (1, 0, 0), (0, 1, 0),
+            (0, 1, 0), (0, 0, 0), (1, 0, 0),
+        ]
+        for faces in [
+            [(0, 1, 2), (3, 4, 5)],
+            [(3, 4, 5), (0, 1, 2)],
+        ]:
+            with self.subTest(faces=faces), self.assertRaisesRegex(
+                ValueError, "duplicate triangle surface"
+            ):
+                measure_triangle_mesh(
+                    vertices, faces, meters_per_unit=0.01,
+                    absolute_scale_bound=0.001,
+                )
+
     def test_unreferenced_vertices_do_not_inflate_dimensions(self) -> None:
         vertices = [(0, 0, 0), (2, 0, 0), (0, 3, 0), (1000, -500, 900)]
         result = measure_triangle_mesh(
