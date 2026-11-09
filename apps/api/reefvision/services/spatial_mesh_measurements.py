@@ -11,11 +11,7 @@ def triangle_area(
     c: tuple[float, float, float],
 ) -> float:
     """Return uncalibrated surface area for one triangle."""
-    if any(
-        type(x) not in (int, float) or not isfinite(x)
-        for point in (a, b, c)
-        for x in point
-    ):
+    if any(type(x) not in (int, float) or not isfinite(x) for point in (a, b, c) for x in point):
         raise ValueError("3D coordinates must be finite real numbers")
     u = [b[i] - a[i] for i in range(3)]
     v = [c[i] - a[i] for i in range(3)]
