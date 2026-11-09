@@ -786,7 +786,9 @@ def _reused_pose_training_result(
         # workflow snapshots, however, removing a frozen lineage assertion
         # must not downgrade the experiment registry to unchecked evidence.
         if is_current_snapshot and not isinstance(experiment.artifact_manifest_json, dict):
-            raise ValidationError("Recovered pose-training experiment manifest must be a JSON object")
+            raise ValidationError(
+                "Recovered pose-training experiment manifest must be a JSON object"
+            )
         experiment_manifest = dict(experiment.artifact_manifest_json or {})
         # Current experiments expose native metric rows and worker artifacts as
         # well as checkpoint lineage. All persisted scientific evidence must
