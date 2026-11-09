@@ -37,6 +37,12 @@ def test_triangle_area_rejects_non_vertex_containers(invalid: object) -> None:
         triangle_area((0, 0, 0), invalid, (0, 1, 0))  # type: ignore[arg-type]
 
 
+def test_triangle_area_rejects_integer_coordinates_too_large_for_float() -> None:
+    """Huge integer imports must raise a scientific error, not OverflowError."""
+    with pytest.raises(ValueError, match="finite real numbers"):
+        triangle_area((0, 0, 0), (10**1000, 0, 0), (0, 1, 0))
+
+
 def test_independent_calibrated_cube_reference_area_and_extent() -> None:
     """A 2-unit cube has six faces, independent of its 12 triangle facets."""
     from math import sqrt
