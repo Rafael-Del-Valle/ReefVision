@@ -139,7 +139,7 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             parent = Path(directory)
             actual = parent / "actual"
             actual.mkdir()
-            (actual / "camera.jpg").write_bytes(b"\\xff\\xd8payload\\xff\\xd9")
+            (actual / "camera.jpg").write_bytes(b"\xff\xd8payload\xff\xd9")
             linked = parent / "linked"
             try:
                 linked.symlink_to(actual, target_is_directory=True)
@@ -153,7 +153,7 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual(caught.exception.code, 2)
             self.assertIn("must not be a symbolic link", output.getvalue())
             self.assertEqual((actual / "camera.jpg").read_bytes(),
-                             b"\\xff\\xd8payload\\xff\\xd9")
+                             b"\xff\xd8payload\xff\xd9")
 
     def test_empty_fixture_directory_is_not_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
