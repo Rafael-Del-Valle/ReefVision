@@ -819,6 +819,24 @@ def test_saved_obj_workflow_enforces_source_byte_binding(client: TestClient) -> 
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
 
+    # A second execution of the persisted graph must reproduce the same
+    # scientific payload and source-byte binding, not merely the same area.
+    rerun = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert rerun.status_code == 202, rerun.text
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(rerun.json()["job_id"])
+    )
+    rerun_detail = client.get(f"/api/v1/workflow-runs/{rerun.json()['id']}")
+    assert rerun_detail.status_code == 200, rerun_detail.text
+    assert rerun_detail.json()["run"]["status"] == "succeeded"
+    rerun_artifact = next(
+        item for item in rerun_detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert rerun_artifact["payload_json"] == artifact
+    assert rerun_artifact["payload_json"]["provenance"]["source_payload_sha256"] == source_sha
+    assert rerun_artifact["payload_json"]["provenance"]["calibration_verified"] is False
+
 
 def test_mesh_preview_rejects_oversized_integer_calibration() -> None:
     """Direct scientific API must not leak float conversion overflow."""
