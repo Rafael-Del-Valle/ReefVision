@@ -1413,3 +1413,12 @@ describe("camera gallery wrap across paginated image sets", () => {
     ).toBeNull();
   });
 });
+
+describe("malformed WebView2 gallery page drafts", () => {
+  it("rejects non-string runtime values without interrupting image navigation", () => {
+    for (const draft of [null, undefined, 2, {}, ["2"]]) {
+      expect(parseGalleryPageDraft(draft as unknown as string, 8)).toBeNull();
+    }
+    expect(parseGalleryPageDraft("2", 8)).toBe(2);
+  });
+});
