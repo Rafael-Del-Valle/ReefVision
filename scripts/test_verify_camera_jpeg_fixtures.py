@@ -106,6 +106,33 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual(manifest["files"][0]["jpeg_boundary_markers"], False)
             self.assertEqual(manifest["errors"], ["invalid JPEG boundary markers: bad.jfif"])
 
+    def test_changed_fixture_during_hash_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = root / "changing.jpg"
+            original = b"\\xff\\xd8payload\\xff\\xd9"
+            fixture.write_bytes(original)
+            original_stat = Path.stat
+            calls = 0
+
+            def changed_stat(path: Path, *args: object, **kwargs: object):
+                nonlocal calls
+                result = original_stat(path, *args, **kwargs)
+                if path == fixture:
+                    calls += 1
+                    if calls >= 2:
+                        from unittest.mock import Mock
+                        modified = Mock(wraps=result)
+                        modified.st_mtime_ns = result.st_mtime_ns + 1
+                        return modified
+                return result
+
+            with mock.patch.object(Path, "stat", changed_stat):
+                records, errors = MODULE.inventory(root)
+            self.assertEqual(records, [])
+            self.assertIn("JPEG fixture changed during inventory: changing.jpg", errors)
+            self.assertEqual(fixture.read_bytes(), original)
+
     def test_empty_fixture_directory_is_not_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             records, errors = MODULE.inventory(Path(directory))
