@@ -777,7 +777,7 @@ def _reused_pose_training_result(
         if is_current_snapshot and (
             experiment.dataset_version_id != run.dataset_version_id
             or not isinstance(experiment.summary_metrics_json, dict)
-        or experiment.summary_metrics_json != run.metrics_json
+            or experiment.summary_metrics_json != run.metrics_json
             or list(experiment.comparison_warnings_json or []) != list(run.warnings_json or [])
         ):
             raise ValidationError("Recovered pose-training experiment provenance changed")
@@ -1533,7 +1533,7 @@ def create_pose_workflow_training_result(
     if (
         experiment.dataset_version_id != run.dataset_version_id
         or not isinstance(experiment.summary_metrics_json, dict)
-            or experiment.summary_metrics_json != run.metrics_json
+        or experiment.summary_metrics_json != run.metrics_json
         or list(experiment.comparison_warnings_json or []) != list(run.warnings_json or [])
     ):
         raise ValidationError("Completed pose training experiment summary provenance changed")
