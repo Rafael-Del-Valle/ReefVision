@@ -73,7 +73,10 @@ def main() -> int:
     # owner-approved camera fixture directory.
     if args.directory.is_symlink():
         parser.error("camera fixture directory must not be a symbolic link")
-    root = args.directory.resolve(strict=True)
+    try:
+        root = args.directory.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        parser.error(f"cannot resolve camera fixture directory: {type(exc).__name__}")
     if not root.is_dir():
         parser.error("directory must be a directory")
     records, errors = inventory(root)
