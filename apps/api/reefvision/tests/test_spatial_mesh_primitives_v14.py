@@ -43,6 +43,13 @@ def test_triangle_area_rejects_integer_coordinates_too_large_for_float() -> None
         triangle_area((0, 0, 0), (10**1000, 0, 0), (0, 1, 0))
 
 
+def test_triangle_area_rejects_cross_product_integer_overflow() -> None:
+    """Finite imported integer vertices can overflow while computing a cross product."""
+    huge = 10**200
+    with pytest.raises(ValueError, match="3D triangle area overflowed"):
+        triangle_area((0, 0, 0), (huge, 0, 0), (0, huge, 0))
+
+
 def test_independent_calibrated_cube_reference_area_and_extent() -> None:
     """A 2-unit cube has six faces, independent of its 12 triangle facets."""
     from math import sqrt
