@@ -30,6 +30,13 @@ def test_triangle_area_rejects_wrong_coordinate_dimensions(invalid: tuple[int, .
         triangle_area((0, 0, 0), invalid, (0, 1, 0))  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("invalid", [None, 0, 1.5, True, "0,0,0", {"x": 0}])
+def test_triangle_area_rejects_non_vertex_containers(invalid: object) -> None:
+    """Malformed imported vertices must produce a scientific validation error."""
+    with pytest.raises(ValueError, match="exactly three components"):
+        triangle_area((0, 0, 0), invalid, (0, 1, 0))  # type: ignore[arg-type]
+
+
 def test_independent_calibrated_cube_reference_area_and_extent() -> None:
     """A 2-unit cube has six faces, independent of its 12 triangle facets."""
     from math import sqrt
