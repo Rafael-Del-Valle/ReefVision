@@ -1500,11 +1500,14 @@ def create_pose_workflow_training_result(
             or not artifact_checkpoint.is_file()
         ):
             raise ValidationError("Completed pose training checkpoint artifact path changed")
-        digest = (
-            checkpoint_sha256
+        artifact_digest, artifact_size = (
+            (checkpoint_sha256, checkpoint_size)
             if artifact_checkpoint.resolve() == checkpoint.resolve()
-            else hash_model_file(artifact_checkpoint)[0]
+            else hash_model_file(artifact_checkpoint)
         )
+        if artifact_size == 0:
+            raise ValidationError("Completed pose training checkpoint artifact is empty")
+        digest = artifact_digest
         if digest_field in worker_manifest and worker_manifest[digest_field] != digest:
             raise ValidationError(
                 "Completed pose training worker checkpoint artifact checksum changed"
