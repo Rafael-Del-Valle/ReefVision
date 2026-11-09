@@ -1320,6 +1320,35 @@ describe("resolveGalleryNavigation", () => {
   });
 });
 
+describe("gallery recovery from interrupted preference writes", () => {
+  it("starts on the first camera image when WebView2 stores truncated JSON", () => {
+    const storage = memoryStorage({
+      "reefvision.gallery.interrupted-camera.v1":
+        '{"imageId":"camera-17","page":',
+    });
+    expect(readGalleryPreference(storage, "interrupted-camera")).toEqual({
+      imageId: null,
+      page: 1,
+      wrap: false,
+    });
+
+    // Recovery must be non-destructive until a real image selection is saved.
+    expect(storage.getItem("reefvision.gallery.interrupted-camera.v1")).toBe(
+      '{"imageId":"camera-17","page":',
+    );
+    writeGalleryPreference(storage, "interrupted-camera", {
+      imageId: "camera-18",
+      page: 2,
+      wrap: true,
+    });
+    expect(readGalleryPreference(storage, "interrupted-camera")).toEqual({
+      imageId: "camera-18",
+      page: 2,
+      wrap: true,
+    });
+  });
+});
+
 describe("gallery navigation during asynchronous page refresh", () => {
   it("never requests a stale or out-of-range image after the final page shrinks", () => {
     const current = {
