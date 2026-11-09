@@ -271,7 +271,10 @@ def test_earlier_review_revision_rejects_altered_event_request_identity(
             for _ in range(2):
                 with pytest.raises(RuntimeError, match="idempotency UNIQUE constraint"):
                     assert_compatible_revision_0038(connection)
-                assert tuple(connection.execute(text("SELECT * FROM review_queue_item_events"))) == before
+                assert (
+                    tuple(connection.execute(text("SELECT * FROM review_queue_item_events")))
+                    == before
+                )
                 assert connection.scalar(text("SELECT value FROM observations")) == "preserved"
                 assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
     finally:
