@@ -770,6 +770,15 @@ def test_obj_calibration_changes_units_not_source_geometry(client: TestClient) -
     assert second["axis_aligned_dimensions_m"] == pytest.approx(
         [2 * value for value in first["axis_aligned_dimensions_m"]]
     )
+    assert second["area_scale_uncertainty_m2"] == pytest.approx(
+        4 * first["area_scale_uncertainty_m2"]
+    )
+    assert second["axis_aligned_dimension_scale_uncertainty_m"] == pytest.approx(
+        [2 * value for value in first["axis_aligned_dimension_scale_uncertainty_m"]]
+    )
+    assert second["axis_aligned_bounding_box_diagonal_scale_uncertainty_m"] == pytest.approx(
+        2 * first["axis_aligned_bounding_box_diagonal_scale_uncertainty_m"]
+    )
     for observation in observations:
         assert observation["measurement_status"] == "caller_supplied_unverified"
         assert observation["provenance"]["calibration_verified"] is False
