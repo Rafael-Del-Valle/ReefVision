@@ -413,8 +413,8 @@ def _completed_workflow_pose_training_run(
         snapshot = dict(candidate.draft_snapshot_json or {})
 
         if (
-            str(snapshot.get("workflow_run_id") or "") != workflow_run_id
-            or str(snapshot.get("workflow_node_run_id") or "") != workflow_node_run_id
+            snapshot.get("workflow_run_id") != workflow_run_id
+            or snapshot.get("workflow_node_run_id") != workflow_node_run_id
         ):
             continue
 
