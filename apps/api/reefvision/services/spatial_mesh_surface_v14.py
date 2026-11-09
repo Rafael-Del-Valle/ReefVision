@@ -111,8 +111,8 @@ def measure_mesh_preview(
         raise ValueError("Calibration evidence must be provided")
     if relative_scale_uncertainty is not None and (
         type(relative_scale_uncertainty) not in (int, float)
-        or not isfinite(relative_scale_uncertainty)
         or not 0 <= relative_scale_uncertainty <= 1
+        or not isfinite(relative_scale_uncertainty)
     ):
         raise ValueError("relative_scale_uncertainty must be between 0 and 1")
 
