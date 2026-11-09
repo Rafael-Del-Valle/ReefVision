@@ -135,3 +135,53 @@ def test_partial_migration_families_never_imply_safe_upgrade(tmp_path, tables, e
     assert result["upgrade_authorized"] is False
     assert all(result["inventory"][table]["rows"] == 1 for table in tables)
     assert path.read_bytes() == before
+
+
+
+@pytest.mark.parametrize(
+    ("revision_value", "expected_warning"),
+    [
+        (b"0038", "invalid_revision_marker_count_or_value"),
+        (38, "invalid_revision_marker_count_or_value"),
+        (" 0038", "invalid_revision_marker_count_or_value"),
+        ("0038\n", "invalid_revision_marker_count_or_value"),
+    ],
+)
+def test_noncanonical_revision_marker_is_json_safe_and_read_only(
+    tmp_path, revision_value, expected_warning
+):
+    """A corrupted revision stamp must not crash JSON reporting or authorize migration."""
+    import json
+
+    path = tmp_path / "research.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE alembic_version (version_num)")
+        db.execute("INSERT INTO alembic_version VALUES (?)", (revision_value,))
+        db.commit()
+    before = path.read_bytes()
+    result = module.inspect(path)
+    assert expected_warning in result["warnings"]
+    assert result["upgrade_authorized"] is False
+    assert json.loads(json.dumps(result))["upgrade_authorized"] is False
+    assert path.read_bytes() == before
+
+
+def test_foreign_key_violations_are_reported_without_mutation(tmp_path):
+    """Orphaned scientific references must be visible even when SQLite integrity passes."""
+    path = tmp_path / "research.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE alembic_version (version_num TEXT)")
+        db.execute("INSERT INTO alembic_version VALUES ('0038')")
+        db.execute("CREATE TABLE parent (id INTEGER PRIMARY KEY)")
+        db.execute(
+            "CREATE TABLE scientific_records (id INTEGER PRIMARY KEY, parent_id INTEGER "
+            "REFERENCES parent(id))"
+        )
+        db.execute("INSERT INTO scientific_records VALUES (1, 999)")
+        db.commit()
+    before = path.read_bytes()
+    result = module.inspect(path)
+    assert result["sqlite_foreign_key_violations"] == 1
+    assert "sqlite_foreign_key_violations" in result["warnings"]
+    assert result["upgrade_authorized"] is False
+    assert path.read_bytes() == before
