@@ -1458,6 +1458,8 @@ def create_pose_workflow_training_result(
         raise ValidationError("Completed pose training checkpoint is missing")
 
     checkpoint_sha256, checkpoint_size = hash_model_file(checkpoint)
+    if checkpoint_size == 0:
+        raise ValidationError("Completed pose training checkpoint is empty")
 
     # A worker may have already recorded a checkpoint identity. Do not
     # overwrite conflicting evidence when finalizing a saved workflow node.
