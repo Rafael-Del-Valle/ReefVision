@@ -1574,8 +1574,10 @@ def create_pose_workflow_training_result(
     # Upgrade the queued v2 snapshot only when the worker has completed.
     # Historical completed v2 snapshots remain readable, while new results
     # freeze epoch-level metrics in the same transaction as checkpoint hashes.
+    if not isinstance(run.draft_snapshot_json, dict):
+        raise ValidationError("Completed pose-training frozen snapshot must be a JSON object")
     run.draft_snapshot_json = {
-        **dict(run.draft_snapshot_json or {}),
+        **run.draft_snapshot_json,
         "schema_version": "pose-workflow-training-snapshot-0003",
         "metrics_history_sha256": canonical_json_sha256(dict(run.metrics_history_json or {})),
     }
