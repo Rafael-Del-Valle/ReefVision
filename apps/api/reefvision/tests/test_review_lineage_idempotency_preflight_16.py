@@ -160,6 +160,10 @@ def test_earlier_review_revision_rejects_nullable_reviewer_attribution(
                     "created_at",
                 )
             }
+            # Preserve the valid primary-key contract when testing other nullable
+            # attribution fields. A nullable id is itself a primary-key violation.
+            if nullable_field != "id":
+                columns["id"] += " PRIMARY KEY"
             connection.execute(
                 text(
                     "CREATE TABLE review_queue_item_events ("
@@ -183,7 +187,14 @@ def test_earlier_review_revision_rejects_nullable_reviewer_attribution(
             )
             before = tuple(connection.execute(text("SELECT * FROM review_queue_item_events")))
             for _ in range(2):
-                with pytest.raises(RuntimeError, match="nullable review-event attribution"):
+                with pytest.raises(
+                    RuntimeError,
+                    match=(
+                        "review-event primary key must be exactly id"
+                        if nullable_field == "id"
+                        else "nullable review-event attribution"
+                    ),
+                ):
                     assert_compatible_revision_0038(connection)
                 assert (
                     tuple(connection.execute(text("SELECT * FROM review_queue_item_events")))
