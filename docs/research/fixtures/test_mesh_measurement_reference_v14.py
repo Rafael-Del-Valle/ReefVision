@@ -40,6 +40,20 @@ class MeshMeasurementReferenceTests(unittest.TestCase):
                                       [(0, 1, 2)], meters_per_unit=scale,
                                       absolute_scale_bound=bound)
 
+    def test_nonnumeric_and_boolean_coordinates_rejected(self) -> None:
+        # bool is accepted by math.isfinite but is not a measured coordinate.
+        # Strings and missing values should produce a scientific input error,
+        # not leak a Python TypeError from the arithmetic implementation.
+        for invalid in [True, False, "1", None, complex(1, 0)]:
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(
+                ValueError, "vertices must be finite numeric 3D coordinates"
+            ):
+                measure_triangle_mesh(
+                    [(0, 0, 0), (invalid, 0, 0), (0, 1, 0)],
+                    [(0, 1, 2)], meters_per_unit=1,
+                    absolute_scale_bound=0,
+                )
+
     def test_degenerate_and_invalid_faces_rejected(self) -> None:
         vertices = [(0, 0, 0), (1, 0, 0), (2, 0, 0)]
         for face in [(0, 1, 2), (0, 1, 1), (0, 1, 3), (0, True, 2)]:
