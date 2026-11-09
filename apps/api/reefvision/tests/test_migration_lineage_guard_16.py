@@ -235,15 +235,20 @@ def test_revision_0039_rejects_obsolete_event_check_without_writes(
         )
         connection.execute(
             text(
-                f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}, "
+                f"CREATE TABLE review_queue_item_events ({_REVIEW_REQUEST_SCHEMA}, "
+                "CONSTRAINT uq_review_queue_item_event_request "
+                "UNIQUE (review_queue_item_id, client_request_id), "
                 "CONSTRAINT ck_review_queue_item_event_type "
                 f"CHECK (event_type IN ({allowed})))"
             )
         )
         connection.execute(
             text(
-                "INSERT INTO review_queue_item_events (id, event_type) "
-                "VALUES ('preserved-event', 'comment')"
+                "INSERT INTO review_queue_item_events "
+                "(id, review_queue_id, review_queue_item_id, project_id, "
+                "client_request_id, event_type, actor, created_at) "
+                "VALUES ('preserved-event', 'queue-1', 'item-1', 'project-1', "
+                "'request-1', 'comment', 'researcher', '2026-11-09')"
             )
         )
         if should_reject:
