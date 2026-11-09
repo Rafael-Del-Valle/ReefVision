@@ -830,12 +830,14 @@ def test_saved_obj_workflow_enforces_source_byte_binding(client: TestClient) -> 
     assert rerun_detail.status_code == 200, rerun_detail.text
     assert rerun_detail.json()["run"]["status"] == "succeeded"
     rerun_artifact = next(
-        item for item in rerun_detail.json()["artifacts"]
+        item
+        for item in rerun_detail.json()["artifacts"]
         if item["data_type"] == "mesh_measurement_preview"
     )
     assert rerun_artifact["payload_json"] == artifact
     original_artifact = next(
-        item for item in detail.json()["artifacts"]
+        item
+        for item in detail.json()["artifacts"]
         if item["data_type"] == "mesh_measurement_preview"
     )
     assert rerun_artifact["payload_sha256"] == original_artifact["payload_sha256"]
