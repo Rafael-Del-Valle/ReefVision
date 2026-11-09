@@ -63,32 +63,20 @@ def _add_native_review_table(
             allowed_events += ", 'triage_complete'"
         event_type_check = (
             f", CONSTRAINT ck_review_queue_item_event_type CHECK (event_type IN ({allowed_events}))"
-            if stamped_revision in {"0039", "0040", "0041"}
+            if stamped_revision in {"0038", "0039", "0040", "0041"}
             else ""
         )
         event_type_decl = "event_type TEXT" if nullable_event_type else "event_type TEXT NOT NULL"
-        # Revision 0041 requires the same named idempotency constraint as the
-        # real audit migration. A bare synthetic stamp must not bypass it.
+        # All review revisions inherit the original 0038 audit identity,
+        # attribution and named idempotency constraint. Keep synthetic
+        # desktop startup fixtures faithful to the historical migration.
         request_identity = (
             ", CONSTRAINT uq_review_queue_item_event_request "
             "UNIQUE (review_queue_item_id, client_request_id)"
-            if stamped_revision == "0041"
-            else ""
         )
-        request_item_decl = (
-            "review_queue_item_id TEXT NOT NULL"
-            if stamped_revision == "0041"
-            else "review_queue_item_id TEXT"
-        )
-        request_key_decl = (
-            "client_request_id TEXT NOT NULL"
-            if stamped_revision == "0041"
-            else "client_request_id TEXT"
-        )
-        # A stamped 0041 fixture must retain the actual 0038 NOT NULL
-        # attribution contract; otherwise the desktop guard correctly refuses
-        # it before exercising the intended startup/upgrade behavior.
-        attribution_required = " NOT NULL" if stamped_revision == "0041" else ""
+        request_item_decl = "review_queue_item_id TEXT NOT NULL"
+        request_key_decl = "client_request_id TEXT NOT NULL"
+        attribution_required = " NOT NULL"
         connection.execute(
             "CREATE TABLE review_queue_item_events ("
             f"id TEXT PRIMARY KEY{attribution_required}, "
