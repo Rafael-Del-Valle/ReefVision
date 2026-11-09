@@ -53,3 +53,36 @@ $manifest | Format-Table -AutoSize
 Use separate physical camera originals for `.jpg`, `.JPG`, `.jpeg`, and `.JPEG` when available. For `.jpe` and `.jfif`, record whether the sample is genuinely camera-generated or an explicitly labeled **alias copy**; renaming a file only exercises extension routing and does **not** validate decoder compatibility. Record EXIF orientation, ICC profile (including CMYK if present), dimensions, and camera model from a trusted metadata reader; never infer them from the extension. Test import, thumbnail, first-image viewport, full-resolution image, navigation, annotation overlay, and reopen for every sample. Unsupported color profiles or aliases must produce a clear recoverable error rather than a blank viewport.
 
 After import, rerun `Get-FileHash` against the source paths and compare to the manifest. Record the exact application commit, Windows/WebView2 version, per-file observed result, screenshots and any decode error. Treat missing real-camera samples as **BLOCKED**, not PASS. The manifest script records file identity only; it does not test the application, and its CSV is an output artifact that must not be imported as an image.
+
+## Read-only external training console: process-continuity acceptance
+
+The console is a **viewer**, not a training launcher or controller. Test with an actual locally trained run whose ID is obtained from ReefVision's job UI/API, not a fabricated ID. Record the run ID, exact commit, training process PID, model architecture, local dataset provenance, and the timestamped source of each reported loss. `box`, `cls`, and `dfl` are only required for training architectures that actually emit those components; mark each unavailable component **NOT EMITTED** with the reason, never manufacture zeroes.
+
+Before opening the external PowerShell window, record a baseline using the real training PID (substitute the observed numeric PID, never an untrusted string):
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$trainingPid = 12345 # replace with the actual numeric PID observed for this run
+if ($trainingPid -le 0 -or $trainingPid -eq $PID) { throw 'Invalid training PID' }
+$before = Get-CimInstance Win32_Process -Filter "ProcessId=$trainingPid"
+if (-not $before) { throw 'Training process not running before monitor test' }
+$beforeIdentity = [pscustomobject]@{
+  ProcessId = $before.ProcessId
+  CreationDate = $before.CreationDate
+  ExecutablePath = $before.ExecutablePath
+}
+$beforeIdentity | Format-List
+```
+
+While training is running, launch the application's documented **read-only** monitor command in a separate PowerShell process. Capture its command line with credentials/tokens redacted, exit code, and timestamped stdout/stderr. Confirm the monitor displays real run status and advancing epoch/step, logs and loss values backed by the same persisted job. Close the monitor **without** sending Ctrl+C to the training terminal. Verify a new checkpoint/log entry or advancing step after monitor exit, then recheck process identity:
+
+```powershell
+$after = Get-CimInstance Win32_Process -Filter "ProcessId=$trainingPid"
+if (-not $after) { throw 'Training process exited during monitor test' }
+if ($after.CreationDate -ne $beforeIdentity.CreationDate) {
+  throw 'PID was reused: training process restarted or was replaced'
+}
+'PASS: original training process remains alive (checkpoint/step progress still needs independent verification)'
+```
+
+Also exercise a nonexistent run ID, path traversal characters, PowerShell metacharacters, unauthorized access, unavailable backend, and log contents containing terminal escape sequences. Confirm that the monitor neither executes log text nor exposes credentials, write endpoints, shell control, or arbitrary filesystem reads. Document actual outputs and access-denial behavior. The PID continuity check alone cannot prove training progressed or that the console is secure; retain independent checkpoint/epoch evidence and code-level command allowlist/argument-escaping review. If no real training run or external monitor is available, record **BLOCKED**, not PASS.
