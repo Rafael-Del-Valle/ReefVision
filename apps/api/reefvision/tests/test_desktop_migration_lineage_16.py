@@ -240,10 +240,13 @@ def test_desktop_verifies_successful_native_review_migration(
             connection.execute(
                 text(
                     "CREATE TABLE review_queue_item_events ("
-                    "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
-                    "project_id TEXT, client_request_id TEXT, "
-                    "event_type TEXT NOT NULL, actor TEXT, "
-                    "comment TEXT, assignee TEXT, created_at TEXT, "
+                    "id TEXT NOT NULL PRIMARY KEY, review_queue_id TEXT NOT NULL, "
+                    "review_queue_item_id TEXT NOT NULL, project_id TEXT NOT NULL, "
+                    "client_request_id TEXT NOT NULL, event_type TEXT NOT NULL, "
+                    "actor TEXT NOT NULL, comment TEXT, assignee TEXT, "
+                    "created_at TEXT NOT NULL, "
+                    "CONSTRAINT uq_review_queue_item_event_request "
+                    "UNIQUE (review_queue_item_id, client_request_id), "
                     "CONSTRAINT ck_review_queue_item_event_type "
                     "CHECK (event_type IN ('comment', 'assign', 'unassign')))"
                 )
