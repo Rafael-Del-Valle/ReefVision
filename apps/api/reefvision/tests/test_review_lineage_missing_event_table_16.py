@@ -23,9 +23,7 @@ def test_stamped_review_revision_without_event_table_preserves_biology(
                 {"revision": revision},
             )
             connection.execute(
-                text(
-                    "CREATE TABLE observations (id TEXT PRIMARY KEY, measurement REAL NOT NULL)"
-                )
+                text("CREATE TABLE observations (id TEXT PRIMARY KEY, measurement REAL NOT NULL)")
             )
             connection.execute(
                 text("INSERT INTO observations VALUES ('coral-1', 12.5)")
@@ -33,13 +31,10 @@ def test_stamped_review_revision_without_event_table_preserves_biology(
             before = tuple(connection.execute(text("SELECT * FROM observations")).all())
             for _ in range(2):
                 with pytest.raises(
-                    RuntimeError, match="not the ReefVision 1.6 review-events lineage"
+                    RuntimeError, match=r"not the ReefVision 1\.6 review-events lineage"
                 ):
                     assert_compatible_revision_0038(connection)
-                assert (
-                    tuple(connection.execute(text("SELECT * FROM observations")).all())
-                    == before
-                )
+                assert tuple(connection.execute(text("SELECT * FROM observations")).all()) == before
                 assert (
                     connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
                 )
