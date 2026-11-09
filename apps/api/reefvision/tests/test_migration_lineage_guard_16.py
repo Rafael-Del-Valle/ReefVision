@@ -46,11 +46,25 @@ def test_review_lineage_is_accepted_without_writes(revision: str) -> None:
         if revision == "0039":
             allowed += ", 'triage_start', 'triage_skip', 'triage_return'"
         check = f", CONSTRAINT ck_review_queue_item_event_type CHECK (event_type IN ({allowed}))"
-        connection.execute(text(f"CREATE TABLE review_queue_item_events ({REVIEW_SCHEMA}{check})"))
+        # Construct a valid 0038/0039 lineage, including the original
+        # idempotency and attribution contracts, before asserting acceptance.
+        schema = (
+            "id TEXT NOT NULL PRIMARY KEY, review_queue_id TEXT NOT NULL, "
+            "review_queue_item_id TEXT NOT NULL, project_id TEXT NOT NULL, "
+            "client_request_id TEXT NOT NULL, event_type TEXT NOT NULL, "
+            "actor TEXT NOT NULL, comment TEXT, assignee TEXT, "
+            "created_at TEXT NOT NULL, "
+            "CONSTRAINT uq_review_queue_item_event_request "
+            "UNIQUE (review_queue_item_id, client_request_id)"
+        )
+        connection.execute(text(f"CREATE TABLE review_queue_item_events ({schema}{check})"))
         connection.execute(
             text(
-                "INSERT INTO review_queue_item_events (id, event_type) "
-                "VALUES ('event-preserved', 'comment')"
+                "INSERT INTO review_queue_item_events "
+                "(id, review_queue_id, review_queue_item_id, project_id, "
+                "client_request_id, event_type, actor, created_at) "
+                "VALUES ('event-preserved', 'queue-1', 'item-1', 'project-1', "
+                "'request-1', 'comment', 'researcher', '2026-11-09')"
             )
         )
         assert_compatible_revision_0038(connection)
