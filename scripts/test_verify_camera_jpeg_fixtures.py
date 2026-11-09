@@ -110,7 +110,7 @@ class CameraFixtureInventoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             fixture = root / "changing.jpg"
-            original = b"\\xff\\xd8payload\\xff\\xd9"
+            original = bytes.fromhex("ffd8") + b"payload" + bytes.fromhex("ffd9")
             fixture.write_bytes(original)
             original_stat = Path.stat
             calls = 0
@@ -132,6 +132,7 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual(records, [])
             self.assertIn("JPEG fixture changed during inventory: changing.jpg", errors)
             self.assertEqual(fixture.read_bytes(), original)
+            self.assertEqual(len(original), 11)
 
     def test_empty_fixture_directory_is_not_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
