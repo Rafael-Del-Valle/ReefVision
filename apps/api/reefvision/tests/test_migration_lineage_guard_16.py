@@ -133,7 +133,19 @@ def test_nullable_audit_event_type_rejected_without_mutating_research_data(
         if revision == "0040":
             allowed += ", 'triage_complete'"
         # The allowlist is correct but a nullable column makes it ineffective.
-        schema = REVIEW_SCHEMA.replace("event_type TEXT NOT NULL", "event_type TEXT")
+        # Keep all unrelated 0038 audit constraints valid so this test
+        # reaches the intentionally malformed event_type column.
+        schema = (
+            "id TEXT NOT NULL PRIMARY KEY, review_queue_id TEXT NOT NULL, "
+            "review_queue_item_id TEXT NOT NULL, project_id TEXT NOT NULL, "
+            "client_request_id TEXT NOT NULL, event_type TEXT NOT NULL, "
+            "actor TEXT NOT NULL, comment TEXT, assignee TEXT, "
+            "created_at TEXT NOT NULL, "
+            "CONSTRAINT uq_review_queue_item_event_request "
+            "UNIQUE (review_queue_item_id, client_request_id)"
+        ).replace(
+            "event_type TEXT NOT NULL", "event_type TEXT"
+        )
         connection.execute(
             text(
                 f"CREATE TABLE review_queue_item_events ({schema}, "
@@ -143,8 +155,11 @@ def test_nullable_audit_event_type_rejected_without_mutating_research_data(
         )
         connection.execute(
             text(
-                "INSERT INTO review_queue_item_events (id, event_type) "
-                "VALUES ('untyped-event', NULL)"
+                "INSERT INTO review_queue_item_events "
+                "(id, review_queue_id, review_queue_item_id, project_id, "
+                "client_request_id, event_type, actor, created_at) "
+                "VALUES ('untyped-event', 'queue-1', 'item-1', 'project-1', "
+                "'request-1', NULL, 'researcher', '2026-11-09')"
             )
         )
         with pytest.raises(RuntimeError, match="event_type is nullable"):
@@ -174,7 +189,17 @@ def test_defaulted_audit_event_type_rejected_without_rewriting_history(
             allowed += ", 'triage_start', 'triage_skip', 'triage_return'"
         if revision == "0040":
             allowed += ", 'triage_complete'"
-        schema = REVIEW_SCHEMA.replace(
+        # Keep all unrelated 0038 audit constraints valid so this test
+        # reaches the intentionally malformed event_type column.
+        schema = (
+            "id TEXT NOT NULL PRIMARY KEY, review_queue_id TEXT NOT NULL, "
+            "review_queue_item_id TEXT NOT NULL, project_id TEXT NOT NULL, "
+            "client_request_id TEXT NOT NULL, event_type TEXT NOT NULL, "
+            "actor TEXT NOT NULL, comment TEXT, assignee TEXT, "
+            "created_at TEXT NOT NULL, "
+            "CONSTRAINT uq_review_queue_item_event_request "
+            "UNIQUE (review_queue_item_id, client_request_id)"
+        ).replace(
             "event_type TEXT NOT NULL",
             "event_type TEXT NOT NULL DEFAULT 'comment'",
         )
@@ -187,7 +212,11 @@ def test_defaulted_audit_event_type_rejected_without_rewriting_history(
         )
         # SQLite accepts an omitted event type because of the forged default.
         connection.execute(
-            text("INSERT INTO review_queue_item_events (id) VALUES ('forged-comment')")
+            text("INSERT INTO review_queue_item_events "
+                "(id, review_queue_id, review_queue_item_id, project_id, "
+                "client_request_id, actor, created_at) "
+                "VALUES ('forged-comment', 'queue-1', 'item-1', 'project-1', "
+                "'request-1', 'researcher', '2026-11-09')")
         )
         with pytest.raises(RuntimeError, match="unexpected server default"):
             assert_compatible_revision_0038(connection)
