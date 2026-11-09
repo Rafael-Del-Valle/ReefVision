@@ -146,16 +146,23 @@ def test_desktop_rejects_defaulted_audit_event_type_at_head(
         connection.execute(
             text(
                 "CREATE TABLE review_queue_item_events ("
-                "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
-                "project_id TEXT, client_request_id TEXT, "
-                "event_type TEXT NOT NULL DEFAULT 'comment', actor TEXT, "
-                "comment TEXT, assignee TEXT, created_at TEXT, "
+                "id TEXT NOT NULL PRIMARY KEY, review_queue_id TEXT NOT NULL, "
+                "review_queue_item_id TEXT NOT NULL, project_id TEXT NOT NULL, "
+                "client_request_id TEXT NOT NULL, "
+                "event_type TEXT NOT NULL DEFAULT 'comment', actor TEXT NOT NULL, "
+                "comment TEXT, assignee TEXT, created_at TEXT NOT NULL, "
+                "CONSTRAINT uq_review_queue_item_event_request "
+                "UNIQUE (review_queue_item_id, client_request_id), "
                 "CONSTRAINT ck_review_queue_item_event_type "
                 f"CHECK (event_type IN ({allowed})))"
             )
         )
         connection.execute(
-            text("INSERT INTO review_queue_item_events (id) VALUES ('forged-comment')")
+            text("INSERT INTO review_queue_item_events "
+                "(id, review_queue_id, review_queue_item_id, project_id, "
+                "client_request_id, actor, created_at) "
+                "VALUES ('forged-comment', 'queue-1', 'item-1', 'project-1', "
+                "'request-1', 'researcher', '2026-11-09')")
         )
     _prepare_desktop_migration(monkeypatch, engine, head=revision)
     settings = SimpleNamespace(resolved_database_url=str(engine.url))
