@@ -197,6 +197,51 @@ describe("browser gallery storage access", () => {
   });
 });
 
+describe("gallery navigation across sparse camera pages", () => {
+  it("moves between adjacent pages when each page has only one image", () => {
+    expect(
+      resolveGalleryNavigation({
+        action: "next",
+        index: 0,
+        itemCount: 1,
+        page: 1,
+        pages: 3,
+        wrap: false,
+      }),
+    ).toEqual({ page: 2, edge: "first" });
+    expect(
+      resolveGalleryNavigation({
+        action: "previous",
+        index: 0,
+        itemCount: 1,
+        page: 2,
+        pages: 3,
+        wrap: false,
+      }),
+    ).toEqual({ page: 1, edge: "last" });
+    expect(
+      resolveGalleryNavigation({
+        action: "last",
+        index: 0,
+        itemCount: 1,
+        page: 1,
+        pages: 3,
+        wrap: false,
+      }),
+    ).toEqual({ page: 3, edge: "last" });
+    expect(
+      resolveGalleryNavigation({
+        action: "first",
+        index: 0,
+        itemCount: 1,
+        page: 3,
+        pages: 3,
+        wrap: false,
+      }),
+    ).toEqual({ page: 1, edge: "first" });
+  });
+});
+
 describe("gallery preferences", () => {
   it("snapshots changing preference getters before persisting a camera selection", () => {
     const storage = memoryStorage();
