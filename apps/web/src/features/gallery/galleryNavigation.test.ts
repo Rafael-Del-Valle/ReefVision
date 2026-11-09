@@ -242,6 +242,26 @@ describe("gallery navigation across sparse camera pages", () => {
   });
 });
 
+describe("gallery navigation rejects stale camera-page state", () => {
+  it("does not navigate when an asynchronous page refresh invalidates the selection", () => {
+    for (const state of [
+      { index: 3, itemCount: 3, page: 1, pages: 2 },
+      { index: -1, itemCount: 3, page: 1, pages: 2 },
+      { index: 0, itemCount: 0, page: 1, pages: 2 },
+      { index: 0, itemCount: 1, page: 3, pages: 2 },
+      { index: 0, itemCount: 1, page: 1, pages: 0 },
+    ]) {
+      expect(
+        resolveGalleryNavigation({
+          action: "next",
+          ...state,
+          wrap: true,
+        }),
+      ).toBeNull();
+    }
+  });
+});
+
 describe("gallery navigation with uneven camera page sizes", () => {
   it("advances through images before crossing into a sparse final page", () => {
     expect(
