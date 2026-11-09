@@ -143,9 +143,7 @@ def test_nullable_audit_event_type_rejected_without_mutating_research_data(
             "created_at TEXT NOT NULL, "
             "CONSTRAINT uq_review_queue_item_event_request "
             "UNIQUE (review_queue_item_id, client_request_id)"
-        ).replace(
-            "event_type TEXT NOT NULL", "event_type TEXT"
-        )
+        ).replace("event_type TEXT NOT NULL", "event_type TEXT")
         connection.execute(
             text(
                 f"CREATE TABLE review_queue_item_events ({schema}, "
@@ -212,11 +210,13 @@ def test_defaulted_audit_event_type_rejected_without_rewriting_history(
         )
         # SQLite accepts an omitted event type because of the forged default.
         connection.execute(
-            text("INSERT INTO review_queue_item_events "
+            text(
+                "INSERT INTO review_queue_item_events "
                 "(id, review_queue_id, review_queue_item_id, project_id, "
                 "client_request_id, actor, created_at) "
                 "VALUES ('forged-comment', 'queue-1', 'item-1', 'project-1', "
-                "'request-1', 'researcher', '2026-11-09')")
+                "'request-1', 'researcher', '2026-11-09')"
+            )
         )
         with pytest.raises(RuntimeError, match="unexpected server default"):
             assert_compatible_revision_0038(connection)
