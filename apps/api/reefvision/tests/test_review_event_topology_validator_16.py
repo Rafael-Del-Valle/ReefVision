@@ -6,7 +6,10 @@ from sqlalchemy import create_engine, text
 from reefvision.db.review_event_topology_16 import assert_review_event_relationship_topology
 
 
-@pytest.mark.parametrize("broken", ["none", "missing_fk", "wrong_delete", "missing_index", "reordered_index"])
+@pytest.mark.parametrize("broken", [
+        "none", "missing_fk", "wrong_delete", "missing_index", "reordered_index",
+        "wrong_parent", "extra_fk", "extra_index", "wrong_index_name",
+    ])
 def test_review_event_topology_is_read_only_and_fails_closed(broken: str) -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     try:
@@ -14,9 +17,10 @@ def test_review_event_topology_is_read_only_and_fails_closed(broken: str) -> Non
             for parent in ("projects", "review_queues", "review_queue_items"):
                 connection.execute(text(f"CREATE TABLE {parent} (id TEXT PRIMARY KEY)"))
             delete = "RESTRICT" if broken == "wrong_delete" else "CASCADE"
+            item_parent = "review_queues" if broken == "wrong_parent" else "review_queue_items"
             item_fk = (
                 "" if broken == "missing_fk" else
-                ", FOREIGN KEY (review_queue_item_id) REFERENCES review_queue_items(id) ON DELETE CASCADE"
+                f", FOREIGN KEY (review_queue_item_id) REFERENCES {item_parent}(id) ON DELETE CASCADE"
             )
             connection.execute(text(
                 "CREATE TABLE review_queue_item_events ("
@@ -24,20 +28,32 @@ def test_review_event_topology_is_read_only_and_fails_closed(broken: str) -> Non
                 "project_id TEXT, created_at TEXT, "
                 f"FOREIGN KEY (review_queue_id) REFERENCES review_queues(id) ON DELETE {delete}, "
                 "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
-                f"{item_fk})"
+                f"{item_fk}"
+                + (", FOREIGN KEY (created_at) REFERENCES projects(id) ON DELETE CASCADE"
+                   if broken == "extra_fk" else "")
+                + ")"
             ))
             item_order = (
                 "created_at, review_queue_item_id"
                 if broken == "reordered_index" else "review_queue_item_id, created_at"
             )
+            item_index_name = (
+                "ix_review_queue_item_events_item_changed"
+                if broken == "wrong_index_name" else "ix_review_queue_item_events_item_created"
+            )
             connection.execute(text(
-                "CREATE INDEX ix_review_queue_item_events_item_created "
+                f"CREATE INDEX {item_index_name} "
                 f"ON review_queue_item_events ({item_order})"
             ))
             if broken != "missing_index":
                 connection.execute(text(
                     "CREATE INDEX ix_review_queue_item_events_queue_created "
                     "ON review_queue_item_events (review_queue_id, created_at)"
+                ))
+            if broken == "extra_index":
+                connection.execute(text(
+                    "CREATE INDEX ix_review_queue_item_events_extra "
+                    "ON review_queue_item_events (project_id)"
                 ))
             connection.execute(text("CREATE TABLE preserved (observation TEXT NOT NULL)"))
             connection.execute(text("INSERT INTO preserved VALUES ('original research data')"))
