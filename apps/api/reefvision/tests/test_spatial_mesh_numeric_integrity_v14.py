@@ -234,3 +234,69 @@ def test_disconnected_patches_preserve_measurements_in_saved_workflow(
     assert len(artifacts) == 1
     assert artifacts[0]["payload_json"] == standalone
     assert len(artifacts[0]["payload_sha256"]) == 64
+
+
+def test_vertex_touching_patches_are_not_one_connected_surface(
+    client: TestClient,
+) -> None:
+    """A shared vertex does not imply an edge-connected coral surface."""
+    project_id = str(create_project(client, "Vertex-touching mesh patches")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    params = {
+        **PARAMS,
+        "vertices": [
+            [0, 0, 0],
+            [1, 0, 0],
+            [0, 1, 0],
+            [-2, 0, 0],
+            [0, -2, 0],
+        ],
+        "faces": [[0, 1, 2], [0, 3, 4]],
+        "meters_per_unit": 1,
+    }
+    response = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert response.status_code == 200, response.text
+    standalone = response.json()
+    assert standalone["surface_area_m2"] == pytest.approx(2.5)
+    assert standalone["edge_connected_patch_count"] == 2
+    assert standalone["edge_connected_patch_face_counts"] == [1, 1]
+    assert standalone["edge_connected_patch_surface_areas_m2"] == pytest.approx([0.5, 2.0])
+    assert standalone["enclosed_volume_m3"] is None
+    assert standalone["measurement_status"] == "caller_supplied_unverified"
+
+    graph = {
+        "graph_id": "vertex-touching-patches-v14",
+        "name": "Do not merge surfaces that touch at only one vertex",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifacts = [
+        item
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    ]
+    assert len(artifacts) == 1
+    assert artifacts[0]["payload_json"] == standalone
+    assert artifacts[0]["payload_json"]["provenance"]["calibration_verified"] is False
