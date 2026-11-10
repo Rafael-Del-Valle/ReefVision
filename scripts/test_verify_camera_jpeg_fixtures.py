@@ -42,6 +42,28 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual({record["extension"] for record in records}, {".jpg", ".jpeg", ".jpe", ".jfif", ".jfi", ".jif"})
             self.assertEqual(len({record["sha256"] for record in records}), 6)
 
+
+    def test_real_pillow_encoded_rgb_and_cmyk_camera_jpegs(self) -> None:
+        """Inventory actual decodable JPEG streams, not just SOI/EOI markers."""
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for mode, suffix in (("RGB", ".JPG"), ("CMYK", ".JfIf")):
+                path = root / f"camera_{mode}{suffix}"
+                image = Image.new(mode, (8, 6), (35, 90, 140, 180) if mode == "CMYK" else (35, 90, 140))
+                image.save(path, format="JPEG")
+                with Image.open(path) as decoded:
+                    decoded.load()
+                    self.assertEqual(decoded.format, "JPEG")
+                    self.assertEqual(decoded.mode, mode)
+                    self.assertEqual(decoded.size, (8, 6))
+            records, errors = MODULE.inventory(root)
+            self.assertEqual(errors, [])
+            self.assertEqual(len(records), 2)
+            self.assertTrue(all(record["jpeg_boundary_markers"] for record in records))
+            self.assertEqual({record["extension"] for record in records}, {".jpg", ".jfif"})
+
     def test_corrupt_markers_are_reported_without_changing_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
