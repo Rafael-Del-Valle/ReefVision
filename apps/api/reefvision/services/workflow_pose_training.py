@@ -654,8 +654,15 @@ def _reused_pose_training_result(
 ) -> dict[str, Any]:
     """Recreate the workflow artifact from a completed persisted pose run."""
 
-    if run.job_id is None or not run.result_checkpoint_path:
-        raise ValidationError("Recovered pose training is missing its completed job/checkpoint")
+    if (
+        not isinstance(run.job_id, str)
+        or not run.job_id.strip()
+        or run.job_id != run.job_id.strip()
+        or not isinstance(run.result_checkpoint_path, str)
+        or not run.result_checkpoint_path.strip()
+        or run.result_checkpoint_path != run.result_checkpoint_path.strip()
+    ):
+        raise ValidationError("Recovered pose training is missing a canonical job/checkpoint reference")
 
     job = session.get(
         Job,
