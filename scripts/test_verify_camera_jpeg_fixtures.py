@@ -49,8 +49,8 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             root = Path(directory)
             first = root / "capture.JPG"
             second = root / "CAPTURE.jpg"
-            first.write_bytes(b"\\xff\\xd8first\\xff\\xd9")
-            second.write_bytes(b"\\xff\\xd8second\\xff\\xd9")
+            first.write_bytes(bytes.fromhex("ffd8") + b"first" + bytes.fromhex("ffd9"))
+            second.write_bytes(bytes.fromhex("ffd8") + b"second" + bytes.fromhex("ffd9"))
             if len(list(root.iterdir())) != 2:
                 self.skipTest("Filesystem is case-insensitive")
             originals = {p.name: p.read_bytes() for p in (first, second)}
