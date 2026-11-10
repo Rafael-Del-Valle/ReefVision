@@ -46,6 +46,12 @@ def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
         # Detect case-only directory aliases too: Camera/a.jpg and camera/b.jpg
         # are different Linux trees but collapse into one Windows directory.
         components = path.relative_to(root).parts
+        # Win32 normalizes trailing dots/spaces in path components; such
+        # exported names cannot be reliably addressed by the installed app.
+        for component in components:
+            if component.endswith((".", " ")):
+                errors.append(f"Windows trailing dot/space path component: {relative}")
+                break
         for depth in range(1, len(components)):
             key = tuple(part.casefold() for part in components[:depth])
             actual = "/".join(components[:depth])
