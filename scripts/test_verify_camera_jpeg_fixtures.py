@@ -476,6 +476,27 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual(records, [])
             self.assertEqual(errors, ["no JPEG-family fixtures found"])
 
+    def test_symlinked_camera_directory_cannot_hide_uninspected_captures(self) -> None:
+        """A linked subdirectory must not silently pass the fixture inventory."""
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            root = base / "approved"
+            root.mkdir()
+            outside = base / "outside"
+            outside.mkdir()
+            original = bytes.fromhex("ffd8") + b"outside" + bytes.fromhex("ffd9")
+            (outside / "unapproved.JPG").write_bytes(original)
+            (root / "approved.jpeg").write_bytes(bytes.fromhex("ffd8") + b"approved" + bytes.fromhex("ffd9"))
+            link = root / "linked_camera"
+            try:
+                link.symlink_to(outside, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("Directory symlinks unavailable on this filesystem")
+            records, errors = MODULE.inventory(root)
+            self.assertEqual([record["path"] for record in records], ["approved.jpeg"])
+            self.assertIn("symlinked directory not inspected: linked_camera", errors)
+            self.assertEqual((outside / "unapproved.JPG").read_bytes(), original)
+
     def test_symlink_is_rejected_without_reading_target(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
