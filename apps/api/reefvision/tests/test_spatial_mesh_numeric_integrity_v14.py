@@ -783,9 +783,7 @@ def test_mesh_route_calibration_rescales_lengths_not_detour_in_saved_workflow(
     assert route["endpoint_chord_length_m"] == pytest.approx(1)
     assert route["geometric_detour_ratio"] == pytest.approx(2**0.5)
     assert route["path_edge_lengths_m"] == pytest.approx([2**0.5 / 2] * 2)
-    assert route["length_scale_interval_m"] == pytest.approx(
-        [2**0.5 * 0.8, 2**0.5 * 1.2]
-    )
+    assert route["length_scale_interval_m"] == pytest.approx([2**0.5 * 0.8, 2**0.5 * 1.2])
     assert standalone["measurement_status"] == "caller_supplied_unverified"
     assert standalone["provenance"]["calibration_verified"] is False
 
