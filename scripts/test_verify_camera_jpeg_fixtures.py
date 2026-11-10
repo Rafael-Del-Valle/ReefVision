@@ -366,6 +366,30 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual(fixture.read_bytes(), original)
             self.assertEqual(len(original), 11)
 
+    def test_direct_inventory_rejects_linked_root_and_parent_read_only(self) -> None:
+        """Library callers must not bypass the CLI's approved fixture boundary."""
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            actual = parent / "approved"
+            fixtures = actual / "fixtures"
+            fixtures.mkdir(parents=True)
+            original = bytes.fromhex("ffd8") + b"original" + bytes.fromhex("ffd9")
+            camera = fixtures / "camera.JPG"
+            camera.write_bytes(original)
+            linked = parent / "linked"
+            try:
+                linked.symlink_to(actual, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("Directory symlinks unavailable on this platform")
+            for root in (linked, linked / "fixtures"):
+                with self.subTest(root=root):
+                    records, errors = MODULE.inventory(root)
+                    self.assertEqual(records, [])
+                    self.assertEqual(errors, [
+                        "camera fixture directory must not be a symbolic link (including parent components)"
+                    ])
+            self.assertEqual(camera.read_bytes(), original)
+
     def test_cli_rejects_symlink_root_without_inspecting_target(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             parent = Path(directory)
