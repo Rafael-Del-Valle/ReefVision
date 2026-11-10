@@ -35,17 +35,21 @@ def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
         if not path.is_file():
             continue
         relative = path.relative_to(root).as_posix()
-        # Windows reserves device basenames even when a JPEG extension is present.
-        # Such camera exports cannot be opened by ordinary Windows file APIs.
-        if path.stem.rstrip(" .").split(".")[0].upper() in {
+        # Windows reserves device basenames in *every* path component, not
+        # just the final JPEG name (e.g. CON/photos/valid.jpg is also invalid).
+        # Match the basename before any extension, as Win32 does.
+        components = path.relative_to(root).parts
+        reserved = {
             "CON", "PRN", "AUX", "NUL",
             *(f"COM{number}" for number in range(1, 10)),
             *(f"LPT{number}" for number in range(1, 10)),
-        }:
-            errors.append(f"Windows reserved device filename: {relative}")
+        }
+        for component in components:
+            if component.rstrip(" .").split(".")[0].upper() in reserved:
+                errors.append(f"Windows reserved device path component: {relative}")
+                break
         # Detect case-only directory aliases too: Camera/a.jpg and camera/b.jpg
         # are different Linux trees but collapse into one Windows directory.
-        components = path.relative_to(root).parts
         # Win32 normalizes trailing dots/spaces in path components; such
         # exported names cannot be reliably addressed by the installed app.
         for component in components:
