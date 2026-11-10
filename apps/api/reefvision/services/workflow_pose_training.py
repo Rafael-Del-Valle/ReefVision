@@ -336,7 +336,7 @@ def _seed_pose_model(
 
     model_id = payload.get("model_id")
 
-    if not isinstance(model_id, str) or not model_id.strip():
+    if not isinstance(model_id, str) or not model_id.strip() or model_id != model_id.strip():
         raise ValidationError(
             "Pose retraining requires a registered seed model ID as a nonempty string"
         )
