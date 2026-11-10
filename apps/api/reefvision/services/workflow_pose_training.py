@@ -242,6 +242,15 @@ def _pose_dataset(
     ):
         raise ValidationError(f"Pose {role} dataset landmark schema digest is invalid")
 
+    # A persisted schema identifier must be canonical before querying lineage.
+    # Reject malformed values even when a re-signed manifest repeats them.
+    if (
+        not isinstance(dataset.pose_schema_id, str)
+        or not dataset.pose_schema_id.strip()
+        or dataset.pose_schema_id != dataset.pose_schema_id.strip()
+    ):
+        raise ValidationError(f"Pose {role} dataset landmark schema ID is invalid")
+
     # The planner validates frozen truth, but the execution adapter must also
     # reject schema drift after planning or when invoked independently.
     schema = session.get(PoseLandmarkSchema, dataset.pose_schema_id)
