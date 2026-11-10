@@ -231,6 +231,30 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual((actual / "camera.jpg").read_bytes(),
                              b"\xff\xd8payload\xff\xd9")
 
+    def test_cli_rejects_symlinked_parent_directory(self) -> None:
+        """A linked parent must not bypass the approved camera fixture root."""
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            actual = parent / "actual"
+            fixtures = actual / "fixtures"
+            fixtures.mkdir(parents=True)
+            camera = fixtures / "camera.JPG"
+            original = bytes.fromhex("ffd8") + b"unchanged" + bytes.fromhex("ffd9")
+            camera.write_bytes(original)
+            linked_parent = parent / "linked-parent"
+            try:
+                linked_parent.symlink_to(actual, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("Directory symlinks unavailable on this platform")
+            output = io.StringIO()
+            with mock.patch("sys.argv", [str(SCRIPT), str(linked_parent / "fixtures")]):
+                with contextlib.redirect_stderr(output):
+                    with self.assertRaises(SystemExit) as caught:
+                        MODULE.main()
+            self.assertEqual(caught.exception.code, 2)
+            self.assertIn("including parent components", output.getvalue())
+            self.assertEqual(camera.read_bytes(), original)
+
     def test_cli_missing_directory_reports_usage_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             missing = Path(directory) / "missing-camera-fixtures"
