@@ -371,6 +371,26 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual([record["path"] for record in records], ["camera.JPG"])
             self.assertEqual(fixture.read_bytes(), original)
 
+    def test_windows_trailing_dot_directory_is_rejected_read_only(self) -> None:
+        """A Linux-valid directory ending in a dot is not portable to Win32."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            camera_dir = root / "camera."
+            try:
+                camera_dir.mkdir()
+            except OSError:
+                self.skipTest("Trailing-dot directories unavailable on this filesystem")
+            fixture = camera_dir / "frame.JPG"
+            original = bytes.fromhex("ffd8") + b"payload" + bytes.fromhex("ffd9")
+            fixture.write_bytes(original)
+            records, errors = MODULE.inventory(root)
+            self.assertEqual(len(records), 1)
+            self.assertIn(
+                "Windows trailing dot/space path component: camera./frame.JPG",
+                errors,
+            )
+            self.assertEqual(fixture.read_bytes(), original)
+
     def test_empty_fixture_directory_is_not_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             records, errors = MODULE.inventory(Path(directory))
