@@ -671,3 +671,85 @@ def test_multihop_surface_route_uses_mesh_edges_in_saved_workflow(
     assert len(artifacts) == 1
     assert artifacts[0]["payload_json"] == standalone
     assert len(artifacts[0]["payload_sha256"]) == 64
+
+
+def test_noncollinear_mesh_route_detour_is_preserved_in_saved_workflow(
+    client: TestClient,
+) -> None:
+    """A bent surface route must exceed its straight-line chord without claiming anatomy."""
+    project_id = str(create_project(client, "Bent surface path reference")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    params = {
+        **PARAMS,
+        "vertices": [[0, 0, 0], [1, 1, 0], [0, 3, 0], [2, 0, 0]],
+        "faces": [[0, 1, 2], [1, 3, 2]],
+        "surface_path_vertex_pairs": [[0, 3]],
+        "meters_per_unit": 1,
+        "relative_scale_uncertainty": 0.1,
+    }
+    response = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert response.status_code == 200, response.text
+    standalone = response.json()
+    paths = standalone["surface_edge_paths"]
+    assert len(paths) == 1
+    route = paths[0]
+    assert route["status"] == "connected"
+    assert route["path_vertex_indices"] == [0, 1, 3]
+    assert route["length_m"] == pytest.approx(2 * 2**0.5)
+    assert route["path_cumulative_lengths_m"] == pytest.approx([0, 2**0.5, 2 * 2**0.5])
+    assert route["path_edge_lengths_m"] == pytest.approx([2**0.5, 2**0.5])
+    assert route["path_vertices_in_source_frame_m"] == [
+        [0, 0, 0],
+        [1, 1, 0],
+        [2, 0, 0],
+    ]
+    for interval in route["path_edge_length_scale_intervals_m"]:
+        assert interval == pytest.approx([2**0.5 * 0.9, 2**0.5 * 1.1])
+    for interval, expected in zip(
+        route["path_cumulative_length_scale_intervals_m"],
+        ([0, 0], [2**0.5 * 0.9, 2**0.5 * 1.1], [2 * 2**0.5 * 0.9, 2 * 2**0.5 * 1.1]),
+        strict=True,
+    ):
+        assert interval == pytest.approx(expected)
+    assert route["endpoint_chord_length_m"] == pytest.approx(2)
+    assert route["geometric_detour_ratio"] == pytest.approx(2**0.5)
+    assert route["length_scale_interval_m"] == pytest.approx([2 * 2**0.5 * 0.9, 2 * 2**0.5 * 1.1])
+    assert standalone["measurement_status"] == "caller_supplied_unverified"
+    assert standalone["provenance"]["calibration_verified"] is False
+
+    graph = {
+        "graph_id": "bent-mesh-route-v14",
+        "name": "Bent provisional surface path reference",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifacts = [
+        item
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    ]
+    assert len(artifacts) == 1
+    assert artifacts[0]["payload_json"] == standalone
+    assert len(artifacts[0]["payload_sha256"]) == 64
