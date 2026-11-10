@@ -43,6 +43,8 @@ def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
             "CON", "PRN", "AUX", "NUL",
             *(f"COM{number}" for number in range(1, 10)),
             *(f"LPT{number}" for number in range(1, 10)),
+            # Win32 also reserves superscript 1/2/3 as COM/LPT port digits.
+            *(f"{prefix}{digit}" for prefix in ("COM", "LPT") for digit in "¹²³"),
         }
         for index, component in enumerate(components):
             if component.rstrip(" .").split(".")[0].upper() in reserved:
