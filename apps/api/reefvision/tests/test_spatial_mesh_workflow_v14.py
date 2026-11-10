@@ -919,3 +919,34 @@ def test_mesh_preview_rejects_oversized_integer_scale_uncertainty() -> None:
             calibration_evidence="Unverified test calibration",
             relative_scale_uncertainty=10**1000,
         )
+
+
+def test_obj_uncertainty_changes_intervals_not_measured_geometry(client: TestClient) -> None:
+    """Changing uncertainty must not alter measured geometry or source identity."""
+    project = create_project(client, "Calibration uncertainty independence")
+    base = f"/api/v1/projects/{project['id']}"
+    observations = []
+    for uncertainty in (0.01, 0.10):
+        response = client.post(
+            f"{base}/spatial/mesh-preview",
+            json={**MESH, "relative_scale_uncertainty": uncertainty},
+        )
+        assert response.status_code == 200, response.text
+        observations.append(response.json())
+
+    low, high = observations
+    for key in (
+        "surface_area_m2",
+        "boundary_edge_length_m",
+        "axis_aligned_dimensions_m",
+        "axis_aligned_bounding_box_diagonal_m",
+    ):
+        assert low[key] == pytest.approx(high[key])
+    for key in ("geometry_sha256", "source_payload_sha256"):
+        assert low["provenance"][key] == high["provenance"][key]
+    assert high["area_scale_uncertainty_m2"] > low["area_scale_uncertainty_m2"]
+    assert high["surface_area_scale_interval_m2"][0] < low["surface_area_scale_interval_m2"][0]
+    assert high["surface_area_scale_interval_m2"][1] > low["surface_area_scale_interval_m2"][1]
+    for observation in observations:
+        assert observation["measurement_status"] == "caller_supplied_unverified"
+        assert observation["provenance"]["calibration_verified"] is False
