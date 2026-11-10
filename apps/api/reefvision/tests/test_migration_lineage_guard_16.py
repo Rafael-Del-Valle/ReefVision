@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from reefvision.db.migration_lineage_guard import assert_compatible_revision_0038
+from reefvision.db.review_event_topology_16 import assert_review_event_relationship_topology
 
 REVIEW_SCHEMA = (
     "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
@@ -57,7 +58,28 @@ def test_review_lineage_is_accepted_without_writes(revision: str) -> None:
             "CONSTRAINT uq_review_queue_item_event_request "
             "UNIQUE (review_queue_item_id, client_request_id)"
         )
+        # Match the actual 0038 migration's cascading parent links and
+        # ascending history indexes; previous positive fixture omitted these.
+        schema += (
+            ", FOREIGN KEY (review_queue_id) REFERENCES review_queues(id) ON DELETE CASCADE"
+            ", FOREIGN KEY (review_queue_item_id) REFERENCES review_queue_items(id) ON DELETE CASCADE"
+            ", FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
+        )
+        for parent in ("projects", "review_queues", "review_queue_items"):
+            connection.execute(text(f"CREATE TABLE {parent} (id TEXT PRIMARY KEY)"))
         connection.execute(text(f"CREATE TABLE review_queue_item_events ({schema}{check})"))
+        connection.execute(
+            text(
+                "CREATE INDEX ix_review_queue_item_events_item_created "
+                "ON review_queue_item_events (review_queue_item_id, created_at)"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE INDEX ix_review_queue_item_events_queue_created "
+                "ON review_queue_item_events (review_queue_id, created_at)"
+            )
+        )
         connection.execute(
             text(
                 "INSERT INTO review_queue_item_events "
@@ -68,6 +90,7 @@ def test_review_lineage_is_accepted_without_writes(revision: str) -> None:
             )
         )
         assert_compatible_revision_0038(connection)
+        assert_review_event_relationship_topology(connection)
         assert (
             connection.scalar(text("SELECT id FROM review_queue_item_events")) == "event-preserved"
         )
