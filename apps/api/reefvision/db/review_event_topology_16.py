@@ -60,16 +60,27 @@ def assert_review_event_relationship_topology(connection: Connection) -> None:
             )
             for fk in inspected_foreign_keys
         }
+        if len(inspected_foreign_keys) != len(foreign_keys):
+            raise RuntimeError(
+                "Unsafe QC review-event foreign-key topology: duplicate relationship. "
+                "Preserve reviewer history."
+            )
     if foreign_keys != _EXPECTED_FOREIGN_KEYS:
         raise RuntimeError(
             "Unsafe QC review-event foreign-key topology: "
             f"actual={sorted(foreign_keys)}; expected={sorted(_EXPECTED_FOREIGN_KEYS)}. "
             "Preserve reviewer history and reconcile using a reviewed migration."
         )
+    inspected_indexes = inspector.get_indexes(table)
     indexes = {
         index["name"]: tuple(index["column_names"])
-        for index in inspector.get_indexes(table)
+        for index in inspected_indexes
     }
+    if len(inspected_indexes) != len(indexes):
+        raise RuntimeError(
+            "Unsafe QC review-event history index topology: duplicate index name. "
+            "Preserve reviewer history."
+        )
     if indexes != _EXPECTED_INDEXES:
         raise RuntimeError(
             "Unsafe QC review-event history index topology: "
