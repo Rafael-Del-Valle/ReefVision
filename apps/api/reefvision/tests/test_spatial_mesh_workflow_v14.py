@@ -773,6 +773,15 @@ def test_obj_calibration_changes_units_not_source_geometry(client: TestClient) -
     assert second["area_scale_uncertainty_m2"] == pytest.approx(
         4 * first["area_scale_uncertainty_m2"]
     )
+    assert second["surface_area_scale_interval_m2"] == pytest.approx(
+        [4 * bound for bound in first["surface_area_scale_interval_m2"]]
+    )
+    assert second["boundary_loop_perimeter_scale_intervals_m"][0] == pytest.approx(
+        [2 * bound for bound in first["boundary_loop_perimeter_scale_intervals_m"][0]]
+    )
+    assert second["surface_area_to_bounding_diagonal_squared_ratio"] == pytest.approx(
+        first["surface_area_to_bounding_diagonal_squared_ratio"]
+    )
     assert second["axis_aligned_dimension_scale_uncertainty_m"] == pytest.approx(
         [2 * value for value in first["axis_aligned_dimension_scale_uncertainty_m"]]
     )
