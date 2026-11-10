@@ -432,6 +432,11 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                 camera_dir.mkdir()
             except OSError:
                 self.skipTest("Trailing-dot directories unavailable on this filesystem")
+            # Win32 may silently normalize camera. to camera even when mkdir succeeds.
+            # Only assert the Linux-specific path diagnostic if the filesystem
+            # actually preserved the trailing dot on disk.
+            if not any(entry.name == "camera." for entry in root.iterdir()):
+                self.skipTest("Filesystem normalized the trailing-dot directory name")
             fixture = camera_dir / "frame.JPG"
             original = bytes.fromhex("ffd8") + b"payload" + bytes.fromhex("ffd9")
             fixture.write_bytes(original)
