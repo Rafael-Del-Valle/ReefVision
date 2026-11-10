@@ -27,7 +27,7 @@ def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
         if path.is_symlink():
             errors.append(f"symlink not inspected: {path.relative_to(root)}")
             continue
-        if not path.is_file() or path.suffix.lower() not in JPEG_SUFFIXES:
+        if path.suffix.lower() not in JPEG_SUFFIXES or not path.is_file():
             continue
         relative = path.relative_to(root).as_posix()
         folded = relative.casefold()
