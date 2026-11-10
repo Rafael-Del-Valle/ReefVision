@@ -205,6 +205,19 @@ def _pose_dataset(
     ):
         raise ValidationError(f"Pose {role} dataset item count no longer matches frozen manifest")
 
+    # Frozen active-learning source digests are provenance assertions, not labels.
+    # Reject malformed stored values even if the manifest was re-signed to match.
+    for source_digest in (
+        dataset.source_selection_sha256,
+        dataset.source_retraining_manifest_sha256,
+    ):
+        if source_digest is not None and (
+            not isinstance(source_digest, str)
+            or len(source_digest) != 64
+            or any(char not in "0123456789abcdef" for char in source_digest)
+        ):
+            raise ValidationError(f"Pose {role} dataset source lineage digest is invalid")
+
     if not frozen_pose_item_fingerprints_match(session, dataset):
         raise ValidationError(
             f"Pose {role} dataset item fingerprints no longer match persisted frozen truth"
