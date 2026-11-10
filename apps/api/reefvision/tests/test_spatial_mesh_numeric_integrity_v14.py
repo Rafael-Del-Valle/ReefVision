@@ -384,6 +384,16 @@ def test_closed_tetrahedron_volume_is_provisional_and_workflow_reproducible(
     standalone = response.json()
     assert standalone["surface_area_m2"] == pytest.approx(1.5 + 3**0.5 / 2)
     assert standalone["enclosed_volume_m3"] == pytest.approx(1 / 6)
+    # Scale uncertainty compounds quadratically for area and cubically for volume.
+    # These are scale-only bounds, not biological confidence intervals.
+    expected_area = 1.5 + 3**0.5 / 2
+    assert standalone["surface_area_scale_interval_m2"] == pytest.approx(
+        [expected_area * 0.9**2, expected_area * 1.1**2]
+    )
+    assert standalone["enclosed_volume_scale_interval_m3"] == pytest.approx(
+        [(1 / 6) * 0.9**3, (1 / 6) * 1.1**3]
+    )
+    assert standalone["confidence_interval"] is None
     assert standalone["boundary_edge_count"] == 0
     assert standalone["edge_connected_patch_count"] == 1
     assert standalone["measurement_status"] == "caller_supplied_unverified"
