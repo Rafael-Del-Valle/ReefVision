@@ -140,6 +140,24 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual([p.read_bytes() for p in (root / name for name in names)],
                              [original] * len(names))
 
+    def test_windows_superscript_device_aliases_are_rejected_read_only(self) -> None:
+        """Win32 treats COM¹/²/³ and LPT¹/²/³ as reserved device names."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            original = bytes.fromhex("ffd8") + b"unchanged" + bytes.fromhex("ffd9")
+            paths = [root / "COM¹.JPG", root / "LPT².jpeg"]
+            try:
+                for path in paths:
+                    path.write_bytes(original)
+            except OSError:
+                self.skipTest("Host filesystem rejects superscript device filenames")
+            records, errors = MODULE.inventory(root)
+            self.assertEqual({record["path"] for record in records},
+                             {path.name for path in paths})
+            for path in paths:
+                self.assertIn(f"Windows reserved device filename: {path.name}", errors)
+                self.assertEqual(path.read_bytes(), original)
+
     def test_real_pillow_encoded_rgb_and_cmyk_camera_jpegs(self) -> None:
         """Inventory actual decodable JPEG streams, not just SOI/EOI markers."""
         try:
