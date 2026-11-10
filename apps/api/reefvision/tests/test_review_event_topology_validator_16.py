@@ -96,3 +96,47 @@ def test_non_sqlite_composite_foreign_key_rejected_without_querying_rows() -> No
             assert_review_event_relationship_topology(connection)
     connection.execute.assert_not_called()
     inspector.get_indexes.assert_not_called()
+
+
+@pytest.mark.parametrize("duplicate", ["foreign_key", "index"])
+def test_non_sqlite_duplicate_inspection_entries_fail_closed(duplicate: str) -> None:
+    """Inspector duplicates must not disappear through dict/set deduplication."""
+    connection = MagicMock()
+    connection.dialect.name = "postgresql"
+    inspector = MagicMock()
+    inspector.get_table_names.return_value = ["review_queue_item_events"]
+    foreign_keys = [
+        {
+            "constrained_columns": [column],
+            "referred_table": parent,
+            "referred_columns": ["id"],
+            "options": {"ondelete": "CASCADE"},
+        }
+        for column, parent in (
+            ("review_queue_id", "review_queues"),
+            ("review_queue_item_id", "review_queue_items"),
+            ("project_id", "projects"),
+        )
+    ]
+    indexes = [
+        {
+            "name": name,
+            "column_names": list(columns),
+        }
+        for name, columns in (
+            ("ix_review_queue_item_events_item_created", ("review_queue_item_id", "created_at")),
+            ("ix_review_queue_item_events_queue_created", ("review_queue_id", "created_at")),
+        )
+    ]
+    if duplicate == "foreign_key":
+        foreign_keys.append(dict(foreign_keys[0]))
+    else:
+        indexes.append(dict(indexes[0]))
+    inspector.get_foreign_keys.return_value = foreign_keys
+    inspector.get_indexes.return_value = indexes
+    with patch("reefvision.db.review_event_topology_16.inspect", return_value=inspector):
+        with pytest.raises(RuntimeError, match="duplicate"):
+            assert_review_event_relationship_topology(connection)
+    connection.execute.assert_not_called()
+    if duplicate == "foreign_key":
+        inspector.get_indexes.assert_not_called()
