@@ -652,6 +652,10 @@ def _reused_pose_training_result(
             raise ValidationError(
                 "Recovered pose-training checkpoint artifact path changed or is missing"
             )
+        # Legacy manifests may advertise a checkpoint without its digest.
+        # An empty alternate checkpoint must never be replayed as usable science.
+        if advertised_checkpoint.stat().st_size == 0:
+            raise ValidationError("Recovered pose-training checkpoint artifact is empty")
 
     if not checkpoint.is_file():
         raise ValidationError("Recovered pose training checkpoint is missing")
