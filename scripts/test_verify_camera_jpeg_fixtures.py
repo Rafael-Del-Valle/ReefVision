@@ -62,6 +62,30 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertIn("CAPTURE.jpg", errors[0])
             self.assertEqual({p.name: p.read_bytes() for p in (first, second)}, originals)
 
+    def test_windows_case_insensitive_parent_directory_collision(self) -> None:
+        """Case-only directory aliases must be reported even for different JPEG names."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            upper = root / "Camera"
+            lower = root / "camera"
+            upper.mkdir()
+            try:
+                lower.mkdir()
+            except FileExistsError:
+                self.skipTest("Filesystem is case-insensitive")
+            first = upper / "first.JPG"
+            second = lower / "second.jpeg"
+            first.write_bytes(bytes.fromhex("ffd8") + b"first" + bytes.fromhex("ffd9"))
+            second.write_bytes(bytes.fromhex("ffd8") + b"second" + bytes.fromhex("ffd9"))
+            originals = (first.read_bytes(), second.read_bytes())
+            records, errors = MODULE.inventory(root)
+            self.assertEqual(len(records), 2)
+            self.assertIn(
+                "Windows case-insensitive directory collision: Camera / camera",
+                errors,
+            )
+            self.assertEqual((first.read_bytes(), second.read_bytes()), originals)
+
     def test_real_pillow_encoded_rgb_and_cmyk_camera_jpegs(self) -> None:
         """Inventory actual decodable JPEG streams, not just SOI/EOI markers."""
         try:
