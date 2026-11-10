@@ -135,7 +135,11 @@ def _pose_dataset(
 
     dataset_id = payload.get("dataset_id")
 
-    if not isinstance(dataset_id, str) or not dataset_id.strip():
+    if (
+        not isinstance(dataset_id, str)
+        or not dataset_id.strip()
+        or dataset_id != dataset_id.strip()
+    ):
         raise ValidationError(f"Pose {role} dataset artifact requires a nonempty string dataset_id")
 
     dataset = session.get(
