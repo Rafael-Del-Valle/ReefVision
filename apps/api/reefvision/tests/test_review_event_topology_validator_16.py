@@ -21,6 +21,8 @@ from reefvision.db.review_event_topology_16 import assert_review_event_relations
         "duplicate_fk",
         "extra_index",
         "wrong_index_name",
+        "unique_index",
+        "partial_index",
     ],
 )
 def test_review_event_topology_is_read_only_and_fails_closed(broken: str) -> None:
@@ -71,8 +73,9 @@ def test_review_event_topology_is_read_only_and_fails_closed(broken: str) -> Non
             )
             connection.execute(
                 text(
-                    f"CREATE INDEX {item_index_name} "
-                    f"ON review_queue_item_events ({item_order})"
+                    f"CREATE {'UNIQUE ' if broken == 'unique_index' else ''}INDEX "
+                    f"{item_index_name} ON review_queue_item_events ({item_order})"
+                    + (" WHERE created_at IS NOT NULL" if broken == "partial_index" else "")
                 )
             )
             if broken != "missing_index":
