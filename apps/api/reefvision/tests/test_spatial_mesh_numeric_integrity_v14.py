@@ -542,9 +542,7 @@ def test_disconnected_surface_paths_withhold_length_in_saved_workflow(
     assert connected["status"] == "connected"
     assert connected["path_vertex_indices"] == [1, 2]
     assert connected["length_m"] == pytest.approx(2**0.5)
-    assert connected["length_scale_interval_m"] == pytest.approx(
-        [2**0.5 * 0.9, 2**0.5 * 1.1]
-    )
+    assert connected["length_scale_interval_m"] == pytest.approx([2**0.5 * 0.9, 2**0.5 * 1.1])
     assert connected["path_cumulative_lengths_m"] == pytest.approx([0, 2**0.5])
     assert "open_boundary_edge_on_path" in connected["path_qc_warnings"]
     assert disconnected["status"] == "disconnected"
