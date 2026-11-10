@@ -24,10 +24,19 @@ def assert_review_event_relationship_topology(connection: Connection) -> None:
     if table not in inspector.get_table_names():
         raise RuntimeError("Unsafe QC review-event schema: missing event table.")
     if connection.dialect.name == "sqlite":
+        # A set alone conceals duplicate declared relationships.
+        foreign_key_rows = list(
+            connection.execute(text("PRAGMA foreign_key_list(review_queue_item_events)")).mappings()
+        )
         foreign_keys = {
             (row["from"], row["table"], row["to"], str(row["on_delete"]).upper())
-            for row in connection.execute(text("PRAGMA foreign_key_list(review_queue_item_events)")).mappings()
+            for row in foreign_key_rows
         }
+        if len(foreign_key_rows) != len(foreign_keys):
+            raise RuntimeError(
+                "Unsafe QC review-event foreign-key topology: duplicate relationship. "
+                "Preserve reviewer history."
+            )
     else:
         # A composite link must never disappear from the comparison merely
         # because the inspector reports more than one constrained column.
