@@ -39,7 +39,38 @@ def test_review_event_migration_retains_foreign_keys_and_ordering_indexes() -> N
             # Alembic migration, not only hand-constructed SQLite fixtures.
             # This is a prerequisite for safely wiring the validator into
             # desktop startup after the remaining lineage fixtures are fixed.
+            # Preserve a real reviewer event while inspecting the migrated schema.
+            # Parent rows are required by the original 0038 foreign keys.
+            for parent in ("projects", "review_queues", "review_queue_items"):
+                connection.execute(text(f"INSERT INTO {parent} (id) VALUES ('parent')"))
+            connection.execute(
+                text(
+                    "INSERT INTO review_queue_item_events "
+                    "(id, review_queue_id, review_queue_item_id, project_id, "
+                    "client_request_id, event_type, actor, created_at) "
+                    "VALUES ('event', 'parent', 'parent', 'parent', "
+                    "'request', 'comment', 'researcher', '2026-11-10 12:00:00')"
+                )
+            )
+            before = connection.execute(
+                text("SELECT * FROM review_queue_item_events WHERE id='event'")
+            ).one()
+            schema_before = connection.execute(
+                text(
+                    "SELECT type, name, sql FROM sqlite_master "
+                    "WHERE tbl_name='review_queue_item_events' ORDER BY type, name"
+                )
+            ).all()
             assert_review_event_relationship_topology(connection)
+            assert connection.execute(
+                text("SELECT * FROM review_queue_item_events WHERE id='event'")
+            ).one() == before
+            assert connection.execute(
+                text(
+                    "SELECT type, name, sql FROM sqlite_master "
+                    "WHERE tbl_name='review_queue_item_events' ORDER BY type, name"
+                )
+            ).all() == schema_before
 
             inspector = inspect(connection)
             foreign_keys = {
