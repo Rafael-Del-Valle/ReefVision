@@ -510,3 +510,84 @@ def test_full_scale_uncertainty_withholds_unbounded_inverse_scale_interval_in_wo
     assert len(artifacts) == 1
     assert artifacts[0]["payload_json"] == standalone
     assert len(artifacts[0]["payload_sha256"]) == 64
+
+
+def test_disconnected_surface_paths_withhold_length_in_saved_workflow(
+    client: TestClient,
+) -> None:
+    """Only connected mesh-edge routes yield geometric distances, never branch lengths."""
+    project_id = str(create_project(client, "Disconnected surface path QC")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    params = {
+        **PARAMS,
+        "vertices": [
+            [0, 0, 0],
+            [1, 0, 0],
+            [0, 1, 0],
+            [10, 0, 0],
+            [11, 0, 0],
+            [10, 1, 0],
+        ],
+        "faces": [[0, 1, 2], [3, 4, 5]],
+        "surface_path_vertex_pairs": [[1, 2], [0, 4]],
+        "meters_per_unit": 1,
+        "relative_scale_uncertainty": 0.1,
+    }
+    response = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert response.status_code == 200, response.text
+    standalone = response.json()
+    paths = standalone["surface_edge_paths"]
+    assert len(paths) == 2
+    connected, disconnected = paths
+    assert connected["status"] == "connected"
+    assert connected["path_vertex_indices"] == [1, 2]
+    assert connected["length_m"] == pytest.approx(2**0.5)
+    assert connected["length_scale_interval_m"] == pytest.approx(
+        [2**0.5 * 0.9, 2**0.5 * 1.1]
+    )
+    assert connected["path_cumulative_lengths_m"] == pytest.approx([0, 2**0.5])
+    assert "open_boundary_edge_on_path" in connected["path_qc_warnings"]
+    assert disconnected["status"] == "disconnected"
+    assert disconnected["path_vertex_indices"] is None
+    assert disconnected["length_m"] is None
+    assert disconnected["length_scale_interval_m"] is None
+    assert disconnected["path_cumulative_lengths_m"] is None
+    assert standalone["measurement_status"] == "caller_supplied_unverified"
+    assert standalone["provenance"]["calibration_verified"] is False
+
+    graph = {
+        "graph_id": "disconnected-surface-path-qc-v14",
+        "name": "Withhold disconnected geometric path measurements",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifacts = [
+        item
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    ]
+    assert len(artifacts) == 1
+    assert artifacts[0]["payload_json"] == standalone
+    assert len(artifacts[0]["payload_sha256"]) == 64
