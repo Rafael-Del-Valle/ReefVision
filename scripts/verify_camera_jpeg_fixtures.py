@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 
 JPEG_SUFFIXES = {".jpg", ".jpeg", ".jpe", ".jfif", ".jfi", ".jif"}
@@ -33,17 +34,20 @@ def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
     seen_casefolded_paths: dict[str, str] = {}
     seen_casefolded_components: dict[tuple[str, ...], str] = {}
     seen_file_identities: dict[tuple[int, int], str] = {}
-    for path in sorted(root.rglob("*")):
-        # A linked directory can hide additional camera captures from rglob().
-        # Do not traverse it or silently certify an incomplete fixture set.
-        # Check links via lstat (is_symlink), without reading target contents.
-        if path.is_symlink() and path.is_dir():
-            errors.append(f"symlinked directory not inspected: {path.relative_to(root)}")
-            continue
-        # Filter unrelated files before metadata checks; a JPEG-named symlink
-        # remains explicitly rejected rather than followed.
-        if path.suffix.lower() not in JPEG_SUFFIXES:
-            continue
+    # os.walk separates directories from files without statting unrelated
+    # scientific files. Never follow directory links outside the approved root.
+    jpeg_paths: list[Path] = []
+    for directory, dirnames, filenames in os.walk(root, followlinks=False):
+        parent = Path(directory)
+        for dirname in sorted(dirnames):
+            child = parent / dirname
+            if child.is_symlink():
+                errors.append(f"symlinked directory not inspected: {child.relative_to(root)}")
+        dirnames[:] = sorted(name for name in dirnames if not (parent / name).is_symlink())
+        jpeg_paths.extend(parent / name for name in filenames
+                          if Path(name).suffix.lower() in JPEG_SUFFIXES)
+    for path in sorted(jpeg_paths):
+        # JPEG-named symlinks remain explicitly rejected, not followed.
         if path.is_symlink():
             errors.append(f"symlink not inspected: {path.relative_to(root)}")
             continue
