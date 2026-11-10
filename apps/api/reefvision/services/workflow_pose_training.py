@@ -564,6 +564,7 @@ def _completed_workflow_pose_training_run(
             or candidate.notes != notes
             or candidate.device != device
             or candidate.precision != precision
+            or (candidate.random_seed is not None and type(candidate.random_seed) is not int)
             or candidate.random_seed != random_seed
             or dict(candidate.training_config_json or {}) != training_config
             or dict(candidate.resource_limits_json or {}) != resource_limits
