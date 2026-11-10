@@ -86,6 +86,23 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             )
             self.assertEqual((first.read_bytes(), second.read_bytes()), originals)
 
+    def test_windows_reserved_device_parent_directory_is_rejected(self) -> None:
+        """A valid JPEG below a Windows device-named directory is not portable."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reserved = root / "CON"
+            try:
+                reserved.mkdir()
+            except OSError:
+                self.skipTest("Filesystem prohibits Windows device directory names")
+            photo = reserved / "photo.JPG"
+            original = bytes.fromhex("ffd8") + b"camera" + bytes.fromhex("ffd9")
+            photo.write_bytes(original)
+            records, errors = MODULE.inventory(root)
+            self.assertEqual([record["path"] for record in records], ["CON/photo.JPG"])
+            self.assertIn("Windows reserved device directory: CON/photo.JPG", errors)
+            self.assertEqual(photo.read_bytes(), original)
+
     def test_windows_reserved_device_camera_filenames(self) -> None:
         """Windows cannot open device basenames even with JPEG suffixes."""
         with tempfile.TemporaryDirectory() as directory:
