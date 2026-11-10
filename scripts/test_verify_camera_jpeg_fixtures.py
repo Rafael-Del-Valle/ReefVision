@@ -67,6 +67,34 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertTrue(all(record["jpeg_boundary_markers"] for record in records))
             self.assertEqual({record["extension"] for record in records}, {".jpg", ".jfif"})
 
+    def test_exif_oriented_camera_jpeg_is_inventoried_without_rewriting_metadata(self) -> None:
+        """Camera EXIF orientation must survive read-only JPEG inventory."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; camera EXIF acceptance unverified")
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = root / "portrait_camera.JPEG"
+            image = Image.new("RGB", (12, 8), (40, 100, 180))
+            exif = Image.Exif()
+            exif[274] = 6  # Rotate 90 degrees clockwise for display.
+            image.save(fixture, format="JPEG", exif=exif)
+            original = fixture.read_bytes()
+
+            with Image.open(fixture) as decoded:
+                decoded.load()
+                self.assertEqual(decoded.getexif().get(274), 6)
+                self.assertEqual(decoded.size, (12, 8))
+
+            records, errors = MODULE.inventory(root)
+            self.assertEqual(errors, [])
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0]["path"], fixture.name)
+            self.assertTrue(records[0]["jpeg_boundary_markers"])
+            self.assertEqual(fixture.read_bytes(), original)
+
     def test_corrupt_markers_are_reported_without_changing_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
