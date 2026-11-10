@@ -78,7 +78,7 @@ def main() -> int:
     # directory: linked-parent/fixtures would otherwise escape the approved root.
     candidate = args.directory.absolute()
     if any(component.is_symlink() for component in (candidate, *candidate.parents)):
-        parser.error("camera fixture directory path must not contain a symbolic link")
+        parser.error("camera fixture directory must not be a symbolic link (including parent components)")
     try:
         root = args.directory.resolve(strict=True)
     except (OSError, RuntimeError) as exc:
