@@ -209,6 +209,17 @@ def _pose_dataset(
     ):
         raise ValidationError(f"Pose {role} dataset item count no longer matches frozen manifest")
 
+    # A source-round ID identifies the active-learning selection that produced
+    # this frozen dataset. Reject noncanonical persisted IDs before accepting
+    # a re-signed manifest as valid scientific lineage.
+    source_round_id = dataset.source_round_id
+    if source_round_id is not None and (
+        not isinstance(source_round_id, str)
+        or not source_round_id.strip()
+        or source_round_id != source_round_id.strip()
+    ):
+        raise ValidationError(f"Pose {role} dataset source round ID is invalid")
+
     # Frozen active-learning source digests are provenance assertions, not labels.
     # Reject malformed stored values even if the manifest was re-signed to match.
     for source_digest in (
