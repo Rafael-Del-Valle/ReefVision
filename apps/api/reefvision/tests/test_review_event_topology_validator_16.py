@@ -10,7 +10,7 @@ from reefvision.db.review_event_topology_16 import assert_review_event_relations
 
 @pytest.mark.parametrize("broken", [
         "none", "missing_fk", "wrong_delete", "missing_index", "reordered_index",
-        "wrong_parent", "extra_fk", "extra_index", "wrong_index_name",
+        "wrong_parent", "extra_fk", "duplicate_fk", "extra_index", "wrong_index_name",
     ])
 def test_review_event_topology_is_read_only_and_fails_closed(broken: str) -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
@@ -33,6 +33,8 @@ def test_review_event_topology_is_read_only_and_fails_closed(broken: str) -> Non
                 f"{item_fk}"
                 + (", FOREIGN KEY (created_at) REFERENCES projects(id) ON DELETE CASCADE"
                    if broken == "extra_fk" else "")
+                + (", FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
+                   if broken == "duplicate_fk" else "")
                 + ")"
             ))
             item_order = (
