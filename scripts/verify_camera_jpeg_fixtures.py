@@ -18,6 +18,14 @@ JPEG_EOI = b"\xff\xd9"
 
 
 def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
+    # This function is also imported directly by tests and acceptance tools.
+    # Enforce the same root boundary as the CLI before rglob can follow a
+    # linked root or parent into an unapproved camera directory.
+    candidate = root.absolute()
+    if any(component.is_symlink() for component in (candidate, *candidate.parents)):
+        return [], ["camera fixture directory must not be a symbolic link (including parent components)"]
+    if not root.is_dir():
+        return [], ["camera fixture directory is not a directory"]
     records: list[dict[str, object]] = []
     errors: list[str] = []
     # Case-sensitive hosts can hold distinct camera names that collapse to one
