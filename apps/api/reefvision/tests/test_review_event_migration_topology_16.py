@@ -35,6 +35,10 @@ def test_review_event_migration_retains_foreign_keys_and_ordering_indexes() -> N
             finally:
                 module.op = original_op
 
+            # Enforce actual SQLite referential integrity, not just DDL inspection.
+            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+
             # Exercise the same read-only topology contract against the real
             # Alembic migration, not only hand-constructed SQLite fixtures.
             # This is a prerequisite for safely wiring the validator into
