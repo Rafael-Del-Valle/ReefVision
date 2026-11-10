@@ -74,8 +74,11 @@ def main() -> int:
     args = parser.parse_args()
     # Reject a linked root before resolve() can silently follow it outside the
     # owner-approved camera fixture directory.
-    if args.directory.is_symlink():
-        parser.error("camera fixture directory must not be a symbolic link")
+    # Reject symlinks in any supplied path component, not only the final
+    # directory: linked-parent/fixtures would otherwise escape the approved root.
+    candidate = args.directory.absolute()
+    if any(component.is_symlink() for component in (candidate, *candidate.parents)):
+        parser.error("camera fixture directory path must not contain a symbolic link")
     try:
         root = args.directory.resolve(strict=True)
     except (OSError, RuntimeError) as exc:
