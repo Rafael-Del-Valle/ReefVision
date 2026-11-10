@@ -662,7 +662,9 @@ def _reused_pose_training_result(
         or not run.result_checkpoint_path.strip()
         or run.result_checkpoint_path != run.result_checkpoint_path.strip()
     ):
-        raise ValidationError("Recovered pose training is missing a canonical job/checkpoint reference")
+        raise ValidationError(
+            "Recovered pose training is missing a canonical job/checkpoint reference"
+        )
 
     job = session.get(
         Job,
