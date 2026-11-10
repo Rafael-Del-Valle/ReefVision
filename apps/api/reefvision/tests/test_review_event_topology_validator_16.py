@@ -23,6 +23,8 @@ from reefvision.db.review_event_topology_16 import assert_review_event_relations
         "wrong_index_name",
         "unique_index",
         "partial_index",
+        "descending_item_index",
+        "descending_queue_index",
     ],
 )
 def test_review_event_topology_is_read_only_and_fails_closed(broken: str) -> None:
@@ -64,7 +66,11 @@ def test_review_event_topology_is_read_only_and_fails_closed(broken: str) -> Non
             item_order = (
                 "created_at, review_queue_item_id"
                 if broken == "reordered_index"
-                else "review_queue_item_id, created_at"
+                else (
+                    "review_queue_item_id, created_at DESC"
+                    if broken == "descending_item_index"
+                    else "review_queue_item_id, created_at"
+                )
             )
             item_index_name = (
                 "ix_review_queue_item_events_item_changed"
@@ -82,6 +88,9 @@ def test_review_event_topology_is_read_only_and_fails_closed(broken: str) -> Non
                 connection.execute(
                     text(
                         "CREATE INDEX ix_review_queue_item_events_queue_created "
+                        "ON review_queue_item_events (review_queue_id, created_at DESC)"
+                        if broken == "descending_queue_index"
+                        else "CREATE INDEX ix_review_queue_item_events_queue_created "
                         "ON review_queue_item_events (review_queue_id, created_at)"
                     )
                 )
