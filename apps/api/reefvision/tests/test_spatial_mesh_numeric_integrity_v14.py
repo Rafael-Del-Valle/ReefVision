@@ -238,7 +238,8 @@ def test_disconnected_patches_preserve_measurements_in_saved_workflow(
 
 @pytest.mark.parametrize("duplicate_vertex_index", [False, True])
 def test_vertex_touching_patches_are_not_one_connected_surface(
-    client: TestClient, duplicate_vertex_index: bool,
+    client: TestClient,
+    duplicate_vertex_index: bool,
 ) -> None:
     """Shared or coincident vertices do not prove one connected coral surface."""
     project_id = str(create_project(client, "Vertex-touching mesh patches")["id"])
