@@ -29,6 +29,19 @@ def assert_review_event_relationship_topology(connection: Connection) -> None:
             for row in connection.execute(text("PRAGMA foreign_key_list(review_queue_item_events)")).mappings()
         }
     else:
+        # A composite link must never disappear from the comparison merely
+        # because the inspector reports more than one constrained column.
+        # Fail closed instead of silently accepting a modified audit schema.
+        inspected_foreign_keys = inspector.get_foreign_keys(table)
+        if any(
+            len(fk.get("constrained_columns") or ()) != 1
+            or len(fk.get("referred_columns") or ()) != 1
+            for fk in inspected_foreign_keys
+        ):
+            raise RuntimeError(
+                "Unsafe QC review-event foreign-key topology: composite or "
+                "incomplete relationship. Preserve reviewer history."
+            )
         foreign_keys = {
             (
                 fk["constrained_columns"][0],
@@ -36,9 +49,7 @@ def assert_review_event_relationship_topology(connection: Connection) -> None:
                 fk["referred_columns"][0],
                 str((fk.get("options") or {}).get("ondelete") or "").upper(),
             )
-            for fk in inspector.get_foreign_keys(table)
-            if len(fk.get("constrained_columns") or ()) == 1
-            and len(fk.get("referred_columns") or ()) == 1
+            for fk in inspected_foreign_keys
         }
     if foreign_keys != _EXPECTED_FOREIGN_KEYS:
         raise RuntimeError(
