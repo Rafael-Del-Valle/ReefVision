@@ -488,10 +488,10 @@ def _completed_workflow_pose_training_run(
         if candidate.draft_snapshot_json is not None and not isinstance(
             candidate.draft_snapshot_json, dict
         ):
-            # Other pose runs can have unrelated legacy or damaged snapshots.
-            # They cannot match this workflow node, so do not let them block
-            # recovery of an otherwise valid completed run.
-            continue
+            # Malformed persisted snapshots cannot be safely matched to a
+            # workflow node. Fail closed rather than silently treating a
+            # damaged training run as unrelated scientific provenance.
+            raise ValidationError("Recovered pose-training snapshot must be a JSON object")
         snapshot = dict(candidate.draft_snapshot_json or {})
 
         if (
