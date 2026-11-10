@@ -223,6 +223,11 @@ def _pose_dataset(
             f"Pose {role} dataset item fingerprints no longer match persisted frozen truth"
         )
 
+    # A boolean revision compares equal to integer 1 in Python; reject it
+    # before resolving the frozen schema or accepting re-signed provenance.
+    if type(dataset.pose_schema_revision) is not int or dataset.pose_schema_revision < 1:
+        raise ValidationError(f"Pose {role} dataset landmark schema revision is invalid")
+
     # A frozen landmark-schema hash is a scientific identity assertion. Reject
     # malformed stored values before resolving the schema revision.
     schema_digest = dataset.pose_schema_content_hash
