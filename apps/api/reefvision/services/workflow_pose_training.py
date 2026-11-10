@@ -201,6 +201,7 @@ def _pose_dataset(
         or type(dataset.manifest_json.get("item_count")) is not int
         or dataset.manifest_json.get("item_count") != dataset.item_count
         or len(dataset.manifest_json["items"]) != dataset.item_count
+        or any(not isinstance(item, dict) for item in dataset.manifest_json["items"])
     ):
         raise ValidationError(f"Pose {role} dataset item count no longer matches frozen manifest")
 
