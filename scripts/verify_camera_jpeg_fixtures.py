@@ -51,6 +51,12 @@ def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
                 else:
                     errors.append(f"Windows reserved device directory: {relative}")
                 break
+        # Win32 rejects these characters in every path component, even when
+        # a Linux camera export can store them. Flag without renaming originals.
+        forbidden = set('<>:"\\\\|?*')
+        if any(any(character in forbidden or ord(character) < 32
+                   for character in component) for component in components):
+            errors.append(f"Windows invalid path character: {relative}")
         # Detect case-only directory aliases too: Camera/a.jpg and camera/b.jpg
         # are different Linux trees but collapse into one Windows directory.
         # Win32 normalizes trailing dots/spaces in path components; such
