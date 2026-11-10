@@ -26,6 +26,12 @@ def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
     seen_casefolded_components: dict[tuple[str, ...], str] = {}
     seen_file_identities: dict[tuple[int, int], str] = {}
     for path in sorted(root.rglob("*")):
+        # A linked directory can hide additional camera captures from rglob().
+        # Do not traverse it or silently certify an incomplete fixture set.
+        # Check links via lstat (is_symlink), without reading target contents.
+        if path.is_symlink() and path.is_dir():
+            errors.append(f"symlinked directory not inspected: {path.relative_to(root)}")
+            continue
         # Filter unrelated files before metadata checks; a JPEG-named symlink
         # remains explicitly rejected rather than followed.
         if path.suffix.lower() not in JPEG_SUFFIXES:
