@@ -210,7 +210,9 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                 result = original_stat(path, *args, **kwargs)
                 if path == fixture:
                     calls += 1
-                    if calls >= 2:
+                    # Path.is_file() calls stat before inventory's before/after pair.
+                    # Change only the post-read observation, not both snapshots.
+                    if calls >= 3:
                         from types import SimpleNamespace
                         return SimpleNamespace(
                             st_mode=result.st_mode,
