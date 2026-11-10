@@ -101,15 +101,27 @@ def test_review_event_migration_enforces_cascading_links_with_foreign_keys_enabl
                 "INSERT INTO review_queue_item_events "
                 "(id, review_queue_id, review_queue_item_id, project_id, "
                 "client_request_id, event_type, actor, created_at) "
-                "VALUES (:id, :queue, 'parent', 'parent', :request, "
+                "VALUES (:id, :queue, :item, :project, :request, "
                 "'comment', 'researcher', '2026-11-09 12:00:00')"
             )
-            with pytest.raises(IntegrityError):
-                connection.execute(
-                    event_sql, {"id": "orphan", "queue": "missing", "request": "bad"}
-                )
+            # Exercise every foreign-key edge independently. A queue-only
+            # orphan check would miss a missing project/item constraint.
+            for missing_column in ("queue", "item", "project"):
+                values = {
+                    "id": f"orphan-{missing_column}",
+                    "queue": "parent",
+                    "item": "parent",
+                    "project": "parent",
+                    "request": f"bad-{missing_column}",
+                }
+                values[missing_column] = "missing"
+                with pytest.raises(IntegrityError):
+                    connection.execute(event_sql, values)
+            assert connection.execute(
+                text("SELECT COUNT(*) FROM review_queue_item_events")
+            ).scalar_one() == 0
             connection.execute(
-                event_sql, {"id": "valid", "queue": "parent", "request": "good"}
+                event_sql, {"id": "valid", "queue": "parent", "item": "parent", "project": "parent", "request": "good"}
             )
             assert connection.execute(
                 text("SELECT COUNT(*) FROM review_queue_item_events")
