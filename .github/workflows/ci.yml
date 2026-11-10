@@ -72,6 +72,12 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Regression-test camera JPEG fixture inventory on Windows
+        shell: pwsh
+        run: python -m unittest discover -s scripts -p 'test_verify_camera_jpeg_fixtures.py' -v
       - name: Regression-test read-only MSI/CAB evidence collection
         shell: pwsh
         run: ./scripts/windows/test-103-acceptance-evidence.ps1
