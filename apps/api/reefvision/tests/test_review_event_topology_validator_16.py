@@ -1,5 +1,7 @@
 """Standalone read-only checks for QC event foreign keys and ordering indexes."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 from sqlalchemy import create_engine, text
 
@@ -71,3 +73,24 @@ def test_review_event_topology_is_read_only_and_fails_closed(broken: str) -> Non
             )) == before
     finally:
         engine.dispose()
+
+
+def test_non_sqlite_composite_foreign_key_rejected_without_querying_rows() -> None:
+    """Do not silently discard a malformed multi-column audit relationship."""
+    connection = MagicMock()
+    connection.dialect.name = "postgresql"
+    inspector = MagicMock()
+    inspector.get_table_names.return_value = ["review_queue_item_events"]
+    inspector.get_foreign_keys.return_value = [
+        {
+            "constrained_columns": ["review_queue_id", "project_id"],
+            "referred_table": "review_queues",
+            "referred_columns": ["id", "project_id"],
+            "options": {"ondelete": "CASCADE"},
+        }
+    ]
+    with patch("reefvision.db.review_event_topology_16.inspect", return_value=inspector):
+        with pytest.raises(RuntimeError, match="composite or incomplete"):
+            assert_review_event_relationship_topology(connection)
+    connection.execute.assert_not_called()
+    inspector.get_indexes.assert_not_called()
