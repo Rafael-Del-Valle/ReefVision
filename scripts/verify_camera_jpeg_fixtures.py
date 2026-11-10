@@ -25,10 +25,14 @@ def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
     seen_casefolded_paths: dict[str, str] = {}
     seen_casefolded_components: dict[tuple[str, ...], str] = {}
     for path in sorted(root.rglob("*")):
+        # Filter unrelated files before metadata checks; a JPEG-named symlink
+        # remains explicitly rejected rather than followed.
+        if path.suffix.lower() not in JPEG_SUFFIXES:
+            continue
         if path.is_symlink():
             errors.append(f"symlink not inspected: {path.relative_to(root)}")
             continue
-        if path.suffix.lower() not in JPEG_SUFFIXES or not path.is_file():
+        if not path.is_file():
             continue
         relative = path.relative_to(root).as_posix()
         # Windows reserves device basenames even when a JPEG extension is present.
