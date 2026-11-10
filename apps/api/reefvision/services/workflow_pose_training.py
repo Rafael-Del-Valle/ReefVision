@@ -397,7 +397,9 @@ def _seed_pose_model(
     # schema identities can have identical content hashes. Require the exact
     # frozen schema revision before using a locally registered checkpoint.
     if (
-        binding.schema_id != dataset.pose_schema_id
+        type(binding.schema_revision) is not int
+        or binding.schema_revision < 1
+        or binding.schema_id != dataset.pose_schema_id
         or binding.schema_revision != dataset.pose_schema_revision
     ):
         raise ValidationError(
