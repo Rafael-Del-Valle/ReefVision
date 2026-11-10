@@ -20,6 +20,9 @@ JPEG_EOI = b"\xff\xd9"
 def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
     records: list[dict[str, object]] = []
     errors: list[str] = []
+    # Case-sensitive hosts can hold distinct camera names that collapse to one
+    # path on default Windows filesystems. Flag this before acceptance/export.
+    seen_casefolded_paths: dict[str, str] = {}
     for path in sorted(root.rglob("*")):
         if path.is_symlink():
             errors.append(f"symlink not inspected: {path.relative_to(root)}")
@@ -27,6 +30,10 @@ def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
         if not path.is_file() or path.suffix.lower() not in JPEG_SUFFIXES:
             continue
         relative = path.relative_to(root).as_posix()
+        folded = relative.casefold()
+        previous = seen_casefolded_paths.setdefault(folded, relative)
+        if previous != relative:
+            errors.append(f"Windows case-insensitive filename collision: {previous} / {relative}")
         digest = hashlib.sha256()
         first = b""
         tail = b""
