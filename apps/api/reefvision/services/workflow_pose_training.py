@@ -223,6 +223,16 @@ def _pose_dataset(
             f"Pose {role} dataset item fingerprints no longer match persisted frozen truth"
         )
 
+    # A frozen landmark-schema hash is a scientific identity assertion. Reject
+    # malformed stored values before resolving the schema revision.
+    schema_digest = dataset.pose_schema_content_hash
+    if (
+        not isinstance(schema_digest, str)
+        or len(schema_digest) != 64
+        or any(char not in "0123456789abcdef" for char in schema_digest)
+    ):
+        raise ValidationError(f"Pose {role} dataset landmark schema digest is invalid")
+
     # The planner validates frozen truth, but the execution adapter must also
     # reject schema drift after planning or when invoked independently.
     schema = session.get(PoseLandmarkSchema, dataset.pose_schema_id)
