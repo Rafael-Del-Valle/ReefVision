@@ -71,7 +71,11 @@ def test_review_event_topology_is_read_only_and_fails_closed(broken: str) -> Non
                 else (
                     "review_queue_item_id, created_at DESC"
                     if broken == "descending_item_index"
-                    else ("review_queue_item_id COLLATE NOCASE, created_at" if broken == "nocase_item_index" else "review_queue_item_id, created_at")
+                    else (
+                        "review_queue_item_id COLLATE NOCASE, created_at"
+                        if broken == "nocase_item_index"
+                        else "review_queue_item_id, created_at"
+                    )
                 )
             )
             item_index_name = (
