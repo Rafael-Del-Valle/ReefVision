@@ -24,6 +24,10 @@ def test_review_event_migration_retains_foreign_keys_and_ordering_indexes() -> N
     engine = create_engine("sqlite+pysqlite:///:memory:")
     try:
         with engine.begin() as connection:
+            # Enforce actual SQLite referential integrity, not just DDL inspection.
+            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+
             for parent in ("projects", "review_queues", "review_queue_items"):
                 connection.execute(text(f"CREATE TABLE {parent} (id VARCHAR(36) PRIMARY KEY)"))
             context = MigrationContext.configure(connection)
@@ -34,10 +38,6 @@ def test_review_event_migration_retains_foreign_keys_and_ordering_indexes() -> N
                 module.upgrade()
             finally:
                 module.op = original_op
-
-            # Enforce actual SQLite referential integrity, not just DDL inspection.
-            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
-            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
 
             # Exercise the same read-only topology contract against the real
             # Alembic migration, not only hand-constructed SQLite fixtures.
