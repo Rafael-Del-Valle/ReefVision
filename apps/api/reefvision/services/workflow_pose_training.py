@@ -1198,8 +1198,7 @@ def create_pose_workflow_training_result(
     # A conflicting second seed would make the saved scientific configuration
     # disagree with the actual worker invocation (which uses random_seed).
     if configured_seed_supplied and (
-        isinstance(supplied_config["seed"], bool)
-        or supplied_config["seed"] != random_seed
+        isinstance(supplied_config["seed"], bool) or supplied_config["seed"] != random_seed
     ):
         raise ValidationError("Pose training_config.seed must match random_seed")
 
