@@ -132,3 +132,65 @@ def test_review_event_migration_enforces_cascading_links_with_foreign_keys_enabl
             ).scalar_one() == 0
     finally:
         engine.dispose()
+
+
+@pytest.mark.parametrize("changed_column", ["queue", "item", "project"])
+def test_review_event_migration_rejects_orphaned_parent_reassignment(
+    changed_column: str,
+) -> None:
+    """An UPDATE must not silently detach an existing scientific QC audit event."""
+    versions = Path(__file__).resolve().parents[2] / "migrations" / "versions"
+    spec = importlib.util.spec_from_file_location(
+        "review_event_migration_0038_update", versions / "0038_review_queue_item_events.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    try:
+        with engine.connect() as connection:
+            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+            for parent in ("projects", "review_queues", "review_queue_items"):
+                connection.execute(text(f"CREATE TABLE {parent} (id VARCHAR(36) PRIMARY KEY)"))
+                connection.execute(text(f"INSERT INTO {parent} (id) VALUES ('parent')"))
+            operations = Operations(MigrationContext.configure(connection))
+            original_op = module.op
+            try:
+                module.op = operations
+                module.upgrade()
+            finally:
+                module.op = original_op
+
+            connection.execute(
+                text(
+                    "INSERT INTO review_queue_item_events "
+                    "(id, review_queue_id, review_queue_item_id, project_id, "
+                    "client_request_id, event_type, actor, created_at) "
+                    "VALUES ('event', 'parent', 'parent', 'parent', "
+                    "'request', 'comment', 'researcher', '2026-11-10 12:00:00')"
+                )
+            )
+            column = {
+                "queue": "review_queue_id",
+                "item": "review_queue_item_id",
+                "project": "project_id",
+            }[changed_column]
+            with pytest.raises(IntegrityError):
+                connection.execute(
+                    text(
+                        f"UPDATE review_queue_item_events SET {column}='missing' "
+                        "WHERE id='event'"
+                    )
+                )
+            # A rejected reassignment must preserve immutable reviewer attribution.
+            row = connection.execute(
+                text(
+                    "SELECT review_queue_id, review_queue_item_id, project_id, "
+                    "client_request_id, actor FROM review_queue_item_events WHERE id='event'"
+                )
+            ).one()
+            assert tuple(row) == ("parent", "parent", "parent", "request", "researcher")
+    finally:
+        engine.dispose()
