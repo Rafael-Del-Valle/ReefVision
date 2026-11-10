@@ -247,28 +247,45 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             original = bytes.fromhex("ffd8") + b"payload" + bytes.fromhex("ffd9")
             fixture.write_bytes(original)
             original_stat = Path.stat
-            calls = 0
+            original_open = Path.open
+            reading_complete = False
+
+            def observed_open(path: Path, *args: object, **kwargs: object):
+                stream = original_open(path, *args, **kwargs)
+                if path != fixture:
+                    return stream
+
+                class ObservedStream:
+                    def __enter__(self):
+                        return self
+
+                    def __exit__(self, exc_type, exc, tb):
+                        nonlocal reading_complete
+                        try:
+                            return stream.__exit__(exc_type, exc, tb)
+                        finally:
+                            reading_complete = True
+
+                    def read(self, *read_args, **read_kwargs):
+                        return stream.read(*read_args, **read_kwargs)
+
+                return ObservedStream()
 
             def changed_stat(path: Path, *args: object, **kwargs: object):
-                nonlocal calls
                 result = original_stat(path, *args, **kwargs)
-                if path == fixture:
-                    calls += 1
-                    # Path.is_file() calls stat before inventory's before/after pair.
-                    # Change only the post-read observation, not both snapshots.
-                    if calls >= 3:
-                        from types import SimpleNamespace
-                        return SimpleNamespace(
-                            st_mode=result.st_mode,
-                            st_size=result.st_size,
-                            st_mtime_ns=result.st_mtime_ns + 1,
-                            st_ctime_ns=result.st_ctime_ns,
-                            st_ino=result.st_ino,
-                            st_dev=result.st_dev,
-                        )
+                if path == fixture and reading_complete:
+                    from types import SimpleNamespace
+                    return SimpleNamespace(
+                        st_mode=result.st_mode,
+                        st_size=result.st_size,
+                        st_mtime_ns=result.st_mtime_ns + 1,
+                        st_ctime_ns=result.st_ctime_ns,
+                        st_ino=result.st_ino,
+                        st_dev=result.st_dev,
+                    )
                 return result
 
-            with mock.patch.object(Path, "stat", changed_stat):
+            with mock.patch.object(Path, "stat", changed_stat), mock.patch.object(Path, "open", observed_open):
                 records, errors = MODULE.inventory(root)
             self.assertEqual(records, [])
             self.assertIn("JPEG fixture changed during inventory: changing.jpg", errors)
