@@ -72,6 +72,19 @@ def assert_review_event_relationship_topology(connection: Connection) -> None:
             "Preserve reviewer history and reconcile using a reviewed migration."
         )
     inspected_indexes = inspector.get_indexes(table)
+    # UNIQUE or partial history indexes alter the original 0038 audit contract.
+    # An expression index cannot provide the required full-column ordering.
+    if any(
+        index.get("unique", False)
+        or (index.get("dialect_options") or {}).get("sqlite_where") is not None
+        or (index.get("dialect_options") or {}).get("postgresql_where") is not None
+        or any(column is None for column in index.get("column_names") or ())
+        for index in inspected_indexes
+    ):
+        raise RuntimeError(
+            "Unsafe QC review-event history index topology: unique, partial, or "
+            "expression index. Preserve reviewer history."
+        )
     indexes = {
         index["name"]: tuple(index["column_names"])
         for index in inspected_indexes
