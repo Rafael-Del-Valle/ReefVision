@@ -92,8 +92,11 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             root = Path(directory)
             names = ("CON.JPG", "com1.jpeg", "LPT9.JFIF", "safe.jpg")
             original = bytes.fromhex("ffd8") + b"unchanged" + bytes.fromhex("ffd9")
-            for name in names:
-                (root / name).write_bytes(original)
+            try:
+                for name in names:
+                    (root / name).write_bytes(original)
+            except OSError:
+                self.skipTest("Host filesystem rejects Windows device filenames")
             records, errors = MODULE.inventory(root)
             self.assertEqual({record["path"] for record in records}, set(names))
             self.assertEqual(
