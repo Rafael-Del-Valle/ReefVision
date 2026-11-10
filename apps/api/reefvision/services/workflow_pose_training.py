@@ -1004,8 +1004,10 @@ def create_pose_workflow_training_result(
         and (
             not isinstance(workflow_run_id, str)
             or not workflow_run_id.strip()
+            or workflow_run_id != workflow_run_id.strip()
             or not isinstance(workflow_node_run_id, str)
             or not workflow_node_run_id.strip()
+            or workflow_node_run_id != workflow_node_run_id.strip()
         )
     ):
         raise ValidationError("Pose training workflow lineage requires both non-blank IDs")
