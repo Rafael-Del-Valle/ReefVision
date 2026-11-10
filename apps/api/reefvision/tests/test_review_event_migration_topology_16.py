@@ -9,6 +9,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 import pytest
 
+from reefvision.db.review_event_topology_16 import assert_review_event_relationship_topology
+
 
 def test_review_event_migration_retains_foreign_keys_and_ordering_indexes() -> None:
     versions = Path(__file__).resolve().parents[2] / "migrations" / "versions"
@@ -32,6 +34,12 @@ def test_review_event_migration_retains_foreign_keys_and_ordering_indexes() -> N
                 module.upgrade()
             finally:
                 module.op = original_op
+
+            # Exercise the same read-only topology contract against the real
+            # Alembic migration, not only hand-constructed SQLite fixtures.
+            # This is a prerequisite for safely wiring the validator into
+            # desktop startup after the remaining lineage fixtures are fixed.
+            assert_review_event_relationship_topology(connection)
 
             inspector = inspect(connection)
             foreign_keys = {
