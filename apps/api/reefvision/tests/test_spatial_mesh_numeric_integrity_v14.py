@@ -156,4 +156,7 @@ def test_valid_integer_mesh_geometry_retains_saved_workflow_parity(client: TestC
     )
     assert artifact["payload_json"]["surface_area_m2"] == standalone["surface_area_m2"]
     assert artifact["payload_json"]["provenance"] == standalone["provenance"]
+    assert artifact["payload_json"]["measurement_status"] == "caller_supplied_unverified"
+    assert artifact["payload_json"]["provenance"]["calibration_verified"] is False
+    assert artifact["payload_json"] == standalone
     assert len(artifact["payload_sha256"]) == 64
