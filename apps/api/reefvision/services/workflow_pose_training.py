@@ -146,7 +146,7 @@ def _pose_dataset(
     if dataset is None or dataset.project_id != project_id:
         raise ValidationError(f"Pose {role} dataset does not belong to this project")
 
-    if dataset.status != "complete" or (dataset.item_count or 0) < 1:
+    if dataset.status != "complete" or type(dataset.item_count) is not int or dataset.item_count < 1:
         raise ValidationError(f"Pose {role} dataset must be complete and contain verified items")
 
     if not isinstance(dataset.manifest_json, dict):
