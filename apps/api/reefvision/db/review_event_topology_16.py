@@ -94,6 +94,27 @@ def assert_review_event_relationship_topology(connection: Connection) -> None:
             "Unsafe QC review-event history index topology: duplicate index name. "
             "Preserve reviewer history."
         )
+    # SQLAlchemy's column_names does not encode SQLite ASC/DESC ordering.
+    # The original 0038 history indexes use ascending columns; a DESC
+    # replacement can silently alter deterministic QC-history traversal.
+    # Query only fixed, known index identifiers (never user-supplied SQL).
+    if connection.dialect.name == "sqlite":
+        for index_name in _EXPECTED_INDEXES:
+            if index_name not in indexes:
+                continue
+            key_columns = [
+                row
+                for row in connection.execute(
+                    text(f"PRAGMA index_xinfo({index_name})")
+                ).mappings()
+                if row["key"]
+            ]
+            if any(row["desc"] for row in key_columns):
+                raise RuntimeError(
+                    "Unsafe QC review-event history index topology: "
+                    f"descending index columns in {index_name}. "
+                    "Preserve reviewer history."
+                )
     if indexes != _EXPECTED_INDEXES:
         raise RuntimeError(
             "Unsafe QC review-event history index topology: "
