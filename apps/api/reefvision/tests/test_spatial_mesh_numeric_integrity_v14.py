@@ -52,6 +52,8 @@ def test_mesh_service_rejects_coerced_numbers(field: str, value: object) -> None
     [
         ("meters_per_unit", True),
         ("relative_scale_uncertainty", "0.1"),
+        ("meters_per_unit", 10**1000),
+        ("relative_scale_uncertainty", 10**1000),
         ("vertices", [[0, 0, 0], ["1", 0, 0], [0, 1, 0]]),
     ],
 )
