@@ -25,6 +25,8 @@ from reefvision.db.review_event_topology_16 import assert_review_event_relations
         "partial_index",
         "descending_item_index",
         "descending_queue_index",
+        "nocase_item_index",
+        "nocase_queue_index",
     ],
 )
 def test_review_event_topology_is_read_only_and_fails_closed(broken: str) -> None:
@@ -69,7 +71,7 @@ def test_review_event_topology_is_read_only_and_fails_closed(broken: str) -> Non
                 else (
                     "review_queue_item_id, created_at DESC"
                     if broken == "descending_item_index"
-                    else "review_queue_item_id, created_at"
+                    else ("review_queue_item_id COLLATE NOCASE, created_at" if broken == "nocase_item_index" else "review_queue_item_id, created_at")
                 )
             )
             item_index_name = (
@@ -90,6 +92,9 @@ def test_review_event_topology_is_read_only_and_fails_closed(broken: str) -> Non
                         "CREATE INDEX ix_review_queue_item_events_queue_created "
                         "ON review_queue_item_events (review_queue_id, created_at DESC)"
                         if broken == "descending_queue_index"
+                        else "CREATE INDEX ix_review_queue_item_events_queue_created "
+                        "ON review_queue_item_events (review_queue_id COLLATE NOCASE, created_at)"
+                        if broken == "nocase_queue_index"
                         else "CREATE INDEX ix_review_queue_item_events_queue_created "
                         "ON review_queue_item_events (review_queue_id, created_at)"
                     )
