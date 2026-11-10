@@ -44,9 +44,12 @@ def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
             *(f"COM{number}" for number in range(1, 10)),
             *(f"LPT{number}" for number in range(1, 10)),
         }
-        for component in components:
+        for index, component in enumerate(components):
             if component.rstrip(" .").split(".")[0].upper() in reserved:
-                errors.append(f"Windows reserved device path component: {relative}")
+                if index == len(components) - 1:
+                    errors.append(f"Windows reserved device filename: {relative}")
+                else:
+                    errors.append(f"Windows reserved device directory: {relative}")
                 break
         # Detect case-only directory aliases too: Camera/a.jpg and camera/b.jpg
         # are different Linux trees but collapse into one Windows directory.
