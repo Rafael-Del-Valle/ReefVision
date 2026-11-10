@@ -707,7 +707,11 @@ def test_noncollinear_mesh_route_detour_is_preserved_in_saved_workflow(
         assert interval == pytest.approx([2**0.5 * 0.9, 2**0.5 * 1.1])
     for interval, expected in zip(
         route["path_cumulative_length_scale_intervals_m"],
-        ([0, 0], [2**0.5 * 0.9, 2**0.5 * 1.1], [2 * 2**0.5 * 0.9, 2 * 2**0.5 * 1.1]),
+        (
+            [0, 0],
+            [2**0.5 * 0.9, 2**0.5 * 1.1],
+            [2 * 2**0.5 * 0.9, 2 * 2**0.5 * 1.1],
+        ),
         strict=True,
     ):
         assert interval == pytest.approx(expected)
