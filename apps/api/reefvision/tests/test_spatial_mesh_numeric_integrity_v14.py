@@ -28,6 +28,8 @@ INVALID_NUMBERS = [
     ("meters_per_unit", "0.01"),
     ("relative_scale_uncertainty", False),
     ("relative_scale_uncertainty", "0.1"),
+    ("meters_per_unit", 10**1000),
+    ("relative_scale_uncertainty", 10**1000),
     ("vertices", [[True, 0, 0], [1, 0, 0], [0, 1, 0]]),
     ("vertices", [["0", 0, 0], [1, 0, 0], [0, 1, 0]]),
 ]
