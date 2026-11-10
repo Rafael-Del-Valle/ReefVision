@@ -393,6 +393,21 @@ def test_closed_tetrahedron_volume_is_provisional_and_workflow_reproducible(
     assert standalone["enclosed_volume_scale_interval_m3"] == pytest.approx(
         [(1 / 6) * 0.9**3, (1 / 6) * 1.1**3]
     )
+    # Linear dimensions and inverse-length A/V must use different scale exponents.
+    # These are source-frame geometry diagnostics, never anatomical branch lengths.
+    assert standalone["axis_aligned_dimensions_m"] == pytest.approx([1, 1, 1])
+    assert standalone["axis_aligned_dimension_scale_intervals_m"] == pytest.approx(
+        [[0.9, 1.1], [0.9, 1.1], [0.9, 1.1]]
+    )
+    assert standalone["axis_aligned_bounding_box_diagonal_m"] == pytest.approx(3**0.5)
+    assert standalone["axis_aligned_bounding_box_diagonal_scale_interval_m"] == pytest.approx(
+        [3**0.5 * 0.9, 3**0.5 * 1.1]
+    )
+    expected_ratio = expected_area / (1 / 6)
+    assert standalone["surface_to_enclosed_volume_ratio_per_m"] == pytest.approx(expected_ratio)
+    assert standalone["surface_to_enclosed_volume_ratio_scale_interval_per_m"] == pytest.approx(
+        [expected_ratio / 1.1, expected_ratio / 0.9]
+    )
     assert standalone["confidence_interval"] is None
     assert standalone["boundary_edge_count"] == 0
     assert standalone["edge_connected_patch_count"] == 1
