@@ -106,10 +106,13 @@ def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
         # Two directory entries may be hard links to one underlying capture.
         # Keep both manifest records, but flag duplicate scientific inputs so
         # downstream acceptance cannot mistake aliases for independent images.
-        identity = (after.st_dev, after.st_ino)
-        previous_identity = seen_file_identities.setdefault(identity, relative)
-        if previous_identity != relative:
-            errors.append(f"JPEG hard-link alias (same source image): {previous_identity} / {relative}")
+        # Some filesystems report inode zero (unknown); never infer an alias
+        # from an unavailable file identity.
+        if after.st_ino:
+            identity = (after.st_dev, after.st_ino)
+            previous_identity = seen_file_identities.setdefault(identity, relative)
+            if previous_identity != relative:
+                errors.append(f"JPEG hard-link alias (same source image): {previous_identity} / {relative}")
         signature_ok = first == JPEG_SOI and tail == JPEG_EOI
         if not signature_ok:
             errors.append(f"invalid JPEG boundary markers: {relative}")
