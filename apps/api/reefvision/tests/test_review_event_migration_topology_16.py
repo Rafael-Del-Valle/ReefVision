@@ -5,7 +5,9 @@ from pathlib import Path
 
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+import pytest
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import IntegrityError
 
 
 def test_review_event_migration_retains_foreign_keys_and_ordering_indexes() -> None:
@@ -92,8 +94,6 @@ def test_review_event_migration_enforces_cascading_links_with_foreign_keys_enabl
                 module.op = original_op
 
             # An invalid relationship must fail before any audit event is recorded.
-            from sqlalchemy.exc import IntegrityError
-
             event_sql = text(
                 "INSERT INTO review_queue_item_events "
                 "(id, review_queue_id, review_queue_item_id, project_id, "
@@ -101,8 +101,6 @@ def test_review_event_migration_enforces_cascading_links_with_foreign_keys_enabl
                 "VALUES (:id, :queue, 'parent', 'parent', :request, "
                 "'comment', 'researcher', '2026-11-09 12:00:00')"
             )
-            import pytest
-
             with pytest.raises(IntegrityError):
                 connection.execute(
                     event_sql, {"id": "orphan", "queue": "missing", "request": "bad"}
