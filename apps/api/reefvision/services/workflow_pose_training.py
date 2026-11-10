@@ -310,6 +310,15 @@ def _seed_pose_model(
     if model.purpose != "detector" or model.task != "pose" or model.provider_name != "ultralytics":
         raise ValidationError("Pose retraining seed must be a registered Ultralytics pose model")
 
+    # The registered checksum is scientific lineage, not optional metadata.
+    # Reject malformed persisted digests before inspecting the local checkpoint.
+    if (
+        not isinstance(model.sha256, str)
+        or len(model.sha256) != 64
+        or any(char not in "0123456789abcdef" for char in model.sha256)
+    ):
+        raise ValidationError("Pose retraining seed registered checkpoint digest is invalid")
+
     # A model-reference artifact may pin the original registered checkpoint.
     # Its digest is an explicit lineage assertion, not a hint to discard when
     # the model ID still resolves to an intact but different registration.
