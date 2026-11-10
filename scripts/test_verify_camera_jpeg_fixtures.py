@@ -86,6 +86,23 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             )
             self.assertEqual((first.read_bytes(), second.read_bytes()), originals)
 
+    def test_windows_invalid_path_character_is_reported_read_only(self) -> None:
+        """Linux camera paths containing Win32-forbidden characters must be flagged."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            invalid = root / "camera:one"
+            try:
+                invalid.mkdir()
+                fixture = invalid / "photo?.JPG"
+                original = bytes.fromhex("ffd8") + b"camera" + bytes.fromhex("ffd9")
+                fixture.write_bytes(original)
+            except OSError:
+                self.skipTest("Host filesystem rejects Win32-invalid path characters")
+            records, errors = MODULE.inventory(root)
+            self.assertEqual([record["path"] for record in records], ["camera:one/photo?.JPG"])
+            self.assertIn("Windows invalid path character: camera:one/photo?.JPG", errors)
+            self.assertEqual(fixture.read_bytes(), original)
+
     def test_windows_reserved_device_parent_directory_is_rejected(self) -> None:
         """A valid JPEG below a Windows device-named directory is not portable."""
         with tempfile.TemporaryDirectory() as directory:
