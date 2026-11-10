@@ -165,3 +165,72 @@ def test_valid_integer_mesh_geometry_retains_saved_workflow_parity(client: TestC
         sum(item["data_type"] == "mesh_measurement_preview" for item in detail.json()["artifacts"])
         == 1
     )
+
+
+def test_disconnected_patches_preserve_measurements_in_saved_workflow(
+    client: TestClient,
+) -> None:
+    """Independent surface patches are not biological colonies or enclosed volume."""
+    project_id = str(create_project(client, "Disconnected mesh patches")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    params = {
+        **PARAMS,
+        "vertices": [
+            [0, 0, 0],
+            [1, 0, 0],
+            [0, 1, 0],
+            [10, 0, 0],
+            [12, 0, 0],
+            [10, 2, 0],
+        ],
+        "faces": [[0, 1, 2], [3, 4, 5]],
+        "meters_per_unit": 1,
+        "relative_scale_uncertainty": 0.1,
+    }
+    response = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert response.status_code == 200, response.text
+    standalone = response.json()
+    assert standalone["surface_area_m2"] == pytest.approx(2.5)
+    assert standalone["edge_connected_patch_count"] == 2
+    assert standalone["edge_connected_patch_face_counts"] == [1, 1]
+    assert standalone["edge_connected_patch_surface_areas_m2"] == pytest.approx([0.5, 2.0])
+    assert standalone["enclosed_volume_m3"] is None
+    assert standalone["measurement_status"] == "caller_supplied_unverified"
+    assert standalone["provenance"]["calibration_verified"] is False
+
+    graph = {
+        "graph_id": "disconnected-patches-v14",
+        "name": "Disconnected surface patches remain provisional",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifacts = [
+        item
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    ]
+    assert len(artifacts) == 1
+    assert artifacts[0]["payload_json"] == standalone
+    assert len(artifacts[0]["payload_sha256"]) == 64
