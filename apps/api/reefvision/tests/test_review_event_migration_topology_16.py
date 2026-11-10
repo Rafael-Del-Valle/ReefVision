@@ -5,9 +5,9 @@ from pathlib import Path
 
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-import pytest
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
+import pytest
 
 
 def test_review_event_migration_retains_foreign_keys_and_ordering_indexes() -> None:
@@ -66,8 +66,11 @@ def test_review_event_migration_retains_foreign_keys_and_ordering_indexes() -> N
         engine.dispose()
 
 
-def test_review_event_migration_enforces_cascading_links_with_foreign_keys_enabled() -> None:
-    """The 0038 audit history must not retain orphan events after parent deletion."""
+@pytest.mark.parametrize("parent_to_delete", ["projects", "review_queues", "review_queue_items"])
+def test_review_event_migration_enforces_cascading_links_with_foreign_keys_enabled(
+    parent_to_delete: str,
+) -> None:
+    """Each of the three 0038 parent links must reject orphans and cascade deletes."""
     versions = Path(__file__).resolve().parents[2] / "migrations" / "versions"
     spec = importlib.util.spec_from_file_location(
         "review_event_migration_0038_cascade", versions / "0038_review_queue_item_events.py"
@@ -111,7 +114,7 @@ def test_review_event_migration_enforces_cascading_links_with_foreign_keys_enabl
             assert connection.execute(
                 text("SELECT COUNT(*) FROM review_queue_item_events")
             ).scalar_one() == 1
-            connection.execute(text("DELETE FROM review_queues WHERE id='parent'"))
+            connection.execute(text(f"DELETE FROM {parent_to_delete} WHERE id='parent'"))
             assert connection.execute(
                 text("SELECT COUNT(*) FROM review_queue_item_events")
             ).scalar_one() == 0
