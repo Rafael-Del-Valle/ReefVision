@@ -288,6 +288,28 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertIn("cannot resolve camera fixture directory: FileNotFoundError", output.getvalue())
             self.assertFalse(missing.exists())
 
+    def test_non_jpeg_file_is_not_statted_during_inventory(self) -> None:
+        """Unrelated scientific files must not trigger JPEG file metadata reads."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            unrelated = root / "original-scientific-data.csv"
+            unrelated.write_text("sample,value\\n1,2\\n", encoding="utf-8")
+            fixture = root / "camera.JPG"
+            original = bytes.fromhex("ffd8") + b"payload" + bytes.fromhex("ffd9")
+            fixture.write_bytes(original)
+            original_stat = Path.stat
+
+            def guarded_stat(path: Path, *args: object, **kwargs: object):
+                if path == unrelated:
+                    raise AssertionError("unrelated file was statted")
+                return original_stat(path, *args, **kwargs)
+
+            with mock.patch.object(Path, "stat", guarded_stat):
+                records, errors = MODULE.inventory(root)
+            self.assertEqual(errors, [])
+            self.assertEqual([record["path"] for record in records], ["camera.JPG"])
+            self.assertEqual(fixture.read_bytes(), original)
+
     def test_empty_fixture_directory_is_not_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             records, errors = MODULE.inventory(Path(directory))
