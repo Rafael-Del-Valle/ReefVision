@@ -615,6 +615,22 @@ def test_multihop_surface_route_uses_mesh_edges_in_saved_workflow(
     assert route["path_vertex_indices"] == [0, 1, 3]
     assert route["length_m"] == pytest.approx(2)
     assert route["path_cumulative_lengths_m"] == pytest.approx([0, 1, 2])
+    assert route["path_edge_lengths_m"] == pytest.approx([1, 1])
+    assert route["path_vertices_in_source_frame_m"] == [
+        [0, 0, 0],
+        [1, 0, 0],
+        [2, 0, 0],
+    ]
+    for interval in route["path_edge_length_scale_intervals_m"]:
+        assert interval == pytest.approx([0.9, 1.1])
+    for interval, expected in zip(
+        route["path_cumulative_length_scale_intervals_m"],
+        ([0, 0], [0.9, 1.1], [1.8, 2.2]),
+        strict=True,
+    ):
+        assert interval == pytest.approx(expected)
+    assert route["endpoint_chord_length_m"] == pytest.approx(2)
+    assert route["geometric_detour_ratio"] == pytest.approx(1)
     assert route["length_scale_interval_m"] == pytest.approx([1.8, 2.2])
     assert standalone["measurement_status"] == "caller_supplied_unverified"
     assert standalone["provenance"]["calibration_verified"] is False
