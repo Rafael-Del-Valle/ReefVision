@@ -43,6 +43,25 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual(len({record["sha256"] for record in records}), 6)
 
 
+    def test_windows_case_insensitive_camera_name_collision(self) -> None:
+        """Distinct Linux filenames must not silently alias on Windows."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = root / "capture.JPG"
+            second = root / "CAPTURE.jpg"
+            first.write_bytes(b"\\xff\\xd8first\\xff\\xd9")
+            second.write_bytes(b"\\xff\\xd8second\\xff\\xd9")
+            if len(list(root.iterdir())) != 2:
+                self.skipTest("Filesystem is case-insensitive")
+            originals = {p.name: p.read_bytes() for p in (first, second)}
+            records, errors = MODULE.inventory(root)
+            self.assertEqual(len(records), 2)
+            self.assertEqual(len(errors), 1)
+            self.assertIn("Windows case-insensitive filename collision:", errors[0])
+            self.assertIn("capture.JPG", errors[0])
+            self.assertIn("CAPTURE.jpg", errors[0])
+            self.assertEqual({p.name: p.read_bytes() for p in (first, second)}, originals)
+
     def test_real_pillow_encoded_rgb_and_cmyk_camera_jpegs(self) -> None:
         """Inventory actual decodable JPEG streams, not just SOI/EOI markers."""
         try:
