@@ -86,6 +86,23 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             )
             self.assertEqual((first.read_bytes(), second.read_bytes()), originals)
 
+    def test_windows_reserved_device_camera_filenames(self) -> None:
+        """Windows cannot open device basenames even with JPEG suffixes."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            names = ("CON.JPG", "com1.jpeg", "LPT9.JFIF", "safe.jpg")
+            original = bytes.fromhex("ffd8") + b"unchanged" + bytes.fromhex("ffd9")
+            for name in names:
+                (root / name).write_bytes(original)
+            records, errors = MODULE.inventory(root)
+            self.assertEqual({record["path"] for record in records}, set(names))
+            self.assertEqual(
+                set(errors),
+                {f"Windows reserved device filename: {name}" for name in names[:3]},
+            )
+            self.assertEqual([p.read_bytes() for p in (root / name for name in names)],
+                             [original] * len(names))
+
     def test_real_pillow_encoded_rgb_and_cmyk_camera_jpegs(self) -> None:
         """Inventory actual decodable JPEG streams, not just SOI/EOI markers."""
         try:
