@@ -161,7 +161,7 @@ def test_valid_integer_mesh_geometry_retains_saved_workflow_parity(client: TestC
     assert artifact["payload_json"] == standalone
     assert len(artifact["payload_sha256"]) == 64
     # A single saved measurement node must not silently duplicate scientific outputs.
-    assert sum(
-        item["data_type"] == "mesh_measurement_preview"
-        for item in detail.json()["artifacts"]
-    ) == 1
+    assert (
+        sum(item["data_type"] == "mesh_measurement_preview" for item in detail.json()["artifacts"])
+        == 1
+    )
