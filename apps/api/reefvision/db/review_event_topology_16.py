@@ -109,6 +109,12 @@ def assert_review_event_relationship_topology(connection: Connection) -> None:
                 ).mappings()
                 if row["key"]
             ]
+            if any(str(row["coll"]).upper() != "BINARY" for row in key_columns):
+                raise RuntimeError(
+                    "Unsafe QC review-event history index topology: "
+                    f"non-binary collation in {index_name}. "
+                    "Preserve reviewer history."
+                )
             if any(row["desc"] for row in key_columns):
                 raise RuntimeError(
                     "Unsafe QC review-event history index topology: "
