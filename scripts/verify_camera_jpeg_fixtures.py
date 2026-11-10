@@ -31,6 +31,14 @@ def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
         if path.suffix.lower() not in JPEG_SUFFIXES or not path.is_file():
             continue
         relative = path.relative_to(root).as_posix()
+        # Windows reserves device basenames even when a JPEG extension is present.
+        # Such camera exports cannot be opened by ordinary Windows file APIs.
+        if path.stem.rstrip(" .").split(".")[0].upper() in {
+            "CON", "PRN", "AUX", "NUL",
+            *(f"COM{number}" for number in range(1, 10)),
+            *(f"LPT{number}" for number in range(1, 10)),
+        }:
+            errors.append(f"Windows reserved device filename: {relative}")
         # Detect case-only directory aliases too: Camera/a.jpg and camera/b.jpg
         # are different Linux trees but collapse into one Windows directory.
         components = path.relative_to(root).parts
