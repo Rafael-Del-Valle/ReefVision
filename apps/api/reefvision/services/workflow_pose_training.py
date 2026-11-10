@@ -153,7 +153,11 @@ def _pose_dataset(
     ):
         raise ValidationError(f"Pose {role} dataset must be complete and contain verified items")
 
-    if not isinstance(dataset.manifest_sha256, str) or len(dataset.manifest_sha256) != 64:
+    if (
+        not isinstance(dataset.manifest_sha256, str)
+        or len(dataset.manifest_sha256) != 64
+        or any(char not in "0123456789abcdef" for char in dataset.manifest_sha256)
+    ):
         raise ValidationError(f"Pose {role} dataset frozen manifest digest is invalid")
 
     if not isinstance(dataset.manifest_json, dict):
