@@ -236,10 +236,11 @@ def test_disconnected_patches_preserve_measurements_in_saved_workflow(
     assert len(artifacts[0]["payload_sha256"]) == 64
 
 
+@pytest.mark.parametrize("duplicate_vertex_index", [False, True])
 def test_vertex_touching_patches_are_not_one_connected_surface(
-    client: TestClient,
+    client: TestClient, duplicate_vertex_index: bool,
 ) -> None:
-    """A shared vertex does not imply an edge-connected coral surface."""
+    """Shared or coincident vertices do not prove one connected coral surface."""
     project_id = str(create_project(client, "Vertex-touching mesh patches")["id"])
     base = f"/api/v1/projects/{project_id}"
     params = {
@@ -251,9 +252,12 @@ def test_vertex_touching_patches_are_not_one_connected_surface(
             [-2, 0, 0],
             [0, -2, 0],
         ],
-        "faces": [[0, 1, 2], [0, 3, 4]],
+        "faces": [[0, 1, 2], [5 if duplicate_vertex_index else 0, 3, 4]],
         "meters_per_unit": 1,
     }
+    if duplicate_vertex_index:
+        # Two vertex IDs at the same XYZ must not imply edge connectivity.
+        params["vertices"].append([0, 0, 0])
     response = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert response.status_code == 200, response.text
     standalone = response.json()
