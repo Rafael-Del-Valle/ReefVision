@@ -43,6 +43,28 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual(len({record["sha256"] for record in records}), 6)
 
 
+    def test_hardlinked_camera_files_are_flagged_as_one_scientific_source(self) -> None:
+        """Two JPEG paths pointing to one inode must not count as independent captures."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = root / "capture_one.JPG"
+            alias = root / "capture_two.jpeg"
+            original = bytes.fromhex("ffd8") + b"same-source" + bytes.fromhex("ffd9")
+            first.write_bytes(original)
+            try:
+                import os
+                os.link(first, alias)
+            except (OSError, NotImplementedError):
+                self.skipTest("Hard links unavailable on this filesystem")
+            records, errors = MODULE.inventory(root)
+            self.assertEqual({record["path"] for record in records}, {first.name, alias.name})
+            self.assertEqual(len({record["sha256"] for record in records}), 1)
+            self.assertEqual(errors, [
+                "JPEG hard-link alias (same source image): capture_one.JPG / capture_two.jpeg"
+            ])
+            self.assertEqual(first.read_bytes(), original)
+            self.assertEqual(alias.read_bytes(), original)
+
     def test_windows_case_insensitive_camera_name_collision(self) -> None:
         """Distinct Linux filenames must not silently alias on Windows."""
         with tempfile.TemporaryDirectory() as directory:
