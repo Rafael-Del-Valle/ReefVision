@@ -23,6 +23,7 @@ def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
     # Case-sensitive hosts can hold distinct camera names that collapse to one
     # path on default Windows filesystems. Flag this before acceptance/export.
     seen_casefolded_paths: dict[str, str] = {}
+    seen_casefolded_components: dict[tuple[str, ...], str] = {}
     for path in sorted(root.rglob("*")):
         if path.is_symlink():
             errors.append(f"symlink not inspected: {path.relative_to(root)}")
@@ -30,6 +31,17 @@ def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
         if path.suffix.lower() not in JPEG_SUFFIXES or not path.is_file():
             continue
         relative = path.relative_to(root).as_posix()
+        # Detect case-only directory aliases too: Camera/a.jpg and camera/b.jpg
+        # are different Linux trees but collapse into one Windows directory.
+        components = path.relative_to(root).parts
+        for depth in range(1, len(components)):
+            key = tuple(part.casefold() for part in components[:depth])
+            actual = "/".join(components[:depth])
+            prior = seen_casefolded_components.setdefault(key, actual)
+            if prior != actual:
+                error = f"Windows case-insensitive directory collision: {prior} / {actual}"
+                if error not in errors:
+                    errors.append(error)
         folded = relative.casefold()
         previous = seen_casefolded_paths.setdefault(folded, relative)
         if previous != relative:
