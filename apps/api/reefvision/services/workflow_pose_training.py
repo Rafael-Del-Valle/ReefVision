@@ -834,7 +834,10 @@ def _reused_pose_training_result(
     }
     if (
         type(frozen_checkpoint.get("pose_schema_revision")) is not int
-        or any(frozen_checkpoint.get(key) != value for key, value in expected_artifact_lineage.items())
+        or any(
+            frozen_checkpoint.get(key) != value
+            for key, value in expected_artifact_lineage.items()
+        )
     ):
         raise ValidationError("Recovered pose-training artifact provenance changed")
     if frozen_checkpoint.get("pose_split_manifest") != dict(run.draft_snapshot_json or {}).get(
