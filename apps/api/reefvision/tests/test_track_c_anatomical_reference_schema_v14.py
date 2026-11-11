@@ -208,9 +208,7 @@ def test_confirmed_registration_requires_named_reviewer(reviewer_id: object) -> 
         ("enclosed_volume", "m3"),
     ],
 )
-def test_supported_metric_units_accept_valid_synthetic_evidence(
-    metric: str, unit: str
-) -> None:
+def test_supported_metric_units_accept_valid_synthetic_evidence(metric: str, unit: str) -> None:
     record = reference_record()
     record["reference_measurements"][0].update(metric=metric, unit=unit)
     VALIDATOR.validate(record)
