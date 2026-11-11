@@ -38,6 +38,12 @@ def test_fresh_and_noncolliding_revisions_are_not_modified(revision: str | None)
 @pytest.mark.parametrize("revision", ["0038", "0039"])
 def test_review_lineage_is_accepted_without_writes(revision: str) -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.connect() as connection:
+        # Enforce the actual 0038 parent relationships during the positive
+        # fixture, rather than relying on SQLite foreign keys being disabled.
+        connection.execute(text("PRAGMA foreign_keys=ON"))
+        assert connection.scalar(text("PRAGMA foreign_keys")) == 1
+        connection.commit()
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
         connection.execute(
@@ -65,8 +71,16 @@ def test_review_lineage_is_accepted_without_writes(revision: str) -> None:
             ", FOREIGN KEY (review_queue_item_id) REFERENCES review_queue_items(id) ON DELETE CASCADE"
             ", FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
         )
-        for parent in ("projects", "review_queues", "review_queue_items"):
+        for parent, parent_id in (
+            ("projects", "project-1"),
+            ("review_queues", "queue-1"),
+            ("review_queue_items", "item-1"),
+        ):
             connection.execute(text(f"CREATE TABLE {parent} (id TEXT PRIMARY KEY)"))
+            connection.execute(
+                text(f"INSERT INTO {parent} (id) VALUES (:parent_id)"),
+                {"parent_id": parent_id},
+            )
         connection.execute(text(f"CREATE TABLE review_queue_item_events ({schema}{check})"))
         connection.execute(
             text(
@@ -89,6 +103,7 @@ def test_review_lineage_is_accepted_without_writes(revision: str) -> None:
                 "'request-1', 'comment', 'researcher', '2026-11-09')"
             )
         )
+        assert connection.scalar(text("PRAGMA foreign_key_check")) is None
         assert_compatible_revision_0038(connection)
         assert_review_event_relationship_topology(connection)
         assert (
