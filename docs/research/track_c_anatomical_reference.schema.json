@@ -162,7 +162,8 @@
             ]
           }
         }
-      }
+      },
+      "uniqueItems": true
     },
     "reference_measurements": {
       "type": "array",
