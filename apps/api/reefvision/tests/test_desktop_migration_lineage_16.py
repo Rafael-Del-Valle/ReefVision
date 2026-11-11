@@ -147,11 +147,12 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
             )
     # Desktop preflight is strictly read-only even for a valid, already-at-head
     # reviewer schema: preserve DDL, index definitions and parent identities.
+    schema_query = text(
+        "SELECT type, name, tbl_name, sql FROM sqlite_master "
+        "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
+    )
     with engine.connect() as connection:
-        schema_before = connection.execute(
-            text("SELECT type, name, tbl_name, sql FROM sqlite_master "
-                 "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name")
-        ).all()
+        schema_before = connection.execute(schema_query).all()
         parents_before = {
             table: connection.execute(text(f"SELECT id FROM {table} ORDER BY id")).all()
             for table in ("projects", "review_queues", "review_queue_items")
@@ -163,12 +164,12 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
     desktop.run_pending_migrations(settings)
 
     with engine.connect() as connection:
-        assert connection.execute(
-            text("SELECT type, name, tbl_name, sql FROM sqlite_master "
-                 "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name")
-        ).all() == schema_before
+        assert connection.execute(schema_query).all() == schema_before
         for table, expected in parents_before.items():
-            assert connection.execute(text(f"SELECT id FROM {table} ORDER BY id")).all() == expected
+            assert (
+                connection.execute(text(f"SELECT id FROM {table} ORDER BY id")).all()
+                == expected
+            )
         assert connection.execute(text("PRAGMA foreign_key_check")).all() == []
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
         assert connection.execute(
