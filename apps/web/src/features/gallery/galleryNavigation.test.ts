@@ -476,6 +476,24 @@ describe("camera filename preference round trips", () => {
   });
 });
 
+describe("exact camera identifier persistence", () => {
+  it("preserves leading and trailing spaces in opaque camera identifiers", () => {
+    const storage = memoryStorage();
+    for (const imageId of [" DSC_0042.JPG", "DSC_0042.JPG ", " IMG 0042.JPEG "]) {
+      writeGalleryPreference(storage, "camera-project", {
+        imageId,
+        page: 2,
+        wrap: false,
+      });
+      expect(readGalleryPreference(storage, "camera-project")).toEqual({
+        imageId,
+        page: 2,
+        wrap: false,
+      });
+    }
+  });
+});
+
 describe("gallery preferences", () => {
   it("snapshots changing preference getters before persisting a camera selection", () => {
     const storage = memoryStorage();
