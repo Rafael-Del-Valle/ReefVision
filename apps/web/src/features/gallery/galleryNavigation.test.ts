@@ -213,6 +213,19 @@ describe("legacy gallery preferences without an image identifier", () => {
   });
 });
 
+describe("legacy wrap-only gallery preferences", () => {
+  it("preserves wrapping while selecting the first image when no page was saved", () => {
+    const storage = memoryStorage({
+      "reefvision.gallery.camera-project.v1": JSON.stringify({ wrap: true }),
+    });
+    expect(readGalleryPreference(storage, "camera-project")).toEqual({
+      imageId: null,
+      page: 1,
+      wrap: true,
+    });
+  });
+});
+
 describe("corrupted gallery preference shapes", () => {
   it("rejects array-shaped WebView2 storage without restoring a phantom image", () => {
     const storage = memoryStorage({
