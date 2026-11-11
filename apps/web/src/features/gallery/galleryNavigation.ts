@@ -76,7 +76,7 @@ export function readGalleryPreference(
     return {
       imageId:
         typeof candidate.imageId === "string" ? candidate.imageId : null,
-      page: candidate.imageId === null ? 1 : candidate.page,
+      page: typeof candidate.imageId === "string" ? candidate.page : 1,
       wrap: candidate.wrap === true,
     };
   } catch {
