@@ -125,6 +125,16 @@ def mesh_edge_paths(
             detour_ratio = (
                 shortest[end] / chord_mesh_units if chord_mesh_units > 0 and chord_m > 0 else None
             )
+            # A finite nominal route can still overflow when its calibration
+            # uncertainty is expanded. Never persist nonfinite scientific JSON.
+            if scale_uncertainty is not None:
+                bounds = [
+                    value * factor
+                    for value in (meters, chord_m, *path_edge_lengths_m, *path_cumulative_lengths_m)
+                    for factor in (1 - scale_uncertainty, 1 + scale_uncertainty)
+                ]
+                if any(not isfinite(bound) for bound in bounds):
+                    raise ValueError("Calibrated mesh path uncertainty interval overflowed")
             # Route flags are topology evidence, not biological branch validation.
             route_edges = [(min(a, b), max(a, b)) for a, b in pairwise(route)]
             path_qc_warnings = []
