@@ -27,6 +27,12 @@ def inspect(path: Path) -> dict:
         # migration stamps, and FK evidence from different committed states.
         connection.execute("BEGIN")
         integrity = connection.execute("PRAGMA quick_check").fetchone()[0]
+        # Header fields are diagnostic evidence, not proof of Alembic lineage.
+        sqlite_header = {
+            "application_id": connection.execute("PRAGMA application_id").fetchone()[0],
+            "user_version": connection.execute("PRAGMA user_version").fetchone()[0],
+            "schema_version": connection.execute("PRAGMA schema_version").fetchone()[0],
+        }
         foreign_keys = connection.execute("PRAGMA foreign_key_check").fetchall()
         # Stable evidence ordering supports reproducible review reports across runs.
         foreign_keys.sort(key=lambda row: (str(row[0]), str(row[1]), str(row[2]), int(row[3])))
@@ -68,6 +74,7 @@ def inspect(path: Path) -> dict:
             "database": str(path.resolve()), "read_only": True,
             "quick_check": integrity,
             "schema_sha256": schema_sha256,
+            "sqlite_header": sqlite_header,
             "foreign_key_violation_count": len(foreign_keys),
             "foreign_key_violations": [
                 {"table": row[0], "rowid": row[1], "parent": row[2], "fkid": row[3]}
