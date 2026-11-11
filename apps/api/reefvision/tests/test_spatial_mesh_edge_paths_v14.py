@@ -67,6 +67,21 @@ def test_mesh_edge_paths_do_not_invent_disconnected_distances(
     assert result["provenance"]["calibration_verified"] is False
 
 
+def test_mesh_path_uncertainty_overflow_fails_closed() -> None:
+    # The nominal edge is finite, but its upper scale bound is not.
+    # This direct scientific-engine test does not imply biological validation.
+    from reefvision.services.spatial_mesh_paths_v14 import mesh_edge_paths
+
+    with pytest.raises(ValueError, match="uncertainty interval overflowed"):
+        mesh_edge_paths(
+            points=[(0.0, 0.0, 0.0), (1e308, 0.0, 0.0), (0.0, 1.0, 0.0)],
+            faces=[[0, 1, 2]],
+            pairs=[[0, 1]],
+            scale=1.0,
+            scale_uncertainty=0.9,
+        )
+
+
 def test_mesh_edge_paths_flag_nonmanifold_edges_for_review() -> None:
     result = measure_mesh_preview(
         vertices=[[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1]],
