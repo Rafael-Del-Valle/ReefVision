@@ -320,6 +320,23 @@ describe("gallery navigation rejects stale camera-page state", () => {
   });
 });
 
+describe("gallery navigation rejects malformed runtime actions", () => {
+  it("keeps the selected camera image when stale UI actions are invalid", () => {
+    const state = { index: 0, itemCount: 2, page: 1, pages: 2, wrap: true };
+    for (const action of ["jump", "", "NEXT"]) {
+      expect(
+        resolveGalleryNavigation({
+          ...state,
+          action: action as Parameters<typeof resolveGalleryNavigation>[0]["action"],
+        }),
+      ).toBeNull();
+    }
+    expect(
+      resolveGalleryNavigation({ ...state, action: "next", wrap: null as unknown as boolean }),
+    ).toBeNull();
+  });
+});
+
 describe("gallery navigation with uneven camera page sizes", () => {
   it("advances through images before crossing into a sparse final page", () => {
     expect(
@@ -396,7 +413,11 @@ describe("camera filename preference round trips", () => {
     });
     const key = "reefvision.gallery.camera-project.v1";
     const original = storage.getItem(key);
-    for (const imageId of ["DSC_0043\u061c.JPG", "DSC_0043\u206a.JPG", "DSC_0043\u206f.JPG"]) {
+    for (const imageId of [
+      "DSC_0043\u061c.JPG",
+      "DSC_0043\u206a.JPG",
+      "DSC_0043\u206f.JPG",
+    ]) {
       writeGalleryPreference(storage, "camera-project", {
         imageId,
         page: 3,
