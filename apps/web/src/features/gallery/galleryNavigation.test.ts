@@ -1487,3 +1487,37 @@ describe("malformed WebView2 gallery page drafts", () => {
     expect(parseGalleryPageDraft("2", 8)).toBe(2);
   });
 });
+
+
+describe("bounded persisted gallery pages", () => {
+  it("falls back to the first image for an implausibly distant saved page", () => {
+    const storage = memoryStorage({
+      "reefvision.gallery.camera-project.v1": JSON.stringify({
+        imageId: "camera-original-1",
+        page: Number.MAX_SAFE_INTEGER,
+        wrap: true,
+      }),
+    });
+    expect(readGalleryPreference(storage, "camera-project")).toEqual({
+      imageId: null,
+      page: 1,
+      wrap: false,
+    });
+  });
+
+  it("does not overwrite a valid selection with an implausibly distant page", () => {
+    const storage = memoryStorage();
+    writeGalleryPreference(storage, "camera-project", {
+      imageId: "camera-original-1",
+      page: 2,
+      wrap: false,
+    });
+    const saved = storage.getItem("reefvision.gallery.camera-project.v1");
+    writeGalleryPreference(storage, "camera-project", {
+      imageId: "camera-original-2",
+      page: Number.MAX_SAFE_INTEGER,
+      wrap: true,
+    });
+    expect(storage.getItem("reefvision.gallery.camera-project.v1")).toBe(saved);
+  });
+});
