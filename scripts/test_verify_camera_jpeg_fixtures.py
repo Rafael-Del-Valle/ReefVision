@@ -537,5 +537,25 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertIn("symlink not inspected: linked.jpg", errors)
 
 
+    def test_unreadable_camera_directory_is_reported_not_silently_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = root / "approved.JPG"
+            original = b"\xff\xd8original\xff\xd9"
+            image.write_bytes(original)
+
+            def failing_walk(_root, *, followlinks, onerror):
+                self.assertFalse(followlinks)
+                onerror(PermissionError(13, "access denied", str(root / "unreadable")))
+                yield str(root), [], ["approved.JPG"]
+
+            with mock.patch.object(MODULE.os, "walk", side_effect=failing_walk):
+                records, errors = MODULE.inventory(root)
+            self.assertEqual([record["path"] for record in records], ["approved.JPG"])
+            self.assertTrue(any("camera directory traversal failed:" in error
+                                and "PermissionError" in error for error in errors))
+            self.assertEqual(image.read_bytes(), original)
+
+
 if __name__ == "__main__":
     unittest.main()
