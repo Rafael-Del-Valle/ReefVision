@@ -56,10 +56,16 @@ def inspect(path: Path) -> dict:
         schema_sha256 = hashlib.sha256(canonical_schema.encode("utf-8")).hexdigest()
         names = {row[1] for row in schema_rows if row[0] == "table"}
         stamps = []
+        alembic_stamp_error = None
         if "alembic_version" in names:
-            stamps = [row[0] for row in connection.execute(
-                "SELECT version_num FROM alembic_version ORDER BY version_num"
-            )]
+            try:
+                stamps = [row[0] for row in connection.execute(
+                    "SELECT version_num FROM alembic_version ORDER BY version_num"
+                )]
+            except sqlite3.DatabaseError as exc:
+                # Partial/corrupt lineage metadata must remain visible as
+                # uncertain evidence, not abort an otherwise useful report.
+                alembic_stamp_error = str(exc)
         tables = {}
         for name in TABLES:
             if name not in names:
@@ -89,7 +95,8 @@ def inspect(path: Path) -> dict:
                 {"table": row[0], "rowid": row[1], "parent": row[2], "fkid": row[3]}
                 for row in foreign_keys
             ],
-            "alembic_stamps": stamps, "tables": tables,
+            "alembic_stamps": stamps, "alembic_stamp_error": alembic_stamp_error,
+            "tables": tables,
             "classification": "requires_researcher_review",
         }
     finally:
