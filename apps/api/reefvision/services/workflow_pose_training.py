@@ -779,8 +779,11 @@ def _reused_pose_training_result(
         "pose-workflow-training-snapshot-0002",
         "pose-workflow-training-snapshot-0003",
     }
+    snapshot_version = snapshot.get("schema_version")
+    if snapshot_version is not None and not isinstance(snapshot_version, str):
+        raise ValidationError("Recovered pose-training snapshot schema version is invalid")
     is_current_snapshot = (
-        snapshot.get("schema_version") in current_snapshot_versions
+        snapshot_version in current_snapshot_versions
         or "pose_training_dataset_manifest_sha256" in snapshot
     )
     # Never coerce malformed persisted summary metrics into a dictionary.
