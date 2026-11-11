@@ -52,7 +52,9 @@ export function readGalleryPreference(
     // rendering with expensive JSON parsing. Valid preferences contain only
     // a short opaque image ID, page number, and wrap flag.
     const parsed: unknown = JSON.parse(value);
-    if (!parsed || typeof parsed !== "object") return { ...DEFAULT_PREFERENCE };
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { ...DEFAULT_PREFERENCE };
+    }
     const candidate = parsed as Record<string, unknown>;
     if (candidate.imageId !== null && !validGalleryImageId(candidate.imageId)) {
       return { ...DEFAULT_PREFERENCE };
