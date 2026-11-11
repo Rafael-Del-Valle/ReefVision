@@ -260,3 +260,47 @@ def test_valid_alembic_table_has_no_stamp_error(tmp_path: Path) -> None:
     assert evidence["alembic_stamps"] == ["0041"]
     assert evidence["alembic_stamp_error"] is None
     assert evidence["classification"] == "requires_researcher_review"
+
+
+def test_quick_check_retains_all_diagnostics_without_modifying_database(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A damaged database may yield more than one quick_check diagnostic."""
+    path = tmp_path / "multiple_checks.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE scientific_records (id INTEGER PRIMARY KEY)")
+    before = path.read_bytes()
+    original_connect = sqlite3.connect
+
+    class CheckConnection:
+        def __init__(self, actual: sqlite3.Connection) -> None:
+            self.actual = actual
+
+        def execute(self, sql: str, *args: object) -> object:
+            if sql == "PRAGMA quick_check":
+                return iter([("first integrity problem",), ("second integrity problem",)])
+            return self.actual.execute(sql, *args)
+
+        def close(self) -> None:
+            self.actual.close()
+
+    def connect(*args: object, **kwargs: object) -> CheckConnection:
+        return CheckConnection(original_connect(*args, **kwargs))
+
+    monkeypatch.setattr(module.sqlite3, "connect", connect)
+    evidence = module.inspect(path)
+    assert evidence["quick_check"] == "first integrity problem"
+    assert evidence["quick_check_details"] == [
+        "first integrity problem", "second integrity problem"
+    ]
+    assert evidence["classification"] == "requires_researcher_review"
+    assert path.read_bytes() == before
+
+
+def test_healthy_quick_check_details_are_explicit(tmp_path: Path) -> None:
+    path = tmp_path / "healthy.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE scientific_records (id INTEGER PRIMARY KEY)")
+    evidence = module.inspect(path)
+    assert evidence["quick_check"] == "ok"
+    assert evidence["quick_check_details"] == ["ok"]
