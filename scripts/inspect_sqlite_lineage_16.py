@@ -4,6 +4,7 @@
 Never infers applied migrations from alembic_version alone. Never changes a DB.
 """
 import argparse
+import hashlib
 import json
 import sqlite3
 from pathlib import Path
@@ -29,9 +30,17 @@ def inspect(path: Path) -> dict:
         foreign_keys = connection.execute("PRAGMA foreign_key_check").fetchall()
         # Stable evidence ordering supports reproducible review reports across runs.
         foreign_keys.sort(key=lambda row: (str(row[0]), str(row[1]), str(row[2]), int(row[3])))
-        names = {row[0] for row in connection.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        )}
+        # Fingerprint structural DDL, never biological records or user data.
+        # Include views, indexes and triggers to distinguish colliding Alembic
+        # stamps with different real schema topology. Exclude SQLite internals.
+        schema_rows = connection.execute(
+            "SELECT type, name, tbl_name, sql FROM sqlite_master "
+            "WHERE name NOT LIKE 'sqlite_%' "
+            "ORDER BY type, name, tbl_name"
+        ).fetchall()
+        canonical_schema = json.dumps(schema_rows, ensure_ascii=False, separators=(",", ":"))
+        schema_sha256 = hashlib.sha256(canonical_schema.encode("utf-8")).hexdigest()
+        names = {row[1] for row in schema_rows if row[0] == "table"}
         stamps = []
         if "alembic_version" in names:
             stamps = [row[0] for row in connection.execute(
@@ -58,6 +67,7 @@ def inspect(path: Path) -> dict:
         return {
             "database": str(path.resolve()), "read_only": True,
             "quick_check": integrity,
+            "schema_sha256": schema_sha256,
             "foreign_key_violation_count": len(foreign_keys),
             "foreign_key_violations": [
                 {"table": row[0], "rowid": row[1], "parent": row[2], "fkid": row[3]}
