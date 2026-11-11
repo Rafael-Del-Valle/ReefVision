@@ -304,3 +304,18 @@ def test_healthy_quick_check_details_are_explicit(tmp_path: Path) -> None:
     evidence = module.inspect(path)
     assert evidence["quick_check"] == "ok"
     assert evidence["quick_check_details"] == ["ok"]
+
+
+def test_sqlite_prefix_wildcard_does_not_hide_user_schema(tmp_path: Path) -> None:
+    """Only literal sqlite_ names are internal; sqliteX is a valid user prefix."""
+    path = tmp_path / "prefix.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE ordinary_observations (id INTEGER PRIMARY KEY)")
+    baseline = module.inspect(path)
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE sqliteXobservations (id INTEGER PRIMARY KEY)")
+    before = path.read_bytes()
+    evidence = module.inspect(path)
+    assert evidence["schema_sha256"] != baseline["schema_sha256"]
+    assert evidence["classification"] == "requires_researcher_review"
+    assert path.read_bytes() == before
