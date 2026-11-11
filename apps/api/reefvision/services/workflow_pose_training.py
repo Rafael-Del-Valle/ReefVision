@@ -1600,7 +1600,9 @@ def create_pose_workflow_training_result(
         f"{project.storage_root}/training/{run.id}/runs/pose/weights",
     )
     if expected_weights_dir.is_symlink():
-        raise ValidationError("Completed pose training weights directory must not be a symbolic link")
+        raise ValidationError(
+            "Completed pose training weights directory must not be a symbolic link"
+        )
     if checkpoint.resolve().parent != expected_weights_dir.resolve() or checkpoint.name not in {
         "best.pt",
         "last.pt",
