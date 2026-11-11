@@ -75,7 +75,7 @@ export function readGalleryPreference(
     // Start from the first page so the initial camera image remains visible.
     return {
       imageId:
-        typeof candidate.imageId === "string" ? candidate.imageId.trim() : null,
+        typeof candidate.imageId === "string" ? candidate.imageId : null,
       page: candidate.imageId === null ? 1 : candidate.page,
       wrap: candidate.wrap === true,
     };
@@ -133,7 +133,7 @@ export function writeGalleryPreference(
     const serialized = JSON.stringify({
       // Persist only the versioned preference contract, not arbitrary fields
       // accidentally attached to a runtime object (e.g. image metadata).
-      imageId: typeof imageId === "string" ? imageId.trim() : null,
+      imageId: typeof imageId === "string" ? imageId : null,
       page: imageId === null ? 1 : page,
       wrap,
     });
