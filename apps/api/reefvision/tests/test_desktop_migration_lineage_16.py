@@ -74,7 +74,7 @@ def test_desktop_rejects_foreign_review_lineage_even_when_at_head(
         assert connection.scalar(text("SELECT id FROM scientific_records")) == "preserve-me"
 
 
-@pytest.mark.parametrize("revision", ["0038", "0039", "0040"])
+@pytest.mark.parametrize("revision", ["0038", "0039", "0040", "0041"])
 def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -137,13 +137,26 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
             )
         )
         if revision == "0041":
+            # Mirror the actual 0041 non-null audit columns and RESTRICT links.
             connection.execute(
                 text(
                     "CREATE TABLE review_queue_bulk_requests ("
-                    "id TEXT PRIMARY KEY, review_queue_id TEXT, project_id TEXT, "
-                    "action TEXT, actor TEXT, reason TEXT, item_ids_json TEXT, "
-                    "created_at TEXT)"
+                    "id TEXT NOT NULL PRIMARY KEY, "
+                    "review_queue_id TEXT NOT NULL REFERENCES review_queues(id) ON DELETE RESTRICT, "
+                    "project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT, "
+                    "action TEXT NOT NULL, actor TEXT NOT NULL, reason TEXT, "
+                    "item_ids_json JSON NOT NULL, created_at TEXT NOT NULL)"
                 )
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO review_queue_bulk_requests "
+                    "(id, review_queue_id, project_id, action, actor, "
+                    "item_ids_json, created_at) "
+                    "VALUES ('bulk-preserved', 'queue-1', 'project-1', "
+                    "'approve', 'researcher', :items, '2026-11-09')"
+                ),
+                {"items": '["item-1"]'},
             )
     # Desktop preflight is strictly read-only even for a valid, already-at-head
     # reviewer schema: preserve DDL, index definitions and parent identities.
@@ -170,6 +183,10 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
                 connection.execute(text(f"SELECT id FROM {table} ORDER BY id")).all()
                 == expected
             )
+        if revision == "0041":
+            assert connection.execute(
+                text("SELECT id, actor, item_ids_json FROM review_queue_bulk_requests")
+            ).one() == ("bulk-preserved", "researcher", '["item-1"]')
         assert connection.execute(text("PRAGMA foreign_key_check")).all() == []
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
         assert connection.execute(
