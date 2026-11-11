@@ -23,6 +23,25 @@ class MeshMeasurementReferenceTests(unittest.TestCase):
         self.assertAlmostEqual(result.scale_bound_m, 0.007)
         self.assertEqual(result.anatomical_review_state, "unverified")
 
+    def test_selected_path_checks_actual_triangle_edges(self) -> None:
+        vertices = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)]
+        faces = [(0, 1, 2), (0, 2, 3)]
+        result = measure_selected_mesh_edge_path(
+            vertices, [1, 2, 3], meters_per_unit=0.01,
+            absolute_scale_bound=0, triangles=faces,
+        )
+        self.assertAlmostEqual(result.length_m, 0.02)
+        with self.assertRaisesRegex(ValueError, "non-mesh edge"):
+            measure_selected_mesh_edge_path(
+                vertices, [1, 3], meters_per_unit=0.01,
+                absolute_scale_bound=0, triangles=faces,
+            )
+        with self.assertRaisesRegex(ValueError, "invalid mesh triangle indices"):
+            measure_selected_mesh_edge_path(
+                vertices, [0, 1], meters_per_unit=1,
+                absolute_scale_bound=0, triangles=[(0, True, 2)],
+            )
+
     def test_selected_edge_path_rejects_invalid_routes(self) -> None:
         vertices = [(0, 0, 0), (1, 0, 0), (2, 0, 0)]
         for route in ([0], [0, 0], [0, 3], [True, 1]):
