@@ -319,3 +319,36 @@ def test_sqlite_prefix_wildcard_does_not_hide_user_schema(tmp_path: Path) -> Non
     assert evidence["schema_sha256"] != baseline["schema_sha256"]
     assert evidence["classification"] == "requires_researcher_review"
     assert path.read_bytes() == before
+
+
+def test_generated_columns_are_visible_in_extended_lineage_evidence(tmp_path: Path) -> None:
+    """SQLite table_info omits generated columns; xinfo must retain their provenance."""
+    path = tmp_path / "generated_metrics.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute(
+            "CREATE TABLE scientific_records ("
+            "id INTEGER PRIMARY KEY, length_mm REAL, "
+            "length_cm REAL GENERATED ALWAYS AS (length_mm / 10.0) STORED)"
+        )
+    before = path.read_bytes()
+    evidence = module.inspect(path)
+    table = evidence["tables"]["scientific_records"]
+    assert [column["name"] for column in table["columns"]] == ["id", "length_mm"]
+    assert [column["name"] for column in table["extended_columns"]] == [
+        "id", "length_mm", "length_cm"
+    ]
+    assert table["extended_columns"][2]["hidden"] == 3
+    assert table["extended_columns"][2]["type"] == "REAL"
+    assert evidence["classification"] == "requires_researcher_review"
+    assert path.read_bytes() == before
+
+
+def test_ordinary_columns_keep_legacy_and_extended_metadata(tmp_path: Path) -> None:
+    path = tmp_path / "ordinary.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE review_queue_item_events (id INTEGER PRIMARY KEY)")
+    evidence = module.inspect(path)
+    table = evidence["tables"]["review_queue_item_events"]
+    assert [column["name"] for column in table["columns"]] == ["id"]
+    assert [column["name"] for column in table["extended_columns"]] == ["id"]
+    assert table["extended_columns"][0]["hidden"] == 0
