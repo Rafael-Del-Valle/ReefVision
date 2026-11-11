@@ -708,7 +708,7 @@ describe("gallery preferences", () => {
     );
   });
 
-  it("normalizes padded camera IDs without losing their selected gallery page", () => {
+  it("preserves opaque padded camera IDs without losing their selected gallery page", () => {
     const storage = memoryStorage({
       "reefvision.gallery.project-a.v1": JSON.stringify({
         imageId: "  camera-original-1  ",
@@ -717,7 +717,7 @@ describe("gallery preferences", () => {
       }),
     });
     expect(readGalleryPreference(storage, "project-a")).toEqual({
-      imageId: "camera-original-1",
+      imageId: "  camera-original-1  ",
       page: 4,
       wrap: false,
     });
@@ -730,7 +730,7 @@ describe("gallery preferences", () => {
     expect(
       JSON.parse(storage.getItem("reefvision.gallery.project-a.v1") ?? "null"),
     ).toEqual({
-      imageId: "camera-original-2",
+      imageId: "  camera-original-2  ",
       page: 5,
       wrap: true,
     });
