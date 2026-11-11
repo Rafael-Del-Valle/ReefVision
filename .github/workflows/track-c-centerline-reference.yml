@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "docs/research/fixtures/centerline_reference_v14.json"
+      - "docs/research/track_c_anatomical_reference.schema.json"
+      - "apps/api/reefvision/tests/test_track_c_anatomical_reference_schema_v14.py"
       - "docs/research/fixtures/validate_centerline_reference_v14.py"
       - "docs/research/fixtures/test_validate_centerline_reference_v14.py"
       - "docs/research/fixtures/mesh_measurement_reference_v14.py"
@@ -14,6 +16,8 @@ on:
       - "develop/reefvision-1.4"
     paths:
       - "docs/research/fixtures/centerline_reference_v14.json"
+      - "docs/research/track_c_anatomical_reference.schema.json"
+      - "apps/api/reefvision/tests/test_track_c_anatomical_reference_schema_v14.py"
       - "docs/research/fixtures/validate_centerline_reference_v14.py"
       - "docs/research/fixtures/test_validate_centerline_reference_v14.py"
       - "docs/research/fixtures/mesh_measurement_reference_v14.py"
@@ -38,3 +42,7 @@ jobs:
         run: python docs/research/fixtures/validate_centerline_reference_v14.py
       - name: Execute mutation regressions
         run: python -m unittest discover -s docs/research/fixtures -p 'test_*reference_v14.py' -v
+      - name: Install required anatomical schema validation dependencies
+        run: python -m pip install 'jsonschema[format]>=4.21,<5' 'pytest>=8,<10'
+      - name: Validate anatomical reference schema and synthetic evidence
+        run: python -m pytest -q apps/api/reefvision/tests/test_track_c_anatomical_reference_schema_v14.py
