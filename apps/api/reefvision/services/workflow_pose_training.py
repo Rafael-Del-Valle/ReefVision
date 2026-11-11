@@ -706,6 +706,14 @@ def _reused_pose_training_result(
     ):
         raise ValidationError("Recovered pose training child job lineage changed")
 
+    # Persisted result paths are untrusted on replay. Reject malformed values
+    # before managed-path resolution so recovery fails with a domain error.
+    if (
+        not isinstance(run.result_checkpoint_path, str)
+        or not run.result_checkpoint_path
+        or run.result_checkpoint_path != run.result_checkpoint_path.strip()
+    ):
+        raise ValidationError("Recovered pose training checkpoint path is invalid")
     checkpoint = resolve_managed_project_path(
         settings,
         run.result_checkpoint_path,
