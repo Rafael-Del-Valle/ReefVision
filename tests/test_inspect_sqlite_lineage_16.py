@@ -148,3 +148,40 @@ def test_concurrent_wal_commit_does_not_mix_lineage_evidence(
         assert evidence["classification"] == "requires_researcher_review"
     finally:
         writer.close()
+
+
+def test_schema_fingerprint_is_stable_and_distinguishes_colliding_stamps(tmp_path: Path) -> None:
+    """Identical revision stamps cannot stand in for structural lineage evidence."""
+    first_path = tmp_path / "scientific.sqlite"
+    second_path = tmp_path / "qc.sqlite"
+    for path, ddl in (
+        (first_path, "CREATE TABLE scientific_records (id INTEGER PRIMARY KEY)"),
+        (second_path, "CREATE TABLE review_queue_item_events (id INTEGER PRIMARY KEY)"),
+    ):
+        with sqlite3.connect(path) as db:
+            db.execute("CREATE TABLE alembic_version (version_num TEXT)")
+            db.execute("INSERT INTO alembic_version VALUES ('0038')")
+            db.execute(ddl)
+    first_bytes, second_bytes = first_path.read_bytes(), second_path.read_bytes()
+    scientific = module.inspect(first_path)
+    qc = module.inspect(second_path)
+    assert scientific["alembic_stamps"] == qc["alembic_stamps"] == ["0038"]
+    assert len(scientific["schema_sha256"]) == len(qc["schema_sha256"]) == 64
+    assert scientific["schema_sha256"] != qc["schema_sha256"]
+    assert scientific["schema_sha256"] == module.inspect(first_path)["schema_sha256"]
+    assert qc["schema_sha256"] == module.inspect(second_path)["schema_sha256"]
+    assert first_path.read_bytes() == first_bytes
+    assert second_path.read_bytes() == second_bytes
+
+
+def test_schema_fingerprint_includes_indexes_but_excludes_record_changes(tmp_path: Path) -> None:
+    path = tmp_path / "evidence.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE scientific_records (id INTEGER PRIMARY KEY, value TEXT)")
+    baseline = module.inspect(path)["schema_sha256"]
+    with sqlite3.connect(path) as db:
+        db.execute("INSERT INTO scientific_records VALUES (1, 'sensitive research observation')")
+    assert module.inspect(path)["schema_sha256"] == baseline
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE INDEX idx_scientific_value ON scientific_records(value)")
+    assert module.inspect(path)["schema_sha256"] != baseline
