@@ -825,7 +825,6 @@ def test_mesh_route_calibration_rescales_lengths_not_detour_in_saved_workflow(
     assert len(artifacts[0]["payload_sha256"]) == 64
 
 
-
 def test_weighted_mesh_route_prefers_shorter_distance_over_fewer_hops_in_saved_workflow(
     client: TestClient,
 ) -> None:
