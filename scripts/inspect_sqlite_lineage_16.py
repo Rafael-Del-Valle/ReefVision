@@ -54,6 +54,10 @@ def inspect(path: Path) -> dict:
             "database": str(path.resolve()), "read_only": True,
             "quick_check": integrity,
             "foreign_key_violation_count": len(foreign_keys),
+            "foreign_key_violations": [
+                {"table": row[0], "rowid": row[1], "parent": row[2], "fkid": row[3]}
+                for row in foreign_keys
+            ],
             "alembic_stamps": stamps, "tables": tables,
             "classification": "requires_researcher_review",
         }
