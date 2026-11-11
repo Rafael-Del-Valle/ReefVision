@@ -1685,7 +1685,7 @@ def create_pose_workflow_training_result(
             raise ValidationError("Completed pose training checkpoint artifact path changed")
         artifact_checkpoint = resolve_managed_project_path(settings, advertised)
         if (
-            artifact_checkpoint.resolve() != (expected_weights_dir / filename).resolve()
+            artifact_checkpoint != expected_weights_dir / filename
             or not artifact_checkpoint.is_file()
         ):
             raise ValidationError("Completed pose training checkpoint artifact path changed")
