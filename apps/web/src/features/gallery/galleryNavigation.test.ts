@@ -197,6 +197,22 @@ describe("browser gallery storage access", () => {
   });
 });
 
+describe("legacy gallery preferences without an image identifier", () => {
+  it("restores page one instead of hiding the first camera image", () => {
+    const storage = memoryStorage({
+      "reefvision.gallery.camera-project.v1": JSON.stringify({
+        page: 87,
+        wrap: true,
+      }),
+    });
+    expect(readGalleryPreference(storage, "camera-project")).toEqual({
+      imageId: null,
+      page: 1,
+      wrap: true,
+    });
+  });
+});
+
 describe("corrupted gallery preference shapes", () => {
   it("rejects array-shaped WebView2 storage without restoring a phantom image", () => {
     const storage = memoryStorage({
