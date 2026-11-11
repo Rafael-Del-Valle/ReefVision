@@ -160,6 +160,13 @@ def mesh_edge_paths(
                 for edge in route_edges
             ):
                 path_qc_warnings.append("inconsistent_winding_edge_on_path")
+            if any(
+                adjacency[a][b] > 0 and calibrated == 0
+                for (a, b), calibrated in zip(
+                    pairwise(route), path_edge_lengths_m, strict=True
+                )
+            ):
+                path_qc_warnings.append("calibrated_path_segment_underflow")
             if any(adjacency[a][b] == 0 for a, b in pairwise(route)):
                 path_qc_warnings.append("zero_length_edge_on_path")
         results.append(
