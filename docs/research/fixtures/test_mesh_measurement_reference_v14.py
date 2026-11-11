@@ -32,7 +32,7 @@ class MeshMeasurementReferenceTests(unittest.TestCase):
                 )
 
     def test_selected_edge_path_rejects_unrepresentable_calibration(self) -> None:
-        vertices = [(0, 0, 0), (1, 0, 0)]
+        vertices = [(0, 0, 0), (1e-100, 0, 0)]
         with self.assertRaisesRegex(ValueError, "nonrepresentable calibrated path length"):
             measure_selected_mesh_edge_path(
                 vertices, [0, 1], meters_per_unit=1e-300,
