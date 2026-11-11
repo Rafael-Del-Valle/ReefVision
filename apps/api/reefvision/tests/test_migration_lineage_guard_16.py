@@ -94,6 +94,21 @@ def test_review_lineage_is_accepted_without_writes(revision: str) -> None:
         assert (
             connection.scalar(text("SELECT id FROM review_queue_item_events")) == "event-preserved"
         )
+        # A valid lineage fixture must also detect an altered audit-history
+        # index without losing the existing event or migration provenance.
+        connection.execute(text("DROP INDEX ix_review_queue_item_events_item_created"))
+        connection.execute(
+            text(
+                "CREATE INDEX ix_review_queue_item_events_item_created "
+                "ON review_queue_item_events (review_queue_item_id DESC, created_at)"
+            )
+        )
+        with pytest.raises(RuntimeError, match="descending index columns"):
+            assert_review_event_relationship_topology(connection)
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+        assert (
+            connection.scalar(text("SELECT id FROM review_queue_item_events")) == "event-preserved"
+        )
 
 
 @pytest.mark.parametrize("revision", ["0038", "0039"])
