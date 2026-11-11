@@ -2,81 +2,379 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/Rafael-Del-Valle/ReefVision/blob/develop/reefvision-1.4/docs/research/track_c_anatomical_reference.schema.json",
   "title": "Track C independently measured coral anatomical reference",
-  "description": "Research-only evidence contract. A syntactically valid record does not establish biological ground truth, verified calibration, or release readiness.",
+  "description": "Research-only evidence contract. A syntactically valid record does not establish biological ground truth, verified calibration, or release readiness. Metric-specific SI dimensions are enforced; branch-centerline references require a named branch and endpoint-annotation fingerprint.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "specimen_id", "observation_id", "acquired_at_utc", "source_sha256", "geometry_kind", "calibration", "reviewers", "reference_measurements", "identity_review", "registration_review"],
+  "required": [
+    "schema_version",
+    "specimen_id",
+    "observation_id",
+    "acquired_at_utc",
+    "source_sha256",
+    "geometry_kind",
+    "calibration",
+    "reviewers",
+    "reference_measurements",
+    "identity_review",
+    "registration_review"
+  ],
   "properties": {
-    "schema_version": {"const": "1.0"},
-    "specimen_id": {"type": "string", "minLength": 1},
-    "observation_id": {"type": "string", "minLength": 1},
-    "acquired_at_utc": {"type": "string", "format": "date-time", "pattern": "(Z|\\+00:00)$"},
-    "source_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-    "geometry_kind": {"enum": ["mesh", "point_cloud"]},
-    "morphology_stratum": {"type": ["string", "null"]},
-    "reconstruction_software": {"type": ["string", "null"]},
+    "schema_version": {
+      "const": "1.0"
+    },
+    "specimen_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "observation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "acquired_at_utc": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "(Z|\\+00:00)$"
+    },
+    "source_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "geometry_kind": {
+      "enum": [
+        "mesh",
+        "point_cloud"
+      ]
+    },
+    "morphology_stratum": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reconstruction_software": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "calibration": {
-      "type": "object", "additionalProperties": false,
-      "required": ["method", "meters_per_unit", "relative_scale_uncertainty", "verified", "reviewer_id"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "meters_per_unit",
+        "relative_scale_uncertainty",
+        "verified",
+        "reviewer_id"
+      ],
       "properties": {
-        "method": {"type": "string", "minLength": 1},
-        "meters_per_unit": {"type": "number", "exclusiveMinimum": 0},
-        "relative_scale_uncertainty": {"type": "number", "minimum": 0, "maximum": 1},
-        "verified": {"type": "boolean"},
-        "reviewer_id": {"type": ["string", "null"]},
-        "reference_target_id": {"type": ["string", "null"]}
+        "method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "meters_per_unit": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "relative_scale_uncertainty": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "reviewer_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reference_target_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "reviewers": {
-      "type": "array", "minItems": 2,
+      "type": "array",
+      "minItems": 2,
       "items": {
-        "type": "object", "additionalProperties": false,
-        "required": ["reviewer_id", "blinded", "protocol_revision", "reviewed_at_utc"],
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reviewer_id",
+          "blinded",
+          "protocol_revision",
+          "reviewed_at_utc"
+        ],
         "properties": {
-          "reviewer_id": {"type": "string", "minLength": 1},
-          "blinded": {"type": "boolean"},
-          "protocol_revision": {"type": "string", "minLength": 1},
-          "reviewed_at_utc": {"type": "string", "format": "date-time"},
-          "notes": {"type": ["string", "null"]}
+          "reviewer_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "blinded": {
+            "type": "boolean"
+          },
+          "protocol_revision": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reviewed_at_utc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
         }
       }
     },
     "reference_measurements": {
-      "type": "array", "minItems": 1,
+      "type": "array",
+      "minItems": 1,
       "items": {
-        "type": "object", "additionalProperties": false,
-        "required": ["metric", "value", "unit", "reference_method", "reviewer_id", "anatomical_definition", "verification_status"],
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "metric",
+          "value",
+          "unit",
+          "reference_method",
+          "reviewer_id",
+          "anatomical_definition",
+          "verification_status"
+        ],
         "properties": {
-          "metric": {"enum": ["surface_area", "height", "width", "depth", "branch_centerline_length", "mesh_edge_path_length", "enclosed_volume"]},
-          "value": {"type": "number", "minimum": 0},
-          "unit": {"enum": ["m", "m2", "m3"]},
-          "reference_method": {"type": "string", "minLength": 1},
-          "reviewer_id": {"type": "string", "minLength": 1},
-          "anatomical_definition": {"type": "string", "minLength": 1},
-          "verification_status": {"enum": ["provisional", "independently_verified"]},
-          "uncertainty_absolute": {"type": ["number", "null"], "minimum": 0},
-          "branch_id": {"type": ["string", "null"]},
-          "endpoint_annotation_sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"}
-        }
+          "metric": {
+            "enum": [
+              "surface_area",
+              "height",
+              "width",
+              "depth",
+              "branch_centerline_length",
+              "mesh_edge_path_length",
+              "enclosed_volume"
+            ]
+          },
+          "value": {
+            "type": "number",
+            "minimum": 0
+          },
+          "unit": {
+            "enum": [
+              "m",
+              "m2",
+              "m3"
+            ]
+          },
+          "reference_method": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reviewer_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "anatomical_definition": {
+            "type": "string",
+            "minLength": 1
+          },
+          "verification_status": {
+            "enum": [
+              "provisional",
+              "independently_verified"
+            ]
+          },
+          "uncertainty_absolute": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "branch_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "endpoint_annotation_sha256": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "metric": {
+                  "enum": [
+                    "surface_area"
+                  ]
+                }
+              },
+              "required": [
+                "metric"
+              ]
+            },
+            "then": {
+              "properties": {
+                "unit": {
+                  "const": "m2"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "metric": {
+                  "enum": [
+                    "enclosed_volume"
+                  ]
+                }
+              },
+              "required": [
+                "metric"
+              ]
+            },
+            "then": {
+              "properties": {
+                "unit": {
+                  "const": "m3"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "metric": {
+                  "enum": [
+                    "height",
+                    "width",
+                    "depth",
+                    "branch_centerline_length",
+                    "mesh_edge_path_length"
+                  ]
+                }
+              },
+              "required": [
+                "metric"
+              ]
+            },
+            "then": {
+              "properties": {
+                "unit": {
+                  "const": "m"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "metric": {
+                  "const": "branch_centerline_length"
+                }
+              },
+              "required": [
+                "metric"
+              ]
+            },
+            "then": {
+              "required": [
+                "branch_id",
+                "endpoint_annotation_sha256"
+              ],
+              "properties": {
+                "branch_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "endpoint_annotation_sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              }
+            }
+          }
+        ]
       }
     },
     "identity_review": {
-      "type": "object", "additionalProperties": false,
-      "required": ["status", "reviewer_id"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reviewer_id"
+      ],
       "properties": {
-        "status": {"enum": ["unverified", "confirmed", "rejected", "conflicted"]},
-        "reviewer_id": {"type": ["string", "null"]},
-        "adjudication_note": {"type": ["string", "null"]}
+        "status": {
+          "enum": [
+            "unverified",
+            "confirmed",
+            "rejected",
+            "conflicted"
+          ]
+        },
+        "reviewer_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "adjudication_note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "registration_review": {
-      "type": "object", "additionalProperties": false,
-      "required": ["status", "reference_frame"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reference_frame"
+      ],
       "properties": {
-        "status": {"enum": ["not_applicable", "unverified", "confirmed", "rejected"]},
-        "reference_frame": {"type": "string", "minLength": 1},
-        "transform_sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
-        "rms_error_m": {"type": ["number", "null"], "minimum": 0}
+        "status": {
+          "enum": [
+            "not_applicable",
+            "unverified",
+            "confirmed",
+            "rejected"
+          ]
+        },
+        "reference_frame": {
+          "type": "string",
+          "minLength": 1
+        },
+        "transform_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "rms_error_m": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
       }
     }
   }
