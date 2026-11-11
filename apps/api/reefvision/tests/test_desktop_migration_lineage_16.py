@@ -82,6 +82,8 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
 ) -> None:
     engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'lineage.sqlite'}")
     with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys=ON"))
+        assert connection.scalar(text("PRAGMA foreign_keys")) == 1
         connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
         connection.execute(
             text("INSERT INTO alembic_version VALUES (:revision)"),
@@ -113,6 +115,16 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
             )
         )
         _create_review_event_history_indexes(connection)
+        # Create valid parents under enforced SQLite FK constraints.
+        for table, parent_id in (
+            ("projects", "project-1"),
+            ("review_queues", "queue-1"),
+            ("review_queue_items", "item-1"),
+        ):
+            connection.execute(
+                text(f"INSERT INTO {table} (id) VALUES (:parent_id)"),
+                {"parent_id": parent_id},
+            )
         # Already-at-head startup must preserve existing biological QC notes.
         connection.execute(
             text(
@@ -139,6 +151,7 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
     desktop.run_pending_migrations(settings)
 
     with engine.connect() as connection:
+        assert connection.execute(text("PRAGMA foreign_key_check")).all() == []
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
         assert connection.execute(
             text("SELECT id, comment FROM review_queue_item_events")
