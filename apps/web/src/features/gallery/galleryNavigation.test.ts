@@ -311,6 +311,7 @@ describe("gallery navigation rejects stale camera-page state", () => {
       { index: 0, itemCount: 0, page: 1, pages: 2 },
       { index: 0, itemCount: 1, page: 3, pages: 2 },
       { index: 0, itemCount: 1, page: 1, pages: 0 },
+      { index: 0, itemCount: 1, page: 1, pages: 1_000_001 },
     ]) {
       expect(
         resolveGalleryNavigation({
