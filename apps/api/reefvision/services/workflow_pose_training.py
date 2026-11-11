@@ -740,7 +740,11 @@ def _reused_pose_training_result(
         advertised = artifact_manifest.get(field)
         if advertised is None:
             continue
-        if not isinstance(advertised, str):
+        if (
+            not isinstance(advertised, str)
+            or not advertised.strip()
+            or advertised != advertised.strip()
+        ):
             raise ValidationError("Recovered pose-training checkpoint artifact path changed")
         advertised_checkpoint = resolve_managed_project_path(settings, advertised)
         if (
