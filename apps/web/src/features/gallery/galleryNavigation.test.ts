@@ -1691,7 +1691,6 @@ describe("malformed WebView2 gallery page drafts", () => {
   });
 });
 
-
 describe("bounded persisted gallery pages", () => {
   it("falls back to the first image for an implausibly distant saved page", () => {
     const storage = memoryStorage({
