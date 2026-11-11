@@ -1599,10 +1599,23 @@ def create_pose_workflow_training_result(
         settings,
         f"{project.storage_root}/training/{run.id}/runs/pose/weights",
     )
-    if expected_weights_dir.is_symlink():
-        raise ValidationError(
-            "Completed pose training weights directory must not be a symbolic link"
-        )
+    # The weights directory is not the only redirectable component: a
+    # symlinked parent could send the worker outside this run's output tree.
+    training_root = resolve_managed_project_path(
+        settings,
+        f"{project.storage_root}/training",
+    )
+    for directory in (
+        training_root,
+        training_root / run.id,
+        training_root / run.id / "runs",
+        training_root / run.id / "runs" / "pose",
+        expected_weights_dir,
+    ):
+        if directory.is_symlink():
+            raise ValidationError(
+                "Completed pose training output directory must not be a symbolic link"
+            )
     if checkpoint.resolve().parent != expected_weights_dir.resolve() or checkpoint.name not in {
         "best.pt",
         "last.pt",
