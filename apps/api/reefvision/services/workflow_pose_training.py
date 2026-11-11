@@ -1631,7 +1631,11 @@ def create_pose_workflow_training_result(
             if digest_field in worker_manifest:
                 raise ValidationError("Completed pose training checkpoint artifact path is missing")
             continue
-        if not isinstance(advertised, str):
+        if (
+            not isinstance(advertised, str)
+            or not advertised
+            or advertised != advertised.strip()
+        ):
             raise ValidationError("Completed pose training checkpoint artifact path changed")
         artifact_checkpoint = resolve_managed_project_path(settings, advertised)
         if (
