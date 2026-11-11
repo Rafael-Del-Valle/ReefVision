@@ -31,9 +31,12 @@ def measure_selected_mesh_edge_path(
     *,
     meters_per_unit: float,
     absolute_scale_bound: float,
+    triangles: Sequence[Face] | None = None,
 ) -> MeshEdgePathMeasurement:
     """Measure an explicitly selected polyline without inferring branch anatomy.
 
+    When triangles are supplied, every consecutive pair must be an actual
+    observed triangle edge. Without faces, topology remains unverified.
     A selected route must contain at least two distinct consecutive vertices.
     The uncertainty bound represents calibration only, not endpoint placement,
     reconstruction, anatomical identity, or spatial registration.
@@ -46,6 +49,20 @@ def measure_selected_mesh_edge_path(
         raise ValueError("selected path requires at least two vertices")
     if any(type(i) is not int or i < 0 or i >= len(vertices) for i in vertex_indices):
         raise ValueError("invalid selected path vertex index")
+    if triangles is not None:
+        edges: set[tuple[int, int]] = set()
+        for face in triangles:
+            if len(face) != 3 or any(
+                type(i) is not int or i < 0 or i >= len(vertices) for i in face
+            ) or len(set(face)) != 3:
+                raise ValueError("invalid mesh triangle indices")
+            a, b, c = face
+            edges.update((min(x, y), max(x, y)) for x, y in ((a, b), (b, c), (c, a)))
+        if any(
+            (min(a, b), max(a, b)) not in edges
+            for a, b in zip(vertex_indices, vertex_indices[1:])
+        ):
+            raise ValueError("selected route contains a non-mesh edge")
     selected = [vertices[i] for i in vertex_indices]
     if any(
         len(point) != 3
