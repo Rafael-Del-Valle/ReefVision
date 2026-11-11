@@ -786,6 +786,10 @@ def _reused_pose_training_result(
         or snapshot_version != snapshot_version.strip()
     ):
         raise ValidationError("Recovered pose-training snapshot schema version is invalid")
+    # An explicit unknown version cannot be treated as an unchecked legacy
+    # snapshot: fail closed rather than silently downgrading lineage checks.
+    if snapshot_version is not None and snapshot_version not in current_snapshot_versions:
+        raise ValidationError("Recovered pose-training snapshot schema version is unsupported")
     is_current_snapshot = (
         snapshot_version in current_snapshot_versions
         or "pose_training_dataset_manifest_sha256" in snapshot
