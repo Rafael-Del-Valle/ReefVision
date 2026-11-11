@@ -418,3 +418,23 @@ def test_inconsistent_winding_on_route_persists_in_saved_workflow(
     assert "inconsistent_face_winding" in artifact["qc_warnings"]
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
+
+
+def test_mesh_path_flags_individual_calibrated_segment_underflow() -> None:
+    # A tiny edge vanishes under calibration even though the whole route is
+    # measurable. The saved route must not silently imply all segments resolved.
+    from reefvision.services.spatial_mesh_paths_v14 import mesh_edge_paths
+
+    route = mesh_edge_paths(
+        points=[(0.0, 0.0, 0.0), (1e-170, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        faces=[[0, 1, 3], [1, 2, 3]],
+        pairs=[[0, 2]],
+        scale=1e-160,
+        scale_uncertainty=0.1,
+    )[0]
+    assert route["status"] == "connected"
+    assert route["length_m"] > 0
+    assert route["path_edge_lengths_m"][0] == 0.0
+    assert route["path_edge_lengths_m"][1] > 0
+    assert "calibrated_path_segment_underflow" in route["path_qc_warnings"]
+    assert "calibrated_path_length_underflow" not in route["path_qc_warnings"]
