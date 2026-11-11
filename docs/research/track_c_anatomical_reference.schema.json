@@ -449,7 +449,37 @@
           ],
           "minimum": 0
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "confirmed"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "transform_sha256",
+              "rms_error_m"
+            ],
+            "properties": {
+              "transform_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "rms_error_m": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }
