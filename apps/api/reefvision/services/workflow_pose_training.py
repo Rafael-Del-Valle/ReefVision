@@ -780,7 +780,11 @@ def _reused_pose_training_result(
         "pose-workflow-training-snapshot-0003",
     }
     snapshot_version = snapshot.get("schema_version")
-    if snapshot_version is not None and not isinstance(snapshot_version, str):
+    if snapshot_version is not None and (
+        not isinstance(snapshot_version, str)
+        or not snapshot_version
+        or snapshot_version != snapshot_version.strip()
+    ):
         raise ValidationError("Recovered pose-training snapshot schema version is invalid")
     is_current_snapshot = (
         snapshot_version in current_snapshot_versions
