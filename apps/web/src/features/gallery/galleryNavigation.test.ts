@@ -368,7 +368,12 @@ describe("gallery navigation with uneven camera page sizes", () => {
 describe("camera filename preference round trips", () => {
   it("preserves mixed-case JPG/JPEG camera identifiers without alias rewriting", () => {
     const storage = memoryStorage();
-    for (const imageId of ["DSC_0042.JPG", "DSC_0042.JPEG", "IMG_0042.jpg", "IMG_0042.jpeg"]) {
+    for (const imageId of [
+      "DSC_0042.JPG",
+      "DSC_0042.JPEG",
+      "IMG_0042.jpg",
+      "IMG_0042.jpeg",
+    ]) {
       writeGalleryPreference(storage, "camera-project", {
         imageId,
         page: 1,
@@ -379,6 +384,24 @@ describe("camera filename preference round trips", () => {
         page: 1,
         wrap: false,
       });
+    }
+  });
+
+  it("keeps the saved capture when an invalid camera identifier is submitted", () => {
+    const storage = memoryStorage();
+    writeGalleryPreference(storage, "camera-project", {
+      imageId: "DSC_0042.JPG",
+      page: 2,
+      wrap: true,
+    });
+    const previous = readGalleryPreference(storage, "camera-project");
+    for (const imageId of ["", " ", "DSC_0043.JPG\\n", "DSC_0043.JPG\u0000"]) {
+      writeGalleryPreference(storage, "camera-project", {
+        imageId,
+        page: 3,
+        wrap: false,
+      });
+      expect(readGalleryPreference(storage, "camera-project")).toEqual(previous);
     }
   });
 });
