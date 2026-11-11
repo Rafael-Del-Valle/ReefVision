@@ -48,9 +48,11 @@ def inspect(path: Path) -> dict:
         # Fingerprint structural DDL, never biological records or user data.
         # Include views, indexes and triggers to distinguish colliding Alembic
         # stamps with different real schema topology. Exclude SQLite internals.
+        # LIKE treats '_' as a wildcard and incorrectly drops user tables
+        # named sqliteX...; only the reserved literal sqlite_ prefix is internal.
         schema_rows = connection.execute(
             "SELECT type, name, tbl_name, sql FROM sqlite_master "
-            "WHERE name NOT LIKE 'sqlite_%' "
+            "WHERE substr(name, 1, 7) != 'sqlite_' "
             "ORDER BY type, name, tbl_name"
         ).fetchall()
         canonical_schema = json.dumps(schema_rows, ensure_ascii=False, separators=(",", ":"))
