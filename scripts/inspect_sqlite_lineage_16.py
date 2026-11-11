@@ -77,6 +77,11 @@ def inspect(path: Path) -> dict:
             columns = [dict(zip(
                 ("cid", "name", "type", "notnull", "default", "pk"), row
             )) for row in connection.execute(f'PRAGMA table_info("{name}")')]
+            # table_info omits generated/hidden columns. Preserve its legacy
+            # shape while exposing complete SQLite column topology separately.
+            extended_columns = [dict(zip(
+                ("cid", "name", "type", "notnull", "default", "pk", "hidden"), row
+            )) for row in connection.execute(f'PRAGMA table_xinfo("{name}")')]
             fks = [dict(zip(
                 ("id", "seq", "table", "from", "to", "on_update", "on_delete", "match"), row
             )) for row in connection.execute(f'PRAGMA foreign_key_list("{name}")')]
@@ -85,6 +90,7 @@ def inspect(path: Path) -> dict:
             )) for row in connection.execute(f'PRAGMA index_list("{name}")')]
             tables[name] = {
                 "present": True, "columns": columns,
+                "extended_columns": extended_columns,
                 "foreign_keys": fks, "indexes": indexes,
             }
         return {
