@@ -34,3 +34,43 @@ def test_missing_file_never_creates_database(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         module.inspect(path)
     assert not path.exists()
+
+
+def test_foreign_key_violations_are_reported_without_repair(tmp_path: Path) -> None:
+    path = tmp_path / "broken_research.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("PRAGMA foreign_keys=OFF")
+        db.execute("CREATE TABLE projects (id INTEGER PRIMARY KEY)")
+        db.execute(
+            "CREATE TABLE review_queue_item_events ("
+            "id INTEGER PRIMARY KEY, project_id INTEGER REFERENCES projects(id))"
+        )
+        db.execute("INSERT INTO review_queue_item_events VALUES (1, 999)")
+    before = path.read_bytes()
+    evidence = module.inspect(path)
+    assert evidence["foreign_key_violation_count"] == 1
+    assert evidence["classification"] == "requires_researcher_review"
+    assert evidence["tables"]["review_queue_item_events"]["foreign_keys"][0]["table"] == "projects"
+    assert path.read_bytes() == before
+
+
+def test_wal_uncheckpointed_schema_is_visible_without_changing_database(tmp_path: Path) -> None:
+    path = tmp_path / "wal_research.sqlite"
+    with sqlite3.connect(path) as setup:
+        setup.execute("PRAGMA journal_mode=WAL")
+        setup.execute("PRAGMA wal_autocheckpoint=0")
+        setup.execute("CREATE TABLE alembic_version (version_num TEXT)")
+    writer = sqlite3.connect(path)
+    try:
+        writer.execute("PRAGMA wal_autocheckpoint=0")
+        writer.execute("INSERT INTO alembic_version VALUES ('0038')")
+        writer.execute("CREATE TABLE scientific_records (id INTEGER PRIMARY KEY)")
+        writer.commit()
+        before = path.read_bytes()
+        evidence = module.inspect(path)
+        assert evidence["alembic_stamps"] == ["0038"]
+        assert evidence["tables"]["scientific_records"]["present"]
+        assert evidence["classification"] == "requires_researcher_review"
+        assert path.read_bytes() == before
+    finally:
+        writer.close()
