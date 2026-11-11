@@ -395,7 +395,7 @@ describe("camera filename preference round trips", () => {
       wrap: true,
     });
     const previous = readGalleryPreference(storage, "camera-project");
-    for (const imageId of ["", " ", "DSC_0043.JPG\\n", "DSC_0043.JPG\u0000"]) {
+    for (const imageId of ["", " ", "DSC_0043.JPG\\n", "DSC_0043.JPG\\0"]) {
       writeGalleryPreference(storage, "camera-project", {
         imageId,
         page: 3,
