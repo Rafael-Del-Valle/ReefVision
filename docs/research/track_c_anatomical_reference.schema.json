@@ -96,7 +96,36 @@
             "null"
           ]
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "verified": {
+                "const": true
+              }
+            },
+            "required": [
+              "verified"
+            ]
+          },
+          "then": {
+            "properties": {
+              "reviewer_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reference_target_id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "reference_target_id"
+            ]
+          }
+        }
+      ]
     },
     "reviewers": {
       "type": "array",
@@ -307,6 +336,29 @@
                 }
               }
             }
+          },
+          {
+            "if": {
+              "properties": {
+                "verification_status": {
+                  "const": "independently_verified"
+                }
+              },
+              "required": [
+                "verification_status"
+              ]
+            },
+            "then": {
+              "required": [
+                "uncertainty_absolute"
+              ],
+              "properties": {
+                "uncertainty_absolute": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              }
+            }
           }
         ]
       }
@@ -339,7 +391,29 @@
             "null"
           ]
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "confirmed"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "reviewer_id": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
     },
     "registration_review": {
       "type": "object",
