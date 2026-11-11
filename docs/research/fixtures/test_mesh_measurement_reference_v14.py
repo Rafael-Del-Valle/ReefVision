@@ -4,10 +4,41 @@ from __future__ import annotations
 import math
 import unittest
 
-from mesh_measurement_reference_v14 import measure_triangle_mesh
+from mesh_measurement_reference_v14 import (
+    measure_selected_mesh_edge_path,
+    measure_triangle_mesh,
+)
 
 
 class MeshMeasurementReferenceTests(unittest.TestCase):
+    def test_selected_edge_path_calibration_and_review_status(self) -> None:
+        result = measure_selected_mesh_edge_path(
+            [(0, 0, 0), (3, 0, 0), (3, 4, 0)],
+            [0, 1, 2],
+            meters_per_unit=0.01,
+            absolute_scale_bound=0.001,
+        )
+        self.assertEqual(result.vertex_indices, (0, 1, 2))
+        self.assertAlmostEqual(result.length_m, 0.07)
+        self.assertAlmostEqual(result.scale_bound_m, 0.007)
+        self.assertEqual(result.anatomical_review_state, "unverified")
+
+    def test_selected_edge_path_rejects_invalid_routes(self) -> None:
+        vertices = [(0, 0, 0), (1, 0, 0), (2, 0, 0)]
+        for route in ([0], [0, 0], [0, 3], [True, 1]):
+            with self.subTest(route=route), self.assertRaises(ValueError):
+                measure_selected_mesh_edge_path(
+                    vertices, route, meters_per_unit=1, absolute_scale_bound=0
+                )
+
+    def test_selected_edge_path_rejects_unrepresentable_calibration(self) -> None:
+        vertices = [(0, 0, 0), (1, 0, 0)]
+        with self.assertRaisesRegex(ValueError, "nonrepresentable calibrated path length"):
+            measure_selected_mesh_edge_path(
+                vertices, [0, 1], meters_per_unit=1e-300,
+                absolute_scale_bound=1e-320,
+            )
+
     def test_unit_square_calibration_and_uncertainty(self) -> None:
         result = measure_triangle_mesh(
             [(0, 0, 0), (2, 0, 0), (2, 2, 0), (0, 2, 0)],
