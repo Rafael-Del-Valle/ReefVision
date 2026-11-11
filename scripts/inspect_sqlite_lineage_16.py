@@ -22,6 +22,9 @@ def inspect(path: Path) -> dict:
     connection = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
     try:
         connection.execute("PRAGMA query_only=ON")
+        # Pin one read snapshot: concurrent WAL writers must not mix schema,
+        # migration stamps, and FK evidence from different committed states.
+        connection.execute("BEGIN")
         integrity = connection.execute("PRAGMA quick_check").fetchone()[0]
         foreign_keys = connection.execute("PRAGMA foreign_key_check").fetchall()
         # Stable evidence ordering supports reproducible review reports across runs.
