@@ -228,3 +228,13 @@ def test_anatomical_centerline_rejects_null_endpoint_fingerprint() -> None:
     assert not VALIDATOR.is_valid(record)
     measurement["endpoint_annotation_sha256"] = HASH
     VALIDATOR.validate(record)
+
+
+def test_duplicate_identical_reviewer_records_are_rejected() -> None:
+    record = reference_record()
+    record["reviewers"][1] = copy.deepcopy(record["reviewers"][0])
+    assert not VALIDATOR.is_valid(record)
+
+
+def test_distinct_reviewer_records_remain_valid() -> None:
+    VALIDATOR.validate(reference_record())
