@@ -37,7 +37,15 @@ def inventory(root: Path) -> tuple[list[dict[str, object]], list[str]]:
     # os.walk separates directories from files without statting unrelated
     # scientific files. Never follow directory links outside the approved root.
     jpeg_paths: list[Path] = []
-    for directory, dirnames, filenames in os.walk(root, followlinks=False):
+
+    def report_walk_error(error: OSError) -> None:
+        # os.walk otherwise silently skips unreadable camera subdirectories,
+        # producing a deceptively complete scientific acceptance manifest.
+        # Do not retry, follow links, or modify the source directory.
+        location = getattr(error, "filename", None) or str(root)
+        errors.append(f"camera directory traversal failed: {location}: {type(error).__name__}")
+
+    for directory, dirnames, filenames in os.walk(root, followlinks=False, onerror=report_walk_error):
         parent = Path(directory)
         for dirname in sorted(dirnames):
             child = parent / dirname
