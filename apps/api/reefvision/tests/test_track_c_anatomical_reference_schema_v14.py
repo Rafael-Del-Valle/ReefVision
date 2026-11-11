@@ -170,9 +170,7 @@ def test_confirmed_registration_requires_transform_digest_and_rms() -> None:
         ("rms_error_m", -0.01),
     ],
 )
-def test_confirmed_registration_rejects_invalid_evidence(
-    field: str, value: object
-) -> None:
+def test_confirmed_registration_rejects_invalid_evidence(field: str, value: object) -> None:
     record = reference_record()
     registration = record["registration_review"]
     registration.update(
