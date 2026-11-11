@@ -2,7 +2,7 @@
 
 These are synthetic schema fixtures, not independently verified coral measurements.
 Run with: python -m pytest apps/api/reefvision/tests/test_track_c_anatomical_reference_schema_v14.py
-Requires the optional jsonschema package; tests skip explicitly when absent.
+Requires jsonschema; missing validation dependencies fail this scientific gate.
 """
 
 from __future__ import annotations
@@ -11,9 +11,8 @@ import copy
 import json
 from pathlib import Path
 
+import jsonschema
 import pytest
-
-jsonschema = pytest.importorskip("jsonschema")
 
 SCHEMA_PATH = (
     Path(__file__).resolve().parents[4] / "docs/research/track_c_anatomical_reference.schema.json"
