@@ -1656,7 +1656,9 @@ def create_pose_workflow_training_result(
         ):
             raise ValidationError("Completed pose training checkpoint artifact path changed")
         if artifact_checkpoint.is_symlink():
-            raise ValidationError("Completed pose training checkpoint artifact must not be a symbolic link")
+            raise ValidationError(
+                "Completed pose training checkpoint artifact must not be a symbolic link"
+            )
         artifact_digest, artifact_size = (
             (checkpoint_sha256, checkpoint_size)
             if artifact_checkpoint.resolve() == checkpoint.resolve()
