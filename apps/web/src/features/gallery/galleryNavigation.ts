@@ -12,6 +12,10 @@ export type GalleryNavigationDestination =
   | { page: number; edge: "first" | "last" }
   | { page: number; edge: "index"; index: number };
 
+// Bound restored page numbers so corrupted but safe-integer WebView2 state cannot
+// request implausibly distant pages and leave the first-image viewport empty.
+const MAX_RESTORED_GALLERY_PAGE = 1_000_000;
+
 const DEFAULT_PREFERENCE: GalleryPreference = {
   imageId: null,
   page: 1,
@@ -60,6 +64,7 @@ export function readGalleryPreference(
       typeof candidate.page !== "number" ||
       !Number.isSafeInteger(candidate.page) ||
       candidate.page < 1 ||
+      candidate.page > MAX_RESTORED_GALLERY_PAGE ||
       (candidate.wrap !== undefined && typeof candidate.wrap !== "boolean")
     ) {
       return { ...DEFAULT_PREFERENCE };
@@ -117,6 +122,7 @@ export function writeGalleryPreference(
     if (
       !Number.isSafeInteger(page) ||
       page < 1 ||
+      page > MAX_RESTORED_GALLERY_PAGE ||
       (imageId !== null && !validGalleryImageId(imageId)) ||
       typeof wrap !== "boolean"
     ) {
