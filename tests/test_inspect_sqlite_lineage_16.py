@@ -185,3 +185,19 @@ def test_schema_fingerprint_includes_indexes_but_excludes_record_changes(tmp_pat
     with sqlite3.connect(path) as db:
         db.execute("CREATE INDEX idx_scientific_value ON scientific_records(value)")
     assert module.inspect(path)["schema_sha256"] != baseline
+
+def test_sqlite_header_metadata_is_evidence_not_lineage_classification(tmp_path: Path) -> None:
+    """Capture non-default header fields without trusting them as migrations."""
+    path = tmp_path / "header.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("PRAGMA application_id=12345")
+        db.execute("PRAGMA user_version=47")
+        db.execute("CREATE TABLE alembic_version (version_num TEXT)")
+        db.execute("INSERT INTO alembic_version VALUES ('0038')")
+    before = path.read_bytes()
+    evidence = module.inspect(path)
+    assert evidence["sqlite_header"]["application_id"] == 12345
+    assert evidence["sqlite_header"]["user_version"] == 47
+    assert evidence["sqlite_header"]["schema_version"] >= 1
+    assert evidence["classification"] == "requires_researcher_review"
+    assert path.read_bytes() == before
