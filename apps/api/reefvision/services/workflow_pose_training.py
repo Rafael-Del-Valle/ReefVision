@@ -421,6 +421,16 @@ def _seed_pose_model(
             "Pose retraining seed landmark schema does not match the frozen training dataset"
         )
 
+    # Persisted checkpoint paths are local scientific lineage. Validate their
+    # shape before passing them to the managed-path resolver so corrupted
+    # registrations fail with a domain error rather than a filesystem error.
+    if (
+        not isinstance(model.managed_path, str)
+        or not model.managed_path.strip()
+        or model.managed_path != model.managed_path.strip()
+    ):
+        raise ValidationError("Pose retraining seed checkpoint path is invalid")
+
     checkpoint = resolve_managed_project_path(
         settings,
         model.managed_path,
