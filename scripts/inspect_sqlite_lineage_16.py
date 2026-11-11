@@ -33,7 +33,15 @@ def inspect(path: Path) -> dict:
             "user_version": connection.execute("PRAGMA user_version").fetchone()[0],
             "schema_version": connection.execute("PRAGMA schema_version").fetchone()[0],
         }
-        foreign_keys = connection.execute("PRAGMA foreign_key_check").fetchall()
+        # A partially migrated schema can have an invalid FK parent key. SQLite
+        # raises OperationalError instead of returning violations in that case.
+        # Preserve the failure as evidence; never silently report zero violations.
+        foreign_key_check_error = None
+        try:
+            foreign_keys = connection.execute("PRAGMA foreign_key_check").fetchall()
+        except sqlite3.DatabaseError as exc:
+            foreign_keys = []
+            foreign_key_check_error = str(exc)
         # Stable evidence ordering supports reproducible review reports across runs.
         foreign_keys.sort(key=lambda row: (str(row[0]), str(row[1]), str(row[2]), int(row[3])))
         # Fingerprint structural DDL, never biological records or user data.
@@ -75,7 +83,8 @@ def inspect(path: Path) -> dict:
             "quick_check": integrity,
             "schema_sha256": schema_sha256,
             "sqlite_header": sqlite_header,
-            "foreign_key_violation_count": len(foreign_keys),
+            "foreign_key_violation_count": len(foreign_keys) if foreign_key_check_error is None else None,
+            "foreign_key_check_error": foreign_key_check_error,
             "foreign_key_violations": [
                 {"table": row[0], "rowid": row[1], "parent": row[2], "fkid": row[3]}
                 for row in foreign_keys
