@@ -195,3 +195,36 @@ def test_confirmed_registration_requires_named_reviewer(reviewer_id: object) -> 
         reviewer_id=reviewer_id,
     )
     assert not VALIDATOR.is_valid(record)
+
+
+@pytest.mark.parametrize(
+    ("metric", "unit"),
+    [
+        ("surface_area", "m2"),
+        ("height", "m"),
+        ("width", "m"),
+        ("depth", "m"),
+        ("mesh_edge_path_length", "m"),
+        ("enclosed_volume", "m3"),
+    ],
+)
+def test_supported_metric_units_accept_valid_synthetic_evidence(
+    metric: str, unit: str
+) -> None:
+    record = reference_record()
+    record["reference_measurements"][0].update(metric=metric, unit=unit)
+    VALIDATOR.validate(record)
+
+
+def test_anatomical_centerline_rejects_null_endpoint_fingerprint() -> None:
+    record = reference_record()
+    measurement = record["reference_measurements"][0]
+    measurement.update(
+        metric="branch_centerline_length",
+        unit="m",
+        branch_id="synthetic-branch",
+        endpoint_annotation_sha256=None,
+    )
+    assert not VALIDATOR.is_valid(record)
+    measurement["endpoint_annotation_sha256"] = HASH
+    VALIDATOR.validate(record)
