@@ -829,14 +829,17 @@ def _reused_pose_training_result(
             continue
         expected_digest = frozen_checkpoint[digest_field]
         advertised = frozen_checkpoint.get(path_field)
-        if (
-            not isinstance(expected_digest, str)
-            or len(expected_digest) != 64
-            or any(char not in "0123456789abcdef" for char in expected_digest)
-            or not isinstance(advertised, str)
-            or not advertised
-            or advertised != advertised.strip()
-        ):
+        valid_digest = (
+            isinstance(expected_digest, str)
+            and len(expected_digest) == 64
+            and all(char in "0123456789abcdef" for char in expected_digest)
+        )
+        valid_path = (
+            isinstance(advertised, str)
+            and bool(advertised)
+            and advertised == advertised.strip()
+        )
+        if not valid_digest or not valid_path:
             raise ValidationError("Recovered pose-training checkpoint artifact checksum changed")
         artifact_checkpoint = resolve_managed_project_path(settings, advertised)
         actual_digest = (
