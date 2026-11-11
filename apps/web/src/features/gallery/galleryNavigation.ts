@@ -56,7 +56,7 @@ export function readGalleryPreference(
       return { ...DEFAULT_PREFERENCE };
     }
     const candidate = parsed as Record<string, unknown>;
-    if (candidate.imageId !== null && !validGalleryImageId(candidate.imageId)) {
+    if (candidate.imageId != null && !validGalleryImageId(candidate.imageId)) {
       return { ...DEFAULT_PREFERENCE };
     }
     // Corrupted persisted pages such as 1e100 are integers in JavaScript but
