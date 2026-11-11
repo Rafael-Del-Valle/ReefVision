@@ -146,3 +146,39 @@ def test_metric_dimensions_are_enforced(metric: str, unit: str) -> None:
     record = reference_record()
     record["reference_measurements"][0].update(metric=metric, unit=unit)
     assert not VALIDATOR.is_valid(record)
+
+
+def test_confirmed_registration_requires_transform_digest_and_rms() -> None:
+    record = reference_record()
+    registration = record["registration_review"]
+    registration["status"] = "confirmed"
+    assert not VALIDATOR.is_valid(record)
+
+    registration["transform_sha256"] = HASH
+    assert not VALIDATOR.is_valid(record)
+
+    registration["rms_error_m"] = 0.001
+    VALIDATOR.validate(record)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("transform_sha256", None),
+        ("transform_sha256", "untracked-transform"),
+        ("rms_error_m", None),
+        ("rms_error_m", -0.01),
+    ],
+)
+def test_confirmed_registration_rejects_invalid_evidence(
+    field: str, value: object
+) -> None:
+    record = reference_record()
+    registration = record["registration_review"]
+    registration.update(
+        status="confirmed",
+        transform_sha256=HASH,
+        rms_error_m=0.001,
+    )
+    registration[field] = value
+    assert not VALIDATOR.is_valid(record)
