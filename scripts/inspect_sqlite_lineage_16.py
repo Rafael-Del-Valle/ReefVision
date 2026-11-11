@@ -26,7 +26,8 @@ def inspect(path: Path) -> dict:
         # Pin one read snapshot: concurrent WAL writers must not mix schema,
         # migration stamps, and FK evidence from different committed states.
         connection.execute("BEGIN")
-        integrity = connection.execute("PRAGMA quick_check").fetchone()[0]
+        quick_check_details = [row[0] for row in connection.execute("PRAGMA quick_check")]
+        integrity = "ok" if quick_check_details == ["ok"] else (quick_check_details[0] if quick_check_details else "no result")
         # Header fields are diagnostic evidence, not proof of Alembic lineage.
         sqlite_header = {
             "application_id": connection.execute("PRAGMA application_id").fetchone()[0],
@@ -87,6 +88,7 @@ def inspect(path: Path) -> dict:
         return {
             "database": str(path.resolve()), "read_only": True,
             "quick_check": integrity,
+            "quick_check_details": quick_check_details,
             "schema_sha256": schema_sha256,
             "sqlite_header": sqlite_header,
             "foreign_key_violation_count": len(foreign_keys) if foreign_key_check_error is None else None,
