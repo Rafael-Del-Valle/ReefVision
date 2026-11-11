@@ -728,6 +728,23 @@ def _reused_pose_training_result(
         settings,
         f"{project.storage_root}/training/{run.id}/runs/pose/weights",
     )
+    # Replay must enforce the same no-symlink ancestry contract as first
+    # completion, before trusting or hashing persisted checkpoint artifacts.
+    training_root = resolve_managed_project_path(
+        settings,
+        f"{project.storage_root}/training",
+    )
+    for directory in (
+        training_root,
+        training_root / run.id,
+        training_root / run.id / "runs",
+        training_root / run.id / "runs" / "pose",
+        expected_weights_dir,
+    ):
+        if directory.is_symlink():
+            raise ValidationError("Recovered pose training output directory is a symbolic link")
+    if checkpoint.is_symlink():
+        raise ValidationError("Recovered pose training checkpoint is a symbolic link")
     if checkpoint.resolve().parent != expected_weights_dir.resolve():
         raise ValidationError("Recovered pose training checkpoint belongs to another output")
     if checkpoint.name not in {"best.pt", "last.pt"}:
