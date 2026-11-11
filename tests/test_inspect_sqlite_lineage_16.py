@@ -233,3 +233,30 @@ def test_valid_foreign_keys_have_explicit_success_evidence(tmp_path: Path) -> No
     assert evidence["foreign_key_check_error"] is None
     assert evidence["foreign_key_violation_count"] == 0
     assert evidence["foreign_key_violations"] == []
+
+def test_malformed_alembic_table_reports_uncertain_stamp_without_writes(tmp_path: Path) -> None:
+    """A partial revision table must not suppress schema/FK evidence or imply success."""
+    path = tmp_path / "malformed_alembic.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE alembic_version (wrong_column TEXT)")
+        db.execute("INSERT INTO alembic_version VALUES ('0038')")
+        db.execute("CREATE TABLE review_queue_item_events (id INTEGER PRIMARY KEY)")
+    before = path.read_bytes()
+    evidence = module.inspect(path)
+    assert evidence["alembic_stamps"] == []
+    assert "no such column" in evidence["alembic_stamp_error"]
+    assert evidence["tables"]["review_queue_item_events"]["present"]
+    assert evidence["classification"] == "requires_researcher_review"
+    assert evidence["foreign_key_violation_count"] == 0
+    assert path.read_bytes() == before
+
+
+def test_valid_alembic_table_has_no_stamp_error(tmp_path: Path) -> None:
+    path = tmp_path / "valid_alembic.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE alembic_version (version_num TEXT)")
+        db.execute("INSERT INTO alembic_version VALUES ('0041')")
+    evidence = module.inspect(path)
+    assert evidence["alembic_stamps"] == ["0041"]
+    assert evidence["alembic_stamp_error"] is None
+    assert evidence["classification"] == "requires_researcher_review"
