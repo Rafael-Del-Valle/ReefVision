@@ -24,6 +24,8 @@ def inspect(path: Path) -> dict:
         connection.execute("PRAGMA query_only=ON")
         integrity = connection.execute("PRAGMA quick_check").fetchone()[0]
         foreign_keys = connection.execute("PRAGMA foreign_key_check").fetchall()
+        # Stable evidence ordering supports reproducible review reports across runs.
+        foreign_keys.sort(key=lambda row: (str(row[0]), str(row[1]), str(row[2]), int(row[3])))
         names = {row[0] for row in connection.execute(
             "SELECT name FROM sqlite_master WHERE type='table'"
         )}
