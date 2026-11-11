@@ -984,7 +984,7 @@ def _reused_pose_training_result(
         "training_job_id": job.id,
         "training_draft_id": None,
         "experiment_id": (experiment.id if experiment is not None else None),
-        "dataset_version_id": None,
+        "dataset_version_id": (run.dataset_version_id),
         "dataset_manifest_sha256": (run.dataset_manifest_sha256),
         "split_manifest_sha256": (run.split_manifest_sha256),
         "pose_training_dataset_id": (dataset.id),
