@@ -448,6 +448,12 @@
             "null"
           ],
           "minimum": 0
+        },
+        "reviewer_id": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "allOf": [
@@ -465,7 +471,8 @@
           "then": {
             "required": [
               "transform_sha256",
-              "rms_error_m"
+              "rms_error_m",
+              "reviewer_id"
             ],
             "properties": {
               "transform_sha256": {
@@ -475,6 +482,10 @@
               "rms_error_m": {
                 "type": "number",
                 "minimum": 0
+              },
+              "reviewer_id": {
+                "type": "string",
+                "minLength": 1
               }
             }
           }
