@@ -242,6 +242,51 @@ describe("gallery navigation across sparse camera pages", () => {
   });
 });
 
+describe("gallery wrap across single-image camera pages", () => {
+  it("wraps from the final capture to the first and back without invalid indices", () => {
+    expect(
+      resolveGalleryNavigation({
+        action: "next",
+        index: 0,
+        itemCount: 1,
+        page: 3,
+        pages: 3,
+        wrap: true,
+      }),
+    ).toEqual({ page: 1, edge: "first" });
+    expect(
+      resolveGalleryNavigation({
+        action: "previous",
+        index: 0,
+        itemCount: 1,
+        page: 1,
+        pages: 3,
+        wrap: true,
+      }),
+    ).toEqual({ page: 3, edge: "last" });
+    expect(
+      resolveGalleryNavigation({
+        action: "next",
+        index: 0,
+        itemCount: 1,
+        page: 3,
+        pages: 3,
+        wrap: false,
+      }),
+    ).toBeNull();
+    expect(
+      resolveGalleryNavigation({
+        action: "previous",
+        index: 0,
+        itemCount: 1,
+        page: 1,
+        pages: 3,
+        wrap: false,
+      }),
+    ).toBeNull();
+  });
+});
+
 describe("gallery navigation rejects stale camera-page state", () => {
   it("does not navigate when an asynchronous page refresh invalidates the selection", () => {
     for (const state of [
