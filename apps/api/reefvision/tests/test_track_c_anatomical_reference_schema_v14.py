@@ -158,6 +158,8 @@ def test_confirmed_registration_requires_transform_digest_and_rms() -> None:
     assert not VALIDATOR.is_valid(record)
 
     registration["rms_error_m"] = 0.001
+    assert not VALIDATOR.is_valid(record)
+    registration["reviewer_id"] = "synthetic-reviewer-a"
     VALIDATOR.validate(record)
 
 
@@ -177,6 +179,20 @@ def test_confirmed_registration_rejects_invalid_evidence(field: str, value: obje
         status="confirmed",
         transform_sha256=HASH,
         rms_error_m=0.001,
+        reviewer_id="synthetic-reviewer-a",
     )
     registration[field] = value
+    assert not VALIDATOR.is_valid(record)
+
+
+@pytest.mark.parametrize("reviewer_id", [None, "", 42])
+def test_confirmed_registration_requires_named_reviewer(reviewer_id: object) -> None:
+    record = reference_record()
+    registration = record["registration_review"]
+    registration.update(
+        status="confirmed",
+        transform_sha256=HASH,
+        rms_error_m=0.001,
+        reviewer_id=reviewer_id,
+    )
     assert not VALIDATOR.is_valid(record)
