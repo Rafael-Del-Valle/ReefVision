@@ -85,8 +85,14 @@ def test_multiple_foreign_key_violations_have_stable_order(tmp_path: Path) -> No
     with sqlite3.connect(path) as db:
         db.execute("PRAGMA foreign_keys=OFF")
         db.execute("CREATE TABLE projects (id INTEGER PRIMARY KEY)")
-        db.execute("CREATE TABLE review_queue_item_events (id INTEGER PRIMARY KEY, project_id INTEGER REFERENCES projects(id))")
-        db.execute("CREATE TABLE review_queue_bulk_requests (id INTEGER PRIMARY KEY, project_id INTEGER REFERENCES projects(id))")
+        db.execute(
+            "CREATE TABLE review_queue_item_events ("
+            "id INTEGER PRIMARY KEY, project_id INTEGER REFERENCES projects(id))"
+        )
+        db.execute(
+            "CREATE TABLE review_queue_bulk_requests ("
+            "id INTEGER PRIMARY KEY, project_id INTEGER REFERENCES projects(id))"
+        )
         db.execute("INSERT INTO review_queue_item_events VALUES (8, 800)")
         db.execute("INSERT INTO review_queue_bulk_requests VALUES (2, 200)")
     before = path.read_bytes()
