@@ -336,7 +336,11 @@ describe("gallery navigation rejects malformed runtime actions", () => {
       ).toBeNull();
     }
     expect(
-      resolveGalleryNavigation({ ...state, action: "next", wrap: null as unknown as boolean }),
+      resolveGalleryNavigation({
+        ...state,
+        action: "next",
+        wrap: null as unknown as boolean,
+      }),
     ).toBeNull();
   });
 });
