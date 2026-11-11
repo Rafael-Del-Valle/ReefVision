@@ -130,7 +130,12 @@ def mesh_edge_paths(
             if scale_uncertainty is not None:
                 bounds = [
                     value * factor
-                    for value in (meters, chord_m, *path_edge_lengths_m, *path_cumulative_lengths_m)
+                    for value in (
+                        meters,
+                        chord_m,
+                        *path_edge_lengths_m,
+                        *path_cumulative_lengths_m,
+                    )
                     for factor in (1 - scale_uncertainty, 1 + scale_uncertainty)
                 ]
                 if any(not isfinite(bound) for bound in bounds):
