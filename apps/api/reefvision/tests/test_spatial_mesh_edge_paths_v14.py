@@ -426,7 +426,12 @@ def test_mesh_path_flags_individual_calibrated_segment_underflow() -> None:
     from reefvision.services.spatial_mesh_paths_v14 import mesh_edge_paths
 
     route = mesh_edge_paths(
-        points=[(0.0, 0.0, 0.0), (1e-170, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        points=[
+            (0.0, 0.0, 0.0),
+            (1e-170, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ],
         faces=[[0, 1, 3], [1, 2, 3]],
         pairs=[[0, 2]],
         scale=1e-160,
