@@ -396,7 +396,7 @@ describe("camera filename preference round trips", () => {
     });
     const key = "reefvision.gallery.camera-project.v1";
     const original = storage.getItem(key);
-    for (const imageId of ["DSC_0043\\u061c.JPG", "DSC_0043\\u206a.JPG", "DSC_0043\\u206f.JPG"]) {
+    for (const imageId of ["DSC_0043\u061c.JPG", "DSC_0043\u206a.JPG", "DSC_0043\u206f.JPG"]) {
       writeGalleryPreference(storage, "camera-project", {
         imageId,
         page: 3,
