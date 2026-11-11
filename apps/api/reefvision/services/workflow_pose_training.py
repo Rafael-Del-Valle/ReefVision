@@ -1582,8 +1582,10 @@ def create_pose_workflow_training_result(
             dataset=dataset,
         )
 
-    if not run.result_checkpoint_path:
+    if not isinstance(run.result_checkpoint_path, str) or not run.result_checkpoint_path:
         raise ValidationError("Completed pose training did not produce a checkpoint")
+    if run.result_checkpoint_path != run.result_checkpoint_path.strip():
+        raise ValidationError("Completed pose training checkpoint path is not canonical")
 
     checkpoint = resolve_managed_project_path(
         settings,
