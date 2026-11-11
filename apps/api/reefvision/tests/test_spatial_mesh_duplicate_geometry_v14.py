@@ -290,7 +290,8 @@ def test_coincident_vertices_distinct_faces_persist_without_false_duplicate_qc(
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifacts = [
-        item for item in detail.json()["artifacts"]
+        item
+        for item in detail.json()["artifacts"]
         if item["data_type"] == "mesh_measurement_preview"
     ]
     assert len(artifacts) == 1
