@@ -287,6 +287,19 @@ describe("gallery wrap across single-image camera pages", () => {
   });
 });
 
+describe("gallery page input validation for camera browsing", () => {
+  it("rejects malformed or oversized page drafts without navigating away from the image", () => {
+    for (const draft of ["", " ", "-1", "1e3", "2.5", "3junk", "9".repeat(65)]) {
+      expect(parseGalleryPageDraft(draft, 4)).toBeNull();
+    }
+    expect(parseGalleryPageDraft(" 0002 ", 4)).toBe(2);
+    expect(parseGalleryPageDraft("999", 4)).toBe(4);
+    expect(parseGalleryPageDraft("1", 0)).toBeNull();
+    expect(parseGalleryPageDraft("1", Number.NaN)).toBeNull();
+    expect(parseGalleryPageDraft("1", Number.MAX_SAFE_INTEGER + 1)).toBeNull();
+  });
+});
+
 describe("gallery navigation rejects stale camera-page state", () => {
   it("does not navigate when an asynchronous page refresh invalidates the selection", () => {
     for (const state of [
