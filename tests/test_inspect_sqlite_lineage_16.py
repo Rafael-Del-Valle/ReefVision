@@ -78,3 +78,24 @@ def test_wal_uncheckpointed_schema_is_visible_without_changing_database(tmp_path
         assert path.read_bytes() == before
     finally:
         writer.close()
+
+
+def test_multiple_foreign_key_violations_have_stable_order(tmp_path: Path) -> None:
+    path = tmp_path / "multiple_orphans.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("PRAGMA foreign_keys=OFF")
+        db.execute("CREATE TABLE projects (id INTEGER PRIMARY KEY)")
+        db.execute("CREATE TABLE review_queue_item_events (id INTEGER PRIMARY KEY, project_id INTEGER REFERENCES projects(id))")
+        db.execute("CREATE TABLE review_queue_bulk_requests (id INTEGER PRIMARY KEY, project_id INTEGER REFERENCES projects(id))")
+        db.execute("INSERT INTO review_queue_item_events VALUES (8, 800)")
+        db.execute("INSERT INTO review_queue_bulk_requests VALUES (2, 200)")
+    before = path.read_bytes()
+    first = module.inspect(path)
+    second = module.inspect(path)
+    assert first["foreign_key_violation_count"] == 2
+    assert first["foreign_key_violations"] == second["foreign_key_violations"]
+    assert first["foreign_key_violations"] == [
+        {"table": "review_queue_bulk_requests", "rowid": 2, "parent": "projects", "fkid": 0},
+        {"table": "review_queue_item_events", "rowid": 8, "parent": "projects", "fkid": 0},
+    ]
+    assert path.read_bytes() == before
