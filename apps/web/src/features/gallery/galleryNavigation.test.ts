@@ -387,6 +387,32 @@ describe("camera filename preference round trips", () => {
     }
   });
 
+  it("rejects invisible directional controls in camera IDs without losing the last selection", () => {
+    const storage = memoryStorage();
+    writeGalleryPreference(storage, "camera-project", {
+      imageId: "DSC_0042.JPG",
+      page: 2,
+      wrap: true,
+    });
+    const key = "reefvision.gallery.camera-project.v1";
+    const original = storage.getItem(key);
+    for (const imageId of ["DSC_0043\\u061c.JPG", "DSC_0043\\u206a.JPG", "DSC_0043\\u206f.JPG"]) {
+      writeGalleryPreference(storage, "camera-project", {
+        imageId,
+        page: 3,
+        wrap: false,
+      });
+      expect(storage.getItem(key)).toBe(original);
+      storage.setItem(key, JSON.stringify({ imageId, page: 3, wrap: false }));
+      expect(readGalleryPreference(storage, "camera-project")).toEqual({
+        imageId: null,
+        page: 1,
+        wrap: false,
+      });
+      storage.setItem(key, original!);
+    }
+  });
+
   it("keeps the saved capture when an invalid camera identifier is submitted", () => {
     const storage = memoryStorage();
     writeGalleryPreference(storage, "camera-project", {
