@@ -120,6 +120,9 @@ def test_review_lineage_is_accepted_without_writes(revision: str) -> None:
         )
         with pytest.raises(RuntimeError, match="descending index columns"):
             assert_review_event_relationship_topology(connection)
+        # Desktop startup must enforce the same read-only relationship contract.
+        with pytest.raises(RuntimeError, match="descending index columns"):
+            assert_compatible_revision_0038(connection)
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
         assert (
             connection.scalar(text("SELECT id FROM review_queue_item_events")) == "event-preserved"
