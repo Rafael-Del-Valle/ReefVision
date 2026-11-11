@@ -193,6 +193,7 @@ export function resolveGalleryNavigation({
     !Number.isSafeInteger(index) ||
     itemCount < 1 ||
     pages < 1 ||
+    pages > MAX_RESTORED_GALLERY_PAGE ||
     page < 1 ||
     page > pages ||
     index < 0 ||
