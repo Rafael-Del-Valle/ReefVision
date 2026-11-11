@@ -16,8 +16,7 @@ import pytest
 jsonschema = pytest.importorskip("jsonschema")
 
 SCHEMA_PATH = (
-    Path(__file__).resolve().parents[4]
-    / "docs/research/track_c_anatomical_reference.schema.json"
+    Path(__file__).resolve().parents[4] / "docs/research/track_c_anatomical_reference.schema.json"
 )
 SCHEMA = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
 VALIDATOR = jsonschema.Draft202012Validator(SCHEMA, format_checker=jsonschema.FormatChecker())
