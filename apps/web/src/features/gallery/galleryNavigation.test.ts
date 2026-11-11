@@ -365,6 +365,24 @@ describe("gallery navigation with uneven camera page sizes", () => {
   });
 });
 
+describe("camera filename preference round trips", () => {
+  it("preserves mixed-case JPG/JPEG camera identifiers without alias rewriting", () => {
+    const storage = memoryStorage();
+    for (const imageId of ["DSC_0042.JPG", "DSC_0042.JPEG", "IMG_0042.jpg", "IMG_0042.jpeg"]) {
+      writeGalleryPreference(storage, "camera-project", {
+        imageId,
+        page: 1,
+        wrap: false,
+      });
+      expect(readGalleryPreference(storage, "camera-project")).toEqual({
+        imageId,
+        page: 1,
+        wrap: false,
+      });
+    }
+  });
+});
+
 describe("gallery preferences", () => {
   it("snapshots changing preference getters before persisting a camera selection", () => {
     const storage = memoryStorage();
