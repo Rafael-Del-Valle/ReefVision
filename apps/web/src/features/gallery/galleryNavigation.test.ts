@@ -197,6 +197,21 @@ describe("browser gallery storage access", () => {
   });
 });
 
+describe("corrupted gallery preference shapes", () => {
+  it("rejects array-shaped WebView2 storage without restoring a phantom image", () => {
+    const storage = memoryStorage({
+      "reefvision.gallery.camera-project.v1": JSON.stringify([
+        { imageId: "DSC_0042.JPG", page: 99, wrap: true },
+      ]),
+    });
+    expect(readGalleryPreference(storage, "camera-project")).toEqual({
+      imageId: null,
+      page: 1,
+      wrap: false,
+    });
+  });
+});
+
 describe("gallery navigation across sparse camera pages", () => {
   it("moves between adjacent pages when each page has only one image", () => {
     expect(
