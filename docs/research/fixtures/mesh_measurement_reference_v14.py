@@ -14,6 +14,63 @@ Point = tuple[float, float, float]
 Face = tuple[int, int, int]
 
 
+
+@dataclass(frozen=True)
+class MeshEdgePathMeasurement:
+    """Selected mesh-edge route, not a verified anatomical centerline."""
+
+    vertex_indices: tuple[int, ...]
+    length_m: float
+    scale_bound_m: float
+    anatomical_review_state: str = "unverified"
+
+
+def measure_selected_mesh_edge_path(
+    vertices: Sequence[Point],
+    vertex_indices: Sequence[int],
+    *,
+    meters_per_unit: float,
+    absolute_scale_bound: float,
+) -> MeshEdgePathMeasurement:
+    """Measure an explicitly selected polyline without inferring branch anatomy.
+
+    A selected route must contain at least two distinct consecutive vertices.
+    The uncertainty bound represents calibration only, not endpoint placement,
+    reconstruction, anatomical identity, or spatial registration.
+    """
+    if not math.isfinite(meters_per_unit) or meters_per_unit <= 0:
+        raise ValueError("meters_per_unit must be positive and finite")
+    if not math.isfinite(absolute_scale_bound) or not 0 <= absolute_scale_bound < meters_per_unit:
+        raise ValueError("absolute_scale_bound must be finite and less than scale")
+    if len(vertex_indices) < 2:
+        raise ValueError("selected path requires at least two vertices")
+    if any(type(i) is not int or i < 0 or i >= len(vertices) for i in vertex_indices):
+        raise ValueError("invalid selected path vertex index")
+    selected = [vertices[i] for i in vertex_indices]
+    if any(
+        len(point) != 3
+        or any(type(x) not in (int, float) or not math.isfinite(x) for x in point)
+        for point in selected
+    ):
+        raise ValueError("selected path coordinates must be finite numeric 3D points")
+    lengths = [
+        math.dist(a, b)
+        for a, b in zip(selected, selected[1:])
+    ]
+    if any(not math.isfinite(length) or length <= 0 for length in lengths):
+        raise ValueError("selected path contains zero or nonfinite segment")
+    total = math.fsum(lengths)
+    if not math.isfinite(total) or any(total == math.fsum(lengths[:i]) for i in range(1, len(lengths))):
+        raise ValueError("selected path length lost to numeric precision")
+    nominal = total * meters_per_unit
+    bound = total * absolute_scale_bound
+    if not math.isfinite(nominal) or nominal <= 0 or (absolute_scale_bound > 0 and bound == 0):
+        raise ValueError("nonrepresentable calibrated path length")
+    if not math.isfinite(bound):
+        raise ValueError("nonfinite calibrated path uncertainty")
+    return MeshEdgePathMeasurement(tuple(vertex_indices), nominal, bound)
+
+
 @dataclass(frozen=True)
 class MeshMeasurement:
     triangle_area_units2: float
