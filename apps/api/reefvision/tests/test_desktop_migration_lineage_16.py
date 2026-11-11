@@ -184,9 +184,18 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
                 == expected
             )
         if revision == "0041":
+            # Desktop preflight must not silently modify the persisted bulk
+            # request identity, researcher attribution, action, or evidence.
             assert connection.execute(
-                text("SELECT id, actor, item_ids_json FROM review_queue_bulk_requests")
-            ).one() == ("bulk-preserved", "researcher", '["item-1"]')
+                text(
+                    "SELECT id, review_queue_id, project_id, action, actor, "
+                    "reason, item_ids_json, created_at "
+                    "FROM review_queue_bulk_requests"
+                )
+            ).one() == (
+                "bulk-preserved", "queue-1", "project-1", "approve",
+                "researcher", None, '["item-1"]', "2026-11-09",
+            )
         assert connection.execute(text("PRAGMA foreign_key_check")).all() == []
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
         assert connection.execute(
