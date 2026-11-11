@@ -297,6 +297,9 @@ describe("gallery page input validation for camera browsing", () => {
     expect(parseGalleryPageDraft("1", 0)).toBeNull();
     expect(parseGalleryPageDraft("1", Number.NaN)).toBeNull();
     expect(parseGalleryPageDraft("1", Number.MAX_SAFE_INTEGER + 1)).toBeNull();
+    // Page counts beyond the persisted preference contract cannot be restored.
+    expect(parseGalleryPageDraft("1", 1_000_001)).toBeNull();
+    expect(parseGalleryPageDraft("1", 1_000_000)).toBe(1);
   });
 });
 
