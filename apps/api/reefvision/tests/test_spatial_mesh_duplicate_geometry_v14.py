@@ -235,3 +235,65 @@ def test_all_zero_area_triangles_have_undefined_area_concentration() -> None:
     assert result["largest_triangle_area_fraction"] is None
     assert result["area_weighted_effective_triangle_count"] is None
     assert result["degenerate_face_count"] == 1
+
+
+def test_coincident_vertices_distinct_faces_persist_without_false_duplicate_qc(
+    client: TestClient,
+) -> None:
+    """Shared coordinates alone do not imply duplicate surfaces in saved graphs."""
+    params = {
+        **DUPLICATED,
+        "vertices": [
+            [0, 0, 0],
+            [1, 0, 0],
+            [0, 1, 0],
+            [0, 0, 0],
+            [1, 0, 0],
+            [0, 0, 1],
+        ],
+        "faces": [[0, 1, 2], [3, 4, 5]],
+    }
+    project_id = str(create_project(client, "Coincident vertices workflow")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert response.status_code == 200, response.text
+    standalone = response.json()
+    assert standalone["surface_area_m2"] == pytest.approx(1)
+    assert standalone["measurement_status"] == "caller_supplied_unverified"
+
+    graph = {
+        "graph_id": "distinct-faces-coincident-vertices-v14",
+        "name": "Distinct faces despite shared coordinates",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifacts = [
+        item for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    ]
+    assert len(artifacts) == 1
+    assert artifacts[0]["payload_json"] == standalone
+    assert len(artifacts[0]["payload_sha256"]) == 64
+    assert artifacts[0]["payload_json"]["provenance"]["calibration_verified"] is False
