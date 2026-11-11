@@ -63,10 +63,17 @@ export function readGalleryPreference(
     // cannot safely be used for a paginated API query. Fall back before the
     // first image is requested so a bad preference never hides the viewport.
     if (
-      typeof candidate.page !== "number" ||
-      !Number.isSafeInteger(candidate.page) ||
-      candidate.page < 1 ||
-      candidate.page > MAX_RESTORED_GALLERY_PAGE ||
+      (candidate.imageId != null &&
+        (typeof candidate.page !== "number" ||
+          !Number.isSafeInteger(candidate.page) ||
+          candidate.page < 1 ||
+          candidate.page > MAX_RESTORED_GALLERY_PAGE)) ||
+      (candidate.imageId == null &&
+        candidate.page !== undefined &&
+        (typeof candidate.page !== "number" ||
+          !Number.isSafeInteger(candidate.page) ||
+          candidate.page < 1 ||
+          candidate.page > MAX_RESTORED_GALLERY_PAGE)) ||
       (candidate.wrap !== undefined && typeof candidate.wrap !== "boolean")
     ) {
       return { ...DEFAULT_PREFERENCE };
