@@ -201,3 +201,35 @@ def test_sqlite_header_metadata_is_evidence_not_lineage_classification(tmp_path:
     assert evidence["sqlite_header"]["schema_version"] >= 1
     assert evidence["classification"] == "requires_researcher_review"
     assert path.read_bytes() == before
+
+
+def test_malformed_foreign_key_parent_is_reported_not_misclassified(tmp_path: Path) -> None:
+    """An invalid parent key must not be reported as zero FK violations."""
+    path = tmp_path / "malformed_fk.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE parent (id INTEGER)")
+        db.execute("CREATE TABLE review_queue_item_events ("
+                   "id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES parent(id))")
+        db.execute("INSERT INTO review_queue_item_events VALUES (1, 7)")
+    before = path.read_bytes()
+    evidence = module.inspect(path)
+    assert evidence["quick_check"] == "ok"
+    assert evidence["foreign_key_violation_count"] is None
+    assert "foreign key mismatch" in evidence["foreign_key_check_error"]
+    assert evidence["foreign_key_violations"] == []
+    assert evidence["classification"] == "requires_researcher_review"
+    assert path.read_bytes() == before
+
+
+def test_valid_foreign_keys_have_explicit_success_evidence(tmp_path: Path) -> None:
+    path = tmp_path / "valid_fk.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE parent (id INTEGER PRIMARY KEY)")
+        db.execute("CREATE TABLE review_queue_item_events ("
+                   "id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES parent(id))")
+        db.execute("INSERT INTO parent VALUES (7)")
+        db.execute("INSERT INTO review_queue_item_events VALUES (1, 7)")
+    evidence = module.inspect(path)
+    assert evidence["foreign_key_check_error"] is None
+    assert evidence["foreign_key_violation_count"] == 0
+    assert evidence["foreign_key_violations"] == []
