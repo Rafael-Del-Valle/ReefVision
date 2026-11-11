@@ -26,6 +26,7 @@ def test_ambiguous_0038_is_not_classified_from_stamp(tmp_path: Path) -> None:
     assert evidence["classification"] == "requires_researcher_review"
     assert evidence["quick_check"] == "ok"
     assert evidence["foreign_key_violation_count"] == 0
+    assert evidence["foreign_key_violations"] == []
     assert before == path.read_bytes()
 
 
@@ -49,6 +50,9 @@ def test_foreign_key_violations_are_reported_without_repair(tmp_path: Path) -> N
     before = path.read_bytes()
     evidence = module.inspect(path)
     assert evidence["foreign_key_violation_count"] == 1
+    assert evidence["foreign_key_violations"] == [
+        {"table": "review_queue_item_events", "rowid": 1, "parent": "projects", "fkid": 0}
+    ]
     assert evidence["classification"] == "requires_researcher_review"
     assert evidence["tables"]["review_queue_item_events"]["foreign_keys"][0]["table"] == "projects"
     assert path.read_bytes() == before
