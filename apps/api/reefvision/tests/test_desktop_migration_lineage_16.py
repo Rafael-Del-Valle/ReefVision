@@ -29,6 +29,24 @@ def _prepare_desktop_migration(
     )
 
 
+def _create_review_event_parents(connection: object) -> None:
+    """Build the three 0038 parent tables for a faithful SQLite QC fixture."""
+    for table in ("projects", "review_queues", "review_queue_items"):
+        connection.execute(text(f"CREATE TABLE {table} (id TEXT PRIMARY KEY)"))
+
+
+def _create_review_event_history_indexes(connection: object) -> None:
+    """Preserve the original ascending, non-unique reviewer history indexes."""
+    connection.execute(text(
+        "CREATE INDEX ix_review_queue_item_events_item_created "
+        "ON review_queue_item_events (review_queue_item_id, created_at)"
+    ))
+    connection.execute(text(
+        "CREATE INDEX ix_review_queue_item_events_queue_created "
+        "ON review_queue_item_events (review_queue_id, created_at)"
+    ))
+
+
 @pytest.mark.parametrize("revision", ["0038", "0039", "0040", "0041"])
 def test_desktop_rejects_foreign_review_lineage_even_when_at_head(
     monkeypatch: pytest.MonkeyPatch,
@@ -74,6 +92,7 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
             allowed += ", 'triage_start', 'triage_skip', 'triage_return'"
         if revision in {"0040", "0041"}:
             allowed += ", 'triage_complete'"
+        _create_review_event_parents(connection)
         event_type_check = (
             f", CONSTRAINT ck_review_queue_item_event_type CHECK (event_type IN ({allowed}))"
         )
@@ -85,11 +104,15 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
                 "client_request_id TEXT NOT NULL, event_type TEXT NOT NULL, "
                 "actor TEXT NOT NULL, comment TEXT, assignee TEXT, "
                 "created_at TEXT NOT NULL, "
+                "FOREIGN KEY (review_queue_id) REFERENCES review_queues(id) ON DELETE CASCADE, "
+                "FOREIGN KEY (review_queue_item_id) REFERENCES review_queue_items(id) ON DELETE CASCADE, "
+                "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE, "
                 "CONSTRAINT uq_review_queue_item_event_request "
                 "UNIQUE (review_queue_item_id, client_request_id)"
                 f"{event_type_check})"
             )
         )
+        _create_review_event_history_indexes(connection)
         # Already-at-head startup must preserve existing biological QC notes.
         connection.execute(
             text(
@@ -244,6 +267,7 @@ def test_desktop_verifies_successful_native_review_migration(
         with engine.begin() as connection:
             connection.execute(text("CREATE TABLE alembic_version (version_num TEXT)"))
             connection.execute(text("INSERT INTO alembic_version VALUES ('0038')"))
+            _create_review_event_parents(connection)
             connection.execute(
                 text(
                     "CREATE TABLE review_queue_item_events ("
@@ -252,12 +276,17 @@ def test_desktop_verifies_successful_native_review_migration(
                     "client_request_id TEXT NOT NULL, event_type TEXT NOT NULL, "
                     "actor TEXT NOT NULL, comment TEXT, assignee TEXT, "
                     "created_at TEXT NOT NULL, "
+                    "FOREIGN KEY (review_queue_id) REFERENCES review_queues(id) ON DELETE CASCADE, "
+                    "FOREIGN KEY (review_queue_item_id) REFERENCES review_queue_items(id) ON DELETE CASCADE, "
+                    "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE, "
                     "CONSTRAINT uq_review_queue_item_event_request "
                     "UNIQUE (review_queue_item_id, client_request_id), "
                     "CONSTRAINT ck_review_queue_item_event_type "
                     "CHECK (event_type IN ('comment', 'assign', 'unassign')))"
                 )
             )
+
+            _create_review_event_history_indexes(connection)
 
     _prepare_fresh_desktop_migration(monkeypatch, engine, upgrade=apply_native_review_revision)
     settings = SimpleNamespace(resolved_database_url=str(engine.url))
