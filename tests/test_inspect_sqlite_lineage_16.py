@@ -105,3 +105,46 @@ def test_multiple_foreign_key_violations_have_stable_order(tmp_path: Path) -> No
         {"table": "review_queue_item_events", "rowid": 8, "parent": "projects", "fkid": 0},
     ]
     assert path.read_bytes() == before
+
+
+def test_concurrent_wal_commit_does_not_mix_lineage_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A writer committing mid-inspection must not alter the reader's snapshot."""
+    path = tmp_path / "concurrent.sqlite"
+    with sqlite3.connect(path) as setup:
+        setup.execute("PRAGMA journal_mode=WAL")
+        setup.execute("CREATE TABLE alembic_version (version_num TEXT)")
+        setup.execute("INSERT INTO alembic_version VALUES ('0038')")
+    writer = sqlite3.connect(path)
+    original_connect = sqlite3.connect
+    committed = False
+
+    class InterleavedConnection:
+        def __init__(self, actual: sqlite3.Connection) -> None:
+            self.actual = actual
+
+        def execute(self, sql: str, *args: object) -> sqlite3.Cursor:
+            nonlocal committed
+            if sql == "PRAGMA foreign_key_check" and not committed:
+                writer.execute("INSERT INTO alembic_version VALUES ('0039')")
+                writer.execute("CREATE TABLE scientific_records (id INTEGER PRIMARY KEY)")
+                writer.commit()
+                committed = True
+            return self.actual.execute(sql, *args)
+
+        def close(self) -> None:
+            self.actual.close()
+
+    def connect(*args: object, **kwargs: object) -> InterleavedConnection:
+        return InterleavedConnection(original_connect(*args, **kwargs))
+
+    try:
+        monkeypatch.setattr(module.sqlite3, "connect", connect)
+        evidence = module.inspect(path)
+        assert committed
+        assert evidence["alembic_stamps"] == ["0038"]
+        assert not evidence["tables"]["scientific_records"]["present"]
+        assert evidence["classification"] == "requires_researcher_review"
+    finally:
+        writer.close()
