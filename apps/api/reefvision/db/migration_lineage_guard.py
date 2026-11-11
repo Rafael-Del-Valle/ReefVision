@@ -10,6 +10,8 @@ import re
 
 from sqlalchemy import Connection, inspect, text
 
+from reefvision.db.review_event_topology_16 import assert_review_event_relationship_topology
+
 _REVIEW_TABLE = "review_queue_item_events"
 _REVIEW_COLUMNS = frozenset(
     {
@@ -459,3 +461,9 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 "database and reconcile the migration lineage without "
                 "stamping or deleting records."
             )
+
+    # The lineage stamp and audit-column checks alone cannot prove that the
+    # original 0038 foreign-key links and history indexes survived a restore.
+    # Verify the relationship topology before desktop migrations or QC writes.
+    # This validator is read-only and deliberately refuses to repair user data.
+    assert_review_event_relationship_topology(connection)
