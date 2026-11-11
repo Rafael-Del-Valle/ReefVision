@@ -150,7 +150,7 @@ export function parseGalleryPageDraft(draft: string, totalPages: number): number
   // compile-time string contract. Never let a malformed page draft interrupt
   // the gallery or its initial-image viewport.
   if (typeof draft !== "string") return null;
-  if (!Number.isSafeInteger(totalPages) || totalPages < 1) return null;
+  if (!Number.isSafeInteger(totalPages) || totalPages < 1 || totalPages > MAX_RESTORED_GALLERY_PAGE) return null;
   // Reject oversized input before trimming so pasted whitespace cannot force
   // an unnecessary full-string normalization on the gallery UI thread.
   if (draft.length > 64) return null;
