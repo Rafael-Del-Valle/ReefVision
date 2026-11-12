@@ -235,6 +235,10 @@ def test_mesh_edge_path_reports_geometric_detour_not_biological_curvature() -> N
     assert route["endpoint_chord_length_m"] == pytest.approx(2**0.5 * 0.1)
     assert route["endpoint_chord_scale_uncertainty_m"] == pytest.approx(2**0.5 * 0.01)
     assert route["geometric_detour_ratio"] == pytest.approx(2**0.5)
+    assert route["geometric_excess_length_m"] == pytest.approx((2 - 2**0.5) * 0.1)
+    assert route["geometric_excess_scale_interval_m"] == pytest.approx(
+        [(2 - 2**0.5) * 0.09, (2 - 2**0.5) * 0.11]
+    )
     assert result["measurement_status"] == "caller_supplied_unverified"
 
 
@@ -288,6 +292,8 @@ def test_saved_mesh_edge_paths_match_standalone(client: TestClient) -> None:
     standalone = client.post(f"{base}/spatial/mesh-preview", json=PARAMS)
     assert standalone.status_code == 200, standalone.text
     assert artifact["surface_edge_paths"] == standalone.json()["surface_edge_paths"]
+    assert artifact["surface_edge_paths"][0]["geometric_excess_length_m"] == 0.0
+    assert artifact["surface_edge_paths"][0]["geometric_excess_scale_interval_m"] is None
     assert artifact["surface_edge_paths"][0]["geometric_detour_ratio"] == pytest.approx(1.0)
     assert artifact["surface_edge_paths"][0]["path_qc_warnings"] == ["open_boundary_edge_on_path"]
     assert (
