@@ -576,3 +576,28 @@ def test_disconnected_mesh_paths_preserve_nulls_in_saved_workflow(
     assert artifact["surface_edge_paths"] == expected
     assert artifact["provenance"] == standalone.json()["provenance"]
     assert artifact["provenance"]["calibration_verified"] is False
+
+
+
+def test_calibrated_mesh_path_vertex_coordinate_underflow_is_flagged() -> None:
+    # A finite source coordinate can round to zero in meters. Keep the
+    # provisional route but expose the loss of positional precision to review.
+    from reefvision.services.spatial_mesh_paths_v14 import mesh_edge_paths
+
+    result = mesh_edge_paths(
+        points=[
+            (1e-170, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ],
+        faces=[[0, 1, 2]],
+        pairs=[[0, 1]],
+        scale=1e-160,
+        scale_uncertainty=0.1,
+    )
+    assert result is not None
+    route = result[0]
+    assert route["status"] == "connected"
+    assert route["path_vertices_in_source_frame_m"][0][0] == 0.0
+    assert route["length_m"] > 0
+    assert "calibrated_path_vertex_coordinate_underflow" in route["path_qc_warnings"]
