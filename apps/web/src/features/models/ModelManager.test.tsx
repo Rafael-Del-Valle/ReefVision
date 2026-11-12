@@ -365,6 +365,148 @@ describe("ModelManager catalog", () => {
     expect(usePoseModel).toHaveBeenCalledWith("reefpose-model-1");
   });
 
+  it("runs a held-out ReefPose evaluation and displays scientific metrics", async () => {
+    const response = bootstrap(catalog("Available"));
+    const registered = {
+      id: "reefpose-model-1",
+      project_id: project.id,
+      purpose: "detector",
+      display_name: "Fish ReefPose-S",
+      source_filename: "best.pt",
+      managed_path: "projects/project-1/models/best.pt",
+      file_size_bytes: 4096,
+      framework: "pytorch",
+      task: "pose",
+      provider_name: "reefpose",
+      provider_version: "1",
+      sha256: "f".repeat(64),
+      class_map_json: {},
+      input_size_json: { width: 256, height: 256 },
+      metadata_json: {
+        source_pose_training_dataset_id: "training-dataset",
+        source_pose_validation_dataset_id: "validation-dataset",
+        source_pose_schema_id: "schema-1",
+        source_pose_schema_revision: 3,
+        source_pose_schema_content_hash: "a".repeat(64),
+        pose_landmark_schema: {
+          schema_name: "Fish anatomy",
+          schema_id: "schema-1",
+          schema_revision: 3,
+          content_hash: "a".repeat(64),
+          keypoint_count: 7,
+        },
+      },
+      created_at: "2026-11-07T12:00:00Z",
+      updated_at: "2026-11-07T12:00:00Z",
+      notes: null,
+    };
+    const evaluation = {
+      id: "evaluation-1",
+      project_id: project.id,
+      model_id: registered.id,
+      evaluation_dataset_id: "held-out-dataset",
+      schema_version: "reefpose-evaluation-run-0001",
+      status: "completed",
+      configuration_json: { pck_thresholds: [0.1, 0.2] },
+      metrics_json: {
+        pck: { "0.1": 0.75, "0.2": 0.9 },
+        nme: 0.08,
+        mean_euclidean_error: 2.5,
+        localization_coverage: 0.95,
+        oks: null,
+      },
+      predictions_json: [],
+      provenance_json: { truth_policy: "scientist_verified_only" },
+      warnings_json: ["OKS omitted without explicit sigmas."],
+      result_sha256: "e".repeat(64),
+      inference_latency_ms: 4.2,
+      images_per_second: 238.1,
+      created_at: "2026-11-12T12:00:00Z",
+    };
+    let completed = false;
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.includes("/model-hub/bootstrap"))
+          return jsonResponse({ ...response, models: [registered] });
+        if (url.includes("/model-catalog"))
+          return jsonResponse(response.catalog);
+        if (url.includes("/pose-training-datasets"))
+          return jsonResponse([
+            {
+              id: "training-dataset",
+              project_id: project.id,
+              name: "Training set",
+              status: "complete",
+              pose_schema_id: "schema-1",
+              pose_schema_revision: 3,
+              pose_schema_content_hash: "a".repeat(64),
+              manifest_sha256: "1".repeat(64),
+              item_count: 10,
+              source_round_id: "round-1",
+              schema_version: "pose-training-dataset-0001",
+              source_selection_sha256: "2".repeat(64),
+              source_retraining_manifest_sha256: "3".repeat(64),
+              manifest_json: {},
+              created_by: "scientist",
+              created_at: "2026-11-10T12:00:00Z",
+            },
+            {
+              id: "held-out-dataset",
+              project_id: project.id,
+              name: "Held-out fish",
+              status: "complete",
+              pose_schema_id: "schema-1",
+              pose_schema_revision: 3,
+              pose_schema_content_hash: "a".repeat(64),
+              manifest_sha256: "4".repeat(64),
+              item_count: 5,
+              source_round_id: "round-2",
+              schema_version: "pose-training-dataset-0001",
+              source_selection_sha256: "5".repeat(64),
+              source_retraining_manifest_sha256: "6".repeat(64),
+              manifest_json: {},
+              created_by: "scientist",
+              created_at: "2026-11-11T12:00:00Z",
+            },
+          ]);
+        if (url.includes("/pose-evaluations") && init?.method === "POST") {
+          completed = true;
+          expect(JSON.parse(String(init.body))).toMatchObject({
+            model_id: registered.id,
+            evaluation_dataset_id: "held-out-dataset",
+          });
+          return jsonResponse(evaluation);
+        }
+        if (url.includes("/pose-evaluations"))
+          return jsonResponse(completed ? [evaluation] : []);
+        return new Promise<Response>(() => undefined);
+      });
+    renderManager();
+
+    const card = (
+      await screen.findByRole("heading", { name: "Fish ReefPose-S" })
+    ).closest("article")!;
+    await userEvent.selectOptions(
+      await within(card).findByLabelText("Held-out evaluation dataset"),
+      "held-out-dataset",
+    );
+    expect(
+      within(card).queryByRole("option", { name: /Training set/ }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      within(card).getByRole("button", { name: "Evaluate ReefPose" }),
+    );
+    expect(await within(card).findByText(/PCK@0.1: 0.750/)).toBeInTheDocument();
+    expect(within(card).getByText(/NME: 0.080/)).toBeInTheDocument();
+    expect(within(card).getByText(/4.20 ms/)).toBeInTheDocument();
+    expect(
+      within(card).getByRole("link", { name: "Export CSV" }),
+    ).toHaveAttribute("href", expect.stringContaining("format=csv"));
+    expect(fetchSpy).toHaveBeenCalled();
+  });
+
   it("routes pose architectures to their schema-aware workflow", async () => {
     const modelCatalog = catalog("Available");
     Object.assign(modelCatalog.models[0], {
