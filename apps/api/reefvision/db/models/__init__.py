@@ -34,6 +34,16 @@ from reefvision.db.models.pose_active_learning import (
     PoseActiveLearningRound,
 )
 from reefvision.db.models.pose_evaluation import PoseEvaluationRun
+from reefvision.db.models.pose_identity_tracking import (
+    PoseAnimalIdentity,
+    PoseIdentityAssociationDecision,
+    PoseIdentityAssociationRun,
+    PoseIdentityCorrection,
+    PoseIdentityEvaluationRun,
+    PoseIdentityObservation,
+    PoseIdentityOcclusion,
+    PoseIdentityTruthDataset,
+)
 from reefvision.db.models.pose_schema import (
     PoseLandmarkSchema,
     PoseLandmarkSchemaRevision,
@@ -102,6 +112,14 @@ __all__ = [
     "PoseActiveLearningCandidate",
     "PoseActiveLearningRound",
     "PoseEvaluationRun",
+    "PoseAnimalIdentity",
+    "PoseIdentityAssociationDecision",
+    "PoseIdentityAssociationRun",
+    "PoseIdentityCorrection",
+    "PoseIdentityEvaluationRun",
+    "PoseIdentityObservation",
+    "PoseIdentityOcclusion",
+    "PoseIdentityTruthDataset",
     "PoseLandmarkAssociationCandidate",
     "PoseLandmarkAssociationDecision",
     "PoseLandmarkCorrection",
