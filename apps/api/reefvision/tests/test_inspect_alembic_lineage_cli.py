@@ -184,3 +184,32 @@ def test_foreign_key_violations_are_reported_without_mutation(tmp_path):
     assert "sqlite_foreign_key_violations" in result["warnings"]
     assert result["upgrade_authorized"] is False
     assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    ("stamp_definition", "canonical"),
+    [
+        ("version_num VARCHAR(32) NOT NULL PRIMARY KEY", True),
+        ("version_num TEXT NOT NULL PRIMARY KEY", True),
+        ("version_num TEXT", False),
+        ("version_num TEXT PRIMARY KEY", False),
+        ("version_num TEXT NOT NULL", False),
+        ("version_num TEXT NOT NULL PRIMARY KEY, foreign_stamp TEXT", False),
+    ],
+)
+def test_alembic_stamp_constraints_are_diagnosed_without_mutation(
+    tmp_path, stamp_definition, canonical
+):
+    """An identical revision is not proof of a canonical Alembic stamp."""
+    path = tmp_path / "research.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute(f"CREATE TABLE alembic_version ({stamp_definition})")
+        db.execute("INSERT INTO alembic_version (version_num) VALUES ('0038')")
+        db.commit()
+    before = path.read_bytes()
+    result = module.inspect(path)
+    assert result["canonical_alembic_stamp_constraints"] is canonical
+    assert ("noncanonical_alembic_stamp_constraints" in result["warnings"]) is not canonical
+    assert result["revision_rows"] == ["0038"]
+    assert result["upgrade_authorized"] is False
+    assert path.read_bytes() == before
