@@ -119,6 +119,25 @@ def test_direct_mesh_path_engine_rejects_invalid_faces(faces: list[list[int]]) -
         )
 
 
+def test_degenerate_triangle_route_is_provisional_and_flagged() -> None:
+    from reefvision.services.spatial_mesh_paths_v14 import mesh_edge_paths
+
+    routes = mesh_edge_paths(
+        points=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (2.0, 0.0, 0.0)],
+        faces=[[0, 1, 2]],
+        pairs=[[0, 1]],
+        scale=0.01,
+        scale_uncertainty=0.1,
+    )
+    assert routes is not None
+    assert routes[0]["status"] == "connected"
+    assert routes[0]["length_m"] == pytest.approx(0.01)
+    assert routes[0]["path_qc_warnings"] == [
+        "degenerate_triangle_on_path",
+        "open_boundary_edge_on_path",
+    ]
+
+
 @pytest.mark.parametrize(
     "invalid_point",
     [
