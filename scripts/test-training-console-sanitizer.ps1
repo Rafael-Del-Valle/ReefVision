@@ -241,4 +241,40 @@ if ($monitorScript -notmatch 'Test-FiniteMetricValue\s+-Value\s+\$values\[\$inde
   throw 'Persisted epoch loss history must reject nonfinite measurements.'
 }
 
+# Execute the monitor's real summary/history selection block against a synthetic
+# persisted run. Source-order assertions alone cannot catch a precedence bug.
+$selectionStart = $monitorScript.IndexOf('    $latestMetrics = @{}')
+$selectionEnd = $monitorScript.IndexOf('    $trainingLosses = @(', $selectionStart)
+if ($selectionStart -lt 0 -or $selectionEnd -le $selectionStart) {
+  throw 'Could not isolate persisted training metric selection.'
+}
+$selectionCode = $monitorScript.Substring($selectionStart, $selectionEnd - $selectionStart)
+$run = [pscustomobject]@{
+  metrics = [pscustomobject]@{
+    'train/box_loss' = 9.0
+    'train/cls_loss' = 8.0
+    'train/dfl_loss' = 7.0
+  }
+  metrics_history = [pscustomobject]@{
+    'train/box_loss' = @(0.5, [double]::NaN, 0.25)
+    'train/cls_loss' = @(0.8, 0.3, [double]::PositiveInfinity)
+    'train/dfl_loss' = @($null, 0.1)
+  }
+}
+Invoke-Expression $selectionCode
+if ($latestMetrics['train/box_loss'] -ne 0.25 -or
+    $latestMetrics['train/cls_loss'] -ne 0.3 -or
+    $latestMetrics['train/dfl_loss'] -ne 0.1) {
+  throw 'Latest finite persisted box/cls/dfl losses did not override stale summaries.'
+}
+# When a series has no finite epoch sample, retain its finite summary rather
+# than inventing a zero or showing an invalid sentinel.
+$run.metrics_history = [pscustomobject]@{
+  'train/box_loss' = @([double]::NaN, [double]::PositiveInfinity)
+}
+Invoke-Expression $selectionCode
+if ($latestMetrics['train/box_loss'] -ne 9.0) {
+  throw 'Invalid epoch history must not erase the last finite summary loss.'
+}
+
 Write-Host 'PowerShell training console sanitizer regression passed.'
