@@ -167,6 +167,12 @@ def mesh_edge_paths(
                 path_qc_warnings.append("calibrated_path_segment_underflow")
             if any(adjacency[a][b] == 0 for a, b in pairwise(route)):
                 path_qc_warnings.append("zero_length_edge_on_path")
+            if any(
+                source != 0 and calibrated == 0
+                for index, vertex in zip(route, path_vertices_in_source_frame_m, strict=True)
+                for source, calibrated in zip(points[index], vertex, strict=True)
+            ):
+                path_qc_warnings.append("calibrated_path_vertex_coordinate_underflow")
         results.append(
             {
                 "start_vertex_index": start,
