@@ -183,11 +183,20 @@ def main() -> None:
         help="Exit 2 when --compare-to finds different Alembic revision markers; "
         "still require human review even when markers match",
     )
+    parser.add_argument(
+        "--fail-on-lineage-collision",
+        action="store_true",
+        help="Exit 2 when --compare-to has the same validated Alembic revision "
+        "but a different structural schema fingerprint; matching stamps "
+        "never establish migration equivalence",
+    )
     args = parser.parse_args()
     if args.fail_on_schema_drift and args.compare_to is None:
         parser.error("--fail-on-schema-drift requires --compare-to")
     if args.fail_on_revision_mismatch and args.compare_to is None:
         parser.error("--fail-on-revision-mismatch requires --compare-to")
+    if args.fail_on_lineage_collision and args.compare_to is None:
+        parser.error("--fail-on-lineage-collision requires --compare-to")
     # Validate both inputs before samefile(): pathlib.samefile raises an
     # unhandled OSError for missing paths. Report a stable CLI usage error
     # without attempting to create or modify either research database.
@@ -253,6 +262,12 @@ def main() -> None:
         raise SystemExit(2)
 
     if args.fail_on_revision_mismatch and not evidence["schema_comparison"]["revision_markers_match"]:
+        raise SystemExit(2)
+
+    if args.fail_on_lineage_collision and (
+        evidence["schema_comparison"]["revision_markers_match"]
+        and not evidence["schema_comparison"]["matches"]
+    ):
         raise SystemExit(2)
 
     def has_integrity_error(report: dict) -> bool:
