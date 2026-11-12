@@ -13,3 +13,18 @@ The default invocation remains backward-compatible and emits JSON without settin
 This gate is intended for controlled *copies* of databases and automated acceptance scripts. It does not repair foreign keys, rewrite revision stamps, mutate research records, grant scientific verification, or authorize migration/merge/release. A SQLite `quick_check` is not a replacement for full domain-specific integrity checks. Keep the full JSON evidence and review it before any migration reconciliation.
 
 Regression fixtures cover an orphaned QC foreign key, an ambiguous-but-structurally-healthy `0038` database, and malformed Alembic metadata, including unchanged database bytes. Full repository/Windows installer and saved Workflow Builder acceptance remain separate release gates.
+
+## Independent revision comparison evidence
+
+With `--compare-to reference.sqlite`, the JSON includes the primary
+`alembic_stamps` and `schema_comparison.reference_alembic_stamps` side by side,
+plus `revision_markers_match`. This exposes the actual differing markers to a
+researcher instead of reporting only a boolean. The reference values are read
+from the independent database, never inferred from schema hashes. Even matching
+markers and hashes do **not** establish compatible migration histories.
+`--fail-on-revision-mismatch` exits 2 on mismatch while retaining the JSON
+report; neither database is changed. No observation rows are included.
+
+The integrity gate now evaluates both bounded full `integrity_check(100)`
+and `quick_check`, FK evidence, and Alembic metadata for both inputs when
+comparison is requested. This is diagnostic rather than scientific approval.
