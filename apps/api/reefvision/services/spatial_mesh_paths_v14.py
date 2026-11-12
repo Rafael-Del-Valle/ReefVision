@@ -28,6 +28,15 @@ def mesh_edge_paths(
         raise ValueError("Mesh path relative scale uncertainty must be finite and in [0, 1)")
     if len(pairs) > 16:
         raise ValueError("A maximum of 16 mesh path pairs is supported")
+    # Direct scientific-engine callers must not bypass mesh topology validation.
+    # Negative Python indices otherwise silently refer to unrelated vertices.
+    for face in faces:
+        if (
+            len(face) != 3
+            or any(type(index) is not int or index < 0 or index >= len(points) for index in face)
+            or len(set(face)) != 3
+        ):
+            raise ValueError("Mesh path faces require three distinct existing vertex indices")
     referenced = {index for face in faces for index in face}
     adjacency: dict[int, dict[int, float]] = {index: {} for index in referenced}
     edge_incidence: Counter[tuple[int, int]] = Counter()
