@@ -24,10 +24,12 @@ def test_finite_individual_edges_cannot_silently_overflow_total_path() -> None:
 def test_calibrated_route_vertices_reject_coordinate_overflow() -> None:
     # Local edge distances remain representable after calibration, while
     # absolute source-frame coordinates cannot be represented in meters.
+    # Keep this triangle collinear so cross-product overflow is not the
+    # earlier, independent rejection reason being exercised here.
     points = [
         (1e300, 0.0, 0.0),
         (1e300 + 1e290, 0.0, 0.0),
-        (1e300, 1e290, 0.0),
+        (1e300 + 2e290, 0.0, 0.0),
     ]
     with pytest.raises(ValueError, match="Calibrated mesh path vertex coordinate overflowed"):
         mesh_edge_paths(points, [[0, 1, 2]], [[0, 1]], 1e10, None)
