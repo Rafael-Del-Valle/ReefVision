@@ -41,6 +41,7 @@ from reefvision.storage.projects import (
     resolve_managed_project_path,
 )
 
+
 def _reject_symlinked_training_path(settings: Settings, relative_path: str) -> None:
     """Reject symlink components before managed-path resolution erases them."""
     from pathlib import Path
