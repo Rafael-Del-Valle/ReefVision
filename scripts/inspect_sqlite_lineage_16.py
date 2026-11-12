@@ -283,7 +283,8 @@ def main() -> None:
 
     if args.fail_on_lineage_collision:
         # Invalid or missing stamps must not silently pass a collision gate.
-        # Collision acceptance also requires canonical stamp constraints on both sides.\n        # Legacy stamps remain available through default read-only diagnostics.
+        # Collision acceptance also requires canonical stamp constraints on both sides.
+        # Legacy stamps remain available through default read-only diagnostics.
         if (
             not evidence["schema_comparison"]["revision_markers_match"]
             or not evidence["schema_comparison"]["matches"]
