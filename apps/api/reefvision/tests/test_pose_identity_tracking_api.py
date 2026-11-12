@@ -6,7 +6,7 @@ from typing import cast
 import pytest
 from fastapi.testclient import TestClient
 
-from reefvision.db.models import VideoTrack
+from reefvision.db.models import PoseIdentityObservation, VideoTrack
 from reefvision.jobs.pose_identity_tracking import process_pose_identity_tracking_job
 from reefvision.services import video_assets as video_assets_module
 from reefvision.tests.test_annotations import create_project
@@ -166,6 +166,22 @@ def test_api_runs_association_persists_corrections_and_exports_provenance(
             "actor": "scientist@example.test",
         },
     )
+    assert corrected.status_code == 400, corrected.text
+    assert "already has an observation" in corrected.json()["detail"]
+
+    corrected = client.post(
+        f"/api/v1/pose-identity-runs/{run_id}/corrections",
+        json={
+            "action": "swap",
+            "target_type": "identity",
+            "target_id": target["animal_identity_id"],
+            "destination_identity_id": destination["id"],
+            "frame_start": target["frame_index"],
+            "frame_end": target["frame_index"],
+            "reason": "Synthetic crossing correction",
+            "actor": "scientist@example.test",
+        },
+    )
     assert corrected.status_code == 201, corrected.text
     assert corrected.json()["before_sha256"] != corrected.json()["after_sha256"]
 
@@ -176,7 +192,7 @@ def test_api_runs_association_persists_corrections_and_exports_provenance(
     ).json()
     assert [item["revision"] for item in history] == [2]
     assert len(current) == 6
-    assert len(revisions) == 7
+    assert len(revisions) == 8
     assert any(
         item["supersedes_observation_id"] == target["id"]
         and item["animal_identity_id"] == destination["id"]
@@ -190,6 +206,50 @@ def test_api_runs_association_persists_corrections_and_exports_provenance(
     assert payload["association_run"]["input_manifest_sha256"]
     assert payload["corrections"][0]["actor"] == "scientist@example.test"
     assert payload["coordinate_space"] == "source_pixels"
+
+
+def test_review_queue_drops_resolved_low_confidence_observations(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = create_project(client, "Pose identity review queue")
+    video = _video(client, str(project["id"]), monkeypatch, "review-queue")
+    track = _track(
+        client,
+        str(video["id"]),
+        _first_class(project),
+        offset=10,
+        prefix="review",
+    )
+    job = _submit(client, str(project["id"]), str(video["id"]), [str(track["id"])])
+    run_id = str(cast(dict[str, object], job["result_json"])["run_id"])
+    assert process_pose_identity_tracking_job(
+        client.app.state.settings, client.app.state.session_factory, str(job["id"])
+    )
+
+    observations = client.get(f"/api/v1/pose-identity-runs/{run_id}/observations").json()
+    target = observations[0]
+    with client.app.state.session_factory() as session:
+        record = session.get(PoseIdentityObservation, target["id"])
+        assert record is not None
+        record.association_confidence = 0.01
+        session.commit()
+
+    queued = client.get(f"/api/v1/pose-identity-runs/{run_id}/review-queue").json()
+    assert target["id"] in {item["id"] for item in queued}
+    resolved = client.post(
+        f"/api/v1/pose-identity-runs/{run_id}/corrections",
+        json={
+            "action": "reject",
+            "target_type": "observation",
+            "target_id": target["id"],
+            "actor": "queue-reviewer",
+        },
+    )
+    assert resolved.status_code == 201, resolved.text
+    remaining = client.get(f"/api/v1/pose-identity-runs/{run_id}/review-queue").json()
+    assert all(
+        item["observation_series_id"] != target["observation_series_id"] for item in remaining
+    )
 
 
 def test_submission_rejects_foreign_video_and_schema_mismatch(

@@ -13,6 +13,8 @@ from reefvision.config import Settings
 from reefvision.db.models import (
     Job,
     ModelRegistration,
+    PoseIdentityAssociationRun,
+    PoseIdentityEvaluationRun,
     Project,
     VideoAsset,
     VideoTrack,
@@ -29,6 +31,7 @@ from reefvision.schemas.pose_identity_tracking import (
     PoseIdentityAssociationCreateRequest,
     PoseIdentityAssociationParameters,
     PoseIdentityEvaluationRequest,
+    PoseIdentityEvaluationResponse,
 )
 from reefvision.schemas.pose_tracking import (
     PoseTemporalAssociationBuildRequest,
@@ -1086,6 +1089,15 @@ def execute_pose_identity_association_adapter(
             device=str(parameters.get("device", "auto")),
         ),
     )
+    child_record = session.get(Job, child.id)
+    if child_record is None:
+        raise ValidationError("Identity association child job disappeared before execution")
+    child_record.request_json = {
+        **dict(child_record.request_json or {}),
+        "workflow_run_id": str(parameters.get("__workflow_run_id") or ""),
+        "workflow_node_run_id": str(parameters.get("__workflow_node_run_id") or ""),
+    }
+    session.commit()
     factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
     process_pose_identity_tracking_job(settings, factory, child.id)
     session.expire_all()
@@ -1181,6 +1193,13 @@ def execute_pose_identity_evaluation_adapter(
     if reviewed.get("project_id") not in {None, project_id}:
         raise ValidationError("Identity evaluation received tracks from another project")
     run_id = str(reviewed.get("run_id") or "")
+    run = session.get(PoseIdentityAssociationRun, run_id)
+    if run is None:
+        raise ValidationError("Identity evaluation association run was not found")
+    if int(reviewed.get("run_revision") or 0) != run.revision:
+        raise ValidationError(
+            "Identity review artifact is stale; review the latest association revision"
+        )
     evaluation = PoseIdentityTrackingService(session).evaluate(
         run_id,
         PoseIdentityEvaluationRequest(
@@ -1220,11 +1239,36 @@ def execute_pose_identity_export_adapter(
     if evaluation.get("project_id") not in {None, project_id}:
         raise ValidationError("Identity export received an evaluation from another project")
     run_id = str(evaluation.get("run_id") or "")
+    evaluation_id = str(evaluation.get("evaluation_id") or "")
+    evaluation_record = session.get(PoseIdentityEvaluationRun, evaluation_id)
+    if evaluation_record is None or evaluation_record.association_run_id != run_id:
+        raise ValidationError("Identity evaluation artifact does not reference a valid report")
+    if evaluation_record.result_sha256 != str(evaluation.get("result_sha256") or ""):
+        raise ValidationError("Identity evaluation artifact integrity hash does not match")
+    run = session.get(PoseIdentityAssociationRun, run_id)
+    if run is None:
+        raise ValidationError("Identity export association run was not found")
+    if (
+        evaluation_record.association_run_revision != int(evaluation.get("run_revision") or 0)
+        or run.revision != evaluation_record.association_run_revision
+    ):
+        raise ValidationError(
+            "Identity evaluation is stale; evaluate the latest association revision before export"
+        )
+    evaluation_report = PoseIdentityEvaluationResponse.model_validate(evaluation_record).model_dump(
+        mode="json"
+    )
     export_format = str(parameters.get("format", "json"))
     service = PoseIdentityTrackingService(session)
     if export_format == "json":
         content = json.dumps(
-            service.export_json(run_id), sort_keys=True, separators=(",", ":")
+            {
+                "schema_version": "pose-identity-evaluated-export-0001",
+                "identity_results": service.export_json(run_id),
+                "evaluation": evaluation_report,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
         ).encode("utf-8")
         extension = "json"
         media_type = "application/json"
@@ -1257,6 +1301,9 @@ def execute_pose_identity_export_adapter(
                 "run_revision": evaluation.get("run_revision"),
                 "evaluation_id": evaluation.get("evaluation_id"),
                 "evaluation_result_sha256": evaluation.get("result_sha256"),
+                "evaluation_metrics": evaluation_report["metrics_json"],
+                "evaluation_warnings": evaluation_report["warnings_json"],
+                "evaluation_provenance": evaluation_report["provenance_json"],
                 "format": export_format,
                 "media_type": media_type,
                 "managed_path": relative_path,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from math import hypot
 from typing import Literal
@@ -240,24 +241,28 @@ def _score(track: _Track, detection: PoseDetection, config: AssociationConfig) -
         (confidence_cost, config.confidence_weight),
     ]
     available = [(value, weight) for value, weight in weighted if value is not None and weight > 0]
-    total_cost = sum(value * weight for value, weight in available) / sum(
-        weight for _value, weight in available
+    available_weight = sum(weight for _value, weight in available)
+    total_cost = (
+        sum(value * weight for value, weight in available) / available_weight
+        if available_weight > 0
+        else config.acceptance_threshold + 1.0
     )
 
-    gate_reason: str | None = None
-    if detection.confidence < config.minimum_detection_confidence:
+    gate_reason: str | None = "missing_weighted_evidence" if available_weight <= 0 else None
+    if gate_reason is None and detection.confidence < config.minimum_detection_confidence:
         gate_reason = "detection_confidence"
-    elif min(proximity_cost, motion_cost) > config.max_normalized_distance:
+    elif gate_reason is None and min(proximity_cost, motion_cost) > config.max_normalized_distance:
         gate_reason = "normalized_distance"
-    elif config.minimum_iou > 0 and overlap < config.minimum_iou:
+    elif gate_reason is None and config.minimum_iou > 0 and overlap < config.minimum_iou:
         gate_reason = "bbox_iou"
     elif (
-        config.minimum_landmark_similarity > 0
+        gate_reason is None
+        and config.minimum_landmark_similarity > 0
         and landmark_cost is not None
         and 1.0 - landmark_cost < config.minimum_landmark_similarity
     ):
         gate_reason = "landmark_similarity"
-    elif total_cost > config.acceptance_threshold:
+    elif gate_reason is None and total_cost > config.acceptance_threshold:
         gate_reason = "total_cost"
     passed = gate_reason is None
     confidence = (
@@ -337,7 +342,11 @@ def _parameters_hash(config: AssociationConfig) -> str:
 
 
 def associate_pose_identities(
-    detections: list[PoseDetection], config: AssociationConfig
+    detections: list[PoseDetection],
+    config: AssociationConfig,
+    *,
+    cancellation_check: Callable[[], None] | None = None,
+    progress: Callable[[int, int], None] | None = None,
 ) -> AssociationResult:
     """Associate detections without asserting unsupported long-gap re-identification."""
 
@@ -352,7 +361,9 @@ def associate_pose_identities(
 
     frames = sorted({item.frame_index for item in ordered})
     by_frame = {frame: [item for item in ordered if item.frame_index == frame] for frame in frames}
-    for frame in frames:
+    for frame_number, frame in enumerate(frames, start=1):
+        if cancellation_check is not None:
+            cancellation_check()
         frame_detections = by_frame[frame]
         for track in tracks:
             if frame - track.observations[-1].frame_index - 1 > config.max_gap_frames:
@@ -508,6 +519,9 @@ def associate_pose_identities(
                     },
                 )
             )
+
+        if progress is not None:
+            progress(frame_number, len(frames))
 
     identities = tuple(
         IdentitySummary(

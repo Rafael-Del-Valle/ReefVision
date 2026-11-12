@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from reefvision.domain.pose_identity_tracking import (
     AssociationConfig,
     Landmark,
@@ -137,6 +139,43 @@ def test_missing_landmarks_fall_back_to_geometry_without_inventing_similarity() 
     selected = next(item for item in result.decisions if item.selected)
     assert selected.score_components["landmark_cost"] is None
     assert result.assignments[0].identity_key == result.assignments[1].identity_key
+
+
+def test_landmark_only_matching_without_shared_landmarks_is_gated_without_crashing() -> None:
+    result = associate_pose_identities(
+        [_detection("fish-0", 0, 0, landmark_x=5), _detection("fish-1", 1, 2)],
+        AssociationConfig(
+            proximity_weight=0.0,
+            overlap_weight=0.0,
+            landmark_weight=1.0,
+            motion_weight=0.0,
+            confidence_weight=0.0,
+        ),
+    )
+
+    rejected = next(
+        item for item in result.decisions if item.detection_id == "fish-1" and not item.selected
+    )
+    assert rejected.gate_reason == "missing_weighted_evidence"
+    assert result.assignments[0].identity_key != result.assignments[1].identity_key
+
+
+def test_association_checks_cancellation_between_frames() -> None:
+    checks = 0
+
+    def cancellation_check() -> None:
+        nonlocal checks
+        checks += 1
+        if checks == 2:
+            raise RuntimeError("cancelled")
+
+    with pytest.raises(RuntimeError, match="cancelled"):
+        associate_pose_identities(
+            [_detection("fish-0", 0, 0), _detection("fish-1", 1, 2)],
+            AssociationConfig(),
+            cancellation_check=cancellation_check,
+        )
+    assert checks == 2
 
 
 def test_uncertain_detection_is_rejected_without_starting_an_identity() -> None:

@@ -99,6 +99,20 @@ const observations = [
         confidence: 0.8,
         visibility: "visible",
       },
+      {
+        landmark_id: "tail",
+        x: 35,
+        y: 27,
+        confidence: 0.7,
+        visibility: "visible",
+      },
+      {
+        landmark_id: "fin",
+        x: 25,
+        y: 32,
+        confidence: 0.1,
+        visibility: "absent",
+      },
     ],
     detection_confidence: 0.9,
     association_confidence: 0.42,
@@ -128,12 +142,23 @@ const tracks: VideoTrackRecord[] = [
         schema_id: "schema-1",
         schema_revision: 2,
         content_hash: "a".repeat(64),
-        groups: [{ name: "nose", count: 1 }],
-        expanded_labels: ["nose"],
-        keypoint_count: 1,
+        groups: [
+          { name: "nose", count: 1 },
+          { name: "tail", count: 1 },
+          { name: "fin", count: 1 },
+        ],
+        expanded_labels: ["nose", "tail", "fin"],
+        keypoint_count: 3,
         allows_repeated_labels: false,
-        landmarks: [{ id: "nose", name: "Nose" }],
-        edges: [],
+        landmarks: [
+          { id: "nose", name: "Nose" },
+          { id: "tail", name: "Tail" },
+          { id: "fin", name: "Fin" },
+        ],
+        edges: [
+          { from_id: "nose", to_id: "tail" },
+          { from_id: "nose", to_id: "fin" },
+        ],
       },
     },
     revision: 1,
@@ -245,9 +270,12 @@ describe("PoseIdentityReviewPanel", () => {
     expect(screen.getByText("motion 0.800")).toBeInTheDocument();
     expect(screen.getByText("schema-1 · revision 2")).toBeInTheDocument();
     expect(screen.getByText("source_pixels · 320 × 180")).toBeInTheDocument();
-    expect(
-      screen.getByLabelText("Animal animal-0001 skeleton at frame 3"),
-    ).toBeInTheDocument();
+    const skeleton = screen.getByLabelText(
+      "Animal animal-0001 skeleton at frame 3",
+    );
+    expect(skeleton).toBeInTheDocument();
+    expect(skeleton.querySelectorAll("line")).toHaveLength(1);
+    expect(skeleton.querySelectorAll("circle")).toHaveLength(2);
   });
 
   it("reassigns one observation and reloads append-only history", async () => {
@@ -357,5 +385,22 @@ describe("PoseIdentityReviewPanel", () => {
       await screen.findByRole("button", { name: "animal-0001" }),
     ).toBeInTheDocument();
     expect(identityApi.getPoseIdentityIdentities).toHaveBeenCalledTimes(2);
+    expect(
+      screen.queryByRole("button", { name: "Cancel association" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("cancels a persisted queued run after the workspace is reloaded", async () => {
+    vi.mocked(identityApi.listPoseIdentityRuns).mockResolvedValue([
+      { ...run, status: "queued", completed_at: null },
+    ]);
+    renderPanel();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Cancel association" }),
+    );
+    await waitFor(() =>
+      expect(identityApi.cancelPoseIdentityJob).toHaveBeenCalledWith("job-1"),
+    );
   });
 });

@@ -81,6 +81,7 @@ def process_pose_identity_tracking_job(
             completed = PoseIdentityTrackingService(session).execute(
                 active_run.id,
                 [str(value) for value in active_job.request_json.get("source_track_ids", [])],
+                expected_manifest=dict(active_job.request_json.get("input_manifest") or {}),
                 cancellation_check=cancellation_check,
                 progress=progress,
             )

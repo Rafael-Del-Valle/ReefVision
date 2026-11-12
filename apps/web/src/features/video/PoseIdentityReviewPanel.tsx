@@ -70,6 +70,20 @@ export function PoseIdentityReviewPanel({
     if (!selectedRunId && runs[0]) setSelectedRunId(runs[0].id);
   }, [runs, selectedRunId]);
   const selectedRun = runs.find((run) => run.id === selectedRunId);
+  const persistedActiveJobId =
+    selectedRun && ["queued", "running"].includes(selectedRun.status)
+      ? selectedRun.source_job_id
+      : null;
+  const cancellableJobId = persistedActiveJobId ?? submittedJobId;
+  useEffect(() => {
+    if (
+      submittedJobId &&
+      selectedRun?.source_job_id === submittedJobId &&
+      ["completed", "failed", "cancelled"].includes(selectedRun.status)
+    ) {
+      setSubmittedJobId(null);
+    }
+  }, [selectedRun?.source_job_id, selectedRun?.status, submittedJobId]);
   const identitiesQuery = useQuery({
     queryKey: ["pose-identity-identities", selectedRunId],
     queryFn: ({ signal }) => getPoseIdentityIdentities(selectedRunId, signal),
@@ -195,7 +209,7 @@ export function PoseIdentityReviewPanel({
       ),
   });
   const cancelMutation = useMutation({
-    mutationFn: () => cancelPoseIdentityJob(submittedJobId ?? ""),
+    mutationFn: () => cancelPoseIdentityJob(cancellableJobId ?? ""),
     onSuccess: () => setMessage("Identity association cancellation requested."),
     onError: (error) =>
       setMessage(
@@ -294,7 +308,7 @@ export function PoseIdentityReviewPanel({
         >
           Associate individuals
         </button>
-        {submittedJobId && (
+        {cancellableJobId && (
           <button type="button" onClick={() => cancelMutation.mutate()}>
             Cancel association
           </button>
@@ -385,6 +399,18 @@ export function PoseIdentityReviewPanel({
           const identity = identities.find(
             (item) => item.id === observation.animal_identity_id,
           );
+          const visibleLandmarks = observation.landmarks_json.filter(
+            (landmark) =>
+              landmark.x != null &&
+              landmark.y != null &&
+              !["absent", "out_of_frame"].includes(landmark.visibility),
+          );
+          const landmarkById = new Map(
+            visibleLandmarks.map((landmark) => [
+              landmark.landmark_id,
+              landmark,
+            ]),
+          );
           return (
             <svg
               key={observation.id}
@@ -402,7 +428,24 @@ export function PoseIdentityReviewPanel({
                 fill="none"
                 stroke="currentColor"
               />
-              {observation.landmarks_json.map((landmark) =>
+              {(firstSchema?.edges ?? []).map((edge) => {
+                const from = landmarkById.get(edge.from_id);
+                const to = landmarkById.get(edge.to_id);
+                return from?.x == null ||
+                  from.y == null ||
+                  to?.x == null ||
+                  to.y == null ? null : (
+                  <line
+                    key={`${edge.from_id}-${edge.to_id}`}
+                    x1={from.x}
+                    y1={from.y}
+                    x2={to.x}
+                    y2={to.y}
+                    stroke="currentColor"
+                  />
+                );
+              })}
+              {visibleLandmarks.map((landmark) =>
                 landmark.x == null || landmark.y == null ? null : (
                   <circle
                     key={landmark.landmark_id}

@@ -63,6 +63,27 @@ def test_crossed_predictions_count_switches_and_reduce_idf1() -> None:
     assert report.association_failures == 2
 
 
+def test_idf1_uses_global_eligible_trajectory_pairs_for_overlapping_animals() -> None:
+    truth = [
+        _observation(identity, frame, x)
+        for frame in (0, 1)
+        for identity, x in (("truth-a", 0.0), ("truth-b", 2.0))
+    ]
+    prediction = [
+        _observation(identity, frame, x)
+        for frame in (0, 1)
+        for identity, x in (("pred-a", 2.0), ("pred-b", 0.0))
+    ]
+
+    report = evaluate_pose_identities(truth, prediction, iou_threshold=0.5)
+
+    assert report.id_true_positives == 4
+    assert report.id_false_positives == 0
+    assert report.id_false_negatives == 0
+    assert report.id_f1 == 1.0
+    assert report.identity_mapping == {"truth-a": "pred-a", "truth-b": "pred-b"}
+
+
 def test_missed_middle_observation_counts_fragmentation_and_coverage() -> None:
     truth = [_observation("truth", frame, float(frame)) for frame in range(3)]
     prediction = [

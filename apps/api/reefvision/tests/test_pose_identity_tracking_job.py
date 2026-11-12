@@ -3,7 +3,12 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from reefvision.db.models import Job, PoseIdentityAssociationRun, PoseIdentityObservation
+from reefvision.db.models import (
+    Job,
+    PoseIdentityAssociationRun,
+    PoseIdentityObservation,
+    VideoTrack,
+)
 from reefvision.jobs.pose_identity_tracking import process_pose_identity_tracking_job
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_pose_identity_tracking_api import (
@@ -40,6 +45,60 @@ def test_cancelled_job_registers_no_partial_observations(
         run = session.get(PoseIdentityAssociationRun, run_id)
         assert job is not None and job.status == "cancelled"
         assert run is not None and run.status == "cancelled"
+        assert (
+            session.query(PoseIdentityObservation).filter_by(association_run_id=run_id).count() == 0
+        )
+
+
+def test_cancel_endpoint_atomically_cancels_queued_identity_run(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = create_project(client, "Pose identity queued cancellation")
+    video = _video(client, str(project["id"]), monkeypatch, "queued-cancel")
+    track = _track(client, str(video["id"]), _first_class(project), offset=20, prefix="cancel")
+    job = _submit(client, str(project["id"]), str(video["id"]), [str(track["id"])])
+    run_id = str(job["result_json"]["run_id"])
+
+    cancelled = client.post(f"/api/v1/jobs/{job['id']}/cancel")
+
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["status"] == "cancelled"
+    with client.app.state.session_factory() as session:
+        run = session.get(PoseIdentityAssociationRun, run_id)
+        assert run is not None
+        assert run.status == "cancelled"
+        assert run.completed_at is not None
+
+
+def test_worker_rejects_pose_tracks_changed_after_submission(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = create_project(client, "Pose identity immutable queue input")
+    video = _video(client, str(project["id"]), monkeypatch, "changed-input")
+    track = _track(client, str(video["id"]), _first_class(project), offset=20, prefix="input")
+    job = _submit(client, str(project["id"]), str(video["id"]), [str(track["id"])])
+    run_id = str(job["result_json"]["run_id"])
+    with client.app.state.session_factory() as session:
+        record = session.get(VideoTrack, str(track["id"]))
+        assert record is not None
+        record.revision += 1
+        record.keyframes_json = [
+            {**item, "bbox": [999, 20, 30, 15]} for item in record.keyframes_json
+        ]
+        session.commit()
+
+    assert process_pose_identity_tracking_job(
+        client.app.state.settings,
+        client.app.state.session_factory,
+        str(job["id"]),
+    )
+
+    with client.app.state.session_factory() as session:
+        failed_job = session.get(Job, str(job["id"]))
+        run = session.get(PoseIdentityAssociationRun, run_id)
+        assert failed_job is not None and failed_job.status == "failed"
+        assert "changed after association was queued" in str(failed_job.error_message)
+        assert run is not None and run.status == "failed"
         assert (
             session.query(PoseIdentityObservation).filter_by(association_run_id=run_id).count() == 0
         )

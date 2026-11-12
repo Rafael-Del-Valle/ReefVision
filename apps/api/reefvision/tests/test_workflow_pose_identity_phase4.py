@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from typing import cast
 
 import pytest
@@ -8,8 +9,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import reefvision.jobs.video_tracking as tracking_job_module
-from reefvision.db.models import ModelRegistration
+from reefvision.db.models import Job, ModelRegistration, WorkflowArtifact
+from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.services.workflow_pose import execute_pose_identity_export_adapter
 from reefvision.services.workflow_review import REVIEW_GATE_NODE_TYPES
 from reefvision.services.workflow_runtime_adapters import RUNTIME_ADAPTER_NODE_TYPES
 from reefvision.storage.projects import resolve_managed_project_path
@@ -236,6 +239,10 @@ def test_phase4_saved_workflow_executes_review_evaluation_export_and_replay(
         assert paused["run"]["status"] == "waiting_for_review"
         artifacts = {item["data_type"]: item for item in paused["artifacts"]}
         identity_payload = artifacts["pose_identity_tracks"]["payload_json"]
+        with app.state.session_factory() as session:
+            child = session.get(Job, identity_payload["association_job_id"])
+            assert child is not None
+            assert child.request_json["workflow_run_id"] == queued.json()["id"]
         identities = client.get(
             f"/api/v1/pose-identity-runs/{identity_payload['run_id']}/identities"
         ).json()
@@ -271,6 +278,34 @@ def test_phase4_saved_workflow_executes_review_evaluation_export_and_replay(
     package_path = resolve_managed_project_path(app.state.settings, package["managed_path"])
     assert package_path.is_file()
     assert package["content_sha256"] == hashlib.sha256(package_path.read_bytes()).hexdigest()
+    exported_json = json.loads(package_path.read_text(encoding="utf-8"))
+    assert exported_json["schema_version"] == "pose-identity-evaluated-export-0001"
+    assert exported_json["evaluation"]["result_sha256"] == package["evaluation_result_sha256"]
+    assert exported_json["identity_results"]["association_run"]["id"] == package["run_id"]
+
+    evaluation_artifact_id = first_artifacts["pose_identity_evaluation"]["id"]
+    identities = client.get(f"/api/v1/pose-identity-runs/{package['run_id']}/identities").json()
+    revised = client.post(
+        f"/api/v1/pose-identity-runs/{package['run_id']}/corrections",
+        json={
+            "action": "accept",
+            "target_type": "identity",
+            "target_id": identities[0]["id"],
+            "actor": "post-evaluation-reviewer",
+        },
+    )
+    assert revised.status_code == 201, revised.text
+    with app.state.session_factory() as session:
+        evaluation_artifact = session.get(WorkflowArtifact, evaluation_artifact_id)
+        assert evaluation_artifact is not None
+        with pytest.raises(ValidationError, match="evaluation is stale"):
+            execute_pose_identity_export_adapter(
+                session,
+                app.state.settings,
+                str(project["id"]),
+                {"format": "json"},
+                {"evaluation": [evaluation_artifact]},
+            )
 
     replay = execute_saved_workflow()
     replay_artifacts = {item["data_type"]: item for item in replay["artifacts"]}

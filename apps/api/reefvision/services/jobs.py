@@ -5,7 +5,13 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from reefvision.db.models import Job, TrainingRun, WorkflowNodeRun, WorkflowRun
+from reefvision.db.models import (
+    Job,
+    PoseIdentityAssociationRun,
+    TrainingRun,
+    WorkflowNodeRun,
+    WorkflowRun,
+)
 from reefvision.db.models.project import utc_now
 from reefvision.domain.errors import ConflictError, NotFoundError
 from reefvision.repositories.backups import BackupRepository
@@ -66,6 +72,21 @@ class JobService:
             if str((child.request_json or {}).get("workflow_run_id") or "") == run.id
         ]
 
+    def _cancel_queued_pose_identity_run(self, job: Job, *, now: datetime) -> None:
+        if job.job_type != "pose_identity_tracking":
+            return
+        run_id = str((job.request_json or {}).get("run_id") or "")
+        run = self.session.get(PoseIdentityAssociationRun, run_id)
+        if run is None or run.status not in {"queued", "running"}:
+            return
+        run.status = "cancelled"
+        run.progress_json = {
+            "stage": "cancelled",
+            "current": job.progress_current,
+            "total": job.progress_total,
+        }
+        run.completed_at = now
+
     def _cancel_workflow_children(
         self,
         run: WorkflowRun,
@@ -79,6 +100,7 @@ class JobService:
                 child.status = "cancelled"
                 child.completed_at = now
                 child.error_message = "Parent workflow was cancelled before child execution"
+                self._cancel_queued_pose_identity_run(child, now=now)
                 counts["cancelled"] += 1
             elif child.status == "running":
                 child.status = "cancel_requested"
@@ -196,6 +218,7 @@ class JobService:
         if job.status in {"queued", "waiting_for_review"}:
             job.status = "cancelled"
             job.completed_at = now
+            self._cancel_queued_pose_identity_run(job, now=now)
             if job.job_type == "pose_evaluation":
                 job.deduplication_key = None
                 job.result_json = {

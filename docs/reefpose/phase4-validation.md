@@ -21,9 +21,9 @@ claim of appearance-based re-identification after long occlusions.
 
 The persisted worker supports progress, cancellation, rollback of incomplete output, and
 JSON/CSV export. Scientist operations include reassign, split, merge, interval swap,
-accept, and reject; each creates a revision with before/after hashes. Invalid corrected
-states now return a structured validation error during scientific evaluation rather than
-an HTTP 500.
+accept, and reject; each creates a revision with before/after hashes. Corrections that
+would create two current observations for one identity and frame are rejected before any
+revision is written, with swap recommended for exchanged identities.
 
 Identity evaluation reports ID precision, ID recall, IDF1, switches, fragmentation,
 per-identity coverage, spatial match denominators, and association success/failure. It is
@@ -78,21 +78,22 @@ was not performed.
 
 Backend:
 
-- Phase 4 focused suites: 24 passed after the structured-evaluation-error regression test.
+- Phase 4 and affected compatibility suites: 59 passed and two opt-in GPU evaluation
+  cases skipped after the final integrity review fixes.
 - Existing pose/video/workflow compatibility suites passed during milestone tasks.
 - Alembic disposable database: upgrade to 0041, downgrade to 0040, and re-upgrade to 0041
   passed; the migration test also verifies existing `VideoTrack` preservation.
 - Ruff: passed.
 - Mypy: passed for 438 source files.
-- Full API collection: 1,527 tests. A long Windows base temp initially caused 55 unrelated
-  path-length failures; every one passed when rerun under `C:\r4...`. The remaining six
-  failures are the previously documented real pose-interoperability tests requiring absent
-  optional `sleap-io==0.9.2`; the effective result is 1,483 passed, 38 skipped, and six
-  optional-runtime failures. No dependency was installed.
+- Final full API collection under a short Windows temp path: 1,487 passed, 40 skipped,
+  and six failures. All six are the previously documented real pose-interoperability tests
+  requiring absent optional `sleap-io==0.9.2`; no dependency was installed and no other
+  failure occurred.
 
 Frontend:
 
-- Vitest: 96 files, 507 tests passed, including the completed-run cache regression.
+- Vitest: 96 files, 508 tests passed, including persisted-run cancellation and the
+  completed-run cache regression.
 - TypeScript project check: passed.
 - Prettier check: passed.
 - Production Vite build: passed; the existing large-chunk advisory remains.
@@ -124,9 +125,8 @@ accuracy, identity reliability, generalization, or publication-quality performan
 - Real multi-animal biological videos with independent identity labels are still required.
 - The baseline has no learned appearance embedding and must not be described as reliable
   long-gap re-identification.
-- Reassign can create more than one observation for an identity/frame; evaluation now
-  rejects that state clearly, while swap is the appropriate correction for exchanged
-  identities. A future GUI can preview and block conflicting reassignments earlier.
+- The GUI reports conflicting reassignments from the backend; a richer preview of the
+  affected identity/frame range remains a useful refinement.
 - Identity evaluation currently reports deterministic point metrics; stratification by
   density/gap length and confidence intervals remain future scientific work.
 - The GUI shows current-frame skeletons and correction history, but richer track lanes,

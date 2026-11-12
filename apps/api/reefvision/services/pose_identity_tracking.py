@@ -116,25 +116,45 @@ class PoseIdentityTrackingService:
                 )
         return project, video, ordered
 
-    def submit(self, project_id: str, payload: PoseIdentityAssociationCreateRequest) -> JobResponse:
-        _project, video, tracks = self._tracks(project_id, payload)
-        manifest = {
+    @staticmethod
+    def _input_manifest(
+        video: VideoAsset,
+        tracks: list[VideoTrack],
+        *,
+        schema_id: str,
+        schema_revision: int,
+        schema_content_hash: str,
+    ) -> dict[str, Any]:
+        return {
             "video_id": video.id,
             "video_sha256": video.sha256,
             "pose_schema": {
-                "id": payload.pose_schema_id,
-                "revision": payload.pose_schema_revision,
-                "content_hash": payload.pose_schema_content_hash,
+                "id": schema_id,
+                "revision": schema_revision,
+                "content_hash": schema_content_hash,
             },
             "tracks": [
                 {
                     "id": track.id,
                     "revision": track.revision,
                     "keyframes_sha256": _json_hash(track.keyframes_json),
+                    "schema_binding": dict(
+                        (track.metadata_json or {}).get("pose_landmark_schema") or {}
+                    ),
                 }
                 for track in tracks
             ],
         }
+
+    def submit(self, project_id: str, payload: PoseIdentityAssociationCreateRequest) -> JobResponse:
+        _project, video, tracks = self._tracks(project_id, payload)
+        manifest = self._input_manifest(
+            video,
+            tracks,
+            schema_id=payload.pose_schema_id,
+            schema_revision=payload.pose_schema_revision,
+            schema_content_hash=payload.pose_schema_content_hash,
+        )
         parameters = payload.parameters.model_dump(mode="json")
         run = PoseIdentityAssociationRun(
             project_id=project_id,
@@ -227,26 +247,58 @@ class PoseIdentityTrackingService:
         run_id: str,
         source_track_ids: list[str],
         *,
+        expected_manifest: dict[str, Any] | None = None,
         cancellation_check: Callable[[], None] | None = None,
         progress: Callable[[int, int], None] | None = None,
     ) -> PoseIdentityAssociationRun:
         run = self._run(run_id)
-        tracks = list(
+        loaded_tracks = list(
             self.session.scalars(
-                select(VideoTrack)
-                .where(VideoTrack.id.in_(source_track_ids), VideoTrack.deleted_at.is_(None))
-                .order_by(VideoTrack.id)
+                select(VideoTrack).where(
+                    VideoTrack.id.in_(source_track_ids), VideoTrack.deleted_at.is_(None)
+                )
             )
         )
-        if len(tracks) != len(set(source_track_ids)):
+        by_id = {track.id: track for track in loaded_tracks}
+        if len(by_id) != len(set(source_track_ids)):
             raise ValidationError("One or more source pose tracks disappeared")
+        tracks = [by_id[track_id] for track_id in source_track_ids]
+        video = self.session.get(VideoAsset, run.video_id)
+        if video is None:
+            raise ValidationError("Source video disappeared after identity association was queued")
+        current_manifest = self._input_manifest(
+            video,
+            tracks,
+            schema_id=run.pose_schema_id,
+            schema_revision=run.pose_schema_revision,
+            schema_content_hash=run.pose_schema_content_hash,
+        )
+        if _json_hash(current_manifest) != run.input_manifest_sha256 or (
+            expected_manifest is not None
+            and _json_hash(expected_manifest) != run.input_manifest_sha256
+        ):
+            raise ValidationError(
+                "Source video, pose tracks, or landmark schema changed after association was queued"
+            )
         detections = self._detections(tracks)
         if not detections:
             raise ValidationError("Source pose tracks contain no detections")
         if cancellation_check:
             cancellation_check()
         config = AssociationConfig(**dict(run.parameters_json or {}))
-        result = associate_pose_identities(detections, config)
+        association_frame_count = len({item.frame_index for item in detections})
+        total_work = association_frame_count + len(detections)
+
+        def association_progress(current: int, _total: int) -> None:
+            if progress:
+                progress(current, total_work)
+
+        result = associate_pose_identities(
+            detections,
+            config,
+            cancellation_check=cancellation_check,
+            progress=association_progress,
+        )
         detection_by_id = {item.detection_id: item for item in detections}
         identity_by_key: dict[str, PoseAnimalIdentity] = {}
         for summary in result.identities:
@@ -266,7 +318,6 @@ class PoseIdentityTrackingService:
         self.session.flush()
 
         observation_by_detection: dict[str, PoseIdentityObservation] = {}
-        total = len(result.assignments)
         for index, assignment in enumerate(result.assignments, start=1):
             if cancellation_check:
                 cancellation_check()
@@ -298,7 +349,7 @@ class PoseIdentityTrackingService:
             self.session.add(observation)
             observation_by_detection[detection.detection_id] = observation
             if progress:
-                progress(index, total)
+                progress(association_frame_count + index, total_work)
         self.session.flush()
 
         latest_by_identity: dict[str, PoseIdentityObservation] = {}
@@ -348,7 +399,11 @@ class PoseIdentityTrackingService:
                 )
             )
         run.status = "completed"
-        run.progress_json = {"stage": "completed", "current": total, "total": total}
+        run.progress_json = {
+            "stage": "completed",
+            "current": total_work,
+            "total": total_work,
+        }
         run.completed_at = datetime.now(UTC)
         self.session.commit()
         self.session.refresh(run)
@@ -434,6 +489,7 @@ class PoseIdentityTrackingService:
             .where(
                 PoseIdentityObservation.association_run_id == run_id,
                 PoseIdentityObservation.is_current.is_(True),
+                PoseIdentityObservation.verification_state == "unreviewed",
                 PoseIdentityObservation.association_confidence < threshold,
             )
             .order_by(PoseIdentityObservation.association_confidence)
@@ -517,6 +573,28 @@ class PoseIdentityTrackingService:
 
         if not observations:
             raise ValidationError("Correction target contains no current observations")
+
+        if payload.action in {"reassign", "merge"}:
+            if destination is None:
+                raise ValidationError(f"{payload.action} requires a destination identity")
+            target_ids = {item.id for item in observations}
+            target_frames = {item.frame_index for item in observations}
+            conflicting = self.session.scalar(
+                select(PoseIdentityObservation)
+                .where(
+                    PoseIdentityObservation.association_run_id == run.id,
+                    PoseIdentityObservation.animal_identity_id == destination.id,
+                    PoseIdentityObservation.frame_index.in_(target_frames),
+                    PoseIdentityObservation.is_current.is_(True),
+                    PoseIdentityObservation.id.not_in(target_ids),
+                )
+                .order_by(PoseIdentityObservation.frame_index)
+            )
+            if conflicting is not None:
+                raise ValidationError(
+                    "Destination identity already has an observation on frame "
+                    f"{conflicting.frame_index}; use swap or choose a non-overlapping range"
+                )
 
         swap_observations: list[PoseIdentityObservation] = []
         if payload.action == "swap":

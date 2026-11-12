@@ -125,9 +125,13 @@ def evaluate_pose_identities(
         prediction_by_frame[item.frame_index].append(item)
 
     matched_by_truth: dict[tuple[str, int], str] = {}
-    pair_counts: Counter[tuple[str, str]] = Counter()
+    eligible_pair_counts: Counter[tuple[str, str]] = Counter()
     matched_prediction_keys: set[tuple[str, int]] = set()
     for frame in sorted(set(truth_by_frame) | set(prediction_by_frame)):
+        for truth_item in truth_by_frame.get(frame, []):
+            for prediction in prediction_by_frame.get(frame, []):
+                if _iou(truth_item, prediction) >= iou_threshold:
+                    eligible_pair_counts[(truth_item.identity_id, prediction.identity_id)] += 1
         for truth_item, prediction in _frame_matches(
             truth_by_frame.get(frame, []),
             prediction_by_frame.get(frame, []),
@@ -135,13 +139,13 @@ def evaluate_pose_identities(
         ):
             matched_by_truth[(truth_item.identity_id, frame)] = prediction.identity_id
             matched_prediction_keys.add((prediction.identity_id, frame))
-            pair_counts[(truth_item.identity_id, prediction.identity_id)] += 1
 
     truth_ids = sorted({item.identity_id for item in truth})
     predicted_ids = sorted({item.identity_id for item in predictions})
-    mapping = _identity_mapping(truth_ids, predicted_ids, pair_counts)
+    mapping = _identity_mapping(truth_ids, predicted_ids, eligible_pair_counts)
     idtp = sum(
-        pair_counts[(truth_id, prediction_id)] for truth_id, prediction_id in mapping.items()
+        eligible_pair_counts[(truth_id, prediction_id)]
+        for truth_id, prediction_id in mapping.items()
     )
     idfn = len(truth) - idtp
     idfp = len(predictions) - idtp
@@ -180,7 +184,7 @@ def evaluate_pose_identities(
         spatial_count = sum(item is not None for item in matched_ids)
         predicted_identity = mapping.get(truth_id)
         identity_matches = (
-            sum(item == predicted_identity for item in matched_ids) if predicted_identity else 0
+            eligible_pair_counts[(truth_id, predicted_identity)] if predicted_identity else 0
         )
         total_switches += switches
         total_fragmentations += fragmentations
