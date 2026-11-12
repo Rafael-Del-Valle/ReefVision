@@ -118,3 +118,21 @@ by passing exact-head CI**. Windows MSI upgrade/rollback, installed-GUI,
 representative biological-data acceptance and independent 1.1/1.6
 revision-0038 reconciliation are still mandatory. Do not stamp or merge
 the conflicting migration histories.
+
+
+## 2026-11-12 — Strict collision gate requires healthy referential integrity
+
+The opt-in `--fail-on-lineage-collision` gate now rejects a comparison
+even when the Alembic revisions and structural DDL hashes agree if either
+database has a failed SQLite quick/full integrity check, broken foreign-key
+references, an FK-check error, or malformed Alembic metadata. The default
+read-only report remains diagnostic and legacy-compatible; strict failure
+does not mutate either database or approve a migration.
+
+The new subprocess regressions create two independent databases with
+identical schema and revision markers, inject an orphaned foreign-key
+reference on each side in turn, and require exit 2, explicit researcher
+review, preservation of original database bytes and no biological-note
+disclosure. These committed tests require exact-head CI verification.
+This does **not** reconcile independent 1.1/1.6 revision-0038 histories;
+native Windows MSI, installed GUI and scientific acceptance remain blocked.
