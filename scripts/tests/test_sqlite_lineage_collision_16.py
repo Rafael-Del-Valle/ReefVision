@@ -1,0 +1,81 @@
+"""A matching Alembic stamp is not proof of matching SQLite schema lineage."""
+
+import json
+import sqlite3
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+SCRIPT = Path(__file__).resolve().parents[1] / "inspect_sqlite_lineage_16.py"
+
+
+def _database(path: Path, *, revision: str, divergent: bool) -> bytes:
+    with sqlite3.connect(path) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT)")
+        connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
+        connection.execute("CREATE TABLE observations (private_note TEXT)")
+        if divergent:
+            connection.execute("CREATE TABLE new_review_evidence (item_id TEXT)")
+        connection.execute("INSERT INTO observations VALUES ('confidential coral')")
+    return path.read_bytes()
+
+
+@pytest.mark.parametrize(
+    ("reference_revision", "divergent", "expected_exit"),
+    [
+        ("0038", True, 2),
+        ("0038", False, 0),
+        ("0039", True, 0),
+    ],
+)
+def test_collision_gate_preserves_data_and_requires_review(
+    tmp_path: Path, reference_revision: str, divergent: bool, expected_exit: int
+) -> None:
+    primary = tmp_path / "primary.sqlite"
+    reference = tmp_path / "reference.sqlite"
+    primary_bytes = _database(primary, revision="0038", divergent=False)
+    reference_bytes = _database(
+        reference, revision=reference_revision, divergent=divergent
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            str(primary),
+            "--compare-to",
+            str(reference),
+            "--fail-on-lineage-collision",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == expected_exit, result.stderr
+    report = json.loads(result.stdout)
+    assert report["classification"] == "requires_researcher_review"
+    assert report["schema_comparison"]["requires_researcher_review"] is True
+    assert report["schema_comparison"]["revision_markers_match"] == (
+        reference_revision == "0038"
+    )
+    assert report["schema_comparison"]["matches"] is (not divergent)
+    assert "confidential coral" not in result.stdout + result.stderr
+    assert primary.read_bytes() == primary_bytes
+    assert reference.read_bytes() == reference_bytes
+
+
+def test_collision_gate_requires_reference(tmp_path: Path) -> None:
+    primary = tmp_path / "primary.sqlite"
+    _database(primary, revision="0038", divergent=False)
+    before = primary.read_bytes()
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), str(primary), "--fail-on-lineage-collision"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "--fail-on-lineage-collision requires --compare-to" in result.stderr
+    assert result.stdout == ""
+    assert primary.read_bytes() == before
