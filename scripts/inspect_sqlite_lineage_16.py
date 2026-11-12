@@ -194,6 +194,7 @@ def main() -> None:
     print(json.dumps(evidence, indent=2, sort_keys=True))
     if args.fail_on_schema_drift and not evidence["schema_comparison"]["matches"]:
         raise SystemExit(2)
+
     def has_integrity_error(report: dict) -> bool:
         return (
             report["quick_check_details"] != ["ok"]
@@ -208,10 +209,6 @@ def main() -> None:
         or (reference is not None and has_integrity_error(reference))
     ):
         raise SystemExit(2)
-
-    # Both databases are independently checked before a comparison is trusted.
-    # A matching DDL fingerprint never certifies SQLite or Alembic integrity.
-    return
 
 
 if __name__ == "__main__":
