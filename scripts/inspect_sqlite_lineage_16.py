@@ -267,6 +267,10 @@ def main() -> None:
                 and reference["alembic_stamp_error"] is None
                 and evidence["alembic_stamp_validation_error"] is None
                 and reference["alembic_stamp_validation_error"] is None
+                # Matching revision text is not validated lineage evidence if
+                # either version_num column is nullable or lacks its PK.
+                and evidence["alembic_stamp_constraint_error"] is None
+                and reference["alembic_stamp_constraint_error"] is None
             ),
             "only_in_database": describe(source_objects - reference_objects),
             "only_in_reference": describe(reference_objects - source_objects),
