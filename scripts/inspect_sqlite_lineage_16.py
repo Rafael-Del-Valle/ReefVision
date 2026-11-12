@@ -188,6 +188,12 @@ def main() -> None:
         parser.error("--fail-on-schema-drift requires --compare-to")
     if args.fail_on_revision_mismatch and args.compare_to is None:
         parser.error("--fail-on-revision-mismatch requires --compare-to")
+    # Validate both inputs before samefile(): pathlib.samefile raises an
+    # unhandled OSError for missing paths. Report a stable CLI usage error
+    # without attempting to create or modify either research database.
+    for candidate in (args.database, args.compare_to):
+        if candidate is not None and not candidate.is_file():
+            parser.error(f"database must be an existing file: {candidate}")
     if args.compare_to is not None and args.database.samefile(args.compare_to):
         parser.error("--compare-to requires an independent database, not the same file")
     evidence = inspect(args.database)
