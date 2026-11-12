@@ -156,6 +156,7 @@ def main() -> None:
     if args.fail_on_schema_drift and args.compare_to is None:
         parser.error("--fail-on-schema-drift requires --compare-to")
     evidence = inspect(args.database)
+    reference = None
     if args.compare_to is not None:
         reference = inspect(args.compare_to)
         source_objects = {
@@ -176,6 +177,13 @@ def main() -> None:
         evidence["schema_comparison"] = {
             "reference_database": reference["database"],
             "reference_schema_sha256": reference["schema_sha256"],
+            "reference_integrity": {
+                "quick_check_details": reference["quick_check_details"],
+                "foreign_key_violation_count": reference["foreign_key_violation_count"],
+                "foreign_key_check_error": reference["foreign_key_check_error"],
+                "alembic_stamp_error": reference["alembic_stamp_error"],
+                "alembic_stamp_validation_error": reference["alembic_stamp_validation_error"],
+            },
             "matches": evidence["schema_sha256"] == reference["schema_sha256"],
             "only_in_database": describe(source_objects - reference_objects),
             "only_in_reference": describe(reference_objects - source_objects),
@@ -186,14 +194,24 @@ def main() -> None:
     print(json.dumps(evidence, indent=2, sort_keys=True))
     if args.fail_on_schema_drift and not evidence["schema_comparison"]["matches"]:
         raise SystemExit(2)
+    def has_integrity_error(report: dict) -> bool:
+        return (
+            report["quick_check_details"] != ["ok"]
+            or report["foreign_key_check_error"] is not None
+            or report["foreign_key_violation_count"] != 0
+            or report["alembic_stamp_error"] is not None
+            or report["alembic_stamp_validation_error"] is not None
+        )
+
     if args.fail_on_integrity_error and (
-        evidence["quick_check_details"] != ["ok"]
-        or evidence["foreign_key_check_error"] is not None
-        or evidence["foreign_key_violation_count"] != 0
-        or evidence["alembic_stamp_error"] is not None
-        or evidence["alembic_stamp_validation_error"] is not None
+        has_integrity_error(evidence)
+        or (reference is not None and has_integrity_error(reference))
     ):
         raise SystemExit(2)
+
+    # Both databases are independently checked before a comparison is trusted.
+    # A matching DDL fingerprint never certifies SQLite or Alembic integrity.
+    return
 
 
 if __name__ == "__main__":
