@@ -198,7 +198,7 @@ function Format-SafeText {
 }
 function Test-FiniteMetricValue {
   param([AllowNull()][object]$Value)
-  if ($null -eq $Value -or $Value -is [bool] -or $Value -is [string] -or $Value -isnot [System.ValueType]) {
+  if ($null -eq $Value -or $Value -is [bool] -or $Value -is [string] -or $Value -is [enum] -or $Value -isnot [System.ValueType]) {
     return $false
   }
   try {
