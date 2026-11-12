@@ -206,7 +206,16 @@ describe("invalid project gallery identifiers", () => {
       wrap: true,
     });
     const saved = storage.getItem("reefvision.gallery.survey-a.v1");
-    const invalidIds = ["", "   ", "survey\nother", "x".repeat(257)];
+    const invalidIds = [
+      "",
+      "   ",
+      "survey\nother",
+      "survey\u202eother",
+      "survey\u2066other",
+      "survey\u200bother",
+      "survey\u0085other",
+      "x".repeat(257),
+    ];
     for (const projectId of invalidIds) {
       expect(readGalleryPreference(storage, projectId)).toEqual({
         imageId: null,
