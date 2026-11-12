@@ -611,7 +611,9 @@ def test_comparison_integrity_gate_checks_both_inputs(
     assert (current.read_bytes(), reference.read_bytes()) == original
 
 
-def test_comparison_integrity_gate_reports_malformed_reference_stamp(tmp_path: Path) -> None:
+def test_comparison_integrity_gate_reports_malformed_reference_stamp(
+    tmp_path: Path,
+) -> None:
     import json
     import subprocess
     import sys
