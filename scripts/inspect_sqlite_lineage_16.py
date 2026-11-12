@@ -110,6 +110,12 @@ def inspect(path: Path) -> dict:
             "quick_check": integrity,
             "quick_check_details": quick_check_details,
             "schema_sha256": schema_sha256,
+            # Names and kinds permit human comparison of colliding histories
+            # without exposing DDL expressions or scientific record values.
+            "schema_objects": [
+                {"type": kind, "name": name, "table": table}
+                for kind, name, table, _sql in schema_rows
+            ],
             "sqlite_header": sqlite_header,
             "foreign_key_violation_count": len(foreign_keys) if foreign_key_check_error is None else None,
             "foreign_key_check_error": foreign_key_check_error,
