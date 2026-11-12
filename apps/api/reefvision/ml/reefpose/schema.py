@@ -276,8 +276,7 @@ class AnatomySchema:
                 extended["schema_version"] = cls.LEGACY_SCHEMA_VERSION
                 candidates = [extended]
                 has_extended_landmark_metadata = any(
-                    isinstance(item, dict)
-                    and ("symmetric_with" in item or "required" in item)
+                    isinstance(item, dict) and ("symmetric_with" in item or "required" in item)
                     for item in raw_landmarks
                 )
                 if not has_extended_landmark_metadata:
