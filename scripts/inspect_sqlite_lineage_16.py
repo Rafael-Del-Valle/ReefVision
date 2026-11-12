@@ -287,6 +287,8 @@ def main() -> None:
         if (
             not evidence["schema_comparison"]["revision_markers_match"]
             or not evidence["schema_comparison"]["matches"]
+            or evidence["alembic_stamp_constraint_error"] is not None
+            or reference["alembic_stamp_constraint_error"] is not None
         ):
             raise SystemExit(2)
 
