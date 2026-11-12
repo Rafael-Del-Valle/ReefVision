@@ -641,3 +641,69 @@ def test_comparison_integrity_gate_reports_malformed_reference_stamp(
         "alembic_stamp_validation_error"
     ] == "expected_exactly_one_revision_row"
     assert (current.read_bytes(), reference.read_bytes()) == original
+
+
+@pytest.mark.parametrize(
+    ("current_stamp", "reference_stamp", "expected_code"),
+    [("0038", "0038", 0), ("0038", "0039", 2)],
+)
+def test_revision_comparison_gate_detects_equal_schema_different_lineage(
+    tmp_path: Path, current_stamp: str, reference_stamp: str, expected_code: int
+) -> None:
+    """Identical DDL is insufficient evidence of equal migration histories."""
+    import json
+    import subprocess
+    import sys
+
+    current = tmp_path / "current.sqlite"
+    reference = tmp_path / "reference.sqlite"
+    for path, stamp in ((current, current_stamp), (reference, reference_stamp)):
+        with sqlite3.connect(path) as db:
+            db.execute("CREATE TABLE alembic_version (version_num TEXT)")
+            db.execute("INSERT INTO alembic_version VALUES (?)", (stamp,))
+            db.execute("CREATE TABLE scientific_records (id INTEGER, note TEXT)")
+            db.execute("INSERT INTO scientific_records VALUES (1, 'private observation')")
+    before = (current.read_bytes(), reference.read_bytes())
+    result = subprocess.run(
+        [
+            sys.executable, str(SCRIPT), str(current), "--compare-to",
+            str(reference), "--fail-on-revision-mismatch",
+        ],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == expected_code, result.stderr
+    report = json.loads(result.stdout)
+    comparison = report["schema_comparison"]
+    assert comparison["matches"] is True
+    assert comparison["revision_markers_match"] is (expected_code == 0)
+    assert comparison["requires_researcher_review"] is True
+    assert "private observation" not in result.stdout
+    assert (current.read_bytes(), reference.read_bytes()) == before
+
+
+def test_revision_comparison_gate_rejects_malformed_reference_stamp(
+    tmp_path: Path,
+) -> None:
+    import json
+    import subprocess
+    import sys
+
+    current = tmp_path / "current.sqlite"
+    reference = tmp_path / "reference.sqlite"
+    for path in (current, reference):
+        with sqlite3.connect(path) as db:
+            db.execute("CREATE TABLE alembic_version (version_num TEXT)")
+            db.execute("INSERT INTO alembic_version VALUES ('0038')")
+    with sqlite3.connect(reference) as db:
+        db.execute("DELETE FROM alembic_version")
+    before = (current.read_bytes(), reference.read_bytes())
+    result = subprocess.run(
+        [
+            sys.executable, str(SCRIPT), str(current), "--compare-to",
+            str(reference), "--fail-on-revision-mismatch",
+        ],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 2, result.stderr
+    assert json.loads(result.stdout)["schema_comparison"]["revision_markers_match"] is False
+    assert (current.read_bytes(), reference.read_bytes()) == before
