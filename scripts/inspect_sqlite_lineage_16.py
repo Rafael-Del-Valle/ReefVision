@@ -27,6 +27,12 @@ def inspect(path: Path) -> dict:
         # migration stamps, and FK evidence from different committed states.
         connection.execute("BEGIN")
         quick_check_details = [row[0] for row in connection.execute("PRAGMA quick_check")]
+        # quick_check is a fast diagnostic but does not validate all index
+        # relationships. A migration acceptance gate must also run the full
+        # SQLite integrity check (bounded to 100 diagnostic rows).
+        integrity_check_details = [
+            row[0] for row in connection.execute("PRAGMA integrity_check(100)")
+        ]
         integrity = "ok" if quick_check_details == ["ok"] else (quick_check_details[0] if quick_check_details else "no result")
         # Header fields are diagnostic evidence, not proof of Alembic lineage.
         sqlite_header = {
@@ -113,6 +119,7 @@ def inspect(path: Path) -> dict:
             "database": str(path.resolve()), "read_only": True,
             "quick_check": integrity,
             "quick_check_details": quick_check_details,
+            "integrity_check_details": integrity_check_details,
             "schema_sha256": schema_sha256,
             # Names and kinds permit human comparison of colliding histories
             # without exposing DDL expressions or scientific record values.
@@ -193,6 +200,7 @@ def main() -> None:
             "reference_schema_sha256": reference["schema_sha256"],
             "reference_integrity": {
                 "quick_check_details": reference["quick_check_details"],
+                "integrity_check_details": reference["integrity_check_details"],
                 "foreign_key_violation_count": reference["foreign_key_violation_count"],
                 "foreign_key_check_error": reference["foreign_key_check_error"],
                 "alembic_stamp_error": reference["alembic_stamp_error"],
@@ -223,6 +231,7 @@ def main() -> None:
     def has_integrity_error(report: dict) -> bool:
         return (
             report["quick_check_details"] != ["ok"]
+            or report["integrity_check_details"] != ["ok"]
             or report["foreign_key_check_error"] is not None
             or report["foreign_key_violation_count"] != 0
             or report["alembic_stamp_error"] is not None
