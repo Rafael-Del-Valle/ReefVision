@@ -116,8 +116,22 @@ def inspect(path: Path) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("database", type=Path, help="Existing SQLite database")
+    parser.add_argument(
+        "--fail-on-integrity-error",
+        action="store_true",
+        help="Exit 2 on SQLite integrity, FK, or Alembic metadata errors; "
+        "still emit complete read-only JSON evidence",
+    )
     args = parser.parse_args()
-    print(json.dumps(inspect(args.database), indent=2, sort_keys=True))
+    evidence = inspect(args.database)
+    print(json.dumps(evidence, indent=2, sort_keys=True))
+    if args.fail_on_integrity_error and (
+        evidence["quick_check_details"] != ["ok"]
+        or evidence["foreign_key_check_error"] is not None
+        or evidence["foreign_key_violation_count"] != 0
+        or evidence["alembic_stamp_error"] is not None
+    ):
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":
