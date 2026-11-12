@@ -281,18 +281,6 @@ def main() -> None:
     if args.fail_on_revision_mismatch and not evidence["schema_comparison"]["revision_markers_match"]:
         raise SystemExit(2)
 
-    if args.fail_on_lineage_collision:
-        # Invalid or missing stamps must not silently pass a collision gate.
-        # Collision acceptance also requires canonical stamp constraints on both sides.
-        # Legacy stamps remain available through default read-only diagnostics.
-        if (
-            not evidence["schema_comparison"]["revision_markers_match"]
-            or not evidence["schema_comparison"]["matches"]
-            or evidence["alembic_stamp_constraint_error"] is not None
-            or reference["alembic_stamp_constraint_error"] is not None
-        ):
-            raise SystemExit(2)
-
     def has_integrity_error(report: dict) -> bool:
         return (
             report["quick_check_details"] != ["ok"]
@@ -302,6 +290,20 @@ def main() -> None:
             or report["alembic_stamp_error"] is not None
             or report["alembic_stamp_validation_error"] is not None
         )
+
+    if args.fail_on_lineage_collision:
+        # Equal stamps and DDL cannot establish safe lineage when either
+        # database contains broken foreign keys or failed integrity checks.
+        # Keep default diagnostics compatible with legacy inspection.
+        if (
+            not evidence["schema_comparison"]["revision_markers_match"]
+            or not evidence["schema_comparison"]["matches"]
+            or evidence["alembic_stamp_constraint_error"] is not None
+            or reference["alembic_stamp_constraint_error"] is not None
+            or has_integrity_error(evidence)
+            or has_integrity_error(reference)
+        ):
+            raise SystemExit(2)
 
     if args.fail_on_noncanonical_stamp and (
         evidence["alembic_stamp_constraint_error"] is not None
