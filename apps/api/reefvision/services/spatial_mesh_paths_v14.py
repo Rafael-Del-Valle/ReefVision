@@ -117,6 +117,7 @@ def mesh_edge_paths(
         meters: float | None = None
         chord_m: float | None = None
         detour_ratio: float | None = None
+        geometric_excess_m: float | None = None
         path_qc_warnings: list[str] | None = None
         path_edge_lengths_m: list[float] | None = None
         path_cumulative_lengths_m: list[float] | None = None
@@ -166,6 +167,13 @@ def mesh_edge_paths(
             chord_m = chord_mesh_units * scale
             if not isfinite(chord_m):
                 raise ValueError("Calibrated endpoint chord length overflowed")
+            # The excess over the straight endpoint chord is a geometric
+            # detour diagnostic, never an anatomical branch-length estimate.
+            # Both distances share the same calibration scale, so uncertainty
+            # bounds must scale the difference together (not independently).
+            geometric_excess_m = max(0.0, (shortest[end] - chord_mesh_units) * scale)
+            if not isfinite(geometric_excess_m):
+                raise ValueError("Calibrated geometric detour excess overflowed")
             # Compute the dimensionless detour in source units: calibration
             # cancels, and dividing two tiny calibrated lengths loses precision.
             # An underflowed calibrated chord is not a usable physical endpoint
@@ -181,6 +189,7 @@ def mesh_edge_paths(
                     for value in (
                         meters,
                         chord_m,
+                        geometric_excess_m,
                         *path_edge_lengths_m,
                         *path_cumulative_lengths_m,
                     )
@@ -258,6 +267,15 @@ def mesh_edge_paths(
                     else None
                 ),
                 "geometric_detour_ratio": detour_ratio,
+                "geometric_excess_length_m": geometric_excess_m,
+                "geometric_excess_scale_interval_m": (
+                    [
+                        geometric_excess_m * (1 - scale_uncertainty),
+                        geometric_excess_m * (1 + scale_uncertainty),
+                    ]
+                    if geometric_excess_m is not None and scale_uncertainty is not None
+                    else None
+                ),
                 "scale_uncertainty_m": (
                     meters * scale_uncertainty
                     if meters is not None and scale_uncertainty is not None
