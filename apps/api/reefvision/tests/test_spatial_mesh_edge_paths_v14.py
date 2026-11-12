@@ -443,3 +443,68 @@ def test_mesh_path_flags_individual_calibrated_segment_underflow() -> None:
     assert route["path_edge_lengths_m"][1] > 0
     assert "calibrated_path_segment_underflow" in route["path_qc_warnings"]
     assert "calibrated_path_length_underflow" not in route["path_qc_warnings"]
+
+
+def test_calibrated_segment_underflow_survives_saved_workflow(
+    client: TestClient,
+) -> None:
+    # A positive source edge can underflow in meters. Persist the warning
+    # without promoting the result to a verified anatomical measurement.
+    parameters = {
+        "vertices": [
+            [0.0, 0.0, 0.0],
+            [1e-170, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+        ],
+        "faces": [[0, 1, 3], [1, 2, 3]],
+        "meters_per_unit": 1e-160,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Provisional synthetic underflow scale",
+        "relative_scale_uncertainty": 0.1,
+        "surface_path_vertex_pairs": [[0, 2]],
+    }
+    project_id = str(create_project(client, "Mesh segment underflow parity")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=parameters)
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()["surface_edge_paths"][0]
+    assert expected["status"] == "connected"
+    assert "calibrated_path_segment_underflow" in expected["path_qc_warnings"]
+
+    graph = {
+        "graph_id": "mesh-segment-underflow-v14",
+        "name": "Provisional segment underflow QC",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": parameters},
+        ],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "m",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["surface_edge_paths"][0] == expected
+    assert artifact["measurement_status"] == "caller_supplied_unverified"
+    assert artifact["provenance"]["calibration_verified"] is False
