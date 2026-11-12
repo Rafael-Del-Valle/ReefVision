@@ -346,4 +346,37 @@ if ($latestMetrics.Count -ne 0) {
   throw 'An unstarted training run fabricated a loss measurement.'
 }
 
+# A persisted history can contain unrelated scientific or validation metrics.
+# The monitor must retain their original keys and not confuse them with
+# training losses; each loss series must select its own latest finite sample.
+$run = [pscustomobject]@{
+  metrics = [pscustomobject]@{
+    'train/box_loss' = 0.91
+    'train/cls_loss' = 0.82
+    'train/dfl_loss' = 0.73
+    'val/box_loss' = 0.64
+  }
+  metrics_history = [pscustomobject]@{
+    'train/box_loss' = @(0.51, 0.41)
+    'train/cls_loss' = @(0.32, [double]::NaN)
+    'train/dfl_loss' = @(0.23, 0.13)
+    'val/box_loss' = @(0.61, 0.52)
+  }
+}
+Invoke-Expression $selectionCode
+foreach ($expected in @(
+  @{ key = 'train/box_loss'; value = 0.41 },
+  @{ key = 'train/cls_loss'; value = 0.32 },
+  @{ key = 'train/dfl_loss'; value = 0.13 },
+  @{ key = 'val/box_loss'; value = 0.52 }
+)) {
+  if (-not $latestMetrics.ContainsKey($expected.key) -or
+      $latestMetrics[$expected.key] -ne $expected.value) {
+    throw ('Independent metric history selection failed: {0}' -f $expected.key)
+  }
+}
+if ($latestMetrics.Count -ne 4) {
+  throw 'Metric selection introduced unexpected or fabricated keys.'
+}
+
 Write-Host 'PowerShell training console sanitizer regression passed.'
