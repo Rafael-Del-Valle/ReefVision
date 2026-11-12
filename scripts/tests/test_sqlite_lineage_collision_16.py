@@ -27,7 +27,8 @@ def _database(path: Path, *, revision: str, divergent: bool) -> bytes:
     [
         ("0038", True, 2),
         ("0038", False, 0),
-        ("0039", True, 0),
+        ("0039", True, 2),
+        ("0039", False, 2),
     ],
 )
 def test_collision_gate_preserves_data_and_requires_review(
@@ -60,6 +61,10 @@ def test_collision_gate_preserves_data_and_requires_review(
         reference_revision == "0038"
     )
     assert report["schema_comparison"]["matches"] is (not divergent)
+    # Collision mode is fail-closed for uncertain or different revision lineage.
+    assert (result.returncode == 0) is (
+        reference_revision == "0038" and not divergent
+    )
     assert "confidential coral" not in result.stdout + result.stderr
     assert primary.read_bytes() == primary_bytes
     assert reference.read_bytes() == reference_bytes
