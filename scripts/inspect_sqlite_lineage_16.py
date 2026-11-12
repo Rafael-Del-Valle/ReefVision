@@ -289,6 +289,7 @@ def main() -> None:
             or report["foreign_key_violation_count"] != 0
             or report["alembic_stamp_error"] is not None
             or report["alembic_stamp_validation_error"] is not None
+            or report["alembic_stamp_constraint_error"] is not None
         )
 
     if args.fail_on_lineage_collision:
