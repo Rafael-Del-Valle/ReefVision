@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createPoseArchitectureWorkflow,
   createPoseComparisonWorkflow,
+  createPoseIdentityEvaluationWorkflow,
   workflowTemplates,
 } from "./workflowTemplates";
 
@@ -23,6 +24,28 @@ describe("workflowTemplates", () => {
     expect(graph.edges.some((edge) => edge.target_port_id === "dataset")).toBe(
       true,
     );
+  });
+
+  it("provides an executable scientist-gated multi-animal identity workflow", () => {
+    const graph = createPoseIdentityEvaluationWorkflow();
+    expect(graph.nodes.map((node) => node.node_type)).toEqual([
+      "project_source",
+      "project_video_source",
+      "registered_model_source",
+      "pose_inference",
+      "pose_identity_association",
+      "pose_identity_review_gate",
+      "pose_identity_evaluation",
+      "pose_identity_export",
+    ]);
+    expect(
+      graph.nodes.find((node) => node.node_type === "pose_identity_evaluation")
+        ?.parameters,
+    ).toEqual({ truth_dataset_id: "", spatial_iou_threshold: 0.5 });
+    expect(graph.edges.at(-1)).toMatchObject({
+      source_port_id: "evaluation",
+      target_port_id: "evaluation",
+    });
   });
 
   it("builds seed-free pose architecture training from an immutable dataset", () => {

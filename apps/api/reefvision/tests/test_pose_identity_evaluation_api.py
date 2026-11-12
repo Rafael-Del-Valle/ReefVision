@@ -15,6 +15,73 @@ from reefvision.tests.test_pose_identity_tracking_api import (
 )
 
 
+def test_evaluation_rejects_duplicate_corrected_identity_frame_without_server_error(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = create_project(client, "Pose identity invalid corrected state")
+    video = _video(client, str(project["id"]), monkeypatch, "invalid-correction")
+    label_id = _first_class(project)
+    tracks = [
+        _track(client, str(video["id"]), label_id, offset=10, prefix="left"),
+        _track(client, str(video["id"]), label_id, offset=150, prefix="right"),
+    ]
+    job = _submit(
+        client,
+        str(project["id"]),
+        str(video["id"]),
+        [str(item["id"]) for item in tracks],
+    )
+    run_id = str(job["result_json"]["run_id"])
+    assert process_pose_identity_tracking_job(
+        client.app.state.settings, client.app.state.session_factory, str(job["id"])
+    )
+    identities = client.get(f"/api/v1/pose-identity-runs/{run_id}/identities").json()
+    observations = client.get(f"/api/v1/pose-identity-runs/{run_id}/observations").json()
+    target = next(item for item in observations if item["frame_index"] == 0)
+    destination = next(
+        item for item in identities if item["id"] != target["animal_identity_id"]
+    )
+    corrected = client.post(
+        f"/api/v1/pose-identity-runs/{run_id}/corrections",
+        json={
+            "action": "reassign",
+            "target_type": "observation",
+            "target_id": target["id"],
+            "destination_identity_id": destination["id"],
+        },
+    )
+    assert corrected.status_code == 201, corrected.text
+    truth = client.post(
+        f"/api/v1/projects/{project['id']}/pose-identity-truth-datasets",
+        json={
+            "name": "Synthetic duplicate-state truth",
+            "video_id": video["id"],
+            "pose_schema_id": SCHEMA_ID,
+            "pose_schema_revision": 1,
+            "pose_schema_content_hash": SCHEMA_HASH,
+            "scientific_context": "synthetic_engineering",
+            "verified_by": "fixture-author",
+            "observations": [
+                {
+                    "identity_id": f"truth-{offset}",
+                    "frame_index": frame,
+                    "bbox": [offset + frame * 4, 20, 30, 15],
+                }
+                for offset in (10, 150)
+                for frame in (0, 1, 2)
+            ],
+        },
+    )
+    assert truth.status_code == 201, truth.text
+
+    evaluation = client.post(
+        f"/api/v1/pose-identity-runs/{run_id}/evaluations",
+        json={"truth_dataset_id": truth.json()["id"], "spatial_iou_threshold": 0.5},
+    )
+    assert evaluation.status_code == 400
+    assert "one observation per identity and frame" in evaluation.json()["detail"]
+
+
 def test_verified_truth_evaluation_is_immutable_and_provenance_complete(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

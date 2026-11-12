@@ -1027,6 +1027,132 @@ export function createPoseComparisonWorkflow() {
   };
 }
 
+export function createPoseIdentityEvaluationWorkflow() {
+  return {
+    graph_id: "pose-identity-evaluation",
+    name: "Multi-animal pose identity evaluation",
+    schema_version: "workflow-graph-0001",
+    metadata: {
+      truth_policy: "scientist_verified_only",
+      synthetic_data_warning:
+        "Synthetic fixtures validate engineering behavior, not biological accuracy.",
+    },
+    nodes: [
+      {
+        node_id: "project",
+        node_type: "project_source",
+        parameters: {},
+        position: { x: 40, y: 100 },
+      },
+      {
+        node_id: "video",
+        node_type: "project_video_source",
+        parameters: { video_id: "" },
+        position: { x: 300, y: 40 },
+      },
+      {
+        node_id: "model",
+        node_type: "registered_model_source",
+        parameters: { model_id: "" },
+        position: { x: 300, y: 180 },
+      },
+      {
+        node_id: "pose",
+        node_type: "pose_inference",
+        parameters: { device: "auto" },
+        position: { x: 580, y: 100 },
+      },
+      {
+        node_id: "associate",
+        node_type: "pose_identity_association",
+        parameters: {
+          max_gap_frames: 5,
+          max_normalized_distance: 1.5,
+          acceptance_threshold: 0.75,
+          low_confidence_threshold: 0.6,
+        },
+        position: { x: 860, y: 100 },
+      },
+      {
+        node_id: "review",
+        node_type: "pose_identity_review_gate",
+        parameters: {},
+        position: { x: 1140, y: 100 },
+      },
+      {
+        node_id: "evaluate",
+        node_type: "pose_identity_evaluation",
+        parameters: { truth_dataset_id: "", spatial_iou_threshold: 0.5 },
+        position: { x: 1420, y: 100 },
+      },
+      {
+        node_id: "export",
+        node_type: "pose_identity_export",
+        parameters: { format: "json" },
+        position: { x: 1700, y: 100 },
+      },
+    ],
+    edges: [
+      {
+        edge_id: "project-video",
+        source_node_id: "project",
+        source_port_id: "project",
+        target_node_id: "video",
+        target_port_id: "project",
+      },
+      {
+        edge_id: "project-model",
+        source_node_id: "project",
+        source_port_id: "project",
+        target_node_id: "model",
+        target_port_id: "project",
+      },
+      {
+        edge_id: "video-pose",
+        source_node_id: "video",
+        source_port_id: "video",
+        target_node_id: "pose",
+        target_port_id: "video",
+      },
+      {
+        edge_id: "model-pose",
+        source_node_id: "model",
+        source_port_id: "model",
+        target_node_id: "pose",
+        target_port_id: "model",
+      },
+      {
+        edge_id: "pose-associate",
+        source_node_id: "pose",
+        source_port_id: "poses",
+        target_node_id: "associate",
+        target_port_id: "poses",
+      },
+      {
+        edge_id: "associate-review",
+        source_node_id: "associate",
+        source_port_id: "tracks",
+        target_node_id: "review",
+        target_port_id: "tracks",
+      },
+      {
+        edge_id: "review-evaluate",
+        source_node_id: "review",
+        source_port_id: "tracks",
+        target_node_id: "evaluate",
+        target_port_id: "tracks",
+      },
+      {
+        edge_id: "evaluate-export",
+        source_node_id: "evaluate",
+        source_port_id: "evaluation",
+        target_node_id: "export",
+        target_port_id: "evaluation",
+      },
+    ],
+  };
+}
+
 export const workflowTemplates: WorkflowTemplate[] = [
   {
     id: "pose-model-comparison",
@@ -1055,6 +1181,13 @@ export const workflowTemplates: WorkflowTemplate[] = [
     description:
       "Pose inference → temporal identity → scientist review → Active Learning → verified dataset → retrain → register → Results Package, with a visual next-iteration cue.",
     graph: poseActiveLearningRetrain,
+  },
+  {
+    id: "pose-identity-evaluation",
+    name: "Multi-animal pose identity evaluation",
+    description:
+      "Pose inference → deterministic individual association → scientist identity review → IDF1 evaluation → provenance-preserving export.",
+    graph: createPoseIdentityEvaluationWorkflow(),
   },
   {
     id: "project-images",

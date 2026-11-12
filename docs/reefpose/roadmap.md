@@ -14,8 +14,10 @@ Updated: 2026-11-12
   Builder: complete, subject to optional SLEAP runtime availability and real biological
   validation.
 - Phase 4 — pose-aware multi-animal association, identity review, IDF1, and
-  identity-switch analysis: design complete; implementation not started.
+  identity-switch analysis: complete for the deterministic, scientist-gated vertical
+  slice, subject to real biological validation.
 
-Recommended next task: implement the auditable deterministic Phase 4 association
-baseline and immutable identity-labeled evaluation fixtures described in
-`docs/superpowers/specs/2026-11-12-reefpose-phase4-multi-animal-design.md`.
+Recommended next task: Phase 5 biological movement analysis and event counting from
+scientist-reviewed identity tracks and stable anatomical landmarks. Begin with
+transparent kinematic measurements and manually verified event intervals; defer learned
+behavior classifiers until real multi-animal videos establish an evaluation baseline.

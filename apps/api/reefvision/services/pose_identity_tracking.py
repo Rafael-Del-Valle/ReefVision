@@ -831,11 +831,14 @@ class PoseIdentityTrackingService:
             )
             for item in prediction_records
         ]
-        report = evaluate_pose_identities(
-            truth_observations,
-            predictions,
-            iou_threshold=payload.spatial_iou_threshold,
-        )
+        try:
+            report = evaluate_pose_identities(
+                truth_observations,
+                predictions,
+                iou_threshold=payload.spatial_iou_threshold,
+            )
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
         metrics = asdict(report)
         warnings = [
             "Identity association metrics do not measure anatomical landmark localization accuracy."

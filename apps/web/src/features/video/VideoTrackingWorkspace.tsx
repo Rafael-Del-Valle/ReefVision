@@ -6,6 +6,7 @@ import { GeoreferencingSetupPanel } from "./GeoreferencingSetupPanel";
 import { GeographicExportPanel } from "./GeographicExportPanel";
 import { GeographicMovementAnalyticsPanel } from "./GeographicMovementAnalyticsPanel";
 import { PoseActiveLearningPanel } from "./PoseActiveLearningPanel";
+import { PoseIdentityReviewPanel } from "./PoseIdentityReviewPanel";
 import {
   reviewPoseActiveLearningCandidate,
   type PoseActiveLearningCandidate,
@@ -1884,6 +1885,22 @@ export function VideoTrackingWorkspace({
           </p>
         )}
       </section>
+
+      {selectedVideo &&
+        (tracksQuery.data ?? []).some((track) =>
+          Boolean(poseLandmarkSchemaFromMetadata(track.metadata_json)),
+        ) && (
+          <PoseIdentityReviewPanel
+            projectId={project.id}
+            videoId={selectedVideo.id}
+            frameIndex={frameIndex}
+            tracks={tracksQuery.data ?? []}
+            onFrameChange={(nextFrame) => {
+              setFrameIndex(nextFrame);
+              setPreviewFrameIndex(nextFrame);
+            }}
+          />
+        )}
 
       {selectedVideo && (
         <section className="management-card">
