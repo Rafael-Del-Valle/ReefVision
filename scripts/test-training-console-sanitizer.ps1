@@ -127,7 +127,11 @@ if (-not $finiteMatch.Success) {
   throw 'Training monitor must define Test-FiniteMetricValue.'
 }
 Invoke-Expression $finiteMatch.Value
-foreach ($valid in @(0, 0.25, -0.125, [decimal]1.5, [single]0.75, [double]::Epsilon, [double]::MaxValue)) {
+# Losses may be serialized as integer, decimal, single or double precision. Keep
+# signed finite extrema valid without allowing nonfinite IEEE-754 sentinels.
+foreach ($valid in @(0, 0.25, -0.125, [decimal]1.5, [decimal]::MaxValue,
+    [single]0.75, [single]::Epsilon, [single]::MaxValue,
+    [double]::Epsilon, [double]::MaxValue, [int]::MinValue, [long]::MaxValue)) {
   if (-not (Test-FiniteMetricValue -Value $valid)) {
     throw ('Finite training metric was rejected: {0}' -f $valid)
   }
@@ -135,7 +139,7 @@ foreach ($valid in @(0, 0.25, -0.125, [decimal]1.5, [single]0.75, [double]::Epsi
 # A training-run API response may contain JSON arrays/objects or timestamp fields.
 # None is a scalar measured loss, even if PowerShell would coerce it to text.
 foreach ($invalid in @($null, $true, $false, '0.00', 'NaN', [double]::NaN, [double]::PositiveInfinity, [double]::NegativeInfinity,
-    [datetime]'2026-01-01', [char]'1', [System.DayOfWeek]::Monday, @{ value = 0.25 }, [double]::PositiveInfinity, [single]::NaN)) {
+    [datetime]'2026-01-01', [char]'1', [System.DayOfWeek]::Monday, @{ value = 0.25 }, [single]::NaN, [single]::NegativeInfinity)) {
   if (Test-FiniteMetricValue -Value $invalid) {
     throw ('Untrusted or nonfinite training metric was accepted: {0}' -f $invalid)
   }
