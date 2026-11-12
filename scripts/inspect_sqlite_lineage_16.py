@@ -69,19 +69,30 @@ def inspect(path: Path) -> dict:
         alembic_stamp_validation_error = None
         if "alembic_version" in names:
             try:
+                # A foreign or partially migrated Alembic table can contain a
+                # valid version_num alongside unrelated lineage columns. Never
+                # accept that stamp as evidence of a canonical Alembic table.
+                stamp_columns = [
+                    row[1] for row in connection.execute(
+                        "PRAGMA table_xinfo(alembic_version)"
+                    )
+                ]
+                if stamp_columns != ["version_num"]:
+                    alembic_stamp_validation_error = "unexpected_alembic_version_columns"
                 # Do not sort SQLite mixed-type values or serialize raw BLOBs:
                 # malformed stamps must remain structured, JSON-safe evidence.
                 raw_stamps = [row[0] for row in connection.execute(
                     "SELECT version_num FROM alembic_version"
                 )]
                 stamps = [value if isinstance(value, str) else None for value in raw_stamps]
-                if len(raw_stamps) != 1:
+                if len(raw_stamps) != 1 and alembic_stamp_validation_error is None:
                     alembic_stamp_validation_error = "expected_exactly_one_revision_row"
-                elif not isinstance(raw_stamps[0], str) or (
+                elif len(raw_stamps) == 1 and (
+                    not isinstance(raw_stamps[0], str) or (
                     not raw_stamps[0]
                     or raw_stamps[0] != raw_stamps[0].strip()
                     or any(ord(char) < 32 or ord(char) == 127 for char in raw_stamps[0])
-                ):
+                ) and alembic_stamp_validation_error is None:
                     alembic_stamp_validation_error = "invalid_revision_marker_type_or_value"
             except sqlite3.DatabaseError as exc:
                 # Partial/corrupt lineage metadata must remain visible as
