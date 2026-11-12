@@ -203,6 +203,11 @@ def mesh_edge_paths(
             path_qc_warnings = []
             if shortest[end] > 0 and meters == 0:
                 path_qc_warnings.append("calibrated_path_length_underflow")
+            if chord_mesh_units == 0 and shortest[end] > 0:
+                # Distinct mesh vertices can occupy identical coordinates. A
+                # nonzero surface route between them has no usable chord for
+                # detour interpretation and needs explicit scientist review.
+                path_qc_warnings.append("coincident_route_endpoints")
             if chord_mesh_units > 0 and chord_m == 0:
                 path_qc_warnings.append("calibrated_endpoint_chord_underflow")
             if geometric_excess_source_units > 0 and geometric_excess_m == 0:
