@@ -116,7 +116,7 @@ if (-not $finiteMatch.Success) {
   throw 'Training monitor must define Test-FiniteMetricValue.'
 }
 Invoke-Expression $finiteMatch.Value
-foreach ($valid in @(0, 0.25, -0.125, [decimal]1.5, [single]0.75)) {
+foreach ($valid in @(0, 0.25, -0.125, [decimal]1.5, [single]0.75, [double]::Epsilon, [double]::MaxValue)) {
   if (-not (Test-FiniteMetricValue -Value $valid)) {
     throw ('Finite training metric was rejected: {0}' -f $valid)
   }
@@ -124,7 +124,7 @@ foreach ($valid in @(0, 0.25, -0.125, [decimal]1.5, [single]0.75)) {
 # A training-run API response may contain JSON arrays/objects or timestamp fields.
 # None is a scalar measured loss, even if PowerShell would coerce it to text.
 foreach ($invalid in @($null, $true, $false, '0.00', 'NaN', [double]::NaN, [double]::PositiveInfinity, [double]::NegativeInfinity,
-    [datetime]'2026-01-01', [char]'1', @{ value = 0.25 })) {
+    [datetime]'2026-01-01', [char]'1', @{ value = 0.25 }, [double]::PositiveInfinity, [single]::NaN)) {
   if (Test-FiniteMetricValue -Value $invalid) {
     throw ('Untrusted or nonfinite training metric was accepted: {0}' -f $invalid)
   }
@@ -138,7 +138,10 @@ if (Test-FiniteMetricValue -Value $structuredLoss) {
 }
 
 
-# PowerShell single-quoted regex strings use one backslash for regex escapes.\n# Double backslashes would match literal backslashes instead of HTTP verbs,\n# allowing the request inventory assertion to miss the real monitor calls.\n# The external monitor must remain a passive observer of the existing worker.
+# PowerShell single-quoted regex strings use one backslash for regex escapes.
+# Double backslashes would match literal backslashes instead of HTTP verbs,
+# allowing the request inventory assertion to miss the real monitor calls.
+# The external monitor must remain a passive observer of the existing worker.
 # Check the actual embedded PowerShell script, not a mock monitor: a future
 # refactor must not add a mutation request, job launch, or process termination.
 $monitorStart = $source.IndexOf("let script = format!")
