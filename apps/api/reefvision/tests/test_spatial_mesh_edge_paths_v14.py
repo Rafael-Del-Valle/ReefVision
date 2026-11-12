@@ -767,9 +767,7 @@ def test_degenerate_triangle_route_qc_survives_saved_workflow(
 
     # Re-executing the same persisted graph must not lose scientific QC or
     # silently upgrade provisional calibration to human-verified evidence.
-    rerun = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    rerun = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert rerun.status_code == 202, rerun.text
     assert process_workflow_run_job(
         app.state.settings, app.state.session_factory, str(rerun.json()["job_id"])
@@ -783,3 +781,30 @@ def test_degenerate_triangle_route_qc_survives_saved_workflow(
         if item["data_type"] == "mesh_measurement_preview"
     )
     assert rerun_artifact == artifact
+
+
+def test_degenerate_triangle_off_selected_route_does_not_contaminate_qc() -> None:
+    # A defective, disconnected reconstruction patch is not evidence that a
+    # separately selected geometric route traverses degenerate triangles.
+    from reefvision.services.spatial_mesh_paths_v14 import mesh_edge_paths
+
+    routes = mesh_edge_paths(
+        points=[
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (3.0, 0.0, 0.0),
+            (4.0, 0.0, 0.0),
+            (5.0, 0.0, 0.0),
+        ],
+        faces=[[0, 1, 2], [3, 4, 5]],
+        pairs=[[0, 1], [3, 4]],
+        scale=0.1,
+        scale_uncertainty=0.1,
+    )
+    assert routes is not None
+    assert routes[0]["status"] == "connected"
+    assert routes[0]["length_m"] == pytest.approx(0.1)
+    assert "degenerate_triangle_on_path" not in routes[0]["path_qc_warnings"]
+    assert routes[1]["status"] == "connected"
+    assert "degenerate_triangle_on_path" in routes[1]["path_qc_warnings"]
