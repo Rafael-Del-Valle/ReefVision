@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -303,6 +304,7 @@ class PoseIdentityTrackingService:
         identity_by_key: dict[str, PoseAnimalIdentity] = {}
         for summary in result.identities:
             record = PoseAnimalIdentity(
+                id=str(uuid4()),
                 association_run_id=run.id,
                 stable_identity_key=summary.identity_key,
                 display_name=summary.identity_key,
@@ -315,7 +317,6 @@ class PoseIdentityTrackingService:
             )
             self.session.add(record)
             identity_by_key[summary.identity_key] = record
-        self.session.flush()
 
         observation_by_detection: dict[str, PoseIdentityObservation] = {}
         for index, assignment in enumerate(result.assignments, start=1):
@@ -326,6 +327,7 @@ class PoseIdentityTrackingService:
                 identity_by_key.get(assignment.identity_key) if assignment.identity_key else None
             )
             observation = PoseIdentityObservation(
+                id=str(uuid4()),
                 observation_series_id=_json_hash(
                     {"run_id": run.id, "detection_id": detection.detection_id}
                 )[:36],
@@ -350,12 +352,13 @@ class PoseIdentityTrackingService:
             observation_by_detection[detection.detection_id] = observation
             if progress:
                 progress(association_frame_count + index, total_work)
-        self.session.flush()
 
         latest_by_identity: dict[str, PoseIdentityObservation] = {}
         for decision in sorted(
             result.decisions, key=lambda item: (item.frame_index, item.detection_id)
         ):
+            if cancellation_check:
+                cancellation_check()
             observation = observation_by_detection[decision.detection_id]
             previous = (
                 latest_by_identity.get(decision.candidate_identity_key)
@@ -398,6 +401,8 @@ class PoseIdentityTrackingService:
                     recovery_confidence=interval.recovery_confidence,
                 )
             )
+        if cancellation_check:
+            cancellation_check()
         run.status = "completed"
         run.progress_json = {
             "stage": "completed",

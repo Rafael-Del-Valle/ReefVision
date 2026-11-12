@@ -364,6 +364,34 @@ describe("PoseIdentityReviewPanel", () => {
     ).toBeInTheDocument();
   });
 
+  it("does not cancel a submitted job when another run is selected", async () => {
+    vi.mocked(identityApi.createPoseIdentityRun).mockResolvedValue({
+      id: "identity-job-new",
+      status: "queued",
+      progress_current: 0,
+      progress_total: 1,
+      result_json: { run_id: "run-new" },
+      error_message: null,
+    });
+    renderPanel();
+    await screen.findByRole("button", { name: "animal-0001" });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Associate individuals" }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "Cancel association" }),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Identity run"), {
+      target: { value: "run-1" },
+    });
+
+    expect(
+      screen.queryByRole("button", { name: "Cancel association" }),
+    ).not.toBeInTheDocument();
+    expect(identityApi.cancelPoseIdentityJob).not.toHaveBeenCalled();
+  });
+
   it("reloads identity records when a queued run reaches completion", async () => {
     const queuedRun = { ...run, status: "queued", completed_at: null };
     vi.mocked(identityApi.listPoseIdentityRuns).mockResolvedValue([queuedRun]);

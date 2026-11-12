@@ -78,7 +78,7 @@ was not performed.
 
 Backend:
 
-- Phase 4 and affected compatibility suites: 59 passed and two opt-in GPU evaluation
+- Phase 4 and affected compatibility suites: 61 passed and two opt-in GPU evaluation
   cases skipped after the final integrity review fixes.
 - Existing pose/video/workflow compatibility suites passed during milestone tasks.
 - Alembic disposable database: upgrade to 0041, downgrade to 0040, and re-upgrade to 0041
@@ -92,7 +92,7 @@ Backend:
 
 Frontend:
 
-- Vitest: 96 files, 508 tests passed, including persisted-run cancellation and the
+- Vitest: 96 files, 509 tests passed, including persisted-run cancellation and the
   completed-run cache regression.
 - TypeScript project check: passed.
 - Prettier check: passed.

@@ -48,6 +48,7 @@ export function PoseIdentityReviewPanel({
   const queryClient = useQueryClient();
   const [selectedRunId, setSelectedRunId] = useState("");
   const [submittedJobId, setSubmittedJobId] = useState<string | null>(null);
+  const [submittedRunId, setSubmittedRunId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [action, setAction] =
     useState<PoseIdentityCorrectionAction>("reassign");
@@ -74,7 +75,9 @@ export function PoseIdentityReviewPanel({
     selectedRun && ["queued", "running"].includes(selectedRun.status)
       ? selectedRun.source_job_id
       : null;
-  const cancellableJobId = persistedActiveJobId ?? submittedJobId;
+  const cancellableJobId =
+    persistedActiveJobId ??
+    (submittedRunId === selectedRunId ? submittedJobId : null);
   useEffect(() => {
     if (
       submittedJobId &&
@@ -82,6 +85,7 @@ export function PoseIdentityReviewPanel({
       ["completed", "failed", "cancelled"].includes(selectedRun.status)
     ) {
       setSubmittedJobId(null);
+      setSubmittedRunId(null);
     }
   }, [selectedRun?.source_job_id, selectedRun?.status, submittedJobId]);
   const identitiesQuery = useQuery({
@@ -195,7 +199,10 @@ export function PoseIdentityReviewPanel({
     onSuccess: async (job) => {
       setSubmittedJobId(job.id);
       const runId = job.result_json?.run_id;
-      if (runId) setSelectedRunId(runId);
+      if (runId) {
+        setSubmittedRunId(runId);
+        setSelectedRunId(runId);
+      }
       setMessage(
         "Identity association queued; progress is persisted by the background job.",
       );

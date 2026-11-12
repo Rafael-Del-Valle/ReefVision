@@ -142,7 +142,7 @@ def test_api_runs_association_persists_corrections_and_exports_provenance(
 
     loaded = client.get(f"/api/v1/pose-identity-runs/{run_id}")
     assert loaded.status_code == 200, loaded.text
-    assert loaded.json()["status"] == "completed"
+    assert loaded.json()["status"] == "completed", loaded.text
     assert loaded.json()["source_coordinate_space"] == "source_pixels"
 
     identities = client.get(f"/api/v1/pose-identity-runs/{run_id}/identities").json()

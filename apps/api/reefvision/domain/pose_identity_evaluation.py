@@ -202,6 +202,10 @@ def evaluate_pose_identities(
         )
 
     spatial_matches = len(matched_by_truth)
+    spatial_identity_matches = sum(
+        prediction_id == mapping.get(truth_id)
+        for (truth_id, _frame), prediction_id in matched_by_truth.items()
+    )
     return IdentityEvaluationReport(
         id_true_positives=idtp,
         id_false_positives=idfp,
@@ -214,8 +218,8 @@ def evaluate_pose_identities(
         spatial_matches=spatial_matches,
         spatial_misses=len(truth) - spatial_matches,
         spatial_false_positives=len(predictions) - len(matched_prediction_keys),
-        association_successes=idtp,
-        association_failures=spatial_matches - idtp,
+        association_successes=spatial_identity_matches,
+        association_failures=spatial_matches - spatial_identity_matches,
         identity_mapping=mapping,
         per_identity=tuple(per_identity),
     )

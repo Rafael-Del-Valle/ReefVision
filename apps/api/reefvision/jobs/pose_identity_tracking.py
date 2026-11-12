@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
@@ -58,24 +59,35 @@ def process_pose_identity_tracking_job(
         active_run = run
 
         def cancellation_check() -> None:
-            session.expire(active_job)
-            if active_job.status == "cancel_requested":
+            with factory() as status_session:
+                status = status_session.scalar(select(Job.status).where(Job.id == job_id))
+            if status == "cancel_requested":
                 raise PoseIdentityTrackingCancelled
 
         def progress(current: int, total: int) -> None:
-            active_job.progress_current = current
-            active_job.progress_total = total
-            active_job.result_json = {
-                "run_id": active_run.id,
-                "stage": "persisting",
-                "current": current,
-                "total": total,
-            }
-            active_run.progress_json = {
-                "stage": "persisting",
-                "current": current,
-                "total": total,
-            }
+            with factory() as progress_session:
+                progress_job = progress_session.get(Job, job_id)
+                progress_run = progress_session.get(PoseIdentityAssociationRun, run_id)
+                if progress_job is None or progress_run is None:
+                    raise PoseIdentityTrackingCancelled
+                if progress_job.status == "cancel_requested":
+                    raise PoseIdentityTrackingCancelled
+                if progress_job.status != "running":
+                    return
+                progress_job.progress_current = current
+                progress_job.progress_total = total
+                progress_job.result_json = {
+                    "run_id": active_run.id,
+                    "stage": "persisting",
+                    "current": current,
+                    "total": total,
+                }
+                progress_run.progress_json = {
+                    "stage": "persisting",
+                    "current": current,
+                    "total": total,
+                }
+                progress_session.commit()
 
         try:
             completed = PoseIdentityTrackingService(session).execute(
@@ -85,6 +97,7 @@ def process_pose_identity_tracking_job(
                 cancellation_check=cancellation_check,
                 progress=progress,
             )
+            session.refresh(job)
             job.status = "completed"
             job.progress_current = job.progress_total
             job.completed_at = completed.completed_at or datetime.now(UTC)

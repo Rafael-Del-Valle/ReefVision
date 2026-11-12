@@ -84,6 +84,19 @@ def test_idf1_uses_global_eligible_trajectory_pairs_for_overlapping_animals() ->
     assert report.identity_mapping == {"truth-a": "pred-a", "truth-b": "pred-b"}
 
 
+def test_association_failures_use_frame_matching_population_when_global_idf1_differs() -> None:
+    truth = [_observation("truth-a", 0, 0), _observation("truth-b", 0, 6)]
+    prediction = [_observation("pred-a", 0, 0), _observation("pred-b", 0, -6)]
+
+    report = evaluate_pose_identities(truth, prediction, iou_threshold=0.2)
+
+    assert report.id_true_positives == 2
+    assert report.spatial_matches == 1
+    assert report.association_successes == 0
+    assert report.association_failures == 1
+    assert report.association_successes + report.association_failures == report.spatial_matches
+
+
 def test_missed_middle_observation_counts_fragmentation_and_coverage() -> None:
     truth = [_observation("truth", frame, float(frame)) for frame in range(3)]
     prediction = [
