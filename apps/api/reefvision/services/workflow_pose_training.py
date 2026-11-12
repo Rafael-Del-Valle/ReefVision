@@ -128,6 +128,11 @@ def _pose_dataset(
     payload: dict[str, Any],
     role: str,
 ) -> PoseTrainingDataset:
+    # Saved Workflow Builder artifacts are untrusted at execution/replay time.
+    # Reject malformed payloads with a domain error before reading their fields.
+    if not isinstance(payload, dict):
+        raise ValidationError(f"Pose {role} dataset artifact must be a JSON object")
+
     # A connected artifact's explicit project identity is a provenance assertion.
     # Null must not be interpreted as an omitted project when replaying a graph.
     if "project_id" in payload and payload["project_id"] != project_id:
