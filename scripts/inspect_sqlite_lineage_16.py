@@ -152,9 +152,17 @@ def main() -> None:
         action="store_true",
         help="Exit 2 when --compare-to finds different structural fingerprints",
     )
+    parser.add_argument(
+        "--fail-on-revision-mismatch",
+        action="store_true",
+        help="Exit 2 when --compare-to finds different Alembic revision markers; "
+        "still require human review even when markers match",
+    )
     args = parser.parse_args()
     if args.fail_on_schema_drift and args.compare_to is None:
         parser.error("--fail-on-schema-drift requires --compare-to")
+    if args.fail_on_revision_mismatch and args.compare_to is None:
+        parser.error("--fail-on-revision-mismatch requires --compare-to")
     evidence = inspect(args.database)
     reference = None
     if args.compare_to is not None:
@@ -185,6 +193,13 @@ def main() -> None:
                 "alembic_stamp_validation_error": reference["alembic_stamp_validation_error"],
             },
             "matches": evidence["schema_sha256"] == reference["schema_sha256"],
+            "revision_markers_match": (
+                evidence["alembic_stamps"] == reference["alembic_stamps"]
+                and evidence["alembic_stamp_error"] is None
+                and reference["alembic_stamp_error"] is None
+                and evidence["alembic_stamp_validation_error"] is None
+                and reference["alembic_stamp_validation_error"] is None
+            ),
             "only_in_database": describe(source_objects - reference_objects),
             "only_in_reference": describe(reference_objects - source_objects),
             # Same named object can have different DDL; hashes, not name
@@ -193,6 +208,9 @@ def main() -> None:
         }
     print(json.dumps(evidence, indent=2, sort_keys=True))
     if args.fail_on_schema_drift and not evidence["schema_comparison"]["matches"]:
+        raise SystemExit(2)
+
+    if args.fail_on_revision_mismatch and not evidence["schema_comparison"]["revision_markers_match"]:
         raise SystemExit(2)
 
     def has_integrity_error(report: dict) -> bool:
