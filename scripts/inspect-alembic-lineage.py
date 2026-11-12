@@ -56,6 +56,21 @@ def inspect(path: Path) -> dict:
             if version_table_present
             else set()
         )
+        # Alembic's canonical SQLite stamp is a single non-null primary-key
+        # version_num column. A plausible revision string alone is insufficient
+        # evidence when a restored table permits duplicate or NULL stamps.
+        version_table_info = (
+            list(db.execute('PRAGMA table_info("alembic_version")'))
+            if version_table_present
+            else []
+        )
+        canonical_stamp_constraints = (
+            len(version_table_info) == 1
+            and version_table_info[0][1] == "version_num"
+            and str(version_table_info[0][2]).upper() in {"VARCHAR(32)", "VARCHAR", "TEXT"}
+            and version_table_info[0][3] == 1
+            and version_table_info[0][5] == 1
+        )
         # A malformed Alembic table is a diagnostic finding, not an inspector crash.
         revisions = (
             [row[0] for row in db.execute("SELECT version_num FROM alembic_version")]
@@ -101,6 +116,8 @@ def inspect(path: Path) -> dict:
                 warnings.append(warning)
         if not version_table_present:
             warnings.append("missing_alembic_version_table")
+        elif not canonical_stamp_constraints:
+            warnings.append("noncanonical_alembic_stamp_constraints")
         elif "version_num" not in version_columns:
             warnings.append("missing_alembic_version_column")
         elif version_columns != {"version_num"}:
@@ -139,6 +156,7 @@ def inspect(path: Path) -> dict:
             # SQLite permits BLOB/INTEGER revision cells despite Alembic expecting TEXT.
             # Keep the report JSON-safe without exposing arbitrary binary payloads.
             "revision_rows": [value if isinstance(value, str) else None for value in revisions],
+            "canonical_alembic_stamp_constraints": canonical_stamp_constraints,
             "lineage_hint": lineage,
             "upgrade_authorized": False,
             "inventory": inventory,
