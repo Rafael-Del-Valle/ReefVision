@@ -931,3 +931,29 @@ def test_tiny_geometric_excess_underflow_is_rejected_before_workflow_persistence
     standalone = client.post(f"{base}/spatial/mesh-preview", json=parameters)
     assert standalone.status_code == 400
     assert standalone.json()["detail"] == "Calibrated mesh surface area underflowed to zero"
+
+
+def test_coincident_mesh_route_endpoints_require_scientist_review() -> None:
+    # Distinct vertex IDs can share physical coordinates without sharing an
+    # edge. Their nonzero mesh route cannot yield a meaningful detour ratio.
+    from reefvision.services.spatial_mesh_paths_v14 import mesh_edge_paths
+
+    routes = mesh_edge_paths(
+        points=[
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+        ],
+        faces=[[0, 1, 3], [1, 2, 3]],
+        pairs=[[0, 2], [0, 1]],
+        scale=0.1,
+        scale_uncertainty=0.1,
+    )
+    assert routes is not None
+    assert routes[0]["status"] == "connected"
+    assert routes[0]["length_m"] == pytest.approx(0.2)
+    assert routes[0]["endpoint_chord_length_m"] == 0
+    assert routes[0]["geometric_detour_ratio"] is None
+    assert "coincident_route_endpoints" in routes[0]["path_qc_warnings"]
+    assert "coincident_route_endpoints" not in routes[1]["path_qc_warnings"]
