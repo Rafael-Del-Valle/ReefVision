@@ -810,8 +810,10 @@ def test_degenerate_triangle_off_selected_route_does_not_contaminate_qc() -> Non
     assert "degenerate_triangle_on_path" in routes[1]["path_qc_warnings"]
 
 
+@pytest.mark.parametrize("duplicate_face", [[0, 1, 2], [2, 1, 0]])
 def test_duplicate_triangles_are_route_scoped_and_survive_saved_workflow(
     client: TestClient,
+    duplicate_face: list[int],
 ) -> None:
     # Duplicate faces can corrupt reconstructed topology even when a route
     # remains geometrically measurable. Do not promote it to a centerline.
@@ -825,7 +827,7 @@ def test_duplicate_triangles_are_route_scoped_and_survive_saved_workflow(
         [4.0, 0.0, 0.0],
         [3.0, 1.0, 0.0],
     ]
-    faces = [[0, 1, 2], [2, 1, 0], [3, 4, 5]]
+    faces = [[0, 1, 2], duplicate_face, [3, 4, 5]]
     routes = mesh_edge_paths(
         points=[tuple(vertex) for vertex in vertices],
         faces=faces,
