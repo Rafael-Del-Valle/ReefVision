@@ -45,7 +45,7 @@ function preferenceKey(projectId: string): string | null {
     projectId.length === 0 ||
     projectId.length > 256 ||
     projectId.trim().length === 0 ||
-    /[\x00-\x1f\x7f]/.test(projectId)
+    /[\x00-\x1f\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2060\u2066-\u206f\ufeff]/.test(projectId)
   ) {
     return null;
   }
