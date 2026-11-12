@@ -136,3 +136,17 @@ review, preservation of original database bytes and no biological-note
 disclosure. These committed tests require exact-head CI verification.
 This does **not** reconcile independent 1.1/1.6 revision-0038 histories;
 native Windows MSI, installed GUI and scientific acceptance remain blocked.
+
+## 2026-11-12 — Integrity gate includes Alembic column constraints
+
+The optional `--fail-on-integrity-error` gate now rejects noncanonical
+`alembic_version.version_num` column constraints (missing NOT NULL or
+single-column primary key), whether found in the primary or comparison
+database. Previously, the diagnostic reported
+`alembic_stamp_constraint_error` but the integrity gate could return zero
+if all other checks passed. The default read-only diagnostic remains
+backwards compatible and reports `requires_researcher_review` without
+modifying data. Parameterized subprocess regressions cover both sides,
+JSON evidence, exit status, confidential notes, and byte preservation.
+Passing exact-head CI, independent migration reconciliation, and native
+Windows installed-GUI acceptance remain required.
