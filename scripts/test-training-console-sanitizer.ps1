@@ -111,7 +111,7 @@ if ($hyperlinkSafe.Contains('example.invalid') -or
 # Validate the real monitor's metric gate: strings, booleans, NaN and infinity
 # must never be displayed as measured training losses. Finite numeric values
 # (including a real zero) must remain eligible for the box/cls/dfl display.
-$finiteMatch = [regex]::Match($source, '(?ms)^function Test-FiniteMetricValue \\{.*?^\\}')
+$finiteMatch = [regex]::Match($source, '(?ms)^function Test-FiniteMetricValue \{.*?^\}')
 if (-not $finiteMatch.Success) {
   throw 'Training monitor must define Test-FiniteMetricValue.'
 }
