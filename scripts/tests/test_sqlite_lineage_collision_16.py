@@ -114,6 +114,8 @@ def test_collision_gate_rejects_noncanonical_stamp_constraints(
     report = json.loads(result.stdout)
     assert report["classification"] == "requires_researcher_review"
     assert report["schema_comparison"]["requires_researcher_review"] is True
+    # A matching text stamp on a noncanonical table is not a validated match.
+    assert report["schema_comparison"]["revision_markers_match"] is False
     assert (
         report["alembic_stamp_constraint_error"] is not None
         or report["schema_comparison"]["reference_integrity"][
