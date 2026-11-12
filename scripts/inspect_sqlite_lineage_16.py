@@ -222,6 +222,9 @@ def main() -> None:
         evidence["schema_comparison"] = {
             "reference_database": reference["database"],
             "reference_schema_sha256": reference["schema_sha256"],
+            # Show both validated revision values to support independent human
+            # reconciliation; a boolean alone cannot explain mismatched stamps.
+            "reference_alembic_stamps": reference["alembic_stamps"],
             "reference_integrity": {
                 "quick_check_details": reference["quick_check_details"],
                 "integrity_check_details": reference["integrity_check_details"],
