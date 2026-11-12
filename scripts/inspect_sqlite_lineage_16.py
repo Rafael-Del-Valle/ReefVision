@@ -72,13 +72,22 @@ def inspect(path: Path) -> dict:
                 # A foreign or partially migrated Alembic table can contain a
                 # valid version_num alongside unrelated lineage columns. Never
                 # accept that stamp as evidence of a canonical Alembic table.
-                stamp_columns = [
-                    row[1]
-                    for row in connection.execute("PRAGMA table_xinfo(alembic_version)")
-                ]
-                if stamp_columns != ["version_num"]:
+                stamp_columns = list(
+                    connection.execute("PRAGMA table_xinfo(alembic_version)")
+                )
+                if [row[1] for row in stamp_columns] != ["version_num"]:
                     alembic_stamp_validation_error = (
                         "unexpected_alembic_version_columns"
+                    )
+                elif (
+                    stamp_columns[0][3] != 1  # NOT NULL
+                    or stamp_columns[0][5] != 1  # single-column primary key
+                    or stamp_columns[0][6] != 0  # ordinary, non-hidden column
+                ):
+                    # A name-only match can conceal an unrelated table with
+                    # nonunique or nullable lineage markers. Do not trust it.
+                    alembic_stamp_validation_error = (
+                        "invalid_alembic_version_column_constraints"
                     )
                 # Do not sort SQLite mixed-type values or serialize raw BLOBs:
                 # malformed stamps must remain structured, JSON-safe evidence.
