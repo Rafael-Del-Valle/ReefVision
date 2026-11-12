@@ -311,8 +311,16 @@ def main() -> None:
             raise SystemExit(2)
 
     if args.fail_on_noncanonical_stamp and (
-        evidence["alembic_stamp_constraint_error"] is not None
-        or (reference is not None and reference["alembic_stamp_constraint_error"] is not None)
+        any(
+            report[field] is not None
+            for report in (evidence, reference)
+            if report is not None
+            for field in (
+                "alembic_stamp_error",
+                "alembic_stamp_validation_error",
+                "alembic_stamp_constraint_error",
+            )
+        )
     ):
         raise SystemExit(2)
 
