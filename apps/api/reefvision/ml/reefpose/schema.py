@@ -274,18 +274,27 @@ class AnatomySchema:
             if source_version == cls.LEGACY_SCHEMA_VERSION:
                 extended = schema._canonical_payload()
                 extended["schema_version"] = cls.LEGACY_SCHEMA_VERSION
-                legacy = {
-                    **extended,
-                    "landmarks": [
+                candidates = [extended]
+                has_extended_landmark_metadata = any(
+                    isinstance(item, dict)
+                    and ("symmetric_with" in item or "required" in item)
+                    for item in raw_landmarks
+                )
+                if not has_extended_landmark_metadata:
+                    candidates.append(
                         {
-                            key: value
-                            for key, value in landmark.to_dict().items()
-                            if key not in {"symmetric_with", "required"}
+                            **extended,
+                            "landmarks": [
+                                {
+                                    key: value
+                                    for key, value in landmark.to_dict().items()
+                                    if key not in {"symmetric_with", "required"}
+                                }
+                                for landmark in schema.landmarks
+                            ],
                         }
-                        for landmark in schema.landmarks
-                    ],
-                }
-                for candidate in (extended, legacy):
+                    )
+                for candidate in candidates:
                     valid_hashes.add(
                         hashlib.sha256(
                             json.dumps(

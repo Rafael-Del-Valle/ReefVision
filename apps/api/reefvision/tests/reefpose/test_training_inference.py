@@ -86,6 +86,62 @@ class CheckpointAndTrainingTests(unittest.TestCase):
                     self.assertEqual(state.schema.schema_id, "schema-1")
                     self.assertEqual(state.schema.SCHEMA_VERSION, "reefpose-anatomy-0002")
 
+    def test_historical_v1_hash_cannot_authorize_added_anatomy_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            model = ReefPoseS(
+                ReefPoseConfig(
+                    num_keypoints=2,
+                    input_height=64,
+                    input_width=64,
+                    base_channels=8,
+                )
+            )
+            path = root / "historical-v1.pt"
+            save_checkpoint(path, model=model, schema=_schema(), epoch=0, global_step=0)
+            payload = torch.load(path, map_location="cpu", weights_only=True)
+            anatomy = payload["anatomy_schema"]
+            anatomy["schema_version"] = "reefpose-anatomy-0001"
+            for landmark in anatomy["landmarks"]:
+                landmark.pop("symmetric_with", None)
+                landmark.pop("required", None)
+            anatomy.pop("integrity_hash")
+            historical_hash = hashlib.sha256(
+                json.dumps(
+                    anatomy,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                ).encode("utf-8")
+            ).hexdigest()
+            anatomy["integrity_hash"] = historical_hash
+            payload["anatomy_integrity_hash"] = historical_hash
+
+            for mutation in ("required", "symmetry"):
+                with self.subTest(mutation=mutation):
+                    changed = dict(payload)
+                    changed_anatomy = {
+                        **anatomy,
+                        "landmarks": [dict(item) for item in anatomy["landmarks"]],
+                    }
+                    if mutation == "required":
+                        changed_anatomy["landmarks"][0]["required"] = False
+                    else:
+                        changed_anatomy["landmarks"][0]["symmetric_with"] = "point-1"
+                        changed_anatomy["landmarks"][1]["symmetric_with"] = "point-0"
+                    changed["anatomy_schema"] = changed_anatomy
+                    torch.save(changed, path)
+
+                    with self.assertRaisesRegex(
+                        ReefPoseValidationError,
+                        "integrity hash",
+                    ):
+                        load_checkpoint(
+                            path,
+                            device="cpu",
+                            expected_schema_hash=historical_hash,
+                        )
+
     def test_checkpoint_round_trip_restores_schema_model_and_optimizer_state(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             path = Path(raw) / "checkpoint.pt"
