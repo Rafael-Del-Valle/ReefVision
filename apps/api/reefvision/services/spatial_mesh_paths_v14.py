@@ -47,7 +47,20 @@ def mesh_edge_paths(
     adjacency: dict[int, dict[int, float]] = {index: {} for index in referenced}
     edge_incidence: Counter[tuple[int, int]] = Counter()
     edge_orientations: dict[tuple[int, int], list[bool]] = {}
+    degenerate_edges: set[tuple[int, int]] = set()
     for a, b, c in faces:
+        ab = tuple(points[b][axis] - points[a][axis] for axis in range(3))
+        ac = tuple(points[c][axis] - points[a][axis] for axis in range(3))
+        cross = (
+            ab[1] * ac[2] - ab[2] * ac[1],
+            ab[2] * ac[0] - ab[0] * ac[2],
+            ab[0] * ac[1] - ab[1] * ac[0],
+        )
+        if all(component == 0 for component in cross):
+            degenerate_edges.update(
+                (min(first, second), max(first, second))
+                for first, second in ((a, b), (b, c), (c, a))
+            )
         for first, second in ((a, b), (b, c), (c, a)):
             edge = (min(first, second), max(first, second))
             edge_incidence[edge] += 1
@@ -173,6 +186,8 @@ def mesh_edge_paths(
             if detour_ratio is not None and not isfinite(detour_ratio):
                 detour_ratio = None
                 path_qc_warnings.append("geometric_detour_ratio_overflow")
+            if any(edge in degenerate_edges for edge in route_edges):
+                path_qc_warnings.append("degenerate_triangle_on_path")
             if any(edge_incidence[edge] > 2 for edge in route_edges):
                 path_qc_warnings.append("nonmanifold_edge_on_path")
             if any(edge_incidence[edge] == 1 for edge in route_edges):
