@@ -709,3 +709,29 @@ def test_revision_comparison_gate_rejects_malformed_reference_stamp(
         json.loads(result.stdout)["schema_comparison"]["revision_markers_match"] is False
     )
     assert (current.read_bytes(), reference.read_bytes()) == before
+
+
+def test_comparison_rejects_same_database_and_symlink_without_writes(tmp_path: Path) -> None:
+    """A self-comparison is not independent migration-reconciliation evidence."""
+    import subprocess
+    import sys
+
+    source = tmp_path / "source.sqlite"
+    alias = tmp_path / "alias.sqlite"
+    with sqlite3.connect(source) as db:
+        db.execute("CREATE TABLE alembic_version (version_num TEXT)")
+        db.execute("INSERT INTO alembic_version VALUES ('0038')")
+        db.execute("CREATE TABLE scientific_records (id INTEGER PRIMARY KEY, note TEXT)")
+        db.execute("INSERT INTO scientific_records VALUES (1, 'private observation')")
+    alias.symlink_to(source)
+    before = source.read_bytes()
+    for reference in (source, alias):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), str(source), "--compare-to", str(reference),
+             "--fail-on-schema-drift", "--fail-on-revision-mismatch"],
+            capture_output=True, text=True, check=False,
+        )
+        assert result.returncode == 2
+        assert "independent database" in result.stderr
+        assert "private observation" not in result.stderr
+        assert source.read_bytes() == before
