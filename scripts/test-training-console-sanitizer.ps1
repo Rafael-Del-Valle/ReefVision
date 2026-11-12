@@ -167,4 +167,24 @@ if ($monitorScript -notmatch 'Start-Sleep\s+-Seconds\s+2\b') {
   throw 'Read-only polling throttle was removed from training monitor.'
 }
 
+# Protect the actual loss-source precedence: the newest finite persisted epoch
+# history must override stale summary metrics, not the reverse. These are
+# source-contract assertions; live GPU training remains a separate acceptance gate.
+$summaryIndex = $monitorScript.IndexOf('foreach ($metric in $run.metrics.PSObject.Properties)')
+$historyIndex = $monitorScript.IndexOf('foreach ($series in $run.metrics_history.PSObject.Properties)')
+$historyReverseIndex = $monitorScript.IndexOf('for ($index = $values.Count - 1; $index -ge 0; $index -= 1)')
+$historyAssignIndex = $monitorScript.IndexOf('$latestMetrics[$series.Name] = $values[$index]')
+if ($summaryIndex -lt 0 -or $historyIndex -le $summaryIndex -or
+    $historyReverseIndex -le $historyIndex -or $historyAssignIndex -le $historyReverseIndex) {
+  throw 'Newest persisted epoch losses must override stale summary metrics.'
+}
+foreach ($lossKey in @('train/box_loss', 'train/cls_loss', 'train/dfl_loss')) {
+  if (-not $monitorScript.Contains("'" + $lossKey + "'")) {
+    throw ('Required measured training loss is missing: {0}' -f $lossKey)
+  }
+}
+if ($monitorScript -notmatch 'Test-FiniteMetricValue\s+-Value\s+\$values\[\$index\]') {
+  throw 'Persisted epoch loss history must reject nonfinite measurements.'
+}
+
 Write-Host 'PowerShell training console sanitizer regression passed.'
