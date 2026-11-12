@@ -173,6 +173,25 @@ class PoseIdentityTruthDatasetCreateRequest(BaseModel):
     observations: list[dict[str, Any]] = Field(min_length=1)
     verified_by: str = Field(min_length=1, max_length=100)
     verification_state: Literal["scientist_verified"] = "scientist_verified"
+    scientific_context: Literal["synthetic_engineering", "biological"] = "synthetic_engineering"
+
+
+class PoseIdentityTruthDatasetResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    project_id: str
+    video_id: str
+    name: str
+    pose_schema_id: str
+    pose_schema_revision: int
+    pose_schema_content_hash: str
+    manifest_json: dict[str, Any]
+    manifest_sha256: str
+    verification_state: str
+    verified_by: str
+    verified_at: datetime
+    created_at: datetime
 
 
 class PoseIdentityEvaluationRequest(BaseModel):

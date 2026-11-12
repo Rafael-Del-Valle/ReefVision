@@ -16,7 +16,11 @@ from reefvision.schemas.pose_identity_tracking import (
     PoseIdentityAssociationRunResponse,
     PoseIdentityCorrectionRequest,
     PoseIdentityCorrectionResponse,
+    PoseIdentityEvaluationRequest,
+    PoseIdentityEvaluationResponse,
     PoseIdentityObservationResponse,
+    PoseIdentityTruthDatasetCreateRequest,
+    PoseIdentityTruthDatasetResponse,
 )
 from reefvision.services.pose_identity_tracking import PoseIdentityTrackingService
 
@@ -131,3 +135,39 @@ def export_pose_identity_run(
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="reefpose-identities-{run_id}.csv"'},
     )
+
+
+@router.post(
+    "/projects/{project_id}/pose-identity-truth-datasets",
+    response_model=PoseIdentityTruthDatasetResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_pose_identity_truth_dataset(
+    project_id: str,
+    payload: PoseIdentityTruthDatasetCreateRequest,
+    session: DbSession,
+) -> PoseIdentityTruthDatasetResponse:
+    return PoseIdentityTrackingService(session).create_truth_dataset(project_id, payload)
+
+
+@router.post(
+    "/pose-identity-runs/{run_id}/evaluations",
+    response_model=PoseIdentityEvaluationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def evaluate_pose_identity_run(
+    run_id: str,
+    payload: PoseIdentityEvaluationRequest,
+    session: DbSession,
+) -> PoseIdentityEvaluationResponse:
+    return PoseIdentityTrackingService(session).evaluate(run_id, payload)
+
+
+@router.get(
+    "/pose-identity-evaluations/{evaluation_id}",
+    response_model=PoseIdentityEvaluationResponse,
+)
+def get_pose_identity_evaluation(
+    evaluation_id: str, session: DbSession
+) -> PoseIdentityEvaluationResponse:
+    return PoseIdentityTrackingService(session).get_evaluation(evaluation_id)

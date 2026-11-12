@@ -276,7 +276,7 @@ def _score(track: _Track, detection: PoseDetection, config: AssociationConfig) -
     )
 
 
-def _hungarian(costs: list[list[float]]) -> list[int]:
+def minimum_cost_assignment(costs: list[list[float]]) -> list[int]:
     """Return one selected column per row using deterministic rectangular Hungarian."""
 
     if not costs:
@@ -389,7 +389,7 @@ def associate_pose_identities(
                     for dummy_index in range(len(active_indices))
                 )
                 matrix.append(row)
-            for active_row, selected_column in enumerate(_hungarian(matrix)):
+            for active_row, selected_column in enumerate(minimum_cost_assignment(matrix)):
                 if selected_column < real_columns:
                     candidate = candidates[(active_row, selected_column)]
                     if candidate.passed_gate:

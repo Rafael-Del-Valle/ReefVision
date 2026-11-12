@@ -18,13 +18,19 @@ from reefvision.db.models import (
     PoseIdentityAssociationDecision,
     PoseIdentityAssociationRun,
     PoseIdentityCorrection,
+    PoseIdentityEvaluationRun,
     PoseIdentityObservation,
     PoseIdentityOcclusion,
+    PoseIdentityTruthDataset,
     Project,
     VideoAsset,
     VideoTrack,
 )
 from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.domain.pose_identity_evaluation import (
+    IdentityObservation,
+    evaluate_pose_identities,
+)
 from reefvision.domain.pose_identity_tracking import (
     AssociationConfig,
     Landmark,
@@ -38,7 +44,11 @@ from reefvision.schemas.pose_identity_tracking import (
     PoseIdentityAssociationRunResponse,
     PoseIdentityCorrectionRequest,
     PoseIdentityCorrectionResponse,
+    PoseIdentityEvaluationRequest,
+    PoseIdentityEvaluationResponse,
     PoseIdentityObservationResponse,
+    PoseIdentityTruthDatasetCreateRequest,
+    PoseIdentityTruthDatasetResponse,
 )
 from reefvision.schemas.videos import VideoTrackKeyframe
 from reefvision.storage.datasets import canonical_json_sha256
@@ -686,3 +696,202 @@ class PoseIdentityTrackingService:
                 ]
             )
         return output.getvalue()
+
+    def create_truth_dataset(
+        self, project_id: str, payload: PoseIdentityTruthDatasetCreateRequest
+    ) -> PoseIdentityTruthDatasetResponse:
+        project = self.session.get(Project, project_id)
+        video = self.session.get(VideoAsset, payload.video_id)
+        if project is None:
+            raise NotFoundError("Project not found")
+        if video is None or video.project_id != project_id:
+            raise ValidationError("Identity truth video does not belong to the project")
+        normalized: list[dict[str, Any]] = []
+        keys: set[tuple[str, int]] = set()
+        for raw in payload.observations:
+            identity_id = str(raw.get("identity_id") or "")
+            frame_index = raw.get("frame_index")
+            bbox = raw.get("bbox")
+            if not identity_id or not isinstance(frame_index, int):
+                raise ValidationError(
+                    "Truth observations require identity_id and integer frame_index"
+                )
+            if frame_index < 0 or frame_index >= video.frame_count:
+                raise ValidationError("Truth observation frame exceeds the source video")
+            if (
+                not isinstance(bbox, list)
+                or len(bbox) != 4
+                or any(not isinstance(value, int | float) for value in bbox)
+            ):
+                raise ValidationError("Truth observations require a four-value bounding box")
+            box = [float(value) for value in bbox]
+            if box[0] < 0 or box[1] < 0 or box[2] <= 0 or box[3] <= 0:
+                raise ValidationError("Truth bounding boxes must use source-pixel coordinates")
+            key = (identity_id, frame_index)
+            if key in keys:
+                raise ValidationError("Truth contains duplicate identity/frame observations")
+            keys.add(key)
+            normalized.append({"identity_id": identity_id, "frame_index": frame_index, "bbox": box})
+        manifest = {
+            "schema_version": "reefpose-identity-truth-0001",
+            "project_id": project_id,
+            "video_id": video.id,
+            "video_sha256": video.sha256,
+            "coordinate_space": "source_pixels",
+            "scientific_context": payload.scientific_context,
+            "pose_schema": {
+                "id": payload.pose_schema_id,
+                "revision": payload.pose_schema_revision,
+                "content_hash": payload.pose_schema_content_hash,
+            },
+            "observations": sorted(
+                normalized, key=lambda item: (item["frame_index"], item["identity_id"])
+            ),
+        }
+        manifest_sha256 = _json_hash(manifest)
+        existing = self.session.scalar(
+            select(PoseIdentityTruthDataset).where(
+                PoseIdentityTruthDataset.manifest_sha256 == manifest_sha256
+            )
+        )
+        if existing is not None:
+            return PoseIdentityTruthDatasetResponse.model_validate(existing)
+        now = datetime.now(UTC)
+        record = PoseIdentityTruthDataset(
+            project_id=project_id,
+            video_id=video.id,
+            name=payload.name,
+            pose_schema_id=payload.pose_schema_id,
+            pose_schema_revision=payload.pose_schema_revision,
+            pose_schema_content_hash=payload.pose_schema_content_hash,
+            manifest_json=manifest,
+            manifest_sha256=manifest_sha256,
+            verification_state="scientist_verified",
+            verified_by=payload.verified_by,
+            verified_at=now,
+        )
+        self.session.add(record)
+        self.session.commit()
+        self.session.refresh(record)
+        return PoseIdentityTruthDatasetResponse.model_validate(record)
+
+    def evaluate(
+        self, run_id: str, payload: PoseIdentityEvaluationRequest
+    ) -> PoseIdentityEvaluationResponse:
+        run = self._run(run_id)
+        if run.status != "completed":
+            raise ValidationError("Only completed identity runs can be evaluated")
+        truth = self.session.get(PoseIdentityTruthDataset, payload.truth_dataset_id)
+        if truth is None:
+            raise NotFoundError("Identity truth dataset not found")
+        if truth.verification_state != "scientist_verified":
+            raise ValidationError("Identity evaluation requires scientist-verified truth")
+        if truth.project_id != run.project_id or truth.video_id != run.video_id:
+            raise ValidationError("Identity truth and association run must share project and video")
+        if (
+            truth.pose_schema_id != run.pose_schema_id
+            or truth.pose_schema_revision != run.pose_schema_revision
+            or truth.pose_schema_content_hash != run.pose_schema_content_hash
+        ):
+            raise ValidationError("Identity truth pose schema is incompatible with the run")
+
+        truth_observations = [
+            IdentityObservation(
+                identity_id=str(item["identity_id"]),
+                frame_index=int(item["frame_index"]),
+                bbox=(
+                    float(item["bbox"][0]),
+                    float(item["bbox"][1]),
+                    float(item["bbox"][2]),
+                    float(item["bbox"][3]),
+                ),
+            )
+            for item in list((truth.manifest_json or {}).get("observations") or [])
+        ]
+        prediction_records = list(
+            self.session.scalars(
+                select(PoseIdentityObservation).where(
+                    PoseIdentityObservation.association_run_id == run.id,
+                    PoseIdentityObservation.is_current.is_(True),
+                    PoseIdentityObservation.animal_identity_id.is_not(None),
+                    PoseIdentityObservation.verification_state != "scientist_rejected",
+                )
+            )
+        )
+        predictions = [
+            IdentityObservation(
+                identity_id=str(item.animal_identity_id),
+                frame_index=item.frame_index,
+                bbox=(
+                    float(item.bbox_json[0]),
+                    float(item.bbox_json[1]),
+                    float(item.bbox_json[2]),
+                    float(item.bbox_json[3]),
+                ),
+            )
+            for item in prediction_records
+        ]
+        report = evaluate_pose_identities(
+            truth_observations,
+            predictions,
+            iou_threshold=payload.spatial_iou_threshold,
+        )
+        metrics = asdict(report)
+        warnings = [
+            "Identity association metrics do not measure anatomical landmark localization accuracy."
+        ]
+        if (truth.manifest_json or {}).get("scientific_context") == "synthetic_engineering":
+            warnings.append(
+                "Synthetic engineering truth validates software behavior, not biological accuracy."
+            )
+        configuration = {
+            "spatial_iou_threshold": payload.spatial_iou_threshold,
+            "spatial_matching_policy": "global-frame-iou",
+            "identity_mapping_policy": "global-maximum-overlap-count",
+        }
+        provenance = {
+            "schema_version": "reefpose-identity-evaluation-0001",
+            "association_run_id": run.id,
+            "association_run_revision": run.revision,
+            "association_parameters_sha256": run.parameters_sha256,
+            "association_input_manifest_sha256": run.input_manifest_sha256,
+            "truth_dataset_id": truth.id,
+            "truth_manifest_sha256": truth.manifest_sha256,
+            "pose_schema_id": run.pose_schema_id,
+            "pose_schema_revision": run.pose_schema_revision,
+            "pose_schema_content_hash": run.pose_schema_content_hash,
+            "coordinate_space": run.source_coordinate_space,
+        }
+        result_payload = {
+            "configuration": configuration,
+            "metrics": metrics,
+            "warnings": warnings,
+            "provenance": provenance,
+        }
+        record = PoseIdentityEvaluationRun(
+            association_run_id=run.id,
+            association_run_revision=run.revision,
+            truth_dataset_id=truth.id,
+            configuration_json=configuration,
+            metrics_json=metrics,
+            warnings_json=warnings,
+            provenance_json=provenance,
+            result_sha256=_json_hash(result_payload),
+        )
+        existing = self.session.scalar(
+            select(PoseIdentityEvaluationRun).where(
+                PoseIdentityEvaluationRun.result_sha256 == record.result_sha256
+            )
+        )
+        if existing is not None:
+            return PoseIdentityEvaluationResponse.model_validate(existing)
+        self.session.add(record)
+        self.session.commit()
+        self.session.refresh(record)
+        return PoseIdentityEvaluationResponse.model_validate(record)
+
+    def get_evaluation(self, evaluation_id: str) -> PoseIdentityEvaluationResponse:
+        record = self.session.get(PoseIdentityEvaluationRun, evaluation_id)
+        if record is None:
+            raise NotFoundError("Pose identity evaluation not found")
+        return PoseIdentityEvaluationResponse.model_validate(record)
