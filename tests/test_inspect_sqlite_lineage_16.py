@@ -705,5 +705,7 @@ def test_revision_comparison_gate_rejects_malformed_reference_stamp(
         capture_output=True, text=True, check=False,
     )
     assert result.returncode == 2, result.stderr
-    assert json.loads(result.stdout)["schema_comparison"]["revision_markers_match"] is False
+    assert (
+        json.loads(result.stdout)["schema_comparison"]["revision_markers_match"] is False
+    )
     assert (current.read_bytes(), reference.read_bytes()) == before
