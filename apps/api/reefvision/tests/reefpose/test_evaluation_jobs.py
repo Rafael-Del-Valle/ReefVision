@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,7 +9,17 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from reefvision.db.models import Job, ModelRegistration, PoseTrainingDataset, Project
+from reefvision.db.models import (
+    Job,
+    ModelRegistration,
+    PoseEvaluationRun,
+    PoseTrainingDataset,
+    Project,
+)
+from reefvision.domain.errors import ConflictError
+from reefvision.ml.pose_evaluation import PoseEvaluationProviderExclusion
+from reefvision.schemas.pose_evaluation import PoseEvaluationCreateRequest
+from reefvision.services.models import ModelService
 
 PROJECT_ID = "11000000-0000-0000-0000-000000000001"
 DATASET_ID = "12000000-0000-0000-0000-000000000001"
@@ -283,3 +294,240 @@ def test_comparison_submission_rejects_foreign_or_non_pose_models(client: TestCl
     )
     assert response.status_code == 400
     assert "pose" in response.json()["detail"].lower()
+
+
+def test_worker_executes_models_and_persists_comparison_report(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from reefvision.jobs.pose_evaluation import process_pose_evaluation_job
+    from reefvision.services.pose_evaluation import PoseEvaluationService
+
+    _seed(client)
+    created = client.post(
+        f"/api/v1/projects/{PROJECT_ID}/pose-evaluation-comparisons",
+        json=_payload(),
+    ).json()
+
+    def fake_create(
+        _service: PoseEvaluationService,
+        _project_id: str,
+        payload: PoseEvaluationCreateRequest,
+        **kwargs: object,
+    ) -> object:
+        callback = kwargs["progress_callback"]
+        assert callable(callback)
+        callback(1, 3)
+        callback(3, 3)
+        model_id = str(payload.model_id)
+        return SimpleNamespace(
+            id=f"run-{model_id[-1]}",
+            model_id=model_id,
+            metrics_json={"nme": 0.1, "mean_euclidean_error": 2.0},
+            warnings_json=[],
+            result_sha256=model_id.replace("-", "")[:64].ljust(64, "0"),
+            inference_latency_ms=4.0,
+            images_per_second=250.0,
+            provenance_json={"provider_name": "reefpose"},
+        )
+
+    monkeypatch.setattr(PoseEvaluationService, "create", fake_create)
+
+    assert process_pose_evaluation_job(
+        client.app.state.settings,
+        client.app.state.session_factory,
+        created["id"],
+    )
+    with client.app.state.session_factory() as session:
+        job = session.get(Job, created["id"])
+        assert job is not None
+        assert job.status == "succeeded"
+        assert job.progress_current == job.progress_total == 6
+        assert job.deduplication_key is None
+        assert job.result_json["schema_version"] == "reefvision-pose-comparison-0001"
+        assert job.result_json["evaluation_run_ids"] == ["run-1", "run-2"]
+        assert len(job.result_json["models"]) == 2
+        assert job.result_json["report_sha256"]
+
+    detail = client.get(f"/api/v1/pose-evaluation-comparisons/{created['id']}")
+    assert detail.status_code == 200
+    assert detail.json()["result_json"]["report_sha256"]
+    exported_json = client.get(
+        f"/api/v1/pose-evaluation-comparisons/{created['id']}/export?format=json"
+    )
+    assert exported_json.status_code == 200
+    assert exported_json.json()["schema_version"] == "reefvision-pose-comparison-0001"
+    exported_csv = client.get(
+        f"/api/v1/pose-evaluation-comparisons/{created['id']}/export?format=csv"
+    )
+    assert exported_csv.status_code == 200
+    assert "row_type,model_id,provider_name" in exported_csv.text
+    assert "aggregate" in exported_csv.text
+
+
+def test_worker_records_provider_exclusion_without_failing_comparison(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from reefvision.jobs.pose_evaluation import process_pose_evaluation_job
+    from reefvision.services.pose_evaluation import PoseEvaluationService
+
+    _seed(client)
+    created = client.post(
+        f"/api/v1/projects/{PROJECT_ID}/pose-evaluation-comparisons",
+        json=_payload([MODEL_IDS[0]]),
+    ).json()
+
+    def excluded(*_args: object, **_kwargs: object) -> object:
+        raise PoseEvaluationProviderExclusion(
+            "provider_runtime_unavailable", "Synthetic optional runtime is unavailable"
+        )
+
+    monkeypatch.setattr(PoseEvaluationService, "create", excluded)
+    assert process_pose_evaluation_job(
+        client.app.state.settings,
+        client.app.state.session_factory,
+        created["id"],
+    )
+    with client.app.state.session_factory() as session:
+        job = session.get(Job, created["id"])
+        assert job is not None
+        assert job.status == "succeeded"
+        assert job.result_json["models"] == []
+        assert job.result_json["exclusions"][0]["code"] == "provider_runtime_unavailable"
+
+
+def test_worker_cooperatively_cancels_and_keeps_partial_report(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from reefvision.jobs.pose_evaluation import process_pose_evaluation_job
+    from reefvision.services.pose_evaluation import PoseEvaluationService
+
+    _seed(client)
+    created = client.post(
+        f"/api/v1/projects/{PROJECT_ID}/pose-evaluation-comparisons",
+        json=_payload(),
+    ).json()
+
+    calls = 0
+
+    def cancel_during_second(
+        _service: PoseEvaluationService,
+        _project_id: str,
+        payload: PoseEvaluationCreateRequest,
+        **kwargs: object,
+    ) -> object:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            model_id = str(payload.model_id)
+            return SimpleNamespace(
+                id="run-complete",
+                model_id=model_id,
+                metrics_json={"nme": 0.2},
+                warnings_json=[],
+                result_sha256="1" * 64,
+                inference_latency_ms=5.0,
+                images_per_second=200.0,
+                provenance_json={},
+            )
+        with client.app.state.session_factory() as session:
+            job = session.get(Job, created["id"])
+            assert job is not None
+            job.status = "cancel_requested"
+            session.commit()
+        cancellation_check = kwargs["cancellation_check"]
+        assert callable(cancellation_check)
+        cancellation_check()
+        raise AssertionError("cancellation check must interrupt")
+
+    monkeypatch.setattr(PoseEvaluationService, "create", cancel_during_second)
+    assert process_pose_evaluation_job(
+        client.app.state.settings,
+        client.app.state.session_factory,
+        created["id"],
+    )
+    with client.app.state.session_factory() as session:
+        job = session.get(Job, created["id"])
+        assert job is not None
+        assert job.status == "cancelled"
+        assert job.result_json["evaluation_run_ids"] == ["run-complete"]
+        assert job.result_json["stage"] == "cancelled"
+        assert job.deduplication_key is None
+
+
+def test_model_with_scientific_evaluation_cannot_be_deleted(client: TestClient) -> None:
+    _seed(client)
+    with client.app.state.session_factory() as session:
+        session.add(
+            PoseEvaluationRun(
+                project_id=PROJECT_ID,
+                model_id=MODEL_IDS[0],
+                evaluation_dataset_id=DATASET_ID,
+                schema_version="reefpose-evaluation-run-0001",
+                status="completed",
+                configuration_json={},
+                metrics_json={},
+                predictions_json=[],
+                provenance_json={},
+                warnings_json=[],
+                result_sha256="9" * 64,
+                inference_latency_ms=1.0,
+                images_per_second=1.0,
+            )
+        )
+        session.commit()
+
+        with pytest.raises(ConflictError, match="evaluation"):
+            ModelService(session, client.app.state.settings).delete_model(MODEL_IDS[0])
+
+
+def test_later_model_failure_preserves_completed_partial_result(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from reefvision.jobs.pose_evaluation import process_pose_evaluation_job
+    from reefvision.services.pose_evaluation import PoseEvaluationService
+
+    _seed(client)
+    created = client.post(
+        f"/api/v1/projects/{PROJECT_ID}/pose-evaluation-comparisons",
+        json=_payload(),
+    ).json()
+    calls = 0
+
+    def fail_second(
+        _service: PoseEvaluationService,
+        _project_id: str,
+        payload: PoseEvaluationCreateRequest,
+        **_kwargs: object,
+    ) -> object:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("synthetic second-model failure")
+        return SimpleNamespace(
+            id="run-first",
+            model_id=payload.model_id,
+            metrics_json={"nme": 0.2},
+            warnings_json=[],
+            result_sha256="3" * 64,
+            inference_latency_ms=5.0,
+            images_per_second=200.0,
+            provenance_json={},
+        )
+
+    monkeypatch.setattr(PoseEvaluationService, "create", fail_second)
+    assert process_pose_evaluation_job(
+        client.app.state.settings,
+        client.app.state.session_factory,
+        created["id"],
+    )
+    with client.app.state.session_factory() as session:
+        job = session.get(Job, created["id"])
+        assert job is not None
+        assert job.status == "failed"
+        assert job.result_json["evaluation_run_ids"] == ["run-first"]
+        assert "synthetic second-model failure" in str(job.error_message)
+        assert job.deduplication_key is None

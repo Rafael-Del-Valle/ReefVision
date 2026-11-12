@@ -26,6 +26,7 @@ RUNNING_CANCELLABLE_JOB_TYPES = frozenset(
         "video_annotated_export",
         "video_metric_depth_3d",
         "workflow_run",
+        "pose_evaluation",
     }
 )
 
@@ -194,6 +195,12 @@ class JobService:
         if job.status in {"queued", "waiting_for_review"}:
             job.status = "cancelled"
             job.completed_at = now
+            if job.job_type == "pose_evaluation":
+                job.deduplication_key = None
+                job.result_json = {
+                    **dict(job.result_json or {}),
+                    "stage": "cancelled",
+                }
             if quality_control_run is not None:
                 quality_control_run.status = "cancelled"
                 quality_control_run.cancelled_at = now

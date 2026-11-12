@@ -59,6 +59,36 @@ def list_pose_evaluation_comparisons(
     )
 
 
+@router.get("/pose-evaluation-comparisons/{job_id}", response_model=JobResponse)
+def get_pose_evaluation_comparison(
+    job_id: str,
+    request: Request,
+    session: DbSession,
+) -> JobResponse:
+    return comparison_service(request, session).get(job_id)
+
+
+@router.get("/pose-evaluation-comparisons/{job_id}/export")
+def export_pose_evaluation_comparison(
+    job_id: str,
+    request: Request,
+    session: DbSession,
+    format: Literal["json", "csv"] = "json",
+) -> Response:
+    comparisons = comparison_service(request, session)
+    if format == "json":
+        return JSONResponse(comparisons.export_json(job_id))
+    return Response(
+        comparisons.export_csv(job_id),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="reefpose-comparison-{job_id}.csv"'
+            )
+        },
+    )
+
+
 @router.post(
     "/projects/{project_id}/pose-evaluations",
     response_model=PoseEvaluationRunResponse,

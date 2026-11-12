@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import csv
+import io
+import json
 from typing import Any
 
 from sqlalchemy import func, select
@@ -202,3 +205,102 @@ class PoseEvaluationComparisonService:
             limit=limit,
             offset=offset,
         )
+
+    def get(self, job_id: str) -> JobResponse:
+        job = self.session.get(Job, job_id)
+        if job is None or job.job_type != "pose_evaluation":
+            raise NotFoundError("Pose evaluation comparison not found")
+        return JobResponse.model_validate(job)
+
+    def export_json(self, job_id: str) -> dict[str, Any]:
+        job = self.session.get(Job, job_id)
+        if job is None or job.job_type != "pose_evaluation":
+            raise NotFoundError("Pose evaluation comparison not found")
+        return dict(job.result_json or {})
+
+    def export_csv(self, job_id: str) -> str:
+        report = self.export_json(job_id)
+        stream = io.StringIO(newline="")
+        fieldnames = [
+            "row_type",
+            "model_id",
+            "provider_name",
+            "landmark_id",
+            "metric",
+            "value",
+            "available",
+            "reason",
+            "evaluation_run_id",
+            "result_sha256",
+        ]
+        writer = csv.DictWriter(stream, fieldnames=fieldnames)
+        writer.writeheader()
+        for model in list(report.get("models") or []):
+            if not isinstance(model, dict):
+                continue
+            metrics = dict(model.get("metrics") or {})
+            for metric in (
+                "mean_euclidean_error",
+                "median_euclidean_error",
+                "nme",
+                "oks",
+                "visibility_accuracy",
+            ):
+                availability = dict(model.get("metric_availability") or {}).get(metric)
+                available = (
+                    availability.get("available")
+                    if isinstance(availability, dict)
+                    else metrics.get(metric) is not None
+                )
+                reason = (
+                    availability.get("reason")
+                    if isinstance(availability, dict)
+                    else None
+                )
+                writer.writerow(
+                    {
+                        "row_type": "aggregate",
+                        "model_id": model.get("model_id"),
+                        "provider_name": model.get("provider_name"),
+                        "metric": metric,
+                        "value": (
+                            json.dumps(metrics.get(metric), sort_keys=True)
+                            if metrics.get(metric) is not None
+                            else ""
+                        ),
+                        "available": available,
+                        "reason": reason,
+                        "evaluation_run_id": model.get("evaluation_run_id"),
+                        "result_sha256": model.get("result_sha256"),
+                    }
+                )
+            for landmark_id, values in sorted(
+                dict(metrics.get("per_landmark") or {}).items()
+            ):
+                writer.writerow(
+                    {
+                        "row_type": "landmark",
+                        "model_id": model.get("model_id"),
+                        "provider_name": model.get("provider_name"),
+                        "landmark_id": landmark_id,
+                        "metric": "metrics",
+                        "value": json.dumps(values, sort_keys=True, separators=(",", ":")),
+                        "available": True,
+                        "evaluation_run_id": model.get("evaluation_run_id"),
+                        "result_sha256": model.get("result_sha256"),
+                    }
+                )
+        for exclusion in list(report.get("exclusions") or []):
+            if not isinstance(exclusion, dict):
+                continue
+            writer.writerow(
+                {
+                    "row_type": "exclusion",
+                    "model_id": exclusion.get("model_id"),
+                    "provider_name": exclusion.get("provider_name"),
+                    "metric": exclusion.get("code"),
+                    "available": False,
+                    "reason": exclusion.get("reason"),
+                }
+            )
+        return stream.getvalue()

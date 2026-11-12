@@ -48,6 +48,8 @@ class JobRepository:
                 job.status = "cancelled"
                 job.completed_at = now
                 job.error_message = "Cancellation finalized after ReefVision restart"
+                if job.job_type == "pose_evaluation":
+                    job.deduplication_key = None
                 result.update(
                     {
                         "stage": "cancelled",
