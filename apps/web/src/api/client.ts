@@ -416,6 +416,24 @@ export interface PoseEvaluationCreatePayload {
   confidence_thresholds?: number[];
 }
 
+export interface PoseEvaluationComparisonCreatePayload {
+  model_ids: string[];
+  evaluation_dataset_id: string;
+  device?: string;
+  pck_thresholds?: number[];
+  calibration_threshold?: number;
+  calibration_bins?: number;
+  confidence_thresholds?: number[];
+  oks_sigmas?: Record<string, number> | null;
+}
+
+export interface PoseEvaluationComparisonPage {
+  items: JobRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export type ModelCatalogCategory =
   | "architecture"
   | "provider_requirement"
@@ -2184,6 +2202,33 @@ export function poseEvaluationExportUrl(
   format: "json" | "csv",
 ): string {
   return `${getApiBaseUrl()}/pose-evaluations/${encodeURIComponent(runId)}/export?format=${format}`;
+}
+
+export function getPoseEvaluationComparisons(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<PoseEvaluationComparisonPage> {
+  return request<PoseEvaluationComparisonPage>(
+    `/projects/${encodeURIComponent(projectId)}/pose-evaluation-comparisons?limit=50&offset=0`,
+    { signal },
+  );
+}
+
+export function createPoseEvaluationComparison(
+  projectId: string,
+  payload: PoseEvaluationComparisonCreatePayload,
+): Promise<JobRecord> {
+  return request<JobRecord>(
+    `/projects/${encodeURIComponent(projectId)}/pose-evaluation-comparisons`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export function poseEvaluationComparisonExportUrl(
+  jobId: string,
+  format: "json" | "csv",
+): string {
+  return `${getApiBaseUrl()}/pose-evaluation-comparisons/${encodeURIComponent(jobId)}/export?format=${format}`;
 }
 
 export async function getProjectModelCatalog(

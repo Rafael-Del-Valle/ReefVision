@@ -28,6 +28,7 @@ import {
   getPoseTrainingDatasets,
   type PoseTrainingDataset,
 } from "../video/poseActiveLearningApi";
+import { PoseEvaluationComparisonPanel } from "./PoseEvaluationComparisonPanel";
 
 const optionalModelProviders = [
   { id: "grounding_dino", label: "Grounding DINO", extension: ".zip" },
@@ -538,9 +539,7 @@ export function ModelManager({
       previous ?? modelHubBootstrap.data?.training_compatibility ?? undefined,
   });
   const models = modelHubBootstrap.data?.models ?? [];
-  const hasNativeReefPose = models.some(
-    (model) => model.provider_name === "reefpose" && model.task === "pose",
-  );
+  const hasNativeReefPose = models.some((model) => model.task === "pose");
   const poseDatasetsQuery = useQuery({
     queryKey: ["pose-training-datasets", project.id, "model-evaluation"],
     queryFn: ({ signal }) => getPoseTrainingDatasets(project.id, signal),
@@ -1520,6 +1519,13 @@ export function ModelManager({
             Mask sessions.
           </p>
         </div>
+      )}
+      {hasNativeReefPose && (
+        <PoseEvaluationComparisonPanel
+          projectId={project.id}
+          models={models}
+          datasets={poseDatasetsQuery.data ?? []}
+        />
       )}
       <div className="image-grid">
         {models.map((model) => (
