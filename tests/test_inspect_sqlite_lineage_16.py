@@ -352,3 +352,82 @@ def test_ordinary_columns_keep_legacy_and_extended_metadata(tmp_path: Path) -> N
     assert [column["name"] for column in table["columns"]] == ["id"]
     assert [column["name"] for column in table["extended_columns"]] == ["id"]
     assert table["extended_columns"][0]["hidden"] == 0
+
+
+def test_cli_integrity_gate_preserves_json_and_database(tmp_path: Path) -> None:
+    """An opt-in machine gate must not mislabel lineage or change scientific bytes."""
+    import json
+    import subprocess
+    import sys
+
+    path = tmp_path / "cli_gate.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE alembic_version (version_num TEXT)")
+        db.execute("INSERT INTO alembic_version VALUES ('0038')")
+        db.execute("CREATE TABLE parent (id INTEGER PRIMARY KEY)")
+        db.execute(
+            "CREATE TABLE review_queue_item_events ("
+            "id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES parent(id))"
+        )
+        db.execute("INSERT INTO review_queue_item_events VALUES (1, 99)")
+    before = path.read_bytes()
+    command = [sys.executable, str(SCRIPT), str(path)]
+    default = subprocess.run(command, capture_output=True, text=True, check=False)
+    gated = subprocess.run(
+        command + ["--fail-on-integrity-error"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert default.returncode == 0
+    assert gated.returncode == 2
+    assert not gated.stderr
+    evidence = json.loads(gated.stdout)
+    assert evidence == json.loads(default.stdout)
+    assert evidence["foreign_key_violation_count"] == 1
+    assert evidence["classification"] == "requires_researcher_review"
+    assert path.read_bytes() == before
+
+
+def test_cli_integrity_gate_does_not_treat_ambiguous_stamp_as_integrity_error(
+    tmp_path: Path,
+) -> None:
+    """A healthy SQLite database with 0038 still requires human lineage review."""
+    import json
+    import subprocess
+    import sys
+
+    path = tmp_path / "healthy_ambiguous.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE alembic_version (version_num TEXT)")
+        db.execute("INSERT INTO alembic_version VALUES ('0038')")
+    before = path.read_bytes()
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), str(path), "--fail-on-integrity-error"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["classification"] == "requires_researcher_review"
+    assert path.read_bytes() == before
+
+
+def test_cli_integrity_gate_rejects_malformed_alembic_metadata(tmp_path: Path) -> None:
+    import json
+    import subprocess
+    import sys
+
+    path = tmp_path / "bad_stamp.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE alembic_version (wrong_column TEXT)")
+    before = path.read_bytes()
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--fail-on-integrity-error", str(path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "no such column" in json.loads(result.stdout)["alembic_stamp_error"]
+    assert path.read_bytes() == before
