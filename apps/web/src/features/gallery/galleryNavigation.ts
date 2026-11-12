@@ -37,7 +37,18 @@ function validGalleryImageId(value: unknown): value is string {
   );
 }
 
-function preferenceKey(projectId: string): string {
+function preferenceKey(projectId: string): string | null {
+  // Never share a preference namespace for missing or malformed project IDs.
+  // A transient project-loading state must not overwrite another survey.
+  if (
+    typeof projectId !== "string" ||
+    projectId.length === 0 ||
+    projectId.length > 256 ||
+    projectId.trim().length === 0 ||
+    /[\x00-\x1f\x7f]/.test(projectId)
+  ) {
+    return null;
+  }
   return `reefvision.gallery.${projectId}.v1`;
 }
 
@@ -46,7 +57,9 @@ export function readGalleryPreference(
   projectId: string,
 ): GalleryPreference {
   try {
-    const value = storage.getItem(preferenceKey(projectId));
+    const key = preferenceKey(projectId);
+    if (key === null) return { ...DEFAULT_PREFERENCE };
+    const value = storage.getItem(key);
     if (!value || value.length > 4096) return { ...DEFAULT_PREFERENCE };
     // Corrupted or oversized WebView2 preferences must not block first-image
     // rendering with expensive JSON parsing. Valid preferences contain only
@@ -147,7 +160,9 @@ export function writeGalleryPreference(
     // Keep writes compatible with the bounded reader. An oversized camera ID
     // must not overwrite a previously restorable first-image selection.
     if (serialized.length > 4096) return;
-    storage.setItem(preferenceKey(projectId), serialized);
+    const key = preferenceKey(projectId);
+    if (key === null) return;
+    storage.setItem(key, serialized);
   } catch {
     // A blocked or full preference store must not prevent annotation work.
   }
