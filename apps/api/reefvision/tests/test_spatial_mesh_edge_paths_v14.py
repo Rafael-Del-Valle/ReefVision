@@ -212,6 +212,7 @@ def test_mesh_edge_paths_flag_coincident_vertices() -> None:
     assert route["endpoint_chord_length_m"] == 0.0
     assert route["geometric_detour_ratio"] is None
     assert route["path_qc_warnings"] == [
+        "degenerate_triangle_on_path",
         "open_boundary_edge_on_path",
         "zero_length_edge_on_path",
     ]
