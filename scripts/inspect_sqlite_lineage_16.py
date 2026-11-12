@@ -85,15 +85,17 @@ def inspect(path: Path) -> dict:
                     "SELECT version_num FROM alembic_version"
                 )]
                 stamps = [value if isinstance(value, str) else None for value in raw_stamps]
-                if len(raw_stamps) != 1 and alembic_stamp_validation_error is None:
-                    alembic_stamp_validation_error = "expected_exactly_one_revision_row"
-                elif len(raw_stamps) == 1 and (
-                    not isinstance(raw_stamps[0], str) or (
-                    not raw_stamps[0]
+                if len(raw_stamps) != 1:
+                    if alembic_stamp_validation_error is None:
+                        alembic_stamp_validation_error = "expected_exactly_one_revision_row"
+                elif (
+                    not isinstance(raw_stamps[0], str)
+                    or not raw_stamps[0]
                     or raw_stamps[0] != raw_stamps[0].strip()
                     or any(ord(char) < 32 or ord(char) == 127 for char in raw_stamps[0])
-                ) and alembic_stamp_validation_error is None:
-                    alembic_stamp_validation_error = "invalid_revision_marker_type_or_value"
+                ):
+                    if alembic_stamp_validation_error is None:
+                        alembic_stamp_validation_error = "invalid_revision_marker_type_or_value"
             except sqlite3.DatabaseError as exc:
                 # Partial/corrupt lineage metadata must remain visible as
                 # uncertain evidence, not abort an otherwise useful report.
