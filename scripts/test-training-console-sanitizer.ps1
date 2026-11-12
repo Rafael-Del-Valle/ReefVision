@@ -138,7 +138,7 @@ if (Test-FiniteMetricValue -Value $structuredLoss) {
 }
 
 
-# The external monitor must remain a passive observer of the existing worker.
+# PowerShell single-quoted regex strings use one backslash for regex escapes.\n# Double backslashes would match literal backslashes instead of HTTP verbs,\n# allowing the request inventory assertion to miss the real monitor calls.\n# The external monitor must remain a passive observer of the existing worker.
 # Check the actual embedded PowerShell script, not a mock monitor: a future
 # refactor must not add a mutation request, job launch, or process termination.
 $monitorStart = $source.IndexOf("let script = format!")
@@ -147,20 +147,20 @@ if ($monitorStart -lt 0 -or $monitorEnd -le $monitorStart) {
   throw 'Could not isolate the external training monitor script.'
 }
 $monitorScript = $source.Substring($monitorStart, $monitorEnd - $monitorStart)
-$requests = [regex]::Matches($monitorScript, 'Invoke-RestMethod\\b[^\\r\\n]*')
+$requests = [regex]::Matches($monitorScript, 'Invoke-RestMethod\b[^\r\n]*')
 if ($requests.Count -ne 2) {
   throw 'Training monitor HTTP request inventory changed; review read-only guarantees.'
 }
 foreach ($request in $requests) {
-  if ($request.Value -notmatch '-Method\\s+Get\\b' -or
-      $request.Value -notmatch '-MaximumRedirection\\s+0\\b') {
+  if ($request.Value -notmatch '-Method\s+Get\b' -or
+      $request.Value -notmatch '-MaximumRedirection\s+0\b') {
     throw 'Training monitor HTTP requests must use GET without redirects.'
   }
 }
-if ($monitorScript -match '(?i)\\b(?:Start-Process|Stop-Process|Invoke-Expression|Invoke-Command|Remove-Item|Set-Content|Add-Content|Out-File)\\b') {
+if ($monitorScript -match '(?i)\b(?:Start-Process|Stop-Process|Invoke-Expression|Invoke-Command|Remove-Item|Set-Content|Add-Content|Out-File)\b') {
   throw 'External monitor must not execute commands or mutate training artifacts.'
 }
-if ($monitorScript -notmatch 'Start-Sleep\\s+-Seconds\\s+2\\b') {
+if ($monitorScript -notmatch 'Start-Sleep\s+-Seconds\s+2\b') {
   throw 'Read-only polling throttle was removed from training monitor.'
 }
 
