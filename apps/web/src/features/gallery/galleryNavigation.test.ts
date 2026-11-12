@@ -241,6 +241,34 @@ describe("corrupted gallery preference shapes", () => {
   });
 });
 
+describe("single-page camera gallery navigation", () => {
+  it("moves within the only page and wraps only when explicitly enabled", () => {
+    const state = { index: 0, itemCount: 3, page: 1, pages: 1 };
+    expect(resolveGalleryNavigation({ ...state, action: "previous", wrap: false })).toBeNull();
+    expect(resolveGalleryNavigation({ ...state, action: "previous", wrap: true })).toEqual({
+      page: 1,
+      edge: "last",
+    });
+    expect(resolveGalleryNavigation({ ...state, action: "next", wrap: false })).toEqual({
+      page: 1,
+      edge: "index",
+      index: 1,
+    });
+    expect(resolveGalleryNavigation({ ...state, action: "first", wrap: true })).toBeNull();
+    expect(resolveGalleryNavigation({ ...state, action: "last", wrap: false })).toEqual({
+      page: 1,
+      edge: "last",
+    });
+    const last = { ...state, index: 2 };
+    expect(resolveGalleryNavigation({ ...last, action: "next", wrap: false })).toBeNull();
+    expect(resolveGalleryNavigation({ ...last, action: "next", wrap: true })).toEqual({
+      page: 1,
+      edge: "first",
+    });
+    expect(resolveGalleryNavigation({ ...last, action: "last", wrap: true })).toBeNull();
+  });
+});
+
 describe("gallery navigation across sparse camera pages", () => {
   it("moves between adjacent pages when each page has only one image", () => {
     expect(
