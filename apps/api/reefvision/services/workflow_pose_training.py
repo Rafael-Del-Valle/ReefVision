@@ -1638,7 +1638,7 @@ def create_pose_workflow_training_result(
             raise ValidationError(
                 "Completed pose training output directory must not be a symbolic link"
             )
-    if checkpoint.resolve().parent != expected_weights_dir.resolve() or checkpoint.name not in {
+    if checkpoint.parent != expected_weights_dir or checkpoint.name not in {
         "best.pt",
         "last.pt",
     }:
