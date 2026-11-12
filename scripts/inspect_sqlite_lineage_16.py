@@ -67,6 +67,7 @@ def inspect(path: Path) -> dict:
         stamps = []
         alembic_stamp_error = None
         alembic_stamp_validation_error = None
+        alembic_stamp_constraint_error = None
         if "alembic_version" in names:
             try:
                 # A foreign or partially migrated Alembic table can contain a
@@ -86,7 +87,7 @@ def inspect(path: Path) -> dict:
                 ):
                     # A name-only match can conceal an unrelated table with
                     # nonunique or nullable lineage markers. Do not trust it.
-                    alembic_stamp_validation_error = (
+                    alembic_stamp_constraint_error = (
                         "invalid_alembic_version_column_constraints"
                     )
                 # Do not sort SQLite mixed-type values or serialize raw BLOBs:
@@ -159,6 +160,7 @@ def inspect(path: Path) -> dict:
             ],
             "alembic_stamps": stamps, "alembic_stamp_error": alembic_stamp_error,
             "alembic_stamp_validation_error": alembic_stamp_validation_error,
+            "alembic_stamp_constraint_error": alembic_stamp_constraint_error,
             "tables": tables,
             "classification": "requires_researcher_review",
         }
@@ -198,6 +200,11 @@ def main() -> None:
         help="Exit 2 when --compare-to has the same validated Alembic revision "
         "but a different structural schema fingerprint; matching stamps "
         "never establish migration equivalence",
+    )
+    parser.add_argument(
+        "--fail-on-noncanonical-stamp", action="store_true",
+        help="Exit 2 if Alembic version_num lacks NOT NULL and primary-key constraints; "
+        "opt-in for legacy SQLite schemas",
     )
     args = parser.parse_args()
     if args.fail_on_schema_drift and args.compare_to is None:
@@ -250,6 +257,7 @@ def main() -> None:
                 "foreign_key_check_error": reference["foreign_key_check_error"],
                 "alembic_stamp_error": reference["alembic_stamp_error"],
                 "alembic_stamp_validation_error": reference["alembic_stamp_validation_error"],
+                "alembic_stamp_constraint_error": reference["alembic_stamp_constraint_error"],
             },
             "matches": evidence["schema_sha256"] == reference["schema_sha256"],
             "revision_markers_match": (
@@ -288,6 +296,12 @@ def main() -> None:
             or report["alembic_stamp_error"] is not None
             or report["alembic_stamp_validation_error"] is not None
         )
+
+    if args.fail_on_noncanonical_stamp and (
+        evidence["alembic_stamp_constraint_error"] is not None
+        or (reference is not None and reference["alembic_stamp_constraint_error"] is not None)
+    ):
+        raise SystemExit(2)
 
     if args.fail_on_integrity_error and (
         has_integrity_error(evidence)
