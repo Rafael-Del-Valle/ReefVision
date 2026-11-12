@@ -472,3 +472,33 @@ def test_lineage_cli_rejects_invalid_revision_values_without_mutating_science(
     assert path.read_bytes() == before
     with sqlite3.connect(path) as db:
         assert db.execute("SELECT note FROM scientific_records").fetchone() == ("preserve",)
+
+
+def test_schema_object_inventory_is_stable_and_excludes_observation_values(tmp_path: Path) -> None:
+    """Migration review needs named objects without leaking scientific rows or DDL."""
+    path = tmp_path / "objects.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE scientific_records (id INTEGER PRIMARY KEY, secret TEXT)")
+        db.execute("CREATE INDEX scientific_records_secret_idx ON scientific_records(secret)")
+        db.execute("CREATE VIEW scientific_record_ids AS SELECT id FROM scientific_records")
+        db.execute(
+            "CREATE TRIGGER scientific_record_no_delete BEFORE DELETE ON scientific_records "
+            "BEGIN SELECT RAISE(ABORT, 'protected'); END"
+        )
+        db.execute("INSERT INTO scientific_records VALUES (1, 'sensitive specimen location')")
+    before = path.read_bytes()
+    first = module.inspect(path)
+    second = module.inspect(path)
+    objects = first["schema_objects"]
+    assert objects == second["schema_objects"]
+    assert {item["name"] for item in objects} == {
+        "scientific_records",
+        "scientific_records_secret_idx",
+        "scientific_record_ids",
+        "scientific_record_no_delete",
+    }
+    assert {item["type"] for item in objects} == {"table", "index", "view", "trigger"}
+    assert all(set(item) == {"type", "name", "table"} for item in objects)
+    assert "sensitive specimen location" not in str(objects)
+    assert first["classification"] == "requires_researcher_review"
+    assert path.read_bytes() == before
