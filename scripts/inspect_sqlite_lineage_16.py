@@ -141,9 +141,51 @@ def main() -> None:
         help="Exit 2 on SQLite integrity, FK, or Alembic metadata errors; "
         "still emit complete read-only JSON evidence",
     )
+    parser.add_argument(
+        "--compare-to",
+        type=Path,
+        help="Compare structural evidence against another existing SQLite database; "
+        "both databases remain read-only",
+    )
+    parser.add_argument(
+        "--fail-on-schema-drift",
+        action="store_true",
+        help="Exit 2 when --compare-to finds different structural fingerprints",
+    )
     args = parser.parse_args()
+    if args.fail_on_schema_drift and args.compare_to is None:
+        parser.error("--fail-on-schema-drift requires --compare-to")
     evidence = inspect(args.database)
+    if args.compare_to is not None:
+        reference = inspect(args.compare_to)
+        source_objects = {
+            (obj["type"], obj["name"], obj["table"])
+            for obj in evidence["schema_objects"]
+        }
+        reference_objects = {
+            (obj["type"], obj["name"], obj["table"])
+            for obj in reference["schema_objects"]
+        }
+
+        def describe(objects: set[tuple[str, str, str]]) -> list[dict[str, str]]:
+            return [
+                {"type": kind, "name": name, "table": table}
+                for kind, name, table in sorted(objects)
+            ]
+
+        evidence["schema_comparison"] = {
+            "reference_database": reference["database"],
+            "reference_schema_sha256": reference["schema_sha256"],
+            "matches": evidence["schema_sha256"] == reference["schema_sha256"],
+            "only_in_database": describe(source_objects - reference_objects),
+            "only_in_reference": describe(reference_objects - source_objects),
+            # Same named object can have different DDL; hashes, not name
+            # equality, determine structural equivalence.
+            "requires_researcher_review": True,
+        }
     print(json.dumps(evidence, indent=2, sort_keys=True))
+    if args.fail_on_schema_drift and not evidence["schema_comparison"]["matches"]:
+        raise SystemExit(2)
     if args.fail_on_integrity_error and (
         evidence["quick_check_details"] != ["ok"]
         or evidence["foreign_key_check_error"] is not None
