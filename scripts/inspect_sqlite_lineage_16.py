@@ -73,12 +73,13 @@ def inspect(path: Path) -> dict:
                 # valid version_num alongside unrelated lineage columns. Never
                 # accept that stamp as evidence of a canonical Alembic table.
                 stamp_columns = [
-                    row[1] for row in connection.execute(
-                        "PRAGMA table_xinfo(alembic_version)"
-                    )
+                    row[1]
+                    for row in connection.execute("PRAGMA table_xinfo(alembic_version)")
                 ]
                 if stamp_columns != ["version_num"]:
-                    alembic_stamp_validation_error = "unexpected_alembic_version_columns"
+                    alembic_stamp_validation_error = (
+                        "unexpected_alembic_version_columns"
+                    )
                 # Do not sort SQLite mixed-type values or serialize raw BLOBs:
                 # malformed stamps must remain structured, JSON-safe evidence.
                 raw_stamps = [row[0] for row in connection.execute(
