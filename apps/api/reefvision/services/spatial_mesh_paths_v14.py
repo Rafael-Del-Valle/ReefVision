@@ -63,6 +63,11 @@ def mesh_edge_paths(
             ab[2] * ac[0] - ab[0] * ac[2],
             ab[0] * ac[1] - ab[1] * ac[0],
         )
+        # Finite vertices and edge distances do not guarantee finite cross
+        # products: large coordinate magnitudes can overflow area arithmetic.
+        # Reject rather than silently treating an invalid triangle as sound.
+        if any(not isfinite(component) for component in cross):
+            raise ValueError("Mesh triangle cross product overflowed")
         if all(component == 0 for component in cross):
             degenerate_edges.update(
                 (min(first, second), max(first, second))
