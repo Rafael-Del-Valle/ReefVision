@@ -174,6 +174,25 @@ if ($monitorScript -notmatch 'Start-Sleep\s+-Seconds\s+2\b') {
   throw 'Read-only polling throttle was removed from training monitor.'
 }
 
+# The desktop command must reject shell metacharacters before constructing the
+# monitor URL, and the API origin must come from trusted desktop state rather
+# than a renderer-supplied URL. These are source-level security assertions.
+$runIdGuard = [regex]::Match($source, '(?s)fn valid_training_run_id\(run_id: &str\) -> bool \{(?<body>.*?)\n\}')
+if (-not $runIdGuard.Success -or
+    $runIdGuard.Groups['body'].Value -notmatch 'run_id\.len\(\) <= 72' -or
+    $runIdGuard.Groups['body'].Value -notmatch 'byte\.is_ascii_alphanumeric\(\)' -or
+    $runIdGuard.Groups['body'].Value -notmatch 'byte == b''-''' -or
+    $runIdGuard.Groups['body'].Value -notmatch 'byte == b''_''') {
+  throw 'Training run IDs must remain bounded to opaque ASCII alphanumeric/hyphen/underscore identifiers.'
+}
+$consoleCommand = [regex]::Match($source, '(?s)fn open_training_console\(.*?\n\}')
+if (-not $consoleCommand.Success -or
+    $consoleCommand.Value -notmatch 'if !valid_training_run_id\(&run_id\)' -or
+    $consoleCommand.Value -notmatch 'state\.context\.api_base_url' -or
+    $consoleCommand.Value -match 'frontend_api_base_url|renderer_api_base_url') {
+  throw 'Training monitor must validate the run ID and use the trusted desktop API origin.'
+}
+
 # Protect the actual loss-source precedence: the newest finite persisted epoch
 # history must override stale summary metrics, not the reverse. These are
 # source-contract assertions; live GPU training remains a separate acceptance gate.
