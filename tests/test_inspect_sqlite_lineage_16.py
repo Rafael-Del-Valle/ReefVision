@@ -502,3 +502,70 @@ def test_schema_object_inventory_is_stable_and_excludes_observation_values(tmp_p
     assert "sensitive specimen location" not in str(objects)
     assert first["classification"] == "requires_researcher_review"
     assert path.read_bytes() == before
+
+
+def test_schema_comparison_cli_detects_same_name_changed_ddl_without_writes(
+    tmp_path: Path,
+) -> None:
+    """Equal object names do not imply equal migration topology."""
+    import json
+    import subprocess
+    import sys
+
+    current = tmp_path / "current.sqlite"
+    reference = tmp_path / "reference.sqlite"
+    with sqlite3.connect(current) as db:
+        db.execute("CREATE TABLE scientific_records (id INTEGER PRIMARY KEY, depth_m REAL)")
+        db.execute("INSERT INTO scientific_records VALUES (1, 45.0)")
+    with sqlite3.connect(reference) as db:
+        db.execute("CREATE TABLE scientific_records (id INTEGER PRIMARY KEY, depth_cm REAL)")
+        db.execute("INSERT INTO scientific_records VALUES (1, 4500.0)")
+    original = (current.read_bytes(), reference.read_bytes())
+    result = subprocess.run(
+        [
+            sys.executable, str(SCRIPT), str(current), "--compare-to",
+            str(reference), "--fail-on-schema-drift",
+        ],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 2, result.stderr
+    report = json.loads(result.stdout)
+    comparison = report["schema_comparison"]
+    assert comparison["matches"] is False
+    assert comparison["only_in_database"] == []
+    assert comparison["only_in_reference"] == []
+    assert comparison["requires_researcher_review"] is True
+    assert report["classification"] == "requires_researcher_review"
+    assert "45.0" not in result.stdout
+    assert "4500.0" not in result.stdout
+    assert (current.read_bytes(), reference.read_bytes()) == original
+
+
+def test_schema_comparison_cli_accepts_equal_structures_with_different_rows(
+    tmp_path: Path,
+) -> None:
+    import json
+    import subprocess
+    import sys
+
+    current = tmp_path / "current.sqlite"
+    reference = tmp_path / "reference.sqlite"
+    for path, value in ((current, "secret coral A"), (reference, "secret coral B")):
+        with sqlite3.connect(path) as db:
+            db.execute("CREATE TABLE scientific_records (id INTEGER PRIMARY KEY, note TEXT)")
+            db.execute("INSERT INTO scientific_records VALUES (1, ?)", (value,))
+    original = (current.read_bytes(), reference.read_bytes())
+    result = subprocess.run(
+        [
+            sys.executable, str(SCRIPT), str(current), "--compare-to",
+            str(reference), "--fail-on-schema-drift",
+        ],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["schema_comparison"]["matches"] is True
+    assert report["schema_comparison"]["only_in_database"] == []
+    assert report["schema_comparison"]["only_in_reference"] == []
+    assert "secret coral" not in result.stdout
+    assert (current.read_bytes(), reference.read_bytes()) == original
