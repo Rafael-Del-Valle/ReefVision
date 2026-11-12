@@ -26,6 +26,12 @@ def mesh_edge_paths(
         not isfinite(scale_uncertainty) or not 0 <= scale_uncertainty < 1
     ):
         raise ValueError("Mesh path relative scale uncertainty must be finite and in [0, 1)")
+    # Validate every source vertex, including unreferenced vertices, before
+    # building a graph. Otherwise malformed geometry can escape QC when the
+    # selected route never traverses the affected vertex.
+    for point in points:
+        if len(point) != 3 or any(not isfinite(coordinate) for coordinate in point):
+            raise ValueError("Mesh path vertices require three finite coordinates")
     if len(pairs) > 16:
         raise ValueError("A maximum of 16 mesh path pairs is supported")
     # Direct scientific-engine callers must not bypass mesh topology validation.
