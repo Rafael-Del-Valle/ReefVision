@@ -41,6 +41,20 @@ from reefvision.storage.projects import (
     resolve_managed_project_path,
 )
 
+def _reject_symlinked_training_path(settings: Settings, relative_path: str) -> None:
+    """Reject symlink components before managed-path resolution erases them."""
+    from pathlib import Path
+
+    relative = Path(relative_path)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValidationError("Pose training artifact path is not canonical")
+    current = settings.resolved_data_dir
+    for component in relative.parts:
+        current = current / component
+        if current.is_symlink():
+            raise ValidationError("Pose training artifact path contains a symbolic link")
+
+
 PoseTrainingProcessor = Callable[
     [
         Settings,
@@ -719,6 +733,7 @@ def _reused_pose_training_result(
         or run.result_checkpoint_path != run.result_checkpoint_path.strip()
     ):
         raise ValidationError("Recovered pose training checkpoint path is invalid")
+    _reject_symlinked_training_path(settings, run.result_checkpoint_path)
     checkpoint = resolve_managed_project_path(
         settings,
         run.result_checkpoint_path,
@@ -1609,6 +1624,7 @@ def create_pose_workflow_training_result(
     if run.result_checkpoint_path != run.result_checkpoint_path.strip():
         raise ValidationError("Completed pose training checkpoint path is not canonical")
 
+    _reject_symlinked_training_path(settings, run.result_checkpoint_path)
     checkpoint = resolve_managed_project_path(
         settings,
         run.result_checkpoint_path,
