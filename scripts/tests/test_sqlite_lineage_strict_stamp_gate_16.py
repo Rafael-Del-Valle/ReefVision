@@ -14,7 +14,11 @@ SCRIPT = Path(__file__).resolve().parents[1] / "inspect_sqlite_lineage_16.py"
 @pytest.mark.parametrize(
     ("schema", "revision", "expected_exit"),
     [
-        ("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)", "0037", 0),
+        (
+            "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)",
+            "0037",
+            0,
+        ),
         (None, None, 2),
         ("CREATE TABLE alembic_version (version_num TEXT)", "0037", 2),
         ("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)", None, 2),
