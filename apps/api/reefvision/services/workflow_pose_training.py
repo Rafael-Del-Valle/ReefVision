@@ -451,6 +451,8 @@ def _seed_pose_model(
     ):
         raise ValidationError("Pose retraining seed checkpoint path is invalid")
 
+    # Check the original registered path before resolution follows symlinks.
+    _reject_symlinked_training_path(settings, model.managed_path)
     checkpoint = resolve_managed_project_path(
         settings,
         model.managed_path,
