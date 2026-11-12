@@ -293,6 +293,7 @@ def test_calibrated_mesh_edge_underflow_warns_in_standalone_and_saved_graph(
         "calibrated_path_length_underflow",
         "calibrated_endpoint_chord_underflow",
         "open_boundary_edge_on_path",
+        "calibrated_path_segment_underflow",
     ]
     assert direct["measurement_status"] == "caller_supplied_unverified"
 
