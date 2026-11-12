@@ -1705,6 +1705,8 @@ def create_pose_workflow_training_result(
             raise ValidationError("Completed pose training checkpoint artifact path changed")
         if advertised != advertised.strip():
             raise ValidationError("Completed pose training checkpoint artifact path changed")
+        # Check raw path components before resolution follows symlinks.
+        _reject_symlinked_training_path(settings, advertised)
         artifact_checkpoint = resolve_managed_project_path(settings, advertised)
         if artifact_checkpoint != expected_weights_dir / filename:
             raise ValidationError("Completed pose training checkpoint artifact path changed")
