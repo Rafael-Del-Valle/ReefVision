@@ -569,3 +569,73 @@ def test_schema_comparison_cli_accepts_equal_structures_with_different_rows(
     assert report["schema_comparison"]["only_in_reference"] == []
     assert "secret coral" not in result.stdout
     assert (current.read_bytes(), reference.read_bytes()) == original
+
+
+@pytest.mark.parametrize("invalid_reference", [True, False])
+def test_comparison_integrity_gate_checks_both_inputs(
+    tmp_path: Path, invalid_reference: bool
+) -> None:
+    """Matching DDL cannot hide orphaned foreign keys in either input."""
+    import json
+    import subprocess
+    import sys
+
+    current = tmp_path / "current.sqlite"
+    reference = tmp_path / "reference.sqlite"
+    for path in (current, reference):
+        with sqlite3.connect(path) as db:
+            db.execute("CREATE TABLE parent (id INTEGER PRIMARY KEY)")
+            db.execute(
+                "CREATE TABLE review_queue_item_events ("
+                "id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES parent(id))"
+            )
+            db.execute("INSERT INTO parent VALUES (1)")
+            db.execute("INSERT INTO review_queue_item_events VALUES (1, 1)")
+    damaged = reference if invalid_reference else current
+    with sqlite3.connect(damaged) as db:
+        db.execute("UPDATE review_queue_item_events SET parent_id=99")
+    original = (current.read_bytes(), reference.read_bytes())
+    command = [
+        sys.executable, str(SCRIPT), str(current), "--compare-to", str(reference),
+        "--fail-on-integrity-error",
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert result.returncode == 2, result.stderr
+    report = json.loads(result.stdout)
+    assert report["schema_comparison"]["matches"] is True
+    assert report["schema_comparison"]["reference_integrity"][
+        "foreign_key_violation_count"
+    ] == (1 if invalid_reference else 0)
+    assert report["foreign_key_violation_count"] == (0 if invalid_reference else 1)
+    assert report["classification"] == "requires_researcher_review"
+    assert (current.read_bytes(), reference.read_bytes()) == original
+
+
+def test_comparison_integrity_gate_reports_malformed_reference_stamp(tmp_path: Path) -> None:
+    import json
+    import subprocess
+    import sys
+
+    current = tmp_path / "current.sqlite"
+    reference = tmp_path / "reference.sqlite"
+    for path in (current, reference):
+        with sqlite3.connect(path) as db:
+            db.execute("CREATE TABLE alembic_version (version_num TEXT)")
+            db.execute("INSERT INTO alembic_version VALUES ('0038')")
+    with sqlite3.connect(reference) as db:
+        db.execute("DELETE FROM alembic_version")
+    original = (current.read_bytes(), reference.read_bytes())
+    result = subprocess.run(
+        [
+            sys.executable, str(SCRIPT), str(current), "--compare-to",
+            str(reference), "--fail-on-integrity-error",
+        ],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 2, result.stderr
+    report = json.loads(result.stdout)
+    assert report["schema_comparison"]["matches"] is True
+    assert report["schema_comparison"]["reference_integrity"][
+        "alembic_stamp_validation_error"
+    ] == "expected_exactly_one_revision_row"
+    assert (current.read_bytes(), reference.read_bytes()) == original
