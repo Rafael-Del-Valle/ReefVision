@@ -818,7 +818,7 @@ def test_collision_gate_fails_closed_on_uncertain_revision_evidence(
     reference = tmp_path / "reference.sqlite"
     for path, stamp in ((source, source_stamp), (reference, reference_stamp)):
         with sqlite3.connect(path) as db:
-            db.execute("CREATE TABLE alembic_version (version_num TEXT)")
+            db.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)")
             if stamp is not None:
                 db.execute("INSERT INTO alembic_version VALUES (?)", (stamp,))
             db.execute("CREATE TABLE scientific_records (note TEXT)")
