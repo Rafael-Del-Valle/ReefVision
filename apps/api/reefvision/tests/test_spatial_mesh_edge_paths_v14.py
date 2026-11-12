@@ -877,3 +877,30 @@ def test_mesh_path_rejects_overflowing_triangle_cross_product() -> None:
             scale=1e-200,
             scale_uncertainty=0.1,
         )
+
+
+def test_tiny_calibrated_geometric_excess_retains_underflow_qc() -> None:
+    # A positive source-frame detour can vanish after calibration even though
+    # its endpoint chord and route length remain representable in meters.
+    from reefvision.services.spatial_mesh_paths_v14 import mesh_edge_paths
+
+    routes = mesh_edge_paths(
+        points=[
+            (0.0, 0.0, 0.0),
+            (1.0, 2e-8, 0.0),
+            (2.0, 0.0, 0.0),
+            (1.0, 10.0, 0.0),
+        ],
+        faces=[[0, 1, 3], [1, 2, 3]],
+        pairs=[[0, 2]],
+        scale=1e-310,
+        scale_uncertainty=0.1,
+    )
+    assert routes is not None
+    route = routes[0]
+    assert route["status"] == "connected"
+    assert route["length_m"] > 0
+    assert route["endpoint_chord_length_m"] > 0
+    assert route["geometric_excess_length_m"] == 0
+    assert "calibrated_geometric_excess_underflow" in route["path_qc_warnings"]
+    assert route["geometric_excess_scale_interval_m"] == [0.0, 0.0]
