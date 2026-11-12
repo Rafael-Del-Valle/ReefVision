@@ -81,6 +81,10 @@ def inspect(path: Path) -> dict:
                 # Partial/corrupt lineage metadata must remain visible as
                 # uncertain evidence, not abort an otherwise useful report.
                 alembic_stamp_error = str(exc)
+        else:
+            # An unstamped database cannot pass the optional migration-integrity gate.
+            # Preserve read-only evidence; never infer or create a revision marker.
+            alembic_stamp_validation_error = "missing_alembic_version_table"
         tables = {}
         for name in TABLES:
             if name not in names:
