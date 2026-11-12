@@ -792,6 +792,7 @@ def _reused_pose_training_result(
             or advertised != advertised.strip()
         ):
             raise ValidationError("Recovered pose-training checkpoint artifact path changed")
+        _reject_symlinked_training_path(settings, advertised)
         advertised_checkpoint = resolve_managed_project_path(settings, advertised)
         if (
             advertised_checkpoint.resolve() != (expected_weights_dir / filename).resolve()
@@ -886,6 +887,7 @@ def _reused_pose_training_result(
             raise ValidationError("Recovered pose-training checkpoint artifact checksum changed")
         if advertised != advertised.strip():
             raise ValidationError("Recovered pose-training checkpoint artifact checksum changed")
+        _reject_symlinked_training_path(settings, advertised)
         artifact_checkpoint = resolve_managed_project_path(settings, advertised)
         actual_digest = (
             checkpoint_sha256
