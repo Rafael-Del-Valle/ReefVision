@@ -735,3 +735,59 @@ def test_comparison_rejects_same_database_and_symlink_without_writes(tmp_path: P
         assert "independent database" in result.stderr
         assert "private observation" not in result.stderr
         assert source.read_bytes() == before
+
+
+@pytest.mark.parametrize("invalid_reference", [False, True])
+def test_opt_in_alembic_column_constraints_gate_is_read_only(
+    tmp_path: Path, invalid_reference: bool
+) -> None:
+    """Legacy stamp tables remain inspectable but cannot pass strict acceptance."""
+    import json
+    import subprocess
+    import sys
+
+    current = tmp_path / "current.sqlite"
+    reference = tmp_path / "reference.sqlite"
+    for path, canonical in (
+        (current, invalid_reference),
+        (reference, not invalid_reference),
+    ):
+        with sqlite3.connect(path) as db:
+            ddl = (
+                "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)"
+                if canonical
+                else "CREATE TABLE alembic_version (version_num TEXT)"
+            )
+            db.execute(ddl)
+            db.execute("INSERT INTO alembic_version VALUES ('0038')")
+            db.execute("CREATE TABLE scientific_records (note TEXT)")
+            db.execute("INSERT INTO scientific_records VALUES ('private coral location')")
+    before = (current.read_bytes(), reference.read_bytes())
+    command = [
+        sys.executable,
+        str(SCRIPT),
+        str(current),
+        "--compare-to",
+        str(reference),
+        "--fail-on-noncanonical-stamp",
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert result.returncode == 2, result.stderr
+    report = json.loads(result.stdout)
+    assert report["alembic_stamp_constraint_error"] == (
+        None if invalid_reference else "invalid_alembic_version_column_constraints"
+    )
+    assert report["schema_comparison"]["reference_integrity"][
+        "alembic_stamp_constraint_error"
+    ] == (
+        "invalid_alembic_version_column_constraints" if invalid_reference else None
+    )
+    assert report["classification"] == "requires_researcher_review"
+    assert "private coral location" not in result.stdout
+    assert (current.read_bytes(), reference.read_bytes()) == before
+
+    # Legacy acceptance behavior is preserved unless the strict gate is selected.
+    legacy = subprocess.run(
+        command[:-1], capture_output=True, text=True, check=False
+    )
+    assert legacy.returncode == 0, legacy.stderr
