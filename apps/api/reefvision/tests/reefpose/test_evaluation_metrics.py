@@ -146,6 +146,32 @@ def test_confidence_calibration_and_threshold_curve_include_misses() -> None:
     assert (high.selected, high.true_positives, high.false_positives) == (0, 0, 0)
 
 
+def test_confidence_calibration_includes_false_positive_visibility() -> None:
+    result = evaluate_pose_instances(
+        [
+            PoseEvaluationInstance(
+                instance_id="fish-1",
+                references=(
+                    _reference("snout", 0, 0),
+                    _reference("fin", 5, 5, visibility="absent"),
+                ),
+                estimates=(
+                    _estimate("snout", 0, 0, confidence=0.9),
+                    _estimate("fin", 5, 5, confidence=1.0),
+                ),
+                normalization_length=10,
+            )
+        ],
+        calibration_threshold=0.1,
+        confidence_thresholds=(0.0,),
+    )
+
+    assert result.visibility.false_positives == 1
+    assert result.calibration.sample_count == 2
+    assert result.calibration.brier_score == pytest.approx((0.1**2 + 1.0**2) / 2)
+    assert result.calibration.thresholds[0].precision == pytest.approx(0.5)
+
+
 def test_oks_requires_valid_sigmas_and_area() -> None:
     valid = evaluate_pose_instances(
         [

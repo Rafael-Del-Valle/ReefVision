@@ -270,6 +270,8 @@ def evaluate_pose_instances(
             estimate = estimates.get(reference.landmark_id)
             predicted_visible = bool(estimate is not None and estimate.visible)
             reference_visible = reference.visibility == "visible"
+            confidence = estimate.confidence if estimate is not None else 0.0
+            calibration_correct = False
             if reference_visible and predicted_visible:
                 visibility_tp += 1
             elif reference_visible:
@@ -278,51 +280,43 @@ def evaluate_pose_instances(
                 visibility_fp += 1
             else:
                 visibility_tn += 1
-            if not reference_visible:
-                continue
-
-            visible_reference_count += 1
-            accumulator = accumulators.setdefault(
-                reference.landmark_id,
-                _LandmarkAccumulator(
-                    name=reference.name,
-                    reference_count=0,
-                    matched_count=0,
-                    errors=[],
-                    normalized_errors=[],
-                    pck_hits={_threshold_key(value): 0 for value in pck_values},
-                ),
-            )
-            if accumulator.name != reference.name:
-                raise ValueError("Stable landmark ID maps to inconsistent names")
-            accumulator.reference_count += 1
-            confidence = estimate.confidence if estimate is not None else 0.0
-            normalized_error: float | None = None
-            if predicted_visible and estimate is not None:
-                error = hypot(reference.x - estimate.x, reference.y - estimate.y)
-                normalized_error = error / instance.normalization_length
-                errors.append(error)
-                normalized_errors.append(normalized_error)
-                matched_visible_count += 1
-                accumulator.matched_count += 1
-                accumulator.errors.append(error)
-                accumulator.normalized_errors.append(normalized_error)
-                for threshold in pck_values:
-                    key = _threshold_key(threshold)
-                    if normalized_error <= threshold:
-                        pck_hits[key] += 1
-                        accumulator.pck_hits[key] += 1
-                if oks_ready:
-                    assert instance.oks_sigmas is not None
-                    assert instance.reference_area is not None
-                    sigma = instance.oks_sigmas[reference.landmark_id]
-                    oks_sum += exp(-(error**2) / (2 * sigma**2 * instance.reference_area))
-            calibration_samples.append(
-                (
-                    confidence,
-                    normalized_error is not None and normalized_error <= calibration_threshold,
+            if reference_visible:
+                visible_reference_count += 1
+                accumulator = accumulators.setdefault(
+                    reference.landmark_id,
+                    _LandmarkAccumulator(
+                        name=reference.name,
+                        reference_count=0,
+                        matched_count=0,
+                        errors=[],
+                        normalized_errors=[],
+                        pck_hits={_threshold_key(value): 0 for value in pck_values},
+                    ),
                 )
-            )
+                if accumulator.name != reference.name:
+                    raise ValueError("Stable landmark ID maps to inconsistent names")
+                accumulator.reference_count += 1
+                if predicted_visible and estimate is not None:
+                    error = hypot(reference.x - estimate.x, reference.y - estimate.y)
+                    normalized_error = error / instance.normalization_length
+                    calibration_correct = normalized_error <= calibration_threshold
+                    errors.append(error)
+                    normalized_errors.append(normalized_error)
+                    matched_visible_count += 1
+                    accumulator.matched_count += 1
+                    accumulator.errors.append(error)
+                    accumulator.normalized_errors.append(normalized_error)
+                    for threshold in pck_values:
+                        key = _threshold_key(threshold)
+                        if normalized_error <= threshold:
+                            pck_hits[key] += 1
+                            accumulator.pck_hits[key] += 1
+                    if oks_ready:
+                        assert instance.oks_sigmas is not None
+                        assert instance.reference_area is not None
+                        sigma = instance.oks_sigmas[reference.landmark_id]
+                        oks_sum += exp(-(error**2) / (2 * sigma**2 * instance.reference_area))
+            calibration_samples.append((confidence, calibration_correct))
         if visible_references:
             if oks_ready:
                 oks_values.append(oks_sum / len(visible_references))

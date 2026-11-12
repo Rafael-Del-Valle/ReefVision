@@ -16,10 +16,13 @@ from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from reefvision import __version__
 from reefvision.config import Settings
 from reefvision.db.models import (
     ModelRegistration,
     PoseEvaluationRun,
+    PoseLandmarkSchema,
+    PoseLandmarkSchemaRevision,
     PoseTrainingDataset,
     PoseTrainingDatasetItem,
     Project,
@@ -32,7 +35,6 @@ from reefvision.domain.pose_evaluation import (
     PoseLandmarkReference,
     evaluate_pose_instances,
 )
-from reefvision.ml.reefpose.inference import ReefPosePredictor
 from reefvision.schemas.pose_evaluation import (
     PoseEvaluationCreateRequest,
     PoseEvaluationRunResponse,
@@ -40,6 +42,18 @@ from reefvision.schemas.pose_evaluation import (
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.results_packages import sha256_file
+
+
+def create_reefpose_predictor(path: Path, *, device: str) -> Any:
+    """Load the optional native runtime only when an evaluation is requested."""
+
+    try:
+        from reefvision.ml.reefpose.inference import ReefPosePredictor
+
+        return ReefPosePredictor.from_checkpoint(path, device=device)
+    except Exception as exc:
+        raise ValidationError("Native ReefPose evaluation runtime could not be loaded") from exc
 
 
 def load_exact_video_frames(
@@ -108,6 +122,162 @@ class PoseEvaluationService:
             raise ValidationError(
                 "Registered ReefPose model lacks immutable anatomy schema provenance"
             ) from exc
+
+    @staticmethod
+    def _native_schema_identity(model: ModelRegistration) -> tuple[str, int, str]:
+        metadata = dict(model.metadata_json or {})
+        try:
+            return (
+                str(metadata["source_pose_schema_id"]),
+                int(metadata["source_pose_schema_revision"]),
+                str(metadata["reefpose_anatomy_integrity_hash"]),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValidationError(
+                "Registered ReefPose model lacks native anatomy checkpoint provenance"
+            ) from exc
+
+    def _validate_frozen_dataset(
+        self,
+        dataset: PoseTrainingDataset,
+        items: list[PoseTrainingDatasetItem],
+    ) -> None:
+        manifest = dict(dataset.manifest_json or {})
+        if canonical_json_sha256(manifest) != dataset.manifest_sha256:
+            raise ValidationError("Frozen evaluation dataset manifest integrity check failed")
+        manifest_items = manifest.get("items")
+        if not isinstance(manifest_items, list) or len(manifest_items) != dataset.item_count:
+            raise ValidationError("Frozen evaluation dataset manifest item count has changed")
+        summaries: dict[str, dict[str, Any]] = {}
+        for raw_summary in manifest_items:
+            if not isinstance(raw_summary, dict) or not isinstance(raw_summary.get("item_id"), str):
+                raise ValidationError("Frozen evaluation dataset manifest is invalid")
+            item_id = raw_summary["item_id"]
+            if item_id in summaries:
+                raise ValidationError("Frozen evaluation dataset manifest has duplicate items")
+            summaries[item_id] = raw_summary
+        if set(summaries) != {item.id for item in items}:
+            raise ValidationError("Frozen evaluation dataset items differ from its manifest")
+
+        summary_fields = (
+            "item_sha256",
+            "candidate_id",
+            "video_id",
+            "video_sha256",
+            "video_track_id",
+            "frame_index",
+            "verified_track_revision",
+            "verified_pose_sha256",
+            "pose_schema_id",
+            "pose_schema_revision",
+            "pose_schema_content_hash",
+        )
+        schema = self.session.get(PoseLandmarkSchema, dataset.pose_schema_id)
+        schema_revision = self.session.scalar(
+            select(PoseLandmarkSchemaRevision).where(
+                PoseLandmarkSchemaRevision.schema_id == dataset.pose_schema_id,
+                PoseLandmarkSchemaRevision.revision == dataset.pose_schema_revision,
+            )
+        )
+        if schema is None or schema_revision is None:
+            raise ValidationError("Frozen evaluation anatomy schema revision is unavailable")
+        schema_snapshot = {
+            "schema_version": schema_revision.schema_version,
+            "schema_id": schema_revision.schema_id,
+            "schema_revision": schema_revision.revision,
+            "name": schema.name,
+            "groups": list(schema_revision.groups_json),
+            "expanded_labels": list(schema_revision.expanded_labels_json),
+            "keypoint_count": schema_revision.keypoint_count,
+            "allows_repeated_labels": schema_revision.allows_repeated_labels,
+            "content_hash": schema_revision.content_hash,
+            **(
+                {"definition": dict(schema_revision.definition_json)}
+                if schema_revision.definition_json is not None
+                else {}
+            ),
+        }
+        for item in items:
+            if (
+                item.pose_schema_id,
+                item.pose_schema_revision,
+                item.pose_schema_content_hash,
+            ) != (
+                dataset.pose_schema_id,
+                dataset.pose_schema_revision,
+                dataset.pose_schema_content_hash,
+            ):
+                raise ValidationError("Frozen evaluation item schema identity has changed")
+            expected = {
+                "item_sha256": item.item_sha256,
+                "candidate_id": item.candidate_id,
+                "video_id": item.video_id,
+                "video_sha256": item.video_sha256,
+                "video_track_id": item.video_track_id,
+                "frame_index": item.frame_index,
+                "verified_track_revision": item.verified_track_revision,
+                "verified_pose_sha256": item.verified_pose_sha256,
+                "pose_schema_id": item.pose_schema_id,
+                "pose_schema_revision": item.pose_schema_revision,
+                "pose_schema_content_hash": item.pose_schema_content_hash,
+            }
+            summary = summaries[item.id]
+            if any(summary.get(field) != expected[field] for field in summary_fields):
+                raise ValidationError("Frozen evaluation item differs from its manifest")
+
+            canonical_pose = dict(item.canonical_pose_json or {})
+            verified_payload = {
+                "schema_version": "pose-active-learning-verified-pose-0001",
+                "video_track_id": item.video_track_id,
+                "track_revision": item.verified_track_revision,
+                "focus_frame": item.frame_index,
+                "pose_schema_id": item.pose_schema_id,
+                "pose_schema_revision": item.pose_schema_revision,
+                "pose_observations": list(canonical_pose.get("pose_observations") or []),
+                "keypoints": list(canonical_pose.get("keypoints") or []),
+            }
+            if canonical_json_sha256(verified_payload) != item.verified_pose_sha256:
+                raise ValidationError("Frozen evaluation verified pose integrity check failed")
+            video = self.session.get(VideoAsset, item.video_id)
+            review = dict(item.review_provenance_json or {})
+            review_before = review.get("before")
+            candidate_provenance_sha256 = (
+                review_before.get("candidate_provenance_sha256")
+                if isinstance(review_before, dict)
+                else None
+            )
+            if video is None or not isinstance(candidate_provenance_sha256, str):
+                raise ValidationError("Frozen evaluation item provenance is incomplete")
+            item_payload = {
+                "schema_version": "pose-training-dataset-item-0001",
+                "dataset_id": dataset.id,
+                "candidate_id": item.candidate_id,
+                "project_id": dataset.project_id,
+                "source_round_id": dataset.source_round_id,
+                "video": {
+                    "video_id": video.id,
+                    "sha256": video.sha256,
+                    "revision": video.revision,
+                    "original_filename": video.original_filename,
+                    "width_px": video.width_px,
+                    "height_px": video.height_px,
+                    "frame_count": video.frame_count,
+                    "fps": video.fps,
+                },
+                "video_track_id": item.video_track_id,
+                "label_class_id": item.label_class_id,
+                "verified_track_revision": item.verified_track_revision,
+                "pose_schema": schema_snapshot,
+                "verified_pose_sha256": item.verified_pose_sha256,
+                "canonical_pose": canonical_pose,
+                "source_models": list(item.source_models_json or []),
+                "source_job_ids": list(item.source_job_ids_json or []),
+                "acquisition_provenance": dict(item.acquisition_provenance_json or {}),
+                "candidate_provenance_sha256": candidate_provenance_sha256,
+                "review_provenance": review,
+            }
+            if canonical_json_sha256(item_payload) != item.item_sha256:
+                raise ValidationError("Frozen evaluation item integrity check failed")
 
     @staticmethod
     def _check_leakage(model: ModelRegistration, dataset: PoseTrainingDataset) -> None:
@@ -216,8 +386,9 @@ class PoseEvaluationService:
         )
         if len(items) != dataset.item_count:
             raise ValidationError("Frozen evaluation dataset item count has changed")
+        self._validate_frozen_dataset(dataset, items)
 
-        predictor = ReefPosePredictor.from_checkpoint(checkpoint_path, device=payload.device)
+        predictor = create_reefpose_predictor(checkpoint_path, device=payload.device)
         frame_requests: dict[str, list[int]] = {}
         videos: dict[str, VideoAsset] = {}
         for item in items:
@@ -234,6 +405,8 @@ class PoseEvaluationService:
         for video_id, indices in frame_requests.items():
             video = videos[video_id]
             video_path = resolve_managed_project_path(self.settings, video.managed_path)
+            if not video_path.is_file() or sha256_file(video_path) != video.sha256:
+                raise ValidationError("Frozen evaluation source video checksum has changed")
             for frame_index, image in load_exact_video_frames(video_path, video, indices).items():
                 frames[(video_id, frame_index)] = image
 
@@ -252,7 +425,7 @@ class PoseEvaluationService:
                     prediction.anatomy_schema_id,
                     prediction.anatomy_schema_revision,
                     prediction.anatomy_integrity_hash,
-                ) != self._schema_identity(model):
+                ) != self._native_schema_identity(model):
                     raise ValidationError(
                         "ReefPose prediction anatomy differs from registered model provenance"
                     )
@@ -301,6 +474,28 @@ class PoseEvaluationService:
         )
         metrics_json = asdict(metrics)
         configuration = payload.model_dump(mode="json")
+        resolved_device = str(getattr(predictor, "device", payload.device))
+        software: dict[str, Any] = {
+            "reefvision": __version__,
+            "python": platform.python_version(),
+        }
+        try:
+            import torch
+
+            software.update(
+                {
+                    "torch": torch.__version__,
+                    "cuda_runtime": torch.version.cuda,
+                }
+            )
+            if resolved_device.casefold().startswith("cuda") and torch.cuda.is_available():
+                software["cuda_device"] = torch.cuda.get_device_name(resolved_device)
+        except Exception:
+            software["torch"] = "unavailable"
+        performance = {
+            "inference_latency_ms": (inference_seconds / len(items)) * 1000.0,
+            "images_per_second": len(items) / inference_seconds,
+        }
         provenance = {
             "project_id": project_id,
             "model_id": model.id,
@@ -313,8 +508,9 @@ class PoseEvaluationService:
             "pose_schema_content_hash": dataset.pose_schema_content_hash,
             "truth_policy": "scientist_verified_only",
             "normalization_policy": "verified_bbox_diagonal",
-            "software": {"python": platform.python_version()},
+            "software": software,
             "device_request": payload.device,
+            "resolved_device": resolved_device,
         }
         result_payload = {
             "schema_version": "reefpose-evaluation-run-0001",
@@ -322,6 +518,7 @@ class PoseEvaluationService:
             "metrics": metrics_json,
             "predictions": predictions,
             "provenance": provenance,
+            "performance": performance,
         }
         run = PoseEvaluationRun(
             project_id=project_id,
@@ -335,8 +532,8 @@ class PoseEvaluationService:
             provenance_json=provenance,
             warnings_json=list(metrics.warnings),
             result_sha256=canonical_json_sha256(result_payload),
-            inference_latency_ms=(inference_seconds / len(items)) * 1000.0,
-            images_per_second=len(items) / inference_seconds,
+            inference_latency_ms=performance["inference_latency_ms"],
+            images_per_second=performance["images_per_second"],
         )
         try:
             self.session.add(run)
