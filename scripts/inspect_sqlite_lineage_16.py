@@ -167,6 +167,8 @@ def main() -> None:
         parser.error("--fail-on-schema-drift requires --compare-to")
     if args.fail_on_revision_mismatch and args.compare_to is None:
         parser.error("--fail-on-revision-mismatch requires --compare-to")
+    if args.compare_to is not None and args.database.samefile(args.compare_to):
+        parser.error("--compare-to requires an independent database, not the same file")
     evidence = inspect(args.database)
     reference = None
     if args.compare_to is not None:
