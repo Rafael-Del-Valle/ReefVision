@@ -28,3 +28,7 @@ report; neither database is changed. No observation rows are included.
 The integrity gate now evaluates both bounded full `integrity_check(100)`
 and `quick_check`, FK evidence, and Alembic metadata for both inputs when
 comparison is requested. This is diagnostic rather than scientific approval.
+
+### Colliding Alembic revisions (1.6)
+
+Run `python scripts/inspect_sqlite_lineage_16.py PRIMARY.sqlite --compare-to REFERENCE.sqlite --fail-on-lineage-collision` to exit with status 2 when **both** databases have the same single validated Alembic revision but their structural SQLite schema SHA-256 fingerprints differ. JSON evidence is emitted before the exit, and both databases are opened read-only. The flag requires `--compare-to`; it does not alter the existing schema-drift or revision-mismatch gates. Different revision markers with different schemas are **not** a collision under this narrowly defined gate; combine `--fail-on-schema-drift` and `--fail-on-revision-mismatch` when those independent conditions should also fail. Matching revision and schema fingerprints are not proof of migration equivalence or scientific-record consistency. Human reconciliation and the separate 1.1/1.6 revision-0038 collision remain unresolved. No database migration is performed.
