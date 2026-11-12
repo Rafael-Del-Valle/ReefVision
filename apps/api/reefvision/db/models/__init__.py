@@ -33,6 +33,7 @@ from reefvision.db.models.pose_active_learning import (
     PoseActiveLearningCandidate,
     PoseActiveLearningRound,
 )
+from reefvision.db.models.pose_evaluation import PoseEvaluationRun
 from reefvision.db.models.pose_schema import (
     PoseLandmarkSchema,
     PoseLandmarkSchemaRevision,
@@ -100,6 +101,7 @@ __all__ = [
     "ModelRegistration",
     "PoseActiveLearningCandidate",
     "PoseActiveLearningRound",
+    "PoseEvaluationRun",
     "PoseLandmarkAssociationCandidate",
     "PoseLandmarkAssociationDecision",
     "PoseLandmarkCorrection",

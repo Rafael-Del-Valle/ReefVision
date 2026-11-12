@@ -142,15 +142,15 @@ def _validate_instance(instance: PoseEvaluationInstance) -> None:
         raise ValueError("Reference landmark IDs must be unique per instance")
     if len(estimate_ids) != len(set(estimate_ids)):
         raise ValueError("Estimate landmark IDs must be unique per instance")
-    for item in instance.references:
-        if item.visibility not in REFERENCE_VISIBILITY_STATES:
+    for reference in instance.references:
+        if reference.visibility not in REFERENCE_VISIBILITY_STATES:
             raise ValueError("Reference landmark visibility is invalid")
-        if not item.name or not isfinite(item.x) or not isfinite(item.y):
+        if not reference.name or not isfinite(reference.x) or not isfinite(reference.y):
             raise ValueError("Reference landmark values must be finite and identified")
-    for item in instance.estimates:
-        if not isfinite(item.x) or not isfinite(item.y):
+    for estimate in instance.estimates:
+        if not isfinite(estimate.x) or not isfinite(estimate.y):
             raise ValueError("Estimated landmark coordinates must be finite")
-        if not isfinite(item.confidence) or not 0 <= item.confidence <= 1:
+        if not isfinite(estimate.confidence) or not 0 <= estimate.confidence <= 1:
             raise ValueError("Estimated landmark confidence must be within [0, 1]")
     if instance.reference_area is not None and (
         not isfinite(instance.reference_area) or instance.reference_area <= 0
@@ -313,8 +313,10 @@ def evaluate_pose_instances(
                         pck_hits[key] += 1
                         accumulator.pck_hits[key] += 1
                 if oks_ready:
-                    sigma = instance.oks_sigmas[reference.landmark_id]  # type: ignore[index]
-                    oks_sum += exp(-(error**2) / (2 * sigma**2 * float(instance.reference_area)))
+                    assert instance.oks_sigmas is not None
+                    assert instance.reference_area is not None
+                    sigma = instance.oks_sigmas[reference.landmark_id]
+                    oks_sum += exp(-(error**2) / (2 * sigma**2 * instance.reference_area))
             calibration_samples.append(
                 (
                     confidence,

@@ -1,0 +1,75 @@
+"""Scientific pose evaluation API."""
+
+from typing import Annotated, Literal
+
+from fastapi import APIRouter, Depends, Query, Request, Response, status
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
+
+from reefvision.api.dependencies import get_db_session
+from reefvision.schemas.pose_evaluation import (
+    PoseEvaluationCreateRequest,
+    PoseEvaluationRunResponse,
+)
+from reefvision.services.pose_evaluation import PoseEvaluationService
+
+router = APIRouter(tags=["pose-evaluation"])
+DbSession = Annotated[Session, Depends(get_db_session)]
+
+
+def service(request: Request, session: Session) -> PoseEvaluationService:
+    return PoseEvaluationService(session, request.app.state.settings)
+
+
+@router.post(
+    "/projects/{project_id}/pose-evaluations",
+    response_model=PoseEvaluationRunResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_pose_evaluation(
+    project_id: str,
+    payload: PoseEvaluationCreateRequest,
+    request: Request,
+    session: DbSession,
+) -> PoseEvaluationRunResponse:
+    return service(request, session).create(project_id, payload)
+
+
+@router.get(
+    "/projects/{project_id}/pose-evaluations",
+    response_model=list[PoseEvaluationRunResponse],
+)
+def list_pose_evaluations(
+    project_id: str,
+    request: Request,
+    session: DbSession,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[PoseEvaluationRunResponse]:
+    return service(request, session).list_for_project(project_id, limit=limit, offset=offset)
+
+
+@router.get("/pose-evaluations/{run_id}", response_model=PoseEvaluationRunResponse)
+def get_pose_evaluation(
+    run_id: str,
+    request: Request,
+    session: DbSession,
+) -> PoseEvaluationRunResponse:
+    return service(request, session).get(run_id)
+
+
+@router.get("/pose-evaluations/{run_id}/export")
+def export_pose_evaluation(
+    run_id: str,
+    request: Request,
+    session: DbSession,
+    format: Literal["json", "csv"] = "json",
+) -> Response:
+    evaluation = service(request, session)
+    if format == "json":
+        return JSONResponse(evaluation.export_json(run_id))
+    return Response(
+        evaluation.export_csv(run_id),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="reefpose-evaluation-{run_id}.csv"'},
+    )

@@ -9,7 +9,7 @@ def test_mask_migrations_form_one_linear_head() -> None:
     config = Config(str(api_root / "alembic.ini"))
     scripts = ScriptDirectory.from_config(config)
 
-    assert scripts.get_heads() == ["0038"]
+    assert scripts.get_heads() == ["0039"]
     editable_masks = scripts.get_revision("0015")
     mask_datasets = scripts.get_revision("0016")
     segmentation_proposals = scripts.get_revision("0017")
@@ -28,6 +28,8 @@ def test_mask_migrations_form_one_linear_head() -> None:
     behavior_models = scripts.get_revision("0035")
     pose_active_learning = scripts.get_revision("0036")
     pose_training_datasets = scripts.get_revision("0037")
+    pose_anatomy_definitions = scripts.get_revision("0038")
+    pose_evaluation_runs = scripts.get_revision("0039")
     assert editable_masks is not None
     assert editable_masks.down_revision == "53ba400993db"
     assert mask_datasets is not None
@@ -64,3 +66,7 @@ def test_mask_migrations_form_one_linear_head() -> None:
     assert pose_active_learning.down_revision == "0035"
     assert pose_training_datasets is not None
     assert pose_training_datasets.down_revision == "0036"
+    assert pose_anatomy_definitions is not None
+    assert pose_anatomy_definitions.down_revision == "0037"
+    assert pose_evaluation_runs is not None
+    assert pose_evaluation_runs.down_revision == "0038"
