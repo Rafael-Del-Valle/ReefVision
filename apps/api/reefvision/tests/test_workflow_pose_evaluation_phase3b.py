@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
 from reefvision.db.models import Job, Project
+from reefvision.domain.errors import WorkflowExecutionCancelled
 from reefvision.schemas.pose_evaluation import PoseEvaluationComparisonCreateRequest
 from reefvision.services.workflow_node_registry_v1 import workflow_node_registry
 from reefvision.services.workflow_pose_evaluation import (
@@ -112,3 +114,53 @@ def test_workflow_evaluation_executes_production_child_and_returns_provenance(
     assert result["evaluation_run_ids"] == ["run-1", "run-2"]
     assert result["report_sha256"] == "a" * 64
     assert result["workflow_run_id"] == "workflow-run-1"
+
+
+def test_workflow_child_cancellation_remains_cancellation(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    from reefvision.services.pose_evaluation_comparison import PoseEvaluationComparisonService
+
+    with client.app.state.session_factory() as session:
+        session.add(
+            Project(
+                id="project-c",
+                name="Cancelled",
+                slug="cancelled",
+                storage_root="projects/c",
+            )
+        )
+        session.add(
+            Job(
+                id="cancelled-child",
+                project_id="project-c",
+                job_type="pose_evaluation",
+                status="cancelled",
+                progress_current=0,
+                progress_total=1,
+                request_json={},
+                result_json={"stage": "cancelled"},
+            )
+        )
+        session.commit()
+
+    monkeypatch.setattr(
+        PoseEvaluationComparisonService,
+        "submit",
+        lambda *_args, **_kwargs: SimpleNamespace(id="cancelled-child"),
+    )
+    with client.app.state.session_factory() as session, pytest.raises(
+        WorkflowExecutionCancelled
+    ):
+        create_pose_workflow_evaluation_result(
+            session,
+            client.app.state.settings,
+            project_id="project-c",
+            dataset_payload={"dataset_id": "dataset-c"},
+            model_payloads=[{"model_id": "model-c"}],
+            parameters={},
+            workflow_run_id=None,
+            workflow_node_run_id=None,
+            processor=lambda *_args, **_kwargs: True,
+        )

@@ -5,13 +5,17 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import Job, ModelRegistration, PoseEvaluationRun
 from reefvision.ml.pose_evaluation import PoseEvaluationProviderExclusion
 from reefvision.schemas.pose_evaluation import PoseEvaluationCreateRequest
-from reefvision.services.pose_evaluation import PoseEvaluationService
+from reefvision.services.pose_evaluation import (
+    PoseEvaluationService,
+    pose_evaluation_result_sha256,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 
 
@@ -61,11 +65,9 @@ def _completed_child_is_reusable(
     session: Session,
     request: dict[str, Any],
     identity: dict[str, Any],
-    existing: dict[str, Any],
+    run: PoseEvaluationRun,
 ) -> bool:
-    run_id = str(existing.get("evaluation_run_id") or "")
-    run = session.get(PoseEvaluationRun, run_id) if run_id else None
-    if run is None or run.status != "completed":
+    if run.status != "completed":
         return False
     expected_configuration = {
         "model_id": str(identity["model_id"]),
@@ -85,8 +87,37 @@ def _completed_child_is_reusable(
         and run.evaluation_dataset_id == request["evaluation_dataset_id"]
         and dict(run.configuration_json or {}) == expected_configuration
         and provenance.get("checkpoint_sha256") == identity.get("checkpoint_sha256")
+        and provenance.get("checkpoint_size_bytes") == identity.get("checkpoint_size_bytes")
         and provenance.get("dataset_manifest_sha256") == request.get("dataset_manifest_sha256")
-        and run.result_sha256 == existing.get("result_sha256")
+        and provenance.get("pose_schema_id") == identity.get("pose_schema_id")
+        and provenance.get("pose_schema_revision") == identity.get("pose_schema_revision")
+        and provenance.get("pose_schema_content_hash") == identity.get("pose_schema_content_hash")
+        and provenance.get("provider_name") == identity.get("provider_name")
+        and provenance.get("provider_version") == identity.get("provider_version")
+        and run.result_sha256 == pose_evaluation_result_sha256(run)
+    )
+
+
+def _recover_completed_child(
+    session: Session, request: dict[str, Any], identity: dict[str, Any]
+) -> PoseEvaluationRun | None:
+    candidates = session.scalars(
+        select(PoseEvaluationRun)
+        .where(
+            PoseEvaluationRun.project_id == request.get("project_id"),
+            PoseEvaluationRun.model_id == identity.get("model_id"),
+            PoseEvaluationRun.evaluation_dataset_id == request.get("evaluation_dataset_id"),
+            PoseEvaluationRun.status == "completed",
+        )
+        .order_by(PoseEvaluationRun.created_at.desc(), PoseEvaluationRun.id.desc())
+    )
+    return next(
+        (
+            run
+            for run in candidates
+            if _completed_child_is_reusable(session, request, identity, run)
+        ),
+        None,
     )
 
 
@@ -133,6 +164,7 @@ def process_pose_evaluation_job(
             return True
         project_id = job.project_id
         request = dict(job.request_json or {})
+        request["project_id"] = project_id
         identities = [
             dict(item)
             for item in list(request.get("model_identities") or [])
@@ -164,10 +196,21 @@ def process_pose_evaluation_job(
                 cancellation_check()
                 model_id = str(identity["model_id"])
                 existing = prior_models.get(model_id)
-                if existing is not None and _completed_child_is_reusable(
-                    session, request, identity, existing
-                ):
-                    models.append(existing)
+                existing_run = None
+                if existing is not None:
+                    existing_run_id = str(existing.get("evaluation_run_id") or "")
+                    existing_run = session.get(PoseEvaluationRun, existing_run_id)
+                reusable_run = (
+                    existing_run
+                    if existing_run is not None
+                    and _completed_child_is_reusable(session, request, identity, existing_run)
+                    else _recover_completed_child(session, request, identity)
+                )
+                if reusable_run is not None:
+                    model = session.get(ModelRegistration, model_id)
+                    if model is None:
+                        raise RuntimeError(f"Registered comparison model disappeared: {model_id}")
+                    models.append(_model_result(model, identity, reusable_run))
                     job.progress_current = min(
                         job.progress_total,
                         (model_index + 1) * int(job.progress_total / len(identities)),

@@ -62,11 +62,21 @@ class ConfidenceThresholdMetrics:
 
 
 @dataclass(frozen=True, slots=True)
+class ConfidenceReliabilityBin:
+    lower_bound: float
+    upper_bound: float
+    sample_count: int
+    mean_confidence: float
+    accuracy: float
+
+
+@dataclass(frozen=True, slots=True)
 class ConfidenceCalibrationMetrics:
     sample_count: int
     correctness_threshold: float
     brier_score: float
     expected_calibration_error: float
+    reliability_bins: tuple[ConfidenceReliabilityBin, ...]
     thresholds: tuple[ConfidenceThresholdMetrics, ...]
 
 
@@ -200,6 +210,7 @@ def _confidence_metrics(
             correctness_threshold=correctness_threshold,
             brier_score=0.0,
             expected_calibration_error=0.0,
+            reliability_bins=(),
             thresholds=tuple(
                 ConfidenceThresholdMetrics(value, 0, 0, 0, 0, 0.0, 0.0) for value in thresholds
             ),
@@ -212,12 +223,22 @@ def _confidence_metrics(
         index = min(bin_count - 1, int(confidence * bin_count))
         bins[index].append((confidence, correct))
     ece = 0.0
-    for items in bins:
+    reliability_bins: list[ConfidenceReliabilityBin] = []
+    for index, items in enumerate(bins):
         if not items:
             continue
         mean_confidence = sum(value for value, _correct in items) / len(items)
         accuracy = sum(int(correct) for _value, correct in items) / len(items)
         ece += (len(items) / total) * abs(accuracy - mean_confidence)
+        reliability_bins.append(
+            ConfidenceReliabilityBin(
+                lower_bound=index / bin_count,
+                upper_bound=(index + 1) / bin_count,
+                sample_count=len(items),
+                mean_confidence=mean_confidence,
+                accuracy=accuracy,
+            )
+        )
     curve: list[ConfidenceThresholdMetrics] = []
     for threshold in thresholds:
         selected = [
@@ -242,6 +263,7 @@ def _confidence_metrics(
         correctness_threshold=correctness_threshold,
         brier_score=brier,
         expected_calibration_error=ece,
+        reliability_bins=tuple(reliability_bins),
         thresholds=tuple(curve),
     )
 
@@ -290,6 +312,7 @@ def evaluate_pose_instances(
     calibration_bins: int = 10,
     confidence_thresholds: tuple[float, ...] = (0.0, 0.25, 0.5, 0.75, 0.9),
     visibility_metrics_available: bool = True,
+    confidence_metrics_available: bool = True,
 ) -> PoseEvaluationMetrics:
     """Evaluate stable-ID pose estimates against explicit reference anatomy.
 
@@ -413,6 +436,11 @@ def evaluate_pose_instances(
             "Visibility metrics are unavailable because the provider does not expose "
             "equivalent ReefVision visibility semantics."
         )
+    if not confidence_metrics_available:
+        warning_items.append(
+            "Confidence calibration is unavailable because the provider did not expose "
+            "per-landmark confidence values."
+        )
     return PoseEvaluationMetrics(
         instance_count=len(instances),
         visible_reference_count=visible_reference_count,
@@ -464,8 +492,16 @@ def evaluate_pose_instances(
                 ),
             ),
             "calibration": MetricAvailability(
-                available=bool(calibration_samples),
-                reason=None if calibration_samples else "No landmark confidence samples exist.",
+                available=bool(calibration_samples) and confidence_metrics_available,
+                reason=(
+                    None
+                    if calibration_samples and confidence_metrics_available
+                    else (
+                        "The provider did not expose per-landmark confidence values."
+                        if not confidence_metrics_available
+                        else "No landmark confidence samples exist."
+                    )
+                ),
             ),
             "oks": MetricAvailability(
                 available=bool(oks_values),

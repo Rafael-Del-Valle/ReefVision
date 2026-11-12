@@ -24,6 +24,7 @@ from reefvision.db.models import (
     PoseEvaluationRun,
     PoseLandmarkSchema,
     PoseLandmarkSchemaRevision,
+    PoseModelSchemaBinding,
     PoseTrainingDataset,
     PoseTrainingDatasetItem,
     Project,
@@ -47,6 +48,7 @@ from reefvision.schemas.pose_evaluation import (
     PoseEvaluationCreateRequest,
     PoseEvaluationRunResponse,
 )
+from reefvision.services.pose_schemas import definition_for_revision
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
@@ -79,6 +81,8 @@ def load_exact_video_frames(
     video_path: Path,
     video: VideoAsset,
     frame_indices: list[int],
+    *,
+    cancellation_check: Callable[[], None] | None = None,
 ) -> dict[int, Image.Image]:
     targets = sorted(set(frame_indices))
     if not targets or targets[0] < 0 or targets[-1] >= video.frame_count:
@@ -91,6 +95,8 @@ def load_exact_video_frames(
     target_set = set(targets)
     try:
         for frame_index in range(targets[-1] + 1):
+            if cancellation_check is not None:
+                cancellation_check()
             ok, frame = capture.read()
             if not ok or frame is None:
                 raise ValidationError(f"Evaluation video ended before frozen frame {targets[-1]}")
@@ -117,6 +123,25 @@ def _synchronize_cuda(device: str) -> None:
         raise ValidationError("CUDA synchronization failed during pose evaluation") from exc
 
 
+def pose_evaluation_result_sha256(run: PoseEvaluationRun) -> str:
+    """Recompute a persisted evaluation result hash from authoritative columns."""
+
+    return canonical_json_sha256(
+        {
+            "schema_version": run.schema_version,
+            "configuration": dict(run.configuration_json or {}),
+            "metrics": dict(run.metrics_json or {}),
+            "predictions": list(run.predictions_json or []),
+            "provenance": dict(run.provenance_json or {}),
+            "warnings": list(run.warnings_json or []),
+            "performance": {
+                "inference_latency_ms": run.inference_latency_ms,
+                "images_per_second": run.images_per_second,
+            },
+        }
+    )
+
+
 class PoseEvaluationService:
     def __init__(self, session: Session, settings: Settings) -> None:
         self.session = session
@@ -128,9 +153,19 @@ class PoseEvaluationService:
             raise NotFoundError("Pose evaluation run not found")
         return run
 
-    @staticmethod
-    def _schema_identity(model: ModelRegistration) -> tuple[str, int, str]:
+    def _schema_identity(self, model: ModelRegistration) -> tuple[str, int, str]:
         metadata = dict(model.metadata_json or {})
+        binding = self.session.get(PoseModelSchemaBinding, model.id)
+        if binding is not None:
+            revision = self.session.scalar(
+                select(PoseLandmarkSchemaRevision).where(
+                    PoseLandmarkSchemaRevision.schema_id == binding.schema_id,
+                    PoseLandmarkSchemaRevision.revision == binding.schema_revision,
+                )
+            )
+            if revision is None:
+                raise ValidationError("Registered pose model schema binding is invalid")
+            return binding.schema_id, binding.schema_revision, revision.content_hash
         try:
             return (
                 str(metadata["source_pose_schema_id"]),
@@ -156,14 +191,38 @@ class PoseEvaluationService:
                 "Registered ReefPose model lacks native anatomy checkpoint provenance"
             ) from exc
 
-    @staticmethod
     def _evaluation_schema(
+        self,
         model: ModelRegistration,
         dataset: PoseTrainingDataset,
     ) -> PoseEvaluationSchema:
         metadata = dict(model.metadata_json or {})
         raw_schema = metadata.get("pose_landmark_schema")
-        raw_landmarks = raw_schema.get("landmarks") if isinstance(raw_schema, dict) else None
+        if not isinstance(raw_schema, dict):
+            raise ValidationError("Registered pose model lacks landmark schema metadata")
+        advertised = (
+            str(raw_schema.get("schema_id") or ""),
+            int(raw_schema.get("schema_revision") or 0),
+            str(raw_schema.get("content_hash") or ""),
+        )
+        if advertised != self._schema_identity(model):
+            raise ValidationError(
+                "Registered pose model landmark metadata differs from its authoritative binding"
+            )
+        raw_landmarks: Any = None
+        binding = self.session.get(PoseModelSchemaBinding, model.id)
+        if binding is not None:
+            bound_revision = self.session.scalar(
+                select(PoseLandmarkSchemaRevision).where(
+                    PoseLandmarkSchemaRevision.schema_id == binding.schema_id,
+                    PoseLandmarkSchemaRevision.revision == binding.schema_revision,
+                )
+            )
+            if bound_revision is None:
+                raise ValidationError("Registered pose model schema binding is invalid")
+            raw_landmarks = definition_for_revision(bound_revision).get("landmarks")
+        if raw_landmarks is None:
+            raw_landmarks = raw_schema.get("landmarks")
         if not isinstance(raw_landmarks, list) or not raw_landmarks:
             raise ValidationError(
                 "Registered pose model lacks stable landmark identity metadata"
@@ -175,7 +234,10 @@ class PoseEvaluationService:
             landmark_id = str(raw.get("id") or raw.get("landmark_id") or "").strip()
             name = str(raw.get("name") or raw.get("semantic_label") or "").strip()
             try:
-                occurrence_index = int(raw.get("occurrence_index", 0))
+                raw_occurrence = raw.get(
+                    "occurrence_index", raw.get("repeat_index", 0)
+                )
+                occurrence_index = int(raw_occurrence if raw_occurrence is not None else 0)
             except (TypeError, ValueError) as exc:
                 raise ValidationError(
                     f"Registered pose model landmark {index} has an invalid occurrence index"
@@ -454,12 +516,6 @@ class PoseEvaluationService:
         self._validate_frozen_dataset(dataset, items)
 
         schema = self._evaluation_schema(model, dataset)
-        runtime = create_provider_evaluation_runtime(
-            model,
-            checkpoint_path,
-            schema,
-            payload.device,
-        )
         frame_requests: dict[str, list[int]] = {}
         videos: dict[str, VideoAsset] = {}
         for item in items:
@@ -476,11 +532,26 @@ class PoseEvaluationService:
         for video_id, indices in frame_requests.items():
             video = videos[video_id]
             video_path = resolve_managed_project_path(self.settings, video.managed_path)
+            if cancellation_check is not None:
+                cancellation_check()
             if not video_path.is_file() or sha256_file(video_path) != video.sha256:
                 raise ValidationError("Frozen evaluation source video checksum has changed")
-            for frame_index, image in load_exact_video_frames(video_path, video, indices).items():
+            decoded = (
+                load_exact_video_frames(
+                    video_path, video, indices, cancellation_check=cancellation_check
+                )
+                if cancellation_check is not None
+                else load_exact_video_frames(video_path, video, indices)
+            )
+            for frame_index, image in decoded.items():
                 frames[(video_id, frame_index)] = image
 
+        runtime = create_provider_evaluation_runtime(
+            model,
+            checkpoint_path,
+            schema,
+            payload.device,
+        )
         instances: list[PoseEvaluationInstance] = []
         predictions: list[dict[str, Any]] = []
         inference_seconds = 0.0
@@ -555,6 +626,7 @@ class PoseEvaluationService:
             calibration_bins=payload.calibration_bins,
             confidence_thresholds=tuple(float(value) for value in payload.confidence_thresholds),
             visibility_metrics_available=runtime.visibility_metrics_available,
+            confidence_metrics_available=getattr(runtime, "confidence_metrics_available", True),
         )
         metrics_json = asdict(metrics)
         configuration = payload.model_dump(mode="json")
@@ -604,6 +676,7 @@ class PoseEvaluationService:
             "metrics": metrics_json,
             "predictions": predictions,
             "provenance": provenance,
+            "warnings": list(metrics.warnings),
             "performance": performance,
         }
         run = PoseEvaluationRun(

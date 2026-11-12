@@ -12,7 +12,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
-from reefvision.db.models import Job, ModelRegistration, PoseTrainingDataset, Project
+from reefvision.db.models import (
+    Job,
+    ModelRegistration,
+    PoseLandmarkSchemaRevision,
+    PoseModelSchemaBinding,
+    PoseTrainingDataset,
+    Project,
+)
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.pose_evaluation import (
@@ -32,9 +39,26 @@ class PoseEvaluationComparisonService:
         self.session = session
         self.settings = settings
 
-    @staticmethod
-    def _schema_identity(model: ModelRegistration) -> tuple[str, int, str]:
+    def _schema_identity(self, model: ModelRegistration) -> tuple[str, int, str]:
         metadata = dict(model.metadata_json or {})
+        binding = self.session.get(PoseModelSchemaBinding, model.id)
+        if binding is not None:
+            revision = self.session.scalar(
+                select(PoseLandmarkSchemaRevision).where(
+                    PoseLandmarkSchemaRevision.schema_id == binding.schema_id,
+                    PoseLandmarkSchemaRevision.revision == binding.schema_revision,
+                )
+            )
+            if revision is None:
+                raise ValidationError("Pose model schema binding is invalid")
+            raw_schema = metadata.get("pose_landmark_schema")
+            if isinstance(raw_schema, dict) and (
+                str(raw_schema.get("schema_id") or "") != binding.schema_id
+                or int(raw_schema.get("schema_revision") or 0) != binding.schema_revision
+                or str(raw_schema.get("content_hash") or "") != revision.content_hash
+            ):
+                raise ValidationError("Pose model schema metadata differs from its binding")
+            return binding.schema_id, binding.schema_revision, revision.content_hash
         try:
             return (
                 str(metadata["source_pose_schema_id"]),
@@ -133,6 +157,9 @@ class PoseEvaluationComparisonService:
                     "checkpoint_size_bytes": checkpoint_size,
                     "provider_name": model.provider_name,
                     "provider_version": model.provider_version,
+                    "pose_schema_id": dataset.pose_schema_id,
+                    "pose_schema_revision": dataset.pose_schema_revision,
+                    "pose_schema_content_hash": dataset.pose_schema_content_hash,
                 }
             )
 
@@ -229,13 +256,27 @@ class PoseEvaluationComparisonService:
             "row_type",
             "model_id",
             "provider_name",
+            "display_name",
+            "provider_version",
+            "checkpoint_sha256",
+            "dataset_manifest_sha256",
+            "pose_schema_id",
+            "pose_schema_revision",
+            "pose_schema_content_hash",
+            "configuration_json",
+            "provenance_json",
+            "warnings_json",
             "landmark_id",
             "metric",
-            "value",
+            "value_json",
+            "denominator_json",
             "available",
             "reason",
             "evaluation_run_id",
             "result_sha256",
+            "report_sha256",
+            "inference_latency_ms",
+            "images_per_second",
         ]
         writer = csv.DictWriter(stream, fieldnames=fieldnames)
         writer.writeheader()
@@ -243,18 +284,52 @@ class PoseEvaluationComparisonService:
             if not isinstance(model, dict):
                 continue
             metrics = dict(model.get("metrics") or {})
-            for metric in (
-                "mean_euclidean_error",
-                "median_euclidean_error",
-                "nme",
-                "oks",
-                "visibility_accuracy",
-            ):
-                availability = dict(model.get("metric_availability") or {}).get(metric)
+            availability_map = dict(model.get("metric_availability") or {})
+            provenance = dict(model.get("provenance") or {})
+            performance = dict(model.get("performance") or {})
+            common = {
+                "model_id": model.get("model_id"),
+                "display_name": model.get("display_name"),
+                "provider_name": model.get("provider_name"),
+                "provider_version": model.get("provider_version"),
+                "checkpoint_sha256": model.get("checkpoint_sha256"),
+                "dataset_manifest_sha256": report.get("dataset_manifest_sha256"),
+                "pose_schema_id": provenance.get("pose_schema_id"),
+                "pose_schema_revision": provenance.get("pose_schema_revision"),
+                "pose_schema_content_hash": provenance.get("pose_schema_content_hash"),
+                "configuration_json": json.dumps(report.get("configuration") or {}, sort_keys=True),
+                "provenance_json": json.dumps(provenance, sort_keys=True),
+                "warnings_json": json.dumps(model.get("warnings") or [], sort_keys=True),
+                "evaluation_run_id": model.get("evaluation_run_id"),
+                "result_sha256": model.get("result_sha256"),
+                "report_sha256": report.get("report_sha256"),
+                "inference_latency_ms": performance.get("inference_latency_ms"),
+                "images_per_second": performance.get("images_per_second"),
+            }
+            metric_values = {
+                "euclidean_error": {
+                    "mean": metrics.get("mean_euclidean_error"),
+                    "median": metrics.get("median_euclidean_error"),
+                },
+                "nme": metrics.get("nme"),
+                "pck": metrics.get("pck"),
+                "visibility": metrics.get("visibility"),
+                "calibration": metrics.get("calibration"),
+                "oks": metrics.get("oks"),
+                "normalized_error_distribution": metrics.get("normalized_error_distribution"),
+            }
+            denominators = {
+                "visible_reference_count": metrics.get("visible_reference_count"),
+                "matched_visible_count": metrics.get("matched_visible_count"),
+                "instance_count": metrics.get("instance_count"),
+                "oks_instance_count": metrics.get("oks_instance_count"),
+            }
+            for metric, value in metric_values.items():
+                availability = availability_map.get(metric)
                 available = (
                     availability.get("available")
                     if isinstance(availability, dict)
-                    else metrics.get(metric) is not None
+                    else value is not None
                 )
                 reason = (
                     availability.get("reason")
@@ -263,19 +338,17 @@ class PoseEvaluationComparisonService:
                 )
                 writer.writerow(
                     {
+                        **common,
                         "row_type": "aggregate",
-                        "model_id": model.get("model_id"),
-                        "provider_name": model.get("provider_name"),
                         "metric": metric,
-                        "value": (
-                            json.dumps(metrics.get(metric), sort_keys=True)
-                            if metrics.get(metric) is not None
+                        "value_json": (
+                            json.dumps(value, sort_keys=True)
+                            if value is not None
                             else ""
                         ),
+                        "denominator_json": json.dumps(denominators, sort_keys=True),
                         "available": available,
                         "reason": reason,
-                        "evaluation_run_id": model.get("evaluation_run_id"),
-                        "result_sha256": model.get("result_sha256"),
                     }
                 )
             for landmark_id, values in sorted(
@@ -283,15 +356,22 @@ class PoseEvaluationComparisonService:
             ):
                 writer.writerow(
                     {
+                        **common,
                         "row_type": "landmark",
-                        "model_id": model.get("model_id"),
-                        "provider_name": model.get("provider_name"),
                         "landmark_id": landmark_id,
                         "metric": "metrics",
-                        "value": json.dumps(values, sort_keys=True, separators=(",", ":")),
+                        "value_json": json.dumps(values, sort_keys=True, separators=(",", ":")),
                         "available": True,
-                        "evaluation_run_id": model.get("evaluation_run_id"),
-                        "result_sha256": model.get("result_sha256"),
+                    }
+                )
+            for warning in list(model.get("warnings") or []):
+                writer.writerow(
+                    {
+                        **common,
+                        "row_type": "warning",
+                        "metric": "scientific_warning",
+                        "available": False,
+                        "reason": str(warning),
                     }
                 )
         for exclusion in list(report.get("exclusions") or []):
@@ -305,6 +385,18 @@ class PoseEvaluationComparisonService:
                     "metric": exclusion.get("code"),
                     "available": False,
                     "reason": exclusion.get("reason"),
+                    "report_sha256": report.get("report_sha256"),
+                }
+            )
+        for warning in list(report.get("warnings") or []):
+            writer.writerow(
+                {
+                    "row_type": "warning",
+                    "metric": "comparison_warning",
+                    "available": False,
+                    "reason": str(warning),
+                    "warnings_json": json.dumps(report.get("warnings") or [], sort_keys=True),
+                    "report_sha256": report.get("report_sha256"),
                 }
             )
         return stream.getvalue()

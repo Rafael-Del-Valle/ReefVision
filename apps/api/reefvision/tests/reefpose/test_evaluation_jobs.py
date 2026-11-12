@@ -13,6 +13,9 @@ from reefvision.db.models import (
     Job,
     ModelRegistration,
     PoseEvaluationRun,
+    PoseLandmarkSchema,
+    PoseLandmarkSchemaRevision,
+    PoseModelSchemaBinding,
     PoseTrainingDataset,
     Project,
 )
@@ -143,6 +146,49 @@ def test_submit_comparison_is_async_durable_and_order_independently_deduplicated
         jobs = list(session.scalars(select(Job).where(Job.job_type == "pose_evaluation")))
         assert len(jobs) == 1
         assert jobs[0].deduplication_key == job["request_json"]["request_sha256"]
+
+
+def test_ultralytics_model_uses_authoritative_schema_binding(client: TestClient) -> None:
+    _seed(client)
+    with client.app.state.session_factory() as session:
+        model = session.get(ModelRegistration, MODEL_IDS[0])
+        assert model is not None
+        model.provider_name = "ultralytics"
+        model.framework = "ultralytics"
+        model.metadata_json = {
+            "pose_landmark_schema": {
+                "schema_id": SCHEMA_ID,
+                "schema_revision": 2,
+                "content_hash": SCHEMA_HASH,
+                "expanded_labels": ["snout", "tail"],
+            }
+        }
+        session.add(PoseLandmarkSchema(id=SCHEMA_ID, project_id=PROJECT_ID, name="Fish"))
+        session.add(
+            PoseLandmarkSchemaRevision(
+                schema_id=SCHEMA_ID,
+                revision=2,
+                groups_json=[],
+                expanded_labels_json=["snout", "tail"],
+                keypoint_count=2,
+                allows_repeated_labels=False,
+                content_hash=SCHEMA_HASH,
+            )
+        )
+        session.add(
+            PoseModelSchemaBinding(
+                model_id=model.id,
+                schema_id=SCHEMA_ID,
+                schema_revision=2,
+            )
+        )
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/projects/{PROJECT_ID}/pose-evaluation-comparisons",
+        json=_payload([MODEL_IDS[0]]),
+    )
+    assert response.status_code == 202, response.text
 
 
 def test_comparison_jobs_are_paginated_and_project_scoped(client: TestClient) -> None:
@@ -363,6 +409,88 @@ def test_worker_executes_models_and_persists_comparison_report(
     assert exported_csv.status_code == 200
     assert "row_type,model_id,provider_name" in exported_csv.text
     assert "aggregate" in exported_csv.text
+
+
+def test_worker_recovers_committed_child_missing_from_parent_report(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from reefvision.jobs.pose_evaluation import (
+        _completed_child_is_reusable,
+        process_pose_evaluation_job,
+    )
+    from reefvision.services.pose_evaluation import (
+        PoseEvaluationService,
+        pose_evaluation_result_sha256,
+    )
+
+    _seed(client)
+    created = client.post(
+        f"/api/v1/projects/{PROJECT_ID}/pose-evaluation-comparisons",
+        json=_payload([MODEL_IDS[0]]),
+    ).json()
+    with client.app.state.session_factory() as session:
+        job = session.get(Job, created["id"])
+        assert job is not None
+        identity = dict(job.request_json["model_identities"][0])
+        configuration = {
+            "model_id": MODEL_IDS[0],
+            "evaluation_dataset_id": DATASET_ID,
+            "device": "cpu",
+            "pck_thresholds": [0.05, 0.1, 0.2],
+            "calibration_threshold": 0.1,
+            "calibration_bins": 10,
+            "confidence_thresholds": [0.0, 0.5, 0.9],
+            "oks_sigmas": None,
+        }
+        run = PoseEvaluationRun(
+            project_id=PROJECT_ID,
+            model_id=MODEL_IDS[0],
+            evaluation_dataset_id=DATASET_ID,
+            schema_version="reefpose-evaluation-run-0001",
+            status="completed",
+            configuration_json=configuration,
+            metrics_json={"nme": 0.1, "availability": {}},
+            predictions_json=[],
+            provenance_json={
+                **identity,
+                "dataset_manifest_sha256": DATASET_HASH,
+            },
+            warnings_json=[],
+            result_sha256="0" * 64,
+            inference_latency_ms=4.0,
+            images_per_second=250.0,
+        )
+        session.add(run)
+        session.flush()
+        recovered_run_id = run.id
+        run.result_sha256 = pose_evaluation_result_sha256(run)
+        session.commit()
+        run.warnings_json = ["tampered warning"]
+        session.flush()
+        assert not _completed_child_is_reusable(
+            session,
+            {**dict(job.request_json), "project_id": PROJECT_ID},
+            identity,
+            run,
+        )
+        run.warnings_json = []
+        session.commit()
+
+    monkeypatch.setattr(
+        PoseEvaluationService,
+        "create",
+        lambda *_args, **_kwargs: pytest.fail("recovery must not rerun inference"),
+    )
+    assert process_pose_evaluation_job(
+        client.app.state.settings,
+        client.app.state.session_factory,
+        created["id"],
+    )
+    with client.app.state.session_factory() as session:
+        job = session.get(Job, created["id"])
+        assert job is not None and job.status == "succeeded"
+        assert job.result_json["evaluation_run_ids"] == [recovered_run_id]
 
 
 def test_worker_records_provider_exclusion_without_failing_comparison(

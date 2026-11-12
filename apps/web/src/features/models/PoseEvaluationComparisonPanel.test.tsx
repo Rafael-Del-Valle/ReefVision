@@ -105,15 +105,47 @@ describe("PoseEvaluationComparisonPanel", () => {
                       metrics: {
                         nme: 0.12,
                         mean_euclidean_error: 2.5,
+                        pck: { "0.1": 0.75 },
+                        oks: 0.61,
+                        visibility: { precision: 0.9, recall: 0.8 },
+                        per_landmark: {
+                          snout: {
+                            name: "Snout",
+                            nme: 0.1,
+                            mean_euclidean_error: 2,
+                            localization_coverage: 1,
+                          },
+                        },
                         normalized_error_distribution: {
                           bin_edges: [0.05, 0.1],
                           bin_counts: [3, 1],
                           overflow_count: 0,
                         },
-                        calibration: { expected_calibration_error: 0.08 },
+                        calibration: {
+                          expected_calibration_error: 0.08,
+                          reliability_bins: [
+                            {
+                              mean_confidence: 0.8,
+                              accuracy: 0.75,
+                              sample_count: 4,
+                            },
+                          ],
+                        },
+                      },
+                      performance: {
+                        inference_latency_ms: 4,
+                        images_per_second: 250,
                       },
                       metric_availability: {
                         nme: { available: true, reason: null },
+                        euclidean_error: { available: true, reason: null },
+                        pck: { available: true, reason: null },
+                        oks: { available: true, reason: null },
+                        calibration: { available: true, reason: null },
+                        visibility: {
+                          available: false,
+                          reason: "Provider visibility semantics unavailable",
+                        },
                       },
                     },
                   ],
@@ -161,6 +193,22 @@ describe("PoseEvaluationComparisonPanel", () => {
       screen.getByRole("img", { name: /Normalized error distribution/ }),
     ).toBeInTheDocument();
     expect(screen.getByText("Calibration ECE: 0.08")).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /Confidence reliability/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /Per-landmark error chart/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/Provider visibility semantics unavailable/).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("table", { name: /Per-landmark performance/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("table", { name: /Comparative pose metrics/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/throughput: 250 images\/s/)).toBeInTheDocument();
     expect(
       screen.getByText(/Pinned SLEAP runtime unavailable/),
     ).toBeInTheDocument();

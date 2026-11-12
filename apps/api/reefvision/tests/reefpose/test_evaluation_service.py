@@ -13,6 +13,7 @@ from PIL import Image
 from sqlalchemy import func, select
 
 from reefvision.db.models import (
+    Job,
     ModelRegistration,
     PoseEvaluationRun,
     PoseLandmarkSchema,
@@ -616,7 +617,7 @@ def test_native_reefpose_cuda_scientific_evaluation(
     monkeypatch.setattr(
         pose_evaluation,
         "load_exact_video_frames",
-        lambda _path, _video, indices: {
+        lambda _path, _video, indices, **_kwargs: {
             index: Image.new("RGB", (20, 10), "black") for index in indices
         },
     )
@@ -649,3 +650,121 @@ def test_native_reefpose_cuda_scientific_evaluation(
         "matched_visible_count": result["metrics_json"]["matched_visible_count"],
     }
     print("REEFPOSE_PHASE3_GPU_EVIDENCE=" + json.dumps(evidence, sort_keys=True))
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.environ.get("REEFPOSE_RUN_GPU_TESTS") != "1",
+    reason="Set REEFPOSE_RUN_GPU_TESTS=1 for explicit RTX comparison validation",
+)
+def test_async_two_model_reefpose_cuda_comparison(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    import torch
+
+    from reefvision.jobs.pose_evaluation import process_pose_evaluation_job
+
+    assert torch.cuda.is_available()
+    _seed(client)
+    schema = AnatomySchema(
+        schema_id=SCHEMA_ID,
+        name="Synthetic GPU comparison fish",
+        revision=2,
+        landmarks=(
+            LandmarkDefinition(landmark_id="snout", name="Snout"),
+            LandmarkDefinition(landmark_id="tail", name="Tail"),
+        ),
+    )
+    network = ReefPoseS(
+        ReefPoseConfig(
+            num_keypoints=2,
+            input_height=64,
+            input_width=64,
+            base_channels=4,
+            fpn_channels=8,
+        )
+    )
+    settings = client.app.state.settings
+    checkpoint = settings.resolved_data_dir / "projects/p1/models/reefpose.pt"
+    second_checkpoint = settings.resolved_data_dir / "projects/p1/models/reefpose-second.pt"
+    save_checkpoint(checkpoint, model=network, schema=schema, epoch=0, global_step=0)
+    with torch.no_grad():
+        next(network.parameters()).add_(0.001)
+    save_checkpoint(second_checkpoint, model=network, schema=schema, epoch=0, global_step=0)
+    checkpoint_bytes = checkpoint.read_bytes()
+    second_checkpoint_bytes = second_checkpoint.read_bytes()
+    second_model_id = "20000000-0000-0000-0000-000000000002"
+    with client.app.state.session_factory() as session:
+        registered = session.get(ModelRegistration, MODEL_ID)
+        assert registered is not None
+        registered.sha256 = hashlib.sha256(checkpoint_bytes).hexdigest()
+        registered.file_size_bytes = len(checkpoint_bytes)
+        registered.metadata_json = {
+            **dict(registered.metadata_json),
+            "reefpose_anatomy_integrity_hash": schema.integrity_hash,
+        }
+        session.add(
+            ModelRegistration(
+                id=second_model_id,
+                project_id=PROJECT_ID,
+                purpose="detector",
+                display_name="Synthetic ReefPose second",
+                source_filename="reefpose-second.pt",
+                managed_path="projects/p1/models/reefpose-second.pt",
+                sha256=hashlib.sha256(second_checkpoint_bytes).hexdigest(),
+                file_size_bytes=len(second_checkpoint_bytes),
+                framework="reefpose",
+                task="pose",
+                provider_name="reefpose",
+                provider_version="1",
+                class_map_json={},
+                metadata_json=dict(registered.metadata_json),
+            )
+        )
+        session.commit()
+
+    from reefvision.services import pose_evaluation
+
+    monkeypatch.setattr(
+        pose_evaluation,
+        "load_exact_video_frames",
+        lambda _path, _video, indices, **_kwargs: {
+            index: Image.new("RGB", (20, 10), "black") for index in indices
+        },
+    )
+    created = client.post(
+        f"/api/v1/projects/{PROJECT_ID}/pose-evaluation-comparisons",
+        json={
+            "model_ids": [MODEL_ID, second_model_id],
+            "evaluation_dataset_id": DATASET_ID,
+            "device": "cuda",
+        },
+    )
+    assert created.status_code == 202, created.text
+    torch.cuda.empty_cache()
+    torch.cuda.reset_peak_memory_stats()
+    assert process_pose_evaluation_job(
+        settings,
+        client.app.state.session_factory,
+        created.json()["id"],
+    )
+    torch.cuda.synchronize()
+    with client.app.state.session_factory() as session:
+        job = session.get(Job, created.json()["id"])
+        assert job is not None and job.status == "succeeded"
+        evidence = {
+            "schema_version": "reefpose-phase3b-async-gpu-0001",
+            "scientific_accuracy_validated": False,
+            "fixture": "synthetic-engineering-only",
+            "device": torch.cuda.get_device_name(0),
+            "torch_version": torch.__version__,
+            "cuda_version": torch.version.cuda,
+            "comparison_job_id": job.id,
+            "evaluation_run_ids": job.result_json["evaluation_run_ids"],
+            "report_sha256": job.result_json["report_sha256"],
+            "progress_current": job.progress_current,
+            "progress_total": job.progress_total,
+            "peak_gpu_memory_bytes": torch.cuda.max_memory_allocated(),
+        }
+    print("REEFPOSE_PHASE3B_ASYNC_GPU_EVIDENCE=" + json.dumps(evidence, sort_keys=True))

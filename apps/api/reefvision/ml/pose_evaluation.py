@@ -62,6 +62,7 @@ class PoseEvaluationProviderExclusion(ValidationError):
 class PoseEvaluationRuntime(Protocol):
     resolved_device: str
     visibility_metrics_available: bool
+    confidence_metrics_available: bool
 
     def predict(self, image: Image.Image) -> NormalizedPosePrediction: ...
 
@@ -101,6 +102,7 @@ def _close_torch_runtime() -> None:
 
 class _ReefPoseEvaluationRuntime:
     visibility_metrics_available = True
+    confidence_metrics_available = True
 
     def __init__(
         self,
@@ -183,6 +185,7 @@ class _UltralyticsEvaluationRuntime:
             )
         self._device = _resolve_ultralytics_device(device)
         self.resolved_device = "cuda:0" if self._device == 0 else str(self._device)
+        self.confidence_metrics_available = True
 
     def predict(self, image: Image.Image) -> NormalizedPosePrediction:
         results = self._model.predict(
@@ -221,13 +224,17 @@ class _UltralyticsEvaluationRuntime:
             )
         confidence_tensor = getattr(keypoints, "conf", None)
         confidence_rows = confidence_tensor.tolist() if confidence_tensor is not None else []
-        confidences = confidence_rows[0] if confidence_rows else [1.0] * len(points)
+        if not confidence_rows:
+            self.confidence_metrics_available = False
+        confidences = confidence_rows[0] if confidence_rows else [0.0] * len(points)
         landmarks: list[NormalizedLandmarkPrediction] = []
         for index, (definition, point) in enumerate(
             zip(self._schema.landmarks, points, strict=True)
         ):
             x, y = float(point[0]), float(point[1])
-            confidence = float(confidences[index]) if index < len(confidences) else 1.0
+            if index >= len(confidences):
+                self.confidence_metrics_available = False
+            confidence = float(confidences[index]) if index < len(confidences) else 0.0
             if not all(math.isfinite(value) for value in (x, y, confidence)):
                 raise PoseEvaluationProviderExclusion(
                     "invalid_provider_output",
@@ -241,7 +248,7 @@ class _UltralyticsEvaluationRuntime:
                     x=x,
                     y=y,
                     confidence=max(0.0, min(1.0, confidence)),
-                    visibility_state="visible" if confidence > 0 else "absent",
+                    visibility_state=("absent" if x == 0.0 and y == 0.0 else "visible"),
                 )
             )
         boxes = getattr(getattr(result, "boxes", None), "xyxy", None)

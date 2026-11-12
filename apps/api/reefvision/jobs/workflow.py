@@ -15,6 +15,7 @@ from reefvision.db.models import (
     WorkflowNodeRun,
     WorkflowRun,
 )
+from reefvision.domain.errors import WorkflowExecutionCancelled
 from reefvision.schemas.workflow_graphs import WorkflowGraphRequest, WorkflowPlanInputBinding
 from reefvision.services.workflow_execution import WorkflowExecutionService
 from reefvision.services.workflow_graphs import WorkflowGraphService
@@ -472,6 +473,23 @@ def process_workflow_run_job(
             review=exc,
         )
         return True
+    except WorkflowExecutionCancelled as exc:
+        with factory() as session:
+            cancelled_node = session.scalar(
+                select(WorkflowNodeRun)
+                .where(
+                    WorkflowNodeRun.workflow_run_id == run_id,
+                    WorkflowNodeRun.status == "running",
+                )
+                .order_by(WorkflowNodeRun.execution_order)
+            )
+            if cancelled_node is not None:
+                cancelled_node.status = "cancelled"
+                cancelled_node.error_message = str(exc)
+                cancelled_node.completed_at = _now()
+            session.commit()
+        _set_terminal(factory, job_id, run_id, status="cancelled", error=str(exc))
+        return False
     except Exception as exc:
         with factory() as session:
             failed_node = session.scalar(

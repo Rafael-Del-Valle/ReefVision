@@ -8,8 +8,8 @@ from typing import Any
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
-from reefvision.db.models import Job, WorkflowArtifact
-from reefvision.domain.errors import ValidationError
+from reefvision.db.models import Job, ModelRegistration, PoseTrainingDataset, WorkflowArtifact
+from reefvision.domain.errors import ValidationError, WorkflowExecutionCancelled
 from reefvision.jobs.pose_evaluation import process_pose_evaluation_job
 from reefvision.schemas.pose_evaluation import PoseEvaluationComparisonCreateRequest
 from reefvision.services import workflow_runtime_adapters as runtime_adapters
@@ -37,6 +37,14 @@ def create_pose_workflow_evaluation_result(
         raise ValidationError("Pose evaluation workflow requires a frozen dataset")
     if not model_payloads:
         raise ValidationError("Pose evaluation workflow requires at least one model")
+    validate_live_artifacts = processor is process_pose_evaluation_job
+    dataset = session.get(PoseTrainingDataset, dataset_id)
+    if validate_live_artifacts:
+        if dataset is None or dataset.project_id != project_id:
+            raise ValidationError("Pose evaluation workflow dataset no longer exists")
+        advertised_manifest = str(dataset_payload.get("manifest_sha256") or "")
+        if advertised_manifest and advertised_manifest != dataset.manifest_sha256:
+            raise ValidationError("Pose evaluation workflow dataset artifact is stale")
     model_ids: list[str] = []
     for payload in model_payloads:
         if payload.get("project_id") not in {None, project_id}:
@@ -44,6 +52,13 @@ def create_pose_workflow_evaluation_result(
         model_id = str(payload.get("model_id") or "")
         if not model_id:
             raise ValidationError("Pose evaluation model artifact lacks model_id")
+        if validate_live_artifacts:
+            model = session.get(ModelRegistration, model_id)
+            if model is None or model.project_id != project_id:
+                raise ValidationError("Pose evaluation workflow model no longer exists")
+            advertised_sha = str(payload.get("model_sha256") or payload.get("sha256") or "")
+            if advertised_sha and advertised_sha != model.sha256:
+                raise ValidationError("Pose evaluation workflow model artifact is stale")
         model_ids.append(model_id)
 
     request = PoseEvaluationComparisonCreateRequest(
@@ -77,6 +92,8 @@ def create_pose_workflow_evaluation_result(
         processed = processor(settings, child_factory, job.id)
         session.expire_all()
         job = session.get(Job, submitted.id)
+    if job is not None and job.status == "cancelled":
+        raise WorkflowExecutionCancelled("Pose evaluation workflow child job was cancelled")
     if job is None or job.status != "succeeded":
         detail = job.error_message if job is not None else "job disappeared"
         raise ValidationError(f"Pose evaluation workflow child job failed: {detail}")
@@ -93,7 +110,14 @@ def create_pose_workflow_evaluation_result(
         "workflow_run_id": workflow_run_id,
         "workflow_node_run_id": workflow_node_run_id,
         "dataset_id": dataset_id,
-        "dataset_manifest_sha256": dataset_payload.get("manifest_sha256"),
+        "dataset_manifest_sha256": (
+            report.get("dataset_manifest_sha256")
+            or (
+                dataset.manifest_sha256
+                if dataset is not None
+                else dataset_payload.get("manifest_sha256")
+            )
+        ),
         "model_ids": model_ids,
     }
 
