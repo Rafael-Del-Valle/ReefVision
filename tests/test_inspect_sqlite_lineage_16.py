@@ -431,3 +431,44 @@ def test_cli_integrity_gate_rejects_malformed_alembic_metadata(tmp_path: Path) -
     assert result.returncode == 2
     assert "no such column" in json.loads(result.stdout)["alembic_stamp_error"]
     assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    ("values", "expected_error"),
+    [
+        ([], "expected_exactly_one_revision_row"),
+        (["0037", "0038"], "expected_exactly_one_revision_row"),
+        ([" 0038"], "invalid_revision_marker_type_or_value"),
+        (["0038\\n"], "invalid_revision_marker_type_or_value"),
+        ([None], "invalid_revision_marker_type_or_value"),
+        ([38], "invalid_revision_marker_type_or_value"),
+        ([b"\\x00\\xff"], "invalid_revision_marker_type_or_value"),
+    ],
+)
+def test_lineage_cli_rejects_invalid_revision_values_without_mutating_science(
+    tmp_path: Path, values: list[object], expected_error: str
+) -> None:
+    """Malformed Alembic values must be JSON-safe and block the opt-in integrity gate."""
+    import json
+    import subprocess
+    import sys
+
+    path = tmp_path / "invalid_stamps.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE alembic_version (version_num)")
+        db.executemany("INSERT INTO alembic_version VALUES (?)", [(v,) for v in values])
+        db.execute("CREATE TABLE scientific_records (id INTEGER PRIMARY KEY, note TEXT)")
+        db.execute("INSERT INTO scientific_records VALUES (1, 'preserve')")
+    before = path.read_bytes()
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--fail-on-integrity-error", str(path)],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 2, result.stderr
+    report = json.loads(result.stdout)
+    assert report["alembic_stamp_validation_error"] == expected_error
+    assert report["classification"] == "requires_researcher_review"
+    assert report["tables"]["scientific_records"]["present"] is True
+    assert path.read_bytes() == before
+    with sqlite3.connect(path) as db:
+        assert db.execute("SELECT note FROM scientific_records").fetchone() == ("preserve",)
