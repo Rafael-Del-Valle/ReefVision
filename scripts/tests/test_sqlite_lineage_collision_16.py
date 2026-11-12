@@ -13,7 +13,7 @@ SCRIPT = Path(__file__).resolve().parents[1] / "inspect_sqlite_lineage_16.py"
 
 def _database(path: Path, *, revision: str, divergent: bool) -> bytes:
     with sqlite3.connect(path) as connection:
-        connection.execute("CREATE TABLE alembic_version (version_num TEXT)")
+        connection.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)")
         connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
         connection.execute("CREATE TABLE observations (private_note TEXT)")
         if divergent:
@@ -84,3 +84,41 @@ def test_collision_gate_requires_reference(tmp_path: Path) -> None:
     assert "--fail-on-lineage-collision requires --compare-to" in result.stderr
     assert result.stdout == ""
     assert primary.read_bytes() == before
+
+
+@pytest.mark.parametrize("noncanonical_side", ["primary", "reference"])
+def test_collision_gate_rejects_noncanonical_stamp_constraints(
+    tmp_path: Path, noncanonical_side: str
+) -> None:
+    primary = tmp_path / "primary.sqlite"
+    reference = tmp_path / "reference.sqlite"
+    _database(primary, revision="0038", divergent=False)
+    _database(reference, revision="0038", divergent=False)
+    target = primary if noncanonical_side == "primary" else reference
+    with sqlite3.connect(target) as connection:
+        connection.execute("ALTER TABLE alembic_version RENAME TO old_alembic_version")
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT)")
+        connection.execute(
+            "INSERT INTO alembic_version SELECT version_num FROM old_alembic_version"
+        )
+        connection.execute("DROP TABLE old_alembic_version")
+    before = (primary.read_bytes(), reference.read_bytes())
+    result = subprocess.run(
+        [
+            sys.executable, str(SCRIPT), str(primary),
+            "--compare-to", str(reference), "--fail-on-lineage-collision",
+        ],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 2, result.stderr
+    report = json.loads(result.stdout)
+    assert report["classification"] == "requires_researcher_review"
+    assert report["schema_comparison"]["requires_researcher_review"] is True
+    assert (
+        report["alembic_stamp_constraint_error"] is not None
+        or report["schema_comparison"]["reference_integrity"][
+            "alembic_stamp_constraint_error"
+        ] is not None
+    )
+    assert "confidential coral" not in result.stdout + result.stderr
+    assert (primary.read_bytes(), reference.read_bytes()) == before
