@@ -95,6 +95,30 @@ def test_direct_mesh_path_engine_rejects_invalid_calibration(
         )
 
 
+@pytest.mark.parametrize(
+    "faces",
+    [
+        [[-1, 1, 2]],
+        [[0, 1, 3]],
+        [[0, 1, 1]],
+        [[0, 1]],
+        [[0, 1, 2, 2]],
+        [[True, 1, 2]],
+    ],
+)
+def test_direct_mesh_path_engine_rejects_invalid_faces(faces: list[list[int]]) -> None:
+    from reefvision.services.spatial_mesh_paths_v14 import mesh_edge_paths
+
+    with pytest.raises(ValueError, match="three distinct existing vertex indices"):
+        mesh_edge_paths(
+            points=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+            faces=faces,
+            pairs=[[0, 1]],
+            scale=0.01,
+            scale_uncertainty=0.1,
+        )
+
+
 def test_mesh_path_uncertainty_overflow_fails_closed() -> None:
     # The nominal edge is finite, but its upper scale bound is not.
     # This direct scientific-engine test does not imply biological validation.
