@@ -281,11 +281,14 @@ def main() -> None:
     if args.fail_on_revision_mismatch and not evidence["schema_comparison"]["revision_markers_match"]:
         raise SystemExit(2)
 
-    if args.fail_on_lineage_collision and (
-        evidence["schema_comparison"]["revision_markers_match"]
-        and not evidence["schema_comparison"]["matches"]
-    ):
-        raise SystemExit(2)
+    if args.fail_on_lineage_collision:
+        # Invalid or missing stamps must not silently pass a collision gate.
+        # Legacy non-PK stamps remain inspectable unless strict mode is selected.
+        if (
+            not evidence["schema_comparison"]["revision_markers_match"]
+            or not evidence["schema_comparison"]["matches"]
+        ):
+            raise SystemExit(2)
 
     def has_integrity_error(report: dict) -> bool:
         return (
