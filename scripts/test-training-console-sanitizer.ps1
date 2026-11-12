@@ -277,4 +277,39 @@ if ($latestMetrics['train/box_loss'] -ne 9.0) {
   throw 'Invalid epoch history must not erase the last finite summary loss.'
 }
 
+# An epoch value of zero is a legitimate measurement and must override stale
+# summary losses. Non-numeric JSON values and nonfinite trailing entries must
+# never displace the latest finite measurement for any loss component.
+$run = [pscustomobject]@{
+  metrics = [pscustomobject]@{
+    'train/box_loss' = 4.0
+    'train/cls_loss' = 5.0
+    'train/dfl_loss' = 6.0
+  }
+  metrics_history = [pscustomobject]@{
+    'train/box_loss' = @(0.9, 0.0, '0.000')
+    'train/cls_loss' = @(0.7, 0.0, $false)
+    'train/dfl_loss' = @(0.6, 0.0, [double]::NegativeInfinity)
+  }
+}
+Invoke-Expression $selectionCode
+foreach ($lossKey in @('train/box_loss', 'train/cls_loss', 'train/dfl_loss')) {
+  if (-not $latestMetrics.ContainsKey($lossKey) -or
+      $latestMetrics[$lossKey] -ne 0.0) {
+    throw ('Zero-valued persisted epoch loss was discarded: {0}' -f $lossKey)
+  }
+}
+# A history with only invalid values cannot manufacture a measurement when
+# the summary is invalid too.
+$run.metrics = [pscustomobject]@{
+  'train/box_loss' = 'not-a-measurement'
+}
+$run.metrics_history = [pscustomobject]@{
+  'train/box_loss' = @($null, [double]::NaN, '0.2')
+}
+Invoke-Expression $selectionCode
+if ($latestMetrics.ContainsKey('train/box_loss')) {
+  throw 'Invalid summary/history values fabricated a box-loss measurement.'
+}
+
 Write-Host 'PowerShell training console sanitizer regression passed.'
