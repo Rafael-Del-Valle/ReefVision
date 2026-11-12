@@ -808,3 +808,86 @@ def test_degenerate_triangle_off_selected_route_does_not_contaminate_qc() -> Non
     assert "degenerate_triangle_on_path" not in routes[0]["path_qc_warnings"]
     assert routes[1]["status"] == "connected"
     assert "degenerate_triangle_on_path" in routes[1]["path_qc_warnings"]
+
+
+def test_duplicate_triangles_are_route_scoped_and_survive_saved_workflow(
+    client: TestClient,
+) -> None:
+    # Duplicate faces can corrupt reconstructed topology even when a route
+    # remains geometrically measurable. Do not promote it to a centerline.
+    from reefvision.services.spatial_mesh_paths_v14 import mesh_edge_paths
+
+    vertices = [
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [3.0, 0.0, 0.0],
+        [4.0, 0.0, 0.0],
+        [3.0, 1.0, 0.0],
+    ]
+    faces = [[0, 1, 2], [2, 1, 0], [3, 4, 5]]
+    routes = mesh_edge_paths(
+        points=[tuple(vertex) for vertex in vertices],
+        faces=faces,
+        pairs=[[0, 1], [3, 4]],
+        scale=0.1,
+        scale_uncertainty=0.1,
+    )
+    assert routes is not None
+    assert routes[0]["length_m"] == pytest.approx(0.1)
+    assert "duplicate_triangle_on_path" in routes[0]["path_qc_warnings"]
+    assert "duplicate_triangle_on_path" not in routes[1]["path_qc_warnings"]
+
+    parameters = {
+        "vertices": vertices,
+        "faces": faces,
+        "meters_per_unit": 0.1,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic duplicate-face reconstruction; unverified",
+        "relative_scale_uncertainty": 0.1,
+        "surface_path_vertex_pairs": [[0, 1], [3, 4]],
+    }
+    project_id = str(create_project(client, "Duplicate mesh face QC parity")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=parameters)
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()["surface_edge_paths"]
+    assert "duplicate_triangle_on_path" in expected[0]["path_qc_warnings"]
+    assert "duplicate_triangle_on_path" not in expected[1]["path_qc_warnings"]
+
+    graph = {
+        "graph_id": "duplicate-face-route-v14",
+        "name": "Duplicate reconstruction face QC",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": parameters},
+        ],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "m",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["surface_edge_paths"] == expected
+    assert artifact["provenance"]["calibration_verified"] is False
+    assert artifact["measurement_status"] == "caller_supplied_unverified"
