@@ -67,6 +67,34 @@ def test_mesh_edge_paths_do_not_invent_disconnected_distances(
     assert result["provenance"]["calibration_verified"] is False
 
 
+@pytest.mark.parametrize(
+    ("scale", "uncertainty"),
+    [
+        (0.0, None),
+        (-1.0, None),
+        (float("nan"), None),
+        (float("inf"), None),
+        (1.0, -0.1),
+        (1.0, 1.0),
+        (1.0, float("nan")),
+        (1.0, float("inf")),
+    ],
+)
+def test_direct_mesh_path_engine_rejects_invalid_calibration(
+    scale: float, uncertainty: float | None
+) -> None:
+    from reefvision.services.spatial_mesh_paths_v14 import mesh_edge_paths
+
+    with pytest.raises(ValueError, match="Mesh path"):
+        mesh_edge_paths(
+            points=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+            faces=[[0, 1, 2]],
+            pairs=[[0, 1]],
+            scale=scale,
+            scale_uncertainty=uncertainty,
+        )
+
+
 def test_mesh_path_uncertainty_overflow_fails_closed() -> None:
     # The nominal edge is finite, but its upper scale bound is not.
     # This direct scientific-engine test does not imply biological validation.
