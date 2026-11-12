@@ -122,3 +122,56 @@ def test_collision_gate_rejects_noncanonical_stamp_constraints(
     )
     assert "confidential coral" not in result.stdout + result.stderr
     assert (primary.read_bytes(), reference.read_bytes()) == before
+
+
+@pytest.mark.parametrize("invalid_side", ["primary", "reference"])
+def test_collision_gate_rejects_matching_schema_with_broken_foreign_keys(
+    tmp_path: Path, invalid_side: str
+) -> None:
+    """Identical revision and DDL cannot hide a broken biological reference."""
+    primary = tmp_path / "primary.sqlite"
+    reference = tmp_path / "reference.sqlite"
+    for path in (primary, reference):
+        _database(path, revision="0038", divergent=False)
+        with sqlite3.connect(path) as connection:
+            connection.execute("CREATE TABLE parents (id INTEGER PRIMARY KEY)")
+            connection.execute(
+                "CREATE TABLE samples (parent_id INTEGER REFERENCES parents(id))"
+            )
+            connection.execute("INSERT INTO parents VALUES (1)")
+            connection.execute("INSERT INTO samples VALUES (1)")
+    target = primary if invalid_side == "primary" else reference
+    # SQLite permits legacy databases with orphaned FK values when enforcement
+    # was disabled; the read-only inspector must still reject this evidence.
+    with sqlite3.connect(target) as connection:
+        connection.execute("INSERT INTO samples VALUES (999)")
+    before = (primary.read_bytes(), reference.read_bytes())
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            str(primary),
+            "--compare-to",
+            str(reference),
+            "--fail-on-lineage-collision",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2, result.stderr
+    report = json.loads(result.stdout)
+    assert report["schema_comparison"]["matches"] is True
+    assert report["schema_comparison"]["revision_markers_match"] is True
+    assert report["classification"] == "requires_researcher_review"
+    if invalid_side == "primary":
+        assert report["foreign_key_violation_count"] == 1
+    else:
+        assert (
+            report["schema_comparison"]["reference_integrity"][
+                "foreign_key_violation_count"
+            ]
+            == 1
+        )
+    assert "confidential coral" not in result.stdout + result.stderr
+    assert (primary.read_bytes(), reference.read_bytes()) == before
