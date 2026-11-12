@@ -108,6 +108,17 @@ if ($hyperlinkSafe.Contains('example.invalid') -or
   throw 'OSC 8 terminal hyperlink escaped or obscured training loss display.'
 }
 
+# Scientific worker logs may contain 8-bit C1 OSC/DCS introductions rather
+# than ESC-prefixed forms. Their payloads must not masquerade as epoch losses.
+$c1Osc = 'train/box_loss=0.25' + [char]0x009D + '0;forged train/dfl_loss=0.00' + [char]0x009C + ' train/cls_loss=0.30'
+if ((Format-SafeText $c1Osc) -cne 'train/box_loss=0.25 train/cls_loss=0.30') {
+  throw 'C1 OSC payload leaked a forged training loss.'
+}
+$c1Dcs = 'epoch=5' + [char]0x0090 + 'forged train/box_loss=0.00' + [char]0x009C + ' train/dfl_loss=0.10'
+if ((Format-SafeText $c1Dcs) -cne 'epoch=5 train/dfl_loss=0.10') {
+  throw 'C1 DCS payload leaked a forged training loss.'
+}
+
 # Validate the real monitor's metric gate: strings, booleans, NaN and infinity
 # must never be displayed as measured training losses. Finite numeric values
 # (including a real zero) must remain eligible for the box/cls/dfl display.
