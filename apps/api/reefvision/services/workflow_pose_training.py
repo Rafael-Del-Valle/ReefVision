@@ -1689,18 +1689,17 @@ def create_pose_workflow_training_result(
         if advertised != advertised.strip():
             raise ValidationError("Completed pose training checkpoint artifact path changed")
         artifact_checkpoint = resolve_managed_project_path(settings, advertised)
-        if (
-            artifact_checkpoint != expected_weights_dir / filename
-            or not artifact_checkpoint.is_file()
-        ):
+        if artifact_checkpoint != expected_weights_dir / filename:
             raise ValidationError("Completed pose training checkpoint artifact path changed")
         if artifact_checkpoint.is_symlink():
             raise ValidationError(
                 "Completed pose training checkpoint artifact must not be a symbolic link"
             )
+        if not artifact_checkpoint.is_file():
+            raise ValidationError("Completed pose training checkpoint artifact is missing")
         artifact_digest, artifact_size = (
             (checkpoint_sha256, checkpoint_size)
-            if artifact_checkpoint.resolve() == checkpoint.resolve()
+            if artifact_checkpoint == checkpoint
             else hash_model_file(artifact_checkpoint)
         )
         if artifact_size == 0:
