@@ -838,6 +838,8 @@ def test_duplicate_triangles_are_route_scoped_and_survive_saved_workflow(
     assert "duplicate_triangle_on_path" in routes[0]["path_qc_warnings"]
     assert "duplicate_triangle_on_path" not in routes[1]["path_qc_warnings"]
 
+    # The low-level route engine reports provisional topology QC, but the
+    # project API must reject duplicate faces: they would double-count area.
     parameters = {
         "vertices": vertices,
         "faces": faces,
@@ -850,44 +852,5 @@ def test_duplicate_triangles_are_route_scoped_and_survive_saved_workflow(
     project_id = str(create_project(client, "Duplicate mesh face QC parity")["id"])
     base = f"/api/v1/projects/{project_id}"
     standalone = client.post(f"{base}/spatial/mesh-preview", json=parameters)
-    assert standalone.status_code == 200, standalone.text
-    expected = standalone.json()["surface_edge_paths"]
-    assert "duplicate_triangle_on_path" in expected[0]["path_qc_warnings"]
-    assert "duplicate_triangle_on_path" not in expected[1]["path_qc_warnings"]
-
-    graph = {
-        "graph_id": "duplicate-face-route-v14",
-        "name": "Duplicate reconstruction face QC",
-        "nodes": [
-            {"node_id": "p", "node_type": "project_source"},
-            {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": parameters},
-        ],
-        "edges": [
-            {
-                "edge_id": "e",
-                "source_node_id": "p",
-                "source_port_id": "project",
-                "target_node_id": "m",
-                "target_port_id": "project",
-            }
-        ],
-    }
-    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
-    assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
-    assert run.status_code == 202, run.text
-    app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
-    )
-    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
-    assert detail.status_code == 200, detail.text
-    assert detail.json()["run"]["status"] == "succeeded"
-    artifact = next(
-        item["payload_json"]
-        for item in detail.json()["artifacts"]
-        if item["data_type"] == "mesh_measurement_preview"
-    )
-    assert artifact["surface_edge_paths"] == expected
-    assert artifact["provenance"]["calibration_verified"] is False
-    assert artifact["measurement_status"] == "caller_supplied_unverified"
+    assert standalone.status_code == 400
+    assert standalone.json()["detail"] == "Duplicate triangles would double-count surface area"
