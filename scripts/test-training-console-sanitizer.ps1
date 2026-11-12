@@ -163,6 +163,13 @@ foreach ($request in $requests) {
 if ($monitorScript -match '(?i)\b(?:Start-Process|Stop-Process|Invoke-Expression|Invoke-Command|Remove-Item|Set-Content|Add-Content|Out-File)\b') {
   throw 'External monitor must not execute commands or mutate training artifacts.'
 }
+# GET-only checks must also prevent bypass through alternate PowerShell HTTP clients
+# or a second process. This is a source-level safety contract, not a live-job test.
+if ($monitorScript -match '(?i)\b(?:Invoke-WebRequest|Start-BitsTransfer|Start-Job|Start-ThreadJob|New-Item|Set-Item|Copy-Item|Move-Item|Export-Csv|Export-Clixml|Tee-Object)\b' -or
+    $monitorScript -match '(?i)\b(?:curl(?:\.exe)?|wget(?:\.exe)?|bitsadmin(?:\.exe)?)\b' -or
+    $monitorScript -match '(?i)\[System\.Net\.Http\.HttpClient\]|\[System\.Net\.WebClient\]') {
+  throw 'External training monitor introduced an alternate network, process, or artifact-write path.'
+}
 if ($monitorScript -notmatch 'Start-Sleep\s+-Seconds\s+2\b') {
   throw 'Read-only polling throttle was removed from training monitor.'
 }
