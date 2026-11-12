@@ -791,3 +791,57 @@ def test_opt_in_alembic_column_constraints_gate_is_read_only(
         command[:-1], capture_output=True, text=True, check=False
     )
     assert legacy.returncode == 0, legacy.stderr
+
+
+@pytest.mark.parametrize(
+    ("source_stamp", "reference_stamp", "schema_difference", "expected_code"),
+    [
+        ("0038", "0038", False, 0),
+        ("0038", "0038", True, 2),
+        ("0038", "0039", False, 2),
+        ("0038", None, False, 2),
+    ],
+)
+def test_collision_gate_fails_closed_on_uncertain_revision_evidence(
+    tmp_path: Path,
+    source_stamp: str,
+    reference_stamp: str | None,
+    schema_difference: bool,
+    expected_code: int,
+) -> None:
+    """Never interpret absent or conflicting lineage evidence as no collision."""
+    import json
+    import subprocess
+    import sys
+
+    source = tmp_path / "source.sqlite"
+    reference = tmp_path / "reference.sqlite"
+    for path, stamp in ((source, source_stamp), (reference, reference_stamp)):
+        with sqlite3.connect(path) as db:
+            db.execute("CREATE TABLE alembic_version (version_num TEXT)")
+            if stamp is not None:
+                db.execute("INSERT INTO alembic_version VALUES (?)", (stamp,))
+            db.execute("CREATE TABLE scientific_records (note TEXT)")
+            db.execute("INSERT INTO scientific_records VALUES ('private coral location')")
+            if schema_difference and path == reference:
+                db.execute("CREATE TABLE review_queue_item_events (id INTEGER)")
+    before = (source.read_bytes(), reference.read_bytes())
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            str(source),
+            "--compare-to",
+            str(reference),
+            "--fail-on-lineage-collision",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == expected_code, result.stderr
+    report = json.loads(result.stdout)
+    assert report["classification"] == "requires_researcher_review"
+    assert report["schema_comparison"]["requires_researcher_review"] is True
+    assert "private coral location" not in result.stdout
+    assert (source.read_bytes(), reference.read_bytes()) == before
