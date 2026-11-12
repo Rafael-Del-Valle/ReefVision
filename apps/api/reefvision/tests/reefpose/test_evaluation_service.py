@@ -22,6 +22,10 @@ from reefvision.db.models import (
     Project,
     VideoAsset,
 )
+from reefvision.ml.pose_evaluation import (
+    NormalizedLandmarkPrediction,
+    NormalizedPosePrediction,
+)
 from reefvision.ml.reefpose.checkpoints import save_checkpoint
 from reefvision.ml.reefpose.inference import LandmarkPrediction, PosePrediction
 from reefvision.ml.reefpose.model import ReefPoseConfig, ReefPoseS
@@ -182,6 +186,38 @@ class _FakePredictor:
         )
 
 
+class _FakeRuntime:
+    resolved_device = "cpu"
+    visibility_metrics_available = True
+
+    def __init__(self, *, fail: bool = False) -> None:
+        self.predictor = _FakePredictor(fail=fail)
+
+    def predict(self, image: Image.Image) -> NormalizedPosePrediction:
+        prediction = self.predictor.predict(image, confidence_threshold=0.0)
+        return NormalizedPosePrediction(
+            landmarks=tuple(
+                NormalizedLandmarkPrediction(
+                    landmark_id=item.landmark_id,
+                    name=item.name,
+                    occurrence_index=item.occurrence_index,
+                    x=item.x,
+                    y=item.y,
+                    confidence=item.confidence,
+                    visibility_state=item.visibility_state,
+                )
+                for item in prediction.landmarks
+            ),
+            bbox=prediction.bbox,
+            schema_id=prediction.anatomy_schema_id,
+            schema_revision=prediction.anatomy_schema_revision,
+            native_integrity_hash=prediction.anatomy_integrity_hash,
+        )
+
+    def close(self) -> None:
+        return
+
+
 def _seed(client: TestClient) -> None:
     settings = client.app.state.settings
     managed_checkpoint = settings.resolved_data_dir / "projects/p1/models/reefpose.pt"
@@ -319,8 +355,8 @@ def _patch_runtime(monkeypatch, *, fail: bool = False) -> None:
 
     monkeypatch.setattr(
         pose_evaluation,
-        "create_reefpose_predictor",
-        lambda _path, *, device: _FakePredictor(fail=fail),
+        "create_provider_evaluation_runtime",
+        lambda _model, _path, _schema, _device: _FakeRuntime(fail=fail),
     )
     monkeypatch.setattr(
         pose_evaluation,

@@ -6,6 +6,7 @@ import csv
 import io
 import json
 import platform
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 from time import perf_counter
@@ -35,6 +36,13 @@ from reefvision.domain.pose_evaluation import (
     PoseLandmarkReference,
     evaluate_pose_instances,
 )
+from reefvision.ml.pose_evaluation import (
+    PoseEvaluationLandmark,
+    PoseEvaluationProviderExclusion,
+    PoseEvaluationRuntime,
+    PoseEvaluationSchema,
+    create_pose_evaluation_runtime,
+)
 from reefvision.schemas.pose_evaluation import (
     PoseEvaluationCreateRequest,
     PoseEvaluationRunResponse,
@@ -54,6 +62,17 @@ def create_reefpose_predictor(path: Path, *, device: str) -> Any:
         return ReefPosePredictor.from_checkpoint(path, device=device)
     except Exception as exc:
         raise ValidationError("Native ReefPose evaluation runtime could not be loaded") from exc
+
+
+def create_provider_evaluation_runtime(
+    model: ModelRegistration,
+    checkpoint_path: Path,
+    schema: PoseEvaluationSchema,
+    device: str,
+) -> PoseEvaluationRuntime:
+    """Indirection kept explicit so tests never need optional provider runtimes."""
+
+    return create_pose_evaluation_runtime(model, checkpoint_path, schema, device)
 
 
 def load_exact_video_frames(
@@ -136,6 +155,46 @@ class PoseEvaluationService:
             raise ValidationError(
                 "Registered ReefPose model lacks native anatomy checkpoint provenance"
             ) from exc
+
+    @staticmethod
+    def _evaluation_schema(
+        model: ModelRegistration,
+        dataset: PoseTrainingDataset,
+    ) -> PoseEvaluationSchema:
+        metadata = dict(model.metadata_json or {})
+        raw_schema = metadata.get("pose_landmark_schema")
+        raw_landmarks = raw_schema.get("landmarks") if isinstance(raw_schema, dict) else None
+        if not isinstance(raw_landmarks, list) or not raw_landmarks:
+            raise ValidationError(
+                "Registered pose model lacks stable landmark identity metadata"
+            )
+        landmarks: list[PoseEvaluationLandmark] = []
+        for index, raw in enumerate(raw_landmarks):
+            if not isinstance(raw, dict):
+                raise ValidationError("Registered pose model landmark metadata is invalid")
+            landmark_id = str(raw.get("id") or raw.get("landmark_id") or "").strip()
+            name = str(raw.get("name") or raw.get("semantic_label") or "").strip()
+            try:
+                occurrence_index = int(raw.get("occurrence_index", 0))
+            except (TypeError, ValueError) as exc:
+                raise ValidationError(
+                    f"Registered pose model landmark {index} has an invalid occurrence index"
+                ) from exc
+            if not landmark_id or not name or occurrence_index < 0:
+                raise ValidationError(
+                    "Registered pose model landmark metadata is incomplete"
+                )
+            landmarks.append(
+                PoseEvaluationLandmark(landmark_id, name, occurrence_index)
+            )
+        if len({item.landmark_id for item in landmarks}) != len(landmarks):
+            raise ValidationError("Registered pose model landmark IDs are not unique")
+        return PoseEvaluationSchema(
+            schema_id=dataset.pose_schema_id,
+            revision=dataset.pose_schema_revision,
+            content_hash=dataset.pose_schema_content_hash,
+            landmarks=tuple(landmarks),
+        )
 
     def _validate_frozen_dataset(
         self,
@@ -351,6 +410,10 @@ class PoseEvaluationService:
         self,
         project_id: str,
         payload: PoseEvaluationCreateRequest,
+        *,
+        provider_neutral: bool = False,
+        cancellation_check: Callable[[], None] | None = None,
+        progress_callback: Callable[[int, int], None] | None = None,
     ) -> PoseEvaluationRunResponse:
         project = self.session.get(Project, project_id)
         model = self.session.get(ModelRegistration, payload.model_id)
@@ -361,7 +424,9 @@ class PoseEvaluationService:
             raise NotFoundError("Pose model or evaluation dataset not found")
         if model.project_id != project_id or dataset.project_id != project_id:
             raise ValidationError("Pose evaluation inputs must belong to the selected project")
-        if model.provider_name != "reefpose" or model.task != "pose":
+        if model.task != "pose":
+            raise ValidationError("Pose evaluation requires a registered pose model")
+        if not provider_neutral and model.provider_name != "reefpose":
             raise ValidationError("This evaluator currently requires a native ReefPose model")
         if dataset.status != "complete" or dataset.item_count < 1:
             raise ValidationError("Pose evaluation requires a completed immutable dataset")
@@ -388,7 +453,13 @@ class PoseEvaluationService:
             raise ValidationError("Frozen evaluation dataset item count has changed")
         self._validate_frozen_dataset(dataset, items)
 
-        predictor = create_reefpose_predictor(checkpoint_path, device=payload.device)
+        schema = self._evaluation_schema(model, dataset)
+        runtime = create_provider_evaluation_runtime(
+            model,
+            checkpoint_path,
+            schema,
+            payload.device,
+        )
         frame_requests: dict[str, list[int]] = {}
         videos: dict[str, VideoAsset] = {}
         for item in items:
@@ -414,20 +485,21 @@ class PoseEvaluationService:
         predictions: list[dict[str, Any]] = []
         inference_seconds = 0.0
         try:
-            for item in items:
+            for item_index, item in enumerate(items, start=1):
+                if cancellation_check is not None:
+                    cancellation_check()
                 image = frames[(item.video_id, item.frame_index)]
-                _synchronize_cuda(payload.device)
+                _synchronize_cuda(runtime.resolved_device)
                 started = perf_counter()
-                prediction = predictor.predict(image, confidence_threshold=0.0)
-                _synchronize_cuda(payload.device)
+                prediction = runtime.predict(image)
+                _synchronize_cuda(runtime.resolved_device)
                 inference_seconds += max(perf_counter() - started, 1e-12)
-                if (
-                    prediction.anatomy_schema_id,
-                    prediction.anatomy_schema_revision,
-                    prediction.anatomy_integrity_hash,
-                ) != self._native_schema_identity(model):
+                if (prediction.schema_id, prediction.schema_revision) != (
+                    schema.schema_id,
+                    schema.revision,
+                ):
                     raise ValidationError(
-                        "ReefPose prediction anatomy differs from registered model provenance"
+                        "Pose prediction anatomy differs from the evaluation schema"
                     )
                 estimates = tuple(
                     PoseLandmarkEstimate(
@@ -456,14 +528,25 @@ class PoseEvaluationService:
                         "video_id": item.video_id,
                         "frame_index": item.frame_index,
                         "landmarks": [asdict(landmark) for landmark in prediction.landmarks],
-                        "confidence": prediction.confidence,
+                        "confidence": (
+                            sum(landmark.confidence for landmark in prediction.landmarks)
+                            / len(prediction.landmarks)
+                            if prediction.landmarks
+                            else 0.0
+                        ),
                         "bbox": list(prediction.bbox) if prediction.bbox is not None else None,
                     }
                 )
+                if progress_callback is not None:
+                    progress_callback(item_index, len(items))
+        except PoseEvaluationProviderExclusion:
+            raise
         except ValidationError:
             raise
         except Exception as exc:
-            raise ValidationError("ReefPose evaluation inference failed") from exc
+            raise ValidationError("Pose evaluation inference failed") from exc
+        finally:
+            runtime.close()
 
         metrics = evaluate_pose_instances(
             instances,
@@ -471,10 +554,11 @@ class PoseEvaluationService:
             calibration_threshold=float(payload.calibration_threshold),
             calibration_bins=payload.calibration_bins,
             confidence_thresholds=tuple(float(value) for value in payload.confidence_thresholds),
+            visibility_metrics_available=runtime.visibility_metrics_available,
         )
         metrics_json = asdict(metrics)
         configuration = payload.model_dump(mode="json")
-        resolved_device = str(getattr(predictor, "device", payload.device))
+        resolved_device = runtime.resolved_device
         software: dict[str, Any] = {
             "reefvision": __version__,
             "python": platform.python_version(),
@@ -499,6 +583,8 @@ class PoseEvaluationService:
         provenance = {
             "project_id": project_id,
             "model_id": model.id,
+            "provider_name": model.provider_name,
+            "provider_version": model.provider_version,
             "checkpoint_sha256": checkpoint_sha,
             "checkpoint_size_bytes": checkpoint_size,
             "dataset_id": dataset.id,

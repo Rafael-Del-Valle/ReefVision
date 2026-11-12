@@ -75,6 +75,70 @@ def test_exact_localization_pck_nme_and_per_landmark_metrics() -> None:
     assert result.per_landmark["snout"].mean_euclidean_error == pytest.approx(5.0)
     assert result.per_landmark["snout"].pck["0.1"] == pytest.approx(0.0)
     assert result.per_landmark["tail"].pck["0.1"] == pytest.approx(1.0)
+    assert result.availability["nme"].available is True
+    assert result.availability["oks"].available is False
+    assert "area" in str(result.availability["oks"].reason).lower()
+
+
+def test_normalized_error_distributions_use_fixed_bins_and_literal_quantiles() -> None:
+    result = evaluate_pose_instances(
+        [
+            PoseEvaluationInstance(
+                instance_id="fish-1",
+                references=(
+                    _reference("a", 0, 0),
+                    _reference("b", 0, 0),
+                    _reference("c", 0, 0),
+                    _reference("d", 0, 0),
+                ),
+                estimates=(
+                    _estimate("a", 0, 0),
+                    _estimate("b", 0.5, 0),
+                    _estimate("c", 1.5, 0),
+                    _estimate("d", 12, 0),
+                ),
+                normalization_length=10,
+            )
+        ]
+    )
+
+    distribution = result.normalized_error_distribution
+    assert distribution.sample_count == 4
+    assert distribution.bin_edges == (0.025, 0.05, 0.1, 0.2, 0.5, 1.0)
+    assert distribution.bin_counts == (1, 1, 0, 1, 0, 0)
+    assert distribution.overflow_count == 1
+    assert distribution.minimum == pytest.approx(0.0)
+    assert distribution.q1 == pytest.approx(0.0375)
+    assert distribution.median == pytest.approx(0.1)
+    assert distribution.q3 == pytest.approx(0.4125)
+    assert distribution.maximum == pytest.approx(1.2)
+    assert result.per_landmark["a"].normalized_error_distribution.sample_count == 1
+
+
+def test_empty_error_distribution_and_unavailable_visibility_are_explicit() -> None:
+    result = evaluate_pose_instances(
+        [
+            PoseEvaluationInstance(
+                instance_id="fish-1",
+                references=(_reference("snout", 0, 0),),
+                estimates=(),
+                normalization_length=10,
+            )
+        ],
+        visibility_metrics_available=False,
+    )
+
+    distribution = result.normalized_error_distribution
+    assert distribution.sample_count == 0
+    assert distribution.bin_counts == (0, 0, 0, 0, 0, 0)
+    assert distribution.overflow_count == 0
+    assert distribution.minimum is None
+    assert distribution.q1 is None
+    assert distribution.median is None
+    assert distribution.q3 is None
+    assert distribution.maximum is None
+    assert result.availability["visibility"].available is False
+    assert "provider" in str(result.availability["visibility"].reason).lower()
 
 
 def test_missing_and_occluded_landmarks_are_visibility_aware() -> None:

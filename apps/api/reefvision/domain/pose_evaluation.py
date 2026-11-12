@@ -9,6 +9,7 @@ from statistics import median
 REFERENCE_VISIBILITY_STATES = frozenset(
     {"visible", "occluded", "absent", "uncertain", "out_of_frame"}
 )
+NORMALIZED_ERROR_BIN_EDGES = (0.025, 0.05, 0.1, 0.2, 0.5, 1.0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,6 +71,25 @@ class ConfidenceCalibrationMetrics:
 
 
 @dataclass(frozen=True, slots=True)
+class ErrorDistributionMetrics:
+    sample_count: int
+    bin_edges: tuple[float, ...]
+    bin_counts: tuple[int, ...]
+    overflow_count: int
+    minimum: float | None
+    q1: float | None
+    median: float | None
+    q3: float | None
+    maximum: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class MetricAvailability:
+    available: bool
+    reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class PerLandmarkMetrics:
     landmark_id: str
     name: str
@@ -80,6 +100,7 @@ class PerLandmarkMetrics:
     median_euclidean_error: float | None
     nme: float | None
     pck: dict[str, float]
+    normalized_error_distribution: ErrorDistributionMetrics
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +116,8 @@ class PoseEvaluationMetrics:
     per_landmark: dict[str, PerLandmarkMetrics]
     visibility: VisibilityMetrics
     calibration: ConfidenceCalibrationMetrics
+    normalized_error_distribution: ErrorDistributionMetrics
+    availability: dict[str, MetricAvailability]
     oks: float | None
     oks_instance_count: int
     warnings: tuple[str, ...]
@@ -223,6 +246,42 @@ def _confidence_metrics(
     )
 
 
+def _quantile(values: list[float], probability: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    position = (len(ordered) - 1) * probability
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    fraction = position - lower
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * fraction
+
+
+def _error_distribution(values: list[float]) -> ErrorDistributionMetrics:
+    counts = [0 for _edge in NORMALIZED_ERROR_BIN_EDGES]
+    overflow = 0
+    for value in values:
+        for index, edge in enumerate(NORMALIZED_ERROR_BIN_EDGES):
+            if value <= edge:
+                counts[index] += 1
+                break
+        else:
+            overflow += 1
+    return ErrorDistributionMetrics(
+        sample_count=len(values),
+        bin_edges=NORMALIZED_ERROR_BIN_EDGES,
+        bin_counts=tuple(counts),
+        overflow_count=overflow,
+        minimum=min(values) if values else None,
+        q1=_quantile(values, 0.25),
+        median=_quantile(values, 0.5),
+        q3=_quantile(values, 0.75),
+        maximum=max(values) if values else None,
+    )
+
+
 def evaluate_pose_instances(
     instances: list[PoseEvaluationInstance],
     *,
@@ -230,6 +289,7 @@ def evaluate_pose_instances(
     calibration_threshold: float = 0.1,
     calibration_bins: int = 10,
     confidence_thresholds: tuple[float, ...] = (0.0, 0.25, 0.5, 0.75, 0.9),
+    visibility_metrics_available: bool = True,
 ) -> PoseEvaluationMetrics:
     """Evaluate stable-ID pose estimates against explicit reference anatomy.
 
@@ -338,19 +398,21 @@ def evaluate_pose_instances(
                 else None
             ),
             pck={key: _rate(hits, item.reference_count) for key, hits in item.pck_hits.items()},
+            normalized_error_distribution=_error_distribution(item.normalized_errors),
         )
         for landmark_id, item in sorted(accumulators.items())
     }
-    warnings = (
-        (
-            (
-                "OKS omitted for one or more instances because explicit positive "
-                "reference area and per-landmark sigmas were not both available."
-            ),
+    warning_items: list[str] = []
+    if oks_omitted:
+        warning_items.append(
+            "OKS omitted for one or more instances because explicit positive "
+            "reference area and per-landmark sigmas were not both available."
         )
-        if oks_omitted
-        else ()
-    )
+    if not visibility_metrics_available:
+        warning_items.append(
+            "Visibility metrics are unavailable because the provider does not expose "
+            "equivalent ReefVision visibility semantics."
+        )
     return PoseEvaluationMetrics(
         instance_count=len(instances),
         visible_reference_count=visible_reference_count,
@@ -375,7 +437,46 @@ def evaluate_pose_instances(
             bin_count=calibration_bins,
             thresholds=confidence_values,
         ),
+        normalized_error_distribution=_error_distribution(normalized_errors),
+        availability={
+            "euclidean_error": MetricAvailability(
+                available=bool(errors),
+                reason=None if errors else "No visible landmarks were localized.",
+            ),
+            "nme": MetricAvailability(
+                available=bool(normalized_errors),
+                reason=None if normalized_errors else "No visible landmarks were localized.",
+            ),
+            "pck": MetricAvailability(
+                available=visible_reference_count > 0,
+                reason=(
+                    None
+                    if visible_reference_count > 0
+                    else "No visible reference landmarks were available."
+                ),
+            ),
+            "visibility": MetricAvailability(
+                available=visibility_metrics_available,
+                reason=(
+                    None
+                    if visibility_metrics_available
+                    else "The provider has no equivalent ReefVision visibility semantics."
+                ),
+            ),
+            "calibration": MetricAvailability(
+                available=bool(calibration_samples),
+                reason=None if calibration_samples else "No landmark confidence samples exist.",
+            ),
+            "oks": MetricAvailability(
+                available=bool(oks_values),
+                reason=(
+                    None
+                    if oks_values
+                    else "OKS requires positive reference area and per-landmark sigmas."
+                ),
+            ),
+        },
         oks=(sum(oks_values) / len(oks_values) if oks_values else None),
         oks_instance_count=len(oks_values),
-        warnings=warnings,
+        warnings=tuple(warning_items),
     )
