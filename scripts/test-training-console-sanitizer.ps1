@@ -108,4 +108,23 @@ if ($hyperlinkSafe.Contains('example.invalid') -or
   throw 'OSC 8 terminal hyperlink escaped or obscured training loss display.'
 }
 
+# Validate the real monitor's metric gate: strings, booleans, NaN and infinity
+# must never be displayed as measured training losses. Finite numeric values
+# (including a real zero) must remain eligible for the box/cls/dfl display.
+$finiteMatch = [regex]::Match($source, '(?ms)^function Test-FiniteMetricValue \\{.*?^\\}')
+if (-not $finiteMatch.Success) {
+  throw 'Training monitor must define Test-FiniteMetricValue.'
+}
+Invoke-Expression $finiteMatch.Value
+foreach ($valid in @(0, 0.25, -0.125, [decimal]1.5, [single]0.75)) {
+  if (-not (Test-FiniteMetricValue -Value $valid)) {
+    throw ('Finite training metric was rejected: {0}' -f $valid)
+  }
+}
+foreach ($invalid in @($null, $true, $false, '0.00', 'NaN', [double]::NaN, [double]::PositiveInfinity, [double]::NegativeInfinity)) {
+  if (Test-FiniteMetricValue -Value $invalid) {
+    throw ('Untrusted or nonfinite training metric was accepted: {0}' -f $invalid)
+  }
+}
+
 Write-Host 'PowerShell training console sanitizer regression passed.'
