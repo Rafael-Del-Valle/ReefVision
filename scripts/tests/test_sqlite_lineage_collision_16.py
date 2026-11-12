@@ -175,3 +175,50 @@ def test_collision_gate_rejects_matching_schema_with_broken_foreign_keys(
         )
     assert "confidential coral" not in result.stdout + result.stderr
     assert (primary.read_bytes(), reference.read_bytes()) == before
+
+
+@pytest.mark.parametrize("invalid_side", ["primary", "reference"])
+def test_integrity_gate_rejects_noncanonical_alembic_constraints(
+    tmp_path: Path, invalid_side: str
+) -> None:
+    """Integrity acceptance must reject ambiguous stamps on either side."""
+    primary = tmp_path / "primary.sqlite"
+    reference = tmp_path / "reference.sqlite"
+    _database(primary, revision="0038", divergent=False)
+    _database(reference, revision="0038", divergent=False)
+    target = primary if invalid_side == "primary" else reference
+    with sqlite3.connect(target) as connection:
+        connection.execute("ALTER TABLE alembic_version RENAME TO old_alembic_version")
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT)")
+        connection.execute(
+            "INSERT INTO alembic_version SELECT version_num FROM old_alembic_version"
+        )
+        connection.execute("DROP TABLE old_alembic_version")
+    before = (primary.read_bytes(), reference.read_bytes())
+    command = [
+        sys.executable,
+        str(SCRIPT),
+        str(primary),
+        "--compare-to",
+        str(reference),
+    ]
+    diagnostic = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert diagnostic.returncode == 0, diagnostic.stderr
+    report = json.loads(diagnostic.stdout)
+    assert report["classification"] == "requires_researcher_review"
+    assert (
+        report["alembic_stamp_constraint_error"] is not None
+        or report["schema_comparison"]["reference_integrity"][
+            "alembic_stamp_constraint_error"
+        ] is not None
+    )
+    strict = subprocess.run(
+        command + ["--fail-on-integrity-error"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert strict.returncode == 2, strict.stderr
+    assert json.loads(strict.stdout)["classification"] == "requires_researcher_review"
+    assert "confidential coral" not in diagnostic.stdout + strict.stdout + strict.stderr
+    assert (primary.read_bytes(), reference.read_bytes()) == before
