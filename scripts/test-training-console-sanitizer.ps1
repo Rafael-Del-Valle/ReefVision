@@ -312,4 +312,38 @@ if ($latestMetrics.ContainsKey('train/box_loss')) {
   throw 'Invalid summary/history values fabricated a box-loss measurement.'
 }
 
+
+# A newly created training job may have a finite summary before its first epoch
+# history is persisted. Empty series must not erase that measured summary.
+$run = [pscustomobject]@{
+  metrics = [pscustomobject]@{
+    'train/box_loss' = 0.42
+    'train/cls_loss' = 0.37
+    'train/dfl_loss' = 0.19
+  }
+  metrics_history = [pscustomobject]@{
+    'train/box_loss' = @()
+    'train/cls_loss' = @()
+    'train/dfl_loss' = @()
+  }
+}
+Invoke-Expression $selectionCode
+foreach ($expected in @(
+  @{ key = 'train/box_loss'; value = 0.42 },
+  @{ key = 'train/cls_loss'; value = 0.37 },
+  @{ key = 'train/dfl_loss'; value = 0.19 }
+)) {
+  if (-not $latestMetrics.ContainsKey($expected.key) -or
+      $latestMetrics[$expected.key] -ne $expected.value) {
+    throw ('Empty epoch history erased a finite summary loss: {0}' -f $expected.key)
+  }
+}
+# Conversely, no metric may appear when the worker has not yet recorded any.
+$run.metrics = [pscustomobject]@{}
+$run.metrics_history = [pscustomobject]@{}
+Invoke-Expression $selectionCode
+if ($latestMetrics.Count -ne 0) {
+  throw 'An unstarted training run fabricated a loss measurement.'
+}
+
 Write-Host 'PowerShell training console sanitizer regression passed.'
