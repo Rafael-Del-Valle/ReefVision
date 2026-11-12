@@ -2,10 +2,29 @@ import { describe, expect, it } from "vitest";
 
 import {
   createPoseArchitectureWorkflow,
+  createPoseComparisonWorkflow,
   workflowTemplates,
 } from "./workflowTemplates";
 
 describe("workflowTemplates", () => {
+  it("connects a frozen dataset and multiple registered models to pose comparison", () => {
+    const graph = createPoseComparisonWorkflow();
+    const evaluation = graph.nodes.find(
+      (node) => node.node_type === "pose_model_evaluation",
+    );
+    expect(evaluation?.parameters).toMatchObject({
+      device: "auto",
+      pck_thresholds: [0.05, 0.1, 0.2],
+      calibration_bins: 10,
+    });
+    expect(
+      graph.edges.filter((edge) => edge.target_port_id === "models"),
+    ).toHaveLength(2);
+    expect(graph.edges.some((edge) => edge.target_port_id === "dataset")).toBe(
+      true,
+    );
+  });
+
   it("builds seed-free pose architecture training from an immutable dataset", () => {
     const graph = createPoseArchitectureWorkflow("yolo11m-pose.yaml");
     expect(

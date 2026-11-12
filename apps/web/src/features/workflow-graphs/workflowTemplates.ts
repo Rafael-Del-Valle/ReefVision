@@ -976,7 +976,65 @@ export function createPoseArchitectureWorkflow(
   };
 }
 
+export function createPoseComparisonWorkflow() {
+  return {
+    graph_id: "pose-model-comparison",
+    name: "Pose model comparison",
+    schema_version: "workflow-graph-0001",
+    metadata: { truth_policy: "scientist_verified_only" },
+    nodes: [
+      {
+        node_id: "dataset",
+        node_type: "pose_training_dataset",
+        parameters: { dataset_id: "" },
+        position: { x: 40, y: 180 },
+      },
+      ...["a", "b"].map((suffix, index) => ({
+        node_id: `model_${suffix}`,
+        node_type: "registered_model_source",
+        parameters: { model_id: `replace-with-pose-model-${suffix}-id` },
+        position: { x: 40, y: 360 + index * 180 },
+      })),
+      {
+        node_id: "evaluate",
+        node_type: "pose_model_evaluation",
+        parameters: {
+          device: "auto",
+          pck_thresholds: [0.05, 0.1, 0.2],
+          calibration_threshold: 0.1,
+          calibration_bins: 10,
+          confidence_thresholds: [0, 0.25, 0.5, 0.75, 0.9],
+        },
+        position: { x: 420, y: 260 },
+      },
+    ],
+    edges: [
+      {
+        edge_id: "dataset-evaluate",
+        source_node_id: "dataset",
+        source_port_id: "dataset",
+        target_node_id: "evaluate",
+        target_port_id: "dataset",
+      },
+      ...["a", "b"].map((suffix) => ({
+        edge_id: `model-${suffix}-evaluate`,
+        source_node_id: `model_${suffix}`,
+        source_port_id: "model",
+        target_node_id: "evaluate",
+        target_port_id: "models",
+      })),
+    ],
+  };
+}
+
 export const workflowTemplates: WorkflowTemplate[] = [
+  {
+    id: "pose-model-comparison",
+    name: "Pose models → scientific comparison",
+    description:
+      "Evaluate multiple registered pose models on one frozen scientist-verified dataset and preserve a reproducible comparison report.",
+    graph: createPoseComparisonWorkflow(),
+  },
   {
     id: "pose-architecture-training",
     name: "Pose architecture → train from scratch",

@@ -83,6 +83,8 @@ class PoseEvaluationComparisonService:
         self,
         project_id: str,
         payload: PoseEvaluationComparisonCreateRequest,
+        *,
+        submission_context: dict[str, str] | None = None,
     ) -> JobResponse:
         project = self.session.get(Project, project_id)
         dataset = self.session.get(PoseTrainingDataset, payload.evaluation_dataset_id)
@@ -143,6 +145,7 @@ class PoseEvaluationComparisonService:
                 "dataset_id": dataset.id,
                 "dataset_manifest_sha256": dataset.manifest_sha256,
                 "configuration": configuration,
+                "submission_context": submission_context or {},
             }
         )
         active = self._active_job(request_sha256)
@@ -163,6 +166,7 @@ class PoseEvaluationComparisonService:
                 "model_identities": model_identities,
                 "evaluation_dataset_id": dataset.id,
                 "dataset_manifest_sha256": dataset.manifest_sha256,
+                **(submission_context or {}),
                 **configuration,
             },
             result_json={"stage": "queued", "evaluation_run_ids": []},

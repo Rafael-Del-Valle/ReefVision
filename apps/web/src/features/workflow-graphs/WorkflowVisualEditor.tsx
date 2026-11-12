@@ -1067,6 +1067,88 @@ export function WorkflowVisualEditor({
                 </div>
               )}
 
+              {selectedNode.node_type === "pose_model_evaluation" && (
+                <div className="workflow-parameter-grid">
+                  <label>
+                    Evaluation device
+                    <select
+                      value={String(selectedNode.parameters?.device ?? "auto")}
+                      onChange={(event) =>
+                        setSelectedParameter("device", event.target.value)
+                      }
+                    >
+                      <option value="auto">Automatic</option>
+                      <option value="cpu">CPU</option>
+                      <option value="cuda">CUDA</option>
+                    </select>
+                  </label>
+                  <label>
+                    PCK thresholds
+                    <input
+                      aria-label="PCK thresholds"
+                      value={String(
+                        (
+                          selectedNode.parameters?.pck_thresholds as
+                            number[] | undefined
+                        )?.join(", ") ?? "0.05, 0.1, 0.2",
+                      )}
+                      onChange={(event) =>
+                        setSelectedParameter(
+                          "pck_thresholds",
+                          event.target.value
+                            .split(",")
+                            .map((value) => Number(value.trim()))
+                            .filter((value) => Number.isFinite(value)),
+                        )
+                      }
+                    />
+                  </label>
+                  <label>
+                    Confidence thresholds
+                    <input
+                      aria-label="Confidence thresholds"
+                      value={String(
+                        (
+                          selectedNode.parameters?.confidence_thresholds as
+                            number[] | undefined
+                        )?.join(", ") ?? "0, 0.25, 0.5, 0.75, 0.9",
+                      )}
+                      onChange={(event) =>
+                        setSelectedParameter(
+                          "confidence_thresholds",
+                          event.target.value
+                            .split(",")
+                            .map((value) => Number(value.trim()))
+                            .filter((value) => Number.isFinite(value)),
+                        )
+                      }
+                    />
+                  </label>
+                  <label>
+                    Calibration bins
+                    <input
+                      type="number"
+                      min={1}
+                      max={1000}
+                      value={Number(
+                        selectedNode.parameters?.calibration_bins ?? 10,
+                      )}
+                      onChange={(event) =>
+                        setSelectedParameter(
+                          "calibration_bins",
+                          Number(event.target.value),
+                        )
+                      }
+                    />
+                  </label>
+                  <p className="annotation-helper">
+                    Connect one frozen verified pose dataset and one or more
+                    registered pose model nodes. Runtime schema, checkpoint, and
+                    leakage validation is enforced before execution.
+                  </p>
+                </div>
+              )}
+
               {parameterKeys.length > 0 && (
                 <div className="workflow-parameter-grid">
                   {parameterKeys
@@ -1080,6 +1162,16 @@ export function WorkflowVisualEditor({
                           "device",
                           "precision",
                           "training_config",
+                        ].includes(key),
+                    )
+                    .filter(
+                      (key) =>
+                        selectedNode.node_type !== "pose_model_evaluation" ||
+                        ![
+                          "device",
+                          "pck_thresholds",
+                          "confidence_thresholds",
+                          "calibration_bins",
                         ].includes(key),
                     )
                     .map((key) => {

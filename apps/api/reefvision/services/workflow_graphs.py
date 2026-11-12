@@ -50,6 +50,7 @@ _MODEL_PURPOSES_BY_NODE: dict[str, set[str]] = {
     "video_tracking": {"detector", "segmenter"},
     "pose_inference": {"detector"},
     "pose_model_training": {"detector"},
+    "pose_model_evaluation": {"detector"},
 }
 
 _ACTIONS: dict[str, str] = {
@@ -127,6 +128,9 @@ _ACTIONS: dict[str, str] = {
     ),
     "pose_model_training": (
         "Train a provider-native pose checkpoint from immutable scientist-verified pose truth."
+    ),
+    "pose_model_evaluation": (
+        "Compare registered pose models on immutable scientist-verified held-out truth."
     ),
     "project_exchange_export": "Build a Phase 9 checksummed project exchange export inline.",
 }

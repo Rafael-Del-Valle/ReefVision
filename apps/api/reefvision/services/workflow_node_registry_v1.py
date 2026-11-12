@@ -14,6 +14,9 @@ from reefvision.services.workflow_node_registry import (
     workflow_node_registry as base_workflow_node_registry,
 )
 from reefvision.services.workflow_pose import register_pose_workflow_adapters
+from reefvision.services.workflow_pose_evaluation import (
+    register_pose_evaluation_workflow_adapter,
+)
 from reefvision.services.workflow_pose_training import (
     register_pose_training_workflow_adapter,
 )
@@ -24,6 +27,7 @@ from reefvision.services.workflow_results_packages import (
 register_video_depth_3d_adapter()
 register_video_metric_depth_3d_adapter()
 register_pose_workflow_adapters()
+register_pose_evaluation_workflow_adapter()
 register_pose_training_workflow_adapter()
 register_results_package_workflow_adapter()
 
@@ -582,6 +586,51 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 "Execution produces the normal ReefVision training_result "
                 "artifact so Results Package integration remains shared."
             ),
+        ],
+    )
+
+    registry["pose_model_evaluation"] = WorkflowNodeDefinitionResponse(
+        node_type="pose_model_evaluation",
+        display_name="Evaluate Pose Models",
+        category="Scientific analysis",
+        description=(
+            "Compare registered pose models on one immutable scientist-verified pose dataset."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="dataset",
+                display_name="Frozen verified pose dataset",
+                accepted_types=["pose_training_dataset"],
+            ),
+            WorkflowPortDefinition(
+                port_id="models",
+                display_name="Registered pose models",
+                accepted_types=["model_reference"],
+                multiple=True,
+            ),
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="comparison",
+                display_name="Pose evaluation comparison",
+                accepted_types=["pose_evaluation_comparison"],
+                required=False,
+            )
+        ],
+        required_parameters=[],
+        optional_parameters={
+            "device": "auto",
+            "pck_thresholds": [0.05, 0.1, 0.2],
+            "calibration_threshold": 0.1,
+            "calibration_bins": 10,
+            "confidence_thresholds": [0.0, 0.25, 0.5, 0.75, 0.9],
+            "oks_sigmas": None,
+        },
+        execution_state="executable_pose_evaluation",
+        executable=True,
+        implementation_notes=[
+            "Executes the production asynchronous comparison worker and preserves its report hash.",
+            "Provider exclusions and unavailable metrics remain explicit in the output artifact.",
         ],
     )
 
