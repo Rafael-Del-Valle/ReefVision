@@ -1,0 +1,9 @@
+# ReefVision 1.6 — read-only schema drift review gate
+
+Use `python scripts/inspect_sqlite_lineage_16.py current.sqlite --compare-to reference.sqlite --fail-on-schema-drift` to compare two **existing** SQLite databases. Both connections use SQLite read-only mode and pinned read snapshots; the tool never executes migrations or repairs data.
+
+The JSON retains the original inspection fields and adds `schema_comparison`: reference path and SHA-256, exact structural fingerprint equality, and object-name differences in both directions. A mismatch exits 2 only when `--fail-on-schema-drift` is selected. A matching fingerprint exits 0 unless the separate `--fail-on-integrity-error` gate finds corruption. A drift exit is **not** authorization to migrate. Identical object names may conceal changed DDL, so the structural hash is authoritative; different scientific observation rows are intentionally excluded from the hash. Names of schema objects are exposed, but DDL and biological row values are not.
+
+This is a diagnostic for the independent 1.1/1.6 revision-0038 collision, **not a reconciliation**. It does not infer which migration ran, establish scientific compatibility, or automatically approve records. Preserve both original database files, collect the JSON for researcher review, then execute the documented migration and Windows MSI upgrade/rollback acceptance gates before considering release. The existing executable saved `qc_review_queue` Workflow Builder and its review gates are unchanged; this administrative inspection command is not a new scientific workflow node.
+
+Regression cases: same-named tables with different column definitions must fail the drift gate; identical schemas with different sensitive scientific rows must pass without revealing those values or changing database bytes. The committed regressions still require exact-head pytest and CI execution.
