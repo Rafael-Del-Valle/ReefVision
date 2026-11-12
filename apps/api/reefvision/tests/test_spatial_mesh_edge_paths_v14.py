@@ -701,3 +701,66 @@ def test_calibrated_mesh_path_vertex_coordinate_underflow_is_flagged() -> None:
     assert route["path_vertices_in_source_frame_m"][0][0] == 0.0
     assert route["length_m"] > 0
     assert "calibrated_path_vertex_coordinate_underflow" in route["path_qc_warnings"]
+
+
+def test_degenerate_triangle_route_qc_survives_saved_workflow(
+    client: TestClient,
+) -> None:
+    # A collinear triangle is not evidence of a biological centerline.
+    # Keep its provisional edge distance and topology warning after persistence.
+    parameters = {
+        "vertices": [[0, 0, 0], [1, 0, 0], [2, 0, 0]],
+        "faces": [[0, 1, 2]],
+        "meters_per_unit": 0.1,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic collinear triangle, unverified",
+        "relative_scale_uncertainty": 0.1,
+        "surface_path_vertex_pairs": [[0, 1]],
+    }
+    project_id = str(create_project(client, "Degenerate mesh route parity")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=parameters)
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()["surface_edge_paths"][0]
+    assert expected["status"] == "connected"
+    assert expected["length_m"] == pytest.approx(0.1)
+    assert "degenerate_triangle_on_path" in expected["path_qc_warnings"]
+    assert "open_boundary_edge_on_path" in expected["path_qc_warnings"]
+
+    graph = {
+        "graph_id": "degenerate-mesh-route-v14",
+        "name": "Provisional degenerate mesh route QC",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": parameters},
+        ],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "m",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["surface_edge_paths"][0] == expected
+    assert artifact["provenance"] == standalone.json()["provenance"]
+    assert artifact["measurement_status"] == "caller_supplied_unverified"
+    assert artifact["provenance"]["calibration_verified"] is False
