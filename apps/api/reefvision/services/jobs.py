@@ -27,6 +27,7 @@ RUNNING_CANCELLABLE_JOB_TYPES = frozenset(
         "video_metric_depth_3d",
         "workflow_run",
         "pose_evaluation",
+        "pose_identity_tracking",
     }
 )
 

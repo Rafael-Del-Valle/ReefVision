@@ -62,6 +62,7 @@ class PoseIdentityObservationResponse(BaseModel):
     id: str
     observation_series_id: str
     revision: int
+    supersedes_observation_id: str | None
     animal_identity_id: str | None
     source_video_track_id: str
     source_detection_key: str
