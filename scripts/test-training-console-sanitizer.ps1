@@ -95,7 +95,7 @@ if (-not $safeLog.Contains('train/box_loss=0.25') -or -not $safeLog.Contains('ep
 # terminal hyperlinks. Neither may change how the scientific loss line appears.
 $bidi = 'train/box_loss=0.25' + [char]0x2066 + 'hidden' + [char]0x2069 + ' train/cls_loss=0.30'
 $bidiSafe = Format-SafeText $bidi
-if ($bidiSafe -match '[\\p{Cf}]' -or -not $bidiSafe.Contains('train/box_loss=0.25') -or
+if ($bidiSafe -match '[\p{Cf}]' -or -not $bidiSafe.Contains('train/box_loss=0.25') -or
     -not $bidiSafe.Contains('train/cls_loss=0.30')) {
   throw 'Bidirectional formatting controls corrupted scientific loss display.'
 }
