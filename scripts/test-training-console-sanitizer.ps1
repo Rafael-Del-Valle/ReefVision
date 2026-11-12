@@ -379,4 +379,35 @@ if ($latestMetrics.Count -ne 4) {
   throw 'Metric selection introduced unexpected or fabricated keys.'
 }
 
+# Sparse histories are common when a worker persists different loss keys at
+# different epochs. A metric's own latest finite sample must win; a missing
+# history key must preserve its finite summary, not borrow another series.
+$run = [pscustomobject]@{
+  metrics = [pscustomobject]@{
+    'train/box_loss' = 0.75
+    'train/cls_loss' = 0.65
+    'train/dfl_loss' = 0.55
+    'val/cls_loss' = 0.45
+  }
+  metrics_history = [pscustomobject]@{
+    'train/box_loss' = @(0.35, [double]::NaN, 0.15)
+    'train/dfl_loss' = @([double]::PositiveInfinity, 0.25)
+  }
+}
+Invoke-Expression $selectionCode
+foreach ($expected in @(
+  @{ key = 'train/box_loss'; value = 0.15 },
+  @{ key = 'train/cls_loss'; value = 0.65 },
+  @{ key = 'train/dfl_loss'; value = 0.25 },
+  @{ key = 'val/cls_loss'; value = 0.45 }
+)) {
+  if (-not $latestMetrics.ContainsKey($expected.key) -or
+      $latestMetrics[$expected.key] -ne $expected.value) {
+    throw ('Sparse epoch histories changed independent metric provenance: {0}' -f $expected.key)
+  }
+}
+if ($latestMetrics.Count -ne 4) {
+  throw 'Sparse epoch histories fabricated or discarded a metric key.'
+}
+
 Write-Host 'PowerShell training console sanitizer regression passed.'
