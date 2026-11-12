@@ -197,6 +197,38 @@ describe("browser gallery storage access", () => {
   });
 });
 
+describe("project-scoped camera gallery restoration", () => {
+  it("does not restore another project's camera selection after switching projects", () => {
+    const storage = memoryStorage();
+    writeGalleryPreference(storage, "survey-a", {
+      imageId: "DSC_0001.JPG",
+      page: 4,
+      wrap: true,
+    });
+    writeGalleryPreference(storage, "survey-b", {
+      imageId: "DSC_0001.JPG",
+      page: 2,
+      wrap: false,
+    });
+
+    expect(readGalleryPreference(storage, "survey-a")).toEqual({
+      imageId: "DSC_0001.JPG",
+      page: 4,
+      wrap: true,
+    });
+    expect(readGalleryPreference(storage, "survey-b")).toEqual({
+      imageId: "DSC_0001.JPG",
+      page: 2,
+      wrap: false,
+    });
+    expect(readGalleryPreference(storage, "new-survey")).toEqual({
+      imageId: null,
+      page: 1,
+      wrap: false,
+    });
+  });
+});
+
 describe("legacy gallery preferences without an image identifier", () => {
   it("restores page one instead of hiding the first camera image", () => {
     const storage = memoryStorage({
