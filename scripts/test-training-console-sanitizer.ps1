@@ -185,6 +185,18 @@ if ($monitorScript -match '(?i)\b(?:Invoke-WebRequest|Start-BitsTransfer|Start-J
     $monitorScript -match '(?i)\[System\.Net\.Http\.HttpClient\]|\[System\.Net\.WebClient\]') {
   throw 'External training monitor introduced an alternate network, process, or artifact-write path.'
 }
+# Both polling requests must have finite timeouts. A hung local API must not
+# leave the external observer indefinitely blocked or interfere with training.
+if ($requests[0].Value -notmatch '-TimeoutSec\\s+10\\b' -or
+    $requests[1].Value -notmatch '-TimeoutSec\\s+5\\b') {
+  throw 'Training monitor status and log requests must retain bounded timeouts.'
+}
+# Persisted logs may contain CR-only progress updates; display only the most
+# recent 20 lines, without rewriting the worker log or losing progress records.
+if ($monitorScript -notmatch [regex]::Escape("-split '\\r\\n|\\r|\\n'") -or
+    $monitorScript -notmatch 'Select-Object\\s+-Last\\s+20\\b') {
+  throw 'Training log tail must support CR/LF progress and remain bounded to 20 lines.'
+}
 if ($monitorScript -notmatch 'Start-Sleep\s+-Seconds\s+2\b') {
   throw 'Read-only polling throttle was removed from training monitor.'
 }
