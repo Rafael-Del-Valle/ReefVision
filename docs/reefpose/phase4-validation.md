@@ -85,7 +85,7 @@ Backend:
   passed; the migration test also verifies existing `VideoTrack` preservation.
 - Ruff: passed.
 - Mypy: passed for 438 source files.
-- Final full API collection under a short Windows temp path: 1,487 passed, 40 skipped,
+- Final full API collection under a short Windows temp path: 1,489 passed, 40 skipped,
   and six failures. All six are the previously documented real pose-interoperability tests
   requiring absent optional `sleap-io==0.9.2`; no dependency was installed and no other
   failure occurred.
