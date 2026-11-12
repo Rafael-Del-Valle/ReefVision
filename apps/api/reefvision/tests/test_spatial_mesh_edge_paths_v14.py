@@ -856,3 +856,18 @@ def test_duplicate_triangles_are_route_scoped_and_survive_saved_workflow(
     standalone = client.post(f"{base}/spatial/mesh-preview", json=parameters)
     assert standalone.status_code == 400
     assert standalone.json()["detail"] == "Duplicate triangles would double-count surface area"
+
+
+def test_mesh_path_rejects_overflowing_triangle_cross_product() -> None:
+    # All vertices and individual edge lengths are finite, but the area
+    # cross product overflows. Never silently certify the triangle topology.
+    from reefvision.services.spatial_mesh_paths_v14 import mesh_edge_paths
+
+    with pytest.raises(ValueError, match="Mesh triangle cross product overflowed"):
+        mesh_edge_paths(
+            points=[(0.0, 0.0, 0.0), (1e200, 0.0, 0.0), (0.0, 1e200, 0.0)],
+            faces=[[0, 1, 2]],
+            pairs=[[0, 1]],
+            scale=1e-200,
+            scale_uncertainty=0.1,
+        )
