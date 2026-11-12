@@ -124,10 +124,17 @@ foreach ($valid in @(0, 0.25, -0.125, [decimal]1.5, [single]0.75)) {
 # A training-run API response may contain JSON arrays/objects or timestamp fields.
 # None is a scalar measured loss, even if PowerShell would coerce it to text.
 foreach ($invalid in @($null, $true, $false, '0.00', 'NaN', [double]::NaN, [double]::PositiveInfinity, [double]::NegativeInfinity,
-    [datetime]'2026-01-01', [char]'1', @{ value = 0.25 }, @(0.25, 0.30))) {
+    [datetime]'2026-01-01', [char]'1', @{ value = 0.25 })) {
   if (Test-FiniteMetricValue -Value $invalid) {
     throw ('Untrusted or nonfinite training metric was accepted: {0}' -f $invalid)
   }
+}
+
+# Keep this separate: PowerShell automatically flattens nested arrays in @(...).
+# Passing the array as one -Value argument must still be rejected.
+$structuredLoss = @(0.25, 0.30)
+if (Test-FiniteMetricValue -Value $structuredLoss) {
+  throw 'A vector of loss measurements was accepted as one scalar loss.'
 }
 
 Write-Host 'PowerShell training console sanitizer regression passed.'
