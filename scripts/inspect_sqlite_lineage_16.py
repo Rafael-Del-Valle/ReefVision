@@ -60,11 +60,23 @@ def inspect(path: Path) -> dict:
         names = {row[1] for row in schema_rows if row[0] == "table"}
         stamps = []
         alembic_stamp_error = None
+        alembic_stamp_validation_error = None
         if "alembic_version" in names:
             try:
-                stamps = [row[0] for row in connection.execute(
-                    "SELECT version_num FROM alembic_version ORDER BY version_num"
+                # Do not sort SQLite mixed-type values or serialize raw BLOBs:
+                # malformed stamps must remain structured, JSON-safe evidence.
+                raw_stamps = [row[0] for row in connection.execute(
+                    "SELECT version_num FROM alembic_version"
                 )]
+                stamps = [value if isinstance(value, str) else None for value in raw_stamps]
+                if len(raw_stamps) != 1:
+                    alembic_stamp_validation_error = "expected_exactly_one_revision_row"
+                elif not isinstance(raw_stamps[0], str) or (
+                    not raw_stamps[0]
+                    or raw_stamps[0] != raw_stamps[0].strip()
+                    or any(ord(char) < 32 or ord(char) == 127 for char in raw_stamps[0])
+                ):
+                    alembic_stamp_validation_error = "invalid_revision_marker_type_or_value"
             except sqlite3.DatabaseError as exc:
                 # Partial/corrupt lineage metadata must remain visible as
                 # uncertain evidence, not abort an otherwise useful report.
@@ -106,6 +118,7 @@ def inspect(path: Path) -> dict:
                 for row in foreign_keys
             ],
             "alembic_stamps": stamps, "alembic_stamp_error": alembic_stamp_error,
+            "alembic_stamp_validation_error": alembic_stamp_validation_error,
             "tables": tables,
             "classification": "requires_researcher_review",
         }
@@ -130,6 +143,7 @@ def main() -> None:
         or evidence["foreign_key_check_error"] is not None
         or evidence["foreign_key_violation_count"] != 0
         or evidence["alembic_stamp_error"] is not None
+        or evidence["alembic_stamp_validation_error"] is not None
     ):
         raise SystemExit(2)
 
