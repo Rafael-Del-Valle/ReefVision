@@ -509,3 +509,70 @@ def test_calibrated_segment_underflow_survives_saved_workflow(
     assert artifact["surface_edge_paths"][0] == expected
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
+
+
+def test_disconnected_mesh_paths_preserve_nulls_in_saved_workflow(
+    client: TestClient,
+) -> None:
+    # Disconnected components and unreferenced vertices must never acquire
+    # invented physical distances or uncertainty intervals on persistence.
+    parameters = {
+        **PARAMS,
+        "relative_scale_uncertainty": 0.2,
+    }
+    project_id = str(create_project(client, "Disconnected mesh path parity")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=parameters)
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()["surface_edge_paths"]
+    assert [route["status"] for route in expected] == [
+        "connected",
+        "disconnected",
+        "unreferenced_endpoint",
+    ]
+    for route in expected[1:]:
+        for field in (
+            "length_m",
+            "scale_uncertainty_m",
+            "endpoint_chord_length_m",
+            "endpoint_chord_scale_uncertainty_m",
+            "path_vertex_indices",
+        ):
+            assert route[field] is None
+
+    graph = {
+        "graph_id": "disconnected-mesh-paths-v14",
+        "name": "No invented disconnected route measurements",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": parameters},
+        ],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "m",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["surface_edge_paths"] == expected
+    assert artifact["provenance"] == standalone.json()["provenance"]
+    assert artifact["provenance"]["calibration_verified"] is False
