@@ -579,7 +579,6 @@ def test_disconnected_mesh_paths_preserve_nulls_in_saved_workflow(
     assert artifact["provenance"]["calibration_verified"] is False
 
 
-
 def test_calibrated_mesh_path_vertex_coordinate_underflow_is_flagged() -> None:
     # A finite source coordinate can round to zero in meters. Keep the
     # provisional route but expose the loss of positional precision to review.
