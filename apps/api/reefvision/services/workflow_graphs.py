@@ -108,6 +108,16 @@ _ACTIONS: dict[str, str] = {
         "and identity-break provenance."
     ),
     "pose_review_gate": ("Pause until temporal pose state has explicit scientist review."),
+    "pose_identity_association": (
+        "Associate pose instances into auditable, persistent animal identities."
+    ),
+    "pose_identity_review_gate": (
+        "Pause until multi-animal identity assignments have explicit scientist review."
+    ),
+    "pose_identity_evaluation": (
+        "Evaluate reviewed animal identities against immutable verified identity truth."
+    ),
+    "pose_identity_export": "Export reviewed identities and scientific evaluation provenance.",
     "behavior_dynamics": (
         "Calculate deterministic behavior dynamics from scientist-reviewed tracks."
     ),

@@ -242,6 +242,132 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                     ),
                 ],
             ),
+            "pose_identity_association": WorkflowNodeDefinitionResponse(
+                node_type="pose_identity_association",
+                display_name="Associate Individuals",
+                category="Pose",
+                description=(
+                    "Link pose instances into stable animal identities with deterministic, "
+                    "auditable association scores."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="poses",
+                        display_name="Pose tracks",
+                        accepted_types=["pose_tracks"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="tracks",
+                        display_name="Identity tracks",
+                        accepted_types=["pose_identity_tracks"],
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={
+                    "max_gap_frames": 5,
+                    "max_normalized_distance": 1.5,
+                    "acceptance_threshold": 0.75,
+                    "low_confidence_threshold": 0.6,
+                },
+                execution_state="executable_pose_workflow",
+                executable=True,
+                implementation_notes=[
+                    "Uses canonical pose VideoTrack detections without rewriting provider output.",
+                    "Persists every candidate score, threshold, and selected decision.",
+                ],
+            ),
+            "pose_identity_review_gate": WorkflowNodeDefinitionResponse(
+                node_type="pose_identity_review_gate",
+                display_name="Review Animal Identities",
+                category="Human review",
+                description=(
+                    "Pause until current animal identity observations have explicit scientist "
+                    "acceptance, rejection, or correction."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="tracks",
+                        display_name="Identity tracks",
+                        accepted_types=["pose_identity_tracks"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="tracks",
+                        display_name="Reviewed identity tracks",
+                        accepted_types=["reviewed_pose_identity_tracks"],
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={},
+                execution_state="pausable_review_gate",
+                executable=True,
+                implementation_notes=[
+                    "Model identity is never promoted to verified truth without human review."
+                ],
+            ),
+            "pose_identity_evaluation": WorkflowNodeDefinitionResponse(
+                node_type="pose_identity_evaluation",
+                display_name="Evaluate Identity Tracking",
+                category="Scientific analysis",
+                description=(
+                    "Compute IDF1, identity precision/recall, switches, fragmentation, and "
+                    "coverage against immutable verified identity truth."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="tracks",
+                        display_name="Reviewed identity tracks",
+                        accepted_types=["reviewed_pose_identity_tracks"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="evaluation",
+                        display_name="Identity evaluation",
+                        accepted_types=["pose_identity_evaluation"],
+                    )
+                ],
+                required_parameters=["truth_dataset_id"],
+                optional_parameters={"spatial_iou_threshold": 0.5},
+                execution_state="executable_pose_workflow",
+                executable=True,
+                implementation_notes=[
+                    "Identity metrics remain separate from landmark-localization metrics."
+                ],
+            ),
+            "pose_identity_export": WorkflowNodeDefinitionResponse(
+                node_type="pose_identity_export",
+                display_name="Export Identity Results",
+                category="Export",
+                description=(
+                    "Export corrected identity observations and evaluation provenance as a "
+                    "managed JSON or CSV artifact."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="evaluation",
+                        display_name="Identity evaluation",
+                        accepted_types=["pose_identity_evaluation"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="package",
+                        display_name="Identity package",
+                        accepted_types=["pose_identity_package"],
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={"format": "json"},
+                execution_state="executable_pose_workflow",
+                executable=True,
+                implementation_notes=[
+                    "Export provenance retains run revision, truth hash, and workflow identity."
+                ],
+            ),
             "pose_review_gate": WorkflowNodeDefinitionResponse(
                 node_type="pose_review_gate",
                 display_name="Pose Review Gate",

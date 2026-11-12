@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 from reefvision.db.models import (
     ClassificationPrediction,
     Job,
+    PoseIdentityAssociationRun,
+    PoseIdentityObservation,
     PredictionProposal,
     VideoAsset,
     VideoTrack,
@@ -40,6 +42,7 @@ REVIEW_GATE_NODE_TYPES = {
     "classification_review_gate",
     "pose_review_gate",
     "pose_active_learning_review_gate",
+    "pose_identity_review_gate",
 }
 
 
@@ -362,6 +365,61 @@ def pose_active_learning_review_status(
     }
 
 
+def pose_identity_review_status(
+    session: Session,
+    artifact: WorkflowArtifact,
+    *,
+    project_id: str,
+) -> dict[str, Any]:
+    """Return scientist-review readiness for one animal identity run artifact."""
+
+    if artifact.data_type != "pose_identity_tracks":
+        raise ValidationError("Identity Review requires a pose_identity_tracks artifact")
+    payload = dict(artifact.payload_json or {})
+    if payload.get("project_id") not in {None, project_id}:
+        raise ValidationError("Identity Review received tracks from another project")
+    run_id = str(payload.get("run_id") or "")
+    run = session.get(PoseIdentityAssociationRun, run_id)
+    if run is None or run.project_id != project_id:
+        raise ValidationError("Identity Review association run was not found in this project")
+    artifact_revision = int(payload.get("run_revision") or 0)
+    # Review corrections are append-only revisions of the same association run,
+    # so a current revision newer than the source artifact is the expected path.
+    # Only an impossible future artifact is stale.
+    stale = artifact_revision > run.revision
+    total = int(
+        session.scalar(
+            select(func.count(PoseIdentityObservation.id)).where(
+                PoseIdentityObservation.association_run_id == run.id,
+                PoseIdentityObservation.is_current.is_(True),
+            )
+        )
+        or 0
+    )
+    unreviewed = int(
+        session.scalar(
+            select(func.count(PoseIdentityObservation.id)).where(
+                PoseIdentityObservation.association_run_id == run.id,
+                PoseIdentityObservation.is_current.is_(True),
+                PoseIdentityObservation.verification_state == "unreviewed",
+            )
+        )
+        or 0
+    )
+    return {
+        "schema_version": "pose-identity-review-readiness-0001",
+        "ready": total > 0 and unreviewed == 0 and not stale,
+        "project_id": project_id,
+        "source_artifact_id": artifact.id,
+        "run_id": run.id,
+        "artifact_run_revision": artifact_revision,
+        "current_run_revision": run.revision,
+        "stale": stale,
+        "current_observation_count": total,
+        "unreviewed_observation_count": unreviewed,
+    }
+
+
 def resume_review_gate(
     session: Session,
     node_run_id: str,
@@ -424,6 +482,19 @@ def resume_review_gate(
             )
 
         review_context["pose_active_learning_review_status"] = active_learning_status
+
+    elif node_run.node_type == "pose_identity_review_gate":
+        if len(artifacts) != 1:
+            raise ValidationError("Identity Review requires exactly one identity-track artifact")
+        identity_status = pose_identity_review_status(
+            session, artifacts[0], project_id=run.project_id
+        )
+        if not identity_status["ready"]:
+            raise ValidationError(
+                "Identity review cannot be approved while current observations are "
+                "unreviewed or the workflow artifact revision is stale"
+            )
+        review_context["pose_identity_review_status"] = identity_status
 
     else:
         pending_count = _pending_review_count(

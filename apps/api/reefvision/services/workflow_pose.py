@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any, cast
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import (
@@ -17,10 +19,16 @@ from reefvision.db.models import (
     WorkflowArtifact,
 )
 from reefvision.domain.errors import ValidationError
+from reefvision.jobs.pose_identity_tracking import process_pose_identity_tracking_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.schemas.behavior_dynamics import BehaviorDynamicsRequest
 from reefvision.schemas.pose_active_learning import (
     PoseActiveLearningRoundCreateRequest,
+)
+from reefvision.schemas.pose_identity_tracking import (
+    PoseIdentityAssociationCreateRequest,
+    PoseIdentityAssociationParameters,
+    PoseIdentityEvaluationRequest,
 )
 from reefvision.schemas.pose_tracking import (
     PoseTemporalAssociationBuildRequest,
@@ -32,6 +40,7 @@ from reefvision.schemas.pose_training_datasets import (
 from reefvision.services import workflow_runtime_adapters as runtime_adapters
 from reefvision.services.behavior_dynamics import BehaviorDynamicsService
 from reefvision.services.pose_active_learning import PoseActiveLearningService
+from reefvision.services.pose_identity_tracking import PoseIdentityTrackingService
 from reefvision.services.pose_temporal_tracking import (
     PoseTemporalTrackingService,
 )
@@ -44,6 +53,7 @@ from reefvision.services.pose_training_exports import (
 from reefvision.services.workflow_review import (
     WorkflowReviewRequired,
     pose_active_learning_review_status,
+    pose_identity_review_status,
     pose_temporal_review_status,
 )
 from reefvision.storage.projects import resolve_managed_project_path
@@ -57,6 +67,10 @@ POSE_WORKFLOW_RUNTIME_NODE_TYPES = {
     "pose_active_learning_review_gate",
     "pose_training_dataset_freeze",
     "pose_training_export",
+    "pose_identity_association",
+    "pose_identity_review_gate",
+    "pose_identity_evaluation",
+    "pose_identity_export",
 }
 
 _EXTERNAL_POSE_EXPORT_FORMATS = {
@@ -1015,6 +1029,246 @@ def execute_pose_active_learning_review_gate_adapter(
     ]
 
 
+def _identity_schema_binding(
+    tracks: list[VideoTrack], pose_payload: dict[str, Any]
+) -> tuple[str, int, str]:
+    raw_schema = pose_payload.get("pose_schema")
+    schema = dict(raw_schema) if isinstance(raw_schema, dict) else {}
+    if not schema and tracks:
+        schema = dict((tracks[0].metadata_json or {}).get("pose_landmark_schema") or {})
+    schema_id = str(schema.get("schema_id") or schema.get("id") or "")
+    revision = int(schema.get("schema_revision") or schema.get("revision") or 0)
+    content_hash = str(schema.get("content_hash") or schema.get("content_sha256") or "")
+    if not schema_id or revision < 1 or len(content_hash) != 64:
+        raise ValidationError(
+            "Identity association requires pose schema ID, revision, and content hash"
+        )
+    return schema_id, revision, content_hash
+
+
+def execute_pose_identity_association_adapter(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    pose_payload = _single_payload(inputs, "poses")
+    if pose_payload.get("project_id") not in {None, project_id}:
+        raise ValidationError("Identity association received pose tracks from another project")
+    track_ids = _track_ids(pose_payload)
+    tracks, video = _scoped_tracks(session, project_id=project_id, track_ids=track_ids)
+    schema_id, schema_revision, schema_hash = _identity_schema_binding(tracks, pose_payload)
+    association_parameters = PoseIdentityAssociationParameters(
+        max_gap_frames=int(parameters.get("max_gap_frames", 5)),
+        max_normalized_distance=float(parameters.get("max_normalized_distance", 1.5)),
+        minimum_iou=float(parameters.get("minimum_iou", 0.0)),
+        minimum_landmark_similarity=float(parameters.get("minimum_landmark_similarity", 0.0)),
+        minimum_detection_confidence=float(parameters.get("minimum_detection_confidence", 0.05)),
+        acceptance_threshold=float(parameters.get("acceptance_threshold", 0.75)),
+        low_confidence_threshold=float(parameters.get("low_confidence_threshold", 0.6)),
+        proximity_weight=float(parameters.get("proximity_weight", 0.35)),
+        overlap_weight=float(parameters.get("overlap_weight", 0.2)),
+        landmark_weight=float(parameters.get("landmark_weight", 0.25)),
+        motion_weight=float(parameters.get("motion_weight", 0.2)),
+        confidence_weight=float(parameters.get("confidence_weight", 0.1)),
+    )
+    service = PoseIdentityTrackingService(session)
+    child = service.submit(
+        project_id,
+        PoseIdentityAssociationCreateRequest(
+            video_id=video.id,
+            source_track_ids=track_ids,
+            pose_schema_id=schema_id,
+            pose_schema_revision=schema_revision,
+            pose_schema_content_hash=schema_hash,
+            parameters=association_parameters,
+            device=str(parameters.get("device", "auto")),
+        ),
+    )
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+    process_pose_identity_tracking_job(settings, factory, child.id)
+    session.expire_all()
+    child_record = session.get(Job, child.id)
+    if child_record is None or child_record.status != "completed":
+        message = child_record.error_message if child_record is not None else "job disappeared"
+        raise ValidationError(f"Identity association failed: {message}")
+    run_id = str((child_record.result_json or {}).get("run_id") or "")
+    run = service.get(run_id)
+    return [
+        {
+            "port_id": "tracks",
+            "data_type": "pose_identity_tracks",
+            "payload": {
+                "schema_version": "pose-identity-workflow-0001",
+                "project_id": project_id,
+                "video_id": video.id,
+                "video_sha256": video.sha256,
+                "run_id": run.id,
+                "run_revision": run.revision,
+                "association_job_id": child.id,
+                "track_ids": track_ids,
+                "pose_schema_id": run.pose_schema_id,
+                "pose_schema_revision": run.pose_schema_revision,
+                "pose_schema_content_hash": run.pose_schema_content_hash,
+                "parameters": run.parameters_json,
+                "parameters_sha256": run.parameters_sha256,
+                "input_manifest_sha256": run.input_manifest_sha256,
+                "coordinate_space": run.source_coordinate_space,
+                "truth_status": "model_generated_unreviewed",
+            },
+        }
+    ]
+
+
+def execute_pose_identity_review_gate_adapter(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    del settings, parameters
+    source = runtime_adapters._single_artifact(inputs, "tracks")
+    payload = dict(source.payload_json or {})
+    node_run = runtime_adapters._current_review_node(session, source, "pose_identity_review_gate")
+    readiness = pose_identity_review_status(session, source, project_id=project_id)
+    approval = dict((node_run.result_json or {}).get("review_approval") or {})
+    if not approval:
+        raise WorkflowReviewRequired(
+            f"{node_run.node_id} is waiting for scientist identity review",
+            details={
+                "node_run_id": node_run.id,
+                "node_id": node_run.node_id,
+                "node_type": node_run.node_type,
+                "source_artifact_id": source.id,
+                "review_workspace": "video_tracking_identity_review",
+                "run_id": readiness["run_id"],
+                "review_readiness": readiness,
+            },
+        )
+    if not readiness["ready"]:
+        raise ValidationError(
+            "Identity Review approval is stale or current observations remain unreviewed"
+        )
+    return [
+        {
+            "port_id": "tracks",
+            "data_type": "reviewed_pose_identity_tracks",
+            "payload": {
+                **payload,
+                "schema_version": "reviewed-pose-identity-workflow-0001",
+                "run_revision": readiness["current_run_revision"],
+                "source_identity_artifact_id": source.id,
+                "source_identity_artifact_sha256": source.payload_sha256,
+                "review_approval": approval,
+                "review_readiness": readiness,
+                "truth_status": "scientist_reviewed",
+            },
+        }
+    ]
+
+
+def execute_pose_identity_evaluation_adapter(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    del settings
+    reviewed = _single_payload(inputs, "tracks")
+    if reviewed.get("project_id") not in {None, project_id}:
+        raise ValidationError("Identity evaluation received tracks from another project")
+    run_id = str(reviewed.get("run_id") or "")
+    evaluation = PoseIdentityTrackingService(session).evaluate(
+        run_id,
+        PoseIdentityEvaluationRequest(
+            truth_dataset_id=str(parameters.get("truth_dataset_id") or ""),
+            spatial_iou_threshold=float(parameters.get("spatial_iou_threshold", 0.5)),
+        ),
+    )
+    return [
+        {
+            "port_id": "evaluation",
+            "data_type": "pose_identity_evaluation",
+            "payload": {
+                "schema_version": "pose-identity-evaluation-workflow-0001",
+                "project_id": project_id,
+                "video_id": reviewed.get("video_id"),
+                "run_id": run_id,
+                "run_revision": evaluation.association_run_revision,
+                "evaluation_id": evaluation.id,
+                "truth_dataset_id": evaluation.truth_dataset_id,
+                "result_sha256": evaluation.result_sha256,
+                "metrics": evaluation.metrics_json,
+                "warnings": evaluation.warnings_json,
+                "provenance": evaluation.provenance_json,
+            },
+        }
+    ]
+
+
+def execute_pose_identity_export_adapter(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    evaluation = _single_payload(inputs, "evaluation")
+    if evaluation.get("project_id") not in {None, project_id}:
+        raise ValidationError("Identity export received an evaluation from another project")
+    run_id = str(evaluation.get("run_id") or "")
+    export_format = str(parameters.get("format", "json"))
+    service = PoseIdentityTrackingService(session)
+    if export_format == "json":
+        content = json.dumps(
+            service.export_json(run_id), sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        extension = "json"
+        media_type = "application/json"
+    elif export_format == "csv":
+        content = service.export_csv(run_id).encode("utf-8")
+        extension = "csv"
+        media_type = "text/csv"
+    else:
+        raise ValidationError("Identity export format must be json or csv")
+    project = session.get(Project, project_id)
+    if project is None:
+        raise ValidationError("Identity export project was not found")
+    workflow_run_id = str(parameters.get("__workflow_run_id") or "unscoped")
+    node_run_id = str(parameters.get("__workflow_node_run_id") or "unscoped")
+    relative_path = (
+        f"{project.storage_root}/derived/workflows/{workflow_run_id}/"
+        f"identity-{node_run_id[:8]}.{extension}"
+    )
+    destination = resolve_managed_project_path(settings, relative_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(content)
+    return [
+        {
+            "port_id": "package",
+            "data_type": "pose_identity_package",
+            "payload": {
+                "schema_version": "pose-identity-package-workflow-0001",
+                "project_id": project_id,
+                "run_id": run_id,
+                "run_revision": evaluation.get("run_revision"),
+                "evaluation_id": evaluation.get("evaluation_id"),
+                "evaluation_result_sha256": evaluation.get("result_sha256"),
+                "format": export_format,
+                "media_type": media_type,
+                "managed_path": relative_path,
+                "size_bytes": len(content),
+                "content_sha256": hashlib.sha256(content).hexdigest(),
+                "workflow_run_id": workflow_run_id,
+                "workflow_node_run_id": node_run_id,
+            },
+        }
+    ]
+
+
 _POSE_ADAPTERS = {
     "pose_inference": (execute_pose_inference_adapter),
     "pose_temporal_association": (execute_pose_temporal_association_adapter),
@@ -1024,6 +1278,10 @@ _POSE_ADAPTERS = {
     "pose_active_learning_review_gate": (execute_pose_active_learning_review_gate_adapter),
     "pose_training_dataset_freeze": (execute_pose_training_dataset_freeze_adapter),
     "pose_training_export": (execute_pose_training_export_adapter),
+    "pose_identity_association": (execute_pose_identity_association_adapter),
+    "pose_identity_review_gate": (execute_pose_identity_review_gate_adapter),
+    "pose_identity_evaluation": (execute_pose_identity_evaluation_adapter),
+    "pose_identity_export": (execute_pose_identity_export_adapter),
 }
 
 
