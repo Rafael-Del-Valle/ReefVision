@@ -138,7 +138,7 @@ def main() -> None:
     parser.add_argument(
         "--fail-on-integrity-error",
         action="store_true",
-        help="Exit 2 on SQLite integrity, FK, or Alembic metadata errors; "
+        help="Exit 2 on SQLite integrity, FK, or Alembic metadata errors in either input; "
         "still emit complete read-only JSON evidence",
     )
     parser.add_argument(
