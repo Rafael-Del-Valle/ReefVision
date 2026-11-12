@@ -194,7 +194,8 @@ def main() -> None:
             },
             "matches": evidence["schema_sha256"] == reference["schema_sha256"],
             "revision_markers_match": (
-                evidence["alembic_stamps"] == reference["alembic_stamps"]
+                len(evidence["alembic_stamps"]) == 1
+                and evidence["alembic_stamps"] == reference["alembic_stamps"]
                 and evidence["alembic_stamp_error"] is None
                 and reference["alembic_stamp_error"] is None
                 and evidence["alembic_stamp_validation_error"] is None
