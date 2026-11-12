@@ -91,4 +91,21 @@ if (-not $safeLog.Contains('train/box_loss=0.25') -or -not $safeLog.Contains('ep
   throw 'Sanitization removed valid training loss or epoch information.'
 }
 
+# A malicious imported run name can contain bidirectional isolate controls or
+# terminal hyperlinks. Neither may change how the scientific loss line appears.
+$bidi = 'train/box_loss=0.25' + [char]0x2066 + 'hidden' + [char]0x2069 + ' train/cls_loss=0.30'
+$bidiSafe = Format-SafeText $bidi
+if ($bidiSafe -match '[\\p{Cf}]' -or -not $bidiSafe.Contains('train/box_loss=0.25') -or
+    -not $bidiSafe.Contains('train/cls_loss=0.30')) {
+  throw 'Bidirectional formatting controls corrupted scientific loss display.'
+}
+$hyperlink = 'epoch=4 ' + [char]0x001B + ']8;;https://example.invalid/unsafe' + [char]0x001B + '\\' +
+  'train/dfl_loss=0.10' + [char]0x001B + ']8;;' + [char]0x001B + '\\'
+$hyperlinkSafe = Format-SafeText $hyperlink
+if ($hyperlinkSafe.Contains('example.invalid') -or
+    -not $hyperlinkSafe.Contains('epoch=4') -or
+    -not $hyperlinkSafe.Contains('train/dfl_loss=0.10')) {
+  throw 'OSC 8 terminal hyperlink escaped or obscured training loss display.'
+}
+
 Write-Host 'PowerShell training console sanitizer regression passed.'
