@@ -7,11 +7,15 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
+from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.pose_evaluation import (
+    PoseEvaluationComparisonCreateRequest,
+    PoseEvaluationComparisonListResponse,
     PoseEvaluationCreateRequest,
     PoseEvaluationRunResponse,
 )
 from reefvision.services.pose_evaluation import PoseEvaluationService
+from reefvision.services.pose_evaluation_comparison import PoseEvaluationComparisonService
 
 router = APIRouter(tags=["pose-evaluation"])
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -19,6 +23,40 @@ DbSession = Annotated[Session, Depends(get_db_session)]
 
 def service(request: Request, session: Session) -> PoseEvaluationService:
     return PoseEvaluationService(session, request.app.state.settings)
+
+
+def comparison_service(request: Request, session: Session) -> PoseEvaluationComparisonService:
+    return PoseEvaluationComparisonService(session, request.app.state.settings)
+
+
+@router.post(
+    "/projects/{project_id}/pose-evaluation-comparisons",
+    response_model=JobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def create_pose_evaluation_comparison(
+    project_id: str,
+    payload: PoseEvaluationComparisonCreateRequest,
+    request: Request,
+    session: DbSession,
+) -> JobResponse:
+    return comparison_service(request, session).submit(project_id, payload)
+
+
+@router.get(
+    "/projects/{project_id}/pose-evaluation-comparisons",
+    response_model=PoseEvaluationComparisonListResponse,
+)
+def list_pose_evaluation_comparisons(
+    project_id: str,
+    request: Request,
+    session: DbSession,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> PoseEvaluationComparisonListResponse:
+    return comparison_service(request, session).list_for_project(
+        project_id, limit=limit, offset=offset
+    )
 
 
 @router.post(

@@ -24,6 +24,9 @@ class Job(Base):
         String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
     )
     job_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    deduplication_key: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
+    )
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="queued", index=True)
     progress_current: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     progress_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
