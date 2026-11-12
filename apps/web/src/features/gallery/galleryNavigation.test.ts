@@ -197,6 +197,33 @@ describe("browser gallery storage access", () => {
   });
 });
 
+describe("invalid project gallery identifiers", () => {
+  it("does not read or overwrite preferences while a project ID is unavailable", () => {
+    const storage = memoryStorage();
+    writeGalleryPreference(storage, "survey-a", {
+      imageId: "DSC_0042.JPG",
+      page: 3,
+      wrap: true,
+    });
+    const saved = storage.getItem("reefvision.gallery.survey-a.v1");
+    const invalidIds = ["", "   ", "survey\nother", "x".repeat(257)];
+    for (const projectId of invalidIds) {
+      expect(readGalleryPreference(storage, projectId)).toEqual({
+        imageId: null,
+        page: 1,
+        wrap: false,
+      });
+      writeGalleryPreference(storage, projectId, {
+        imageId: "DSC_9999.JPG",
+        page: 9,
+        wrap: false,
+      });
+      expect(storage.getItem("reefvision.gallery.survey-a.v1")).toBe(saved);
+    }
+    expect(storage.length).toBe(1);
+  });
+});
+
 describe("project-scoped camera gallery restoration", () => {
   it("does not restore another project's camera selection after switching projects", () => {
     const storage = memoryStorage();
