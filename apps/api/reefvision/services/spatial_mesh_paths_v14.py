@@ -171,7 +171,8 @@ def mesh_edge_paths(
             # detour diagnostic, never an anatomical branch-length estimate.
             # Both distances share the same calibration scale, so uncertainty
             # bounds must scale the difference together (not independently).
-            geometric_excess_m = max(0.0, (shortest[end] - chord_mesh_units) * scale)
+            geometric_excess_source_units = max(0.0, shortest[end] - chord_mesh_units)
+            geometric_excess_m = geometric_excess_source_units * scale
             if not isfinite(geometric_excess_m):
                 raise ValueError("Calibrated geometric detour excess overflowed")
             # Compute the dimensionless detour in source units: calibration
@@ -204,6 +205,8 @@ def mesh_edge_paths(
                 path_qc_warnings.append("calibrated_path_length_underflow")
             if chord_mesh_units > 0 and chord_m == 0:
                 path_qc_warnings.append("calibrated_endpoint_chord_underflow")
+            if geometric_excess_source_units > 0 and geometric_excess_m == 0:
+                path_qc_warnings.append("calibrated_geometric_excess_underflow")
             if detour_ratio is not None and not isfinite(detour_ratio):
                 detour_ratio = None
                 path_qc_warnings.append("geometric_detour_ratio_overflow")
