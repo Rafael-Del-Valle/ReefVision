@@ -764,3 +764,22 @@ def test_degenerate_triangle_route_qc_survives_saved_workflow(
     assert artifact["provenance"] == standalone.json()["provenance"]
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
+
+    # Re-executing the same persisted graph must not lose scientific QC or
+    # silently upgrade provisional calibration to human-verified evidence.
+    rerun = client.post(
+        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+    )
+    assert rerun.status_code == 202, rerun.text
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(rerun.json()["job_id"])
+    )
+    rerun_detail = client.get(f"/api/v1/workflow-runs/{rerun.json()['id']}")
+    assert rerun_detail.status_code == 200, rerun_detail.text
+    assert rerun_detail.json()["run"]["status"] == "succeeded"
+    rerun_artifact = next(
+        item["payload_json"]
+        for item in rerun_detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert rerun_artifact == artifact
