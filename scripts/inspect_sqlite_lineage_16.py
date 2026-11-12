@@ -196,10 +196,14 @@ def main() -> None:
             parser.error(f"database must be an existing file: {candidate}")
     if args.compare_to is not None and args.database.samefile(args.compare_to):
         parser.error("--compare-to requires an independent database, not the same file")
-    evidence = inspect(args.database)
-    reference = None
-    if args.compare_to is not None:
-        reference = inspect(args.compare_to)
+    # Existing files are not necessarily SQLite databases. A corrupt or
+    # unrelated file must fail closed without a Python traceback or writes.
+    try:
+        evidence = inspect(args.database)
+        reference = inspect(args.compare_to) if args.compare_to is not None else None
+    except (sqlite3.DatabaseError, OSError) as exc:
+        parser.error(f"unable to inspect SQLite database: {type(exc).__name__}")
+    if reference is not None:
         source_objects = {
             (obj["type"], obj["name"], obj["table"])
             for obj in evidence["schema_objects"]
