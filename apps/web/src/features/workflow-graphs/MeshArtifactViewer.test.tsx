@@ -229,6 +229,82 @@ describe("MeshArtifactViewer", () => {
     expect(screen.queryByRole("slider", { name: "Route vertex" })).toBeNull();
   });
 
+  it("highlights and inspects individual saved mesh-edge segments without claiming anatomy", () => {
+    const artifact = {
+      ...validArtifact,
+      provenance: {
+        calibration_verified: false,
+        relative_scale_uncertainty: 0.1,
+      },
+      surface_edge_paths: [
+        {
+          status: "connected",
+          path_vertex_indices: [10, 12, 16],
+          path_vertices_in_source_frame_m: [
+            [0, 0, 0],
+            [3, 0, 0],
+            [3, 4, 0],
+          ],
+          length_m: 7,
+          length_scale_interval_m: [6.3, 7.7],
+          path_cumulative_lengths_m: [0, 3, 7],
+          path_cumulative_length_scale_intervals_m: [
+            [0, 0],
+            [2.7, 3.3],
+            [6.3, 7.7],
+          ],
+          path_qc_warnings: [],
+        },
+      ],
+    };
+    const original = JSON.stringify(artifact);
+    const { container, rerender } = render(
+      <MeshArtifactViewer artifact={artifact} />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect provisional route 1" }),
+    );
+    expect(screen.getByText(/Route waypoint 1 of 3/)).toHaveTextContent(
+      "Starting waypoint has no preceding route segment",
+    );
+    expect(screen.queryByTestId("mesh-route-selected-segment")).toBeNull();
+
+    fireEvent.change(screen.getByRole("slider", { name: "Route vertex" }), {
+      target: { value: "1" },
+    });
+    expect(screen.getByText(/Route waypoint 2 of 3/)).toHaveTextContent(
+      "Saved preceding mesh-edge segment length: 3.00000 m",
+    );
+    expect(screen.getByText(/Route waypoint 2 of 3/)).toHaveTextContent(
+      "Scale-only segment interval: [2.70000, 3.30000] m",
+    );
+    const segment = container.querySelector(
+      '[data-testid="mesh-route-selected-segment"]',
+    );
+    expect(segment).not.toBeNull();
+    const beforeYaw = segment?.getAttribute("x2");
+    fireEvent.change(screen.getByRole("slider", { name: "Yaw" }), {
+      target: { value: "100" },
+    });
+    expect(segment?.getAttribute("x2")).not.toBe(beforeYaw);
+
+    fireEvent.change(screen.getByRole("slider", { name: "Route vertex" }), {
+      target: { value: "2" },
+    });
+    expect(screen.getByText(/Route waypoint 3 of 3/)).toHaveTextContent(
+      "Saved preceding mesh-edge segment length: 4.00000 m",
+    );
+    expect(screen.getByText(/Route waypoint 3 of 3/)).toHaveTextContent(
+      "Scale-only segment interval: [3.60000, 4.40000] m",
+    );
+    expect(screen.getByText(/Route waypoint 3 of 3/)).toHaveTextContent(
+      "Not a verified anatomical segment",
+    );
+    expect(JSON.stringify(artifact)).toBe(original);
+    rerender(<MeshArtifactViewer artifact={validArtifact} />);
+    expect(screen.queryByTestId("mesh-route-selected-segment")).toBeNull();
+  });
+
   it("keeps invalid or legacy cumulative route measurements unknown", () => {
     const artifact = {
       ...validArtifact,
