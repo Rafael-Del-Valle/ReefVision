@@ -415,8 +415,7 @@ def test_conditional_visibility_saves_reject_stale_and_recreated_scopes(
 
         # A late retry after removal cannot re-create an overwritten revision.
         assert (
-            client.delete(path, params={"expected_updated_at": second_revision}).status_code
-            == 204
+            client.delete(path, params={"expected_updated_at": second_revision}).status_code == 204
         )
         removed_retry = client.put(
             path,
