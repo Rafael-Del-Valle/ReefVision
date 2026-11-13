@@ -8,6 +8,32 @@ The 1.1 branch contains `0038_scientific_data.py` while the isolated 1.6 branch 
 
 The read-only `scripts/inspect_sqlite_lineage_16.py` captures: committed Alembic stamps, relevant table/column/index/FK evidence, schema DDL SHA-256, SQLite header metadata, integrity findings and FK violations. It explicitly returns `classification=requires_researcher_review`. The diagnostic fingerprint is structural, not a record-content checksum or proof of migration lineage.
 
+## Mutable SQLite sidecars (1.6 strict inspector)
+
+The legacy read-only Alembic inventory already warns about `-wal`, `-shm`
+and `-journal` files. The more detailed comparison inspector now reports
+`sqlite_sidecar_presence` for each input (primary and reference) and sets
+`sqlite_sidecar_consistent_snapshot_required` if any such sidecar was seen
+before or after inspection. This is a conservative condition, not proof that
+the sidecar contains uncommitted data. Its schema DDL hash remains structural;
+a matching schema and revision does **not** override snapshot warnings.
+
+The optional `--fail-on-integrity-error` and `--fail-on-lineage-collision`
+gates reject **either** database with a detected sidecar (exit 2 and an
+unchanged, read-only review report). Non-strict inspection still reads
+committed WAL data instead of treating the main database file as the only
+valid image. A database with no visible sidecars is **not** proven immutable
+or backed up; reviewers must still verify a consistent offline snapshot
+before attempting reconciliation.
+
+Regression contract: run
+`pytest scripts/tests/test_sqlite_lineage_mutable_sidecars_16.py` on the
+exact candidate head. The tests exercise a live WAL with a pinned old reader,
+both comparison input positions, a live rollback journal, a canonical
+sidecar-free copy, confidentiality, review classification, strict exit
+statuses and unchanged main database/WAL bytes. SQLite shared-memory
+reader locks can change without implying biological-data modification.
+
 ## Required independently reviewed reconciliation
 1. Collect exact SHA and parent/child revision graph of **both** migrations and all successors from their own version branches. Compare DDL, indexes, FK constraints, defaults, data backfills and downgrade behavior. Identify all overlapping object names.
 2. Inventory representative *copies* of pre-0038, 1.1-0038, 1.6-0038, and post-0038 databases, including SQLite WAL mode, user/project class visibility, QC audit events, saved workflow graphs/runs and scientific records. Retain original bytes and record checksums. Never test migrations against the only copy of a research database.
