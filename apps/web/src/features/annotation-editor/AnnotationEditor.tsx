@@ -854,14 +854,15 @@ export function AnnotationEditor({
     state.selectedIds.length + state.selectedMaskIds.length;
   const canReassignSelection =
     state.tool === "select" && state.selectedIds.length > 0;
+  // A QC launch may explicitly highlight a hidden observation. Reveal only
+  // those IDs for inspection; never change saved class/layer visibility.
   const visiblePredictions = useMemo(() => {
-    if (!showPredictions) {
-      return [];
-    }
     const filtered = (predictionQuery.data?.items ?? []).filter(
       (proposal) =>
-        !proposal.label_class_id ||
-        !predictionHiddenClassSet.has(proposal.label_class_id),
+        highlightedPredictionIds.has(proposal.id) ||
+        (showPredictions &&
+          (!proposal.label_class_id ||
+            !predictionHiddenClassSet.has(proposal.label_class_id))),
     );
     return [...filtered].sort((left, right) => {
       if (predictionSort === "confidence-desc")
@@ -871,6 +872,7 @@ export function AnnotationEditor({
       return left.confidence - right.confidence;
     });
   }, [
+    highlightedPredictionIds,
     predictionHiddenClassSet,
     predictionQuery.data?.items,
     predictionSort,
@@ -918,13 +920,18 @@ export function AnnotationEditor({
       : null) ?? selectedPrediction;
   const visibleAnnotations = useMemo(
     () =>
-      hideAnnotations
-        ? []
-        : renderedAnnotations.filter(
-            (annotation) =>
-              !annotationHiddenClassSet.has(annotation.label_class_id),
-          ),
-    [annotationHiddenClassSet, hideAnnotations, renderedAnnotations],
+      renderedAnnotations.filter(
+        (annotation) =>
+          highlightedAnnotationIds.has(annotation.id) ||
+          (!hideAnnotations &&
+            !annotationHiddenClassSet.has(annotation.label_class_id)),
+      ),
+    [
+      annotationHiddenClassSet,
+      hideAnnotations,
+      highlightedAnnotationIds,
+      renderedAnnotations,
+    ],
   );
 
   // Viewport culling is display-only: never modify saved annotations, review
@@ -2588,6 +2595,14 @@ export function AnnotationEditor({
               )}
             </div>
           )}
+          {(highlightedAnnotationIds.size > 0 ||
+            highlightedPredictionIds.size > 0) && (
+            <p className="annotation-editor-subtitle" role="status" data-testid="review-evidence-reveal">
+              Only explicitly highlighted review observations bypass hidden
+              class/layer controls in this editor view. Saved visibility and
+              scientific records are unchanged.
+            </p>
+          )}
         </div>
         <div className="annotation-editor-actions">
           <button
@@ -4182,8 +4197,7 @@ export function AnnotationEditor({
                     />
                   </filter>
                 </defs>
-                {showPredictions &&
-                  viewportPredictions.map((proposal) => {
+                {viewportPredictions.map((proposal) => {
                     const labelClass =
                       (proposal.label_class_id
                         ? labelClassesById.get(proposal.label_class_id)
@@ -4211,6 +4225,7 @@ export function AnnotationEditor({
                           />
                         )}
                         <rect
+                          data-testid={`prediction-${proposal.id}`}
                           x={proposal.x_min}
                           y={proposal.y_min}
                           width={proposal.x_max - proposal.x_min}
@@ -4242,8 +4257,7 @@ export function AnnotationEditor({
                       </g>
                     );
                   })}
-                {!hideAnnotations &&
-                  viewportAnnotations.map((annotation) => {
+                {viewportAnnotations.map((annotation) => {
                     const labelClass = labelClassesById.get(
                       annotation.label_class_id,
                     );
