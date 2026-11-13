@@ -146,6 +146,32 @@ def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
             faces.append(indices)
             if len(faces) > MAX_FACES:
                 raise ValueError("OBJ preview exceeds face limit")
+        elif fields[0] in {
+            "p",
+            "l",
+            "vp",
+            "cstype",
+            "deg",
+            "bmat",
+            "step",
+            "curv",
+            "curv2",
+            "surf",
+            "parm",
+            "trim",
+            "hole",
+            "scrv",
+            "sp",
+            "end",
+            "con",
+            "call",
+            "csh",
+        }:
+            # A mixed polygon/free-form/line/point OBJ is not a complete
+            # triangular surface reconstruction. Silently dropping these
+            # geometric records can understate a coral's reconstructed extent.
+            # Inert grouping and material labels remain accepted.
+            raise ValueError(f"OBJ line {line_number}: unsupported geometry directive")
     if not vertices or not faces:
         raise ValueError("OBJ preview requires vertices and triangular faces")
     return vertices, faces
