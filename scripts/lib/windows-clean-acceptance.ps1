@@ -296,11 +296,23 @@ function Get-ReefVisionResearchFileSnapshot {
 function Assert-ReefVisionResearchFileSnapshotRetained {
     param(
         [Parameter(Mandatory = $true)][hashtable]$Before,
-        [Parameter(Mandatory = $true)][hashtable]$After
+        [Parameter(Mandatory = $true)][hashtable]$After,
+        [switch]$AllowSqliteChanges
     )
+    $verifiedFileCount = 0
     foreach ($key in $Before.Keys) {
-        if (-not $After.ContainsKey($key)) { throw "Uninstall removed retained research file: $key" }
-        if ($After[$key] -cne $Before[$key]) { throw "Uninstall modified retained research file: $key" }
+        # A running *new* desktop may legitimately migrate its SQLite schema.
+        # MSI installation itself must preserve every byte (default mode);
+        # only the separate post-migration check may exempt SQLite sidecars.
+        if ($AllowSqliteChanges -and $key -in @('reefvision.db', 'reefvision.db-wal', 'reefvision.db-shm')) {
+            continue
+        }
+        if (-not $After.ContainsKey($key)) { throw "Retained research file was removed: $key" }
+        if ($After[$key] -cne $Before[$key]) { throw "Retained research file was modified: $key" }
+        $verifiedFileCount++
     }
-    return $Before.Count
+    if ($AllowSqliteChanges -and $verifiedFileCount -lt 1) {
+        throw 'Upgrade retention comparison has no non-SQLite scientific assets.'
+    }
+    return $verifiedFileCount
 }
