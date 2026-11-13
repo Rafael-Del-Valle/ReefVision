@@ -66,7 +66,9 @@ def test_zero_length_edges_withhold_route_uniqueness_instead_of_guessing() -> No
         route["shortest_route_alternatives_status"] == "unassessable_zero_length_edges"
         for route in paths
     )
-    assert all("multiple_equal_cost_mesh_routes" not in route["path_qc_warnings"] for route in paths)
+    assert all(
+        "multiple_equal_cost_mesh_routes" not in route["path_qc_warnings"] for route in paths
+    )
 
 
 def test_tied_route_qc_roundtrips_standalone_and_persisted_graph(
