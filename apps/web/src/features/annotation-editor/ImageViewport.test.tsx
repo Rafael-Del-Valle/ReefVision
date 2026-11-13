@@ -111,6 +111,36 @@ describe("ImageViewport", () => {
     expect(transform.style.transform).not.toBe(initial);
   });
 
+  it("prevents document scrolling when the wheel targets an annotation overlay", () => {
+    render(
+      <ImageViewport width={6000} height={4000} label="Scientific image">
+        <svg data-testid="pixel-aligned-overlay" viewBox="0 0 6000 4000">
+          <polygon points="5,5 20,5 20,20" />
+        </svg>
+      </ImageViewport>,
+    );
+
+    const overlay = screen.getByTestId("pixel-aligned-overlay");
+    const transform = screen.getByTestId("image-viewport-transform");
+    const initialTransform = transform.style.transform;
+    const originalPoints = overlay.querySelector("polygon")?.getAttribute("points");
+    const wheel = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaY: -120,
+      clientX: 200,
+      clientY: 180,
+    });
+
+    fireEvent(overlay, wheel);
+
+    expect(wheel.defaultPrevented).toBe(true);
+    expect(transform.style.transform).not.toBe(initialTransform);
+    expect(overlay.querySelector("polygon")).toHaveAttribute(
+      "points",
+      originalPoints,
+    );
+  });
 
   it("ignores other pointers and only ends a pan for its originating pointer", () => {
     render(
@@ -122,7 +152,9 @@ describe("ImageViewport", () => {
     );
     const frame = screen.getByRole("region", { name: "Multi-pointer viewport" });
     const transform = screen.getByTestId("image-viewport-transform");
-    const polygon = screen.getByTestId("fixed-overlay").querySelector("polygon");
+    const polygon = screen
+      .getByTestId("fixed-overlay")
+      .querySelector("polygon");
     const originalGeometry = polygon?.getAttribute("points");
     const initial = transform.style.transform;
 
@@ -163,7 +195,9 @@ describe("ImageViewport", () => {
     );
     const frame = screen.getByRole("region", { name: "Escape viewport" });
     const transform = screen.getByTestId("image-viewport-transform");
-    const polygon = screen.getByTestId("escape-overlay").querySelector("polygon");
+    const polygon = screen
+      .getByTestId("escape-overlay")
+      .querySelector("polygon");
     const originalPoints = polygon?.getAttribute("points");
 
     fireEvent.pointerDown(frame, {
