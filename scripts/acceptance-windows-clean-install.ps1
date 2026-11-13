@@ -547,12 +547,19 @@ try {
     Stop-AcceptanceDesktop $desktop
     $projectChecksum = (Get-FileHash -LiteralPath (Join-Path $DataRoot 'reefvision.db') -Algorithm SHA256).Hash
 
+    $retainedResearchBeforeUpgrade = $null
+    $upgradePreMigrationCount = 0
     if ($PreviousInstallerPath -and -not $SkipUpgrade) {
+        # The installer may not touch any research data, even if the *new app*
+        # subsequently performs a legitimate SQLite schema migration.
+        $retainedResearchBeforeUpgrade = Get-ReefVisionResearchFileSnapshot -DataRoot $DataRoot
         Run-Msi -Action Install -PackageOrProduct $InstallerPath -LogName 'upgrade.log' -TargetRoot $InstallRoot | Out-Null
+        $retainedResearchAfterInstall = Get-ReefVisionResearchFileSnapshot -DataRoot $DataRoot
+        $upgradePreMigrationCount = Assert-ReefVisionResearchFileSnapshotRetained -Before $retainedResearchBeforeUpgrade -After $retainedResearchAfterInstall
         # msiexec exit 0 alone does not prove the newer desktop was installed.
-        # Keep upgrade unaccepted until the restarted API, registry and
-        # preserved scientific project are checked below.
-        $report.upgrade = New-ReefVisionEvidenceResult -Status 'NOT RUN' -Detail 'MSI returned success; post-upgrade checks pending.'
+        # Keep upgrade unaccepted until the restarted API, registry, scientist
+        # workflow, and post-migration stable asset retention are checked.
+        $report.upgrade = New-ReefVisionEvidenceResult -Status 'NOT RUN' -Detail 'MSI and exact research-byte retention passed; post-upgrade acceptance pending.'
     }
 
     $desktop = Start-AcceptanceDesktop
@@ -599,7 +606,7 @@ try {
             $upgradedMigration.current_schema_revision -ne $upgradedMigration.expected_schema_revision) {
             throw 'MSI upgrade changed the isolated database boundary or left migrations incomplete.'
         }
-        $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Verified version $PreviousProductVersion -> $ProductVersion through MSI, registry and packaged API; project and annotation retained; isolated schema current."
+        $report.upgrade = New-ReefVisionEvidenceResult -Status 'NOT RUN' -Detail "Verified version $PreviousProductVersion -> $ProductVersion through MSI, registry and packaged API; project and annotation retained; awaiting post-migration scientific-asset check."
     }
     $report.restart = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Desktop and backend restarted cleanly.'
     $report.project_persistence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Project $projectId, image $imageId, and annotation $annotationId persisted; pre-restart database SHA-256 $projectChecksum"
@@ -875,6 +882,15 @@ try {
     $zip = [IO.Compression.ZipFile]::OpenRead($archive); try { if (-not ($zip.Entries | Where-Object FullName -eq 'reefvision-exchange-manifest.json')) { throw 'Project Exchange archive has no reefvision-exchange-manifest.json.' } } finally { $zip.Dispose() }
     $report.project_exchange = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Exported inspectable archive: $archive"
     Stop-AcceptanceDesktop $desktop
+
+    if ($PreviousInstallerPath -and -not $SkipUpgrade) {
+        # After startup and saved-workflow execution the database may differ
+        # because Alembic and QC append records. Every pre-upgrade non-SQLite
+        # research asset must nevertheless remain byte-for-byte unchanged.
+        $retainedResearchAfterUpgrade = Get-ReefVisionResearchFileSnapshot -DataRoot $DataRoot
+        $upgradeStableAssetCount = Assert-ReefVisionResearchFileSnapshotRetained -Before $retainedResearchBeforeUpgrade -After $retainedResearchAfterUpgrade -AllowSqliteChanges
+        $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Verified $PreviousProductVersion -> $ProductVersion through MSI, registry, API and migration; $upgradePreMigrationCount pre-migration research files and $upgradeStableAssetCount stable non-SQLite assets retained byte-for-byte after installed QC and workflow replay."
+    }
 
     if (-not $SkipUninstall) {
         # Uninstall must retain actual project database and scientific files,
