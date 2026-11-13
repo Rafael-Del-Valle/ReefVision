@@ -55,9 +55,11 @@ describe("dense object-browser window", () => {
     const annotations = [{ id: "a" }, { id: "b" }];
     const masks = [{ id: "m1" }, { id: "m2" }, { id: "m3" }];
     expect(
-      boundedDenseObjectRows(annotations, masks, 4, [], []).map(
-        (row) => [row.kind, row.item.id, row.position],
-      ),
+      boundedDenseObjectRows(annotations, masks, 4, [], []).map((row) => [
+        row.kind,
+        row.item.id,
+        row.position,
+      ]),
     ).toEqual([
       ["annotation", "a", 0],
       ["annotation", "b", 1],

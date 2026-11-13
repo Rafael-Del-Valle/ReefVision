@@ -721,9 +721,9 @@ export function AnnotationEditor({
   const filteredObjectAnnotations = useMemo(
     () =>
       state.document.annotations.filter((annotation) =>
-        (
-          labelClassesById.get(annotation.label_class_id)?.name ?? ""
-        ).toLowerCase().includes(normalizedObjectFilter),
+        (labelClassesById.get(annotation.label_class_id)?.name ?? "")
+          .toLowerCase()
+          .includes(normalizedObjectFilter),
       ),
     [labelClassesById, normalizedObjectFilter, state.document.annotations],
   );
@@ -3788,10 +3788,6 @@ export function AnnotationEditor({
                 state.document.maskAnnotations.length === 0 && (
                   <p>No annotations yet.</p>
                 )}
-              {state.document.annotations.length === 0 &&
-                state.document.maskAnnotations.length === 0 && (
-                  <p>No annotations yet.</p>
-                )}
               {filteredObjectCount === 0 &&
                 (state.document.annotations.length > 0 ||
                   state.document.maskAnnotations.length > 0) && (
@@ -3864,8 +3860,7 @@ export function AnnotationEditor({
                     <span
                       className="annotation-class-swatch"
                       style={{
-                        backgroundColor:
-                          labelClass?.display_color ?? "#72dbc9",
+                        backgroundColor: labelClass?.display_color ?? "#72dbc9",
                       }}
                     />
                     <span>
