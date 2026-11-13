@@ -64,7 +64,7 @@ class ClassVisibilityPreferenceRepository:
     ) -> bool:
         """Atomic compare-and-save. None means create only if the scope is absent."""
         if expected_updated_at is None:
-            statement = (
+            insert_statement = (
                 sqlite_insert(ClassVisibilityPreference)
                 .values(
                     project_id=project_id,
@@ -81,7 +81,7 @@ class ClassVisibilityPreferenceRepository:
                 )
             )
         else:
-            statement = (
+            update_statement = (
                 update(ClassVisibilityPreference)
                 .where(
                     ClassVisibilityPreference.project_id == project_id,
@@ -91,7 +91,9 @@ class ClassVisibilityPreferenceRepository:
                 )
                 .values(hidden_class_ids_json=hidden_class_ids, updated_at=utc_now())
             )
-        return self.session.execute(statement).rowcount == 1
+        if expected_updated_at is None:
+            return self.session.connection().execute(insert_statement).rowcount == 1
+        return self.session.connection().execute(update_statement).rowcount == 1
 
     def upsert(
         self, project_id: str, user_identity: str, layer_type: str, hidden_class_ids: list[str]
@@ -165,7 +167,7 @@ class ProjectClassVisibilityDefaultRepository:
     ) -> bool:
         """Create or update only the project-default revision observed by the editor."""
         if expected_updated_at is None:
-            statement = (
+            insert_statement = (
                 sqlite_insert(ProjectClassVisibilityDefault)
                 .values(
                     project_id=project_id,
@@ -181,7 +183,7 @@ class ProjectClassVisibilityDefaultRepository:
                 )
             )
         else:
-            statement = (
+            update_statement = (
                 update(ProjectClassVisibilityDefault)
                 .where(
                     ProjectClassVisibilityDefault.project_id == project_id,
@@ -194,7 +196,9 @@ class ProjectClassVisibilityDefaultRepository:
                     updated_at=utc_now(),
                 )
             )
-        return self.session.execute(statement).rowcount == 1
+        if expected_updated_at is None:
+            return self.session.connection().execute(insert_statement).rowcount == 1
+        return self.session.connection().execute(update_statement).rowcount == 1
 
     def upsert(
         self,
