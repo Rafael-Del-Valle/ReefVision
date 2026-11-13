@@ -226,6 +226,13 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual(len(records), 2)
             self.assertTrue(all(record["jpeg_boundary_markers"] for record in records))
             self.assertTrue(all(record["jpeg_decodable"] for record in records))
+            self.assertEqual(
+                {record["jpeg_color_mode"] for record in records}, {"RGB", "CMYK"}
+            )
+            for record in records:
+                self.assertEqual(record["jpeg_pixel_width"], 12)
+                self.assertEqual(record["jpeg_pixel_height"], 8)
+                self.assertEqual(record["jpeg_exif_orientation"], 6)
             for name, content in originals.items():
                 self.assertEqual((root / name).read_bytes(), content)
 
@@ -244,6 +251,8 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual([record["path"] for record in records], [fixture.name])
             self.assertTrue(records[0]["jpeg_boundary_markers"])
             self.assertFalse(records[0]["jpeg_decodable"])
+            self.assertNotIn("jpeg_pixel_width", records[0])
+            self.assertNotIn("jpeg_exif_orientation", records[0])
             self.assertEqual(len(errors), 1)
             self.assertTrue(errors[0].startswith(f"JPEG decode failed: {fixture.name}:"))
             self.assertEqual(fixture.read_bytes(), original)
