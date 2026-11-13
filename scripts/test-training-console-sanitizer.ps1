@@ -410,4 +410,35 @@ if ($latestMetrics.Count -ne 4) {
   throw 'Sparse epoch histories fabricated or discarded a metric key.'
 }
 
+
+# Persisted JSON histories may mix numeric scalar types across epochs. The
+# latest finite numeric scalar wins regardless of integer/decimal/single/double
+# representation; a trailing string that looks numeric must not be coerced.
+$run = [pscustomobject]@{
+  metrics = [pscustomobject]@{
+    'train/box_loss' = 8
+    'train/cls_loss' = 7
+    'train/dfl_loss' = 6
+  }
+  metrics_history = [pscustomobject]@{
+    'train/box_loss' = @(2, [decimal]0.125, '0.001')
+    'train/cls_loss' = @([single]0.5, 0, [double]::NaN)
+    'train/dfl_loss' = @([double]0.75, [single]0.25, $true)
+  }
+}
+Invoke-Expression $selectionCode
+foreach ($expected in @(
+  @{ key = 'train/box_loss'; value = [decimal]0.125 },
+  @{ key = 'train/cls_loss'; value = 0 },
+  @{ key = 'train/dfl_loss'; value = [single]0.25 }
+)) {
+  if (-not $latestMetrics.ContainsKey($expected.key) -or
+      $latestMetrics[$expected.key] -ne $expected.value) {
+    throw ('Mixed numeric epoch history lost the latest finite scalar: {0}' -f $expected.key)
+  }
+}
+if ($latestMetrics.Count -ne 3) {
+  throw 'Mixed numeric epoch histories introduced an unexpected metric.'
+}
+
 Write-Host 'PowerShell training console sanitizer regression passed.'
