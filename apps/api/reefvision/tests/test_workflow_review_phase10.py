@@ -348,6 +348,21 @@ def test_review_resume_rejects_valid_artifact_from_wrong_saved_edge(
         assert job is not None and job.status == "waiting_for_review"
         assert review_node is not None and review_node.status == "waiting_for_review"
         assert "review_approval" not in (review_node.result_json or {})
+        review_node.input_artifact_ids_json = []
+        session.commit()
+
+    # A missing saved input list must not bypass graph-lineage validation.
+    missing = client.post(
+        f"/api/v1/workflow-node-runs/{review_node_id}/resume-review",
+        json={"reviewed_by": "scientist", "note": "Checked the consensus."},
+    )
+    assert missing.status_code == 409, missing.text
+    assert "inputs do not match saved graph edges" in missing.text
+
+    with app.state.session_factory() as session:
+        review_node = session.get(WorkflowNodeRun, review_node_id)
+        assert review_node is not None and review_node.status == "waiting_for_review"
+        assert "review_approval" not in (review_node.result_json or {})
         review_node.input_artifact_ids_json = original_input_ids
         session.commit()
 
