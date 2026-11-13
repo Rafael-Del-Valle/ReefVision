@@ -4,10 +4,30 @@ import {
   createPoseArchitectureWorkflow,
   createPoseComparisonWorkflow,
   createPoseIdentityEvaluationWorkflow,
+  createBiologicalMovementWorkflow,
   workflowTemplates,
 } from "./workflowTemplates";
 
 describe("workflowTemplates", () => {
+  it("provides an executable scientist-reviewed biological movement workflow", () => {
+    const graph = createBiologicalMovementWorkflow();
+    expect(graph.nodes.map((node) => node.node_type)).toEqual([
+      "project_source",
+      "project_video_source",
+      "registered_model_source",
+      "pose_inference",
+      "pose_identity_association",
+      "pose_identity_review_gate",
+      "anatomical_measurement",
+      "biological_event_detection",
+      "biological_event_review_gate",
+      "biological_movement_export",
+    ]);
+    expect(graph.edges.at(-1)).toMatchObject({
+      source_port_id: "events",
+      target_port_id: "events",
+    });
+  });
   it("connects a frozen dataset and multiple registered models to pose comparison", () => {
     const graph = createPoseComparisonWorkflow();
     const evaluation = graph.nodes.find(

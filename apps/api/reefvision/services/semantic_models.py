@@ -33,6 +33,7 @@ from reefvision.schemas.models import (
     PoseLandmarkSchemaUpdateRequest,
     RegisterModelFromRunRequest,
 )
+from reefvision.services.pose_schemas import definition_for_revision
 from reefvision.services.segmentation_models import SegmentationModelService
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import copy_model_file, hash_model_file
@@ -601,6 +602,7 @@ class SemanticModelService(SegmentationModelService):
             )
             self.session.add(schema_revision)
             self.session.flush()
+            bound_revision = schema_revision
             binding = PoseModelSchemaBinding(
                 model_id=model.id,
                 schema_id=schema.id,
@@ -639,12 +641,16 @@ class SemanticModelService(SegmentationModelService):
                 self.session.add(existing_revision)
                 self.session.flush()
             binding.schema_revision = existing_revision.revision
+            bound_revision = existing_revision
 
+        definition = definition_for_revision(bound_revision)
         metadata["pose_landmark_schema"] = {
             **schema_payload,
             "schema_id": binding.schema_id,
             "schema_revision": binding.schema_revision,
             "content_hash": content_hash,
+            "landmarks": list(definition.get("landmarks", [])),
+            "edges": list(definition.get("edges", [])),
         }
         model.metadata_json = metadata
         self.session.commit()

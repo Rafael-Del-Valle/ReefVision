@@ -1153,7 +1153,113 @@ export function createPoseIdentityEvaluationWorkflow() {
   };
 }
 
+export function createBiologicalMovementWorkflow() {
+  const nodes = [
+    ["project", "project_source", {}, 40],
+    ["video", "project_video_source", { video_id: "" }, 300],
+    ["model", "registered_model_source", { model_id: "" }, 300],
+    ["pose", "pose_inference", { device: "auto" }, 560],
+    ["associate", "pose_identity_association", {}, 820],
+    ["identity_review", "pose_identity_review_gate", {}, 1080],
+    [
+      "measure",
+      "anatomical_measurement",
+      {
+        definitions: [
+          {
+            id: "gape",
+            name: "Gape distance",
+            kind: "distance",
+            landmark_ids: ["upper_jaw", "lower_jaw"],
+          },
+        ],
+        maximum_gap_s: 0.25,
+      },
+      1340,
+    ],
+    [
+      "detect",
+      "biological_event_detection",
+      {
+        cycles: [
+          {
+            measurement_definition_id: "gape",
+            open_threshold: 6,
+            close_threshold: 3,
+            minimum_amplitude: 4,
+            minimum_duration_s: 0.1,
+            maximum_gap_s: 0.25,
+          },
+        ],
+      },
+      1600,
+    ],
+    ["event_review", "biological_event_review_gate", {}, 1860],
+    ["export", "biological_movement_export", { format: "json" }, 2120],
+  ].map(([node_id, node_type, parameters, x]) => ({
+    node_id,
+    node_type,
+    parameters,
+    position: { x, y: 100 },
+  }));
+  const link = (
+    edge_id: string,
+    source_node_id: string,
+    source_port_id: string,
+    target_node_id: string,
+    target_port_id: string,
+  ) => ({
+    edge_id,
+    source_node_id,
+    source_port_id,
+    target_node_id,
+    target_port_id,
+  });
+  return {
+    graph_id: "reefpose-biological-movement",
+    name: "ReefPose biological movement analysis",
+    schema_version: "workflow-graph-0001",
+    metadata: {
+      truth_policy: "scientist_reviewed_events_only",
+      synthetic_data_warning:
+        "Synthetic fixtures validate engineering behavior, not biological accuracy.",
+    },
+    nodes,
+    edges: [
+      link("project-video", "project", "project", "video", "project"),
+      link("project-model", "project", "project", "model", "project"),
+      link("video-pose", "video", "video", "pose", "video"),
+      link("model-pose", "model", "model", "pose", "model"),
+      link("pose-associate", "pose", "poses", "associate", "poses"),
+      link(
+        "associate-review",
+        "associate",
+        "tracks",
+        "identity_review",
+        "tracks",
+      ),
+      link("review-measure", "identity_review", "tracks", "measure", "tracks"),
+      link(
+        "measure-detect",
+        "measure",
+        "measurements",
+        "detect",
+        "measurements",
+      ),
+      link("detect-review", "detect", "events", "event_review", "events"),
+      link("review-export", "event_review", "events", "export", "events"),
+    ],
+  };
+}
+
 export const workflowTemplates: WorkflowTemplate[] = [
+  {
+    id: "reefpose-biological-movement",
+    name: "ReefPose biological movement",
+    description:
+      "Pose inference → identity review → anatomical measurements → event detection → scientist review → reproducible export.",
+    graph: createBiologicalMovementWorkflow(),
+  },
   {
     id: "pose-model-comparison",
     name: "Pose models → scientific comparison",

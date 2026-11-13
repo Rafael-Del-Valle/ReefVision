@@ -11,8 +11,11 @@ from sqlalchemy.orm import Session
 from reefvision.db.models import (
     ClassificationPrediction,
     Job,
+    PoseBiologicalEventRevision,
+    PoseEventDetectionRun,
     PoseIdentityAssociationRun,
     PoseIdentityObservation,
+    PoseMeasurementRun,
     PredictionProposal,
     VideoAsset,
     VideoTrack,
@@ -43,6 +46,7 @@ REVIEW_GATE_NODE_TYPES = {
     "pose_review_gate",
     "pose_active_learning_review_gate",
     "pose_identity_review_gate",
+    "biological_event_review_gate",
 }
 
 
@@ -420,6 +424,59 @@ def pose_identity_review_status(
     }
 
 
+def biological_event_review_status(
+    session: Session,
+    artifact: WorkflowArtifact,
+    *,
+    project_id: str,
+) -> dict[str, Any]:
+    if artifact.data_type != "pose_event_candidates":
+        raise ValidationError("Biological Event Review requires a pose_event_candidates artifact")
+    payload = dict(artifact.payload_json or {})
+    if payload.get("project_id") not in {None, project_id}:
+        raise ValidationError("Biological Event Review received another project's artifact")
+    event_run_id = str(payload.get("event_run_id") or "")
+    event_run = session.get(PoseEventDetectionRun, event_run_id)
+    if event_run is None:
+        raise ValidationError("Biological event detection run was not found")
+    measurement = session.get(PoseMeasurementRun, event_run.measurement_run_id)
+    if measurement is None or measurement.project_id != project_id:
+        raise ValidationError("Biological event measurement run was not found in this project")
+    stale = event_run.result_sha256 != str(
+        payload.get("result_sha256") or ""
+    ) or measurement.result_sha256 != str(payload.get("measurement_result_sha256") or "")
+    total = int(
+        session.scalar(
+            select(func.count(PoseBiologicalEventRevision.id)).where(
+                PoseBiologicalEventRevision.event_detection_run_id == event_run.id,
+                PoseBiologicalEventRevision.is_current.is_(True),
+            )
+        )
+        or 0
+    )
+    unreviewed = int(
+        session.scalar(
+            select(func.count(PoseBiologicalEventRevision.id)).where(
+                PoseBiologicalEventRevision.event_detection_run_id == event_run.id,
+                PoseBiologicalEventRevision.is_current.is_(True),
+                PoseBiologicalEventRevision.review_state == "unreviewed",
+            )
+        )
+        or 0
+    )
+    return {
+        "schema_version": "biological-event-review-readiness-0001",
+        "ready": unreviewed == 0 and not stale,
+        "project_id": project_id,
+        "source_artifact_id": artifact.id,
+        "event_run_id": event_run.id,
+        "measurement_run_id": measurement.id,
+        "stale": stale,
+        "current_event_count": total,
+        "unreviewed_event_count": unreviewed,
+    }
+
+
 def resume_review_gate(
     session: Session,
     node_run_id: str,
@@ -495,6 +552,19 @@ def resume_review_gate(
                 "unreviewed or the workflow artifact revision is stale"
             )
         review_context["pose_identity_review_status"] = identity_status
+
+    elif node_run.node_type == "biological_event_review_gate":
+        if len(artifacts) != 1:
+            raise ValidationError("Biological Event Review requires exactly one event artifact")
+        event_status = biological_event_review_status(
+            session, artifacts[0], project_id=run.project_id
+        )
+        if not event_status["ready"]:
+            raise ValidationError(
+                "Biological event review cannot be approved while candidates are unreviewed "
+                "or the workflow artifact is stale"
+            )
+        review_context["biological_event_review_status"] = event_status
 
     else:
         pending_count = _pending_review_count(

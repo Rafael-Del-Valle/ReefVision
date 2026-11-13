@@ -118,6 +118,18 @@ _ACTIONS: dict[str, str] = {
         "Evaluate reviewed animal identities against immutable verified identity truth."
     ),
     "pose_identity_export": "Export reviewed identities and scientific evaluation provenance.",
+    "anatomical_measurement": (
+        "Calculate immutable anatomical time series from reviewed animal identities."
+    ),
+    "biological_event_detection": (
+        "Detect complete and partial biological movement candidates with deterministic hysteresis."
+    ),
+    "biological_event_review_gate": (
+        "Pause until every retained biological event candidate has scientist disposition."
+    ),
+    "biological_movement_export": (
+        "Export reviewed measurements, event revisions, and integrity provenance."
+    ),
     "behavior_dynamics": (
         "Calculate deterministic behavior dynamics from scientist-reviewed tracks."
     ),

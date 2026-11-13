@@ -368,6 +368,115 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                     "Export provenance retains run revision, truth hash, and workflow identity."
                 ],
             ),
+            "anatomical_measurement": WorkflowNodeDefinitionResponse(
+                node_type="anatomical_measurement",
+                display_name="Measure Anatomy",
+                category="Scientific analysis",
+                description=(
+                    "Calculate reproducible anatomical time series for reviewed animal identities."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="tracks",
+                        display_name="Reviewed identity tracks",
+                        accepted_types=["reviewed_pose_identity_tracks"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="measurements",
+                        display_name="Anatomical measurements",
+                        accepted_types=["pose_measurement_series"],
+                    )
+                ],
+                required_parameters=["definitions"],
+                optional_parameters={"maximum_gap_s": 0.25},
+                execution_state="executable_pose_workflow",
+                executable=True,
+                implementation_notes=[
+                    "Executes the canonical asynchronous Phase 5 measurement job.",
+                    "Retains identity revision, schema, calibration, and video provenance.",
+                ],
+            ),
+            "biological_event_detection": WorkflowNodeDefinitionResponse(
+                node_type="biological_event_detection",
+                display_name="Detect Biological Events",
+                category="Scientific analysis",
+                description="Detect deterministic hysteresis cycles in anatomical time series.",
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="measurements",
+                        display_name="Anatomical measurements",
+                        accepted_types=["pose_measurement_series"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="events",
+                        display_name="Event candidates",
+                        accepted_types=["pose_event_candidates"],
+                    )
+                ],
+                required_parameters=["cycles"],
+                optional_parameters={},
+                execution_state="executable_pose_workflow",
+                executable=True,
+                implementation_notes=[
+                    "Partial, rejected, and unreviewed candidates remain diagnostic only."
+                ],
+            ),
+            "biological_event_review_gate": WorkflowNodeDefinitionResponse(
+                node_type="biological_event_review_gate",
+                display_name="Review Biological Events",
+                category="Human review",
+                description="Pause until every retained event candidate has scientist disposition.",
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="events",
+                        display_name="Event candidates",
+                        accepted_types=["pose_event_candidates"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="events",
+                        display_name="Reviewed biological events",
+                        accepted_types=["reviewed_pose_events"],
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={},
+                execution_state="pausable_review_gate",
+                executable=True,
+                implementation_notes=[
+                    "Approval never promotes partial, rejected, or removed cycles to confirmed."
+                ],
+            ),
+            "biological_movement_export": WorkflowNodeDefinitionResponse(
+                node_type="biological_movement_export",
+                display_name="Export Biological Movement",
+                category="Export",
+                description="Export scientist-reviewed measurement and event provenance.",
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="events",
+                        display_name="Reviewed biological events",
+                        accepted_types=["reviewed_pose_events"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="package",
+                        display_name="Biological movement package",
+                        accepted_types=["biological_movement_package"],
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={"format": "json"},
+                execution_state="executable_pose_workflow",
+                executable=True,
+                implementation_notes=["Reviewed exports reject stale upstream provenance."],
+            ),
             "pose_review_gate": WorkflowNodeDefinitionResponse(
                 node_type="pose_review_gate",
                 display_name="Pose Review Gate",

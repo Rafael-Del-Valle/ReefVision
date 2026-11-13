@@ -116,7 +116,7 @@ class PoseBiologicalMeasurementService:
         if not selected or not selected <= {identity.id for identity in identities}:
             raise ValidationError("Selected identities do not belong to the identity run")
         if payload.verification_mode == "scientific" and any(
-            identity.verification_state != "scientist_verified"
+            identity.verification_state not in {"scientist_verified", "scientist_confirmed"}
             for identity in identities
             if identity.id in selected
         ):
