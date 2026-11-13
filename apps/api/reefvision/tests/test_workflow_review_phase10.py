@@ -458,6 +458,7 @@ def test_review_resume_rejects_post_pause_frozen_parameter_mutation(
         original_parameters = dict(nodes["model"].parameters_json or {})
         assert original_parameters.get("model_id")
         review_node_id = nodes["review"].id
+        model_node_id = nodes["model"].id
         nodes["model"].parameters_json = {
             **original_parameters,
             "model_id": "tampered-after-review-paused",
@@ -473,7 +474,7 @@ def test_review_resume_rejects_post_pause_frozen_parameter_mutation(
     with app.state.session_factory() as session:
         run = session.get(WorkflowRun, run_id)
         job = session.get(Job, job_id)
-        model_node = session.get(WorkflowNodeRun, nodes["model"].id)
+        model_node = session.get(WorkflowNodeRun, model_node_id)
         review_node = session.get(WorkflowNodeRun, review_node_id)
         assert run is not None and run.status == "waiting_for_review"
         assert job is not None and job.status == "waiting_for_review"
