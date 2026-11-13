@@ -634,6 +634,7 @@ try {
     $null = Invoke-RestMethod $qcEventsUrl -Method Post -ContentType 'application/json' -Body $qcAssignBody
     $qcBulkUrl = "$api/review-queues/$($qcQueue.id)/items/bulk"
     $qcSkipBody = @{
+        client_request_id = [guid]::NewGuid().ToString()
         item_ids = @($qcItemId)
         action = 'skip'
         reason = 'Synthetic QC acceptance'
@@ -645,9 +646,9 @@ try {
         $qcSkipped.requires_researcher_review -ne $true) {
         throw 'Installed QC bulk skip was not guarded and retry-safe.'
     }
-    $qcReturnBody = @{item_ids=@($qcItemId);action='return';actor='disposable-lab-reviewer'} | ConvertTo-Json
+    $qcReturnBody = @{item_ids=@($qcItemId);action='return';actor='disposable-lab-reviewer';client_request_id=[guid]::NewGuid().ToString()} | ConvertTo-Json
     $qcReturned = Invoke-RestMethod $qcBulkUrl -Method Post -ContentType 'application/json' -Body $qcReturnBody
-    $qcStartBody = @{item_ids=@($qcItemId);action='start';actor='disposable-lab-reviewer'} | ConvertTo-Json
+    $qcStartBody = @{item_ids=@($qcItemId);action='start';actor='disposable-lab-reviewer';client_request_id=[guid]::NewGuid().ToString()} | ConvertTo-Json
     $qcStarted = Invoke-RestMethod $qcBulkUrl -Method Post -ContentType 'application/json' -Body $qcStartBody
     if ($qcReturned.changed_count -ne 1 -or $qcStarted.changed_count -ne 1 -or
         @($qcStarted.items)[0].review_state -ne 'in_progress') {
@@ -657,6 +658,7 @@ try {
     # confirmation on disposable synthetic data. This completes review
     # coordination only; it does not verify biological annotations.
     $qcCompleteBody = @{
+        client_request_id = [guid]::NewGuid().ToString()
         item_ids = @($qcItemId)
         action = 'complete'
         actor = 'disposable-lab-reviewer'
@@ -669,6 +671,16 @@ try {
         -not @($qcCompleted.items)[0].completed_at -or
         $qcCompleted.requires_researcher_review -ne $true) {
         throw 'Installed QC bulk completion did not require reviewed state, preserve the review gate or retry idempotently.'
+    }
+    # An old keyed start response may arrive only after a different reviewer
+    # has completed the item. Replaying that exact UUID must not reopen QC,
+    # reset the completion timestamp, or create another audit event.
+    $qcLateStartRetry = Invoke-RestMethod $qcBulkUrl -Method Post -ContentType 'application/json' -Body $qcStartBody
+    if ($qcLateStartRetry.changed_count -ne 0 -or
+        @($qcLateStartRetry.items)[0].review_state -ne 'completed' -or
+        @($qcLateStartRetry.items)[0].completed_at -ne @($qcCompleted.items)[0].completed_at -or
+        $qcLateStartRetry.requires_researcher_review -ne $true) {
+        throw 'Installed QC stale keyed start retry reopened a completed item or changed its scientific review gate.'
     }
     $qcHistory = Invoke-RestMethod $qcEventsUrl
     $qcEventTypes = @($qcHistory.items | ForEach-Object { $_.event_type } | Sort-Object)
@@ -752,6 +764,20 @@ try {
     $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $api = "http://127.0.0.1:$port/api/v1"
     Wait-BackendApiReady -ApiBaseUrl $api -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
+    # The registry and append-only events must survive a real packaged desktop
+    # restart. Replay both the final completion and the earlier start with
+    # their original UUIDs; neither may write or silently reopen the review.
+    $qcRestartCompleteRetry = Invoke-RestMethod "$api/review-queues/$($qcQueue.id)/items/bulk" -Method Post -ContentType 'application/json' -Body $qcCompleteBody
+    $qcRestartStartRetry = Invoke-RestMethod "$api/review-queues/$($qcQueue.id)/items/bulk" -Method Post -ContentType 'application/json' -Body $qcStartBody
+    if ($qcRestartCompleteRetry.changed_count -ne 0 -or
+        $qcRestartStartRetry.changed_count -ne 0 -or
+        @($qcRestartCompleteRetry.items)[0].review_state -ne 'completed' -or
+        @($qcRestartStartRetry.items)[0].review_state -ne 'completed' -or
+        @($qcRestartStartRetry.items)[0].completed_at -ne @($qcCompleted.items)[0].completed_at -or
+        $qcRestartCompleteRetry.requires_researcher_review -ne $true -or
+        $qcRestartStartRetry.requires_researcher_review -ne $true) {
+        throw 'Packaged QC UUID replay after restart changed review state, completion evidence, or researcher-review gate.'
+    }
     $qcPersistedQueue = Invoke-RestMethod "$api/review-queues/$($qcQueue.id)"
     $qcPersistedItems = Invoke-RestMethod "$api/review-queues/$($qcQueue.id)/items"
     $qcPersistedEvents = Invoke-RestMethod "$api/review-queues/$($qcQueue.id)/items/$qcItemId/events"
@@ -767,7 +793,7 @@ try {
     if (@($qcPersistedAnnotations.annotations | Where-Object { $_.id -eq $annotationId }).Count -ne 1) {
         throw 'Packaged QC review changed the researcher annotation across restart.'
     }
-    $report.qc_review_coordination = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Installed API: scoped queue, idempotent comment/skip/completion, assignment, return/start/confirmed-complete, six durable audit events and unchanged annotation across desktop restart.'
+    $report.qc_review_coordination = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Installed API: scoped queue, UUID-keyed skip/return/start/complete, stale-start and post-restart exact-UUID replay, durable assignment and six audit events, explicit human review and unchanged annotation.'
 
     # Verify saved graph, executed typed artifact, provenance digest and queue
     # survive a full installed-desktop restart, not merely the in-process job.
