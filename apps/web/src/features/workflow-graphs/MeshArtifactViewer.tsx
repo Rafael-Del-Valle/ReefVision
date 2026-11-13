@@ -433,7 +433,7 @@ function parsePathInspections(
       if (interiorTurns.some((angle) => angle === null)) {
         if (rawTotalTurn === null) totalTurnStatus = "undefined";
       } else {
-        const expectedTotal = interiorTurns.reduce(
+        const expectedTotal = interiorTurns.reduce<number>(
           (sum, angle) => sum + (angle ?? 0),
           0,
         );
