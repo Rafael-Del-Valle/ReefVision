@@ -154,7 +154,9 @@ class ClassVisibilityService:
                 )
         else:
             # Older local clients omit the revision field and retain legacy PUT behavior.
-            self.preferences.upsert(project_id, user_identity, resolved_layer_type, hidden_class_ids)
+            self.preferences.upsert(
+                project_id, user_identity, resolved_layer_type, hidden_class_ids
+            )
         self.session.commit()
         self.session.expire_all()
         preference = self.preferences.get(project_id, user_identity, resolved_layer_type)
