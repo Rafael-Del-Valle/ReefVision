@@ -11,6 +11,7 @@ from alembic.script import ScriptDirectory
 from reefvision import desktop
 from reefvision.config import Settings
 from reefvision.ml.dependencies import provider_runtime_dir
+from reefvision.tests.review_lineage_fixture_16 import REVIEW_EVENT_FK_SQL
 
 
 def _desktop_settings(data_dir: Path) -> Settings:
@@ -84,13 +85,30 @@ def _add_native_review_table(
             f"project_id TEXT{attribution_required}, {request_key_decl}, "
             f"{event_type_decl}, actor TEXT{attribution_required}, "
             f"comment TEXT, assignee TEXT, "
-            f"created_at TEXT{attribution_required}{event_type_check}{request_identity})"
+            f"created_at TEXT{attribution_required}{event_type_check}{request_identity}"
+            f"{REVIEW_EVENT_FK_SQL})"
+        )
+        for parent, ids in (
+            ("projects", ("project-1",)),
+            ("review_queues", ("queue-1", "queue-2")),
+            ("review_queue_items", ("item-1", "item-2")),
+        ):
+            connection.execute(f"CREATE TABLE IF NOT EXISTS {parent} (id TEXT PRIMARY KEY)")
+            connection.executemany(
+                f"INSERT OR IGNORE INTO {parent} (id) VALUES (?)",
+                [(value,) for value in ids],
+            )
+        connection.execute(
+            "CREATE INDEX ix_review_queue_item_events_item_created "
+            "ON review_queue_item_events (review_queue_item_id, created_at)"
+        )
+        connection.execute(
+            "CREATE INDEX ix_review_queue_item_events_queue_created "
+            "ON review_queue_item_events (review_queue_id, created_at)"
         )
         if stamped_revision == "0041":
             # Synthetic schema identity must include the real 0041 registry
             # contract, not just the 0040 review-event table.
-            connection.execute("CREATE TABLE projects (id TEXT PRIMARY KEY)")
-            connection.execute("CREATE TABLE review_queues (id TEXT PRIMARY KEY)")
             connection.execute(
                 "CREATE TABLE review_queue_bulk_requests ("
                 "id TEXT PRIMARY KEY NOT NULL, "
