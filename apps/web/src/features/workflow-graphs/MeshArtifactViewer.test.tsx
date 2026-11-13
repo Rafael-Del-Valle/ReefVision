@@ -556,7 +556,9 @@ describe("MeshArtifactViewer", () => {
     expect(waypoint).toHaveTextContent(
       "Saved cumulative mesh-edge distance: 1.00000 m",
     );
-    expect(waypoint).toHaveTextContent("Scale-only cumulative interval: unknown");
+    expect(waypoint).toHaveTextContent(
+      "Scale-only cumulative interval: unknown",
+    );
     expect(JSON.stringify(artifact)).toBe(original);
 
     const corrected = {
@@ -586,6 +588,106 @@ describe("MeshArtifactViewer", () => {
     expect(screen.getByText(/Route waypoint 2 of 3/)).toHaveTextContent(
       "Scale-only cumulative interval: [0.900000, 1.10000] m",
     );
+  });
+
+  it("rejects misleading microscopic and zero-length uncertainty bounds", () => {
+    const tiny = {
+      ...validArtifact,
+      provenance: {
+        calibration_verified: false,
+        relative_scale_uncertainty: 0.1,
+      },
+      surface_edge_paths: [
+        {
+          status: "connected",
+          path_vertex_indices: [0, 1],
+          path_vertices_in_source_frame_m: [
+            [0, 0, 0],
+            [1e-16, 0, 0],
+          ],
+          length_m: 1e-16,
+          length_scale_interval_m: [0, 1e-13],
+          path_edge_lengths_m: [1e-16],
+          path_edge_length_scale_intervals_m: [[0, 1e-13]],
+          path_cumulative_lengths_m: [0, 1e-16],
+          path_cumulative_length_scale_intervals_m: [
+            [0, 0],
+            [0, 1e-13],
+          ],
+          path_qc_warnings: [],
+        },
+      ],
+    };
+    const original = JSON.stringify(tiny);
+    const rejected = parseMeshRenderArtifact(tiny)?.routeInspections[0];
+    expect(rejected).toMatchObject({
+      lengthM: 1e-16,
+      lengthScaleIntervalM: null,
+      edgeLengthsM: [1e-16],
+      edgeScaleIntervalsM: null,
+      cumulativeLengthsM: [0, 1e-16],
+      cumulativeScaleIntervalsM: null,
+    });
+
+    const zero = {
+      ...tiny,
+      surface_edge_paths: [
+        {
+          ...tiny.surface_edge_paths[0],
+          path_vertices_in_source_frame_m: [
+            [0, 0, 0],
+            [0, 0, 0],
+          ],
+          length_m: 0,
+          length_scale_interval_m: [0, 1e-13],
+          path_edge_lengths_m: [0],
+          path_edge_length_scale_intervals_m: [[0, 1e-13]],
+          path_cumulative_lengths_m: [0, 0],
+          path_cumulative_length_scale_intervals_m: [
+            [0, 0],
+            [0, 1e-13],
+          ],
+        },
+      ],
+    };
+    expect(parseMeshRenderArtifact(zero)?.routeInspections[0]).toMatchObject({
+      lengthM: 0,
+      lengthScaleIntervalM: null,
+      edgeLengthsM: [0],
+      edgeScaleIntervalsM: null,
+      cumulativeLengthsM: [0, 0],
+      cumulativeScaleIntervalsM: null,
+    });
+
+    const valid = {
+      ...tiny,
+      surface_edge_paths: [
+        {
+          ...tiny.surface_edge_paths[0],
+          length_scale_interval_m: [9e-17, 1.1e-16],
+          path_edge_length_scale_intervals_m: [[9e-17, 1.1e-16]],
+          path_cumulative_length_scale_intervals_m: [
+            [0, 0],
+            [9e-17, 1.1e-16],
+          ],
+        },
+      ],
+    };
+    expect(parseMeshRenderArtifact(valid)?.routeInspections[0]).toMatchObject({
+      lengthScaleIntervalM: [9e-17, 1.1e-16],
+      edgeScaleIntervalsM: [[9e-17, 1.1e-16]],
+      cumulativeScaleIntervalsM: [[0, 0], [9e-17, 1.1e-16]],
+    });
+    expect(
+      parseMeshRenderArtifact({
+        ...tiny,
+        provenance: {
+          calibration_verified: false,
+          relative_scale_uncertainty: 1,
+        },
+      }),
+    ).toBeNull();
+    expect(JSON.stringify(tiny)).toBe(original);
   });
 
   it("fails closed on invalid saved path measurements but retains renderable geometry", () => {
