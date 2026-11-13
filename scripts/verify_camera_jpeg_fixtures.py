@@ -26,12 +26,22 @@ def _file_fingerprint(stat: os.stat_result) -> tuple[int, int, int, int, int]:
     return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
 
 
+def _is_windows_junction(path: Path) -> bool:
+    """Detect NTFS junctions, which can bypass followlinks=False on Windows."""
+    is_junction = getattr(path, "is_junction", None)
+    return bool(is_junction()) if is_junction is not None else False
+
+
+def _is_linked_path(path: Path) -> bool:
+    return path.is_symlink() or _is_windows_junction(path)
+
+
 def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str, object]], list[str]]:
     # This function is also imported directly by tests and acceptance tools.
     # Enforce the same root boundary as the CLI before rglob can follow a
     # linked root or parent into an unapproved camera directory.
     candidate = root.absolute()
-    if any(component.is_symlink() for component in (candidate, *candidate.parents)):
+    if any(_is_linked_path(component) for component in (candidate, *candidate.parents)):
         return [], ["camera fixture directory must not be a symbolic link (including parent components)"]
     if not root.is_dir():
         return [], ["camera fixture directory is not a directory"]
@@ -62,7 +72,9 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
             child = parent / dirname
             if child.is_symlink():
                 errors.append(f"symlinked directory not inspected: {child.relative_to(root)}")
-        dirnames[:] = sorted(name for name in dirnames if not (parent / name).is_symlink())
+            elif _is_windows_junction(child):
+                errors.append(f"junction directory not inspected: {child.relative_to(root)}")
+        dirnames[:] = sorted(name for name in dirnames if not _is_linked_path(parent / name))
         jpeg_paths.extend(parent / name for name in filenames
                           if Path(name).suffix.lower() in JPEG_SUFFIXES)
     for path in sorted(jpeg_paths):
@@ -278,7 +290,7 @@ def main() -> int:
     # Reject symlinks in any supplied path component, not only the final
     # directory: linked-parent/fixtures would otherwise escape the approved root.
     candidate = args.directory.absolute()
-    if any(component.is_symlink() for component in (candidate, *candidate.parents)):
+    if any(_is_linked_path(component) for component in (candidate, *candidate.parents)):
         parser.error("camera fixture directory must not be a symbolic link (including parent components)")
     try:
         root = args.directory.resolve(strict=True)

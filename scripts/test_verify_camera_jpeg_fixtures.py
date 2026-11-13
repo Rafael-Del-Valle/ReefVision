@@ -725,6 +725,60 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertIn("including parent components", output.getvalue())
             self.assertEqual(camera.read_bytes(), original)
 
+    def test_simulated_windows_junction_root_and_parent_are_rejected(self) -> None:
+        """Refuse junctions even when pathlib does not classify them as symlinks."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            junction = root / "junction"
+            fixtures = junction / "fixtures"
+            fixtures.mkdir(parents=True)
+            original = bytes.fromhex("ffd8") + b"unchanged" + bytes.fromhex("ffd9")
+            camera = fixtures / "camera.JPG"
+            camera.write_bytes(original)
+
+            def simulate_junction(path: Path) -> bool:
+                return path == junction
+
+            with mock.patch.object(Path, "is_junction", simulate_junction, create=True):
+                for candidate in (junction, fixtures):
+                    with self.subTest(candidate=candidate):
+                        records, errors = MODULE.inventory(candidate)
+                        self.assertEqual(records, [])
+                        self.assertEqual(errors, [
+                            "camera fixture directory must not be a symbolic link (including parent components)"
+                        ])
+                stderr = io.StringIO()
+                with mock.patch("sys.argv", [str(SCRIPT), str(fixtures)]):
+                    with contextlib.redirect_stderr(stderr):
+                        with self.assertRaises(SystemExit) as caught:
+                            MODULE.main()
+                self.assertEqual(caught.exception.code, 2)
+                self.assertIn("including parent components", stderr.getvalue())
+            self.assertEqual(camera.read_bytes(), original)
+
+    def test_simulated_windows_junction_subdirectory_is_not_traversed(self) -> None:
+        """Never count linked external camera files as approved scientific fixtures."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            junction = root / "linked-camera-library"
+            junction.mkdir()
+            protected = junction / "outside.JPG"
+            original = bytes.fromhex("ffd8") + b"external" + bytes.fromhex("ffd9")
+            protected.write_bytes(original)
+            accepted = root / "approved.JPG"
+            accepted.write_bytes(bytes.fromhex("ffd8") + b"approved" + bytes.fromhex("ffd9"))
+
+            def simulate_junction(path: Path) -> bool:
+                return path == junction
+
+            with mock.patch.object(Path, "is_junction", simulate_junction, create=True):
+                records, errors = MODULE.inventory(root)
+            self.assertEqual([record["path"] for record in records], ["approved.JPG"])
+            self.assertEqual(errors, [
+                "junction directory not inspected: linked-camera-library"
+            ])
+            self.assertEqual(protected.read_bytes(), original)
+
     def test_cli_missing_directory_reports_usage_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             missing = Path(directory) / "missing-camera-fixtures"
