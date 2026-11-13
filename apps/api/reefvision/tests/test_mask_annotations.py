@@ -6,7 +6,7 @@ from typing import Any, cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from reefvision.db.models import MaskAnnotation, MaskAnnotationEvent
 from reefvision.tests.test_annotations import create_project, import_one
@@ -26,12 +26,16 @@ def _mask_payload(
 
 
 def test_polygon_mask_create_update_delete_and_audit(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, request: pytest.FixtureRequest
 ) -> None:
     event_time = datetime(2026, 1, 1, tzinfo=UTC)
     # SQLite can persist consecutive changes with equal UTC timestamps.
-    event_default = MaskAnnotationEvent.__table__.c.created_at.default
-    monkeypatch.setattr(event_default, "arg", lambda _context: event_time)
+
+    def set_audit_time(_mapper: object, _connection: object, audit: MaskAnnotationEvent) -> None:
+        audit.created_at = event_time
+
+    event.listen(MaskAnnotationEvent, "before_insert", set_audit_time)
+    request.addfinalizer(lambda: event.remove(MaskAnnotationEvent, "before_insert", set_audit_time))
     project = create_project(client, "Mask lifecycle")
     report = import_one(client, project["id"])
     image_id = report["successful"][0]["image_id"]
