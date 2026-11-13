@@ -249,3 +249,59 @@ function Test-ReefVisionAdministrator {
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
+
+# After installed-desktop shutdown, snapshot stable scientific files in the
+# marker-gated disposable profile. Exclude volatile logs/runtime/caches, but
+# include SQLite, imported imagery, metadata and generated research outputs.
+# We check bytes, not merely whether the parent directory still exists.
+function Get-ReefVisionResearchFileSnapshot {
+    param([Parameter(Mandatory = $true)][string]$DataRoot)
+    $root = Resolve-ReefVisionAcceptancePath $DataRoot
+    if (-not (Test-Path -LiteralPath $root -PathType Container)) {
+        throw 'Disposable research data directory is missing.'
+    }
+    [void](Assert-ReefVisionAcceptanceTreeNoReparsePoints -Path $root)
+    $database = Join-Path $root 'reefvision.db'
+    if (-not (Test-Path -LiteralPath $database -PathType Leaf)) {
+        throw 'Disposable research SQLite database is missing.'
+    }
+    $prefix = $root.TrimEnd('\') + '\'
+    $volatileTopLevel = @('cache', 'logs', 'runtime', 'tmp', 'temp')
+    $researchExtensions = @(
+        '.db', '.sqlite', '.sqlite3', '.png', '.jpg', '.jpeg', '.webp',
+        '.tif', '.tiff', '.json', '.geojson', '.csv', '.tsv', '.parquet',
+        '.npz', '.npy', '.yaml', '.yml', '.zip', '.h5', '.hdf5', '.nc',
+        '.wav', '.flac'
+    )
+    $snapshot = @{}
+    foreach ($file in (Get-ChildItem -LiteralPath $root -Recurse -Force -File -ErrorAction Stop)) {
+        if (-not $file.FullName.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Research file escaped the disposable data root.'
+        }
+        $relative = $file.FullName.Substring($prefix.Length)
+        $topLevel = @($relative.Split('\'))[0].ToLowerInvariant()
+        if ($topLevel -in $volatileTopLevel -or $file.Extension.ToLowerInvariant() -notin $researchExtensions) {
+            continue
+        }
+        $key = $relative.ToLowerInvariant()
+        if ($snapshot.ContainsKey($key)) { throw "Duplicate retained research path: $relative" }
+        $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256 -ErrorAction Stop).Hash
+        $snapshot[$key] = "$($file.Length):$hash"
+    }
+    if (-not $snapshot.ContainsKey('reefvision.db') -or $snapshot.Count -lt 2) {
+        throw 'Disposable research snapshot must include the SQLite database and at least one persisted research file.'
+    }
+    return ,$snapshot
+}
+
+function Assert-ReefVisionResearchFileSnapshotRetained {
+    param(
+        [Parameter(Mandatory = $true)][hashtable]$Before,
+        [Parameter(Mandatory = $true)][hashtable]$After
+    )
+    foreach ($key in $Before.Keys) {
+        if (-not $After.ContainsKey($key)) { throw "Uninstall removed retained research file: $key" }
+        if ($After[$key] -cne $Before[$key]) { throw "Uninstall modified retained research file: $key" }
+    }
+    return $Before.Count
+}
