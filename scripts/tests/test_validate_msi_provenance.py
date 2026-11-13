@@ -234,3 +234,21 @@ def test_rejection_preserves_user_artifacts(tmp_path: Path) -> None:
     with pytest.raises(validator.BundleValidationError):
         verify(directory)
     assert cab.read_bytes() == before
+
+
+def test_clean_runner_binds_installer_and_acceptance_to_checkout_version() -> None:
+    """Do not accidentally accept a fixed historical MSI in a newer checkout."""
+    repo_root = Path(__file__).resolve().parents[2]
+    workflow = (repo_root / ".github/workflows/build-desktop.yml").read_text(
+        encoding="utf-8"
+    )
+    acceptance = workflow.split("  windows-clean-install-acceptance:", 1)[1]
+    assert "1.0.2" not in acceptance
+    assert acceptance.count("reefvision-installer") >= 4
+    assert acceptance.count("apps/web/src-tauri/tauri.conf.json") >= 4
+    assert "$msi[0].Name -cne $expectedMsi" in acceptance
+    assert "$versionRecord.StringData(1) -ne $version" in acceptance
+    assert acceptance.count("'ReefVision_{0}_x64_en-US.msi' -f $version") >= 2
+    assert "--expected-version $version --expected-upgrade skipped" in acceptance
+    assert "-SkipUpgrade -DisposableTest -KeepArtifacts" in acceptance
+    assert "C:\\reefvision-disposable-acceptance" in acceptance

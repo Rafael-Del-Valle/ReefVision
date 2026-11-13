@@ -51,3 +51,22 @@ cryptographic code-signing, a real GUI session, field hardware, or a supported
 old-to-new upgrade/rollback. The 1.1/1.6 Alembic collision and those release
 gates remain unresolved. No unapproved pretrained checkpoints, scientific
 verification decisions, or user research assets are affected.
+
+## Version-independent disposable Windows acceptance (2026-11-13)
+
+The second Windows runner was pinned to an MSI filename, ProductVersion and
+installed-acceptance expectation of `1.0.2` even when the source checkout's
+`tauri.conf.json` version changes. That could reject a correctly built newer
+MSI or accidentally test an unrelated historical build. The runner now derives
+the expected MSI filename and version from the **same checked-out Tauri config**
+used by the build job, then compares both the Windows Installer ProductVersion
+and independent installed-app report against that version. A version-neutral
+disposable directory and artifact name avoid misleading cross-version labeling.
+The cross-runner source-commit, provenance, cabinet-inventory and hash checks
+remain before any installer execution. A regression requires version binding at
+every step and prohibits hardcoded historical versions in this acceptance job.
+
+This is *not* a 1.6 product version bump, a native Windows execution result,
+or evidence of upgrade/rollback; the current Tauri config remains unchanged.
+An approved release still requires Windows MSI/CAB installation, GUI, real
+upgrade and rollback, migration reconciliation and scientific acceptance.

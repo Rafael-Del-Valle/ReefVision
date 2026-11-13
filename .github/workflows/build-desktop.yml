@@ -150,7 +150,7 @@ jobs:
 
   # Separate, disposable Windows runner: do not validate an MSI only on its build machine.
   windows-clean-install-acceptance:
-    name: Install, launch, persist and uninstall 1.0.2 on fresh Windows
+    name: Install, launch, persist and uninstall packaged ReefVision on fresh Windows
     runs-on: windows-latest
     needs: build-windows-installer
     timeout-minutes: 75
@@ -167,7 +167,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ReefVision-Windows-Installer
-          path: ${{ runner.temp }}/reefvision-1-0-2-installer
+          path: ${{ runner.temp }}/reefvision-installer
 
       # Do not trust the build job's earlier verdict alone: artifact transport
       # and a fresh checkout form a separate integrity boundary. Keep this
@@ -175,7 +175,7 @@ jobs:
       - name: Verify downloaded MSI/CAB provenance against clean-runner checkout
         shell: pwsh
         run: |
-          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-2-installer'
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-installer'
           $version = (Get-Content -LiteralPath 'apps/web/src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json).version
           $expectedCommit = (git rev-parse HEAD).Trim()
           if ($LASTEXITCODE -ne 0 -or $expectedCommit -notmatch '^[0-9a-fA-F]{40}$') {
@@ -189,11 +189,13 @@ jobs:
       - name: Verify MSI-declared cabinet payload before any install
         shell: pwsh
         run: |
-          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-2-installer'
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-installer'
           $msi = @(Get-ChildItem -LiteralPath $folder -Filter '*.msi' -File)
           $cabs = @(Get-ChildItem -LiteralPath $folder -Filter '*.cab' -File)
-          if ($msi.Count -ne 1 -or $msi[0].Name -ne 'ReefVision_1.0.2_x64_en-US.msi') {
-            throw 'Expected exactly the ReefVision 1.0.2 MSI.'
+          $version = (Get-Content -LiteralPath 'apps/web/src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json).version
+          $expectedMsi = 'ReefVision_{0}_x64_en-US.msi' -f $version
+          if ($msi.Count -ne 1 -or $msi[0].Name -cne $expectedMsi) {
+            throw "Expected exactly the ReefVision $version MSI, found $($msi.Count) candidates."
           }
 
           # Windows Installer Media is authoritative; cabinet count depends on
@@ -203,8 +205,8 @@ jobs:
           $versionView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')
           $versionView.Execute()
           $versionRecord = $versionView.Fetch()
-          if ($null -eq $versionRecord -or $versionRecord.StringData(1) -ne '1.0.2') {
-            throw 'MSI ProductVersion must be 1.0.2.'
+          if ($null -eq $versionRecord -or $versionRecord.StringData(1) -ne $version) {
+            throw "MSI ProductVersion must equal checkout version $version."
           }
           $versionView.Close()
 
@@ -242,8 +244,9 @@ jobs:
       - name: Test isolated MSI installation without developer runtimes on PATH
         shell: pwsh
         run: |
-          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-2-installer'
-          $msi = Join-Path $folder 'ReefVision_1.0.2_x64_en-US.msi'
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-installer'
+          $version = (Get-Content -LiteralPath 'apps/web/src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json).version
+          $msi = Join-Path $folder ('ReefVision_{0}_x64_en-US.msi' -f $version)
           # The runner may contain development tools, but the installed desktop
           # must function without any Python, Node.js, or Rust executable on PATH.
           $env:PATH = @(
@@ -262,7 +265,7 @@ jobs:
           # require explicit researcher approval, not a CI default.
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
-            -AcceptanceRoot 'C:\reefvision-1-0-2-disposable-acceptance' `
+            -AcceptanceRoot 'C:\reefvision-disposable-acceptance' `
             -SkipUpgrade -DisposableTest -KeepArtifacts
 
       # Passing msiexec or exiting the harness is not enough: independently
@@ -271,14 +274,15 @@ jobs:
       - name: Verify installed Windows acceptance evidence
         shell: pwsh
         run: |
-          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-2-installer'
-          $msi = Join-Path $folder 'ReefVision_1.0.2_x64_en-US.msi'
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-installer'
+          $version = (Get-Content -LiteralPath 'apps/web/src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json).version
+          $msi = Join-Path $folder ('ReefVision_{0}_x64_en-US.msi' -f $version)
           $reports = @(Get-ChildItem -Path '.artifacts' -Directory -Filter 'windows-clean-acceptance-*' |
             ForEach-Object { Get-Item -LiteralPath (Join-Path $_.FullName 'report.json') -ErrorAction SilentlyContinue })
           if ($reports.Count -ne 1) {
             throw "Expected exactly one installed-Windows acceptance report; found $($reports.Count)."
           }
-          python scripts/validate_windows_acceptance_report.py --report $reports[0].FullName --expected-version 1.0.2 --expected-upgrade skipped --installer $msi
+          python scripts/validate_windows_acceptance_report.py --report $reports[0].FullName --expected-version $version --expected-upgrade skipped --installer $msi
           if ($LASTEXITCODE -ne 0) {
             throw 'Installed-Windows acceptance evidence verification failed.'
           }
@@ -287,7 +291,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ReefVision-1.0.2-Windows-Clean-Install-Evidence
+          name: ReefVision-Windows-Clean-Install-Evidence
           path: |
             .artifacts/windows-clean-acceptance-*/report.json
             .artifacts/windows-clean-acceptance-*/*.log
