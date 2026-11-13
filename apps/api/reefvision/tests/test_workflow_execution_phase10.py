@@ -15,7 +15,10 @@ from reefvision.db.models import (
 )
 from reefvision.domain.errors import ConflictError
 from reefvision.jobs.workflow import process_workflow_run_job
-from reefvision.services.workflow_provenance import build_workflow_run_provenance
+from reefvision.services.workflow_provenance import (
+    build_workflow_run_provenance,
+    verify_succeeded_node_artifacts,
+)
 from reefvision.tests.test_annotations import create_project, import_one
 
 
@@ -263,6 +266,34 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         artifact.producer_port_id = original_port
         producer.result_json = original_result
         session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
+    # The executed project's input may have a valid checksum and the exact
+    # graph-required producer/port but still be an undeclared, substituted
+    # artifact. Verify persisted-node reuse independently of terminal-run
+    # checks, which do not apply during interrupted workflow recovery.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        original = session.get(WorkflowArtifact, artifacts["project_reference"]["id"])
+        assert producer is not None and consumer is not None and original is not None
+        undeclared = WorkflowArtifact(
+            workflow_run_id=str(run["id"]),
+            producer_node_run_id=producer.id,
+            producer_port_id=original.producer_port_id,
+            data_type=original.data_type,
+            payload_json=dict(original.payload_json),
+            payload_sha256=original.payload_sha256,
+        )
+        session.add(undeclared)
+        session.flush()
+        consumer.input_artifact_ids_json = [undeclared.id]
+        session.flush()
+        with pytest.raises(ConflictError, match="input is not a declared producer output"):
+            verify_succeeded_node_artifacts(
+                session, run_id=str(run["id"]), node_run=consumer
+            )
+        session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
     # This graph was actually executed and its provenance frozen at closeout.
