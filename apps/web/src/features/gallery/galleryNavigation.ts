@@ -96,7 +96,7 @@ export function readGalleryPreference(
     return {
       imageId:
         typeof candidate.imageId === "string" ? candidate.imageId : null,
-      page: typeof candidate.imageId === "string" ? candidate.page : 1,
+      page: typeof candidate.imageId === "string" && typeof candidate.page === "number" ? candidate.page : 1,
       wrap: candidate.wrap === true,
     };
   } catch {
