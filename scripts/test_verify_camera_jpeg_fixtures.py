@@ -248,6 +248,38 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertTrue(errors[0].startswith(f"JPEG decode failed: {fixture.name}:"))
             self.assertEqual(fixture.read_bytes(), original)
 
+    def test_opt_in_pixel_decode_rejects_pillow_pixel_budget_warning(self) -> None:
+        """An oversized yet decodable JPEG must not silently pass camera QC."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; decompression warning unverified")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = root / "pixel_budget.JPEG"
+            Image.new("RGB", (12, 8), (20, 45, 120)).save(fixture, format="JPEG")
+            original = fixture.read_bytes()
+
+            # Header/integrity inventory must remain available read-only;
+            # only explicitly requested decoding enforces the pixel budget.
+            records, errors = MODULE.inventory(root)
+            self.assertEqual(errors, [])
+            self.assertEqual(len(records), 1)
+            self.assertTrue(records[0]["jpeg_boundary_markers"])
+
+            # 96 pixels exceeds the warning threshold (60) but not Pillow's
+            # hard error threshold (120); exercise the otherwise silent path.
+            with mock.patch.object(Image, "MAX_IMAGE_PIXELS", 60):
+                records, errors = MODULE.inventory(root, verify_decode=True)
+            self.assertEqual(len(records), 1)
+            self.assertTrue(records[0]["jpeg_boundary_markers"])
+            self.assertFalse(records[0]["jpeg_decodable"])
+            self.assertEqual(
+                errors,
+                ["JPEG decode failed: pixel_budget.JPEG: DecompressionBombWarning"],
+            )
+            self.assertEqual(fixture.read_bytes(), original)
+
     def test_opt_in_pixel_decode_reports_pillow_decompression_bomb_guard(self) -> None:
         """Large camera images must fail QC explicitly, not abort the manifest."""
         try:
