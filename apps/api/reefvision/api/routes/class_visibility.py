@@ -84,8 +84,6 @@ def delete_project_class_visibility_default(
     layer_type: str,
     request: Request,
     session: DbSession,
-    expected_updated_at: datetime | None = Query(default=None),
+    expected_updated_at: Annotated[datetime | None, Query()] = None,
 ) -> None:
-    service(request, session).reset_project_default(
-        project_id, layer_type, expected_updated_at
-    )
+    service(request, session).reset_project_default(project_id, layer_type, expected_updated_at)

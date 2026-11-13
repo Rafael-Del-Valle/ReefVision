@@ -316,7 +316,8 @@ def test_versioned_project_default_reset_is_safe_against_other_editor(
     # Older local integrations remain backwards-compatible.
     assert client.delete(path).status_code == 204
     assert (
-        client.get(f"/api/v1/projects/{project['id']}/class-visibility")
-        .json()["project_defaults"]["annotations"]["saved"]
+        client.get(f"/api/v1/projects/{project['id']}/class-visibility").json()["project_defaults"][
+            "annotations"
+        ]["saved"]
         is False
     )
