@@ -84,6 +84,14 @@ $script:logText += ([string][char]10) + 'train/box_loss=0.25'
 $script:logText += ([string][char]13) + 'train/cls_loss=0.30'
 $script:logText += ([string][char]13) + ([string][char]0x001B) + ']0;spoofed log title' + ([string][char]0x0007) + 'train/dfl_loss=0.10'
 
+# An imported worker log can split an OSC or C1/DCS control payload across
+# CR-only progress updates. Sanitizing each line after splitting would leak
+# the following line's forged loss into the monitor display.
+$script:logText += ([string][char]13) + 'before-osc' + ([string][char]0x001B) + ']0;forged title'
+$script:logText += ([string][char]13) + 'train/box_loss=0.00' + ([string][char]0x0007) + ' after-osc'
+$script:logText += ([string][char]13) + 'before-dcs' + ([string][char]0x0090) + 'forged title'
+$script:logText += ([string][char]10) + 'train/dfl_loss=0.00' + ([string][char]0x009C) + ' after-dcs'
+
 function Invoke-RestMethod {
   param([string]$Uri, [string]$Method, [int]$TimeoutSec, [int]$MaximumRedirection = -1)
   # Never allow the loopback training API to redirect a GET to the Internet.
@@ -204,7 +212,14 @@ if ($output.Contains('spoofed console title') -or $output.Contains('spoofed log 
 }
 if (-not $output.Contains('worker-progress-24') -or
     $output.Contains('worker-progress-8') -or
-    -not $output.Contains('train/dfl_loss=0.10')) {
+    -not $output.Contains('train/dfl_loss=0.10') -or
+    -not $output.Contains('before-osc') -or
+    -not $output.Contains('after-osc') -or
+    -not $output.Contains('before-dcs') -or
+    -not $output.Contains('after-dcs') -or
+    $output.Contains('train/box_loss=0.00') -or
+    $output.Contains('train/dfl_loss=0.00') -or
+    $output.Contains('forged title')) {
   throw 'CR-only training progress updates were not split, tailed, and displayed correctly.'
 }
 # Both terminal error states must stop polling immediately. A missing log tail

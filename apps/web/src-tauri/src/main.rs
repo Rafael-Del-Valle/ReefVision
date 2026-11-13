@@ -297,7 +297,14 @@ while ($true) {
         Write-Host ''
         Write-Host 'Training job log (last 20 lines, read-only)'
         # Training progress bars can use CR-only updates. Treat CR, LF, and CRLF as separate log lines.
-        $logLines = @($tail.text -split '\r\n|\r|\n' | Where-Object { $_ -ne '' })
+        # Terminal OSC/DCS control strings can span CR/LF progress records.
+        # Strip complete control payloads before line splitting, or a forged
+        # loss on the next line could escape per-line Format-SafeText.
+        # Only sanitize the display copy: persisted worker logs are immutable.
+        $safeTail = [string]$tail.text
+        $safeTail = [regex]::Replace($safeTail, '\x1b[\]PX^_][\s\S]*?(?:\x07|\x9c|\x1b\\|$)', '')
+        $safeTail = [regex]::Replace($safeTail, '[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)', '')
+        $logLines = @($safeTail -split '\r\n|\r|\n' | Where-Object { $_ -ne '' })
         foreach ($line in ($logLines | Select-Object -Last 20)) {
           # Training logs are untrusted terminal text, just like run metadata.
           # Sanitize the displayed copy; never rewrite persisted log bytes.
