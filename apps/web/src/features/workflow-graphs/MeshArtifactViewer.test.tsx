@@ -482,9 +482,8 @@ describe("MeshArtifactViewer", () => {
       )?.routeInspections[0].geometryQc,
     ).toBe("consistent");
     expect(
-      parseMeshRenderArtifact(
-        makeArtifact({ length_m: null }),
-      )?.routeInspections[0].geometryQc,
+      parseMeshRenderArtifact(makeArtifact({ length_m: null }))
+        ?.routeInspections[0].geometryQc,
     ).toBe("unverifiable");
 
     const { container, rerender } = render(
