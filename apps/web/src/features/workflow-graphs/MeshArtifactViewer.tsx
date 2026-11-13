@@ -122,12 +122,14 @@ function anglesAgreeWithSavedPolyline(
     }
     const saved = angles[index];
     if (saved === null) return false;
-    const unitIn: Vec3 = incoming.map((value) => value / incomingLength) as Vec3;
-    const unitOut: Vec3 = outgoing.map((value) => value / outgoingLength) as Vec3;
+    const unitIn: Vec3 = incoming.map(
+      (value) => value / incomingLength,
+    ) as Vec3;
+    const unitOut: Vec3 = outgoing.map(
+      (value) => value / outgoingLength,
+    ) as Vec3;
     const cosine =
-      unitIn[0] * unitOut[0] +
-      unitIn[1] * unitOut[1] +
-      unitIn[2] * unitOut[2];
+      unitIn[0] * unitOut[0] + unitIn[1] * unitOut[1] + unitIn[2] * unitOut[2];
     const cross: Vec3 = [
       unitIn[1] * unitOut[2] - unitIn[2] * unitOut[1],
       unitIn[2] * unitOut[0] - unitIn[0] * unitOut[2],
