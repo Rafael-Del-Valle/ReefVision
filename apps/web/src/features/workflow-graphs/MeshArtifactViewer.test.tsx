@@ -761,6 +761,20 @@ describe("MeshArtifactViewer", () => {
       cumulativeLengthsM: [0, 0, 0],
       edgeLengthsM: null,
     });
+    // Individually finite edges can overflow when summed. An infinite
+    // accumulated length must never pass a relative-tolerance comparison.
+    expect(
+      inspect({
+        ...route,
+        length_m: 1e308,
+        path_cumulative_lengths_m: [0, 1e308, 1e308],
+        path_edge_lengths_m: [1e308, 1e308],
+      }),
+    ).toMatchObject({
+      lengthM: 1e308,
+      cumulativeLengthsM: [0, 1e308, 1e308],
+      edgeLengthsM: null,
+    });
     expect(JSON.stringify(artifact)).toBe(original);
   });
 
