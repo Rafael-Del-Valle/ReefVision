@@ -266,13 +266,12 @@ function Get-ReefVisionResearchFileSnapshot {
         throw 'Disposable research SQLite database is missing.'
     }
     $prefix = $root.TrimEnd('\') + '\'
+    # Only named volatile top-level directories are excluded. An extension
+    # allowlist silently misses user assets such as .mp4 field videos, .srt
+    # telemetry, .ply point clouds, .onnx trained models and plugin outputs.
+    # Hash *every* regular file elsewhere so future scientific modalities
+    # cannot pass uninstall acceptance while their unknown files are erased.
     $volatileTopLevel = @('cache', 'logs', 'runtime', 'tmp', 'temp')
-    $researchExtensions = @(
-        '.db', '.sqlite', '.sqlite3', '.png', '.jpg', '.jpeg', '.webp',
-        '.tif', '.tiff', '.json', '.geojson', '.csv', '.tsv', '.parquet',
-        '.npz', '.npy', '.yaml', '.yml', '.zip', '.h5', '.hdf5', '.nc',
-        '.wav', '.flac'
-    )
     $snapshot = @{}
     foreach ($file in (Get-ChildItem -LiteralPath $root -Recurse -Force -File -ErrorAction Stop)) {
         if (-not $file.FullName.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -280,7 +279,7 @@ function Get-ReefVisionResearchFileSnapshot {
         }
         $relative = $file.FullName.Substring($prefix.Length)
         $topLevel = @($relative.Split('\'))[0].ToLowerInvariant()
-        if ($topLevel -in $volatileTopLevel -or $file.Extension.ToLowerInvariant() -notin $researchExtensions) {
+        if ($topLevel -in $volatileTopLevel) {
             continue
         }
         $key = $relative.ToLowerInvariant()
