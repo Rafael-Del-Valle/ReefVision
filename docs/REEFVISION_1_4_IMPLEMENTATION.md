@@ -83,6 +83,27 @@ persisted executable Workflow Builder graph. If total or per-patch calibrated
 area instead underflows, the entire measurement fails before route QC can be
 published. Neither outcome establishes anatomical centerline validity.
 
+## OBJ directive completeness guard (provisional)
+
+The bounded OBJ mesh importer now fails closed on unrecognized or
+vendor-specific record directives, even when valid triangles precede them.
+Known unsupported point, line, free-form curve/surface, and external-geometry
+directives remain explicitly rejected. Only recognized triangle/vertex/texture/
+normal records and inert object/group/smoothing/material labels are accepted;
+comments and blank lines remain harmless. An unknown record might describe
+additional geometry, so quietly ignoring it could understate reconstructed
+coral surface area or dimensions. This guard does **not** parse external
+material libraries or assert that an otherwise valid triangle mesh is a
+complete anatomical coral reconstruction.
+
+Regression tests exercise unknown records before and after faces, direct
+parsing, the standalone mesh-preview API, and a persisted executable typed
+`mesh_surface_preview` Workflow Builder graph. Rejected source records must
+not emit measurement artifacts. Existing inert OBJ metadata remains supported
+and retains identical standalone/workflow provisional measurements. Imported
+source SHA-256 fingerprints and human calibration-review requirements remain
+unchanged; no independent physical or biological validation is inferred.
+
 ## OBJ text separator integrity (provisional)
 
 The bounded OBJ mesh importer rejects NUL/ASCII control characters other
