@@ -239,6 +239,60 @@ describe("ClassManagerPanel", () => {
   });
 
   it.each([
+    ["foreign project", { project_id: "project-from-another-study" }],
+    ["foreign class", { class_id: "another-class" }],
+    ["contradictory total", { total_references: 1 }],
+    ["hidden mutable references", { mutable_reference_count: 1 }],
+    ["hidden immutable references", { immutable_reference_count: 1 }],
+    [
+      "positive itemized count",
+      {
+        counts: [
+          {
+            key: "historical_annotations",
+            label: "Historical annotations",
+            count: 1,
+          },
+        ],
+      },
+    ],
+    ["nonempty delete blockers", { delete_blockers: ["Protected evidence"] }],
+    ["missing itemization", { counts: null }],
+  ] as const)(
+    "rejects allegedly deletable usage with %s",
+    async (_reason, conflictingFields) => {
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async (input) => {
+          const url = String(input);
+          if (url.endsWith(`/projects/${project.id}/classes/class-1/usage`)) {
+            return jsonResponse({ ...classUsage(true), ...conflictingFields });
+          }
+          throw new Error(`Unexpected request: GET ${url}`);
+        });
+      renderPanel();
+      const row = sourceClassRow();
+      const remove = within(row).getByRole("button", {
+        name: "Delete unused",
+      });
+      await userEvent.click(within(row).getByRole("button", { name: "Usage" }));
+      expect(
+        await within(row).findByText(/Usage evidence has an inconsistent/),
+      ).toBeInTheDocument();
+      expect(remove).toBeDisabled();
+      await userEvent.click(remove);
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) =>
+            String(input).endsWith("/classes/class-1") &&
+            init?.method === "DELETE",
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it.each([
     ["reassign", "blockers"],
     ["reassign", "blocking_records"],
     ["reassign", "failures"],
