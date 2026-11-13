@@ -21,6 +21,7 @@ import {
   previewComputedMaskCoverage,
   type AggregateGroupingLevel,
   type ComputedMaskCoveragePreview,
+  type MaskCoverageRoiPolygon,
   validateComputedMaskCoverageResult,
 } from "./computedMetricsApi";
 
@@ -38,6 +39,18 @@ function identifiers(value: string, required: boolean): string[] {
 
 function percent(value: number | null): string {
   return value === null ? "Unavailable" : `${Number(value.toFixed(6))}%`;
+}
+
+function parseRoiPolygons(text: string): MaskCoverageRoiPolygon[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("Enter valid JSON for the saved ROI polygons.");
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0)
+    throw new Error("Enter a JSON list with at least one ROI polygon.");
+  return parsed as MaskCoverageRoiPolygon[];
 }
 
 function CoverageSummary({ value }: { value: ComputedMaskCoveragePreview }) {
@@ -72,6 +85,12 @@ function CoverageSummary({ value }: { value: ComputedMaskCoveragePreview }) {
           <dt>ROI coverage</dt>
           <dd>{percent(value.roi_coverage_percent)}</dd>
         </div>
+        {value.calibration_method === "projective_reference_plane" && (
+          <div>
+            <dt>Reference-plane ROI coverage</dt>
+            <dd>{percent(value.roi_coverage_physical_percent ?? null)}</dd>
+          </div>
+        )}
         <div>
           <dt>Images / independent units</dt>
           <dd>
@@ -101,8 +120,21 @@ function CoverageSummary({ value }: { value: ComputedMaskCoveragePreview }) {
         Image denominator: {value.image_denominator_pixels} px²
         {value.roi_denominator_pixels === null
           ? "."
-          : `; verified ROI denominator: ${value.roi_denominator_pixels} px².`}
+          : `; ROI denominator: ${value.roi_denominator_pixels} px².`}
       </p>
+      {value.roi_contract === "source_image_polygons" && (
+        <details>
+          <summary>Saved source-image ROI polygons</summary>
+          <ul>
+            {value.image_snapshot.map((image) => (
+              <li key={String(image.image_id)}>
+                {String(image.image_id)}{" "}
+                <code>{JSON.stringify(image.roi_polygon)}</code>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       <h4>Union area by class</h4>
       <ul>
         {value.area_by_class.map((item) => (
@@ -163,6 +195,8 @@ export function MaskCoveragePanel({ project }: { project: Project }) {
     useState<AggregateGroupingLevel>("image");
   const [labelClassIds, setLabelClassIds] = useState("");
   const [roiLabelClassId, setRoiLabelClassId] = useState("");
+  const [roiPolygonJson, setRoiPolygonJson] = useState("");
+  const [useReferencePlane, setUseReferencePlane] = useState(false);
   const [imageIds, setImageIds] = useState("");
   const [selectedDefinitionId, setSelectedDefinitionId] = useState("");
 
@@ -193,6 +227,10 @@ export function MaskCoveragePanel({ project }: { project: Project }) {
         grouping_level: groupingLevel,
         label_class_ids: identifiers(labelClassIds, false),
         roi_label_class_id: roiLabelClassId.trim() || null,
+        ...(roiPolygonJson.trim()
+          ? { roi_polygons: parseRoiPolygons(roiPolygonJson) }
+          : {}),
+        ...(useReferencePlane ? { use_reference_plane: true } : {}),
       }),
     onSuccess: async (definition) => {
       setSelectedDefinitionId(definition.id);
@@ -240,10 +278,10 @@ export function MaskCoveragePanel({ project }: { project: Project }) {
           <p className="eyebrow">Exact source-pixel geometry</p>
           <h3>Verified mask area and coverage</h3>
           <p>
-            Compare summed and geometric-union area from verified masks.
-            Coverage uses explicit full-image denominators or the union of one
-            verified ROI class. Physical values appear only for compatible
-            scalar calibrations.
+            Compare summed and geometric-union area from verified masks. Use the
+            full image, one verified ROI class, or saved per-image polygons as
+            the sampling region. Enable reference-plane calibration when the
+            image and masks lie on a calibrated plane.
           </p>
         </div>
         <a
@@ -297,9 +335,28 @@ export function MaskCoveragePanel({ project }: { project: Project }) {
             ROI class ID
             <input
               value={roiLabelClassId}
+              disabled={Boolean(roiPolygonJson.trim())}
               onChange={(event) => setRoiLabelClassId(event.target.value)}
               placeholder="Optional verified-mask denominator class"
             />
+          </label>
+          <label>
+            Saved ROI polygons (JSON)
+            <textarea
+              rows={3}
+              value={roiPolygonJson}
+              disabled={Boolean(roiLabelClassId.trim())}
+              onChange={(event) => setRoiPolygonJson(event.target.value)}
+              placeholder='[{"image_id":"…","points":[[0,0],[50,0],[0,50]]}]'
+            />
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={useReferencePlane}
+              onChange={(event) => setUseReferencePlane(event.target.checked)}
+            />
+            Use reference-plane homography for physical values
           </label>
           <button type="submit" disabled={createMutation.isPending}>
             Save coverage definition

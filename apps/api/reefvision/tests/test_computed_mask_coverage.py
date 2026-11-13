@@ -116,6 +116,80 @@ def test_known_overlap_reports_sum_union_and_image_coverage(client: TestClient) 
     assert payload["area_by_class"][0]["union_area_pixels"] == 24
 
 
+def test_saved_polygon_roi_restricts_sampling_without_changing_full_image_union(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Concave sampling ROI")
+    project_id = str(project["id"])
+    image_id = _image(client, project_id)
+    target = str(project["label_classes"][0]["id"])
+    _save_masks(
+        client,
+        image_id,
+        [_polygon(str(uuid4()), target, [(2, 2), (5, 2), (5, 5), (2, 5)])],
+    )
+    points = [[0, 0], [5, 0], [5, 1], [1, 1], [1, 5], [0, 5]]
+    definitions = f"/api/v1/projects/{project_id}/computed-mask-coverage-definitions"
+    definition = client.post(
+        definitions,
+        json={
+            "name": "L-shaped transect",
+            "grouping_level": "image",
+            "label_class_ids": [target],
+            "roi_polygons": [{"image_id": image_id, "points": points}],
+        },
+    )
+    assert definition.status_code == 201, definition.text
+    response = client.post(
+        f"{definitions}/{definition.json()['id']}/calculate", json={"image_ids": [image_id]}
+    )
+    assert response.status_code == 201, response.text
+    result = response.json()
+    assert result["roi_contract"] == "source_image_polygons"
+    assert result["roi_denominator_pixels"] == 20
+    assert result["target_union_in_roi_pixels"] == 0
+    assert result["union_area_pixels"] == 16
+    assert result["density_object_count"] == 0
+    assert result["image_snapshot"][0]["roi_polygon"] == points
+    assert result["image_snapshot"][0]["sha256"]
+
+
+@pytest.mark.parametrize("defect", ["foreign_image", "self_intersection", "missing_roi", "both"])
+def test_saved_polygon_roi_rejects_invalid_geometry_and_scope(
+    client: TestClient, defect: str
+) -> None:
+    project = create_project(client, "Scoped sampling ROI")
+    project_id = str(project["id"])
+    image_id = _image(client, project_id)
+    points = [[0, 0], [5, 0], [5, 5], [0, 5]]
+    if defect == "foreign_image":
+        other = create_project(client, "Foreign sampling ROI")
+        image_id = _image(client, str(other["id"]))
+    if defect == "self_intersection":
+        points = [[0, 0], [6, 5], [2, 5], [5, 0]]
+    body = {
+        "name": "Scoped ROI",
+        "grouping_level": "image",
+        "roi_polygons": [{"image_id": image_id, "points": points}],
+    }
+    if defect == "both":
+        body["roi_label_class_id"] = project["label_classes"][0]["id"]
+    definitions = f"/api/v1/projects/{project_id}/computed-mask-coverage-definitions"
+    response = client.post(definitions, json=body)
+    if defect != "missing_roi":
+        assert response.status_code == (422 if defect == "both" else 400), response.text
+        return
+    assert response.status_code == 201, response.text
+    other = import_one(
+        client, project_id, filename="other.png", relative_path="coverage/other.png", size=(9, 9)
+    )
+    other_id = other["successful"][0]["image_id"]
+    _save_masks(client, other_id, [])
+    missing = _preview(client, project_id, response.json()["id"], [other_id])
+    assert missing.status_code == 400
+    assert "missing a saved ROI" in missing.text
+
+
 def test_roi_union_and_scalar_calibration_make_denominators_explicit(
     client: TestClient,
 ) -> None:
@@ -242,6 +316,60 @@ def test_projective_or_missing_calibration_leaves_physical_values_unavailable(
     assert projective["physical_unavailable_reason"] == (
         "perspective_homography_requires_union_resampling"
     )
+
+
+@pytest.mark.parametrize("crosses_horizon", [False, True])
+def test_opt_in_projective_coverage_measures_union_on_reference_plane(
+    client: TestClient, crosses_horizon: bool
+) -> None:
+    project = create_project(client, "Projective cover")
+    project_id = str(project["id"])
+    image_id = _image(client, project_id)
+    target = str(project["label_classes"][0]["id"])
+    _save_masks(
+        client,
+        image_id,
+        [
+            _polygon(str(uuid4()), target, [(0, 0), (1, 0), (1, 1), (0, 1)]),
+            _polygon(str(uuid4()), target, [(1, 0), (2, 0), (2, 1), (1, 1)]),
+        ],
+    )
+    coefficient = -0.5 if crosses_horizon else 1.0
+    calibrated = client.put(
+        f"/api/v1/images/{image_id}/measurement-calibration",
+        json={
+            "distance_per_pixel": 10,
+            "unit": "cm",
+            "perspective_homography": [[1, 0, 0], [0, 1, 0], [coefficient, 0, 1]],
+        },
+    )
+    assert calibrated.status_code == 200, calibrated.text
+    definition = client.post(
+        f"/api/v1/projects/{project_id}/computed-mask-coverage-definitions",
+        json={
+            "name": "Reference-plane sampling",
+            "grouping_level": "image",
+            "use_reference_plane": True,
+            "roi_polygons": [{"image_id": image_id, "points": [[0, 0], [2, 0], [2, 2], [0, 2]]}],
+        },
+    )
+    assert definition.status_code == 201, definition.text
+    response = _preview(client, project_id, definition.json()["id"], [image_id])
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["union_area_pixels"] == 6
+    assert result["roi_denominator_pixels"] == 9
+    if crosses_horizon:
+        assert result["union_area_physical"] is None
+        assert result["physical_unavailable_reason"] == "invalid_reference_plane_projection"
+        return
+    # x'=x/(1+x), y'=y/(1+x). Integrating the Jacobian (1+x)^-3
+    # over width 3 and heights 2 and 3 gives 15/16 and 45/32 cm².
+    assert result["union_area_physical"] == pytest.approx(15 / 16)
+    assert result["sampling_area_physical"] == pytest.approx(45 / 32)
+    assert result["target_union_in_roi_physical"] == pytest.approx(15 / 16)
+    assert result["roi_coverage_physical_percent"] == pytest.approx(200 / 3)
+    assert result["calibration_method"] == "projective_reference_plane"
 
 
 def test_group_summary_pools_pixel_denominators_instead_of_averaging_percentages(

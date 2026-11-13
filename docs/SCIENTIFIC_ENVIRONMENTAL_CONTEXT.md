@@ -209,6 +209,34 @@ project into a new independent project. Optional media/artifact inclusion still
 applies to exchange; scientific cache payloads are included as scientific data,
 not as model weights. Neither workflow includes provider credentials.
 
+### Saved polygon regions and reference-plane coverage
+
+In **Computed Metrics → Open verified mask coverage**, supply one source-image
+polygon per selected image. The JSON list accepts objects with an `image_id` and
+ordered `points` as `[[x, y], ...]`. An immutable coverage definition saves the
+geometry independently of annotation classes. Simple concave polygons are
+supported. Each polygon is tied to a project image and checked against its source
+dimensions. Self-intersections, missing regions and foreign images fail
+validation. The same source-pixel fill convention applies to ROI polygons and
+verified polygon masks.
+
+Select **Use reference-plane homography for physical values** only for a calibrated
+planar scene. ReefVision takes the union in source-pixel space and maps each
+disjoint pixel run as a rectangle onto the reference plane. It reports the
+projected union, sampling area, ROI intersection and coverage. Pixel coverage is
+retained when the transform is unavailable or invalid. Uncertainty information
+supplied with the calibration remains in the snapshot. The area calculation does
+not estimate a homography covariance or validate the calibration against surveyed
+field controls. See [OpenCV's planar homography reference](https://docs.opencv.org/4.x/d9/dab/tutorial_homography.html).
+
+Saved polygon and reference-plane definitions use `reefvision.mask-coverage.v2`.
+Existing definitions retain their original calculation and hashes. The same
+service runs standalone and through the saved `mask_coverage` Workflow Builder
+node. CSV includes polygon coordinates, calibration method and the physical
+coverage columns. Project exchange remaps project image IDs, preserves the polygon
+coordinates and recalculates the result hashes. The calculation uses the existing
+definition and result tables.
+
 ### Migration-lineage coordination
 
 This 1.1 branch owns `0038_scientific_data.py`, followed by

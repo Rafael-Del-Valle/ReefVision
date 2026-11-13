@@ -332,11 +332,24 @@ export function computedAggregateCsvUrl(projectId: string): string {
   return `${getApiBaseUrl()}/projects/${encodeURIComponent(projectId)}/computed-aggregate-results.csv`;
 }
 
+type MaskCoverageRoiContract =
+  "full_image" | "verified_mask_class_union" | "source_image_polygons";
+
+type MaskCoverageFormulaVersion =
+  "reefvision.mask-coverage.v1" | "reefvision.mask-coverage.v2";
+
+export interface MaskCoverageRoiPolygon {
+  image_id: string;
+  points: [number, number][];
+}
+
 export interface ComputedMaskCoverageDefinitionCreate {
   name: string;
   grouping_level: AggregateGroupingLevel;
   label_class_ids: string[];
   roi_label_class_id: string | null;
+  roi_polygons?: MaskCoverageRoiPolygon[];
+  use_reference_plane?: boolean;
 }
 
 export interface ComputedMaskCoverageDefinition extends ComputedMaskCoverageDefinitionCreate {
@@ -346,11 +359,11 @@ export interface ComputedMaskCoverageDefinition extends ComputedMaskCoverageDefi
   expression: string;
   operation: "verified_mask_union_coverage";
   output_unit: "percent";
-  formula_version: "reefvision.mask-coverage.v1";
+  formula_version: MaskCoverageFormulaVersion;
   schema_version: "1.1.0";
   required_review_state: "reviewed";
   independence_contract: "one_unit_per_image" | "one_unit_per_image_group_key";
-  roi_contract: "full_image" | "verified_mask_class_union";
+  roi_contract: MaskCoverageRoiContract;
   definition_sha256: string;
   created_at: string;
 }
@@ -381,7 +394,10 @@ export interface MaskCoverageSummary {
   union_area_physical: number | null;
   sampling_area_physical: number | null;
   object_density_per_square_unit: number | null;
-  calibration_method: "scalar_distance_per_pixel" | null;
+  calibration_method:
+    "scalar_distance_per_pixel" | "projective_reference_plane" | null;
+  target_union_in_roi_physical?: number | null;
+  roi_coverage_physical_percent?: number | null;
   physical_unavailable_reason: string | null;
 }
 
@@ -403,7 +419,7 @@ export interface ComputedMaskCoveragePreview extends MaskCoverageSummary {
   definition_sha256: string;
   grouping_level: AggregateGroupingLevel;
   required_review_state: "reviewed";
-  roi_contract: "full_image" | "verified_mask_class_union";
+  roi_contract: MaskCoverageRoiContract;
   image_count: number;
   independent_unit_count: number;
   algorithm: "reefvision.source-pixel-mask-union.v1";
@@ -421,7 +437,7 @@ export interface ComputedMaskCoverageResult extends ComputedMaskCoveragePreview 
   result_kind: "mask_coverage";
   definition_name: string;
   expression: string;
-  formula_version: "reefvision.mask-coverage.v1";
+  formula_version: MaskCoverageFormulaVersion;
   output_unit: "percent";
   observed_at: string;
   provenance: Record<string, unknown>;

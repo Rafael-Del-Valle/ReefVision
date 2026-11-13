@@ -602,6 +602,18 @@ class WorkflowExecutionService:
                     "union_area_pixels": response.union_area_pixels,
                     "image_coverage_percent": response.image_coverage_percent,
                     "roi_coverage_percent": response.roi_coverage_percent,
+                    **(
+                        {
+                            "roi_contract": response.roi_contract,
+                            "roi_denominator_pixels": response.roi_denominator_pixels,
+                            "target_union_in_roi_pixels": response.target_union_in_roi_pixels,
+                            "target_union_in_roi_physical": response.target_union_in_roi_physical,
+                            "roi_coverage_physical_percent": response.roi_coverage_physical_percent,
+                            "calibration_method": response.calibration_method,
+                        }
+                        if response.formula_version == "reefvision.mask-coverage.v2"
+                        else {}
+                    ),
                     "physical_unit": response.physical_unit,
                     "union_area_physical": response.union_area_physical,
                     "object_density_per_square_unit": response.object_density_per_square_unit,

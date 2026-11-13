@@ -26,8 +26,9 @@ from reefvision.tests.test_workflow_computed_metrics import save_and_queue
 from reefvision.tests.test_workflow_mask_coverage import mask_coverage_graph
 
 
+@pytest.mark.parametrize("mode", ["legacy", "polygon", "projective", "invalid_projection"])
 def test_mask_coverage_round_trip_remaps_immutable_evidence(
-    client: TestClient, test_settings
+    client: TestClient, test_settings, mode: str
 ) -> None:
     project = create_project(client, "Portable mask coverage")
     target = str(project["label_classes"][0]["id"])
@@ -42,17 +43,35 @@ def test_mask_coverage_round_trip_remaps_immutable_evidence(
         ],
         group_key=project["id"],
     )
+    projective = mode in {"projective", "invalid_projection"}
+    with_polygon = mode != "legacy"
+    calibration = {"distance_per_pixel": 0.5, "unit": "cm", "source": "synthetic ruler"}
+    if projective:
+        calibration["perspective_homography"] = [
+            [0.5, 0, 0],
+            [0, 0.5, 0],
+            [-1 if mode == "invalid_projection" else 0, 0, 1],
+        ]
     calibrated = client.put(
         f"/api/v1/images/{image_id}/measurement-calibration",
-        json={"distance_per_pixel": 0.5, "unit": "cm", "source": "synthetic ruler"},
+        json=calibration,
     )
     assert calibrated.status_code == 200, calibrated.text
-    definition = _definition(
-        client,
-        project["id"],
-        target,
-        grouping_level="image_group_key",
+    points = [[0, 0], [4, 0], [4, 4], [0, 4]]
+    response = client.post(
+        f"/api/v1/projects/{project['id']}/computed-mask-coverage-definitions",
+        json={
+            "name": "Portable coverage",
+            "grouping_level": "image_group_key",
+            "label_class_ids": [target],
+            "use_reference_plane": projective,
+            **(
+                {"roi_polygons": [{"image_id": image_id, "points": points}]} if with_polygon else {}
+            ),
+        },
     )
+    assert response.status_code == 201, response.text
+    definition = response.json()
     run = save_and_queue(
         client,
         project["id"],
@@ -81,10 +100,33 @@ def test_mask_coverage_round_trip_remaps_immutable_evidence(
     assert restored_result["id"] != source_result["id"]
     assert restored_result["definition_id"] == restored_definition["id"]
     assert restored_result["union_area_pixels"] == source_result["union_area_pixels"] == 24
-    assert restored_result["union_area_physical"] == source_result["union_area_physical"] == 6
-    assert restored_result["physical_unit"] == "cm"
+    if mode == "invalid_projection":
+        assert restored_result["union_area_physical"] is None
+        assert (
+            restored_result["physical_unavailable_reason"] == "invalid_reference_plane_projection"
+        )
+    else:
+        assert restored_result["union_area_physical"] == source_result["union_area_physical"] == 6
+        assert restored_result["physical_unit"] == "cm"
     assert restored_result["groups"][0]["unit_key"] == project["id"]
     assert restored_result["image_snapshot"][0]["image_id"] != image_id
+    if with_polygon:
+        restored_image = restored_result["image_snapshot"][0]
+        assert restored_definition["roi_polygons"] == [
+            {"image_id": restored_image["image_id"], "points": points}
+        ]
+        assert restored_image["roi_polygon"] == points
+        assert restored_result["roi_denominator_pixels"] == 25
+        assert restored_result["target_union_in_roi_pixels"] == 16
+        assert restored_result["roi_coverage_percent"] == 64
+        if mode == "projective":
+            assert restored_result["roi_coverage_physical_percent"] == 64
+            assert restored_result["target_union_in_roi_physical"] == 4
+        csv = client.get(
+            f"/api/v1/projects/{imported_project_id}/computed-mask-coverage-results.csv"
+        )
+        assert csv.status_code == 200, csv.text
+        assert "source_image_polygons" in csv.text
     assert {item["id"] for item in restored_result["mask_snapshot"]}.isdisjoint(mask_ids)
     assert restored_result["workflow_run_id"] not in (None, source_result["workflow_run_id"])
     assert restored_result["workflow_node_run_id"] not in (
@@ -97,6 +139,22 @@ def test_mask_coverage_round_trip_remaps_immutable_evidence(
     )
     assert validation.status_code == 200, validation.text
     assert validation.json()["current"] is True
+    if with_polygon:
+        graphs = client.get(f"/api/v1/projects/{imported_project_id}/workflow-graphs").json()
+        replay = client.post(
+            f"/api/v1/projects/{imported_project_id}/workflow-runs",
+            json={"graph_record_id": graphs[0]["id"]},
+        )
+        assert replay.status_code == 202, replay.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, replay.json()["job_id"]
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{replay.json()['id']}").json()
+        artifact = next(
+            item for item in detail["artifacts"] if item["data_type"] == "computed_metric_result"
+        )
+        assert artifact["payload_json"]["evidence_sha256"] == restored_result["evidence_sha256"]
+        assert artifact["payload_json"]["content_sha256"] == restored_result["content_sha256"]
 
 
 def test_mask_coverage_round_trip_preserves_invalid_calibration_snapshot(

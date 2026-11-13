@@ -7,7 +7,9 @@ import hashlib
 import io
 import json
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import UTC, datetime
+from math import fsum, isfinite
 from typing import Any
 from uuid import uuid4
 
@@ -29,16 +31,23 @@ from reefvision.schemas.computed_mask_coverage import (
     ComputedMaskCoverageResultPage,
     ComputedMaskCoverageResultResponse,
     ComputedMaskCoverageValidationResponse,
+    MaskCoverageCalibrationMethod,
     MaskCoverageClassArea,
     MaskCoverageGroupSummary,
     MaskCoverageImageSummary,
 )
 from reefvision.schemas.measurements import MeasurementCalibrationUpdate
+from reefvision.services.calibration_geometry import Homography, projected_rectangle_area
 from reefvision.services.scientific_data import content_hash
 from reefvision.storage.projects import resolve_managed_project_path
-from reefvision.storage.segmentation_metric_masks import png_to_runs, polygon_to_runs
+from reefvision.storage.segmentation_metric_masks import (
+    png_to_runs,
+    polygon_to_runs,
+    validate_source_polygon,
+)
 
 FORMULA_VERSION = "reefvision.mask-coverage.v1"
+EXTENDED_FORMULA_VERSION = "reefvision.mask-coverage.v2"
 SCHEMA_VERSION = "1.1.0"
 ALGORITHM = "reefvision.source-pixel-mask-union.v1"
 DEFINITION_KIND = "mask_coverage"
@@ -50,10 +59,10 @@ def _utc(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
-def _configuration(payload: ComputedMaskCoverageDefinitionCreate) -> dict[str, Any]:
+def mask_coverage_configuration(payload: ComputedMaskCoverageDefinitionCreate) -> dict[str, Any]:
     grouping = payload.grouping_level
     roi_label = str(payload.roi_label_class_id) if payload.roi_label_class_id else None
-    return {
+    config: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "grouping_level": grouping,
         "label_class_ids": [str(value) for value in payload.label_class_ids],
@@ -65,6 +74,56 @@ def _configuration(payload: ComputedMaskCoverageDefinitionCreate) -> dict[str, A
         ),
         "roi_contract": "verified_mask_class_union" if roi_label else "full_image",
     }
+    if payload.roi_polygons:
+        config["roi_contract"] = "source_image_polygons"
+        config["roi_polygons"] = [
+            polygon.model_dump(mode="json")
+            for polygon in sorted(payload.roi_polygons, key=lambda item: item.image_id)
+        ]
+    if payload.use_reference_plane:
+        config["use_reference_plane"] = True
+    return config
+
+
+def mask_coverage_formula_version(payload: ComputedMaskCoverageDefinitionCreate) -> str:
+    return (
+        EXTENDED_FORMULA_VERSION
+        if payload.roi_polygons or payload.use_reference_plane
+        else FORMULA_VERSION
+    )
+
+
+def mask_coverage_calibration(
+    raw: Any, width: int, height: int, *, use_reference_plane: bool
+) -> tuple[Any, str | None]:
+    if raw is None:
+        return None, "missing_calibration"
+    if not isinstance(raw, dict):
+        return raw, "invalid_calibration"
+    try:
+        calibration = MeasurementCalibrationUpdate.model_validate(raw)
+    except PydanticValidationError:
+        return raw, "invalid_calibration"
+    snapshot = calibration.model_dump(mode="json")
+    if calibration.unit not in UNITS or UNITS[calibration.unit][0] != "length":
+        return snapshot, "unsupported_calibration_unit"
+    matrix = calibration.perspective_homography
+    if use_reference_plane:
+        if matrix is None:
+            return snapshot, "missing_reference_plane_homography"
+        try:
+            projected_rectangle_area(matrix, 0, 0, width, height)
+        except ValidationError:
+            return snapshot, "invalid_reference_plane_projection"
+    elif matrix is not None:
+        return snapshot, "perspective_homography_requires_union_resampling"
+    elif (
+        not 0
+        < width * height * calibration.distance_per_pixel * calibration.distance_per_pixel
+        < float("inf")
+    ):
+        return raw, "invalid_calibration"
+    return snapshot, None
 
 
 def _definition_payload(row: ComputedMetricDefinition) -> dict[str, Any]:
@@ -82,6 +141,20 @@ def _area_in_square_metres(value: float, unit: str) -> float:
     if dimension != "length":
         raise ValueError("Physical area requires a supported length unit")
     return value * scale * scale
+
+
+def _projected_area_measure(matrix: Homography) -> Callable[[PixelRuns], float]:
+    def measure(runs: PixelRuns) -> float:
+        area = fsum(projected_rectangle_area(matrix, x0, y, x1, y + 1) for y, x0, x1 in runs)
+        if not isfinite(area):
+            raise ValidationError("Reference-plane union area is numerically invalid")
+        return area
+
+    return measure
+
+
+def _scalar_area_measure(scale: float) -> Callable[[PixelRuns], float]:
+    return lambda runs: run_area(runs) * scale * scale
 
 
 class ComputedMaskCoverageService:
@@ -112,14 +185,28 @@ class ComputedMaskCoverageService:
                 raise ValidationError(
                     "All target and ROI label classes must belong to this project"
                 )
-        configuration = _configuration(payload)
+        for polygon in payload.roi_polygons:
+            image = self.session.get(ImageAsset, str(polygon.image_id))
+            if image is None or image.project_id != project_id:
+                raise ValidationError("All ROI images must belong to this project")
+            try:
+                validate_source_polygon(
+                    [list(point) for point in polygon.points],
+                    width=image.width_px,
+                    height=image.height_px,
+                )
+            except ValueError as exc:
+                raise ValidationError(
+                    f"Invalid saved ROI polygon for image {image.id}: {exc}"
+                ) from exc
+        configuration = mask_coverage_configuration(payload)
         row = ComputedMetricDefinition(
             id=str(uuid4()),
             project_id=project_id,
             definition_kind=DEFINITION_KIND,
             name=payload.name,
             expression="union_area(verified_masks) / explicit_denominator",
-            formula_version=FORMULA_VERSION,
+            formula_version=mask_coverage_formula_version(payload),
             input_spec_json=[],
             configuration_json=configuration,
             output_unit="percent",
@@ -216,30 +303,12 @@ class ComputedMaskCoverageService:
         raise ValidationError(f"Verified mask geometry is unsupported: {mask.id}")
 
     @staticmethod
-    def _calibration(image: ImageAsset) -> tuple[Any | None, str | None]:
-        raw = dict(image.metadata_json or {}).get(CALIBRATION_KEY)
-        if raw is None:
-            return None, "missing_calibration"
-        if not isinstance(raw, dict):
-            return raw, "invalid_calibration"
-        try:
-            calibration = MeasurementCalibrationUpdate.model_validate(raw)
-        except PydanticValidationError:
-            return raw, "invalid_calibration"
-        snapshot = calibration.model_dump(mode="json")
-        if calibration.unit not in UNITS or UNITS[calibration.unit][0] != "length":
-            return snapshot, "unsupported_calibration_unit"
-        if calibration.perspective_homography is not None:
-            return snapshot, "perspective_homography_requires_union_resampling"
-        return snapshot, None
-
-    @staticmethod
     def _class_areas(
         masks: list[MaskAnnotation],
         runs_by_id: dict[str, PixelRuns],
         labels: dict[str, str],
         *,
-        scale: float | None = None,
+        measure_area: Callable[[PixelRuns], float] | None = None,
         physical_unit: str | None = None,
     ) -> list[MaskCoverageClassArea]:
         by_label: dict[str | None, list[MaskAnnotation]] = defaultdict(list)
@@ -247,18 +316,16 @@ class ComputedMaskCoverageService:
             by_label[mask.label_class_id].append(mask)
         output: list[MaskCoverageClassArea] = []
         for label_id, rows in sorted(by_label.items(), key=lambda item: str(item[0] or "")):
-            union_pixels = run_area(union_runs(*(runs_by_id[row.id] for row in rows)))
+            union = union_runs(*(runs_by_id[row.id] for row in rows))
             output.append(
                 MaskCoverageClassArea(
                     label_class_id=label_id,
                     label_name=labels.get(str(label_id), "Unclassified"),
                     mask_count=len(rows),
                     summed_mask_area_pixels=sum(run_area(runs_by_id[row.id]) for row in rows),
-                    union_area_pixels=union_pixels,
+                    union_area_pixels=run_area(union),
                     physical_unit=physical_unit,
-                    union_area_physical=(
-                        union_pixels * scale * scale if scale is not None else None
-                    ),
+                    union_area_physical=(measure_area(union) if measure_area is not None else None),
                 )
             )
         return output
@@ -363,6 +430,19 @@ class ComputedMaskCoverageService:
             if physical_ready
             else None
         )
+        clipped_physical = (
+            fsum(
+                float(item.target_union_in_roi_physical or 0)
+                if same_unit
+                else _area_in_square_metres(
+                    float(item.target_union_in_roi_physical or 0), str(item.physical_unit)
+                )
+                for item in images
+            )
+            if physical_ready
+            and all(item.target_union_in_roi_physical is not None for item in images)
+            else None
+        )
         return {
             "mask_count": mask_count,
             "density_object_count": density_object_count,
@@ -385,8 +465,12 @@ class ComputedMaskCoverageService:
             "object_density_per_square_unit": (
                 density_object_count / sampling_physical if sampling_physical else None
             ),
-            "calibration_method": (
-                "scalar_distance_per_pixel" if physical_unit is not None else None
+            "calibration_method": (images[0].calibration_method if physical_ready else None),
+            "target_union_in_roi_physical": clipped_physical,
+            "roi_coverage_physical_percent": (
+                min(100.0, clipped_physical / sampling_physical * 100)
+                if clipped_physical is not None and sampling_physical
+                else None
             ),
             "physical_unavailable_reason": physical_reason,
             **({"unit_key": unit_key} if unit_key is not None else {}),
@@ -404,6 +488,9 @@ class ComputedMaskCoverageService:
             raise ValidationError("Image group key is required for group-key aggregation")
         target_labels = set(config.get("label_class_ids", []))
         roi_label = config.get("roi_label_class_id")
+        roi_polygons = {item["image_id"]: item["points"] for item in config.get("roi_polygons", [])}
+        has_roi = bool(roi_label or roi_polygons)
+        use_reference_plane = bool(config.get("use_reference_plane"))
         selected_ids = [image.id for image in images]
         mask_rows = list(
             self.session.scalars(
@@ -455,41 +542,82 @@ class ComputedMaskCoverageService:
             target_union = union_runs(*(runs_by_id[row.id] for row in targets))
             target_union_area = run_area(target_union)
             summed = sum(run_area(runs_by_id[row.id]) for row in targets)
-            roi_runs = union_runs(*(runs_by_id[row.id] for row in rois))
-            roi_area = run_area(roi_runs) if roi_label else None
-            if roi_label and not roi_area:
+            roi_polygon = roi_polygons.get(image.id)
+            if roi_polygons and roi_polygon is None:
+                raise ValidationError(f"Selected image is missing a saved ROI: {image.id}")
+            if roi_polygon is not None:
+                try:
+                    roi_runs = polygon_to_runs(
+                        roi_polygon, width=image.width_px, height=image.height_px
+                    )
+                except ValueError as exc:
+                    raise ValidationError(f"Saved ROI cannot be rasterized: {image.id}") from exc
+            else:
+                roi_runs = union_runs(*(runs_by_id[row.id] for row in rois))
+            roi_area = run_area(roi_runs) if has_roi else None
+            if has_roi and not roi_area:
                 raise ValidationError(
                     f"Selected image is missing a nonempty verified ROI: {image.id}"
                 )
-            target_in_roi = run_area(intersect_runs(target_union, roi_runs)) if roi_label else None
+            clipped_runs = intersect_runs(target_union, roi_runs) if has_roi else ()
+            target_in_roi = run_area(clipped_runs) if has_roi else None
             density_object_count = (
                 sum(
                     1
                     for row in targets
                     if run_area(intersect_runs(runs_by_id[row.id], roi_runs)) > 0
                 )
-                if roi_label
+                if has_roi
                 else len(targets)
             )
-            calibration, unavailable = self._calibration(image)
+            calibration, unavailable = mask_coverage_calibration(
+                dict(image.metadata_json or {}).get(CALIBRATION_KEY),
+                image.width_px,
+                image.height_px,
+                use_reference_plane=use_reference_plane,
+            )
             physical_unit: str | None = None
-            scale: float | None = None
             union_physical: float | None = None
             sampling_physical: float | None = None
+            clipped_physical: float | None = None
+            method: MaskCoverageCalibrationMethod | None = None
+            measure_area: Callable[[PixelRuns], float] | None = None
             if calibration is not None and unavailable is None:
-                scale = float(calibration["distance_per_pixel"])
                 physical_unit = str(calibration["unit"])
-                union_physical = target_union_area * scale * scale
-                denominator_pixels = int(roi_area or image.width_px * image.height_px)
-                sampling_physical = denominator_pixels * scale * scale
+                if use_reference_plane:
+                    matrix = calibration["perspective_homography"]
+                    measure_area = _projected_area_measure(matrix)
+                    method = "projective_reference_plane"
+                else:
+                    scale = float(calibration["distance_per_pixel"])
+                    measure_area = _scalar_area_measure(scale)
+                    method = "scalar_distance_per_pixel"
+                try:
+                    union_physical = measure_area(target_union)
+                    if has_roi:
+                        sampling_physical = measure_area(roi_runs)
+                    elif use_reference_plane:
+                        sampling_physical = projected_rectangle_area(
+                            matrix, 0, 0, image.width_px, image.height_px
+                        )
+                    else:
+                        sampling_physical = image.width_px * image.height_px * scale * scale
+                    if use_reference_plane and has_roi:
+                        clipped_physical = measure_area(clipped_runs)
+                    class_areas = self._class_areas(
+                        targets,
+                        runs_by_id,
+                        labels,
+                        measure_area=measure_area,
+                        physical_unit=physical_unit,
+                    )
+                except (OverflowError, ValidationError):
+                    unavailable = "invalid_reference_plane_projection"
+                    union_physical = sampling_physical = clipped_physical = None
+                    method = physical_unit = measure_area = None
+            if measure_area is None:
+                class_areas = self._class_areas(targets, runs_by_id, labels)
             unit_key = image.id if grouping == "image" else str(image.group_key)
-            class_areas = self._class_areas(
-                targets,
-                runs_by_id,
-                labels,
-                scale=scale,
-                physical_unit=physical_unit,
-            )
             image_summaries.append(
                 MaskCoverageImageSummary(
                     image_id=image.id,
@@ -519,8 +647,12 @@ class ComputedMaskCoverageService:
                     object_density_per_square_unit=(
                         density_object_count / sampling_physical if sampling_physical else None
                     ),
-                    calibration_method=(
-                        "scalar_distance_per_pixel" if physical_unit is not None else None
+                    calibration_method=method,
+                    target_union_in_roi_physical=clipped_physical,
+                    roi_coverage_physical_percent=(
+                        min(100.0, clipped_physical / sampling_physical * 100)
+                        if clipped_physical is not None and sampling_physical
+                        else None
                     ),
                     physical_unavailable_reason=unavailable,
                 )
@@ -537,6 +669,7 @@ class ComputedMaskCoverageService:
                     "updated_at": _utc(image.updated_at).isoformat(),
                     "calibration": calibration,
                     "physical_unavailable_reason": unavailable,
+                    **({"roi_polygon": roi_polygon} if roi_polygon is not None else {}),
                 }
             )
 
@@ -645,9 +778,17 @@ class ComputedMaskCoverageService:
                 "algorithm": ALGORITHM,
                 "coordinate_frame": "source_image_pixels",
                 "density_numerator": "verified_target_masks_intersecting_sampling_region",
-                "density_denominator": "verified_roi_area_or_full_image_area",
+                "density_denominator": (
+                    "saved_source_image_roi_area"
+                    if preview.roi_contract == "source_image_polygons"
+                    else "verified_roi_area_or_full_image_area"
+                ),
             },
         }
+        if definition.formula_version == FORMULA_VERSION:
+            for summary in [payload, *payload["images"], *payload["groups"]]:
+                summary.pop("target_union_in_roi_physical", None)
+                summary.pop("roi_coverage_physical_percent", None)
         row = ComputedMetricResult(
             id=str(uuid4()),
             project_id=project_id,
@@ -731,6 +872,8 @@ class ComputedMaskCoverageService:
                 "sampling_area_physical",
                 "object_density_per_square_unit",
                 "calibration_method",
+                "target_union_in_roi_physical",
+                "roi_coverage_physical_percent",
                 "physical_unavailable_reason",
                 "images",
                 "groups",
@@ -768,10 +911,15 @@ class ComputedMaskCoverageService:
             "roi_denominator_pixels",
             "target_union_in_roi_pixels",
             "roi_coverage_percent",
+            "roi_contract",
+            "roi_polygons_json",
             "area_by_class_json",
             "physical_unit",
             "union_area_physical",
             "sampling_area_physical",
+            "target_union_in_roi_physical",
+            "roi_coverage_physical_percent",
+            "calibration_method",
             "object_density_per_square_unit",
             "physical_unavailable_reason",
             "algorithm",
@@ -827,6 +975,15 @@ class ComputedMaskCoverageService:
                         "roi_denominator_pixels": summary.roi_denominator_pixels,
                         "target_union_in_roi_pixels": summary.target_union_in_roi_pixels,
                         "roi_coverage_percent": summary.roi_coverage_percent,
+                        "roi_contract": item.roi_contract,
+                        "roi_polygons_json": json.dumps(
+                            {
+                                str(snapshot["image_id"]): snapshot["roi_polygon"]
+                                for snapshot in item.image_snapshot
+                                if snapshot["image_id"] in image_ids and "roi_polygon" in snapshot
+                            },
+                            sort_keys=True,
+                        ),
                         "area_by_class_json": json.dumps(
                             [row.model_dump(mode="json") for row in summary.area_by_class],
                             sort_keys=True,
@@ -834,6 +991,9 @@ class ComputedMaskCoverageService:
                         "physical_unit": summary.physical_unit or "",
                         "union_area_physical": summary.union_area_physical,
                         "sampling_area_physical": summary.sampling_area_physical,
+                        "target_union_in_roi_physical": summary.target_union_in_roi_physical,
+                        "roi_coverage_physical_percent": summary.roi_coverage_physical_percent,
+                        "calibration_method": summary.calibration_method,
                         "object_density_per_square_unit": summary.object_density_per_square_unit,
                         "physical_unavailable_reason": summary.physical_unavailable_reason or "",
                     }

@@ -141,6 +141,48 @@ function renderPanel() {
 afterEach(() => vi.restoreAllMocks());
 
 describe("MaskCoveragePanel", () => {
+  it("saves per-image polygon geometry in the coverage definition", async () => {
+    const polygon = {
+      image_id: imageId,
+      points: [
+        [0, 0],
+        [5, 0],
+        [0, 5],
+      ],
+    };
+    const submitted = vi.fn();
+    vi.stubGlobal("fetch", async (_url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        submitted(JSON.parse(String(init.body)));
+        return json({
+          ...definition,
+          roi_label_class_id: null,
+          roi_contract: "source_image_polygons",
+          roi_polygons: [polygon],
+        });
+      }
+      return json({ items: [], total: 0 });
+    });
+    renderPanel();
+    fireEvent.change(screen.getByLabelText("Coverage name"), {
+      target: { value: "Transect polygon" },
+    });
+    fireEvent.change(screen.getByLabelText("Saved ROI polygons (JSON)"), {
+      target: { value: JSON.stringify([polygon]) },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save coverage definition" }),
+    );
+    await waitFor(() =>
+      expect(submitted).toHaveBeenCalledWith({
+        name: "Transect polygon",
+        grouping_level: "image",
+        label_class_ids: [],
+        roi_label_class_id: null,
+        roi_polygons: [polygon],
+      }),
+    );
+  });
   it("creates, previews, persists, validates, and exports mask coverage", async () => {
     let savedDefinition = false;
     let savedResult = false;

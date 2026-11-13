@@ -17,7 +17,6 @@ from reefvision.domain.computed_metrics import (
     evaluate_expression,
 )
 from reefvision.domain.errors import ValidationError
-from reefvision.domain.scientific_units import UNITS
 from reefvision.schemas.annotation_comparison import (
     AnnotationComparisonPreviewRequest,
     AnnotationComparisonPreviewResponse,
@@ -29,16 +28,20 @@ from reefvision.schemas.computed_mask_coverage import (
 )
 from reefvision.schemas.computed_metrics import ComputedMetricDefinitionCreate
 from reefvision.schemas.geographic_pairwise import GeographicPairwiseMeasurement
-from reefvision.schemas.measurements import MeasurementCalibrationUpdate
 from reefvision.schemas.scientific_data import ScientificRecordResponse
+from reefvision.services.computed_mask_coverage import (
+    mask_coverage_calibration,
+    mask_coverage_configuration,
+    mask_coverage_formula_version,
+)
 from reefvision.services.computed_metrics import ComputedMetricService
 from reefvision.services.scientific_data import content_hash
+from reefvision.storage.segmentation_metric_masks import validate_source_polygon
 
 COMPUTED_SECTIONS = {"computed_metric_definitions", "computed_metric_results"}
 AGGREGATE_KIND = "annotation_aggregate"
 AGGREGATE_FORMULA_VERSION = "reefvision.annotation-aggregate.v1"
 MASK_COVERAGE_KIND = "mask_coverage"
-MASK_COVERAGE_FORMULA_VERSION = "reefvision.mask-coverage.v1"
 MASK_COVERAGE_ALGORITHM = "reefvision.source-pixel-mask-union.v1"
 ANNOTATION_COMPARISON_KIND = "annotation_comparison"
 ANNOTATION_COMPARISON_VERSION = "reefvision.annotation-comparison.v1"
@@ -343,6 +346,7 @@ def _validate_mask_coverage_definition(
     project_id: str,
     row: dict[str, Any],
     labels: dict[str, dict[str, Any]],
+    images: dict[str, dict[str, Any]],
 ) -> None:
     config = row.get("configuration_json")
     if not isinstance(config, dict):
@@ -353,26 +357,21 @@ def _validate_mask_coverage_definition(
             "grouping_level": config["grouping_level"],
             "label_class_ids": config.get("label_class_ids", []),
             "roi_label_class_id": config.get("roi_label_class_id"),
+            "roi_polygons": config.get("roi_polygons", []),
+            "use_reference_plane": config.get("use_reference_plane", False),
         }
     )
-    expected_config = {
-        "schema_version": "1.1.0",
-        "grouping_level": payload.grouping_level,
-        "label_class_ids": [str(value) for value in payload.label_class_ids],
-        "roi_label_class_id": (
-            str(payload.roi_label_class_id) if payload.roi_label_class_id else None
-        ),
-        "operation": "verified_mask_union_coverage",
-        "required_review_state": "reviewed",
-        "independence_contract": (
-            "one_unit_per_image"
-            if payload.grouping_level == "image"
-            else "one_unit_per_image_group_key"
-        ),
-        "roi_contract": (
-            "verified_mask_class_union" if payload.roi_label_class_id else "full_image"
-        ),
-    }
+    expected_config = mask_coverage_configuration(payload)
+    formula_version = mask_coverage_formula_version(payload)
+    for polygon in payload.roi_polygons:
+        image = images.get(str(polygon.image_id))
+        if image is None or image.get("project_id") != project_id:
+            raise ValidationError("Mask coverage ROI refers to a missing project image")
+        validate_source_polygon(
+            [list(point) for point in polygon.points],
+            width=image["width_px"],
+            height=image["height_px"],
+        )
     referenced_labels = [str(value) for value in payload.label_class_ids]
     if payload.roi_label_class_id is not None:
         referenced_labels.append(str(payload.roi_label_class_id))
@@ -384,7 +383,7 @@ def _validate_mask_coverage_definition(
     if (
         row.get("project_id") != project_id
         or row.get("definition_kind") != MASK_COVERAGE_KIND
-        or row.get("formula_version") != MASK_COVERAGE_FORMULA_VERSION
+        or row.get("formula_version") != formula_version
         or row.get("expression") != "union_area(verified_masks) / explicit_denominator"
         or row.get("input_spec_json") != []
         or row.get("output_unit") != "percent"
@@ -473,31 +472,29 @@ def _validate_mask_coverage_result(
     ):
         raise ValidationError("Mask coverage evidence inventory is duplicated or unordered")
     config = definition["configuration_json"]
+    if payload.get("roi_contract") != config["roi_contract"]:
+        raise ValidationError("Mask coverage ROI contract mismatch")
+    roi_polygons = {item["image_id"]: item["points"] for item in config.get("roi_polygons", [])}
     for snapshot in image_snapshot:
         image = images.get(snapshot["image_id"])
         if image is None or image.get("project_id") != project_id:
             raise ValidationError("Mask coverage image snapshot refers to a missing image")
-        raw_calibration = dict(image.get("metadata_json") or {}).get("measurement_calibration")
-        unavailable = None
-        calibration = raw_calibration
-        if raw_calibration is None:
-            unavailable = "missing_calibration"
-        elif not isinstance(raw_calibration, dict):
-            unavailable = "invalid_calibration"
-        else:
-            try:
-                parsed_calibration = MeasurementCalibrationUpdate.model_validate(raw_calibration)
-            except SchemaError:
-                unavailable = "invalid_calibration"
-            else:
-                calibration = parsed_calibration.model_dump(mode="json")
-                if (
-                    parsed_calibration.unit not in UNITS
-                    or UNITS[parsed_calibration.unit][0] != "length"
-                ):
-                    unavailable = "unsupported_calibration_unit"
-                elif parsed_calibration.perspective_homography is not None:
-                    unavailable = "perspective_homography_requires_union_resampling"
+        polygon = roi_polygons.get(snapshot["image_id"])
+        if roi_polygons and polygon is None:
+            raise ValidationError("Mask coverage evidence image has no saved ROI")
+        calibration, unavailable = mask_coverage_calibration(
+            dict(image.get("metadata_json") or {}).get("measurement_calibration"),
+            image["width_px"],
+            image["height_px"],
+            use_reference_plane=bool(config.get("use_reference_plane")),
+        )
+        # Import recomputes run-level numerical validity after restoring masks.
+        if (
+            unavailable is None
+            and config.get("use_reference_plane")
+            and snapshot.get("physical_unavailable_reason") == "invalid_reference_plane_projection"
+        ):
+            unavailable = "invalid_reference_plane_projection"
         expected = {
             "image_id": image["id"],
             "sha256": image["sha256"],
@@ -509,6 +506,7 @@ def _validate_mask_coverage_result(
             "updated_at": _utc(image["updated_at"]).isoformat(),
             "calibration": calibration,
             "physical_unavailable_reason": unavailable,
+            **({"roi_polygon": polygon} if polygon is not None else {}),
         }
         if snapshot != expected or image.get("annotation_status") != "reviewed":
             raise ValidationError("Mask coverage image snapshot mismatch")
@@ -573,7 +571,11 @@ def _validate_mask_coverage_result(
         "algorithm": MASK_COVERAGE_ALGORITHM,
         "coordinate_frame": "source_image_pixels",
         "density_numerator": "verified_target_masks_intersecting_sampling_region",
-        "density_denominator": "verified_roi_area_or_full_image_area",
+        "density_denominator": (
+            "saved_source_image_roi_area"
+            if roi_polygons
+            else "verified_roi_area_or_full_image_area"
+        ),
     }
     if provenance != expected_provenance:
         raise ValidationError("Mask coverage provenance mismatch")
@@ -869,6 +871,7 @@ def validate_computed_exchange_records(
     workflow_runs = {row["id"]: row for row in sections.get("workflow_runs", [])}
     workflow_nodes = {row["id"]: row for row in sections.get("workflow_node_runs", [])}
     labels = {row["id"]: row for row in sections.get("label_classes", [])}
+    images = {row["id"]: row for row in sections.get("images", [])}
     try:
         compiled_by_id: dict[str, Any] = {}
         for identifier, row in definitions.items():
@@ -885,7 +888,7 @@ def validate_computed_exchange_records(
                 compiled_by_id[identifier] = None
                 continue
             if row.get("definition_kind") == MASK_COVERAGE_KIND:
-                _validate_mask_coverage_definition(project_id, row, labels)
+                _validate_mask_coverage_definition(project_id, row, labels, images)
                 compiled_by_id[identifier] = None
                 continue
             if row.get("project_id") != project_id:
@@ -1139,6 +1142,14 @@ def remap_computed_sections(
             ]
             if config.get("roi_label_class_id") is not None:
                 config["roi_label_class_id"] = id_map[config["roi_label_class_id"]]
+            if config.get("roi_polygons"):
+                config["roi_polygons"] = sorted(
+                    [
+                        {**item, "image_id": id_map[item["image_id"]]}
+                        for item in config["roi_polygons"]
+                    ],
+                    key=lambda item: item["image_id"],
+                )
             row["configuration_json"] = config
             row["definition_sha256"] = content_hash(_aggregate_definition_payload(row))
         elif row.get("definition_kind") == GEOGRAPHIC_PAIRWISE_KIND:
