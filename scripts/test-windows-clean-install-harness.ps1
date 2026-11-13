@@ -113,16 +113,20 @@ New-Item -ItemType Directory -Path (Join-Path $retentionFixture 'images'),(Join-
 try {
     Set-Content -LiteralPath (Join-Path $retentionFixture 'reefvision.db') -Value 'synthetic-sqlite-fixture' -Encoding UTF8
     Set-Content -LiteralPath (Join-Path $retentionFixture 'images\coral.png') -Value 'synthetic-image-fixture' -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $retentionFixture 'observations.json') -Value '{"polyp_count":2}' -Encoding UTF8
     Set-Content -LiteralPath (Join-Path $retentionFixture 'logs\backend.log') -Value 'before' -Encoding UTF8
     $retentionBefore = Get-ReefVisionResearchFileSnapshot -DataRoot $retentionFixture
-    Assert-True ($retentionBefore.Count -eq 2) 'Retention snapshot did not capture SQLite and imported image.'
+    Assert-True ($retentionBefore.Count -eq 3) 'Retention snapshot did not capture SQLite, imported image and biological metadata.'
     Set-Content -LiteralPath (Join-Path $retentionFixture 'logs\backend.log') -Value 'after' -Encoding UTF8
     $retentionAfter = Get-ReefVisionResearchFileSnapshot -DataRoot $retentionFixture
-    Assert-True ((Assert-ReefVisionResearchFileSnapshotRetained -Before $retentionBefore -After $retentionAfter) -eq 2) 'Volatile log changes should not fail research retention.'
+    Assert-True ((Assert-ReefVisionResearchFileSnapshotRetained -Before $retentionBefore -After $retentionAfter) -eq 3) 'Volatile log changes should not fail research retention.'
     Set-Content -LiteralPath (Join-Path $retentionFixture 'images\coral.png') -Value 'altered-image-fixture' -Encoding UTF8
     $retentionAfter = Get-ReefVisionResearchFileSnapshot -DataRoot $retentionFixture
     Assert-ThrowsContaining { Assert-ReefVisionResearchFileSnapshotRetained -Before $retentionBefore -After $retentionAfter } 'modified retained research file'
     Remove-Item -LiteralPath (Join-Path $retentionFixture 'images\coral.png') -Force
+    $retentionAfter = Get-ReefVisionResearchFileSnapshot -DataRoot $retentionFixture
+    Assert-ThrowsContaining { Assert-ReefVisionResearchFileSnapshotRetained -Before $retentionBefore -After $retentionAfter } 'removed retained research file'
+    Remove-Item -LiteralPath (Join-Path $retentionFixture 'observations.json') -Force
     Assert-ThrowsContaining { Get-ReefVisionResearchFileSnapshot -DataRoot $retentionFixture } 'at least one persisted research file'
     Set-Content -LiteralPath (Join-Path $retentionFixture 'images\coral.png') -Value 'synthetic-image-fixture' -Encoding UTF8
     Remove-Item -LiteralPath (Join-Path $retentionFixture 'reefvision.db') -Force
