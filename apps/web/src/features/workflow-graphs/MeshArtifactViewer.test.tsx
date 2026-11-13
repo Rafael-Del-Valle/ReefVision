@@ -1170,4 +1170,128 @@ describe("MeshArtifactViewer", () => {
       }),
     ).toBeNull();
   });
+
+  it("inspects saved route turns without promoting geometric angles to biological measurements", () => {
+    const artifact = {
+      ...validArtifact,
+      surface_edge_paths: [
+        {
+          status: "connected",
+          path_vertex_indices: [10, 12, 16, 19],
+          path_vertices_in_source_frame_m: [
+            [0, 0, 0],
+            [1, 0, 0],
+            [1, 1, 0],
+            [1, 1, 0],
+          ],
+          path_turn_angles_deg: [null, 90, null, null],
+          maximum_turn_angle_deg: 90,
+          path_qc_warnings: ["zero_length_edge_on_path"],
+        },
+      ],
+    };
+    const saved = JSON.stringify(artifact);
+    const { rerender } = render(<MeshArtifactViewer artifact={artifact} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect provisional route 1" }),
+    );
+    expect(screen.getByText(/Route waypoint 1 of 4/)).toHaveTextContent(
+      "Saved geometric turning angle: undefined (endpoint or zero-length adjacent edge)",
+    );
+    fireEvent.change(screen.getByRole("slider", { name: "Route vertex" }), {
+      target: { value: "1" },
+    });
+    expect(screen.getByText(/Route waypoint 2 of 4/)).toHaveTextContent(
+      "Saved geometric turning angle: 90.0000 deg",
+    );
+    expect(screen.getByText(/Route waypoint 2 of 4/)).toHaveTextContent(
+      "not a verified anatomical angle",
+    );
+    fireEvent.change(screen.getByRole("slider", { name: "Route vertex" }), {
+      target: { value: "2" },
+    });
+    expect(screen.getByText(/Route waypoint 3 of 4/)).toHaveTextContent(
+      "Saved geometric turning angle: undefined",
+    );
+    expect(JSON.stringify(artifact)).toBe(saved);
+    rerender(<MeshArtifactViewer artifact={validArtifact} />);
+    expect(screen.queryByText(/Saved geometric turning angle:/)).toBeNull();
+  });
+
+  it("keeps malformed or contradictory saved turning angles unknown", () => {
+    const malformed = [
+      { path_turn_angles_deg: [null, 90, null], maximum_turn_angle_deg: 0 },
+      { path_turn_angles_deg: [0, 90, null], maximum_turn_angle_deg: 90 },
+      { path_turn_angles_deg: [null, 181, null], maximum_turn_angle_deg: 181 },
+      {
+        path_turn_angles_deg: [null, Number.POSITIVE_INFINITY, null],
+        maximum_turn_angle_deg: Number.POSITIVE_INFINITY,
+      },
+      { path_turn_angles_deg: [null, 90], maximum_turn_angle_deg: 90 },
+      { path_turn_angles_deg: [null, 90, null] },
+      { path_turn_angles_deg: [null, null, null], maximum_turn_angle_deg: 0 },
+    ];
+    for (const savedTurns of malformed) {
+      const artifact = {
+        ...validArtifact,
+        surface_edge_paths: [
+          {
+            status: "connected",
+            path_vertex_indices: [0, 1, 2],
+            path_vertices_in_source_frame_m: [
+              [0, 0, 0],
+              [1, 0, 0],
+              [1, 1, 0],
+            ],
+            ...savedTurns,
+          },
+        ],
+      };
+      const before = JSON.stringify(artifact);
+      const { unmount } = render(<MeshArtifactViewer artifact={artifact} />);
+      fireEvent.click(
+        screen.getByRole("button", { name: "Inspect provisional route 1" }),
+      );
+      fireEvent.change(screen.getByRole("slider", { name: "Route vertex" }), {
+        target: { value: "1" },
+      });
+      expect(screen.getByText(/Route waypoint 2 of 3/)).toHaveTextContent(
+        "Saved geometric turning angle: unknown (missing or inconsistent saved angle evidence)",
+      );
+      expect(JSON.stringify(artifact)).toBe(before);
+      unmount();
+    }
+  });
+
+  it("retains tiny nonzero saved turns when their maximum is consistent", () => {
+    const tinyAngle = 5.72957795e-8;
+    const artifact = {
+      ...validArtifact,
+      surface_edge_paths: [
+        {
+          status: "connected",
+          path_vertex_indices: [0, 1, 2],
+          path_vertices_in_source_frame_m: [
+            [0, 0, 0],
+            [1, 0, 0],
+            [2, 1e-9, 0],
+          ],
+          path_turn_angles_deg: [null, tinyAngle, null],
+          maximum_turn_angle_deg: tinyAngle,
+        },
+      ],
+    };
+    const before = JSON.stringify(artifact);
+    render(<MeshArtifactViewer artifact={artifact} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect provisional route 1" }),
+    );
+    fireEvent.change(screen.getByRole("slider", { name: "Route vertex" }), {
+      target: { value: "1" },
+    });
+    expect(screen.getByText(/Route waypoint 2 of 3/)).toHaveTextContent(
+      "Saved geometric turning angle: 5.72958e-8 deg",
+    );
+    expect(JSON.stringify(artifact)).toBe(before);
+  });
 });
