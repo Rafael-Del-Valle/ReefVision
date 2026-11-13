@@ -162,6 +162,111 @@ describe("MeshArtifactViewer", () => {
     expect(screen.queryByText(/Saved geometric route length:/)).toBeNull();
   });
 
+  it("inspects saved cumulative mesh waypoints without treating them as anatomical landmarks", () => {
+    const artifact = {
+      ...validArtifact,
+      surface_edge_paths: [
+        {
+          status: "connected",
+          path_vertex_indices: [10, 12, 16],
+          path_vertices_in_source_frame_m: [
+            [0, 0, 0],
+            [1, 0, 0],
+            [1, 1, 0],
+          ],
+          length_m: 2,
+          length_scale_interval_m: [1.8, 2.2],
+          path_cumulative_lengths_m: [0, 1, 2],
+          path_cumulative_length_scale_intervals_m: [
+            [0, 0],
+            [0.9, 1.1],
+            [1.8, 2.2],
+          ],
+          path_qc_warnings: [],
+        },
+      ],
+    };
+    const original = JSON.stringify(artifact);
+    const { container, rerender } = render(
+      <MeshArtifactViewer artifact={artifact} />,
+    );
+    expect(
+      screen.queryByTestId("mesh-route-waypoint-marker"),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect provisional route 1" }),
+    );
+    expect(screen.getByText(/Route waypoint 1 of 3/)).toHaveTextContent(
+      "source vertex 10",
+    );
+    expect(screen.getByText(/Route waypoint 1 of 3/)).toHaveTextContent(
+      "Saved cumulative mesh-edge distance: 0.00000 m",
+    );
+    const marker = container.querySelector(
+      '[data-testid="mesh-route-waypoint-marker"]',
+    );
+    expect(marker).not.toBeNull();
+    const firstPosition = marker?.getAttribute("cx");
+    fireEvent.change(screen.getByRole("slider", { name: "Route vertex" }), {
+      target: { value: "1" },
+    });
+    expect(screen.getByText(/Route waypoint 2 of 3/)).toHaveTextContent(
+      "source vertex 12",
+    );
+    expect(screen.getByText(/Route waypoint 2 of 3/)).toHaveTextContent(
+      "Saved cumulative mesh-edge distance: 1.00000 m",
+    );
+    expect(screen.getByText(/Route waypoint 2 of 3/)).toHaveTextContent(
+      "Scale-only cumulative interval: [0.900000, 1.10000] m",
+    );
+    expect(screen.getByText(/Route waypoint 2 of 3/)).toHaveTextContent(
+      "not a verified coral anatomical landmark",
+    );
+    expect(marker?.getAttribute("cx")).not.toBe(firstPosition);
+    expect(JSON.stringify(artifact)).toBe(original);
+    rerender(<MeshArtifactViewer artifact={validArtifact} />);
+    expect(screen.queryByTestId("mesh-route-waypoint-marker")).toBeNull();
+    expect(screen.queryByRole("slider", { name: "Route vertex" })).toBeNull();
+  });
+
+  it("keeps invalid or legacy cumulative route measurements unknown", () => {
+    const artifact = {
+      ...validArtifact,
+      surface_edge_paths: [
+        {
+          status: "connected",
+          path_vertex_indices: [0, 1, 2],
+          path_vertices_in_source_frame_m: [
+            [0, 0, 0],
+            [1, 0, 0],
+            [1, 1, 0],
+          ],
+          length_m: 2,
+          path_cumulative_lengths_m: [0, 3, 2],
+          path_cumulative_length_scale_intervals_m: [
+            [0, 0],
+            [2.9, 3.1],
+            [1.8, 2.2],
+          ],
+          path_qc_warnings: [],
+        },
+      ],
+    };
+    render(<MeshArtifactViewer artifact={artifact} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect provisional route 1" }),
+    );
+    fireEvent.change(screen.getByRole("slider", { name: "Route vertex" }), {
+      target: { value: "1" },
+    });
+    expect(screen.getByText(/Route waypoint 2 of 3/)).toHaveTextContent(
+      "Saved cumulative mesh-edge distance: unknown",
+    );
+    expect(screen.getByText(/Route waypoint 2 of 3/)).toHaveTextContent(
+      "Scale-only cumulative interval: unknown",
+    );
+  });
+
   it("fails closed on invalid saved path measurements but retains renderable geometry", () => {
     const artifact = {
       ...validArtifact,
