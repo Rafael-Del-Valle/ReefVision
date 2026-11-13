@@ -59,11 +59,7 @@ function checkSavedRoutePolylineGeometry(
   edges: unknown,
   cumulative: unknown,
 ): "consistent" | "inconsistent" | "unverifiable" {
-  if (
-    typeof nominal !== "number" ||
-    !Number.isFinite(nominal) ||
-    nominal < 0
-  ) {
+  if (typeof nominal !== "number" || !Number.isFinite(nominal) || nominal < 0) {
     return "unverifiable";
   }
   const hasEdges = edges !== undefined && edges !== null;
@@ -72,8 +68,7 @@ function checkSavedRoutePolylineGeometry(
     (hasEdges &&
       (!Array.isArray(edges) || edges.length !== coordinates.length - 1)) ||
     (hasCumulative &&
-      (!Array.isArray(cumulative) ||
-        cumulative.length !== coordinates.length))
+      (!Array.isArray(cumulative) || cumulative.length !== coordinates.length))
   ) {
     return "inconsistent";
   }
