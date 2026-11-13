@@ -7,8 +7,9 @@ from typing import cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
-from reefvision.db.models import Job, WorkflowGraphRecord
+from reefvision.db.models import Job, WorkflowGraphRecord, WorkflowNodeRun
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.workflow_execution import WorkflowRunCreateRequest
@@ -371,3 +372,75 @@ def test_completed_verified_pose_workflow_refuses_stale_queued_job(
     assert after.json()["run"] == frozen["run"]
     assert after.json()["nodes"] == frozen["nodes"]
     assert after.json()["artifacts"] == frozen["artifacts"]
+
+
+def test_queued_verified_pose_workflow_rejects_changed_node_identity_before_execution(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # This uses a real API-frozen scientist-verified pose dataset. Altering the
+    # queued node identity must fail before any dataset adapter or training
+    # step runs, rather than only failing at provenance closeout.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    project_id = str(project["id"])
+    graph = {
+        "graph_id": "track-e-queued-pose-node-preflight",
+        "name": "Queued verified pose node lineage preflight",
+        "nodes": [
+            {
+                "node_id": "frozen-pose",
+                "node_type": "pose_training_dataset",
+                "parameters": {
+                    "dataset_id": str(dataset["id"]),
+                    "manifest_sha256": dataset["manifest_sha256"],
+                },
+            }
+        ],
+        "edges": [],
+    }
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+
+    app = cast(FastAPI, client.app)
+    run_id = str(queued.json()["id"])
+    job_id = str(queued.json()["job_id"])
+    with app.state.session_factory() as session:
+        node = session.scalar(
+            select(WorkflowNodeRun).where(WorkflowNodeRun.workflow_run_id == run_id)
+        )
+        assert node is not None
+        assert node.node_id == "frozen-pose"
+        node.node_id = "not-a-node-in-the-saved-graph"
+        session.commit()
+
+    assert process_workflow_run_job(app.state.settings, app.state.session_factory, job_id) is False
+    with app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        node = session.scalar(
+            select(WorkflowNodeRun).where(WorkflowNodeRun.workflow_run_id == run_id)
+        )
+        assert job is not None and node is not None
+        assert job.status == "failed"
+        assert job.error_message == (
+            "Queued workflow node lineage failed: "
+            "Workflow run node lineage does not match saved graph"
+        )
+        assert job.completed_at is not None
+        assert node.status == "pending"
+        assert node.output_artifact_ids_json == []
+        # Restore only the corrupted identity to inspect the durable failure.
+        node.node_id = "frozen-pose"
+        session.commit()
+
+    detail = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert detail.json()["artifacts"] == []
