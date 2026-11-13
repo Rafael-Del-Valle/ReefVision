@@ -61,6 +61,38 @@ def test_straight_route_turn_is_zero_not_missing() -> None:
     assert paths[0]["total_absolute_geometric_turn_deg"] == pytest.approx(0.0)
 
 
+def test_total_turn_reports_multiple_bends_not_just_largest_bend() -> None:
+    # Three triangles touch at successive vertices, forcing a route with
+    # distinct 90-degree bends while keeping each triangle nondegenerate.
+    paths = mesh_edge_paths(
+        points=[
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, 1.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 0.0, 1.0),
+            (1.0, 1.0, 0.0),
+            (1.0, 1.0, 1.0),
+            (2.0, 1.0, 0.0),
+        ],
+        faces=[[0, 1, 2], [2, 3, 4], [4, 5, 6]],
+        pairs=[[0, 6]],
+        scale=0.02,
+        scale_uncertainty=0.1,
+    )
+    assert paths is not None
+    route = paths[0]
+    assert route["path_vertex_indices"] == [0, 2, 4, 6]
+    assert route["path_turn_angles_deg"] == [
+        None,
+        pytest.approx(90.0),
+        pytest.approx(90.0),
+        None,
+    ]
+    assert route["maximum_turn_angle_deg"] == pytest.approx(90.0)
+    assert route["total_absolute_geometric_turn_deg"] == pytest.approx(180.0)
+    assert route["length_m"] == pytest.approx(0.06)
+
+
 @pytest.mark.parametrize(
     ("lateral", "vertical"),
     [(1e-9, 0.0), (-1e-9, 0.0), (0.0, 1e-9)],
