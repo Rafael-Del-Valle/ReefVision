@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
+from reefvision.domain.errors import ConflictError
 from reefvision.db.models import (
     Job,
     WorkflowArtifact,
@@ -22,6 +23,7 @@ from reefvision.services.workflow_graphs import WorkflowGraphService
 from reefvision.services.workflow_provenance import (
     build_workflow_run_provenance,
     verify_succeeded_node_artifacts,
+    verify_workflow_run_node_graph_lineage,
     verify_workflow_artifact,
 )
 from reefvision.services.workflow_review import WorkflowReviewRequired
@@ -325,6 +327,27 @@ def process_workflow_run_job(
             run.completed_at = job.completed_at
             session.commit()
             return False
+        # A persisted execution plan must still own exactly the planned
+        # node identities, parameters, and topological order before any node
+        # (including costly offline training) is allowed to execute.
+        # Run-detail validation alone is too late for a corrupted queued job.
+        saved_nodes = list(
+            session.scalars(
+                select(WorkflowNodeRun).where(WorkflowNodeRun.workflow_run_id == run.id)
+            )
+        )
+        try:
+            verify_workflow_run_node_graph_lineage(graph_record, saved_nodes)
+        except ConflictError as exc:
+            job.status = "failed"
+            job.error_message = f"Queued workflow node lineage failed: {exc}"
+            job.completed_at = _now()
+            run.status = "failed"
+            run.error_message = job.error_message
+            run.completed_at = job.completed_at
+            session.commit()
+            return False
+
         now = _now()
         job.status = "running"
         job.started_at = job.started_at or now
