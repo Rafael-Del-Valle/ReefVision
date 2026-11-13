@@ -128,7 +128,8 @@ function parsePathInspections(value: unknown): MeshRouteInspection[] {
         Math.max(1e-12, lengthM * 1e-8)
         ? (rawCumulative as number[])
         : null;
-    const rawCumulativeIntervals = route.path_cumulative_length_scale_intervals_m;
+    const rawCumulativeIntervals =
+      route.path_cumulative_length_scale_intervals_m;
     const cumulativeScaleIntervalsM: [number, number][] | null =
       cumulativeLengthsM !== null &&
       Array.isArray(rawCumulativeIntervals) &&
@@ -139,12 +140,13 @@ function parsePathInspections(value: unknown): MeshRouteInspection[] {
           pair.length === 2 &&
           pair.every(
             (bound) =>
-              typeof bound === "number" &&
-              Number.isFinite(bound) &&
-              bound >= 0,
+              typeof bound === "number" && Number.isFinite(bound) && bound >= 0,
           ) &&
           pair[0] <= cumulativeLengthsM[index] &&
-          pair[1] >= cumulativeLengthsM[index],
+          pair[1] >= cumulativeLengthsM[index] &&
+          (index === 0 ||
+            (pair[0] >= rawCumulativeIntervals[index - 1][0] &&
+              pair[1] >= rawCumulativeIntervals[index - 1][1])),
       )
         ? (rawCumulativeIntervals as [number, number][])
         : null;
