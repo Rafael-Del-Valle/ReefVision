@@ -85,3 +85,25 @@ identical timestamp. A stale row ID yields HTTP 409 without mutation. Older
 timestamp-only API clients remain compatible, but lack this ABA protection.
 These are display preference tokens, not biological event timestamps or
 organism identities. No migration or duplicate Workflow Builder node is added.
+
+## Legacy unconditional saves must invalidate modern editor tokens
+
+Older offline clients may omit `expected_updated_at` and continue to perform
+unconditional PUTs. Their SQLite `ON CONFLICT DO UPDATE` previously used the
+wall clock directly, which could regress or repeat the saved timestamp if a
+workstation clock froze or moved backward. A modern editor holding the earlier
+revision could then overwrite that intervening legacy save.
+
+The 1.6 SQLite upsert now computes a strictly increasing microsecond revision
+**inside the atomic conflict update from the database's current row**, not
+from an unprotected preliminary read. It carries `.999999` into the next
+second. The existing row UUID and creation time remain stable; two older
+clients still have last-committed-writer behavior, but a version-aware client
+cannot silently reuse its stale timestamp after an older client writes.
+
+Parameterized API regressions cover both personal and project defaults,
+a frozen/backdated clock, repeated legacy saves, the microsecond rollover,
+preserved record identity, and stale conditional saves/resets returning 409.
+These changes affect display preferences only; no new Workflow Builder node,
+scientific observation mutation, model download or migration is involved.
+Full repository CI and native Windows installed-MSI/GUI checks remain required.

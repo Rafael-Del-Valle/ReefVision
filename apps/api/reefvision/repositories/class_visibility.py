@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import Integer, String, case, cast, delete, func, literal, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
@@ -24,6 +25,33 @@ def _next_visibility_revision(observed: datetime) -> datetime:
         observed.replace(tzinfo=UTC) if observed.tzinfo is None else observed.astimezone(UTC)
     )
     return max(utc_now(), previous_utc + timedelta(microseconds=1))
+
+
+
+def _atomic_next_visibility_revision(column: Any, now: datetime) -> Any:
+    """Bump a SQLite revision inside an upsert, even after a wall-clock rollback.
+
+    SQLite serializes the conflicting writer. Calculate from the *stored* row,
+    not a stale pre-read; a legacy unconditional PUT must not reuse an earlier
+    CAS timestamp and let another editor overwrite newer visibility settings.
+    SQLite's DateTime representation has exactly six fractional digits.
+    """
+    stored = cast(column, String)
+    microseconds = cast(func.substr(stored, 21, 6), Integer)
+    next_microsecond = cast(func.substr(stored, 1, 20), String) + cast(
+        func.printf("%06d", microseconds + 1), String
+    )
+    next_second = cast(
+        func.strftime(
+            "%Y-%m-%d %H:%M:%S",
+            func.datetime(func.substr(stored, 1, 19), "+1 second"),
+        ),
+        String,
+    ) + literal(".000000")
+    incremented = case(
+        (microseconds < 999999, next_microsecond), else_=next_second
+    )
+    return case((column >= now, incremented), else_=now)
 
 
 class ClassVisibilityPreferenceRepository:
@@ -145,7 +173,9 @@ class ClassVisibilityPreferenceRepository:
                 ],
                 set_={
                     "hidden_class_ids_json": hidden_class_ids,
-                    "updated_at": utc_now(),
+                    "updated_at": _atomic_next_visibility_revision(
+                        ClassVisibilityPreference.updated_at, utc_now()
+                    ),
                 },
             )
         )
@@ -258,7 +288,9 @@ class ProjectClassVisibilityDefaultRepository:
                 set_={
                     "hidden_class_ids_json": hidden_class_ids,
                     "updated_by_identity": updated_by_identity,
-                    "updated_at": utc_now(),
+                    "updated_at": _atomic_next_visibility_revision(
+                        ProjectClassVisibilityDefault.updated_at, utc_now()
+                    ),
                 },
             )
         )

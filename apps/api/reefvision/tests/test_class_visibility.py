@@ -570,3 +570,77 @@ def test_visibility_row_identity_rejects_recreated_scope(tmp_path: Path, scope: 
         assert valid.status_code == 200, valid.text
         assert valid.json()["record_id"] == new["record_id"]
     Base.metadata.drop_all(app.state.engine)
+
+
+@pytest.mark.parametrize("scope", ["preferences", "defaults"])
+@pytest.mark.parametrize("microsecond_rollover", [False, True])
+def test_legacy_visibility_put_cannot_recycle_cas_revision(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    scope: str,
+    microsecond_rollover: bool,
+) -> None:
+    """Old unconditional clients must still invalidate a modern editor's CAS token."""
+    project = create_project(client)
+    label_class = create_label_class(
+        client,
+        project["id"],
+        class_index=0,
+        name="Swiftia Open",
+        display_color="#C74343",
+    )
+    path = f"/api/v1/projects/{project['id']}/class-visibility/{scope}/annotations"
+    initial = client.put(
+        path, json={"hidden_class_ids": [label_class["id"]], "expected_updated_at": None}
+    )
+    assert initial.status_code == 200, initial.text
+    first = initial.json()
+    previous = datetime.fromisoformat(first["updated_at"])
+
+    if microsecond_rollover:
+        # Exercise .999999 -> following second, not merely .000001 arithmetic.
+        previous = previous.replace(microsecond=999999)
+        model = (
+            ClassVisibilityPreference if scope == "preferences" else ProjectClassVisibilityDefault
+        )
+        app = cast(Any, client.app)
+        with Session(app.state.engine) as session:
+            session.execute(
+                update(model)
+                .where(model.id == first["record_id"])
+                .values(updated_at=previous)
+            )
+            session.commit()
+
+    frozen_past = previous.replace(tzinfo=UTC) - timedelta(days=1)
+    monkeypatch.setattr("reefvision.repositories.class_visibility.utc_now", lambda: frozen_past)
+    saved = client.put(path, json={"hidden_class_ids": []})
+    assert saved.status_code == 200, saved.text
+    second = saved.json()
+    assert second["record_id"] == first["record_id"]
+    assert datetime.fromisoformat(second["updated_at"]) > previous
+
+    repeated = client.put(path, json={"hidden_class_ids": [label_class["id"]]})
+    assert repeated.status_code == 200, repeated.text
+    third = repeated.json()
+    assert third["record_id"] == first["record_id"]
+    assert datetime.fromisoformat(third["updated_at"]) > datetime.fromisoformat(
+        second["updated_at"]
+    )
+
+    stale_precondition = {
+        "expected_updated_at": second["updated_at"],
+        "expected_record_id": second["record_id"],
+    }
+    stale_save = client.put(
+        path,
+        json={"hidden_class_ids": [], **stale_precondition},
+    )
+    assert stale_save.status_code == 409, stale_save.text
+    assert client.delete(path, params=stale_precondition).status_code == 409
+    key = "user_preferences" if scope == "preferences" else "project_defaults"
+    observed = client.get(f"/api/v1/projects/{project['id']}/class-visibility").json()[key][
+        "annotations"
+    ]
+    assert observed["hidden_class_ids"] == [label_class["id"]]
+    assert observed["updated_at"] == third["updated_at"]
