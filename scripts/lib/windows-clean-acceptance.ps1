@@ -307,8 +307,8 @@ function Assert-ReefVisionResearchFileSnapshotRetained {
         if ($AllowSqliteChanges -and $key -in @('reefvision.db', 'reefvision.db-wal', 'reefvision.db-shm')) {
             continue
         }
-        if (-not $After.ContainsKey($key)) { throw "Retained research file was removed: $key" }
-        if ($After[$key] -cne $Before[$key]) { throw "Retained research file was modified: $key" }
+        if (-not $After.ContainsKey($key)) { throw "MSI or restart removed retained research file: $key" }
+        if ($After[$key] -cne $Before[$key]) { throw "MSI or restart modified retained research file: $key" }
         $verifiedFileCount++
     }
     if ($AllowSqliteChanges -and $verifiedFileCount -lt 1) {
