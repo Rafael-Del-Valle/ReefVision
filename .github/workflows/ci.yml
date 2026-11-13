@@ -53,11 +53,14 @@ jobs:
         working-directory: apps/web
       - run: npm ci
         working-directory: apps/web
-      - run: npm run format:check
-        working-directory: apps/web
+      # Typechecking and unit regressions must still run while existing
+      # formatting debts are being corrected, but formatting remains a hard
+      # release gate before the more expensive browser/end-to-end stages.
       - run: npm run typecheck
         working-directory: apps/web
       - run: npm run test
+        working-directory: apps/web
+      - run: npm run format:check
         working-directory: apps/web
       - run: npx playwright install --with-deps chromium
         working-directory: apps/web
