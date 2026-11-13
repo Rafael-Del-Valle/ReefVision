@@ -103,7 +103,7 @@ type ProjectView =
   | "workflows"
   | "system";
 
-const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.0.2";
+const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.1.0";
 
 type ProjectTab = Exclude<ProjectView, "system">;
 

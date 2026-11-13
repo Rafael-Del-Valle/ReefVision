@@ -1,6 +1,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$InstallerPath,
     [Parameter(Mandatory = $true)][string]$AcceptanceRoot,
+    [string]$ExpectedVersion = '',
+    [string]$ExpectedSchemaRevision = '',
     [string]$PreviousInstallerPath = '',
     [switch]$PreviousInstallerSupportsIsolatedAcceptance,
     [switch]$DisposableTest,
@@ -39,8 +41,29 @@ $DataRoot = Join-Path $RunRoot 'data'
 $EvidenceRoot = Join-Path $RepositoryRoot ".artifacts\windows-clean-acceptance-$Token"
 $ReportPath = Join-Path $EvidenceRoot 'report.json'
 $InstallerHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash
-$Version = (New-Object -ComObject WindowsInstaller.Installer).OpenDatabase($InstallerPath, 0).OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductVersion'")
-$Version.Execute(); $VersionRecord = $Version.Fetch(); $ProductVersion = $VersionRecord.StringData(1)
+function Get-AcceptanceMsiProperty([string]$Path, [string]$Name) {
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    $database = $installer.OpenDatabase($Path, 0)
+    $query = 'SELECT `Value` FROM `Property` WHERE `Property`=''{0}''' -f $Name
+    $view = $database.OpenView($query)
+    $null = $view.Execute()
+    $record = $view.Fetch()
+    if ($null -eq $record) { throw "MSI has no $Name." }
+    $value = [string]$record.StringData(1)
+    $null = $view.Close()
+    return $value
+}
+$ProductVersion = Get-AcceptanceMsiProperty -Path $InstallerPath -Name 'ProductVersion'
+if ($ExpectedVersion -and $ProductVersion -ne $ExpectedVersion) {
+    throw "MSI ProductVersion $ProductVersion does not match $ExpectedVersion."
+}
+if ($PreviousInstallerPath -and -not $SkipUpgrade) {
+    $previousProductVersion = Get-AcceptanceMsiProperty -Path $PreviousInstallerPath -Name 'ProductVersion'
+    if ([version]$previousProductVersion -ge [version]$ProductVersion) { throw 'Upgrade requires an earlier MSI version.' }
+    $upgradeCode = Get-AcceptanceMsiProperty -Path $InstallerPath -Name 'UpgradeCode'
+    $previousUpgradeCode = Get-AcceptanceMsiProperty -Path $PreviousInstallerPath -Name 'UpgradeCode'
+    if ($upgradeCode -ne $previousUpgradeCode) { throw 'Earlier and candidate MSI UpgradeCode values differ.' }
+}
 
 $report = [ordered]@{
     schema_version = 'reefvision-windows-clean-acceptance-1'
@@ -59,6 +82,8 @@ $report = [ordered]@{
     shortcuts = New-ReefVisionEvidenceResult
     first_launch = New-ReefVisionEvidenceResult
     frontend_backend_connectivity = New-ReefVisionEvidenceResult
+    webview2 = New-ReefVisionEvidenceResult
+    schema_migration = New-ReefVisionEvidenceResult
     model_policy = New-ReefVisionEvidenceResult
     sam2_live = if ($LiveSam2Acceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real SAM 2.1 packaged runtime acceptance not requested' }
     external_annotation_imports = New-ReefVisionEvidenceResult
@@ -73,6 +98,31 @@ $report = [ordered]@{
 }
 
 function Save-Report { Write-ReefVisionEvidenceReport -Report $report -Path $ReportPath }
+
+function Assert-AcceptancePackagedBackend([string]$Api, [string]$ExpectedAppVersion, [string]$ExpectedRevision) {
+    $versionPayload = Invoke-RestMethod "$Api/system/version"
+    if ($versionPayload.application_version -ne $ExpectedAppVersion) {
+        throw "Packaged API version $($versionPayload.application_version) does not match $ExpectedAppVersion."
+    }
+    $migration = Invoke-RestMethod "$Api/system/migrations/status"
+    if (-not $migration.database_exists -or $migration.schema_status -ne 'up_to_date' -or
+        ($ExpectedRevision -and $migration.current_schema_revision -ne $ExpectedRevision)) {
+        throw "Unexpected packaged database migration status: $($migration | ConvertTo-Json -Compress)"
+    }
+    return $migration
+}
+
+function Wait-AcceptanceWebView2([int]$DesktopProcessId) {
+    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    do {
+        $webview = Get-CimInstance -ClassName Win32_Process -Filter "Name = 'msedgewebview2.exe' AND ParentProcessId = $DesktopProcessId" |
+            Select-Object -First 1
+        if ($webview) { return $webview.ProcessId }
+        Start-Sleep -Milliseconds 500
+    } while ([DateTime]::UtcNow -lt $deadline)
+    throw 'No WebView2 browser process was observed under the installed desktop.'
+}
+
 function Run-Msi([string]$Action, [string]$PackageOrProduct, [string]$LogName, [string]$TargetRoot = '') {
     $log = Join-Path $EvidenceRoot $LogName
     $arguments = New-ReefVisionMsiArguments -Action $Action -PackageOrProduct $PackageOrProduct -InstallRoot $TargetRoot -LogPath $log
@@ -250,10 +300,16 @@ try {
     $desktop = Start-AcceptanceDesktop
     $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $api = "http://127.0.0.1:$port/api/v1"
-    $versionPayload = Invoke-RestMethod "$api/system/version"
-    $migrationPayload = Invoke-RestMethod "$api/system/migrations/status"
-    $report.first_launch = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop and packaged backend started; database initialized; API version $($versionPayload.application_version)"
-    $report.frontend_backend_connectivity = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop-published loopback API responded; migration status: $($migrationPayload.schema_status)"
+    $initialVersion = Get-AcceptanceMsiProperty -Path $initialInstaller -Name 'ProductVersion'
+    $initialRevision = if ($initialInstaller -eq $InstallerPath) { $ExpectedSchemaRevision } else { '' }
+    $migrationPayload = Assert-AcceptancePackagedBackend -Api $api -ExpectedAppVersion $initialVersion -ExpectedRevision $initialRevision
+    $report.first_launch = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop and packaged backend started; database initialized; API version $initialVersion"
+    $report.frontend_backend_connectivity = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Desktop-published loopback API responded.'
+    $webviewPid = Wait-AcceptanceWebView2 -DesktopProcessId $desktop.Id
+    $report.webview2 = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "WebView2 browser PID $webviewPid started under the desktop."
+    if ($initialRevision) {
+        $report.schema_migration = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Packaged database reached $($migrationPayload.current_schema_revision)."
+    }
 
     # Project templates were intentionally reduced to 'blank' in 1.0.
     # The acceptance fixture must explicitly create its class instead of
@@ -441,12 +497,13 @@ try {
 
     if ($PreviousInstallerPath -and -not $SkipUpgrade) {
         Run-Msi -Action Install -PackageOrProduct $InstallerPath -LogName 'upgrade.log' -TargetRoot $InstallRoot | Out-Null
-        $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Previous installer upgraded to current installer.'
     }
 
     $desktop = Start-AcceptanceDesktop
     $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $api = "http://127.0.0.1:$port/api/v1"
+    $finalMigration = Assert-AcceptancePackagedBackend -Api $api -ExpectedAppVersion $ProductVersion -ExpectedRevision $ExpectedSchemaRevision
+    $report.schema_migration = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Packaged database reached $($finalMigration.current_schema_revision)."
     $persisted = Invoke-RestMethod "$api/projects/$projectId"
     if ($persisted.id -ne $projectId) { throw 'Project ID changed across restart.' }
     $persistedAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"
@@ -456,6 +513,10 @@ try {
         if (-not ($persistedSamSession.mask_annotations | Where-Object id -eq $samAcceptedMaskId)) {
             throw 'Accepted SAM 2.1 mask did not persist across packaged Windows desktop restart.'
         }
+    }
+    if ($PreviousInstallerPath -and -not $SkipUpgrade) {
+        $null = Wait-AcceptanceWebView2 -DesktopProcessId $desktop.Id
+        $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Upgraded from $initialVersion to $ProductVersion; WebView2, database and existing project verified."
     }
     $report.restart = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Desktop and backend restarted cleanly.'
     $report.project_persistence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Project $projectId, image $imageId, and annotation $annotationId persisted; pre-restart database SHA-256 $projectChecksum"
@@ -474,8 +535,7 @@ try {
     Stop-AcceptanceDesktop $desktop
 
     if (-not $SkipUninstall) {
-        $installer = New-Object -ComObject WindowsInstaller.Installer
-        $database = $installer.OpenDatabase($InstallerPath, 0); $view = $database.OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductCode'"); $view.Execute(); $productCode = $view.Fetch().StringData(1)
+        $productCode = Get-AcceptanceMsiProperty -Path $InstallerPath -Name 'ProductCode'
         Run-Msi -Action Uninstall -PackageOrProduct $productCode -LogName 'uninstall.log' | Out-Null
         if (Test-Path (Join-Path $InstallRoot 'ReefVision.exe')) { throw 'ReefVision.exe remains after uninstall.' }
         if (@($shortcutCandidates | Where-Object { Test-Path -LiteralPath $_ }).Count -gt 0) { throw 'A ReefVision shortcut remains after uninstall.' }

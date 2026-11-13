@@ -79,7 +79,7 @@ test("imports sensor JSON and displays offline NOAA provenance in Environmental 
     const request = route.request();
     const url = new URL(request.url());
     if (url.pathname.endsWith("/health")) {
-      await route.fulfill({ json: { status: "ok", version: "1.0.2" } });
+      await route.fulfill({ json: { status: "ok", version: "1.1.0" } });
     } else if (url.pathname.endsWith("/project-summaries")) {
       await route.fulfill({
         json: [

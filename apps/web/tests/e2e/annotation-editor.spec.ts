@@ -843,7 +843,7 @@ test("renders the first opened image after a deliberately delayed display respon
     const request = route.request();
     const url = new URL(request.url());
     if (url.pathname.endsWith("/health")) {
-      await route.fulfill({ json: { status: "ok", version: "1.0.2" } });
+      await route.fulfill({ json: { status: "ok", version: "1.1.0" } });
       return;
     }
     if (

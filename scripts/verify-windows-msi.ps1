@@ -27,9 +27,9 @@ if (-not $ExpectedVersion) {
 }
 $MsiDatabase = (New-Object -ComObject WindowsInstaller.Installer).OpenDatabase($Msi.FullName, 0)
 $VersionView = $MsiDatabase.OpenView("SELECT ``Value`` FROM ``Property`` WHERE ``Property``='ProductVersion'")
-$VersionView.Execute()
+$null = $VersionView.Execute()
 $ProductVersion = $VersionView.Fetch().StringData(1)
-$VersionView.Close()
+$null = $VersionView.Close()
 if ($ProductVersion -ne $ExpectedVersion) {
     throw "MSI ProductVersion $ProductVersion does not match expected $ExpectedVersion."
 }
