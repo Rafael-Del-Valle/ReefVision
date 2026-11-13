@@ -877,6 +877,9 @@ try {
     Stop-AcceptanceDesktop $desktop
 
     if (-not $SkipUninstall) {
+        # Uninstall must retain actual project database and scientific files,
+        # not just leave behind an empty data directory or a log file.
+        $retainedResearchBefore = Get-ReefVisionResearchFileSnapshot -DataRoot $DataRoot
         $installer = New-Object -ComObject WindowsInstaller.Installer
         $database = $installer.OpenDatabase($InstallerPath, 0); $view = $database.OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductCode'"); $view.Execute(); $productCode = $view.Fetch().StringData(1)
         Run-Msi -Action Uninstall -PackageOrProduct $productCode -LogName 'uninstall.log' | Out-Null
@@ -884,8 +887,9 @@ try {
         if (@($shortcutCandidates | Where-Object { Test-Path -LiteralPath $_ }).Count -gt 0) { throw 'A ReefVision shortcut remains after uninstall.' }
         if (@(Get-ReefVisionInstalledRegistrations).Count -gt 0) { throw 'ReefVision uninstall registration remains after uninstall.' }
         $report.uninstall = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Program binaries removed.'
-        if (-not (Test-Path $DataRoot)) { throw 'Isolated user data was removed by uninstall.' }
-        $report.data_retention = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Isolated project data remained after uninstall.'
+        $retainedResearchAfter = Get-ReefVisionResearchFileSnapshot -DataRoot $DataRoot
+        $retainedFileCount = Assert-ReefVisionResearchFileSnapshotRetained -Before $retainedResearchBefore -After $retainedResearchAfter
+        $report.data_retention = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Verified $retainedFileCount scientific files retained byte-for-byte after uninstall, including isolated SQLite project database and imported research files (SHA-256; no data content exported)."
     } else {
         $report.data_retention = New-ReefVisionEvidenceResult -Status 'NOT RUN' -Detail 'Uninstall was skipped.'
     }
