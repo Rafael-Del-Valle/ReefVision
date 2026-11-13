@@ -237,6 +237,22 @@ coverage columns. Project exchange remaps project image IDs, preserves the polyg
 coordinates and recalculates the result hashes. The calculation uses the existing
 definition and result tables.
 
+### Sampling effort in environmental joins
+
+Choose **Retain unmatched observations** to keep a row when a bounded environmental
+match is unavailable. Matched and unmatched rows retain the observation ID and UTC
+time, lag and target time. The saved result reports the requested, matched and
+unmatched totals. Lagged analysis applies the same policy independently at each
+lag. Omitting the option retains the original strict matching behavior.
+
+An optional study assignment list identifies every selected observation by
+`observation_record_id` and supplies `subject_id`, `experimental_unit_id`,
+`experimental_unit_kind`, `treatment` and `timepoint`. Multiple fragments or
+observations may share a declared tank. Counts describe sampling and reuse.
+ReefVision does not estimate independence, significance or causality from these
+associations. The evidence is available in standalone analysis, saved workflows,
+the existing CSV export and project exchange.
+
 ### Migration-lineage coordination
 
 This 1.1 branch owns `0038_scientific_data.py`, followed by

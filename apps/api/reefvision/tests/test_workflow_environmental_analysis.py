@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from reefvision.domain.errors import ConflictError
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.schemas.environmental_analysis import ObservationEnvironmentJoinRequest
+from reefvision.services.environmental_analysis import EnvironmentalAnalysisService
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_environmental_analysis_temporal import _records
 from reefvision.tests.test_environmental_analysis_tides import _import_tides
@@ -135,6 +139,49 @@ def test_lunar_workflow_persists_lineage_and_saved_graph_replay_is_deterministic
     )
     assert results.status_code == 200, results.text
     assert results.json()["total"] == 2
+
+
+def test_saved_join_replays_explicit_sampling_effort(client: TestClient) -> None:
+    project_id = create_project(client, "Workflow sampling effort")["id"]
+    [record] = _records(
+        client, project_id, [observation(variable="coral_count", value=4, unit="count")]
+    )
+    graph = analysis_graph(
+        "observation_environment_join",
+        {
+            "name": "Unmatched workflow evidence",
+            "observation_record_ids": [record["id"]],
+            "environmental_variable": "water_temperature",
+            "max_time_delta_s": 60,
+            "max_distance_m": 1000,
+            "require_depth_match": False,
+            "unmatched_policy": "retain",
+        },
+    )
+    first_run, first = _execute(client, project_id, graph)
+    second_run, second = _execute(client, project_id, graph)
+    assert first_run["workflow_graph_record_id"] == second_run["workflow_graph_record_id"]
+    first_payload = first["payload_json"]["payload"]
+    assert second["payload_json"]["payload"] == first_payload
+    assert first_payload["sampling_effort"] == {"requested": 1, "matched": 0, "unmatched": 1}
+    assert first_payload["experimental_unit_basis"] == "undeclared"
+    assert first_payload["unmatched"][0]["observation_record_id"] == record["id"]
+    assert "independent_unit_id" not in first_payload["unmatched"][0]
+    app = cast(FastAPI, client.app)
+    saved = first["payload_json"]
+    request = ObservationEnvironmentJoinRequest.model_validate(saved["input_snapshot"])
+    context = {
+        "workflow_run_id": saved["workflow_run_id"],
+        "workflow_node_run_id": saved["workflow_node_run_id"],
+    }
+    with app.state.session_factory() as session:
+        service = EnvironmentalAnalysisService(session)
+        existing = service.create_observation_environment_join(project_id, request, **context)
+        assert str(existing.result.id) == saved["result_id"]
+        with pytest.raises(ConflictError, match="conflicts with its saved inputs"):
+            service.create_observation_environment_join(
+                project_id, request.model_copy(update={"max_distance_m": 10}), **context
+            )
 
 
 def test_tidal_window_join_and_lag_workflow_nodes_execute_end_to_end(

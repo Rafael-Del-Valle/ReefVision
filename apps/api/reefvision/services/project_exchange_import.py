@@ -65,6 +65,7 @@ from reefvision.services.project_exchange_computed import (
 from reefvision.services.project_exchange_environmental_analysis import (
     ANALYSIS_SECTIONS,
     remap_environmental_analysis_sections,
+    remap_study_assignments,
     validate_environmental_analysis_exchange,
 )
 from reefvision.services.project_exchange_inspection import (
@@ -186,7 +187,14 @@ def _remap_json(value: Any, id_map: dict[str, str]) -> Any:
     if isinstance(value, list):
         return [_remap_json(item, id_map) for item in value]
     if isinstance(value, dict):
-        return {key: _remap_json(item, id_map) for key, item in value.items()}
+        return {
+            key: (
+                remap_study_assignments(item, id_map)
+                if key == "study_assignments"
+                else _remap_json(item, id_map)
+            )
+            for key, item in value.items()
+        }
     return value
 
 
@@ -395,6 +403,19 @@ def import_project_exchange(
             environmental_analysis_rows = remap_environmental_analysis_sections(
                 section_rows, id_map
             )
+            analysis_results = {
+                row["id"]: row
+                for row in environmental_analysis_rows["environmental_analysis_results"]
+            }
+            analysis_definitions = {
+                row["id"]: row
+                for row in environmental_analysis_rows["environmental_analysis_definitions"]
+            }
+            coverage_results = {
+                id_map[row["id"]]: row
+                for row in computed_rows["computed_metric_results"]
+                if row["result_kind"] == "mask_coverage"
+            }
             media = _media_inventory(manifest)
             warnings = list(inspection.warnings)
             imported_counts: dict[str, int] = {}
@@ -426,7 +447,8 @@ def import_project_exchange(
                             values = _coerce_row(model, mapped, id_map)
                     elif section_name in ANALYSIS_SECTIONS:
                         mapped = environmental_analysis_rows[section_name][row_index]
-                        values = _coerce_row(model, mapped, id_map)
+                        # Scientific IDs and literal study labels are already separated.
+                        values = _coerce_row(model, mapped, {})
                     else:
                         values = _coerce_row(model, row, id_map)
                     _rewrite_project_paths(
@@ -459,6 +481,37 @@ def import_project_exchange(
                             graph = imported_graphs.get(graph_id)
                             if graph is not None:
                                 values["graph_sha256"] = graph.graph_sha256
+
+                    if section_name == "workflow_artifacts":
+                        payload = values["payload_json"]
+                        result_id = payload.get("result_id")
+                        if (
+                            values["data_type"] == "environmental_analysis_result"
+                            and (analysis := analysis_results.get(result_id)) is not None
+                        ):
+                            payload.update(
+                                {
+                                    "payload": analysis["payload_json"],
+                                    "input_snapshot": analysis["input_snapshot_json"],
+                                    "definition_sha256": analysis_definitions[
+                                        analysis["definition_id"]
+                                    ]["definition_sha256"],
+                                    "content_sha256": analysis["content_sha256"],
+                                }
+                            )
+                        if (
+                            values["data_type"] == "computed_metric_result"
+                            and (coverage := coverage_results.get(result_id)) is not None
+                        ):
+                            payload.update(
+                                {
+                                    "definition_sha256": coverage["payload_json"][
+                                        "definition_sha256"
+                                    ],
+                                    "evidence_sha256": coverage["payload_json"]["evidence_sha256"],
+                                    "content_sha256": coverage["content_sha256"],
+                                }
+                            )
 
                     media_kind = MEDIA_KIND_BY_SECTION.get(section_name)
                     if media_kind is not None and isinstance(old_id, str):

@@ -45,6 +45,8 @@ function AnalysisEvidence({
   projectId: string;
   result: EnvironmentalAnalysisResult;
 }) {
+  const effort = result.payload.sampling_effort as
+    { requested: number; matched: number; unmatched: number } | undefined;
   return (
     <article
       className="panel-card training-content"
@@ -62,6 +64,12 @@ function AnalysisEvidence({
         Source records: {result.source_record_ids.length}; source analyses:{" "}
         {result.source_analysis_result_ids.length}
       </p>
+      {effort && (
+        <p>
+          Matched {effort.matched} of {effort.requested} requested observations.{" "}
+          Unmatched: {effort.unmatched}.
+        </p>
+      )}
       <a href={environmentalAnalysisCsvUrl(projectId, result.id)}>
         Download evidence CSV
       </a>
@@ -105,6 +113,8 @@ export function EnvironmentalAnalysisWorkspace({
   const [environmentalVariable, setEnvironmentalVariable] =
     useState("water_temperature");
   const [depthMatch, setDepthMatch] = useState(false);
+  const [retainUnmatched, setRetainUnmatched] = useState(false);
+  const [studyAssignments, setStudyAssignments] = useState("");
   const [maxDepth, setMaxDepth] = useState("0");
   const [joinResultId, setJoinResultId] = useState("");
   const [lags, setLags] = useState("-3600, 0, 3600");
@@ -151,6 +161,12 @@ export function EnvironmentalAnalysisWorkspace({
         });
       }
       if (kind === "observation_environment_join") {
+        const assignments: unknown = studyAssignments.trim()
+          ? JSON.parse(studyAssignments)
+          : [];
+        if (!Array.isArray(assignments)) {
+          throw new Error("Study assignments must be a JSON list.");
+        }
         return createObservationEnvironmentJoin(projectId, {
           name,
           observation_record_ids: splitValues(observationIds),
@@ -159,6 +175,8 @@ export function EnvironmentalAnalysisWorkspace({
           max_distance_m: Number(maxDistance),
           require_depth_match: depthMatch,
           max_depth_delta_m: depthMatch ? Number(maxDepth) : 0,
+          ...(retainUnmatched ? { unmatched_policy: "retain" } : {}),
+          ...(assignments.length ? { study_assignments: assignments } : {}),
         });
       }
       return createLaggedComparison(projectId, {
@@ -444,6 +462,23 @@ export function EnvironmentalAnalysisWorkspace({
                 onChange={(event) => setDepthMatch(event.target.checked)}
               />
               Require matching depth reference and tolerance
+            </label>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={retainUnmatched}
+                onChange={(event) => setRetainUnmatched(event.target.checked)}
+              />
+              Retain unmatched observations
+            </label>
+            <label>
+              Study assignments (JSON)
+              <textarea
+                rows={3}
+                value={studyAssignments}
+                onChange={(event) => setStudyAssignments(event.target.value)}
+                placeholder="Optional. Supply one subject, experimental unit, treatment and timepoint per observation."
+              />
             </label>
             {depthMatch && (
               <label>

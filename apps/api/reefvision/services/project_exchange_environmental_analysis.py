@@ -195,6 +195,10 @@ def _validate_environmental_analysis_exchange(
             join_id = definition["configuration_json"]["join_result_id"]
             if source_result_ids != [join_id]:
                 raise ValidationError("Lagged analysis source lineage mismatch")
+            if definition["calculation_version"] == "reefvision-lagged-descriptive-comparison-2":
+                snapshot = row["input_snapshot_json"]
+                if snapshot.get("join_result_sha256") != results[join_id]["content_sha256"]:
+                    raise ValidationError("Lagged analysis source result checksum mismatch")
 
 
 def _remap_json(value: Any, id_map: dict[str, str]) -> Any:
@@ -203,8 +207,39 @@ def _remap_json(value: Any, id_map: dict[str, str]) -> Any:
     if isinstance(value, list):
         return [_remap_json(item, id_map) for item in value]
     if isinstance(value, dict):
-        return {key: _remap_json(item, id_map) for key, item in value.items()}
+        return {key: _remap_analysis_field(key, item, id_map) for key, item in value.items()}
     return value
+
+
+def _remap_study_assignment(value: Any, id_map: dict[str, str]) -> Any:
+    if value is None:
+        return None
+    record_id = value["observation_record_id"]
+    return {**value, "observation_record_id": id_map.get(record_id, record_id)}
+
+
+def remap_study_assignments(value: Any, id_map: dict[str, str]) -> Any:
+    if not isinstance(value, list) or any(
+        not isinstance(item, dict) or not isinstance(item.get("observation_record_id"), str)
+        for item in value
+    ):
+        return value
+    return sorted(
+        [_remap_study_assignment(assignment, id_map) for assignment in value],
+        key=lambda assignment: assignment["observation_record_id"],
+    )
+
+
+def _remap_analysis_field(key: str, value: Any, id_map: dict[str, str]) -> Any:
+    if key == "study_assignment":
+        return _remap_study_assignment(value, id_map)
+    if key == "study_assignments":
+        return remap_study_assignments(value, id_map)
+    if key == "environmental_record_reuse_counts":
+        return {id_map.get(identifier, identifier): count for identifier, count in value.items()}
+    if key == "experimental_unit_reuse_counts":
+        return value
+    return _remap_json(value, id_map)
 
 
 def remap_environmental_analysis_sections(
@@ -247,6 +282,19 @@ def remap_environmental_analysis_sections(
             row["payload_json"]["content_sha256"] = content_hash(
                 _lunar_payload_content(row["payload_json"])
             )
+    # A lag's source hash refers to the remapped join, regardless of archive order.
+    result_by_id = {row["id"]: row for row in results}
+    for row in results:
+        if row["analysis_kind"] == "lagged_comparison":
+            continue
+        row["content_sha256"] = content_hash(
+            _result_content(row, definition_hashes[row["definition_id"]])
+        )
+    for row in results:
+        if row["analysis_kind"] != "lagged_comparison":
+            continue
+        join_id = row["source_analysis_result_ids_json"][0]
+        row["input_snapshot_json"]["join_result_sha256"] = result_by_id[join_id]["content_sha256"]
         row["content_sha256"] = content_hash(
             _result_content(row, definition_hashes[row["definition_id"]])
         )

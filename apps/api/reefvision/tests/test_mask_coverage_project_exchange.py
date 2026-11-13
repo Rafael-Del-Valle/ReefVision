@@ -139,6 +139,12 @@ def test_mask_coverage_round_trip_remaps_immutable_evidence(
     )
     assert validation.status_code == 200, validation.text
     assert validation.json()["current"] is True
+    restored_run = client.get(f"/api/v1/workflow-runs/{restored_result['workflow_run_id']}").json()
+    restored_artifact = next(
+        item for item in restored_run["artifacts"] if item["data_type"] == "computed_metric_result"
+    )["payload_json"]
+    assert restored_artifact["evidence_sha256"] == restored_result["evidence_sha256"]
+    assert restored_artifact["content_sha256"] == restored_result["content_sha256"]
     if with_polygon:
         graphs = client.get(f"/api/v1/projects/{imported_project_id}/workflow-graphs").json()
         replay = client.post(

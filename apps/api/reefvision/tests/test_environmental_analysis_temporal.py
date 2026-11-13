@@ -212,6 +212,76 @@ def test_lagged_comparison_reports_reused_samples_and_never_claims_inference(
     assert result["payload"]["inferential_statistics"] is None
 
 
+def test_retained_unmatched_observations_and_declared_units_survive_lags(
+    client: TestClient,
+) -> None:
+    project_id = create_project(client, "Tank-level sampling")["id"]
+    first, second, temperature = _records(
+        client,
+        project_id,
+        [
+            observation(
+                variable="coral_count", value=4, unit="count", observed_at="2026-04-03T13:00:00Z"
+            ),
+            observation(
+                variable="coral_count", value=6, unit="count", observed_at="2026-04-03T13:10:00Z"
+            ),
+            observation(value=68, unit="degF", observed_at="2026-04-03T13:00:00Z"),
+        ],
+    )
+    assignments = [
+        {
+            "observation_record_id": record["id"],
+            "subject_id": f"fragment-{index}",
+            "experimental_unit_id": "tank-A",
+            "experimental_unit_kind": "tank",
+            "treatment": "ambient",
+            "timepoint": f"minute-{10 * index}",
+        }
+        for index, record in enumerate((first, second))
+    ]
+    base = _base(project_id)
+    body = {
+        "name": "Partial biological context",
+        "observation_record_ids": [first["id"], second["id"]],
+        "environmental_variable": "water_temperature",
+        "max_time_delta_s": 30,
+        "max_distance_m": 1000,
+        "unmatched_policy": "retain",
+        "study_assignments": assignments,
+    }
+    joined = client.post(f"{base}/observation-environment-join", json=body)
+    assert joined.status_code == 201, joined.text
+    result = joined.json()["result"]
+    payload = result["payload"]
+    assert payload["sampling_effort"] == {"requested": 2, "matched": 1, "unmatched": 1}
+    assert payload["pairs"][0]["study_assignment"] == assignments[0]
+    assert payload["unmatched"][0]["study_assignment"] == assignments[1]
+    assert payload["unmatched"][0]["reason"] == "no_bounded_environmental_match"
+    assert payload["experimental_unit_reuse_counts"] == {"tank-A": 2}
+    assert payload["inferential_statistics"] is None
+    assert set(result["source_record_ids"]) == {first["id"], second["id"], temperature["id"]}
+
+    lagged = client.post(
+        f"{base}/lagged-comparison",
+        json={"name": "Limited coverage lags", "join_result_id": result["id"], "lags_s": [0, 300]},
+    )
+    assert lagged.status_code == 201, lagged.text
+    analysis = lagged.json()["result"]["payload"]
+    assert analysis["sampling_effort"] == {"requested": 4, "matched": 1, "unmatched": 3}
+    assert sum(row["lag_s"] == 300 for row in analysis["unmatched"]) == 2
+    assert analysis["experimental_unit_reuse_counts"] == {"tank-A": 4}
+
+    foreign = client.post(
+        f"{base}/observation-environment-join",
+        json={
+            **body,
+            "study_assignments": [{**assignments[0], "observation_record_id": temperature["id"]}],
+        },
+    )
+    assert foreign.status_code == 422, foreign.text
+
+
 def test_join_rejects_foreign_or_tampered_source_records_atomically(client: TestClient) -> None:
     project = create_project(client, "Join owner")
     other = create_project(client, "Foreign join source")

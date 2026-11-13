@@ -304,7 +304,11 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 "max_distance_m",
                 "require_depth_match",
             ],
-            optional_parameters={"max_depth_delta_m": 0},
+            optional_parameters={
+                "max_depth_delta_m": 0,
+                "unmatched_policy": "reject",
+                "study_assignments": [],
+            },
             execution_state="executable_analysis",
             executable=True,
             implementation_notes=[

@@ -17,7 +17,7 @@ from reefvision.tests.test_scientific_project_exchange import (
 from reefvision.tests.test_workflow_environmental_analysis import _execute, lunar_graph
 
 
-def _source(client: TestClient) -> tuple[dict, list[dict], list[dict]]:
+def _source(client: TestClient, *, retain: bool = False) -> tuple[dict, list[dict], list[dict]]:
     project = create_project(client, "Portable environmental analyses")
     records = _records(
         client,
@@ -45,9 +45,26 @@ def _source(client: TestClient) -> tuple[dict, list[dict], list[dict]]:
             "name": "Portable join",
             "observation_record_ids": [records[0]["id"]],
             "environmental_variable": "water_temperature",
-            "max_time_delta_s": 600,
+            "max_time_delta_s": 30 if retain else 600,
             "max_distance_m": 1000,
             "require_depth_match": False,
+            **(
+                {
+                    "unmatched_policy": "retain",
+                    "study_assignments": [
+                        {
+                            "observation_record_id": records[0]["id"],
+                            "subject_id": "fragment-a",
+                            "experimental_unit_id": project["id"],
+                            "experimental_unit_kind": "tank",
+                            "treatment": "control",
+                            "timepoint": "baseline",
+                        }
+                    ],
+                }
+                if retain
+                else {}
+            ),
         },
     )
     assert join.status_code == 201, join.text
@@ -69,10 +86,11 @@ def _source(client: TestClient) -> tuple[dict, list[dict], list[dict]]:
     return project, definitions, results
 
 
+@pytest.mark.parametrize("retain", [False, True])
 def test_environmental_analysis_round_trip_remaps_links_and_rebuilds_hashes(
-    client: TestClient, test_settings
+    client: TestClient, test_settings, retain: bool
 ) -> None:
-    project, source_definitions, source_results = _source(client)
+    project, source_definitions, source_results = _source(client, retain=retain)
     raw = export_archive(client, test_settings, project["id"])
     inspection = client.post(
         "/api/v1/exchange-packages/inspect", files={"file": ("analysis.zip", raw)}
@@ -109,6 +127,13 @@ def test_environmental_analysis_round_trip_remaps_links_and_rebuilds_hashes(
     )
     lag = result_by_kind["lagged_comparison"]
     assert lag["source_analysis_result_ids"] == [join["id"]]
+    assert lag["input_snapshot"]["join_result_sha256"] == join["content_sha256"]
+    if retain:
+        pair = join["payload"]["unmatched"][0]
+        assert pair["study_assignment"]["observation_record_id"] == pair["observation_record_id"]
+        assert pair["study_assignment"]["experimental_unit_id"] == project["id"]
+        assert lag["payload"]["experimental_unit_reuse_counts"] == {project["id"]: 2}
+        assert lag["payload"]["sampling_effort"] == {"requested": 2, "matched": 2, "unmatched": 0}
     assert definition_by_kind["lagged_comparison"]["configuration"]["join_result_id"] == join["id"]
     for result in results:
         opened = client.get(f"{base}/results/{result['id']}")
@@ -140,6 +165,13 @@ def test_workflow_analysis_lineage_is_remapped_and_current_after_import(
     imported_run = client.get(f"/api/v1/workflow-runs/{result['workflow_run_id']}")
     assert imported_run.status_code == 200, imported_run.text
     assert imported_run.json()["run"]["project_id"] == project_id
+    restored_artifact = next(
+        row
+        for row in imported_run.json()["artifacts"]
+        if row["data_type"] == "environmental_analysis_result"
+    )["payload_json"]
+    assert restored_artifact["content_sha256"] == result["content_sha256"]
+    assert restored_artifact["payload"] == result["payload"]
     validation = client.get(f"{base}/results/{result['id']}/validation")
     assert validation.status_code == 200, validation.text
     assert validation.json()["current"] is True

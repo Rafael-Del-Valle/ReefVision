@@ -54,10 +54,65 @@ def _iso(value: datetime) -> str:
     return _utc(value).isoformat().replace("+00:00", "Z")
 
 
+def _sampling_effort(
+    pairs: list[dict[str, Any]], unmatched: list[dict[str, Any]]
+) -> dict[str, Any]:
+    units = Counter(
+        row["study_assignment"]["experimental_unit_id"]
+        for row in [*pairs, *unmatched]
+        if row.get("study_assignment") is not None
+    )
+    return {
+        "sampling_effort": {
+            "requested": len(pairs) + len(unmatched),
+            "matched": len(pairs),
+            "unmatched": len(unmatched),
+        },
+        "unmatched": unmatched,
+        "experimental_unit_reuse_counts": dict(units),
+        "experimental_unit_basis": "researcher_declared" if units else "undeclared",
+    }
+
+
 class EnvironmentalAnalysisService:
     def __init__(self, session: Session) -> None:
         self.session = session
         self.science = ScientificDataService(session)
+
+    def _workflow_result(
+        self,
+        project_id: str,
+        kind: EnvironmentalAnalysisKind,
+        configuration: dict[str, Any],
+        workflow_run_id: str | None,
+        workflow_node_run_id: str | None,
+    ) -> EnvironmentalAnalysisSingleResponse | None:
+        if workflow_node_run_id is None:
+            return None
+        existing = self.session.scalar(
+            select(EnvironmentalAnalysisResult).where(
+                EnvironmentalAnalysisResult.workflow_node_run_id == workflow_node_run_id
+            )
+        )
+        if existing is None:
+            return None
+        if (
+            existing.project_id != project_id
+            or existing.analysis_kind != kind
+            or existing.workflow_run_id != workflow_run_id
+        ):
+            raise ConflictError(
+                "Environmental workflow node replay conflicts with its saved result"
+            )
+        definition = self.get_definition(project_id, existing.definition_id)
+        if definition.configuration_json != configuration:
+            raise ConflictError(
+                "Environmental workflow node replay conflicts with its saved inputs"
+            )
+        return EnvironmentalAnalysisSingleResponse(
+            definition=self.definition_response(definition),
+            result=self.result_response(existing),
+        )
 
     @staticmethod
     def _definition_content(
@@ -452,6 +507,12 @@ class EnvironmentalAnalysisService:
             if source is None or source.project_id != row.project_id:
                 reasons.append(f"source_analysis_missing:{source_result_id}")
                 continue
+            if (
+                row.analysis_kind == "lagged_comparison"
+                and row.payload_json.get("experimental_unit_basis") is not None
+                and row.input_snapshot_json.get("join_result_sha256") != source.content_sha256
+            ):
+                reasons.append(f"source_analysis_checksum_mismatch:{source_result_id}")
             nested = self._currentness_reasons(source, visited)
             reasons.extend(f"source_analysis:{source_result_id}:{reason}" for reason in nested)
 
@@ -829,7 +890,7 @@ class EnvironmentalAnalysisService:
         request: ObservationEnvironmentJoinRequest,
         *,
         lag_s: int = 0,
-    ) -> tuple[list[dict[str, Any]], list[str], datetime]:
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], datetime]:
         observations = []
         for identifier in request.observation_record_ids:
             row = self.session.get(ScientificRecord, str(identifier))
@@ -848,12 +909,30 @@ class EnvironmentalAnalysisService:
                 raise ValidationError("Depth-matched joins require observation depth and reference")
             observations.append(record)
         pairs = []
+        unmatched = []
+        assignments = {
+            assignment.observation_record_id: assignment.model_dump(mode="json")
+            for assignment in request.study_assignments
+        }
         sources = [str(record.id) for record in observations]
         for observation in observations:
             observation_location = observation.location
             if observation_location is None:
                 raise ValidationError("Observation location became unavailable during matching")
             target_at = observation.observed_at + timedelta(seconds=lag_s)
+            observation_fields = {
+                "observation_record_id": str(observation.id),
+                "observation_variable": observation.variable,
+                "observation_value": observation.normalized_value,
+                "observation_unit": observation.normalized_unit,
+                "observation_at": _iso(observation.observed_at),
+                "lag_s": lag_s,
+                "target_at": _iso(target_at),
+            }
+            if request.preserves_effort:
+                observation_fields["study_assignment"] = assignments.get(observation.id)
+            else:
+                observation_fields["independent_unit_id"] = self._independent_unit(observation)
             window = timedelta(seconds=request.max_time_delta_s)
             candidate_rows = self.session.scalars(
                 select(ScientificRecord).where(
@@ -905,6 +984,14 @@ class EnvironmentalAnalysisService:
                 )
             )
             if not candidates:
+                if request.unmatched_policy == "retain":
+                    unmatched.append(
+                        {
+                            **observation_fields,
+                            "reason": "no_bounded_environmental_match",
+                        }
+                    )
+                    continue
                 raise ValidationError(
                     f"No bounded environmental match for observation record {observation.id}"
                 )
@@ -912,19 +999,12 @@ class EnvironmentalAnalysisService:
             sources.append(str(environmental.id))
             pairs.append(
                 {
-                    "observation_record_id": str(observation.id),
-                    "observation_variable": observation.variable,
-                    "observation_value": observation.normalized_value,
-                    "observation_unit": observation.normalized_unit,
-                    "observation_at": _iso(observation.observed_at),
-                    "independent_unit_id": self._independent_unit(observation),
+                    **observation_fields,
                     "environmental_record_id": str(environmental.id),
                     "environmental_variable": environmental.variable,
                     "environmental_value": environmental.normalized_value,
                     "environmental_unit": environmental.normalized_unit,
                     "environmental_at": _iso(environmental.observed_at),
-                    "lag_s": lag_s,
-                    "target_at": _iso(target_at),
                     "time_delta_s": time_delta,
                     "distance_m": distance,
                     "depth_delta_m": depth_delta,
@@ -933,6 +1013,7 @@ class EnvironmentalAnalysisService:
             )
         return (
             pairs,
+            unmatched,
             list(dict.fromkeys(sources)),
             min(record.observed_at for record in observations),
         )
@@ -946,13 +1027,28 @@ class EnvironmentalAnalysisService:
         workflow_node_run_id: str | None = None,
     ) -> EnvironmentalAnalysisSingleResponse:
         self.science.require_project(project_id)
-        pairs, source_ids, observed_at = self._bounded_pairs(project_id, request)
+        configuration = request.calculation_configuration()
+        existing = self._workflow_result(
+            project_id,
+            "observation_environment_join",
+            configuration,
+            workflow_run_id,
+            workflow_node_run_id,
+        )
+        if existing is not None:
+            return existing
+        pairs, unmatched, source_ids, observed_at = self._bounded_pairs(project_id, request)
+        effort = _sampling_effort(pairs, unmatched) if request.preserves_effort else {}
         definition = self.create_definition(
             project_id,
             analysis_kind="observation_environment_join",
             name=request.name,
-            configuration=request.model_dump(mode="json"),
-            calculation_version="reefvision-bounded-environment-join-1",
+            configuration=configuration,
+            calculation_version=(
+                "reefvision-bounded-environment-join-2"
+                if request.preserves_effort
+                else "reefvision-bounded-environment-join-1"
+            ),
         )
         environmental_counts = Counter(pair["environmental_record_id"] for pair in pairs)
         result = self.create_result(
@@ -961,6 +1057,7 @@ class EnvironmentalAnalysisService:
             payload={
                 "schema_version": "1.1.0",
                 "pairs": pairs,
+                **effort,
                 "matching_policy": {
                     "observation_time_source": "scientific_record.observed_at",
                     "max_time_delta_s": request.max_time_delta_s,
@@ -972,14 +1069,21 @@ class EnvironmentalAnalysisService:
                     "environmental_record_reuse_counts": dict(environmental_counts),
                     "pseudoreplication_warning": any(
                         count > 1 for count in environmental_counts.values()
+                    )
+                    or any(
+                        count > 1
+                        for count in effort.get("experimental_unit_reuse_counts", {}).values()
                     ),
                 },
                 "interpretation": "descriptive_context_only",
                 "inferential_statistics": None,
             },
-            input_snapshot=request.model_dump(mode="json"),
+            input_snapshot=configuration,
             source_record_ids=source_ids,
-            quality_control={"status": "accepted", "flags": []},
+            quality_control={
+                "status": "accepted",
+                "flags": ["unmatched_observations"] if unmatched else [],
+            },
             uncertainty={
                 "type": "matching_tolerance",
                 "statement": "Each pair reports its actual time, distance and depth offsets",
@@ -1001,6 +1105,12 @@ class EnvironmentalAnalysisService:
         workflow_run_id: str | None = None,
         workflow_node_run_id: str | None = None,
     ) -> EnvironmentalAnalysisSingleResponse:
+        configuration = request.model_dump(mode="json")
+        existing = self._workflow_result(
+            project_id, "lagged_comparison", configuration, workflow_run_id, workflow_node_run_id
+        )
+        if existing is not None:
+            return existing
         source_result = self.get_result(project_id, str(request.join_result_id))
         if source_result.analysis_kind != "observation_environment_join":
             raise ValidationError("Lagged comparisons require an observation-environment join")
@@ -1008,15 +1118,24 @@ class EnvironmentalAnalysisService:
             source_result.input_snapshot_json
         )
         all_pairs: list[dict[str, Any]] = []
+        all_unmatched: list[dict[str, Any]] = []
         source_ids: list[str] = []
         observed_times = []
         for lag_s in request.lags_s:
-            pairs, sources, observed_at = self._bounded_pairs(project_id, join_request, lag_s=lag_s)
+            pairs, unmatched, sources, observed_at = self._bounded_pairs(
+                project_id, join_request, lag_s=lag_s
+            )
             all_pairs.extend(pairs)
+            all_unmatched.extend(unmatched)
             source_ids.extend(sources)
             observed_times.append(observed_at)
         environmental_counts = Counter(pair["environmental_record_id"] for pair in all_pairs)
-        unit_counts = Counter(pair["independent_unit_id"] for pair in all_pairs)
+        effort = _sampling_effort(all_pairs, all_unmatched) if join_request.preserves_effort else {}
+        unit_counts = (
+            effort["experimental_unit_reuse_counts"]
+            if join_request.preserves_effort
+            else Counter(pair["independent_unit_id"] for pair in all_pairs)
+        )
         warning = any(count > 1 for count in environmental_counts.values()) or any(
             count > 1 for count in unit_counts.values()
         )
@@ -1024,8 +1143,12 @@ class EnvironmentalAnalysisService:
             project_id,
             analysis_kind="lagged_comparison",
             name=request.name,
-            configuration=request.model_dump(mode="json"),
-            calculation_version="reefvision-lagged-descriptive-comparison-1",
+            configuration=configuration,
+            calculation_version=(
+                "reefvision-lagged-descriptive-comparison-2"
+                if join_request.preserves_effort
+                else "reefvision-lagged-descriptive-comparison-1"
+            ),
         )
         result = self.create_result(
             definition,
@@ -1035,9 +1158,16 @@ class EnvironmentalAnalysisService:
                 "join_result_id": str(source_result.id),
                 "lags_s": request.lags_s,
                 "pairs": all_pairs,
+                **effort,
                 "reuse_diagnostics": {
                     "environmental_record_reuse_counts": dict(environmental_counts),
-                    "independent_unit_reuse_counts": dict(unit_counts),
+                    **(
+                        {}
+                        if join_request.preserves_effort
+                        else {
+                            "independent_unit_reuse_counts": dict(unit_counts),
+                        }
+                    ),
                     "pseudoreplication_warning": warning,
                 },
                 "interpretation": "descriptive_context_only",
@@ -1050,13 +1180,14 @@ class EnvironmentalAnalysisService:
             input_snapshot={
                 **request.model_dump(mode="json"),
                 "join_result_sha256": source_result.content_sha256,
-                "join_configuration": join_request.model_dump(mode="json"),
+                "join_configuration": join_request.calculation_configuration(),
             },
             source_record_ids=list(dict.fromkeys(source_ids)),
             source_analysis_result_ids=[source_result.id],
             quality_control={
                 "status": "accepted",
-                "flags": ["repeated_units_present"] if warning else [],
+                "flags": (["repeated_units_present"] if warning else [])
+                + (["unmatched_observations"] if all_unmatched else []),
             },
             uncertainty={
                 "type": "matching_tolerance",

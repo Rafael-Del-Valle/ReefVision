@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, JsonValue, field_validator, model_validator
 
 from reefvision.schemas.scientific_data import ScientificLocation, ScientificModel, utc_timestamp
 
@@ -111,6 +111,15 @@ class EventWindowAnalysisRequest(ScientificModel):
     boundary_policy: Literal["inclusive", "exclusive"] = "inclusive"
 
 
+class EnvironmentalStudyAssignment(ScientificModel):
+    observation_record_id: UUID
+    subject_id: str = Field(min_length=1, max_length=200)
+    experimental_unit_id: str = Field(min_length=1, max_length=200)
+    experimental_unit_kind: Literal["animal", "colony", "fragment", "tank", "site", "other"]
+    treatment: str = Field(min_length=1, max_length=200)
+    timepoint: str = Field(min_length=1, max_length=200)
+
+
 class ObservationEnvironmentJoinRequest(ScientificModel):
     name: str = Field(min_length=1, max_length=200)
     observation_record_ids: list[UUID] = Field(min_length=1, max_length=500)
@@ -119,6 +128,18 @@ class ObservationEnvironmentJoinRequest(ScientificModel):
     max_distance_m: float = Field(ge=0, le=100000)
     require_depth_match: bool = False
     max_depth_delta_m: float = Field(default=0, ge=0, le=1000)
+    unmatched_policy: Literal["reject", "retain"] = "reject"
+    study_assignments: list[EnvironmentalStudyAssignment] = Field(
+        default_factory=list, max_length=500
+    )
+
+    @property
+    def preserves_effort(self) -> bool:
+        return self.unmatched_policy == "retain" or bool(self.study_assignments)
+
+    def calculation_configuration(self) -> dict[str, JsonValue]:
+        exclude = set() if self.preserves_effort else {"unmatched_policy", "study_assignments"}
+        return self.model_dump(mode="json", exclude=exclude)
 
     @model_validator(mode="after")
     def unique_observations_and_explicit_depth_tolerance(
@@ -128,6 +149,19 @@ class ObservationEnvironmentJoinRequest(ScientificModel):
             raise ValueError("Observation record identifiers must be unique")
         if not self.require_depth_match and self.max_depth_delta_m != 0:
             raise ValueError("Depth tolerance requires require_depth_match=true")
+        assigned = {assignment.observation_record_id for assignment in self.study_assignments}
+        if self.study_assignments and (
+            assigned != set(self.observation_record_ids)
+            or len(assigned) != len(self.study_assignments)
+        ):
+            raise ValueError("Supply exactly one study assignment for every selected observation")
+        unit_kinds = {
+            (item.experimental_unit_id, item.experimental_unit_kind)
+            for item in self.study_assignments
+        }
+        if len(unit_kinds) != len({item.experimental_unit_id for item in self.study_assignments}):
+            raise ValueError("An experimental unit ID must have one unit kind")
+        self.study_assignments.sort(key=lambda item: item.observation_record_id)
         return self
 
 

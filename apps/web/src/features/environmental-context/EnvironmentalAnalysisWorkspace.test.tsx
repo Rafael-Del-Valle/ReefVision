@@ -61,6 +61,52 @@ function renderWorkspace() {
 afterEach(() => vi.restoreAllMocks());
 
 describe("EnvironmentalAnalysisWorkspace", () => {
+  it("submits study assignments and reports unmatched sampling effort", async () => {
+    const recordId = "00000000-0000-4000-8000-000000000020";
+    const assignment = {
+      observation_record_id: recordId,
+      subject_id: "fragment-A",
+      experimental_unit_id: "tank-A",
+      experimental_unit_kind: "tank",
+      treatment: "ambient",
+      timepoint: "baseline",
+    };
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      json({
+        definition: definition("observation_environment_join"),
+        result: {
+          ...result("observation_environment_join"),
+          payload: {
+            sampling_effort: { requested: 1, matched: 0, unmatched: 1 },
+          },
+        },
+      }),
+    );
+    renderWorkspace();
+    fireEvent.change(screen.getByLabelText("Analysis type"), {
+      target: { value: "observation_environment_join" },
+    });
+    fireEvent.change(screen.getByLabelText("Analysis name"), {
+      target: { value: "Tank context" },
+    });
+    fireEvent.change(screen.getByLabelText(/Observation record IDs/), {
+      target: { value: recordId },
+    });
+    fireEvent.click(screen.getByLabelText("Retain unmatched observations"));
+    fireEvent.change(screen.getByLabelText("Study assignments (JSON)"), {
+      target: { value: JSON.stringify([assignment]) },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Persist analysis" }));
+    expect(
+      await screen.findByText(
+        "Matched 0 of 1 requested observations. Unmatched: 1.",
+      ),
+    ).toBeVisible();
+    expect(JSON.parse(String(fetch.mock.calls[0][1]?.body))).toMatchObject({
+      unmatched_policy: "retain",
+      study_assignments: [assignment],
+    });
+  });
   it("does not acquire data automatically and explains descriptive-only evidence", () => {
     const fetch = vi.spyOn(globalThis, "fetch");
     renderWorkspace();

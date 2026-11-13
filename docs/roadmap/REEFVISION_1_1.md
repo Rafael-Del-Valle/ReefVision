@@ -1,5 +1,26 @@
 # ReefVision 1.1 development roadmap
 
+## 2026-11-13 scientific release validation
+
+Release remains on hold. The audited baseline, `74a63287`, passed 22 GitHub
+workflows. The Windows build and disposable installer exercise explicitly targeted
+1.0.3. Installed 1.1 WebView2, 1.1 MSI/CAB integrity, upgrade/rollback and packaged
+GPU acceptance still need a versioned 1.1 candidate.
+
+| Phase | Current implementation and development evidence | Remaining acceptance |
+| --- | --- | --- |
+| 1 Scientific foundation | Immutable records, QC, cache, checksummed exchange and backup. Scientific migration round trips pass through the single `0042` head. | Representative project exchange and restore in the installed application. The separate 1.6 revision `0038` still requires cross-version reconciliation. |
+| 2 Telemetry and geographic measurements | WGS84 geodesics, stale-coordinate invalidation, pairwise distance and direction, endpoint uncertainty, UTC/VFR alignment work and saved replay. | Surveyed reference data, full covariance and additional spatial transforms/exports. |
+| 3 Environmental context | Local records and bounded NOAA and Copernicus paths with offline cache. Live NOAA fetched 240 Charleston readings and returned the same IDs offline. | Authenticated Copernicus acceptance, representative local/offshore records and installed-app reuse. |
+| 4 Current visualization | Time/depth slices, vectors, bounded WGS84 streamlines, workflow, CSV and spatial overlays. | Representative current-field acceptance and synchronized organism trajectory overlays with explicit UTC and depth. |
+| 5 Scientific heatmaps | Reviewed boxes, verified masks and opt-in prediction layers with source-pixel provenance and export. | Calibrated physical density, broader tracking/environment layers and representative project acceptance. |
+| 6 Computed metrics | Scalar, reviewed-count and mask-union metrics. Saved polygon ROI geometry and opt-in reference-plane area now work through standalone, saved workflow, CSV and exchange. Chromium exercised save, reload and export. | Surveyed plane accuracy, covariance propagation, and broader study-unit metadata across metrics. |
+| 7 Event/environment analysis | Lunar/tidal context, event windows and lagged joins. Explicit missing matches and researcher-declared study assignments now persist through saved workflow and exchange. | Field event alignment, scientific timebase validation and repeated-measures analysis for an explicit study design. |
+
+See [scientific API and methods](../SCIENTIFIC_ENVIRONMENTAL_CONTEXT.md) and
+[draft PR #71](https://github.com/Rafael-Del-Valle/ReefVision/pull/71) for the
+commit-level verification record.
+
 ## 2026-11-05 release-candidate scientific completion checkpoint
 
 - Geographic distances now use the shared GeographicLib WGS84 inverse implementation with independent antipodal and near-antipodal regressions. Movement segments propagate distance, speed, and well-conditioned bearing standard uncertainty only from explicit independent isotropic one-sigma endpoint evidence; missing/shared correlation stays unavailable. Survey-grade covariance propagation, absolute UTC/VFR alignment, surveyed GCP validation, persisted arbitrary pairwise measurements, and GeoPackage remain open.
