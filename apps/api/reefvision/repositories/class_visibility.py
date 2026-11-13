@@ -40,6 +40,20 @@ class ClassVisibilityPreferenceRepository:
         )
         return self.session.scalar(statement)
 
+    def delete_if_updated_at(
+        self, project_id: str, user_identity: str, layer_type: str, expected_updated_at: datetime
+    ) -> bool:
+        """Delete only the saved personal preference version observed by this editor."""
+        result = self.session.connection().execute(
+            delete(ClassVisibilityPreference).where(
+                ClassVisibilityPreference.project_id == project_id,
+                ClassVisibilityPreference.user_identity == user_identity,
+                ClassVisibilityPreference.layer_type == layer_type,
+                ClassVisibilityPreference.updated_at == expected_updated_at,
+            )
+        )
+        return result.rowcount == 1
+
     def upsert(
         self, project_id: str, user_identity: str, layer_type: str, hidden_class_ids: list[str]
     ) -> None:
