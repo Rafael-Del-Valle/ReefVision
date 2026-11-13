@@ -204,6 +204,50 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertTrue(all(record["jpeg_boundary_markers"] for record in records))
             self.assertEqual({record["extension"] for record in records}, {".jpg", ".jfif"})
 
+    def test_opt_in_pixel_decode_accepts_rgb_cmyk_and_exif_without_mutation(self) -> None:
+        """Actual camera codecs must decode originals without rewriting EXIF or color mode."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; full camera JPEG decoding is unverified")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            originals = {}
+            for mode, suffix in (("RGB", ".JPG"), ("CMYK", ".JFIF")):
+                fixture = root / f"camera_{mode}{suffix}"
+                values = (30, 80, 120) if mode == "RGB" else (30, 80, 120, 150)
+                image = Image.new(mode, (12, 8), values)
+                exif = Image.Exif()
+                exif[274] = 6
+                image.save(fixture, format="JPEG", exif=exif)
+                originals[fixture.name] = fixture.read_bytes()
+            records, errors = MODULE.inventory(root, verify_decode=True)
+            self.assertEqual(errors, [])
+            self.assertEqual(len(records), 2)
+            self.assertTrue(all(record["jpeg_boundary_markers"] for record in records))
+            self.assertTrue(all(record["jpeg_decodable"] for record in records))
+            for name, content in originals.items():
+                self.assertEqual((root / name).read_bytes(), content)
+
+    def test_opt_in_pixel_decode_rejects_corruption_with_valid_jpeg_markers(self) -> None:
+        """SOI/EOI and SHA-256 alone cannot prove that an image is usable."""
+        try:
+            from PIL import Image  # noqa: F401
+        except ImportError:
+            self.skipTest("Pillow unavailable; full camera JPEG decoding is unverified")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = root / "undecodable.JpEg"
+            original = b"\\xff\\xd8" + b"not a real JPEG image" + b"\\xff\\xd9"
+            fixture.write_bytes(original)
+            records, errors = MODULE.inventory(root, verify_decode=True)
+            self.assertEqual([record["path"] for record in records], [fixture.name])
+            self.assertTrue(records[0]["jpeg_boundary_markers"])
+            self.assertFalse(records[0]["jpeg_decodable"])
+            self.assertEqual(len(errors), 1)
+            self.assertTrue(errors[0].startswith(f"JPEG decode failed: {fixture.name}:"))
+            self.assertEqual(fixture.read_bytes(), original)
+
     def test_exif_oriented_camera_jpeg_is_inventoried_without_rewriting_metadata(self) -> None:
         """Camera EXIF orientation must survive read-only JPEG inventory."""
         try:
