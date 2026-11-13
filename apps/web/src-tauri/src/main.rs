@@ -223,6 +223,10 @@ while ($true) {
     # where both sources have a value, the latest persisted epoch history
     # wins so box/cls/dfl losses reflect the actual training progression.
     $latestMetrics = @{}
+    # Scientific QC: a trailing null/nonfinite history entry means the loss
+    # shown below is a previously recorded sample, not a current-epoch value.
+    # Keep the persisted history unchanged and disclose that age in the view.
+    $staleMetricSamples = @{}
     if ($null -ne $run.metrics) {
       foreach ($metric in $run.metrics.PSObject.Properties) {
         if (Test-FiniteMetricValue -Value $metric.Value) {
@@ -236,6 +240,9 @@ while ($true) {
         for ($index = $values.Count - 1; $index -ge 0; $index -= 1) {
           if (Test-FiniteMetricValue -Value $values[$index]) {
             $latestMetrics[$series.Name] = $values[$index]
+            if ($index -lt ($values.Count - 1)) {
+              $staleMetricSamples[$series.Name] = (' [prior history entry {0}/{1}; latest unavailable]' -f ($index + 1), $values.Count)
+            }
             break
           }
         }
@@ -247,14 +254,20 @@ while ($true) {
       Write-Host ''
       Write-Host 'Training losses'
       foreach ($key in $trainingLosses) {
-        if ($latestMetrics.ContainsKey($key)) { Write-Host ('  {0,-20} {1}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key])) }
+        if ($latestMetrics.ContainsKey($key)) {
+          $note = if ($staleMetricSamples.ContainsKey($key)) { $staleMetricSamples[$key] } else { '' }
+          Write-Host ('  {0,-20} {1}{2}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key]), $note)
+        }
       }
     }
     if (@($validationLosses | Where-Object { $latestMetrics.ContainsKey($_) }).Count -gt 0) {
       Write-Host ''
       Write-Host 'Validation losses'
       foreach ($key in $validationLosses) {
-        if ($latestMetrics.ContainsKey($key)) { Write-Host ('  {0,-20} {1}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key])) }
+        if ($latestMetrics.ContainsKey($key)) {
+          $note = if ($staleMetricSamples.ContainsKey($key)) { $staleMetricSamples[$key] } else { '' }
+          Write-Host ('  {0,-20} {1}{2}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key]), $note)
+        }
       }
     }
     $otherMetrics = @($latestMetrics.Keys | Where-Object {
@@ -264,7 +277,8 @@ while ($true) {
       Write-Host ''
       Write-Host 'Other model metrics'
       foreach ($key in $otherMetrics) {
-        Write-Host ('  {0,-30} {1}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key]))
+        $note = if ($staleMetricSamples.ContainsKey($key)) { $staleMetricSamples[$key] } else { '' }
+        Write-Host ('  {0,-30} {1}{2}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key]), $note)
       }
     }
     # Never follow an API redirect to a remote host: monitoring stays on loopback.
