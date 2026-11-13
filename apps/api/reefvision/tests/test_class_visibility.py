@@ -197,13 +197,11 @@ def test_atomic_visibility_upsert_preserves_scopes_after_stale_first_reads(
             name="Swiftia Closed",
             display_color="#326EA8",
         )
-        identity = client.get(
-            f"/api/v1/projects/{project['id']}/class-visibility"
-        ).json()["user_identity"]
+        identity = client.get(f"/api/v1/projects/{project['id']}/class-visibility").json()[
+            "user_identity"
+        ]
 
-        with Session(app.state.engine) as first_editor, Session(
-            app.state.engine
-        ) as second_editor:
+        with Session(app.state.engine) as first_editor, Session(app.state.engine) as second_editor:
             pref_a = ClassVisibilityPreferenceRepository(first_editor)
             pref_b = ClassVisibilityPreferenceRepository(second_editor)
             default_a = ProjectClassVisibilityDefaultRepository(first_editor)
@@ -215,15 +213,11 @@ def test_atomic_visibility_upsert_preserves_scopes_after_stale_first_reads(
             assert default_b.get(project["id"], "predictions") is None
 
             pref_a.upsert(project["id"], identity, "annotations", [first["id"]])
-            default_a.upsert(
-                project["id"], "predictions", [first["id"]], "local-user:editor-a"
-            )
+            default_a.upsert(project["id"], "predictions", [first["id"]], "local-user:editor-a")
             first_editor.commit()
 
             pref_b.upsert(project["id"], identity, "annotations", [second["id"]])
-            default_b.upsert(
-                project["id"], "predictions", [second["id"]], "local-user:editor-b"
-            )
+            default_b.upsert(project["id"], "predictions", [second["id"]], "local-user:editor-b")
             second_editor.commit()
 
         with Session(app.state.engine) as verification:
@@ -262,16 +256,9 @@ def test_atomic_visibility_upsert_preserves_scopes_after_stale_first_reads(
         assert preference.status_code == project_default.status_code == 200
         bundle = client.get(f"/api/v1/projects/{project['id']}/class-visibility")
         assert bundle.status_code == 200
-        assert bundle.json()["user_preferences"]["annotations"]["hidden_class_ids"] == [
-            first["id"]
-        ]
-        assert bundle.json()["project_defaults"]["predictions"]["hidden_class_ids"] == [
-            first["id"]
-        ]
-        assert (
-            bundle.json()["project_defaults"]["predictions"]["updated_by_identity"]
-            == identity
-        )
+        assert bundle.json()["user_preferences"]["annotations"]["hidden_class_ids"] == [first["id"]]
+        assert bundle.json()["project_defaults"]["predictions"]["hidden_class_ids"] == [first["id"]]
+        assert bundle.json()["project_defaults"]["predictions"]["updated_by_identity"] == identity
         with Session(app.state.engine) as verification:
             assert verification.get(ClassVisibilityPreference, pref_id).hidden_class_ids_json == [
                 first["id"]
