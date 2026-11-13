@@ -205,7 +205,9 @@ def _disagreement_artifact_for_consensus(
         or artifact.producer_node_run_id != producer.id
         for artifact in declared_outputs
     ):
-        raise ConflictError("Workflow consensus declared producer output is missing or inconsistent")
+        raise ConflictError(
+            "Workflow consensus declared producer output is missing or inconsistent"
+        )
 
     disagreements = list(
         session.scalars(
