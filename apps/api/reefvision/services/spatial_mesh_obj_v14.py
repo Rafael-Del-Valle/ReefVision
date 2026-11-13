@@ -172,6 +172,12 @@ def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
             # geometric records can understate a coral's reconstructed extent.
             # Inert grouping and material labels remain accepted.
             raise ValueError(f"OBJ line {line_number}: unsupported geometry directive")
+        elif fields[0] not in {"o", "g", "s", "usemtl", "mtllib"}:
+            # Unknown or vendor-specific directives may encode additional
+            # geometry. Accept only known inert object/group/material labels:
+            # measuring a triangular subset as the whole coral surface would
+            # make the scientific preview misleading.
+            raise ValueError(f"OBJ line {line_number}: unsupported directive")
     if not vertices or not faces:
         raise ValueError("OBJ preview requires vertices and triangular faces")
     return vertices, faces
