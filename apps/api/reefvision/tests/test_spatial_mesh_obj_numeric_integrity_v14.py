@@ -231,6 +231,7 @@ def test_representable_weighted_coordinate_preserves_standalone_workflow_parity(
     assert artifact["payload_json"] == expected
     assert len(artifact["payload_sha256"]) == 64
 
+
 @pytest.mark.parametrize(
     "directive",
     [
@@ -276,7 +277,10 @@ def test_inert_obj_metadata_keeps_standalone_and_workflow_measurements_identical
         "g branch_A\n"
         "s off\n"
         "usemtl tissue\n"
-        + OBJ
+        "v 0 0 0\n"
+        "v 2 0 0\n"
+        "v 0 3 0\n"
+        "f 1 2 3\n"
     )
     assert parse_obj_triangles(decorated) == parse_obj_triangles(OBJ)
     project_id = str(create_project(client, "OBJ metadata replay")["id"])
