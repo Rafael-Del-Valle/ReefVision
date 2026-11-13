@@ -120,15 +120,28 @@ def mesh_edge_paths(
             adjacency[first][second] = length
             adjacency[second][first] = length
 
-    # Shortest-route multiplicity is only decidable by the positive-weight
-    # Dijkstra count below. A zero-length edge anywhere in the imported
-    # mesh makes this bounded exact-cost diagnostic conservatively unknown:
-    # equal-distance predecessor updates need not be acyclic.
-    has_zero_length_edges = any(
-        edge_length == 0.0
-        for neighbors in adjacency.values()
-        for edge_length in neighbors.values()
-    )
+    # Positive-weight shortest-path counts are invalidated by zero edges,
+    # but only within the connected component containing the requested pair.
+    # Unrelated disconnected scans must not make a valid route indeterminate.
+    zero_edge_in_component: dict[int, bool] = {}
+    unseen = set(referenced)
+    while unseen:
+        seed = min(unseen)
+        unseen.remove(seed)
+        frontier = [seed]
+        component = [seed]
+        contains_zero_edge = False
+        while frontier:
+            vertex = frontier.pop()
+            for neighbor, edge_length in adjacency[vertex].items():
+                if edge_length == 0.0:
+                    contains_zero_edge = True
+                if neighbor in unseen:
+                    unseen.remove(neighbor)
+                    frontier.append(neighbor)
+                    component.append(neighbor)
+        for vertex in component:
+            zero_edge_in_component[vertex] = contains_zero_edge
 
     results: list[dict[str, Any]] = []
     for pair in pairs:
@@ -185,7 +198,7 @@ def mesh_edge_paths(
         maximum_turn_angle_deg: float | None = None
         total_absolute_geometric_turn_deg: float | None = None
         if status == "connected":
-            if has_zero_length_edges:
+            if zero_edge_in_component[start]:
                 shortest_route_alternatives_status = "unassessable_zero_length_edges"
             elif shortest_counts[end] > 1:
                 shortest_route_alternatives_status = "multiple_exact_equal_cost_routes"
