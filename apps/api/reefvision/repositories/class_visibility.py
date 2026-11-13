@@ -54,12 +54,17 @@ class ClassVisibilityPreferenceRepository:
         return self.session.scalar(statement)
 
     def delete_if_updated_at(
-        self, project_id: str, user_identity: str, layer_type: str, expected_updated_at: datetime, expected_record_id: str | None = None
+        self,
+        project_id: str,
+        user_identity: str,
+        layer_type: str,
+        expected_updated_at: datetime,
+        expected_record_id: str | None = None,
     ) -> bool:
         """Delete only the saved personal preference version observed by this editor."""
         statement = delete(ClassVisibilityPreference).where(
             ClassVisibilityPreference.project_id == project_id,
-                ClassVisibilityPreference.user_identity == user_identity,
+            ClassVisibilityPreference.user_identity == user_identity,
             ClassVisibilityPreference.layer_type == layer_type,
             ClassVisibilityPreference.updated_at == expected_updated_at,
         )
@@ -111,7 +116,9 @@ class ClassVisibilityPreferenceRepository:
         if expected_updated_at is None:
             return self.session.connection().execute(insert_statement).rowcount == 1
         if expected_record_id is not None:
-            update_statement = update_statement.where(ClassVisibilityPreference.id == expected_record_id)
+            update_statement = update_statement.where(
+                ClassVisibilityPreference.id == expected_record_id
+            )
         return self.session.connection().execute(update_statement).rowcount == 1
 
     def upsert(
@@ -164,7 +171,11 @@ class ProjectClassVisibilityDefaultRepository:
         return self.session.scalar(statement)
 
     def delete_if_updated_at(
-        self, project_id: str, layer_type: str, expected_updated_at: datetime, expected_record_id: str | None = None
+        self,
+        project_id: str,
+        layer_type: str,
+        expected_updated_at: datetime,
+        expected_record_id: str | None = None,
     ) -> bool:
         """Atomically delete only the version observed by this editor."""
         statement = delete(ProjectClassVisibilityDefault).where(
@@ -219,7 +230,9 @@ class ProjectClassVisibilityDefaultRepository:
         if expected_updated_at is None:
             return self.session.connection().execute(insert_statement).rowcount == 1
         if expected_record_id is not None:
-            update_statement = update_statement.where(ProjectClassVisibilityDefault.id == expected_record_id)
+            update_statement = update_statement.where(
+                ProjectClassVisibilityDefault.id == expected_record_id
+            )
         return self.session.connection().execute(update_statement).rowcount == 1
 
     def upsert(
