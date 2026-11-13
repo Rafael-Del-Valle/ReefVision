@@ -75,3 +75,13 @@ clock one day backwards for consecutive conditional saves of both visibility
 scopes, verifies strictly advancing revision tokens, rejects stale save/reset,
 and confirms the latest settings remain intact. Full repository CI and native
 Windows installed-GUI/installer validation are still required for acceptance.
+
+## Row identity protects against delete/recreate ABA
+
+Each saved scope also exposes optional `record_id` (its existing UUID primary
+key). A client may supply `expected_record_id` alongside a timestamp on PUT
+or DELETE to atomically protect against a deleted/recreated scope with an
+identical timestamp. A stale row ID yields HTTP 409 without mutation. Older
+timestamp-only API clients remain compatible, but lack this ABA protection.
+These are display preference tokens, not biological event timestamps or
+organism identities. No migration or duplicate Workflow Builder node is added.
