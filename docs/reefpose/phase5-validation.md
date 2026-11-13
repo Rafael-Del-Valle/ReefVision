@@ -136,6 +136,13 @@ without scientific benefit at this scale. Upstream availability was nevertheless
 PyTorch `2.11.0+cu128`, CUDA 12.8, one NVIDIA GeForce RTX 3090, CUDA available. No model
 weights were downloaded and no GPU accuracy claim is made.
 
+The three explicit RTX integration tests also passed: native scientific evaluation,
+asynchronous two-model comparison, and the complete Phase 2A CUDA workflow from training
+through checkpoint registration and inference. The synthetic evaluation measured 246.929 ms
+latency (4.050 images/s) and 9,822,208 peak GPU bytes; the workflow trained and inferred in
+1.717 s with 18,968,064 peak GPU bytes. These are engineering fixtures, not biological
+accuracy evidence.
+
 ## Remaining scientific limitations
 
 - No real labeled animal dataset has been used to estimate event precision/recall,
