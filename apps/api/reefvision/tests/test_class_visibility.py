@@ -340,9 +340,7 @@ def test_versioned_personal_visibility_reset_preserves_newer_editor_save(
     assert original.status_code == 200
     old_stamp = original.json()["updated_at"]
     assert old_stamp
-    assert (
-        client.put(other_layer, json={"hidden_class_ids": [first["id"]]}).status_code == 200
-    )
+    assert client.put(other_layer, json={"hidden_class_ids": [first["id"]]}).status_code == 200
     newer = client.put(path, json={"hidden_class_ids": [second["id"]]})
     assert newer.status_code == 200
     new_stamp = newer.json()["updated_at"]
@@ -369,3 +367,67 @@ def test_versioned_personal_visibility_reset_preserves_newer_editor_save(
     bundle = client.get(f"/api/v1/projects/{project['id']}/class-visibility").json()
     assert bundle["user_preferences"]["annotations"]["saved"] is False
     assert bundle["user_preferences"]["predictions"]["saved"] is True
+
+
+def test_conditional_visibility_saves_reject_stale_and_recreated_scopes(
+    client: TestClient,
+) -> None:
+    """Both personal and project saves must never overwrite another editor's update."""
+    project = create_project(client)
+    first = create_label_class(
+        client, project["id"], class_index=0, name="Swiftia Open", display_color="#C74343"
+    )
+    second = create_label_class(
+        client, project["id"], class_index=1, name="Swiftia Closed", display_color="#326EA8"
+    )
+
+    for scope in ("preferences", "defaults"):
+        path = f"/api/v1/projects/{project['id']}/class-visibility/{scope}/annotations"
+        create = client.put(
+            path, json={"hidden_class_ids": [first["id"]], "expected_updated_at": None}
+        )
+        assert create.status_code == 200, create.text
+        first_revision = create.json()["updated_at"]
+        assert first_revision
+
+        # Two editors saw no record. The second must not replace the first insert.
+        collision = client.put(
+            path, json={"hidden_class_ids": [second["id"]], "expected_updated_at": None}
+        )
+        assert collision.status_code == 409
+
+        update = client.put(
+            path,
+            json={"hidden_class_ids": [second["id"]], "expected_updated_at": first_revision},
+        )
+        assert update.status_code == 200, update.text
+        second_revision = update.json()["updated_at"]
+        assert second_revision != first_revision
+
+        stale = client.put(
+            path,
+            json={"hidden_class_ids": [first["id"]], "expected_updated_at": first_revision},
+        )
+        assert stale.status_code == 409
+        bundle = client.get(f"/api/v1/projects/{project['id']}/class-visibility").json()
+        key = "user_preferences" if scope == "preferences" else "project_defaults"
+        assert bundle[key]["annotations"]["hidden_class_ids"] == [second["id"]]
+
+        # A late retry after removal cannot re-create an overwritten revision.
+        assert (
+            client.delete(path, params={"expected_updated_at": second_revision}).status_code
+            == 204
+        )
+        removed_retry = client.put(
+            path,
+            json={"hidden_class_ids": [first["id"]], "expected_updated_at": second_revision},
+        )
+        assert removed_retry.status_code == 409
+        restored = client.put(
+            path, json={"hidden_class_ids": [first["id"]], "expected_updated_at": None}
+        )
+        assert restored.status_code == 200
+        # Existing offline integrations may still omit the revision field.
+        legacy = client.put(path, json={"hidden_class_ids": [second["id"]]})
+        assert legacy.status_code == 200
+        assert legacy.json()["hidden_class_ids"] == [second["id"]]
