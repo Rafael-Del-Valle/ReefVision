@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from heapq import heappop, heappush
 from itertools import accumulate, pairwise
-from math import acos, degrees, dist, isfinite
+from math import atan2, degrees, dist, hypot, isfinite
 from typing import Any
 
 
@@ -28,15 +28,21 @@ def _route_turn_angles(
         if incoming_length == 0 or outgoing_length == 0:
             continue
         incoming = [
-            (points[current][axis] - points[previous][axis]) / incoming_length
-            for axis in range(3)
+            (points[current][axis] - points[previous][axis]) / incoming_length for axis in range(3)
         ]
         outgoing = [
-            (points[following][axis] - points[current][axis]) / outgoing_length
-            for axis in range(3)
+            (points[following][axis] - points[current][axis]) / outgoing_length for axis in range(3)
         ]
         cosine = sum(a * b for a, b in zip(incoming, outgoing, strict=True))
-        angles[offset] = degrees(acos(max(-1.0, min(1.0, cosine))))
+        # acos(dot) collapses tiny genuine bends to zero when dot rounds to
+        # 1.0. atan2(cross magnitude, dot) retains sub-degree sensitivity
+        # while remaining orientation-independent in three dimensions.
+        cross = (
+            incoming[1] * outgoing[2] - incoming[2] * outgoing[1],
+            incoming[2] * outgoing[0] - incoming[0] * outgoing[2],
+            incoming[0] * outgoing[1] - incoming[1] * outgoing[0],
+        )
+        angles[offset] = degrees(atan2(hypot(*cross), cosine))
     return angles
 
 
