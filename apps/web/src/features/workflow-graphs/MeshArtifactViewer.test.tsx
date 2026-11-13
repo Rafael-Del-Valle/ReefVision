@@ -693,6 +693,77 @@ describe("MeshArtifactViewer", () => {
     expect(JSON.stringify(tiny)).toBe(original);
   });
 
+  it("rejects contradictory microscopic segment and cumulative distances without losing nominal geometry", () => {
+    const route = {
+      status: "connected",
+      path_vertex_indices: [0, 1, 2],
+      path_vertices_in_source_frame_m: [
+        [0, 0, 0],
+        [1e-16, 0, 0],
+        [2e-16, 0, 0],
+      ],
+      length_m: 2e-16,
+      path_cumulative_lengths_m: [0, 1e-16, 2e-16],
+      path_edge_lengths_m: [1e-16, 1e-16],
+      path_qc_warnings: [],
+    };
+    const artifact = { ...validArtifact, surface_edge_paths: [route] };
+    const original = JSON.stringify(artifact);
+    const inspect = (candidate: typeof route) =>
+      parseMeshRenderArtifact({
+        ...validArtifact,
+        surface_edge_paths: [candidate],
+      })?.routeInspections[0];
+
+    expect(inspect(route)).toMatchObject({
+      lengthM: 2e-16,
+      cumulativeLengthsM: [0, 1e-16, 2e-16],
+      edgeLengthsM: [1e-16, 1e-16],
+    });
+    expect(
+      inspect({
+        ...route,
+        path_cumulative_lengths_m: [0, 1e-16, 3e-16],
+      }),
+    ).toMatchObject({
+      lengthM: 2e-16,
+      cumulativeLengthsM: null,
+      edgeLengthsM: [1e-16, 1e-16],
+    });
+    expect(
+      inspect({
+        ...route,
+        path_edge_lengths_m: [1e-16, 2e-16],
+      }),
+    ).toMatchObject({
+      lengthM: 2e-16,
+      cumulativeLengthsM: [0, 1e-16, 2e-16],
+      edgeLengthsM: null,
+    });
+    expect(
+      inspect({
+        ...route,
+        path_edge_lengths_m: [2e-16, 0],
+      }),
+    ).toMatchObject({
+      cumulativeLengthsM: [0, 1e-16, 2e-16],
+      edgeLengthsM: null,
+    });
+    const zero = {
+      ...route,
+      length_m: 0,
+      path_cumulative_lengths_m: [0, 0, 0],
+      path_edge_lengths_m: [0, 0],
+    };
+    expect(inspect(zero)?.edgeLengthsM).toEqual([0, 0]);
+    expect(inspect({ ...zero, path_edge_lengths_m: [1e-16, 0] })).toMatchObject({
+      lengthM: 0,
+      cumulativeLengthsM: [0, 0, 0],
+      edgeLengthsM: null,
+    });
+    expect(JSON.stringify(artifact)).toBe(original);
+  });
+
   it("fails closed on invalid saved path measurements but retains renderable geometry", () => {
     const artifact = {
       ...validArtifact,
