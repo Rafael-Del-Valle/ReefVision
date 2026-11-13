@@ -54,18 +54,18 @@ class ClassVisibilityPreferenceRepository:
         return self.session.scalar(statement)
 
     def delete_if_updated_at(
-        self, project_id: str, user_identity: str, layer_type: str, expected_updated_at: datetime
+        self, project_id: str, user_identity: str, layer_type: str, expected_updated_at: datetime, expected_record_id: str | None = None
     ) -> bool:
         """Delete only the saved personal preference version observed by this editor."""
-        result = self.session.connection().execute(
-            delete(ClassVisibilityPreference).where(
-                ClassVisibilityPreference.project_id == project_id,
+        statement = delete(ClassVisibilityPreference).where(
+            ClassVisibilityPreference.project_id == project_id,
                 ClassVisibilityPreference.user_identity == user_identity,
-                ClassVisibilityPreference.layer_type == layer_type,
-                ClassVisibilityPreference.updated_at == expected_updated_at,
-            )
+            ClassVisibilityPreference.layer_type == layer_type,
+            ClassVisibilityPreference.updated_at == expected_updated_at,
         )
-        return result.rowcount == 1
+        if expected_record_id is not None:
+            statement = statement.where(ClassVisibilityPreference.id == expected_record_id)
+        return self.session.connection().execute(statement).rowcount == 1
 
     def save_if_revision(
         self,
@@ -74,6 +74,7 @@ class ClassVisibilityPreferenceRepository:
         layer_type: str,
         hidden_class_ids: list[str],
         expected_updated_at: datetime | None,
+        expected_record_id: str | None = None,
     ) -> bool:
         """Atomic compare-and-save. None means create only if the scope is absent."""
         if expected_updated_at is None:
@@ -109,6 +110,8 @@ class ClassVisibilityPreferenceRepository:
             )
         if expected_updated_at is None:
             return self.session.connection().execute(insert_statement).rowcount == 1
+        if expected_record_id is not None:
+            update_statement = update_statement.where(ClassVisibilityPreference.id == expected_record_id)
         return self.session.connection().execute(update_statement).rowcount == 1
 
     def upsert(
@@ -161,17 +164,17 @@ class ProjectClassVisibilityDefaultRepository:
         return self.session.scalar(statement)
 
     def delete_if_updated_at(
-        self, project_id: str, layer_type: str, expected_updated_at: datetime
+        self, project_id: str, layer_type: str, expected_updated_at: datetime, expected_record_id: str | None = None
     ) -> bool:
         """Atomically delete only the version observed by this editor."""
-        result = self.session.connection().execute(
-            delete(ProjectClassVisibilityDefault).where(
-                ProjectClassVisibilityDefault.project_id == project_id,
-                ProjectClassVisibilityDefault.layer_type == layer_type,
-                ProjectClassVisibilityDefault.updated_at == expected_updated_at,
-            )
+        statement = delete(ProjectClassVisibilityDefault).where(
+            ProjectClassVisibilityDefault.project_id == project_id,
+            ProjectClassVisibilityDefault.layer_type == layer_type,
+            ProjectClassVisibilityDefault.updated_at == expected_updated_at,
         )
-        return result.rowcount == 1
+        if expected_record_id is not None:
+            statement = statement.where(ProjectClassVisibilityDefault.id == expected_record_id)
+        return self.session.connection().execute(statement).rowcount == 1
 
     def save_if_revision(
         self,
@@ -180,6 +183,7 @@ class ProjectClassVisibilityDefaultRepository:
         hidden_class_ids: list[str],
         updated_by_identity: str,
         expected_updated_at: datetime | None,
+        expected_record_id: str | None = None,
     ) -> bool:
         """Create or update only the project-default revision observed by the editor."""
         if expected_updated_at is None:
@@ -214,6 +218,8 @@ class ProjectClassVisibilityDefaultRepository:
             )
         if expected_updated_at is None:
             return self.session.connection().execute(insert_statement).rowcount == 1
+        if expected_record_id is not None:
+            update_statement = update_statement.where(ProjectClassVisibilityDefault.id == expected_record_id)
         return self.session.connection().execute(update_statement).rowcount == 1
 
     def upsert(
