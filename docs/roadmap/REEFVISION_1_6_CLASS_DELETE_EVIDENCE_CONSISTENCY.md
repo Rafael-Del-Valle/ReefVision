@@ -12,6 +12,6 @@ This is a client-side, fail-closed safeguard: the backend must continue independ
 
 ## Regression and acceptance scope
 
-Eight parameterized browser-component cases cover a foreign project, foreign class, nonzero aggregate references, hidden mutable and immutable references, positive itemization, active deletion blockers and an absent itemization. All assert that the review inconsistency is visible, Delete remains disabled and no DELETE request is sent. Existing happy-path, 503, stale-query/refetch and blocking-preview tests remain.
+Nine parameterized browser-component cases cover a foreign project, foreign class, nonzero aggregate references, hidden mutable and immutable references, positive itemization, active or missing deletion blockers and an absent itemization. All assert that the review inconsistency is visible, Delete remains disabled and no DELETE request is sent. Existing happy-path, 503, stale-query/refetch and blocking-preview tests remain.
 
 No migration or new Workflow Builder node is appropriate for this UI-only safeguard. Existing standalone and saved executable `qc_review_queue` nodes, typed scientific outputs, evidence/provenance, persisted run state, retries and researcher approval are preserved. Release acceptance still requires exact-head lint/type/tests, representative biological saved-workflow runs, independent Alembic 0038 reconciliation and native Windows MSI/installed-GUI/upgrade/rollback validation.
