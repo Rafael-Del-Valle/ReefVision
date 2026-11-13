@@ -16,8 +16,8 @@ editor attribution, and a different precedence state.
 A **Reset Project Default** action is now available only after the current
 project's visibility bundle loads and the selected layer actually has a saved
 project default. A native confirmation describes project-wide consequences,
-including that users without personal preferences will see all classes in
-that layer. Declining does not send a request. Accepting calls the existing
+including that users without saved personal preferences or session
+overrides will see all classes in that layer. Declining does not send a request. Accepting calls the existing
 scoped DELETE, clears only the selected project/layer default in the local
 cache on success, and disables the action when the default no longer exists.
 
@@ -33,7 +33,9 @@ The AnnotationEditor component regression exercises an initially saved
 personal preference alongside project defaults for two layers, cancellation,
 positive confirmation, exactly one DELETE, preserved personal and
 other-layer settings, absent annotation write requests, and disabled reset
-after success. A pre-load regression includes the new action among controls
+after success. A separate regression simulates a failed first DELETE, checks
+that the default is retained, and requires another explicit confirmation
+before the second attempt can complete. A pre-load regression includes the new action among controls
 that cannot mutate the wrong project before identity is known.
 
 This is a UI/API completion of existing visibility functionality, not a new
