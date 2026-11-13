@@ -31,7 +31,9 @@ type BoundClassPreview = {
 
 // A preview is not permission to execute while any safety evidence is blocked
 // or absent. The backend also validates the immutable preview checksum.
-function previewHasNoBlockingEvidence(operation: ClassOperationRecord): boolean {
+function previewHasNoBlockingEvidence(
+  operation: ClassOperationRecord,
+): boolean {
   const plan = operation.plan;
   return (
     Array.isArray(plan?.blockers) &&

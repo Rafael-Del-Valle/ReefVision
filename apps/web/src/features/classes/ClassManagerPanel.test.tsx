@@ -319,9 +319,7 @@ describe("ClassManagerPanel", () => {
         operationType === "reassign"
           ? "Reassign preview"
           : "Reassign and Delete preview";
-      expect(
-        await within(row).findByText(summaryTitle),
-      ).toBeInTheDocument();
+      expect(await within(row).findByText(summaryTitle)).toBeInTheDocument();
       expect(
         within(row).getByText(/Execution disabled: preview contains blockers/),
       ).toBeInTheDocument();
