@@ -421,7 +421,10 @@ def test_queued_verified_pose_workflow_rejects_changed_node_identity_before_exec
         node.node_id = "not-a-node-in-the-saved-graph"
         session.commit()
 
-    assert process_workflow_run_job(app.state.settings, app.state.session_factory, job_id) is False
+    assert (
+        process_workflow_run_job(app.state.settings, app.state.session_factory, job_id)
+        is False
+    )
     with app.state.session_factory() as session:
         job = session.get(Job, job_id)
         node = session.scalar(
