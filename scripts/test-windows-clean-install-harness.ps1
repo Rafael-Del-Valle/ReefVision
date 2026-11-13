@@ -197,6 +197,27 @@ Assert-True ($acceptanceScript.Contains('$qcPersistedItem[0].review_state -ne ''
 Assert-True ($acceptanceScript.Contains('qcPersistedEvents.total -ne 6')) 'Installed QC audit history, including completion, must be checked after desktop restart.'
 Assert-True ($acceptanceScript.Contains('qcPersistedAnnotations.annotations')) 'Installed QC acceptance must preserve the original annotation.'
 
+# In contrast to repeated unkeyed requests, explicit UUID replays must be
+# durable across installed-desktop restarts and stale researcher actions.
+foreach ($payloadMarker in @('$qcSkipBody = @{', '$qcReturnBody = @{', '$qcStartBody = @{', '$qcCompleteBody = @{')) {
+    $payloadStart = $acceptanceScript.IndexOf($payloadMarker, [System.StringComparison]::Ordinal)
+    Assert-True ($payloadStart -ge 0) "Installed QC payload missing: $payloadMarker"
+    $payloadEnd = $acceptanceScript.IndexOf('| ConvertTo-Json', $payloadStart, [System.StringComparison]::Ordinal)
+    Assert-True ($payloadEnd -gt $payloadStart) "Installed QC payload not serialized: $payloadMarker"
+    $payloadText = $acceptanceScript.Substring($payloadStart, $payloadEnd - $payloadStart)
+    Assert-True ($payloadText -match 'client_request_id\\s*=\\s*\\[guid\\]::NewGuid\\(\\)\\.ToString\\(\\)') "Installed QC action must allocate one stable retry UUID: $payloadMarker"
+}
+Assert-True ($acceptanceScript.Contains('$qcLateStartRetry.changed_count -ne 0')) 'Stale keyed start must be a no-op after scientist completion.'
+Assert-True ($acceptanceScript.Contains('$qcLateStartRetry.items)[0].review_state -ne ''completed''')) 'Stale start must preserve completed review state.'
+Assert-True ($acceptanceScript.Contains('$qcRestartCompleteRetry.changed_count -ne 0')) 'Original completion UUID must be retryable after packaged restart.'
+Assert-True ($acceptanceScript.Contains('$qcRestartStartRetry.changed_count -ne 0')) 'Original start UUID must be retryable after packaged restart.'
+Assert-True ($acceptanceScript.Contains('$qcRestartStartRetry.items)[0].completed_at -ne @($qcCompleted.items)[0].completed_at')) 'Post-restart replay must preserve immutable completion timestamp.'
+Assert-True ($acceptanceScript.Contains('$qcRestartStartRetry.requires_researcher_review -ne $true')) 'Post-restart replay must preserve the scientific review gate.'
+$restartEvidenceOffset = $acceptanceScript.IndexOf('$qcPersistedQueue = Invoke-RestMethod', [System.StringComparison]::Ordinal)
+$postRestartRetryOffset = $acceptanceScript.IndexOf('$qcRestartCompleteRetry = Invoke-RestMethod', [System.StringComparison]::Ordinal)
+Assert-True ($postRestartRetryOffset -gt 0 -and $postRestartRetryOffset -lt $restartEvidenceOffset) 'UUID replay must execute on the restarted packaged API before recording persisted QC evidence.'
+
+
 # Regression: a port file may exist before Uvicorn binds. Every installed
 # desktop launch (initial, post-upgrade/restart, and QC persistence restart)
 # must wait for real loopback HTTP version + migrated schema readiness.
