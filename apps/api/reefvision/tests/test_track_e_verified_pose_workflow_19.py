@@ -31,7 +31,10 @@ from reefvision.services.pose_training_datasets import (
     PoseTrainingDatasetService,
     frozen_pose_item_evidence_sha256,
 )
-from reefvision.services.workflow_execution import WorkflowExecutionService
+from reefvision.services.workflow_execution import (
+    WorkflowArtifactSpec,
+    WorkflowExecutionService,
+)
 from reefvision.services.workflow_pose_training import (
     create_pose_workflow_training_result,
     execute_pose_training_dataset_adapter,
@@ -694,6 +697,38 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     corrupted_detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert corrupted_detail.status_code == 409, corrupted_detail.text
     assert "Workflow artifact checksum failed" in corrupted_detail.json()["detail"]
+
+    with app.state.session_factory() as session:
+        artifact = session.get(WorkflowArtifact, outputs[0]["id"])
+        assert artifact is not None
+        artifact.payload_json = original_payload
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").status_code == 200
+
+    # Deduplication must reject an artifact whose JSON object was replaced by
+    # a list of key/value pairs, even when dict() recreates the same digest.
+    # Exercise the actual artifact persisted by this saved frozen-pose run.
+    with app.state.session_factory() as session:
+        artifact = session.get(WorkflowArtifact, outputs[0]["id"])
+        assert artifact is not None
+        artifact.payload_json = list(original_payload.items())
+        session.commit()
+
+    with app.state.session_factory() as session:
+        artifact = session.get(WorkflowArtifact, outputs[0]["id"])
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert artifact is not None
+        assert node is not None
+        with pytest.raises(ConflictError, match="payload must be a JSON object"):
+            WorkflowExecutionService(session).persist_artifact(
+                run_id=str(queued.json()["id"]),
+                node_run=node,
+                specification=WorkflowArtifactSpec(
+                    port_id=artifact.producer_port_id,
+                    data_type=artifact.data_type,
+                    payload=original_payload,
+                ),
+            )
 
     with app.state.session_factory() as session:
         artifact = session.get(WorkflowArtifact, outputs[0]["id"])

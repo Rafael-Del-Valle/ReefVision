@@ -1060,10 +1060,10 @@ class WorkflowExecutionService:
         )
 
         for candidate in existing:
-            candidate_actual = self.artifact_checksum(dict(candidate.payload_json or {}))
-
-            if candidate_actual != candidate.payload_sha256:
-                raise ConflictError("Existing workflow artifact failed checksum verification")
+            # Check the original JSON shape before considering deduplication.
+            # A list of key/value pairs can hash identically after dict()
+            # coercion but is not a valid persisted scientific artifact.
+            verify_workflow_artifact(candidate, expected_run_id=run_id)
 
             if candidate.payload_sha256 == checksum:
                 return candidate
