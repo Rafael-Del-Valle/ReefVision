@@ -350,6 +350,63 @@ def test_interrupted_workflow_reuses_succeeded_artifacts_and_reopens_with_proven
     assert reopened_result["provenance_sha256"] == result["provenance_sha256"]
 
 
+def test_recovered_completed_node_rejects_modified_scientific_parameters(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Phase 10C frozen recovered parameters")
+    run_id, job_id, artifact_id = _prime_interrupted_run(client, str(project["id"]))
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        completed = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "project",
+            )
+        )
+        assert completed is not None
+        completed.parameters_json = {
+            **dict(completed.parameters_json or {}),
+            "unreviewed_parameter_change": True,
+        }
+        session.commit()
+
+    assert worker.recover_interrupted_jobs(
+        app.state.session_factory, app.state.settings
+    ) >= 1
+    assert not process_workflow_run_job(
+        app.state.settings, app.state.session_factory, job_id
+    )
+
+    with app.state.session_factory() as session:
+        run = session.get(WorkflowRun, run_id)
+        completed = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "project",
+            )
+        )
+        pending = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "images",
+            )
+        )
+        artifact = session.get(WorkflowArtifact, artifact_id)
+        assert run is not None
+        assert completed is not None
+        assert pending is not None
+        assert artifact is not None
+        assert run.status == "failed"
+        assert "Recovered succeeded-node plan identity or parameters changed" in (
+            run.error_message or ""
+        )
+        assert completed.status == "succeeded"
+        assert completed.output_artifact_ids_json == [artifact_id]
+        assert canonical_json_sha256(artifact.payload_json) == artifact.payload_sha256
+        assert pending.output_artifact_ids_json == []
+
+
 def test_review_pause_rejects_foreign_and_completed_nodes_without_mutating_science(
     client: TestClient,
 ) -> None:
