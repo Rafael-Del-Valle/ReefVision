@@ -29,7 +29,15 @@ def _file_fingerprint(stat: os.stat_result) -> tuple[int, int, int, int, int]:
 def _is_windows_junction(path: Path) -> bool:
     """Detect NTFS junctions, which can bypass followlinks=False on Windows."""
     is_junction = getattr(path, "is_junction", None)
-    return bool(is_junction()) if is_junction is not None else False
+    if is_junction is not None:
+        return bool(is_junction())
+    # Python 3.11 lacks Path.is_junction(), but NTFS junctions still expose
+    # the mount-point reparse tag through lstat. Never follow it to inspect
+    # another study directory. The native API is preferred on Python 3.12+.
+    try:
+        return getattr(path.lstat(), "st_reparse_tag", None) == 0xA0000003
+    except OSError:
+        return False
 
 
 def _is_linked_path(path: Path) -> bool:

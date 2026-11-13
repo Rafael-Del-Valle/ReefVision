@@ -779,6 +779,33 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             ])
             self.assertEqual(protected.read_bytes(), original)
 
+    def test_ntfs_junction_fallback_on_python_without_is_junction(self) -> None:
+        """Python 3.11 acceptance must reject mount-point reparse tags too."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            junction = root / "junction"
+            junction.mkdir()
+            original = bytes.fromhex("ffd8") + b"protected" + bytes.fromhex("ffd9")
+            camera = junction / "camera.JPG"
+            camera.write_bytes(original)
+            original_lstat = Path.lstat
+
+            def simulate_ntfs_mountpoint(path: Path, *args: object, **kwargs: object):
+                if path == junction:
+                    return mock.Mock(st_mode=0o040755, st_reparse_tag=0xA0000003)
+                return original_lstat(path, *args, **kwargs)
+
+            with mock.patch.object(Path, "is_junction", None, create=True):
+                with mock.patch.object(Path, "lstat", simulate_ntfs_mountpoint):
+                    self.assertTrue(MODULE._is_windows_junction(junction))
+                    self.assertFalse(MODULE._is_windows_junction(root))
+                    records, errors = MODULE.inventory(junction)
+            self.assertEqual(records, [])
+            self.assertEqual(errors, [
+                "camera fixture directory must not be a symbolic link (including parent components)"
+            ])
+            self.assertEqual(camera.read_bytes(), original)
+
     def test_cli_missing_directory_reports_usage_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             missing = Path(directory) / "missing-camera-fixtures"
