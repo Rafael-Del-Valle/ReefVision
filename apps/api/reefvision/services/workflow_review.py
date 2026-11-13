@@ -194,9 +194,7 @@ def _disagreement_artifact_for_consensus(
         raise ConflictError("Workflow consensus producer outputs are invalid")
     declared_ids = producer.output_artifact_ids_json
     declared_outputs = list(
-        session.scalars(
-            select(WorkflowArtifact).where(WorkflowArtifact.id.in_(declared_ids))
-        )
+        session.scalars(select(WorkflowArtifact).where(WorkflowArtifact.id.in_(declared_ids)))
     )
     # An absent disagreement row must not silently suppress a scientist's
     # active-learning handoff when it is still listed in the producer manifest.
@@ -226,10 +224,7 @@ def _disagreement_artifact_for_consensus(
         raise ConflictError("Workflow consensus disagreement outputs are ambiguous")
 
     disagreement = disagreements[0]
-    if (
-        disagreement.id not in declared_ids
-        or disagreement.producer_port_id != "disagreements"
-    ):
+    if disagreement.id not in declared_ids or disagreement.producer_port_id != "disagreements":
         raise ConflictError("Workflow disagreement is not a declared producer output")
     verify_workflow_artifact(
         disagreement,
