@@ -54,7 +54,10 @@ const statuses: { value: AnnotationStatus | ""; label: string }[] = [
 
 const IMAGE_IMPORT_BATCH_SIZE = 10;
 
-function unconfirmedCameraImportMessage(confirmed: number, total: number): string {
+function unconfirmedCameraImportMessage(
+  confirmed: number,
+  total: number,
+): string {
   const unknown = total - confirmed;
   const noun = unknown === 1 ? "file has" : "files have";
   return (
@@ -83,7 +86,9 @@ function ImageCard({
   );
   // A failed URL must not permanently hide a newly generated thumbnail.
   // Keep failures tied to the specific asset version, not the image card.
-  const [failedThumbnailUrl, setFailedThumbnailUrl] = useState<string | null>(null);
+  const [failedThumbnailUrl, setFailedThumbnailUrl] = useState<string | null>(
+    null,
+  );
   // Some thumbnail jobs regenerate the same managed path. Only a deliberate
   // retry should bypass the failed WebView2/browser cache for that asset.
   const [thumbnailRetry, setThumbnailRetry] = useState(0);
@@ -100,7 +105,8 @@ function ImageCard({
   const thumbnailUrl = thumbnailVersion
     ? `${imageThumbnailUrl(image.id)}&rv_thumb=${thumbnailVersion}${thumbnailRetry ? `&rv_retry=${thumbnailRetry}` : ""}`
     : null;
-  const thumbnailFailed = thumbnailUrl !== null && failedThumbnailUrl === thumbnailUrl;
+  const thumbnailFailed =
+    thumbnailUrl !== null && failedThumbnailUrl === thumbnailUrl;
 
   // Background refreshes and concurrent metadata changes must not silently
   // erase unsaved scientific group/status edits. Reconcile each field against
@@ -119,9 +125,7 @@ function ImageCard({
       setGroupKey((draft) =>
         draft === previous.groupKey ? next.groupKey : draft,
       );
-      setStatus((draft) =>
-        draft === previous.status ? next.status : draft,
-      );
+      setStatus((draft) => (draft === previous.status ? next.status : draft));
     }
     persistedEditable.current = next;
   }, [image.id, image.group_key, image.annotation_status]);
@@ -178,9 +182,13 @@ function ImageCard({
         ) : (
           <div
             className="thumbnail-placeholder"
-            aria-label={thumbnailFailed ? "Thumbnail unavailable" : "Thumbnail pending"}
+            aria-label={
+              thumbnailFailed ? "Thumbnail unavailable" : "Thumbnail pending"
+            }
           >
-            <span>{thumbnailFailed ? "Thumbnail unavailable" : "Thumbnail pending"}</span>
+            <span>
+              {thumbnailFailed ? "Thumbnail unavailable" : "Thumbnail pending"}
+            </span>
             {thumbnailFailed && (
               <button
                 type="button"
@@ -545,9 +553,7 @@ function GalleryContent({
   // Count only batches for which the API returned a complete response.
   // A failed request may still have committed on the server.
   const confirmedImportCount = useRef(0);
-  const initialPreference = useRef(
-    readBrowserGalleryPreference(project.id),
-  );
+  const initialPreference = useRef(readBrowserGalleryPreference(project.id));
   const activeThumbnail = useRef<HTMLButtonElement | null>(null);
   const filmstripRef = useRef<HTMLDivElement | null>(null);
   const [page, setPage] = useState(initialPreference.current.page);
@@ -734,7 +740,9 @@ function GalleryContent({
   useEffect(() => {
     // Reconcile against the latest server page before notifying downstream
     // inference controls, even on the render before the cleanup effect runs.
-    const availableIds = new Set(images.data?.items.map((item) => item.id) ?? []);
+    const availableIds = new Set(
+      images.data?.items.map((item) => item.id) ?? [],
+    );
     onInferenceSelectionChange?.(
       selectedImageIds.filter((id) => availableIds.has(id)),
     );

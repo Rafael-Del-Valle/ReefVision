@@ -65,16 +65,19 @@ function renderGallery(
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return { ...render(
-    <QueryClientProvider client={queryClient}>
-      <Gallery
-        project={project}
-        onOpenAnnotation={onOpenAnnotation}
-        onInferenceSelectionChange={onInferenceSelectionChange}
-        onFocusedImageChange={onFocusedImageChange}
-      />
-    </QueryClientProvider>,
-  ), queryClient };
+  return {
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <Gallery
+          project={project}
+          onOpenAnnotation={onOpenAnnotation}
+          onInferenceSelectionChange={onInferenceSelectionChange}
+          onFocusedImageChange={onFocusedImageChange}
+        />
+      </QueryClientProvider>,
+    ),
+    queryClient,
+  };
 }
 
 afterEach(() => {
@@ -104,12 +107,15 @@ describe("Gallery pending thumbnail refresh", () => {
       }
       requests += 1;
       return jsonResponse({
-        items: [{
-          ...image,
-          thumbnail_path: requests <= 2
-            ? "thumbnails/broken.jpg"
-            : "thumbnails/regenerated.jpg",
-        }],
+        items: [
+          {
+            ...image,
+            thumbnail_path:
+              requests <= 2
+                ? "thumbnails/broken.jpg"
+                : "thumbnails/regenerated.jpg",
+          },
+        ],
         total: 1,
         page: 1,
         page_size: 24,
@@ -179,12 +185,16 @@ describe("Gallery pending thumbnail refresh", () => {
     expect(metadataReads).toBe(2);
     expect(screen.queryByAltText("Thumbnail of swiftia-01.png")).toBeNull();
 
-    await userEvent.click(screen.getByRole("button", { name: "Retry thumbnail" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry thumbnail" }),
+    );
     const retryOne = await screen.findByAltText("Thumbnail of swiftia-01.png");
     expect(retryOne.getAttribute("src")).not.toBe(originalUrl);
     expect(retryOne.getAttribute("src")).toContain("rv_retry=1");
     fireEvent.error(retryOne);
-    await userEvent.click(screen.getByRole("button", { name: "Retry thumbnail" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry thumbnail" }),
+    );
     const retryTwo = await screen.findByAltText("Thumbnail of swiftia-01.png");
     expect(retryTwo.getAttribute("src")).toContain("rv_retry=2");
     expect(metadataReads).toBe(2);
@@ -308,7 +318,8 @@ describe("Gallery", () => {
 
   it("displays the first image when WebView2 blocks localStorage access", async () => {
     const descriptor = Object.getOwnPropertyDescriptor(window, "localStorage");
-    if (!descriptor) throw new Error("Expected a localStorage property descriptor");
+    if (!descriptor)
+      throw new Error("Expected a localStorage property descriptor");
     Object.defineProperty(window, "localStorage", {
       configurable: true,
       get() {
@@ -450,9 +461,9 @@ describe("Gallery", () => {
       page_size: 24,
       pages: 1,
     });
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      jsonResponse(response(null, "unannotated")),
-    );
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(jsonResponse(response(null, "unannotated")));
     render(
       <QueryClientProvider client={queryClient}>
         <Gallery project={project} />
@@ -712,7 +723,9 @@ describe("Gallery", () => {
       "swiftia",
     );
     await waitFor(() => expect(requestedFilters).toContain("swiftia"));
-    expect(screen.queryByRole("article", { name: /DSC_0001\.JPEG/ })).toBeNull();
+    expect(
+      screen.queryByRole("article", { name: /DSC_0001\.JPEG/ }),
+    ).toBeNull();
 
     await userEvent.upload(
       screen.getByLabelText("Import files"),
@@ -937,12 +950,14 @@ describe("Gallery", () => {
 
     renderGallery();
     await screen.findByText("No images yet");
-    const files = Array.from({ length: 11 }, (_, index) =>
-      new File(
-        ["camera bytes"],
-        `coral-${String(index + 1).padStart(2, "0")}.${index % 2 ? "JPEG" : "JPG"}`,
-        { type: "image/jpeg" },
-      ),
+    const files = Array.from(
+      { length: 11 },
+      (_, index) =>
+        new File(
+          ["camera bytes"],
+          `coral-${String(index + 1).padStart(2, "0")}.${index % 2 ? "JPEG" : "JPG"}`,
+          { type: "image/jpeg" },
+        ),
     );
     await userEvent.upload(screen.getByLabelText("Import files"), files);
 
@@ -950,21 +965,23 @@ describe("Gallery", () => {
     expect(
       await screen.findByText("Images could not be imported"),
     ).toBeInTheDocument();
-    await waitFor(() => expect(screen.getAllByRole("article")).toHaveLength(10));
+    await waitFor(() =>
+      expect(screen.getAllByRole("article")).toHaveLength(10),
+    );
     const importUncertainty = await screen.findByText(
       /10 of 11 files confirmed in completed batches; 1 file has an unconfirmed import outcome\./,
     );
     expect(importUncertainty).toHaveTextContent(
       "The failed batch may have reached the server.",
     );
-    expect(importUncertainty).toHaveTextContent("Review the gallery before retrying");
+    expect(importUncertainty).toHaveTextContent(
+      "Review the gallery before retrying",
+    );
     expect(importRequests).toBe(2);
     expect(
       screen.getByRole("article", { name: /coral-01\.JPG/ }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("article", { name: /coral-11\.JPG/ }),
-    ).toBeNull();
+    expect(screen.queryByRole("article", { name: /coral-11\.JPG/ })).toBeNull();
   });
 
   it("does not claim camera files were imported when the first batch has no response", async () => {
@@ -1001,7 +1018,9 @@ describe("Gallery", () => {
     expect(importUncertainty).toHaveTextContent(
       "The failed batch may have reached the server.",
     );
-    expect(importUncertainty).toHaveTextContent("Review the gallery before retrying");
+    expect(importUncertainty).toHaveTextContent(
+      "Review the gallery before retrying",
+    );
     expect(screen.queryByText("1 files processed")).toBeNull();
   });
 

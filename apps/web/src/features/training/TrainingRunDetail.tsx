@@ -15,12 +15,19 @@ function history(run: TrainingRun): Record<string, number[]> {
   // Older or interrupted training providers may omit the history payload.
   // Keep the run detail and its immutable provenance accessible regardless.
   const rawHistory = run.metrics_history;
-  if (!rawHistory || typeof rawHistory !== "object" || Array.isArray(rawHistory)) return {};
+  if (
+    !rawHistory ||
+    typeof rawHistory !== "object" ||
+    Array.isArray(rawHistory)
+  )
+    return {};
   return Object.fromEntries(
     Object.entries(rawHistory).filter(
       (entry): entry is [string, number[]] =>
         Array.isArray(entry[1]) &&
-        entry[1].every((value) => typeof value === "number" && Number.isFinite(value)),
+        entry[1].every(
+          (value) => typeof value === "number" && Number.isFinite(value),
+        ),
     ),
   );
 }
@@ -32,7 +39,9 @@ function metricLabel(key: string): string {
 function preferredMetric(run: TrainingRun): [string, number[]] | null {
   // Empty metric columns cannot identify a best epoch; prefer the next
   // populated validation metric rather than hiding a valid result.
-  const entries = Object.entries(history(run)).filter(([, values]) => values.length > 0);
+  const entries = Object.entries(history(run)).filter(
+    ([, values]) => values.length > 0,
+  );
   const preferences =
     run.task === "classify"
       ? ["metrics/accuracy_top1", "metrics/accuracy_top5", "val/accuracy"]
@@ -86,7 +95,11 @@ function MetricChart({ label, values }: { label: string; values: number[] }) {
     return (
       <figure className="training-metric-chart">
         <figcaption>{metricLabel(label)}</figcaption>
-        <svg viewBox="0 0 100 44" role="img" aria-label={`${metricLabel(label)} across 1 epoch`}>
+        <svg
+          viewBox="0 0 100 44"
+          role="img"
+          aria-label={`${metricLabel(label)} across 1 epoch`}
+        >
           <circle cx="50" cy="22" r="2" />
         </svg>
         <small>Latest {values[0].toFixed(4)} · 1 epoch</small>
@@ -151,7 +164,8 @@ function MetricChart({ label, values }: { label: string; values: number[] }) {
       </svg>
       <small>
         Latest {values.at(-1)?.toFixed(4)} · {values.length} epochs
-        {values.length > 1002 && " · overview downsampled (raw metrics preserved)"}
+        {values.length > 1002 &&
+          " · overview downsampled (raw metrics preserved)"}
       </small>
     </figure>
   );
@@ -192,11 +206,14 @@ export function TrainingRunDetail({
   const best = bestEpoch(run);
   // Interrupted or older jobs may have no artifact manifest yet. Do not
   // hide the training console, loss history, or immutable run provenance.
-  const manifest = (run.artifact_manifest ?? {}) as NonNullable<TrainingRun["artifact_manifest"]>;
+  const manifest = (run.artifact_manifest ?? {}) as NonNullable<
+    TrainingRun["artifact_manifest"]
+  >;
   const artifacts = Array.isArray(manifest.artifacts)
     ? (manifest.artifacts as TrainingArtifact[])
     : [];
-  const tuningResults = manifest.tuning_results as TuningResults | null | undefined;
+  const tuningResults = manifest.tuning_results as
+    TuningResults | null | undefined;
   const nativeRows = Array.isArray(manifest.native_results_rows)
     ? (manifest.native_results_rows as Array<Record<string, unknown>>)
     : [];

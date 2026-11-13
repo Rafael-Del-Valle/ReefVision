@@ -29,7 +29,9 @@ function validGalleryImageId(value: unknown): value is string {
     typeof value === "string" &&
     value.length <= 4096 &&
     value.trim().length > 0 &&
-    !/[\x00-\x1f\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2060\u2066-\u206f\ufeff]/.test(value) &&
+    !/[\x00-\x1f\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2060\u2066-\u206f\ufeff]/.test(
+      value,
+    ) &&
     // Keep valid supplementary Unicode (e.g. emoji in camera labels), but
     // reject unpaired UTF-16 surrogate halves from corrupted preferences.
     // Unicode-mode matching treats valid surrogate pairs as one code point.
@@ -45,7 +47,9 @@ function preferenceKey(projectId: string): string | null {
     projectId.length === 0 ||
     projectId.length > 256 ||
     projectId.trim().length === 0 ||
-    /[\x00-\x1f\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2060\u2066-\u206f\ufeff]/.test(projectId)
+    /[\x00-\x1f\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2060\u2066-\u206f\ufeff]/.test(
+      projectId,
+    )
   ) {
     return null;
   }
@@ -94,10 +98,10 @@ export function readGalleryPreference(
     // A saved page without a selected image is not a meaningful restore target.
     // Start from the first page so the initial camera image remains visible.
     return {
-      imageId:
-        typeof candidate.imageId === "string" ? candidate.imageId : null,
+      imageId: typeof candidate.imageId === "string" ? candidate.imageId : null,
       page:
-        typeof candidate.imageId === "string" && typeof candidate.page === "number"
+        typeof candidate.imageId === "string" &&
+        typeof candidate.page === "number"
           ? candidate.page
           : 1,
       wrap: candidate.wrap === true,
@@ -109,7 +113,9 @@ export function readGalleryPreference(
 
 // WebView2 may deny access to the localStorage property itself (SecurityError),
 // before getItem/setItem can be called. Keep image browsing usable even then.
-export function readBrowserGalleryPreference(projectId: string): GalleryPreference {
+export function readBrowserGalleryPreference(
+  projectId: string,
+): GalleryPreference {
   try {
     return readGalleryPreference(window.localStorage, projectId);
   } catch {
@@ -255,6 +261,8 @@ export function resolveGalleryNavigation({
   return wrap ? { page: 1, edge: "first" } : null;
 }
 
-export function shouldIgnoreGalleryShortcut(target: EventTarget | null): boolean {
+export function shouldIgnoreGalleryShortcut(
+  target: EventTarget | null,
+): boolean {
   return shouldIgnoreShortcutTarget(target);
 }

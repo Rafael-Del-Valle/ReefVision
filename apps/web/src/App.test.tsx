@@ -1221,7 +1221,8 @@ describe("App", () => {
   it("opens the first project image when WebView2 denies UI preference storage", async () => {
     mockApi({ projects: [project], images: [image] });
     const descriptor = Object.getOwnPropertyDescriptor(window, "localStorage");
-    if (!descriptor) throw new Error("Expected localStorage property descriptor");
+    if (!descriptor)
+      throw new Error("Expected localStorage property descriptor");
     Object.defineProperty(window, "localStorage", {
       configurable: true,
       get() {

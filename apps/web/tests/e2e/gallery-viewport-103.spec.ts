@@ -100,9 +100,15 @@ test("initial image and gallery scrolling", async ({ page }) => {
         json: { items: images, total: 12, page: 1, page_size: 24, pages: 1 },
       });
     } else {
-      const thumbnailMatch = url.pathname.match(/\/images\/(image-\d+)\/thumbnail$/);
+      const thumbnailMatch = url.pathname.match(
+        /\/images\/(image-\d+)\/thumbnail$/,
+      );
       if (thumbnailMatch?.[1] === "image-8") {
-        await route.fulfill({ status: 200, contentType: "image/jpeg", body: standard });
+        await route.fulfill({
+          status: 200,
+          contentType: "image/jpeg",
+          body: standard,
+        });
         return;
       }
       const match = url.pathname.match(/\/images\/(image-\d+)\/display$/);
@@ -567,9 +573,13 @@ test("initial image and gallery scrolling", async ({ page }) => {
   ).toBeVisible();
   await assertDecodedAndContained(1600, 1200);
   await expect(thumbnailFallback).toHaveAttribute("aria-current", "true");
-  await workbench.getByRole("button", { name: "Retry full-resolution image" }).click();
+  await workbench
+    .getByRole("button", { name: "Retry full-resolution image" })
+    .click();
   await assertDecodedAndContained(1600, 1200);
-  await expect(workbench.getByText(/Full-resolution image unavailable/)).toHaveCount(0);
+  await expect(
+    workbench.getByText(/Full-resolution image unavailable/),
+  ).toHaveCount(0);
   await expect(thumbnailFallback).toHaveAttribute("aria-current", "true");
   expect(imageEightRetryValues).toEqual([null, "1"]);
 

@@ -111,14 +111,20 @@ describe("TrainingRunDetail", () => {
     for (const missing of [null, undefined]) {
       const { unmount } = render(
         <TrainingRunDetail
-          run={{ ...run, metrics_history: missing as unknown as TrainingRun["metrics_history"] }}
+          run={{
+            ...run,
+            metrics_history:
+              missing as unknown as TrainingRun["metrics_history"],
+          }}
           registering={false}
           onCancel={vi.fn()}
           onRegister={vi.fn()}
         />,
       );
       expect(screen.getByText("Dataset snapshot")).toBeInTheDocument();
-      expect(screen.getByText("Configuration and provenance")).toBeInTheDocument();
+      expect(
+        screen.getByText("Configuration and provenance"),
+      ).toBeInTheDocument();
       expect(screen.queryByText("Best epoch")).not.toBeInTheDocument();
       unmount();
     }
@@ -130,7 +136,8 @@ describe("TrainingRunDetail", () => {
         run={{
           ...run,
           status: "training",
-          artifact_manifest: null as unknown as TrainingRun["artifact_manifest"],
+          artifact_manifest:
+            null as unknown as TrainingRun["artifact_manifest"],
         }}
         registering={false}
         onCancel={vi.fn()}
@@ -138,8 +145,12 @@ describe("TrainingRunDetail", () => {
       />,
     );
     expect(screen.getByText("Dataset snapshot")).toBeInTheDocument();
-    expect(screen.getByText("Configuration and provenance")).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: /train box loss across 3 epochs/i })).toBeInTheDocument();
+    expect(
+      screen.getByText("Configuration and provenance"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /train box loss across 3 epochs/i }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Best checkpoint")).not.toBeInTheDocument();
   });
 
@@ -209,20 +220,31 @@ describe("TrainingRunDetail", () => {
     expect(
       screen.queryByRole("img", { name: /mAP50-95\(B\)/i }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: /train cls loss/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("img", { name: /train cls loss/i }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("img", { name: /train box loss across 3 epochs/i }),
     ).toBeInTheDocument();
   });
 
   it("does not invent best epochs from mismatched or fractional epoch history", () => {
-    for (const epoch of [[1, 2], [1, 2.5, 3], [1, 2, 0], [1, 1, 3], [1, 3, 2]]) {
+    for (const epoch of [
+      [1, 2],
+      [1, 2.5, 3],
+      [1, 2, 0],
+      [1, 1, 3],
+      [1, 3, 2],
+    ]) {
       const { unmount } = render(
         <TrainingRunDetail
-          run={{ ...run, metrics_history: {
-            epoch,
-            "metrics/mAP50-95(B)": [0.31, 0.52, 0.41],
-          } }}
+          run={{
+            ...run,
+            metrics_history: {
+              epoch,
+              "metrics/mAP50-95(B)": [0.31, 0.52, 0.41],
+            },
+          }}
           registering={false}
           onCancel={vi.fn()}
           onRegister={vi.fn()}
@@ -234,7 +256,10 @@ describe("TrainingRunDetail", () => {
   });
 
   it("renders long finite training histories without overflowing function argument limits", () => {
-    const values = Array.from({ length: 150_000 }, (_, index) => index / 150_000);
+    const values = Array.from(
+      { length: 150_000 },
+      (_, index) => index / 150_000,
+    );
     render(
       <TrainingRunDetail
         run={{
@@ -251,9 +276,12 @@ describe("TrainingRunDetail", () => {
     const chart = screen.getByRole("img", {
       name: /train box loss across 150000 epochs/i,
     });
-    const points = chart.querySelector("polyline")?.getAttribute("points") ?? "";
+    const points =
+      chart.querySelector("polyline")?.getAttribute("points") ?? "";
     expect(points).not.toMatch(/NaN|Infinity/);
-    expect(screen.getByText(/overview downsampled \(raw metrics preserved\)/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/overview downsampled \(raw metrics preserved\)/i),
+    ).toBeInTheDocument();
     // Long histories must not create 150,000 SVG vertices.
     expect(points.split(" ").length).toBeLessThanOrEqual(1002);
     expect(points.split(" ")[0]).toMatch(/^0,/);
@@ -277,23 +305,30 @@ describe("TrainingRunDetail", () => {
     const chart = screen.getByRole("img", {
       name: /train box loss across 3 epochs/i,
     });
-    const points = chart.querySelector("polyline")?.getAttribute("points") ?? "";
+    const points =
+      chart.querySelector("polyline")?.getAttribute("points") ?? "";
     expect(points).not.toMatch(/NaN|Infinity/);
-    expect(points.split(" ").map((point) => Number(point.split(",")[1]))).toEqual([
-      40, 22, 4,
-    ]);
+    expect(
+      points.split(" ").map((point) => Number(point.split(",")[1])),
+    ).toEqual([40, 22, 4]);
   });
 
   it("labels invalid training progress as unavailable instead of showing NaN or Infinity", () => {
     render(
       <TrainingRunDetail
-        run={{ ...run, progress_epoch: Number.NaN, progress_total_epochs: Number.POSITIVE_INFINITY }}
+        run={{
+          ...run,
+          progress_epoch: Number.NaN,
+          progress_total_epochs: Number.POSITIVE_INFINITY,
+        }}
         registering={false}
         onCancel={vi.fn()}
         onRegister={vi.fn()}
       />,
     );
-    const progress = screen.getByRole("progressbar", { name: /Coral detector training progress/i });
+    const progress = screen.getByRole("progressbar", {
+      name: /Coral detector training progress/i,
+    });
     expect(progress).toHaveAttribute("value", "0");
     expect(screen.getByText(/— of —/)).toBeInTheDocument();
   });
@@ -317,11 +352,17 @@ describe("TrainingRunDetail", () => {
         onRegister={vi.fn()}
       />,
     );
-    const box = screen.getByRole("img", { name: /train box loss across 1 epoch/i });
+    const box = screen.getByRole("img", {
+      name: /train box loss across 1 epoch/i,
+    });
     expect(box.querySelector("circle")).toHaveAttribute("cx", "50");
     expect(screen.getByText(/Latest 1\.2500 · 1 epoch/)).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: /train cls loss across 1 epoch/i })).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: /train dfl loss across 1 epoch/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /train cls loss across 1 epoch/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /train dfl loss across 1 epoch/i }),
+    ).toBeInTheDocument();
   });
 
   it("shows every available detection, segmentation, and validation metric", () => {

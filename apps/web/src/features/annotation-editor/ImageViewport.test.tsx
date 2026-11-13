@@ -155,7 +155,9 @@ describe("ImageViewport", () => {
       name: "Multi-pointer viewport",
     });
     const transform = screen.getByTestId("image-viewport-transform");
-    const polygon = screen.getByTestId("fixed-overlay").querySelector("polygon");
+    const polygon = screen
+      .getByTestId("fixed-overlay")
+      .querySelector("polygon");
     const originalGeometry = polygon?.getAttribute("points");
     const initial = transform.style.transform;
 
@@ -212,7 +214,9 @@ describe("ImageViewport", () => {
     );
     const frame = screen.getByRole("region", { name: "Escape viewport" });
     const transform = screen.getByTestId("image-viewport-transform");
-    const polygon = screen.getByTestId("escape-overlay").querySelector("polygon");
+    const polygon = screen
+      .getByTestId("escape-overlay")
+      .querySelector("polygon");
     const originalPoints = polygon?.getAttribute("points");
 
     fireEvent.pointerDown(frame, {

@@ -312,28 +312,44 @@ describe("corrupted gallery preference shapes", () => {
 describe("single-page camera gallery navigation", () => {
   it("moves within the only page and wraps only when explicitly enabled", () => {
     const state = { index: 0, itemCount: 3, page: 1, pages: 1 };
-    expect(resolveGalleryNavigation({ ...state, action: "previous", wrap: false })).toBeNull();
-    expect(resolveGalleryNavigation({ ...state, action: "previous", wrap: true })).toEqual({
+    expect(
+      resolveGalleryNavigation({ ...state, action: "previous", wrap: false }),
+    ).toBeNull();
+    expect(
+      resolveGalleryNavigation({ ...state, action: "previous", wrap: true }),
+    ).toEqual({
       page: 1,
       edge: "last",
     });
-    expect(resolveGalleryNavigation({ ...state, action: "next", wrap: false })).toEqual({
+    expect(
+      resolveGalleryNavigation({ ...state, action: "next", wrap: false }),
+    ).toEqual({
       page: 1,
       edge: "index",
       index: 1,
     });
-    expect(resolveGalleryNavigation({ ...state, action: "first", wrap: true })).toBeNull();
-    expect(resolveGalleryNavigation({ ...state, action: "last", wrap: false })).toEqual({
+    expect(
+      resolveGalleryNavigation({ ...state, action: "first", wrap: true }),
+    ).toBeNull();
+    expect(
+      resolveGalleryNavigation({ ...state, action: "last", wrap: false }),
+    ).toEqual({
       page: 1,
       edge: "last",
     });
     const last = { ...state, index: 2 };
-    expect(resolveGalleryNavigation({ ...last, action: "next", wrap: false })).toBeNull();
-    expect(resolveGalleryNavigation({ ...last, action: "next", wrap: true })).toEqual({
+    expect(
+      resolveGalleryNavigation({ ...last, action: "next", wrap: false }),
+    ).toBeNull();
+    expect(
+      resolveGalleryNavigation({ ...last, action: "next", wrap: true }),
+    ).toEqual({
       page: 1,
       edge: "first",
     });
-    expect(resolveGalleryNavigation({ ...last, action: "last", wrap: true })).toBeNull();
+    expect(
+      resolveGalleryNavigation({ ...last, action: "last", wrap: true }),
+    ).toBeNull();
   });
 });
 
@@ -429,7 +445,15 @@ describe("gallery wrap across single-image camera pages", () => {
 
 describe("gallery page input validation for camera browsing", () => {
   it("rejects malformed or oversized page drafts without navigating away from the image", () => {
-    for (const draft of ["", " ", "-1", "1e3", "2.5", "3junk", "9".repeat(65)]) {
+    for (const draft of [
+      "",
+      " ",
+      "-1",
+      "1e3",
+      "2.5",
+      "3junk",
+      "9".repeat(65),
+    ]) {
       expect(parseGalleryPageDraft(draft, 4)).toBeNull();
     }
     expect(parseGalleryPageDraft(" 0002 ", 4)).toBe(2);
@@ -472,7 +496,9 @@ describe("gallery navigation rejects malformed runtime actions", () => {
       expect(
         resolveGalleryNavigation({
           ...state,
-          action: action as Parameters<typeof resolveGalleryNavigation>[0]["action"],
+          action: action as Parameters<
+            typeof resolveGalleryNavigation
+          >[0]["action"],
         }),
       ).toBeNull();
     }
@@ -597,7 +623,9 @@ describe("camera filename preference round trips", () => {
         page: 3,
         wrap: false,
       });
-      expect(readGalleryPreference(storage, "camera-project")).toEqual(previous);
+      expect(readGalleryPreference(storage, "camera-project")).toEqual(
+        previous,
+      );
     }
   });
 });
@@ -605,7 +633,11 @@ describe("camera filename preference round trips", () => {
 describe("exact camera identifier persistence", () => {
   it("preserves leading and trailing spaces in opaque camera identifiers", () => {
     const storage = memoryStorage();
-    for (const imageId of [" DSC_0042.JPG", "DSC_0042.JPG ", " IMG 0042.JPEG "]) {
+    for (const imageId of [
+      " DSC_0042.JPG",
+      "DSC_0042.JPG ",
+      " IMG 0042.JPEG ",
+    ]) {
       writeGalleryPreference(storage, "camera-project", {
         imageId,
         page: 2,
@@ -1271,12 +1303,14 @@ describe("single-page camera gallery wrap navigation", () => {
       edge: "index",
       index: 1,
     });
-    expect(
-      resolveGalleryNavigation({ ...base, action: "previous" }),
-    ).toEqual({ page: 1, edge: "last" });
-    expect(
-      resolveGalleryNavigation({ ...base, index: 2 }),
-    ).toEqual({ page: 1, edge: "first" });
+    expect(resolveGalleryNavigation({ ...base, action: "previous" })).toEqual({
+      page: 1,
+      edge: "last",
+    });
+    expect(resolveGalleryNavigation({ ...base, index: 2 })).toEqual({
+      page: 1,
+      edge: "first",
+    });
     expect(
       resolveGalleryNavigation({ ...base, index: 2, wrap: false }),
     ).toBeNull();
@@ -1353,7 +1387,10 @@ describe("resolveGalleryNavigation", () => {
       expect(resolveGalleryNavigation({ ...valid, itemCount })).toBeNull();
     }
     expect(
-      resolveGalleryNavigation({ ...valid, pages: Number.MAX_SAFE_INTEGER + 1 }),
+      resolveGalleryNavigation({
+        ...valid,
+        pages: Number.MAX_SAFE_INTEGER + 1,
+      }),
     ).toBeNull();
   });
 
@@ -1367,7 +1404,10 @@ describe("resolveGalleryNavigation", () => {
       wrap: false,
     };
     expect(
-      resolveGalleryNavigation({ ...valid, wrap: "false" as unknown as boolean }),
+      resolveGalleryNavigation({
+        ...valid,
+        wrap: "false" as unknown as boolean,
+      }),
     ).toBeNull();
     expect(
       resolveGalleryNavigation({ ...valid, wrap: null as unknown as boolean }),
@@ -1470,7 +1510,12 @@ describe("resolveGalleryNavigation", () => {
       resolveGalleryNavigation({ ...base, action: "next", page: 3 }),
     ).toBeNull();
     expect(
-      resolveGalleryNavigation({ ...base, action: "next", page: 3, wrap: true }),
+      resolveGalleryNavigation({
+        ...base,
+        action: "next",
+        page: 3,
+        wrap: true,
+      }),
     ).toEqual({ page: 1, edge: "first" });
   });
 
