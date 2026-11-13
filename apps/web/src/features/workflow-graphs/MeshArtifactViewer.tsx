@@ -23,6 +23,10 @@ interface MeshRouteInspection {
   vertexIndices: number[];
   cumulativeLengthsM: number[] | null;
   cumulativeScaleIntervalsM: [number, number][] | null;
+  edgeLengthsM: number[] | null;
+  edgeScaleIntervalsM: [number, number][] | null;
+  edgeLengthsProvided: boolean;
+  edgeIntervalsProvided: boolean;
   startVertexIndex: number;
   endVertexIndex: number;
   lengthM: number | null;
@@ -59,7 +63,10 @@ function isFace(value: unknown, vertexCount: number): value is Face {
  * Keep complete selected edge paths visible when the triangle preview is
  * decimated. Invalid or legacy path evidence is never drawn as a route.
  */
-function parsePathInspections(value: unknown): MeshRouteInspection[] {
+function parsePathInspections(
+  value: unknown,
+  relativeScaleUncertainty: number | null,
+): MeshRouteInspection[] {
   if (!Array.isArray(value) || value.length > 16) return [];
   return value.flatMap((entry, sourceIndex) => {
     if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
@@ -150,6 +157,66 @@ function parsePathInspections(value: unknown): MeshRouteInspection[] {
       )
         ? (rawCumulativeIntervals as [number, number][])
         : null;
+    // Prefer persisted per-edge measurements over differences of large
+    // cumulative distances, which can lose precision. Reject contradictory
+    // saved evidence instead of reconstructing an apparently valid segment.
+    const rawEdges = route.path_edge_lengths_m;
+    const edgeLengthsProvided = rawEdges !== undefined && rawEdges !== null;
+    const edgeLengthsM: number[] | null =
+      lengthM !== null &&
+      Array.isArray(rawEdges) &&
+      rawEdges.length === indices.length - 1 &&
+      rawEdges.every(
+        (distance) =>
+          typeof distance === "number" &&
+          Number.isFinite(distance) &&
+          distance >= 0,
+      ) &&
+      Math.abs(rawEdges.reduce((sum, distance) => sum + distance, 0) - lengthM) <=
+        Math.max(1e-12, lengthM * 1e-8) &&
+      (cumulativeLengthsM === null ||
+        rawEdges.every(
+          (distance, index) =>
+            Math.abs(
+              cumulativeLengthsM[index + 1] -
+                cumulativeLengthsM[index] -
+                distance,
+            ) <=
+            Math.max(
+              1e-12,
+              distance * 1e-8,
+              cumulativeLengthsM[index + 1] * 1e-12,
+            ),
+        ))
+        ? (rawEdges as number[])
+        : null;
+    const rawEdgeIntervals = route.path_edge_length_scale_intervals_m;
+    const edgeIntervalsProvided =
+      rawEdgeIntervals !== undefined && rawEdgeIntervals !== null;
+    const edgeScaleIntervalsM: [number, number][] | null =
+      edgeLengthsM !== null &&
+      relativeScaleUncertainty !== null &&
+      Array.isArray(rawEdgeIntervals) &&
+      rawEdgeIntervals.length === edgeLengthsM.length &&
+      rawEdgeIntervals.every(
+        (pair, index) =>
+          Array.isArray(pair) &&
+          pair.length === 2 &&
+          pair.every(
+            (bound) =>
+              typeof bound === "number" &&
+              Number.isFinite(bound) &&
+              bound >= 0,
+          ) &&
+          Math.abs(
+            pair[0] - edgeLengthsM[index] * (1 - relativeScaleUncertainty),
+          ) <= Math.max(1e-12, edgeLengthsM[index] * 1e-8) &&
+          Math.abs(
+            pair[1] - edgeLengthsM[index] * (1 + relativeScaleUncertainty),
+          ) <= Math.max(1e-12, edgeLengthsM[index] * 1e-8),
+      )
+        ? (rawEdgeIntervals as [number, number][])
+        : null;
     const warnings = route.path_qc_warnings;
     const qcWarnings =
       Array.isArray(warnings) &&
@@ -167,6 +234,10 @@ function parsePathInspections(value: unknown): MeshRouteInspection[] {
         vertexIndices: indices as number[],
         cumulativeLengthsM,
         cumulativeScaleIntervalsM,
+        edgeLengthsM,
+        edgeScaleIntervalsM,
+        edgeLengthsProvided,
+        edgeIntervalsProvided,
         startVertexIndex: indices[0] as number,
         endVertexIndex: indices[indices.length - 1] as number,
         lengthM,
@@ -256,7 +327,12 @@ export function parseMeshRenderArtifact(
   ) {
     return null;
   }
-  const routeInspections = parsePathInspections(data.surface_edge_paths);
+  const routeInspections = parsePathInspections(
+    data.surface_edge_paths,
+    typeof relativeScaleUncertainty === "number"
+      ? relativeScaleUncertainty
+      : null,
+  );
   return {
     vertices: vertices as Vec3[],
     faces: faces as Face[],
@@ -301,20 +377,26 @@ function formatRouteSegmentInspection(
   if (waypointIndex === 0) {
     return "Starting waypoint has no preceding route segment.";
   }
-  if (route.cumulativeLengthsM === null) {
-    return "Saved preceding mesh-edge segment length: unknown. Scale-only segment interval: unknown.";
-  }
   const length =
-    route.cumulativeLengthsM[waypointIndex] -
-    route.cumulativeLengthsM[waypointIndex - 1];
+    route.edgeLengthsM?.[waypointIndex - 1] ??
+    (route.edgeLengthsProvided || route.cumulativeLengthsM === null
+      ? null
+      : route.cumulativeLengthsM[waypointIndex] -
+        route.cumulativeLengthsM[waypointIndex - 1]);
+  if (length === null) {
+    return "Saved preceding mesh-edge segment length: unknown. Scale-only segment interval: unknown (invalid or missing saved segment evidence).";
+  }
+  const savedInterval = route.edgeScaleIntervalsM?.[waypointIndex - 1];
   const lower =
-    relativeScaleUncertainty === null
+    savedInterval?.[0] ??
+    (route.edgeIntervalsProvided || relativeScaleUncertainty === null
       ? null
-      : length * (1 - relativeScaleUncertainty);
+      : length * (1 - relativeScaleUncertainty));
   const upper =
-    relativeScaleUncertainty === null
+    savedInterval?.[1] ??
+    (route.edgeIntervalsProvided || relativeScaleUncertainty === null
       ? null
-      : length * (1 + relativeScaleUncertainty);
+      : length * (1 + relativeScaleUncertainty));
   const interval =
     lower === null ||
     upper === null ||
