@@ -17,6 +17,8 @@ from reefvision.db.models import (
     BackupRecord,
     ImageAsset,
     Job,
+    PoseEventDetectionRun,
+    PoseMeasurementRun,
     QualityControlRun,
     VideoAsset,
     WorkflowNodeRun,
@@ -29,6 +31,7 @@ from reefvision.jobs.diagnostics import process_diagnostics_job
 from reefvision.jobs.export import process_export_job
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.model_install import process_model_install_job
+from reefvision.jobs.pose_biological_measurement import process_pose_biological_measurement_job
 from reefvision.jobs.pose_evaluation import process_pose_evaluation_job
 from reefvision.jobs.pose_identity_tracking import process_pose_identity_tracking_job
 from reefvision.jobs.project_exchange import process_project_exchange_export_job
@@ -337,6 +340,35 @@ def recover_interrupted_jobs(
         count += JobRepository(session).recover_interrupted_jobs()
 
         recovered_at = datetime.now(UTC)
+
+        for model in (PoseMeasurementRun, PoseEventDetectionRun):
+            for analysis_run in session.scalars(
+                select(model).where(model.status.in_(("running", "cancel_requested")))
+            ):
+                source_job = (
+                    session.get(Job, analysis_run.source_job_id)
+                    if analysis_run.source_job_id is not None
+                    else None
+                )
+                if source_job is None:
+                    analysis_run.status = "failed"
+                    analysis_run.completed_at = recovered_at
+                    analysis_run.error_json = {
+                        "type": "InterruptedRun",
+                        "message": "Source job was unavailable during startup recovery",
+                    }
+                elif source_job.status == "cancelled":
+                    analysis_run.status = "cancelled"
+                    analysis_run.completed_at = recovered_at
+                    analysis_run.progress_json = {"stage": "cancelled"}
+                else:
+                    analysis_run.status = "queued"
+                    analysis_run.completed_at = None
+                    analysis_run.progress_json = {
+                        **dict(analysis_run.progress_json or {}),
+                        "stage": "queued",
+                        "recovery": "requeued_on_startup",
+                    }
 
         for qc_run in session.scalars(
             select(QualityControlRun).where(
@@ -711,6 +743,8 @@ def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session
             return process_pose_evaluation_job(settings, factory, job_id)
         if job_type == "pose_identity_tracking":
             return process_pose_identity_tracking_job(settings, factory, job_id)
+        if job_type in {"pose_biological_measurement", "pose_biological_event_detection"}:
+            return process_pose_biological_measurement_job(settings, factory, job_id)
 
         message = f"Unsupported queued job type: {job_type}"
         _fail_job(factory, job_id, message)

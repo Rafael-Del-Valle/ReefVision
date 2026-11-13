@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 
 from reefvision.db.models import (
     Job,
+    PoseEventDetectionRun,
     PoseIdentityAssociationRun,
+    PoseMeasurementRun,
     TrainingRun,
     WorkflowNodeRun,
     WorkflowRun,
@@ -34,6 +36,8 @@ RUNNING_CANCELLABLE_JOB_TYPES = frozenset(
         "workflow_run",
         "pose_evaluation",
         "pose_identity_tracking",
+        "pose_biological_measurement",
+        "pose_biological_event_detection",
     }
 )
 
@@ -87,6 +91,25 @@ class JobService:
         }
         run.completed_at = now
 
+    def _cancel_queued_pose_analysis_run(self, job: Job, *, now: datetime) -> None:
+        model = {
+            "pose_biological_measurement": PoseMeasurementRun,
+            "pose_biological_event_detection": PoseEventDetectionRun,
+        }.get(job.job_type)
+        if model is None:
+            return
+        run_id = str((job.request_json or {}).get("run_id") or "")
+        run = self.session.get(model, run_id)
+        if run is None or run.status not in {"queued", "running"}:
+            return
+        run.status = "cancelled"
+        run.progress_json = {
+            "stage": "cancelled",
+            "current": job.progress_current,
+            "total": job.progress_total,
+        }
+        run.completed_at = now
+
     def _cancel_workflow_children(
         self,
         run: WorkflowRun,
@@ -101,6 +124,7 @@ class JobService:
                 child.completed_at = now
                 child.error_message = "Parent workflow was cancelled before child execution"
                 self._cancel_queued_pose_identity_run(child, now=now)
+                self._cancel_queued_pose_analysis_run(child, now=now)
                 counts["cancelled"] += 1
             elif child.status == "running":
                 child.status = "cancel_requested"
@@ -219,6 +243,7 @@ class JobService:
             job.status = "cancelled"
             job.completed_at = now
             self._cancel_queued_pose_identity_run(job, now=now)
+            self._cancel_queued_pose_analysis_run(job, now=now)
             if job.job_type == "pose_evaluation":
                 job.deduplication_key = None
                 job.result_json = {
