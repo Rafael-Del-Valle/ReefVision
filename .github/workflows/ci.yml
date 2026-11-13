@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - develop/reefvision-1.1
   pull_request:
   workflow_dispatch:
 

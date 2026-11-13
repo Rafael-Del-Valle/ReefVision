@@ -2,6 +2,8 @@ name: Build Windows Desktop Release Candidate
 
 on:
   workflow_dispatch:
+  push:
+    branches: [develop/reefvision-1.1]
   pull_request:
     paths:
       - "apps/api/**"
@@ -37,6 +39,8 @@ jobs:
         run: |
           ./scripts/test-windows-clean-install-harness.ps1
           ./scripts/test-windows-installer-payload.ps1
+          ./scripts/test-training-console-sanitizer.ps1
+          ./scripts/test-training-console-readonly.ps1
 
       - uses: actions/setup-python@v5
         with:
@@ -72,6 +76,8 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path .desktop/release-1.1.0/backend, .desktop/release-1.1.0/bundled-models | Out-Null
+          npm --prefix apps/web run ui:build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test --locked --manifest-path apps/web/src-tauri/Cargo.toml
 
       - name: Build weight-free 1.1.0 desktop installer
