@@ -1531,7 +1531,8 @@ describe("MeshArtifactViewer", () => {
       })?.totalTurnStatus,
     ).toBe("unknown");
     expect(
-      inspect({ total_absolute_geometric_turn_deg: undefined })?.totalTurnStatus,
+      inspect({ total_absolute_geometric_turn_deg: undefined })
+        ?.totalTurnStatus,
     ).toBe("unknown");
     expect(
       inspect({
