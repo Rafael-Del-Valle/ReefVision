@@ -1616,4 +1616,75 @@ describe("MeshArtifactViewer", () => {
       "Saved total absolute geometric turn: 0.00000 deg",
     );
   });
+
+  it("cross-checks saved endpoint chord and scale-only bounds against full-route XYZ", () => {
+    const chord = Math.SQRT2;
+    const route = {
+      status: "connected",
+      path_vertex_indices: [0, 1, 2],
+      path_vertices_in_source_frame_m: [
+        [0, 0, 0],
+        [1, 0, 0],
+        [1, 1, 0],
+      ],
+      length_m: 2,
+      endpoint_chord_length_m: chord,
+      endpoint_chord_scale_interval_m: [chord * 0.9, chord * 1.1],
+    };
+    const artifact = {
+      ...validArtifact,
+      provenance: {
+        calibration_verified: false,
+        relative_scale_uncertainty: 0.1,
+      },
+      surface_edge_paths: [route],
+    };
+    const unchanged = JSON.stringify(artifact);
+    const inspect = (updates: Record<string, unknown>) =>
+      parseMeshRenderArtifact({
+        ...artifact,
+        surface_edge_paths: [{ ...route, ...updates }],
+      })?.routeInspections[0];
+
+    expect(inspect({})?.endpointChordLengthM).toBe(chord);
+    expect(inspect({})?.endpointChordScaleIntervalM).toEqual([
+      chord * 0.9,
+      chord * 1.1,
+    ]);
+    expect(inspect({})?.endpointChordQc).toBe("consistent");
+    expect(inspect({ endpoint_chord_length_m: 1.5 })?.endpointChordQc).toBe(
+      "inconsistent",
+    );
+    expect(
+      inspect({ endpoint_chord_length_m: 1.5 })?.endpointChordLengthM,
+    ).toBeNull();
+    expect(inspect({ endpoint_chord_length_m: null })?.endpointChordQc).toBe(
+      "unverifiable",
+    );
+    expect(
+      inspect({ endpoint_chord_scale_interval_m: [0.5, 2] })
+        ?.endpointChordScaleIntervalM,
+    ).toBeNull();
+    expect(
+      inspect({ endpoint_chord_scale_interval_m: undefined })
+        ?.endpointChordScaleIntervalM,
+    ).toBeNull();
+    expect(inspect({})?.geometryQc).toBe("consistent");
+
+    render(<MeshArtifactViewer artifact={artifact} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect provisional route 1" }),
+    );
+    const details = screen.getByText(/Saved geometric route length:/);
+    expect(details).toHaveTextContent("Saved endpoint chord: 1.41421 m");
+    expect(details).toHaveTextContent(
+      "Scale-only chord interval: [1.27279, 1.55563] m",
+    );
+    expect(details).toHaveTextContent(
+      "consistent with saved endpoint XYZ (provisional)",
+    );
+    expect(details).toHaveTextContent("not a verified biological branch length");
+    expect(JSON.stringify(artifact)).toBe(unchanged);
+  });
+
 });
