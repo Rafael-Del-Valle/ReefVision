@@ -2,10 +2,18 @@ from pathlib import Path
 from typing import Any, cast
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
 from reefvision.db.base import Base
+from reefvision.db.models.class_visibility_preference import ClassVisibilityPreference
+from reefvision.db.models.project_class_visibility_default import ProjectClassVisibilityDefault
 from reefvision.main import create_app
+from reefvision.repositories.class_visibility import (
+    ClassVisibilityPreferenceRepository,
+    ProjectClassVisibilityDefaultRepository,
+)
 
 
 def create_project(client: TestClient, **overrides: object) -> dict[str, Any]:
@@ -154,3 +162,122 @@ def test_class_visibility_rejects_other_project_class_ids(client: TestClient) ->
     )
     assert invalid.status_code == 400
     assert "project" in invalid.json()["detail"].lower()
+
+
+def test_atomic_visibility_upsert_preserves_scopes_after_stale_first_reads(
+    tmp_path: Path,
+) -> None:
+    """Two editors that both observed an absent scope must not create duplicate rows.
+
+    This deterministic interleaving exercises both SQLite unique constraints
+    without depending on thread timing or a shared TestClient connection.
+    """
+    settings = Settings(
+        env="test",
+        data_dir=tmp_path / "visibility-upsert",
+        database_url=f"sqlite:///{(tmp_path / 'visibility-upsert.db').as_posix()}",
+        web_origin="http://testserver",
+        background_worker_enabled=False,
+    )
+    app = create_app(settings)
+    Base.metadata.create_all(app.state.engine)
+    with TestClient(app) as client:
+        project = create_project(client)
+        first = create_label_class(
+            client,
+            project["id"],
+            class_index=0,
+            name="Swiftia Open",
+            display_color="#C74343",
+        )
+        second = create_label_class(
+            client,
+            project["id"],
+            class_index=1,
+            name="Swiftia Closed",
+            display_color="#326EA8",
+        )
+        identity = client.get(
+            f"/api/v1/projects/{project['id']}/class-visibility"
+        ).json()["user_identity"]
+
+        with Session(app.state.engine) as first_editor, Session(
+            app.state.engine
+        ) as second_editor:
+            pref_a = ClassVisibilityPreferenceRepository(first_editor)
+            pref_b = ClassVisibilityPreferenceRepository(second_editor)
+            default_a = ProjectClassVisibilityDefaultRepository(first_editor)
+            default_b = ProjectClassVisibilityDefaultRepository(second_editor)
+
+            assert pref_a.get(project["id"], identity, "annotations") is None
+            assert pref_b.get(project["id"], identity, "annotations") is None
+            assert default_a.get(project["id"], "predictions") is None
+            assert default_b.get(project["id"], "predictions") is None
+
+            pref_a.upsert(project["id"], identity, "annotations", [first["id"]])
+            default_a.upsert(
+                project["id"], "predictions", [first["id"]], "local-user:editor-a"
+            )
+            first_editor.commit()
+
+            pref_b.upsert(project["id"], identity, "annotations", [second["id"]])
+            default_b.upsert(
+                project["id"], "predictions", [second["id"]], "local-user:editor-b"
+            )
+            second_editor.commit()
+
+        with Session(app.state.engine) as verification:
+            pref_rows = list(
+                verification.scalars(
+                    select(ClassVisibilityPreference).where(
+                        ClassVisibilityPreference.project_id == project["id"],
+                        ClassVisibilityPreference.user_identity == identity,
+                        ClassVisibilityPreference.layer_type == "annotations",
+                    )
+                )
+            )
+            default_rows = list(
+                verification.scalars(
+                    select(ProjectClassVisibilityDefault).where(
+                        ProjectClassVisibilityDefault.project_id == project["id"],
+                        ProjectClassVisibilityDefault.layer_type == "predictions",
+                    )
+                )
+            )
+            assert len(pref_rows) == len(default_rows) == 1
+            assert pref_rows[0].hidden_class_ids_json == [second["id"]]
+            assert default_rows[0].hidden_class_ids_json == [second["id"]]
+            assert default_rows[0].updated_by_identity == "local-user:editor-b"
+            pref_id, default_id = pref_rows[0].id, default_rows[0].id
+
+        # The public API must reuse the same durable rows, not insert another.
+        preference = client.put(
+            f"/api/v1/projects/{project['id']}/class-visibility/preferences/annotations",
+            json={"hidden_class_ids": [first["id"]]},
+        )
+        project_default = client.put(
+            f"/api/v1/projects/{project['id']}/class-visibility/defaults/predictions",
+            json={"hidden_class_ids": [first["id"]]},
+        )
+        assert preference.status_code == project_default.status_code == 200
+        bundle = client.get(f"/api/v1/projects/{project['id']}/class-visibility")
+        assert bundle.status_code == 200
+        assert bundle.json()["user_preferences"]["annotations"]["hidden_class_ids"] == [
+            first["id"]
+        ]
+        assert bundle.json()["project_defaults"]["predictions"]["hidden_class_ids"] == [
+            first["id"]
+        ]
+        assert (
+            bundle.json()["project_defaults"]["predictions"]["updated_by_identity"]
+            == identity
+        )
+        with Session(app.state.engine) as verification:
+            assert verification.get(ClassVisibilityPreference, pref_id).hidden_class_ids_json == [
+                first["id"]
+            ]
+            assert verification.get(
+                ProjectClassVisibilityDefault, default_id
+            ).hidden_class_ids_json == [first["id"]]
+
+    Base.metadata.drop_all(app.state.engine)
