@@ -257,6 +257,7 @@ describe("ClassManagerPanel", () => {
       },
     ],
     ["nonempty delete blockers", { delete_blockers: ["Protected evidence"] }],
+    ["missing blocker list", { delete_blockers: null }],
     ["missing itemization", { counts: null }],
   ] as const)(
     "rejects allegedly deletable usage with %s",
