@@ -81,12 +81,13 @@ def inspect(path: Path) -> dict:
                         "unexpected_alembic_version_columns"
                     )
                 elif (
-                    stamp_columns[0][3] != 1  # NOT NULL
+                    stamp_columns[0][2].strip().upper() not in ("TEXT", "VARCHAR(32)")
+                    or stamp_columns[0][3] != 1  # NOT NULL
                     or stamp_columns[0][5] != 1  # single-column primary key
                     or stamp_columns[0][6] != 0  # ordinary, non-hidden column
                 ):
                     # A name-only match can conceal an unrelated table with
-                    # nonunique or nullable lineage markers. Do not trust it.
+                    # nonunique, nullable, or non-text lineage markers. Do not trust it.
                     alembic_stamp_constraint_error = (
                         "invalid_alembic_version_column_constraints"
                     )
@@ -203,7 +204,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--fail-on-noncanonical-stamp", action="store_true",
-        help="Exit 2 if Alembic version_num lacks NOT NULL and primary-key constraints; "
+        help="Exit 2 if Alembic version_num lacks canonical text type, NOT NULL, or primary-key constraints; "
         "opt-in for legacy SQLite schemas",
     )
     args = parser.parse_args()
