@@ -281,11 +281,14 @@ class WorkflowExecutionService:
         # A terminal run's saved provenance must still describe the persisted
         # scientist approvals, graph, and artifact lineage. Valid JSON and
         # artifact hashes alone cannot detect edits to review evidence.
-        if run.status == "succeeded" and (
-            "provenance_manifest" in result or "provenance_sha256" in result
-        ):
-            manifest = result.get("provenance_manifest")
-            digest = result.get("provenance_sha256")
+        if run.status == "succeeded":
+            # Terminal workflow closeout always persists both fields. If both
+            # are deleted, an optional-presence check would silently bypass
+            # verification of the frozen scientific lineage.
+            if "provenance_manifest" not in result or "provenance_sha256" not in result:
+                raise ConflictError("Succeeded workflow run is missing saved provenance")
+            manifest = result["provenance_manifest"]
+            digest = result["provenance_sha256"]
             live_provenance = build_workflow_run_provenance(self.session, run_id=run.id)
             if (
                 not isinstance(manifest, dict)
