@@ -238,7 +238,7 @@ class CameraFixtureInventoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             fixture = root / "undecodable.JpEg"
-            original = b"\\xff\\xd8" + b"not a real JPEG image" + b"\\xff\\xd9"
+            original = bytes.fromhex("ffd8") + b"not a real JPEG image" + bytes.fromhex("ffd9")
             fixture.write_bytes(original)
             records, errors = MODULE.inventory(root, verify_decode=True)
             self.assertEqual([record["path"] for record in records], [fixture.name])
