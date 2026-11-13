@@ -82,7 +82,7 @@ jobs:
             src/features/training/TrainingRunDetail.test.tsx \
             src/features/training/TrainingRunDetail.tsx \
             tests/e2e/gallery-viewport-103.spec.ts
-          git diff --no-ext-diff --src-prefix=a/ --dst-prefix=b/ -- \
+          git -C ../.. diff --no-ext-diff --src-prefix=a/ --dst-prefix=b/ -- \
             apps/web/src/App.test.tsx \
             apps/web/src/features/annotation-editor/ImageViewport.test.tsx \
             apps/web/src/features/gallery/Gallery.test.tsx \
