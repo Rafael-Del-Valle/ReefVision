@@ -315,7 +315,7 @@ def test_reviewed_consensus_materializes_annotation_and_routes_disagreement(
 def test_review_rejects_undeclared_disagreement_before_active_learning_handoff(
     client: TestClient,
 ) -> None:
-    project, _, _, run_id, job_id, _, disagreement_id = _seed_valid_consensus_review(client)
+    _, _, _, run_id, job_id, _, disagreement_id = _seed_valid_consensus_review(client)
     app = cast(FastAPI, client.app)
     assert (
         process_workflow_run_job(
