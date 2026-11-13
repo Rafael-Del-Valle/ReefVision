@@ -141,6 +141,8 @@ function parsePathInspections(
     // Persisted cumulative distances are scientific artifacts, not values
     // reconstructed from the decimated display triangles. Reject malformed
     // or inconsistent arrays rather than presenting invented measurements.
+    // A fixed absolute tolerance would certify contradictory micro-scale
+    // and zero-length path distances; compare relative to the saved evidence.
     const rawCumulative = route.path_cumulative_lengths_m;
     const cumulativeLengthsM =
       lengthM !== null &&
@@ -158,7 +160,7 @@ function parsePathInspections(
           index === 0 || distance >= rawCumulative[index - 1],
       ) &&
       Math.abs(rawCumulative[rawCumulative.length - 1] - lengthM) <=
-        Math.max(1e-12, lengthM * 1e-8)
+        Math.max(rawCumulative[rawCumulative.length - 1], lengthM) * 1e-8
         ? (rawCumulative as number[])
         : null;
     const rawCumulativeIntervals =
@@ -197,7 +199,11 @@ function parsePathInspections(
       ) &&
       Math.abs(
         rawEdges.reduce((sum, distance) => sum + distance, 0) - lengthM,
-      ) <= Math.max(1e-12, lengthM * 1e-8) &&
+      ) <=
+        Math.max(
+          rawEdges.reduce((sum, distance) => sum + distance, 0),
+          lengthM,
+        ) * 1e-8 &&
       (cumulativeLengthsM === null ||
         rawEdges.every(
           (distance, index) =>
@@ -207,10 +213,10 @@ function parsePathInspections(
                 distance,
             ) <=
             Math.max(
-              1e-12,
-              distance * 1e-8,
-              cumulativeLengthsM[index + 1] * 1e-12,
-            ),
+              distance,
+              cumulativeLengthsM[index + 1] - cumulativeLengthsM[index],
+            ) * 1e-8 +
+              cumulativeLengthsM[index + 1] * Number.EPSILON * 8,
         ))
         ? (rawEdges as number[])
         : null;
