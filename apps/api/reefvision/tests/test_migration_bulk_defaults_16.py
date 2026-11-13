@@ -9,6 +9,11 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from reefvision.db.migration_lineage_guard import assert_compatible_revision_0038
+from reefvision.tests.review_lineage_fixture_16 import (
+    REVIEW_EVENT_FK_SQL,
+    install_review_event_history_indexes,
+    install_review_event_parent_rows,
+)
 
 _REQUIRED_FIELDS = (
     "id",
@@ -52,9 +57,12 @@ def test_0041_bulk_registry_defaults_fail_closed_without_writes(
                     "CONSTRAINT uq_review_queue_item_event_request "
                     "UNIQUE (review_queue_item_id, client_request_id), "
                     "CONSTRAINT ck_review_queue_item_event_type "
-                    f"CHECK (event_type IN ({_EVENT_TYPES})))"
+                    f"CHECK (event_type IN ({_EVENT_TYPES}))"
+                    f"{REVIEW_EVENT_FK_SQL})"
                 )
             )
+        install_review_event_parent_rows(connection)
+        install_review_event_history_indexes(connection)
             connection.execute(
                 text(
                     "INSERT INTO review_queue_item_events "
