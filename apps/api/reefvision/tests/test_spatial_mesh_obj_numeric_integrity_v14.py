@@ -268,6 +268,45 @@ def test_unsupported_obj_geometry_rejected_by_api_and_saved_workflow(
     assert not any(item["data_type"] == "mesh_measurement_preview" for item in detail["artifacts"])
 
 
+@pytest.mark.parametrize(
+    "directive",
+    [
+        "vertex 9 8 7",
+        "triangle 1 2 3",
+        "custom_surface 1 2 3 4",
+    ],
+)
+@pytest.mark.parametrize("after_faces", [False, True])
+def test_unknown_obj_directives_cannot_disappear_from_measurements(
+    directive: str, after_faces: bool
+) -> None:
+    # Both a prefix and a trailing custom geometry record must fail closed.
+    # Ignoring them would make the triangular subset appear complete.
+    obj_text = (
+        OBJ + directive + "\n"
+        if after_faces
+        else OBJ.replace("f 1 2 3\n", f"{directive}\nf 1 2 3\n")
+    )
+    with pytest.raises(ValueError, match="unsupported directive"):
+        parse_obj_triangles(obj_text)
+
+
+@pytest.mark.parametrize("directive", ["vertex 9 8 7", "custom_surface 1 2 3 4"])
+def test_unknown_obj_directives_fail_standalone_and_persisted_workflow(
+    client: TestClient, directive: str
+) -> None:
+    project_id = str(create_project(client, "Unknown OBJ directive rejection")["id"])
+    obj_text = OBJ + directive + "\n"
+    standalone = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-preview",
+        json={**PARAMS, "obj_text": obj_text},
+    )
+    assert standalone.status_code in (400, 422), standalone.text
+    detail = _run_saved(client, project_id, obj_text)
+    assert detail["run"]["status"] == "failed"
+    assert not any(item["data_type"] == "mesh_measurement_preview" for item in detail["artifacts"])
+
+
 def test_inert_obj_metadata_keeps_standalone_and_workflow_measurements_identical(
     client: TestClient,
 ) -> None:
