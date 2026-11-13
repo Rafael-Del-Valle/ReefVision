@@ -43,6 +43,48 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual(len({record["sha256"] for record in records}), 6)
 
 
+    def test_non_regular_jpeg_entry_is_not_silently_ignored(self) -> None:
+        """A JPEG-named non-file must fail acceptance without being opened."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            jpeg = root / "camera.JPG"
+            original = bytes.fromhex("ffd8") + b"camera" + bytes.fromhex("ffd9")
+            jpeg.write_bytes(original)
+            original_is_file = Path.is_file
+
+            def pretend_non_regular(path: Path) -> bool:
+                if path == jpeg:
+                    return False
+                return original_is_file(path)
+
+            with mock.patch.object(Path, "is_file", pretend_non_regular):
+                records, errors = MODULE.inventory(root)
+
+            self.assertEqual(records, [])
+            self.assertEqual(
+                errors, ["non-regular JPEG fixture not inspected: camera.JPG"]
+            )
+            self.assertEqual(jpeg.read_bytes(), original)
+
+    def test_fifo_named_as_jpeg_is_rejected_without_opening(self) -> None:
+        """A Unix FIFO must not block inspection or be accepted as a camera."""
+        import os
+
+        if not hasattr(os, "mkfifo"):
+            self.skipTest("FIFO creation is unavailable on this platform")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fifo = root / "camera.JPG"
+            try:
+                os.mkfifo(fifo)
+            except OSError:
+                self.skipTest("Filesystem does not support FIFOs")
+            records, errors = MODULE.inventory(root)
+            self.assertEqual(records, [])
+            self.assertEqual(
+                errors, ["non-regular JPEG fixture not inspected: camera.JPG"]
+            )
+
     def test_hardlinked_camera_files_are_flagged_as_one_scientific_source(self) -> None:
         """Two JPEG paths pointing to one inode must not count as independent captures."""
         with tempfile.TemporaryDirectory() as directory:

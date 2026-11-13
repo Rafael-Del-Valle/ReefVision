@@ -86,13 +86,19 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
         jpeg_paths.extend(parent / name for name in filenames
                           if Path(name).suffix.lower() in JPEG_SUFFIXES)
     for path in sorted(jpeg_paths):
-        # JPEG-named symlinks remain explicitly rejected, not followed.
+        relative = path.relative_to(root).as_posix()
+        # An apparent JPEG may be a FIFO, socket, device or NTFS reparse
+        # point. Reject it explicitly rather than silently producing a
+        # scientifically incomplete inventory. Never attempt to open it.
         if path.is_symlink():
-            errors.append(f"symlink not inspected: {path.relative_to(root)}")
+            errors.append(f"symlink not inspected: {relative}")
+            continue
+        if _is_windows_junction(path):
+            errors.append(f"junction file not inspected: {relative}")
             continue
         if not path.is_file():
+            errors.append(f"non-regular JPEG fixture not inspected: {relative}")
             continue
-        relative = path.relative_to(root).as_posix()
         # Windows reserves device basenames in *every* path component, not
         # just the final JPEG name (e.g. CON/photos/valid.jpg is also invalid).
         # Match the basename before any extension, as Win32 does.
