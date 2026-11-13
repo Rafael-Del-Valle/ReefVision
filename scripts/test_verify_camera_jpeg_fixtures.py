@@ -22,6 +22,28 @@ SPEC.loader.exec_module(MODULE)
 
 
 class CameraFixtureInventoryTests(unittest.TestCase):
+    def test_windows_file_identity_ignores_inconsistent_ctime_only(self) -> None:
+        """Windows path stat and handle fstat can disagree on creation/change time."""
+        from types import SimpleNamespace
+
+        baseline = dict(st_dev=4, st_ino=25, st_size=32,
+                        st_mtime_ns=123456789, st_ctime_ns=987654321)
+        first = SimpleNamespace(**baseline)
+        differing_ctime = SimpleNamespace(**{**baseline, "st_ctime_ns": 987654322})
+        differing_size = SimpleNamespace(**{**baseline, "st_size": 33})
+        differing_mtime = SimpleNamespace(**{**baseline, "st_mtime_ns": 123456790})
+        substituted_handle = SimpleNamespace(**{**baseline, "st_ino": 26})
+
+        with mock.patch.object(MODULE.os, "name", "nt"):
+            self.assertEqual(MODULE._file_fingerprint(first),
+                             MODULE._file_fingerprint(differing_ctime))
+            for changed in (differing_size, differing_mtime, substituted_handle):
+                self.assertNotEqual(MODULE._file_fingerprint(first),
+                                    MODULE._file_fingerprint(changed))
+        with mock.patch.object(MODULE.os, "name", "posix"):
+            self.assertNotEqual(MODULE._file_fingerprint(first),
+                                MODULE._file_fingerprint(differing_ctime))
+
     def test_mixed_case_extensions_and_nested_files(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

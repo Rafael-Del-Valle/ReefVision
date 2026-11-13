@@ -21,9 +21,17 @@ JPEG_SOI = b"\xff\xd8"
 JPEG_EOI = b"\xff\xd9"
 
 
-def _file_fingerprint(stat: os.stat_result) -> tuple[int, int, int, int, int]:
-    """Compare file identity and modification metadata across an opened handle."""
-    return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+def _file_fingerprint(stat: os.stat_result) -> tuple[int, ...]:
+    """Compare file identity/content metadata from path and open-handle stat."""
+    stable = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+    if os.name == "nt":
+        # CPython on Windows can report a different st_ctime_ns for stat(path)
+        # and fstat(fd) of the *same* file. Using it as a cross-API identity
+        # check rejects immutable JPEGs nondeterministically. Keep volume,
+        # file ID, size and modification time checks, plus the content hash.
+        # See CPython issue 157671. POSIX retains the stricter ctime check.
+        return stable
+    return (*stable, stat.st_ctime_ns)
 
 
 def _is_windows_junction(path: Path) -> bool:
