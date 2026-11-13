@@ -190,9 +190,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     with app.state.session_factory() as session:
         original_node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
         assert original_node is not None
-        with pytest.raises(
-            ConflictError, match="producer belongs to a different workflow run"
-        ):
+        with pytest.raises(ConflictError, match="producer belongs to a different workflow run"):
             WorkflowExecutionService(session).persist_artifact(
                 run_id=alternate_run_id,
                 node_run=original_node,
