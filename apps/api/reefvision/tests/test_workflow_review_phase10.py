@@ -254,7 +254,9 @@ def test_invalid_review_node_identity_fails_persisted_run_instead_of_stranding_i
     with app.state.session_factory() as session:
         original_artifact_ids = set(
             session.scalars(
-                select(WorkflowArtifact.id).where(WorkflowArtifact.workflow_run_id == run_id)
+                select(WorkflowArtifact.id).where(
+                    WorkflowArtifact.workflow_run_id == run_id
+                )
             )
         )
     assert original_artifact_ids
@@ -270,8 +272,12 @@ def test_invalid_review_node_identity_fails_persisted_run_instead_of_stranding_i
 
     # Execute the actual persisted review workflow. A broken adapter-supplied
     # node identity must not leave its job perpetually marked running.
-    monkeypatch.setattr(WorkflowExecutionService, "execute_node", malformed_review_pause)
-    assert process_workflow_run_job(app.state.settings, app.state.session_factory, job_id) is False
+    monkeypatch.setattr(
+        WorkflowExecutionService, "execute_node", malformed_review_pause
+    )
+    assert (
+        process_workflow_run_job(app.state.settings, app.state.session_factory, job_id) is False
+    )
 
     with app.state.session_factory() as session:
         job = session.get(Job, job_id)
@@ -290,7 +296,9 @@ def test_invalid_review_node_identity_fails_persisted_run_instead_of_stranding_i
         assert review_node.error_message == job.error_message
         assert set(
             session.scalars(
-                select(WorkflowArtifact.id).where(WorkflowArtifact.workflow_run_id == run_id)
+                select(WorkflowArtifact.id).where(
+                    WorkflowArtifact.workflow_run_id == run_id
+                )
             )
         ) == original_artifact_ids
 
