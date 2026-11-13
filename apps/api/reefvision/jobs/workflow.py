@@ -23,8 +23,8 @@ from reefvision.services.workflow_graphs import WorkflowGraphService
 from reefvision.services.workflow_provenance import (
     build_workflow_run_provenance,
     verify_succeeded_node_artifacts,
-    verify_workflow_run_node_graph_lineage,
     verify_workflow_artifact,
+    verify_workflow_run_node_graph_lineage,
 )
 from reefvision.services.workflow_review import WorkflowReviewRequired
 from reefvision.storage.datasets import canonical_json_sha256
