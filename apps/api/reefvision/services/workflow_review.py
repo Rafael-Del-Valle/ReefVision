@@ -181,6 +181,32 @@ def _disagreement_artifact_for_consensus(
     session: Session,
     consensus_artifact: WorkflowArtifact,
 ) -> WorkflowArtifact | None:
+    producer = session.get(WorkflowNodeRun, consensus_artifact.producer_node_run_id)
+    if (
+        producer is None
+        or producer.workflow_run_id != consensus_artifact.workflow_run_id
+        or not isinstance(producer.output_artifact_ids_json, list)
+        or any(
+            not isinstance(artifact_id, str) or not artifact_id
+            for artifact_id in producer.output_artifact_ids_json
+        )
+    ):
+        raise ConflictError("Workflow consensus producer outputs are invalid")
+    declared_ids = producer.output_artifact_ids_json
+    declared_outputs = list(
+        session.scalars(
+            select(WorkflowArtifact).where(WorkflowArtifact.id.in_(declared_ids))
+        )
+    )
+    # An absent disagreement row must not silently suppress a scientist's
+    # active-learning handoff when it is still listed in the producer manifest.
+    if len(declared_outputs) != len(declared_ids) or any(
+        artifact.workflow_run_id != consensus_artifact.workflow_run_id
+        or artifact.producer_node_run_id != producer.id
+        for artifact in declared_outputs
+    ):
+        raise ConflictError("Workflow consensus declared producer output is missing or inconsistent")
+
     disagreements = list(
         session.scalars(
             select(WorkflowArtifact).where(
@@ -198,12 +224,8 @@ def _disagreement_artifact_for_consensus(
         raise ConflictError("Workflow consensus disagreement outputs are ambiguous")
 
     disagreement = disagreements[0]
-    producer = session.get(WorkflowNodeRun, consensus_artifact.producer_node_run_id)
     if (
-        producer is None
-        or producer.workflow_run_id != consensus_artifact.workflow_run_id
-        or not isinstance(producer.output_artifact_ids_json, list)
-        or disagreement.id not in producer.output_artifact_ids_json
+        disagreement.id not in declared_ids
         or disagreement.producer_port_id != "disagreements"
     ):
         raise ConflictError("Workflow disagreement is not a declared producer output")

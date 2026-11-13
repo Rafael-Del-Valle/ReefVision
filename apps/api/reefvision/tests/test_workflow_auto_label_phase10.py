@@ -379,6 +379,50 @@ def test_review_rejects_undeclared_disagreement_before_active_learning_handoff(
         assert session.scalar(select(func.count(Annotation.id))) == 1
 
 
+def test_review_rejects_missing_declared_disagreement_before_approval(
+    client: TestClient,
+) -> None:
+    # This saved execution has a declared disagreement output and a valid
+    # consensus input. A missing output row must not turn into a silent
+    # success with no active-learning handoff.
+    _, _, _, run_id, job_id, _, disagreement_id = _seed_valid_consensus_review(client)
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(app.state.settings, app.state.session_factory, job_id) is True
+
+    with app.state.session_factory() as session:
+        disagreement = session.get(WorkflowArtifact, disagreement_id)
+        assert disagreement is not None
+        producer = session.get(WorkflowNodeRun, disagreement.producer_node_run_id)
+        assert producer is not None
+        assert disagreement_id in (producer.output_artifact_ids_json or [])
+        review = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "review",
+            )
+        )
+        assert review is not None and review.status == "waiting_for_review"
+        review_id = review.id
+        session.delete(disagreement)
+        session.commit()
+
+    rejected = client.post(
+        f"/api/v1/workflow-node-runs/{review_id}/resume-review",
+        json={"reviewed_by": "scientist", "note": "Review approved."},
+    )
+    assert rejected.status_code == 409, rejected.text
+    assert "declared producer output is missing" in rejected.json()["detail"]
+
+    with app.state.session_factory() as session:
+        run = session.get(WorkflowRun, run_id)
+        review = session.get(WorkflowNodeRun, review_id)
+        assert run is not None and run.status == "waiting_for_review"
+        assert review is not None and review.status == "waiting_for_review"
+        assert "review_approval" not in (review.result_json or {})
+        assert session.scalar(select(func.count(ActiveLearningRound.id))) == 0
+        assert session.scalar(select(func.count(Annotation.id))) == 0
+
+
 def test_auto_label_postprocessing_is_idempotent(client: TestClient) -> None:
     project, _, _, _, _, consensus_id, disagreement_id = _seed_valid_consensus_review(client)
     app = cast(FastAPI, client.app)
