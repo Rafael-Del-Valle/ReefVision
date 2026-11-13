@@ -10,8 +10,11 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+// High-resolution camera frames can require less than 10% zoom to fit in a
+// narrow annotation pane. Share the lower bound with wheel zoom so the first
+// wheel step never jumps from a correctly fitted image back above 10%.
 export function clampScale(scale: number): number {
-  return clamp(scale, 0.1, 16);
+  return clamp(scale, 0.01, 16);
 }
 
 export function boxWidth(annotation: EditorAnnotation): number {
