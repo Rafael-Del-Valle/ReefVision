@@ -46,3 +46,21 @@ provenance, saved runs, retries and researcher-review gates remain unchanged.
 Release remains **HOLD** until exact-head CI and end-to-end tests, independent
 1.1/1.6 Alembic revision-0038 reconciliation, native Windows installed-GUI
 and MSI upgrade/rollback checks, and representative scientific validation.
+
+## Concurrent editor reset safety (2026-11-13)
+
+The researcher-confirmed **Reset Project Default** now submits the saved
+`updated_at` revision. A single conditional SQLite DELETE protects a newer
+project/layer default from another editor's concurrent upsert. An outdated,
+already deleted or recreated record returns HTTP 409 rather than removing newer
+settings. The GUI refetches the authoritative visibility bundle and requires
+a fresh confirmation before attempting another reset; missing revision
+metadata disables project-default reset. Saved user preferences, other layers,
+annotations, QC decisions and workflow artifacts remain unchanged.
+
+For existing local API clients the revision query parameter is optional:
+legacy unconditional DELETE remains available but is *not* concurrency safe.
+The GUI uses the guarded path. Backend and frontend regressions cover stale
+and current revisions, delete/recreate replay, preserved preferences, the
+query-string revision and conflict refresh. Full exact-head CI and native
+Windows installed-GUI/MSI upgrade tests remain acceptance gates.

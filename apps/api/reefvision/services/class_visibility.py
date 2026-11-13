@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
@@ -191,9 +193,27 @@ class ClassVisibilityService:
             updated_by_identity=project_default.updated_by_identity,
         )
 
-    def reset_project_default(self, project_id: str, layer_type: str) -> None:
+    def reset_project_default(
+        self,
+        project_id: str,
+        layer_type: str,
+        expected_updated_at: datetime | None = None,
+    ) -> None:
         self._project(project_id)
         resolved_layer_type = self._layer_type(layer_type)
+        if expected_updated_at is not None:
+            if not self.project_defaults.delete_if_updated_at(
+                project_id, resolved_layer_type, expected_updated_at
+            ):
+                raise ConflictError(
+                    "Project visibility default changed in another editor. "
+                    "Reload visibility settings and confirm the reset again."
+                )
+            self.session.commit()
+            return
+
+        # Legacy local API clients retain their unconditional DELETE behavior.
+        # The GUI always uses the conditional path to avoid lost project edits.
         project_default = self.project_defaults.get(project_id, resolved_layer_type)
         if project_default is not None:
             self.session.delete(project_default)

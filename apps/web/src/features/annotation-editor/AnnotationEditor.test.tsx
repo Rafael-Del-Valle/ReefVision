@@ -1597,8 +1597,8 @@ describe("AnnotationEditor", () => {
           );
         }
         if (
-          url.endsWith(
-            `/projects/${project.id}/class-visibility/defaults/annotations`,
+          url.includes(
+            `/projects/${project.id}/class-visibility/defaults/annotations?expected_updated_at=`,
           ) &&
           init?.method === "DELETE"
         ) {
@@ -1654,9 +1654,13 @@ describe("AnnotationEditor", () => {
     ]);
     expect(resetButton).toBeDisabled();
     expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
-    expect(
-      fetchMock.mock.calls.filter(([, init]) => init?.method === "DELETE"),
-    ).toHaveLength(1);
+    const deleteRequests = fetchMock.mock.calls.filter(
+      ([, init]) => init?.method === "DELETE",
+    );
+    expect(deleteRequests).toHaveLength(1);
+    expect(decodeURIComponent(String(deleteRequests[0][0]))).toContain(
+      "expected_updated_at=2026-07-10T00:00:00Z",
+    );
     expect(
       fetchMock.mock.calls.filter(([, init]) =>
         ["POST", "PUT", "PATCH"].includes(init?.method ?? "GET"),
@@ -1686,9 +1690,9 @@ describe("AnnotationEditor", () => {
         );
       }
       if (
-        url.endsWith(
-          `/projects/${project.id}/class-visibility/defaults/annotations`,
-        ) &&
+        url.includes(
+            `/projects/${project.id}/class-visibility/defaults/annotations?expected_updated_at=`,
+          ) &&
         init?.method === "DELETE"
       ) {
         deleteAttempts += 1;
@@ -1732,6 +1736,90 @@ describe("AnnotationEditor", () => {
         project.id,
       ])?.project_defaults.annotations.saved,
     ).toBe(false);
+  });
+
+  it("refetches the other editor's newer default after a stale-reset conflict", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    let visibilityReads = 0;
+    let resetAttempts = 0;
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (
+          url.endsWith(`/images/${session.image.id}/annotations`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse(session);
+        }
+        if (
+          url.endsWith(`/projects/${project.id}/class-visibility`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          visibilityReads += 1;
+          const bundle = buildVisibilityBundle({
+            projectDefaults: {
+              annotations: [visibilityReads > 1 ? "class-2" : "class-1"],
+            },
+          });
+          if (visibilityReads > 1) {
+            bundle.project_defaults.annotations.updated_at =
+              "2026-07-11T00:00:00Z";
+          }
+          return jsonResponse(bundle);
+        }
+        if (
+          url.includes(
+            `/projects/${project.id}/class-visibility/defaults/annotations?expected_updated_at=`,
+          ) &&
+          init?.method === "DELETE"
+        ) {
+          resetAttempts += 1;
+          expect(decodeURIComponent(url)).toContain(
+            "expected_updated_at=2026-07-10T00:00:00Z",
+          );
+          return jsonResponse(
+            {
+              detail:
+                "Project visibility default changed in another editor. Reload visibility settings and confirm the reset again.",
+            },
+            409,
+          );
+        }
+        const fallback = handleDefaultEditorRequests(url, init);
+        if (fallback) return fallback;
+        throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+      });
+    const { queryClient } = renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Reset Project Default" }),
+      ).not.toBeDisabled(),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Reset Project Default" }),
+    );
+    await waitFor(() => expect(resetAttempts).toBe(1));
+    await waitFor(() => expect(visibilityReads).toBeGreaterThan(1));
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<ClassVisibilityBundle>([
+          "class-visibility",
+          project.id,
+        ])?.project_defaults.annotations.hidden_class_ids,
+      ).toEqual(["class-2"]),
+    );
+    expect(screen.getByTestId("class-visibility-status")).toHaveTextContent(
+      "changed in another editor",
+    );
+    expect(
+      fetchMock.mock.calls.filter(([, init]) =>
+        ["POST", "PUT", "PATCH"].includes(init?.method ?? "GET"),
+      ),
+    ).toHaveLength(0);
   });
 
   it("waits for a project visibility identity before enabling persistent controls", async () => {

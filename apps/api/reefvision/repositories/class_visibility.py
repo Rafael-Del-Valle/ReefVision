@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from datetime import datetime
+
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
@@ -86,6 +88,19 @@ class ProjectClassVisibilityDefaultRepository:
             ProjectClassVisibilityDefault.layer_type == layer_type,
         )
         return self.session.scalar(statement)
+
+    def delete_if_updated_at(
+        self, project_id: str, layer_type: str, expected_updated_at: datetime
+    ) -> bool:
+        """Atomically delete only the version observed by this editor."""
+        result = self.session.execute(
+            delete(ProjectClassVisibilityDefault).where(
+                ProjectClassVisibilityDefault.project_id == project_id,
+                ProjectClassVisibilityDefault.layer_type == layer_type,
+                ProjectClassVisibilityDefault.updated_at == expected_updated_at,
+            )
+        )
+        return result.rowcount == 1
 
     def upsert(
         self,

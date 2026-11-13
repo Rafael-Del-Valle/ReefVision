@@ -165,6 +165,7 @@ interface VisibilityMutationInput {
   layerType: ClassVisibilityLayerType;
   target: VisibilityMutationTarget;
   hiddenClassIds?: string[];
+  expectedUpdatedAt?: string;
 }
 
 interface VisibilityMutationResult {
@@ -1051,9 +1052,13 @@ export function AnnotationEditor({
       if (input.target === "my_preference") {
         await deleteClassVisibilityPreference(input.projectId, input.layerType);
       } else {
+        if (!input.expectedUpdatedAt) {
+          throw new Error("Reload project visibility before resetting its default.");
+        }
         await deleteProjectClassVisibilityDefault(
           input.projectId,
           input.layerType,
+          input.expectedUpdatedAt,
         );
       }
       return {
@@ -1119,6 +1124,13 @@ export function AnnotationEditor({
       }
     },
     onError: (error: Error, input, context) => {
+      if (input.action === "reset" && input.target === "project_default") {
+        // Refresh stale settings before another explicitly confirmed reset.
+        void queryClient.invalidateQueries({
+          queryKey: ["class-visibility", input.projectId],
+          exact: true,
+        });
+      }
       const activeUserIdentity =
         queryClient.getQueryData<ClassVisibilityBundle>([
           "class-visibility",
@@ -1582,7 +1594,8 @@ export function AnnotationEditor({
   }, [project.id, selectedVisibilityLayer, visibilityMutation]);
 
   const resetProjectVisibilityDefault = useCallback(() => {
-    if (!currentLayerVisibility.projectDefault.saved) {
+    const expectedUpdatedAt = currentLayerVisibility.projectDefault.updated_at;
+    if (!currentLayerVisibility.projectDefault.saved || !expectedUpdatedAt) {
       return;
     }
     const layerLabel = visibilityLayerLabel(selectedVisibilityLayer);
@@ -1598,9 +1611,11 @@ export function AnnotationEditor({
       action: "reset",
       layerType: selectedVisibilityLayer,
       target: "project_default",
+      expectedUpdatedAt,
     });
   }, [
     currentLayerVisibility.projectDefault.saved,
+    currentLayerVisibility.projectDefault.updated_at,
     project.id,
     selectedVisibilityLayer,
     visibilityMutation,
@@ -3476,7 +3491,8 @@ export function AnnotationEditor({
                   disabled={
                     visibilityMutation.isPending ||
                     !visibilityQuery.data ||
-                    !currentLayerVisibility.projectDefault.saved
+                    !currentLayerVisibility.projectDefault.saved ||
+                    !currentLayerVisibility.projectDefault.updated_at
                   }
                   onClick={resetProjectVisibilityDefault}
                 >

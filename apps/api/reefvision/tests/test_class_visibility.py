@@ -268,3 +268,55 @@ def test_atomic_visibility_upsert_preserves_scopes_after_stale_first_reads(
             ).hidden_class_ids_json == [first["id"]]
 
     Base.metadata.drop_all(app.state.engine)
+
+
+def test_versioned_project_default_reset_is_safe_against_other_editor(
+    client: TestClient,
+) -> None:
+    """A delayed reset cannot erase another researcher's newer class default."""
+    project = create_project(client)
+    first = create_label_class(
+        client, project["id"], class_index=0, name="Swiftia Open", display_color="#C74343"
+    )
+    second = create_label_class(
+        client, project["id"], class_index=1, name="Swiftia Closed", display_color="#326EA8"
+    )
+    path = f"/api/v1/projects/{project['id']}/class-visibility/defaults/annotations"
+    first_save = client.put(path, json={"hidden_class_ids": [first["id"]]})
+    assert first_save.status_code == 200
+    old_stamp = first_save.json()["updated_at"]
+    assert old_stamp
+    preference = client.put(
+        f"/api/v1/projects/{project['id']}/class-visibility/preferences/annotations",
+        json={"hidden_class_ids": [first["id"]]},
+    )
+    assert preference.status_code == 200
+
+    second_save = client.put(path, json={"hidden_class_ids": [second["id"]]})
+    assert second_save.status_code == 200
+    new_stamp = second_save.json()["updated_at"]
+    assert new_stamp != old_stamp
+
+    stale = client.delete(path, params={"expected_updated_at": old_stamp})
+    assert stale.status_code == 409, stale.text
+    assert "changed in another editor" in stale.json()["detail"]
+    current = client.get(f"/api/v1/projects/{project['id']}/class-visibility").json()
+    assert current["project_defaults"]["annotations"]["hidden_class_ids"] == [second["id"]]
+    assert current["user_preferences"]["annotations"]["hidden_class_ids"] == [first["id"]]
+
+    assert client.delete(path, params={"expected_updated_at": new_stamp}).status_code == 204
+    recreated = client.put(path, json={"hidden_class_ids": [first["id"]]})
+    assert recreated.status_code == 200
+    # A delayed replay after deletion/recreation cannot erase the new record.
+    assert client.delete(path, params={"expected_updated_at": new_stamp}).status_code == 409
+    current = client.get(f"/api/v1/projects/{project['id']}/class-visibility").json()
+    assert current["project_defaults"]["annotations"]["hidden_class_ids"] == [first["id"]]
+    assert current["user_preferences"]["annotations"]["hidden_class_ids"] == [first["id"]]
+
+    # Older local integrations remain backwards-compatible.
+    assert client.delete(path).status_code == 204
+    assert (
+        client.get(f"/api/v1/projects/{project['id']}/class-visibility")
+        .json()["project_defaults"]["annotations"]["saved"]
+        is False
+    )

@@ -2052,9 +2052,13 @@ export async function saveProjectClassVisibilityDefault(
 export async function deleteProjectClassVisibilityDefault(
   projectId: string,
   layerType: ClassVisibilityLayerType,
+  expectedUpdatedAt?: string,
 ): Promise<void> {
+  const revision = expectedUpdatedAt
+    ? `?expected_updated_at=${encodeURIComponent(expectedUpdatedAt)}`
+    : "";
   return request<void>(
-    `/projects/${projectId}/class-visibility/defaults/${layerType}`,
+    `/projects/${projectId}/class-visibility/defaults/${layerType}${revision}`,
     {
       method: "DELETE",
     },
