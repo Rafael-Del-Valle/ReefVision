@@ -194,7 +194,7 @@ if ($requests[0].Value -notmatch '-TimeoutSec\s+10\b' -or
 }
 # Persisted logs may contain CR-only progress updates; display only the most
 # recent 20 lines, without rewriting the worker log or losing progress records.
-if ($monitorScript -notmatch [regex]::Escape("-split '\\r\\n|\\r|\\n'") -or
+if ($monitorScript -notmatch [regex]::Escape("-split '\r\n|\r|\n'") -or
     $monitorScript -notmatch 'Select-Object\s+-Last\s+20\b') {
   throw 'Training log tail must support CR/LF progress and remain bounded to 20 lines.'
 }
