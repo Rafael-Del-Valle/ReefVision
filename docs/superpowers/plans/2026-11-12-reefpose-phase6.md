@@ -42,4 +42,4 @@ Use grouped development and test recordings. Require a completed development rep
 
 - [x] Add executable source and validation nodes to Workflow Builder with dataset and prediction lineage checks. Test via persisted artifacts.
 - [x] Add a shared validation panel to Model Hub and Video Tracking Workspace. Use REST-backed dataset import, rater selection, submission, report history, charts and exports. Run the guarded Chromium acceptance test.
-- [ ] Run backend/frontend suites, strict typing, Ruff, Prettier, production build, migration and installed CUDA checks. Document empirical data availability, fixture results and remaining limitations. Commit verified changes.
+- [x] Run backend/frontend suites, strict typing, Ruff, Prettier, production build, migration and installed CUDA checks. Document the six optional-runtime failures, empirical data availability, fixture results and remaining limitations. Commit verified changes.

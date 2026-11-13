@@ -74,7 +74,9 @@ and event results for tabular use.
 
 The saved-workflow integration test exercises both Phase 6 nodes alongside the
 Phase 5 review branch. It verifies the scientific artifact can export the same
-report hash and refers to the original association output.
+report hash and refers to the original association output. The parent workflow owns
+dispatch and retry of its validation child. Standalone validation jobs use the normal
+worker queue.
 
 ## Statistical interpretation
 
@@ -121,11 +123,24 @@ export. The report contained 24 localized landmarks, IDF1 of 1.0, two true-posit
 complete cycles, zero false positives or misses, zero measurement bias, and fixture
 ICC(A,1) of 1.0. The persisted job was `b0ac5c44-67a5-4fd4-861f-4866d7d15f29` and its
 report hash was `d4140f5bfda3f966444dde6aa9fe81d20c9ee8fede436016828f4e7cd504db0b`.
+The reference hash was
+`dd7a9d65d378b3a7b515880c483b324d1c0b9778bd72c5c369ab91ca313fe4ec`.
 
 Three opt-in upstream integration checks passed on an RTX 3090 with PyTorch
 `2.11.0+cu128` and CUDA 12.8. These covered native evaluation, asynchronous
 comparison, and CUDA workflow training through checkpoint registration and
 inference. Phase 6 reference scoring runs on CPU.
+
+The final focused checks passed 22 Phase 6, workflow and migration tests and 28
+worker and earlier-workflow compatibility tests. Ruff passed for the API and all
+26 changed Python files passed the format check. Strict mypy checked 454 source
+files. The frontend passed 512 Vitest tests across 97 files, TypeScript, Prettier,
+and the production build. Vite reported its existing large-chunk advisory.
+
+The full backend run had 1,523 passed, 40 skipped, and six failed in 15m36s.
+All failures were existing pose interoperability cases requiring the unavailable
+optional `sleap-io==0.9.2` dependency. The run began before the final workflow
+queue fix and test additions. The focused runs above cover those changes.
 
 The repository and local application database supplied no independently annotated
 biological study data. Synthetic engineering fixtures are the available evidence.
