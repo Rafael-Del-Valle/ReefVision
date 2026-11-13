@@ -64,9 +64,53 @@ def test_irregular_velocity_displacement_orientation_and_angular_velocity() -> N
     )
     assert velocity.samples[1].pixel_value == 10
     assert velocity.samples[2].pixel_value == pytest.approx(10 / 3)
-    assert displacement.samples[2].pixel_value == 10
+    assert displacement.samples[0].pixel_value is None
+    assert displacement.samples[1].pixel_value == 5
+    assert displacement.samples[2].pixel_value == 5
     assert orientation.samples[1].pixel_value == 90
     assert omega.samples[2].pixel_value == pytest.approx(60)
+
+
+def test_derivative_state_skips_missing_samples_and_reports_dimensional_units() -> None:
+    observations = [
+        obs(0, 0, {"p": (0, 0), "a": (0, 0), "b": (1, 0), "c": (1, 1)}),
+        obs(1, 1, {"a": (0, 0)}),
+        obs(2, 2, {"p": (4, 0), "a": (0, 0), "b": (1, 0), "c": (1, 1)}),
+    ]
+    calibration = MeasurementCalibration(2, "mm")
+    velocity = calculate_measurement_series(
+        observations,
+        MeasurementDefinition("v", "velocity", ("p",)),
+        calibration,
+    )
+    curvature = calculate_measurement_series(
+        observations,
+        MeasurementDefinition("c", "curvature", ("a", "b", "c")),
+        calibration,
+    )
+    extension = calculate_measurement_series(
+        observations,
+        MeasurementDefinition("e", "extension", ("a", "b", "c")),
+        calibration,
+    )
+    angular_velocity = calculate_measurement_series(
+        [obs(0, 0, {"a": (0, 0), "b": (1, 0)}), obs(1, 1, {"a": (0, 0), "b": (0, 1)})],
+        MeasurementDefinition("w", "angular_velocity", ("a", "b")),
+    )
+
+    assert velocity.samples[2].pixel_value == 2
+    assert velocity.samples[2].physical_value == 1
+    assert velocity.pixel_unit == "pixels/second"
+    assert velocity.physical_unit == "mm/second"
+    assert curvature.pixel_unit == "radians/pixel"
+    assert curvature.physical_unit == "radians/mm"
+    assert curvature.samples[0].pixel_value == pytest.approx(math.pi / 4)
+    assert curvature.samples[0].physical_value == pytest.approx(math.pi / 2)
+    assert extension.pixel_unit == "pixels"
+    assert extension.physical_unit == "mm"
+    assert extension.samples[0].pixel_value == pytest.approx(math.sqrt(2))
+    assert extension.samples[0].physical_value == pytest.approx(math.sqrt(2) / 2)
+    assert angular_velocity.pixel_unit == "degrees/second"
 
 
 def test_curvature_extension_relative_movement_missing_and_identity_isolation() -> None:
@@ -86,8 +130,8 @@ def test_curvature_extension_relative_movement_missing_and_identity_isolation() 
         MeasurementDefinition("r", "relative_movement", ("a", "c")),
         identity_id="fish-1",
     )
-    assert curvature.samples[0].pixel_value == pytest.approx(math.pi / 2)
-    assert extension.samples[0].pixel_value == pytest.approx(math.sqrt(2) / 2)
+    assert curvature.samples[0].pixel_value == pytest.approx(math.pi / 4)
+    assert extension.samples[0].pixel_value == pytest.approx(math.sqrt(2))
     assert relative.samples[1].pixel_value == pytest.approx(math.sqrt(8) - math.sqrt(2))
     assert len(curvature.samples) == 2
 
@@ -96,6 +140,35 @@ def test_curvature_extension_relative_movement_missing_and_identity_isolation() 
     )
     assert missing.samples[0].valid is False
     assert "missing_landmark" in missing.samples[0].quality_flags
+
+
+def test_curvature_uses_the_full_ordered_chain_and_extension_is_anatomical_span() -> None:
+    observation = obs(
+        0,
+        0,
+        {"a": (0, 0), "b": (2, 0), "c": (2, 2), "d": (4, 2)},
+    )
+    curvature = calculate_measurement_series(
+        [observation], MeasurementDefinition("c", "curvature", ("a", "b", "c", "d"))
+    )
+    extension = calculate_measurement_series(
+        [observation], MeasurementDefinition("e", "extension", ("a", "b", "c", "d"))
+    )
+
+    assert curvature.samples[0].pixel_value == pytest.approx(math.pi / 6)
+    assert extension.samples[0].pixel_value == pytest.approx(math.sqrt(20))
+
+    missing_endpoint = obs(1, 1, {"b": (2, 0), "c": (2, 2), "d": (4, 2)})
+    missing_curvature = calculate_measurement_series(
+        [missing_endpoint],
+        MeasurementDefinition("c", "curvature", ("a", "b", "c", "d")),
+    )
+    missing_extension = calculate_measurement_series(
+        [missing_endpoint],
+        MeasurementDefinition("e", "extension", ("a", "b", "c", "d")),
+    )
+    assert missing_curvature.samples[0].valid is False
+    assert missing_extension.samples[0].valid is False
 
 
 def test_rejects_non_source_coordinates_and_nonpositive_time() -> None:

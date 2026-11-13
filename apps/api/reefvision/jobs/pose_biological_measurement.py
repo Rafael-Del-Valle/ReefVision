@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -34,7 +35,10 @@ def process_pose_biological_measurement_job(
             if job.job_type == "pose_biological_measurement"
             else PoseEventDetectionRun
         )
-        run = session.get(model, run_id)
+        run = cast(
+            PoseMeasurementRun | PoseEventDetectionRun | None,
+            session.get(model, run_id),
+        )
         if run is None:
             job.status = "failed"
             job.error_message = "Analysis run disappeared"
@@ -61,7 +65,10 @@ def process_pose_biological_measurement_job(
         def progress(current: int, total: int) -> None:
             with factory() as progress_session:
                 j = progress_session.get(Job, job_id)
-                r = progress_session.get(model, run_id)
+                r = cast(
+                    PoseMeasurementRun | PoseEventDetectionRun | None,
+                    progress_session.get(model, run_id),
+                )
                 if j is None or r is None or j.status == "cancel_requested":
                     raise PoseBiologicalMeasurementCancelled
                 j.progress_current = current
@@ -95,7 +102,10 @@ def process_pose_biological_measurement_job(
         except PoseBiologicalMeasurementCancelled:
             session.rollback()
             job = session.get(Job, job_id)
-            run = session.get(model, run_id)
+            run = cast(
+                PoseMeasurementRun | PoseEventDetectionRun | None,
+                session.get(model, run_id),
+            )
             assert job and run
             job.status = run.status = "cancelled"
             job.completed_at = run.completed_at = datetime.now(UTC)
@@ -103,7 +113,10 @@ def process_pose_biological_measurement_job(
         except Exception as exc:
             session.rollback()
             job = session.get(Job, job_id)
-            run = session.get(model, run_id)
+            run = cast(
+                PoseMeasurementRun | PoseEventDetectionRun | None,
+                session.get(model, run_id),
+            )
             assert job and run
             job.status = run.status = "failed"
             job.error_message = str(exc)

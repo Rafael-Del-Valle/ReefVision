@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import io
+import json
+import zipfile
 from typing import cast
 
 import pytest
@@ -81,7 +84,9 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
             stable_identity_key="fish-1",
             display_name="Synthetic fish",
             origin="synthetic",
-            verification_state="scientist_verified",
+            # Scientific eligibility is derived from the selected current observations,
+            # not this denormalized identity header.
+            verification_state="unreviewed",
             lifecycle_state="active",
             first_frame=0,
             last_frame=len(values) - 1,
@@ -135,7 +140,13 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
                     "name": "Gape distance",
                     "kind": "distance",
                     "landmark_ids": ["upper_jaw", "lower_jaw"],
-                }
+                },
+                {
+                    "id": "gape-copy",
+                    "name": "Gape distance copy",
+                    "kind": "distance",
+                    "landmark_ids": ["upper_jaw", "lower_jaw"],
+                },
             ],
         },
     )
@@ -154,7 +165,13 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
                     "name": "Gape distance",
                     "kind": "distance",
                     "landmark_ids": ["upper_jaw", "lower_jaw"],
-                }
+                },
+                {
+                    "id": "gape-copy",
+                    "name": "Gape distance copy",
+                    "kind": "distance",
+                    "landmark_ids": ["upper_jaw", "lower_jaw"],
+                },
             ],
         },
     )
@@ -166,16 +183,56 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
         client.app.state.session_factory,
         measurement_job["id"],
     )
-    saved_measurements = client.get(
-        f"/api/v1/projects/{project['id']}/pose-measurement-runs"
-    )
+    saved_measurements = client.get(f"/api/v1/projects/{project['id']}/pose-measurement-runs")
     assert saved_measurements.status_code == 200, saved_measurements.text
     assert saved_measurements.json()[0]["source_job_id"] == measurement_job["id"]
     assert saved_measurements.json()[0]["definitions_json"][0]["id"] == "gape"
     series = client.get(f"/api/v1/pose-measurement-runs/{measurement_run_id}/series").json()
-    assert len(series) == 1
-    samples = client.get(f"/api/v1/pose-measurement-series/{series[0]['id']}/samples").json()
+    assert len(series) == 2
+    gape_series = next(item for item in series if item["definition_id"] == "gape")
+    gape_copy_series = next(item for item in series if item["definition_id"] == "gape-copy")
+    samples = client.get(f"/api/v1/pose-measurement-series/{gape_series['id']}/samples").json()
     assert [sample["pixel_value"] for sample in samples] == values
+
+    with client.app.state.session_factory() as session:
+        observation = session.scalar(
+            select(PoseIdentityObservation).where(
+                PoseIdentityObservation.association_run_id == identity_run_id,
+                PoseIdentityObservation.is_current.is_(True),
+            )
+        )
+        assert observation is not None
+        observation.verification_state = "unreviewed"
+        session.commit()
+    unreviewed_source = client.post(
+        f"/api/v1/projects/{project['id']}/pose-measurement-runs",
+        json={
+            "video_id": video["id"],
+            "source_identity_run_id": identity_run_id,
+            "source_identity_run_revision": 1,
+            "verification_mode": "scientific",
+            "definitions": [
+                {
+                    "id": "unreviewed-gape",
+                    "name": "Unreviewed gape",
+                    "kind": "distance",
+                    "landmark_ids": ["upper_jaw", "lower_jaw"],
+                }
+            ],
+        },
+    )
+    assert unreviewed_source.status_code == 400
+    assert "scientist-reviewed observations" in unreviewed_source.text
+    with client.app.state.session_factory() as session:
+        observation = session.scalar(
+            select(PoseIdentityObservation).where(
+                PoseIdentityObservation.association_run_id == identity_run_id,
+                PoseIdentityObservation.verification_state == "unreviewed",
+            )
+        )
+        assert observation is not None
+        observation.verification_state = "scientist_verified"
+        session.commit()
 
     detected = client.post(
         f"/api/v1/projects/{project['id']}/pose-event-runs",
@@ -183,7 +240,7 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
             "measurement_run_id": measurement_run_id,
             "cycles": [
                 {
-                    "measurement_series_id": series[0]["id"],
+                    "measurement_series_id": gape_series["id"],
                     "open_threshold": 6,
                     "close_threshold": 3,
                     "minimum_amplitude": 4,
@@ -201,7 +258,7 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
             "measurement_run_id": measurement_run_id,
             "cycles": [
                 {
-                    "measurement_series_id": series[0]["id"],
+                    "measurement_series_id": gape_series["id"],
                     "open_threshold": 6,
                     "close_threshold": 3,
                     "minimum_amplitude": 4,
@@ -222,14 +279,73 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
     saved_event_runs = client.get(f"/api/v1/projects/{project['id']}/pose-event-runs")
     assert saved_event_runs.status_code == 200, saved_event_runs.text
     assert saved_event_runs.json()[0]["source_job_id"] == event_job["id"]
-    assert saved_event_runs.json()[0]["configuration_json"]["cycles"][0][
-        "measurement_series_id"
-    ] == series[0]["id"]
+    assert (
+        saved_event_runs.json()[0]["configuration_json"]["cycles"][0]["measurement_series_id"]
+        == gape_series["id"]
+    )
     events = client.get(f"/api/v1/pose-event-runs/{event_run_id}/events").json()
     assert [
         (event["start_frame"], event["peak_frame"], event["end_frame"]) for event in events
     ] == [(2, 3, 5), (7, 8, 10)]
+    duplicate_series_configuration = client.post(
+        f"/api/v1/projects/{project['id']}/pose-event-runs",
+        json={
+            "measurement_run_id": measurement_run_id,
+            "cycles": [
+                {
+                    "measurement_series_id": gape_series["id"],
+                    "open_threshold": threshold,
+                    "close_threshold": 3,
+                }
+                for threshold in (6, 7)
+            ],
+        },
+    )
+    assert duplicate_series_configuration.status_code == 422
+    assert "only one cycle definition" in duplicate_series_configuration.text
+    multi_series_job = client.post(
+        f"/api/v1/projects/{project['id']}/pose-event-runs",
+        json={
+            "measurement_run_id": measurement_run_id,
+            "cycles": [
+                {
+                    "measurement_series_id": series_id,
+                    "open_threshold": threshold,
+                    "close_threshold": 3,
+                    "minimum_amplitude": 4,
+                    "minimum_duration_s": 0.1,
+                    "maximum_gap_s": 0.25,
+                }
+                for series_id, threshold in (
+                    (gape_series["id"], 6),
+                    (gape_copy_series["id"], 7),
+                )
+            ],
+        },
+    ).json()
+    assert process_pose_biological_measurement_job(
+        client.app.state.settings,
+        client.app.state.session_factory,
+        multi_series_job["id"],
+    )
+    multi_series_run_id = cast(dict[str, str], multi_series_job["result_json"])["run_id"]
+    with client.app.state.session_factory() as session:
+        multi_series_run = session.get(PoseEventDetectionRun, multi_series_run_id)
+        assert multi_series_run is not None and multi_series_run.status == "completed"
+    assert len(client.get(f"/api/v1/pose-event-runs/{multi_series_run_id}/events").json()) == 4
     current_events = list(events)
+    invalid_boundary = client.post(
+        f"/api/v1/pose-biological-events/{events[0]['id']}/corrections",
+        json={
+            "action": "adjust_boundaries",
+            "start_frame": 0,
+            "end_frame": 999,
+            "reason": "Endpoint does not exist",
+            "actor": "tester",
+        },
+    )
+    assert invalid_boundary.status_code == 400
+    assert "measurement sample" in invalid_boundary.text
     adjusted = client.post(
         f"/api/v1/pose-biological-events/{events[0]['id']}/corrections",
         json={
@@ -243,6 +359,8 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
     assert adjusted.status_code == 201, adjusted.text
     assert adjusted.json()["revision"] == 2
     assert adjusted.json()["amplitude"] == 8
+    assert adjusted.json()["cycle_state"] == "complete"
+    assert adjusted.json()["review_state"] == "unreviewed"
     current_events[0] = adjusted.json()
     for event in current_events:
         confirmed = client.post(
@@ -254,11 +372,13 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
             },
         )
         assert confirmed.status_code == 201, confirmed.text
+        assert confirmed.json()["amplitude"] == event["amplitude"]
+        assert confirmed.json()["peak_frame"] == event["peak_frame"]
 
     manual = client.post(
         f"/api/v1/pose-event-runs/{event_run_id}/events",
         json={
-            "measurement_series_id": series[0]["id"],
+            "measurement_series_id": gape_series["id"],
             "start_frame": 6,
             "end_frame": 10,
             "cycle_state": "complete",
@@ -268,6 +388,19 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
     )
     assert manual.status_code == 201, manual.text
     assert manual.json()["detection_source"] == "scientist"
+    invalid_manual = client.post(
+        f"/api/v1/pose-event-runs/{event_run_id}/events",
+        json={
+            "measurement_series_id": gape_series["id"],
+            "start_frame": 6,
+            "end_frame": 999,
+            "cycle_state": "complete",
+            "reason": "Endpoint does not exist",
+            "actor": "tester",
+        },
+    )
+    assert invalid_manual.status_code == 400
+    assert "measurement sample" in invalid_manual.text
     history = client.get(
         f"/api/v1/pose-event-runs/{event_run_id}/events?include_history=true"
     ).json()
@@ -280,11 +413,98 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
     assert len(exported.json()["events"]) == 3
     assert len(exported.json()["event_history"]) == 6
     assert len(exported.json()["measurement_series"][0]["samples"]) == len(values)
+    assert exported.json()["individual_summaries"][0]["confirmed_complete_count"] == 3
+    assert exported.json()["individual_summaries"][0]["frequency_hz"] == pytest.approx(3 / 1.1)
     assert exported.json()["package_sha256"]
     exported_csv = client.get(f"/api/v1/pose-event-runs/{event_run_id}/export?format=csv")
     assert exported_csv.status_code == 200, exported_csv.text
-    assert "measurement" in exported_csv.text
-    assert "event_revision" in exported_csv.text
+    assert exported_csv.headers["content-type"].startswith("application/zip")
+    with zipfile.ZipFile(io.BytesIO(exported_csv.content)) as archive:
+        assert set(archive.namelist()) == {
+            "events.csv",
+            "individual_summaries.csv",
+            "manifest.json",
+            "measurements.csv",
+            "review_history.csv",
+        }
+        manifest = json.loads(archive.read("manifest.json"))
+        measurements_csv = archive.read("measurements.csv").decode()
+        assert manifest["verification_state"] == "scientific"
+        assert manifest["files"]["measurements.csv"]["sha256"]
+        assert "pixel_unit,physical_unit" in measurements_csv
+
+    with client.app.state.session_factory() as session:
+        event_run = session.get(PoseEventDetectionRun, event_run_id)
+        assert event_run is not None
+        event_run.status = "queued"
+        session.commit()
+    unfinished_export = client.get(f"/api/v1/pose-event-runs/{event_run_id}/export")
+    assert unfinished_export.status_code == 400
+    assert "completed" in unfinished_export.text
+    with client.app.state.session_factory() as session:
+        event_run = session.get(PoseEventDetectionRun, event_run_id)
+        measurement_run = session.get(PoseMeasurementRun, measurement_run_id)
+        assert event_run is not None and measurement_run is not None
+        event_run.status = "completed"
+        measurement_run.verification_state = "exploratory"
+        session.commit()
+    exploratory_export = client.get(f"/api/v1/pose-event-runs/{event_run_id}/export")
+    assert exploratory_export.status_code == 400
+    assert "scientific identity verification" in exploratory_export.text
+    with client.app.state.session_factory() as session:
+        measurement_run = session.get(PoseMeasurementRun, measurement_run_id)
+        assert measurement_run is not None
+        measurement_run.verification_state = "scientific"
+        session.commit()
+
+    stale_source = client.post(
+        f"/api/v1/projects/{project['id']}/pose-measurement-runs",
+        json={
+            "video_id": video["id"],
+            "source_identity_run_id": identity_run_id,
+            "source_identity_run_revision": 1,
+            "definitions": [
+                {
+                    "id": "stale-gape",
+                    "name": "Stale gape",
+                    "kind": "distance",
+                    "landmark_ids": ["upper_jaw", "lower_jaw"],
+                }
+            ],
+        },
+    ).json()
+    with client.app.state.session_factory() as session:
+        observation = session.scalar(
+            select(PoseIdentityObservation).where(
+                PoseIdentityObservation.association_run_id == identity_run_id,
+                PoseIdentityObservation.frame_index == 0,
+                PoseIdentityObservation.is_current.is_(True),
+            )
+        )
+        assert observation is not None
+        original_landmarks = observation.landmarks_json
+        observation.landmarks_json = [
+            *original_landmarks,
+            {"landmark_id": "changed", "x": 0, "y": 0},
+        ]
+        session.commit()
+    assert process_pose_biological_measurement_job(
+        client.app.state.settings, client.app.state.session_factory, stale_source["id"]
+    )
+    with client.app.state.session_factory() as session:
+        stale_job = session.get(Job, stale_source["id"])
+        observation = session.scalar(
+            select(PoseIdentityObservation).where(
+                PoseIdentityObservation.association_run_id == identity_run_id,
+                PoseIdentityObservation.frame_index == 0,
+                PoseIdentityObservation.is_current.is_(True),
+            )
+        )
+        assert stale_job is not None and stale_job.status == "failed"
+        assert "provenance is stale" in (stale_job.error_message or "")
+        assert observation is not None
+        observation.landmarks_json = original_landmarks
+        session.commit()
 
     cancelled = client.post(
         f"/api/v1/projects/{project['id']}/pose-measurement-runs",

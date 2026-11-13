@@ -10,6 +10,19 @@ from itertools import pairwise
 from statistics import fmean
 from typing import Any, Literal
 
+MeasurementKind = Literal[
+    "distance",
+    "angle",
+    "displacement",
+    "velocity",
+    "direction",
+    "angular_velocity",
+    "curvature",
+    "body_axis_orientation",
+    "relative_movement",
+    "extension",
+]
+
 
 @dataclass(frozen=True)
 class AnatomicalLandmark:
@@ -45,18 +58,7 @@ class MeasurementCalibration:
 @dataclass(frozen=True)
 class MeasurementDefinition:
     definition_id: str
-    kind: Literal[
-        "distance",
-        "angle",
-        "displacement",
-        "velocity",
-        "direction",
-        "angular_velocity",
-        "curvature",
-        "body_axis_orientation",
-        "relative_movement",
-        "extension",
-    ]
+    kind: MeasurementKind
     landmark_ids: tuple[str, ...]
     options: dict[str, Any] | None = None
 
@@ -169,7 +171,6 @@ def calculate_measurement_series(
     samples: list[MeasurementSampleResult] = []
     previous_points: list[tuple[float, float]] | None = None
     previous_time: float | None = None
-    origin: tuple[float, float] | None = None
     previous_scalar: float | None = None
     for observation in selected:
         points, confidence, flags = _point_map(observation, definition.landmark_ids)
@@ -183,7 +184,8 @@ def calculate_measurement_series(
             "relative_movement": 2,
         }.get(definition.kind, 1)
         value: float | None = None
-        if len(points) < required:
+        configured_landmarks_present = len(points) == len(definition.landmark_ids)
+        if len(points) < required or not configured_landmarks_present:
             flags.append("missing_landmark")
         else:
             dt = observation.time_s - previous_time if previous_time is not None else None
@@ -195,21 +197,30 @@ def calculate_measurement_series(
             elif definition.kind == "body_axis_orientation":
                 value = _orientation(points[0], points[1])
             elif definition.kind == "curvature":
-                angle = _angle(points[0], points[1], points[2])
-                mean_length = (
-                    _distance(points[0], points[1]) + _distance(points[1], points[2])
-                ) / 2
+                arc_length = sum(_distance(a, b) for a, b in pairwise(points))
+                interior_angles = [
+                    _angle(points[index - 1], points[index], points[index + 1])
+                    for index in range(1, len(points) - 1)
+                ]
                 value = (
                     None
-                    if angle is None or mean_length == 0
-                    else math.radians(180 - angle) / mean_length
+                    if arc_length == 0 or any(angle is None for angle in interior_angles)
+                    else sum(
+                        math.radians(180 - angle) for angle in interior_angles if angle is not None
+                    )
+                    / arc_length
                 )
             elif definition.kind == "extension":
-                path = sum(_distance(a, b) for a, b in pairwise(points))
-                value = None if path == 0 else _distance(points[0], points[-1]) / path
+                value = _distance(points[0], points[-1])
             elif definition.kind == "displacement":
-                origin = origin or points[0]
-                value = _distance(origin, points[0])
+                if previous_points is None:
+                    flags.append("no_previous_sample")
+                elif dt is None or dt <= 0:
+                    flags.append("nonpositive_time_delta")
+                elif gap_invalid:
+                    flags.append("gap_exceeds_maximum")
+                else:
+                    value = _distance(previous_points[0], points[0])
             elif definition.kind == "relative_movement":
                 scalar = _distance(points[0], points[1])
                 value = 0.0 if previous_scalar is None else scalar - previous_scalar
@@ -238,13 +249,18 @@ def calculate_measurement_series(
                 previous_scalar = current
             if value is None and not flags:
                 flags.append("degenerate_geometry")
-        physical = (
-            value / calibration.pixels_per_unit
-            if value is not None
-            and calibration
-            and definition.kind in {"distance", "displacement", "velocity", "relative_movement"}
-            else None
-        )
+        physical: float | None = None
+        if value is not None and calibration:
+            if definition.kind in {
+                "distance",
+                "displacement",
+                "velocity",
+                "relative_movement",
+                "extension",
+            }:
+                physical = value / calibration.pixels_per_unit
+            elif definition.kind == "curvature":
+                physical = value * calibration.pixels_per_unit
         samples.append(
             MeasurementSampleResult(
                 observation.frame_index,
@@ -258,7 +274,9 @@ def calculate_measurement_series(
                 (observation.revision,),
             )
         )
-        previous_points, previous_time = points if points else previous_points, observation.time_s
+        if len(points) >= required and configured_landmarks_present:
+            previous_points = points
+            previous_time = observation.time_s
 
     valid = [s.pixel_value for s in samples if s.valid and s.pixel_value is not None]
     summary: dict[str, float | int | None] = {
@@ -274,14 +292,33 @@ def calculate_measurement_series(
         "samples": [asdict(s) for s in samples],
         "summary": summary,
     }
-    angle_kinds = {"angle", "direction", "angular_velocity", "body_axis_orientation"}
+    pixel_units = {
+        "distance": "pixels",
+        "angle": "degrees",
+        "displacement": "pixels",
+        "velocity": "pixels/second",
+        "direction": "degrees",
+        "angular_velocity": "degrees/second",
+        "curvature": "radians/pixel",
+        "body_axis_orientation": "degrees",
+        "relative_movement": "pixels",
+        "extension": "pixels",
+    }
+    physical_unit: str | None = None
+    if calibration:
+        if definition.kind in {"distance", "displacement", "relative_movement", "extension"}:
+            physical_unit = calibration.unit
+        elif definition.kind == "velocity":
+            physical_unit = f"{calibration.unit}/second"
+        elif definition.kind == "curvature":
+            physical_unit = f"radians/{calibration.unit}"
     return MeasurementSeriesResult(
         definition.definition_id,
         definition.kind,
         identity,
         "reefpose.measurement.v1",
-        "degrees" if definition.kind in angle_kinds else "pixels",
-        calibration.unit if calibration and definition.kind not in angle_kinds else None,
+        pixel_units[definition.kind],
+        physical_unit,
         tuple(samples),
         summary,
         _hash(payload),

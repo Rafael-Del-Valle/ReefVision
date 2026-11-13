@@ -33,9 +33,11 @@ from reefvision.api.routes.measurements import router as measurements_router
 from reefvision.api.routes.model_catalog import router as model_catalog_router
 from reefvision.api.routes.models import router as models_router
 from reefvision.api.routes.pose_active_learning import router as pose_active_learning_router
+from reefvision.api.routes.pose_biological_measurement import (
+    router as pose_biological_measurement_router,
+)
 from reefvision.api.routes.pose_evaluation import router as pose_evaluation_router
 from reefvision.api.routes.pose_identity_tracking import router as pose_identity_tracking_router
-from reefvision.api.routes.pose_biological_measurement import router as pose_biological_measurement_router
 from reefvision.api.routes.pose_schemas import router as pose_schemas_router
 from reefvision.api.routes.pose_training_datasets import (
     router as pose_training_datasets_router,

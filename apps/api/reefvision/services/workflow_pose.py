@@ -1528,6 +1528,11 @@ def execute_biological_event_review_gate_adapter(
                 "review_readiness": readiness,
             },
         )
+    approved_review_hash = str(
+        dict(approval.get("biological_event_review_status") or {}).get("review_state_sha256") or ""
+    )
+    if not approved_review_hash or readiness["review_state_sha256"] != approved_review_hash:
+        raise ValidationError("Biological event revisions changed since scientist approval")
     if not readiness["ready"]:
         raise ValidationError("Biological event review is incomplete or stale")
     return [
@@ -1559,6 +1564,14 @@ def execute_biological_movement_export_adapter(
         raise ValidationError("Biological movement export received another project's artifact")
     event_run_id = str(reviewed.get("event_run_id") or "")
     service = PoseBiologicalMeasurementService(session)
+    approved_review_hash = str(
+        dict(reviewed.get("review_readiness") or {}).get("review_state_sha256") or ""
+    )
+    if (
+        not approved_review_hash
+        or service.review_state_sha256(event_run_id) != approved_review_hash
+    ):
+        raise ValidationError("Biological event revisions changed since scientist approval")
     export_format = str(parameters.get("format", "json"))
     if export_format == "json":
         content = json.dumps(
@@ -1568,8 +1581,8 @@ def execute_biological_movement_export_adapter(
         ).encode("utf-8")
         extension, media_type = "json", "application/json"
     elif export_format == "csv":
-        content = service.export_csv(event_run_id, reviewed_only=True).encode("utf-8")
-        extension, media_type = "csv", "text/csv"
+        content = service.export_csv(event_run_id, reviewed_only=True)
+        extension, media_type = "zip", "application/zip"
     else:
         raise ValidationError("Biological movement export format must be json or csv")
     project = session.get(Project, project_id)

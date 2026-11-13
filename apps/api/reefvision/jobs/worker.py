@@ -8,6 +8,7 @@ import subprocess
 import sys
 from contextlib import suppress
 from datetime import UTC, datetime
+from typing import cast
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
@@ -342,9 +343,15 @@ def recover_interrupted_jobs(
         recovered_at = datetime.now(UTC)
 
         for model in (PoseMeasurementRun, PoseEventDetectionRun):
-            for analysis_run in session.scalars(
-                select(model).where(model.status.in_(("running", "cancel_requested")))
-            ):
+            analysis_runs = cast(
+                list[PoseMeasurementRun | PoseEventDetectionRun],
+                list(
+                    session.scalars(
+                        select(model).where(model.status.in_(("running", "cancel_requested")))
+                    )
+                ),
+            )
+            for analysis_run in analysis_runs:
                 source_job = (
                     session.get(Job, analysis_run.source_job_id)
                     if analysis_run.source_job_id is not None

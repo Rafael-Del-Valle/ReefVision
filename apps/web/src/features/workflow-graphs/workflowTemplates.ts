@@ -1254,18 +1254,18 @@ export function createBiologicalMovementWorkflow() {
 
 export const workflowTemplates: WorkflowTemplate[] = [
   {
-    id: "reefpose-biological-movement",
-    name: "ReefPose biological movement",
-    description:
-      "Pose inference → identity review → anatomical measurements → event detection → scientist review → reproducible export.",
-    graph: createBiologicalMovementWorkflow(),
-  },
-  {
     id: "pose-model-comparison",
     name: "Pose models → scientific comparison",
     description:
       "Evaluate multiple registered pose models on one frozen scientist-verified dataset and preserve a reproducible comparison report.",
     graph: createPoseComparisonWorkflow(),
+  },
+  {
+    id: "reefpose-biological-movement",
+    name: "ReefPose biological movement",
+    description:
+      "Pose inference → identity review → anatomical measurements → event detection → scientist review → reproducible export.",
+    graph: createBiologicalMovementWorkflow(),
   },
   {
     id: "pose-architecture-training",

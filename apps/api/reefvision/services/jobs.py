@@ -1,6 +1,7 @@
 """Job status and retry services."""
 
 from datetime import datetime
+from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -99,7 +100,10 @@ class JobService:
         if model is None:
             return
         run_id = str((job.request_json or {}).get("run_id") or "")
-        run = self.session.get(model, run_id)
+        run = cast(
+            PoseMeasurementRun | PoseEventDetectionRun | None,
+            self.session.get(model, run_id),
+        )
         if run is None or run.status not in {"queued", "running"}:
             return
         run.status = "cancelled"

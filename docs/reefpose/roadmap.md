@@ -16,8 +16,13 @@ Updated: 2026-11-12
 - Phase 4 — pose-aware multi-animal association, identity review, IDF1, and
   identity-switch analysis: complete for the deterministic, scientist-gated vertical
   slice, subject to real biological validation.
+- Phase 5 — immutable anatomical measurement series, deterministic event counting,
+  append-only scientist review, executable Workflow Builder, scientific exports, and the
+  integrated Biological Movement Workspace: complete for the synthetic engineering
+  vertical slice, subject to real biological validation.
 
-Recommended next task: Phase 5 biological movement analysis and event counting from
-scientist-reviewed identity tracks and stable anatomical landmarks. Begin with
-transparent kinematic measurements and manually verified event intervals; defer learned
-behavior classifiers until real multi-animal videos establish an evaluation baseline.
+Recommended next task: Phase 6 real-data scientific validation and study management.
+Freeze independently annotated multi-species videos, quantify pose/identity/event
+agreement and calibration/threshold sensitivity, add inter-observer and uncertainty
+reports, and complete advanced-formula/manual-event GUI controls. Defer learned behavior
+classifiers and biological claims until that baseline is established.

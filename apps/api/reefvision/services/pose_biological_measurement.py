@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import csv
 import io
+import json
+import zipfile
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import UTC, datetime
-from typing import Any
+from hashlib import sha256
+from itertools import pairwise
+from typing import Any, cast
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -30,6 +34,7 @@ from reefvision.domain.pose_anatomical_measurement import (
     AnatomicalLandmark,
     AnatomicalObservation,
     MeasurementCalibration,
+    MeasurementKind,
     calculate_measurement_series,
 )
 from reefvision.domain.pose_anatomical_measurement import (
@@ -76,6 +81,44 @@ class PoseBiologicalMeasurementService:
             raise NotFoundError("Biological event detection run not found")
         return run
 
+    def _observation_manifest(
+        self, source_run_id: str, identity_ids: set[str]
+    ) -> list[dict[str, Any]]:
+        observations = list(
+            self.session.scalars(
+                select(PoseIdentityObservation)
+                .where(
+                    PoseIdentityObservation.association_run_id == source_run_id,
+                    PoseIdentityObservation.animal_identity_id.in_(identity_ids),
+                    PoseIdentityObservation.is_current.is_(True),
+                )
+                .order_by(
+                    PoseIdentityObservation.animal_identity_id,
+                    PoseIdentityObservation.frame_index,
+                    PoseIdentityObservation.id,
+                )
+            )
+        )
+        return [
+            {
+                "id": observation.id,
+                "observation_series_id": observation.observation_series_id,
+                "revision": observation.revision,
+                "animal_identity_id": observation.animal_identity_id,
+                "frame_index": observation.frame_index,
+                "time_s": observation.time_s,
+                "bbox": observation.bbox_json,
+                "landmarks": observation.landmarks_json,
+                "detection_confidence": observation.detection_confidence,
+                "association_confidence": observation.association_confidence,
+                "visibility_state": observation.visibility_state,
+                "assignment_source": observation.assignment_source,
+                "verification_state": observation.verification_state,
+                "coordinate_space": observation.coordinate_space,
+            }
+            for observation in observations
+        ]
+
     @staticmethod
     def _calibration(
         video: VideoAsset,
@@ -115,12 +158,26 @@ class PoseBiologicalMeasurementService:
         selected = set(payload.identity_ids or [identity.id for identity in identities])
         if not selected or not selected <= {identity.id for identity in identities}:
             raise ValidationError("Selected identities do not belong to the identity run")
-        if payload.verification_mode == "scientific" and any(
-            identity.verification_state not in {"scientist_verified", "scientist_confirmed"}
-            for identity in identities
-            if identity.id in selected
-        ):
-            raise ValidationError("Scientific measurement requires scientist-reviewed identities")
+        if payload.verification_mode == "scientific":
+            selected_observations = list(
+                self.session.scalars(
+                    select(PoseIdentityObservation).where(
+                        PoseIdentityObservation.association_run_id == source.id,
+                        PoseIdentityObservation.animal_identity_id.in_(selected),
+                        PoseIdentityObservation.is_current.is_(True),
+                    )
+                )
+            )
+            observed_identities = {
+                observation.animal_identity_id for observation in selected_observations
+            }
+            if observed_identities != selected or any(
+                observation.verification_state not in {"scientist_verified", "scientist_confirmed"}
+                for observation in selected_observations
+            ):
+                raise ValidationError(
+                    "Scientific measurement requires scientist-reviewed observations"
+                )
         calibration_json, calibration_hash, _ = self._calibration(video)
         definitions = [definition.model_dump(mode="json") for definition in payload.definitions]
         manifest = {
@@ -134,6 +191,7 @@ class PoseBiologicalMeasurementService:
             "definitions": definitions,
             "maximum_gap_s": payload.maximum_gap_s,
             "verification_mode": payload.verification_mode,
+            "observations": self._observation_manifest(source.id, selected),
             "schema": {
                 "id": source.pose_schema_id,
                 "revision": source.pose_schema_revision,
@@ -206,14 +264,30 @@ class PoseBiologicalMeasurementService:
         if source is None or video is None:
             raise ValidationError("Measurement source no longer exists")
         _, calibration_hash, _ = self._calibration(video)
+        selected = set(run.input_manifest_json.get("identity_ids") or [])
+        current_observations = self._observation_manifest(source.id, selected)
         if (
             source.revision != run.source_identity_run_revision
             or video.revision != run.video_revision
             or video.sha256 != run.video_sha256
             or calibration_hash != run.calibration_sha256
+            or current_observations != run.input_manifest_json.get("observations")
         ):
             raise ValidationError("Measurement source provenance is stale")
         return source, video
+
+    def _validate_event_source(self, run: PoseEventDetectionRun) -> PoseMeasurementRun:
+        measurement = self._measurement_run(run.measurement_run_id)
+        self._validate_manifest(measurement)
+        if run.status != "completed":
+            raise ValidationError("Biological event run must be completed")
+        if (
+            measurement.status != "completed"
+            or not measurement.result_sha256
+            or run.provenance_json.get("measurement_result_sha256") != measurement.result_sha256
+        ):
+            raise ValidationError("Biological event source provenance is stale")
+        return measurement
 
     def execute_measurements(
         self,
@@ -279,7 +353,7 @@ class PoseBiologicalMeasurementService:
                     cancellation_check()
                 definition = DomainMeasurementDefinition(
                     str(raw["id"]),
-                    str(raw["kind"]),
+                    cast(MeasurementKind, str(raw["kind"])),
                     tuple(raw["landmark_ids"]),
                     dict(raw.get("options") or {}),
                 )
@@ -393,6 +467,7 @@ class PoseBiologicalMeasurementService:
         measurement = self._measurement_run(run.measurement_run_id)
         self._validate_manifest(measurement)
         hashes = []
+        pending_events: list[PoseBiologicalEventRevision] = []
         for index, raw in enumerate(run.configuration_json["cycles"], 1):
             if cancellation_check:
                 cancellation_check()
@@ -425,7 +500,7 @@ class PoseBiologicalMeasurementService:
             for candidate in result.events:
                 event_id = str(uuid4())
                 payload = asdict(candidate)
-                self.session.add(
+                pending_events.append(
                     PoseBiologicalEventRevision(
                         id=event_id,
                         event_series_id=event_id,
@@ -446,7 +521,7 @@ class PoseBiologicalMeasurementService:
                         confidence=candidate.confidence,
                         cycle_state=candidate.cycle_state,
                         detection_source="automated",
-                        review_state="unreviewed",
+                        review_state=("rejected" if candidate.rejection_reasons else "unreviewed"),
                         rejection_reasons_json=list(candidate.rejection_reasons),
                         actor="system",
                         after_sha256=canonical_package_hash(payload),
@@ -455,6 +530,7 @@ class PoseBiologicalMeasurementService:
                 )
             if progress:
                 progress(index, len(run.configuration_json["cycles"]))
+        self.session.add_all(pending_events)
         run.status = "completed"
         run.progress_json = {"stage": "completed", "current": len(hashes), "total": len(hashes)}
         run.result_sha256 = canonical_package_hash(hashes)
@@ -474,46 +550,125 @@ class PoseBiologicalMeasurementService:
         )
         if current is None:
             raise NotFoundError("Current biological event not found")
-        start = (
-            payload.start_frame
-            if payload.action == "adjust_boundaries" and payload.start_frame is not None
-            else current.start_frame
-        )
-        end = (
-            payload.end_frame
-            if payload.action == "adjust_boundaries" and payload.end_frame is not None
-            else current.end_frame
-        )
-        if end is not None and end < start:
-            raise ValidationError("Event end must not precede start")
-        samples = list(
-            self.session.scalars(
-                select(PoseMeasurementSample)
-                .where(
-                    PoseMeasurementSample.series_id == current.measurement_series_id,
-                    PoseMeasurementSample.frame_index >= start,
-                    PoseMeasurementSample.frame_index <= end
-                    if end is not None
-                    else PoseMeasurementSample.frame_index >= start,
+        event_run = self._event_run(current.event_detection_run_id)
+        self._validate_event_source(event_run)
+        start = current.start_frame
+        end = current.end_frame
+        peak_frame = current.peak_frame
+        start_time_s = current.start_time_s
+        peak_time_s = current.peak_time_s
+        end_time_s = current.end_time_s
+        baseline = current.baseline_value
+        peak_value = current.peak_value
+        amplitude = current.amplitude
+        duration_s = current.duration_s
+        confidence = current.confidence
+        cycle_state = current.cycle_state
+        rejection_reasons = list(current.rejection_reasons_json or [])
+        if payload.action == "adjust_boundaries":
+            start = payload.start_frame if payload.start_frame is not None else current.start_frame
+            end = payload.end_frame if payload.end_frame is not None else current.end_frame
+            if end is not None and end < start:
+                raise ValidationError("Event end must not precede start")
+            samples = list(
+                self.session.scalars(
+                    select(PoseMeasurementSample)
+                    .where(
+                        PoseMeasurementSample.series_id == current.measurement_series_id,
+                        PoseMeasurementSample.frame_index >= start,
+                        PoseMeasurementSample.frame_index <= end
+                        if end is not None
+                        else PoseMeasurementSample.frame_index >= start,
+                    )
+                    .order_by(PoseMeasurementSample.frame_index)
                 )
-                .order_by(PoseMeasurementSample.frame_index)
             )
-        )
-        valid = [
-            s
-            for s in samples
-            if s.valid and (s.physical_value is not None or s.pixel_value is not None)
-        ]
-        if not valid:
-            raise ValidationError("Corrected event contains no valid measurement samples")
+            if (
+                not samples
+                or samples[0].frame_index != start
+                or (end is not None and samples[-1].frame_index != end)
+            ):
+                raise ValidationError(
+                    "Corrected event boundaries must reference existing measurement samples"
+                )
+            valid = [
+                sample
+                for sample in samples
+                if sample.valid
+                and (sample.physical_value is not None or sample.pixel_value is not None)
+            ]
+            if not valid:
+                raise ValidationError("Corrected event contains no valid measurement samples")
+            if valid[0].frame_index != start or (end is not None and valid[-1].frame_index != end):
+                raise ValidationError(
+                    "Corrected event boundaries must reference valid measurement samples"
+                )
 
-        def value(sample: PoseMeasurementSample) -> float:
-            raw = sample.physical_value if sample.physical_value is not None else sample.pixel_value
-            assert raw is not None
-            return float(raw)
+            def value(sample: PoseMeasurementSample) -> float:
+                raw = (
+                    sample.physical_value
+                    if sample.physical_value is not None
+                    else sample.pixel_value
+                )
+                assert raw is not None
+                return float(raw)
 
-        peak = max(valid, key=lambda s: (value(s), -s.frame_index))
-        baseline = value(valid[0])
+            peak = max(valid, key=lambda sample: (value(sample), -sample.frame_index))
+            peak_frame = peak.frame_index
+            start_time_s = valid[0].time_s
+            peak_time_s = peak.time_s
+            end_time_s = valid[-1].time_s if end is not None else None
+            baseline = value(valid[0])
+            peak_value = value(peak)
+            amplitude = peak_value - baseline
+            duration_s = valid[-1].time_s - valid[0].time_s if end is not None else None
+            confidence = min(
+                (sample.confidence for sample in valid if sample.confidence is not None),
+                default=None,
+            )
+            cycle: dict[str, Any] = next(
+                (
+                    item
+                    for item in event_run.configuration_json.get("cycles", [])
+                    if str(item.get("measurement_series_id")) == current.measurement_series_id
+                ),
+                {},
+            )
+            close_threshold = float(cycle.get("close_threshold", float("-inf")))
+            open_threshold = float(cycle.get("open_threshold", float("inf")))
+            maximum_gap = float(cycle.get("maximum_gap_s", 0.25))
+            baseline_observed = current.cycle_state != "partial_start" or any(
+                value(sample) <= close_threshold
+                for sample in valid
+                if sample.frame_index <= peak.frame_index
+            )
+            closed_end_observed = end is not None and value(valid[-1]) <= close_threshold
+            opened = peak_value is not None and peak_value >= open_threshold
+            long_gap = any(
+                later.time_s - earlier.time_s > maximum_gap for earlier, later in pairwise(valid)
+            )
+            if not baseline_observed:
+                cycle_state = "partial_start"
+            elif long_gap:
+                cycle_state = "partial_gap"
+            elif not closed_end_observed or not opened:
+                cycle_state = "partial_end"
+            else:
+                cycle_state = "complete"
+            rejection_reasons = []
+            if amplitude is not None and amplitude < float(cycle.get("minimum_amplitude", 0)):
+                rejection_reasons.append("minimum_amplitude")
+            if duration_s is not None and duration_s < float(cycle.get("minimum_duration_s", 0)):
+                rejection_reasons.append("minimum_duration")
+            maximum_duration = cycle.get("maximum_duration_s")
+            if (
+                duration_s is not None
+                and maximum_duration is not None
+                and duration_s > float(maximum_duration)
+            ):
+                rejection_reasons.append("maximum_duration")
+            if confidence is None or confidence < float(cycle.get("minimum_confidence", 0)):
+                rejection_reasons.append("minimum_confidence")
         before = {
             c.name: getattr(current, c.name)
             for c in current.__table__.columns
@@ -521,8 +676,11 @@ class PoseBiologicalMeasurementService:
         }
         current.is_current = False
         state = {"confirm": "confirmed", "reject": "rejected", "remove": "removed"}.get(
-            payload.action, current.review_state
+            payload.action,
+            "unreviewed" if payload.action == "adjust_boundaries" else current.review_state,
         )
+        if payload.action == "confirm" and current.cycle_state != "complete":
+            raise ValidationError("Partial cycles cannot be confirmed")
         revised = PoseBiologicalEventRevision(
             event_series_id=current.event_series_id,
             revision=current.revision + 1,
@@ -531,20 +689,20 @@ class PoseBiologicalMeasurementService:
             measurement_series_id=current.measurement_series_id,
             animal_identity_id=current.animal_identity_id,
             start_frame=start,
-            peak_frame=peak.frame_index,
+            peak_frame=peak_frame,
             end_frame=end,
-            start_time_s=valid[0].time_s,
-            peak_time_s=peak.time_s,
-            end_time_s=valid[-1].time_s if end is not None else None,
+            start_time_s=start_time_s,
+            peak_time_s=peak_time_s,
+            end_time_s=end_time_s,
             baseline_value=baseline,
-            peak_value=value(peak),
-            amplitude=value(peak) - baseline,
-            duration_s=valid[-1].time_s - valid[0].time_s if end is not None else None,
-            confidence=min((s.confidence for s in valid if s.confidence is not None), default=None),
-            cycle_state=current.cycle_state,
+            peak_value=peak_value,
+            amplitude=amplitude,
+            duration_s=duration_s,
+            confidence=confidence,
+            cycle_state=cycle_state,
             detection_source="scientist",
             review_state=state,
-            rejection_reasons_json=current.rejection_reasons_json,
+            rejection_reasons_json=rejection_reasons,
             reason=payload.reason,
             actor=payload.actor,
             before_sha256=canonical_package_hash(before),
@@ -568,6 +726,7 @@ class PoseBiologicalMeasurementService:
         self, event_run_id: str, payload: ManualEventCreateRequest
     ) -> PoseBiologicalEventRevision:
         run = self._event_run(event_run_id)
+        self._validate_event_source(run)
         series = self.session.get(PoseMeasurementSeries, payload.measurement_series_id)
         if series is None or series.measurement_run_id != run.measurement_run_id:
             raise ValidationError("Manual event references an incompatible measurement series")
@@ -583,6 +742,14 @@ class PoseBiologicalMeasurementService:
                 .order_by(PoseMeasurementSample.frame_index)
             )
         )
+        if (
+            not samples
+            or samples[0].frame_index != payload.start_frame
+            or samples[-1].frame_index != payload.end_frame
+        ):
+            raise ValidationError(
+                "Manual event boundaries must reference existing measurement samples"
+            )
         valid = [
             sample
             for sample in samples
@@ -702,10 +869,91 @@ class PoseBiologicalMeasurementService:
             )
         )
 
+    def review_state_sha256(self, event_run_id: str) -> str:
+        return canonical_package_hash(
+            [
+                {
+                    "id": event.id,
+                    "event_series_id": event.event_series_id,
+                    "revision": event.revision,
+                    "after_sha256": event.after_sha256,
+                    "review_state": event.review_state,
+                    "is_current": event.is_current,
+                }
+                for event in self.events(event_run_id)
+            ]
+        )
+
+    def individual_summaries(self, event_run_id: str) -> list[dict[str, Any]]:
+        run = self._event_run(event_run_id)
+        current = self.events(event_run_id)
+        summaries: list[dict[str, Any]] = []
+        for series in self.series(run.measurement_run_id):
+            samples = [
+                sample
+                for sample in self.samples(series.id)
+                if sample.valid
+                and (sample.pixel_value is not None or sample.physical_value is not None)
+            ]
+            cycle: dict[str, Any] = next(
+                (
+                    item
+                    for item in run.configuration_json.get("cycles", [])
+                    if str(item.get("measurement_series_id")) == series.id
+                ),
+                {},
+            )
+            maximum_gap = float(cycle.get("maximum_gap_s", 0.25))
+            evaluated_duration = sum(
+                later.time_s - earlier.time_s
+                for earlier, later in pairwise(samples)
+                if 0 < later.time_s - earlier.time_s <= maximum_gap
+            )
+            events = [event for event in current if event.measurement_series_id == series.id]
+            confirmed = [
+                event
+                for event in events
+                if event.cycle_state == "complete" and event.review_state == "confirmed"
+            ]
+            retained_complete = [
+                event
+                for event in events
+                if event.cycle_state == "complete"
+                and not event.rejection_reasons_json
+                and event.review_state != "removed"
+            ]
+            amplitudes = [event.amplitude for event in confirmed if event.amplitude is not None]
+            summaries.append(
+                {
+                    "measurement_series_id": series.id,
+                    "identity_id": series.animal_identity_id,
+                    "definition_id": series.definition_id,
+                    "confirmed_complete_count": len(confirmed),
+                    "retained_complete_count": len(retained_complete),
+                    "partial_count": sum(
+                        event.cycle_state != "complete" and event.review_state != "removed"
+                        for event in events
+                    ),
+                    "evaluated_valid_duration_s": evaluated_duration,
+                    "frequency_hz": (
+                        len(confirmed) / evaluated_duration if evaluated_duration > 0 else None
+                    ),
+                    "mean_confirmed_amplitude": (
+                        sum(amplitudes) / len(amplitudes) if amplitudes else None
+                    ),
+                    "pixel_unit": series.pixel_unit,
+                    "physical_unit": series.physical_unit,
+                }
+            )
+        return summaries
+
     def export_json(self, event_run_id: str, *, reviewed_only: bool = True) -> dict[str, Any]:
         run = self._event_run(event_run_id)
-        measurement = self._measurement_run(run.measurement_run_id)
-        self._validate_manifest(measurement)
+        measurement = self._validate_event_source(run)
+        if run.status != "completed" or not run.result_sha256:
+            raise ValidationError("Biological event run must be completed before export")
+        if reviewed_only and measurement.verification_state != "scientific":
+            raise ValidationError("Reviewed export requires scientific identity verification")
         events = self.events(run.id)
         history = self.events(run.id, include_history=True)
         if reviewed_only and any(e.review_state == "unreviewed" for e in events):
@@ -724,29 +972,54 @@ class PoseBiologicalMeasurementService:
             else "exploratory_unreviewed",
             "measurement_run": {
                 "id": measurement.id,
+                "project_id": measurement.project_id,
+                "video_id": measurement.video_id,
+                "video_sha256": measurement.video_sha256,
+                "video_revision": measurement.video_revision,
                 "source_identity_run_id": measurement.source_identity_run_id,
                 "source_identity_run_revision": measurement.source_identity_run_revision,
+                "pose_schema_id": measurement.pose_schema_id,
+                "pose_schema_revision": measurement.pose_schema_revision,
+                "pose_schema_content_hash": measurement.pose_schema_content_hash,
+                "calibration": measurement.calibration_json,
+                "calibration_sha256": measurement.calibration_sha256,
+                "timebase": measurement.timebase_json,
+                "definitions": measurement.definitions_json,
+                "configuration": measurement.configuration_json,
+                "verification_state": measurement.verification_state,
+                "provenance": measurement.provenance_json,
                 "result_sha256": measurement.result_sha256,
                 "input_manifest_sha256": measurement.input_manifest_sha256,
             },
             "event_run": {
                 "id": run.id,
+                "configuration": run.configuration_json,
                 "configuration_sha256": run.configuration_sha256,
+                "provenance": run.provenance_json,
                 "result_sha256": run.result_sha256,
+                "review_state_sha256": self.review_state_sha256(run.id),
             },
             "events": [
                 {
                     "event_series_id": e.event_series_id,
                     "revision": e.revision,
                     "identity_id": e.animal_identity_id,
+                    "measurement_series_id": e.measurement_series_id,
                     "start_frame": e.start_frame,
                     "peak_frame": e.peak_frame,
                     "end_frame": e.end_frame,
+                    "start_time_s": e.start_time_s,
+                    "peak_time_s": e.peak_time_s,
+                    "end_time_s": e.end_time_s,
+                    "baseline_value": e.baseline_value,
+                    "peak_value": e.peak_value,
                     "amplitude": e.amplitude,
                     "duration_s": e.duration_s,
                     "confidence": e.confidence,
                     "cycle_state": e.cycle_state,
                     "review_state": e.review_state,
+                    "rejection_reasons": e.rejection_reasons_json,
+                    "detection_source": e.detection_source,
                 }
                 for e in exported
             ],
@@ -761,11 +1034,17 @@ class PoseBiologicalMeasurementService:
                     "start_frame": event.start_frame,
                     "peak_frame": event.peak_frame,
                     "end_frame": event.end_frame,
+                    "start_time_s": event.start_time_s,
+                    "peak_time_s": event.peak_time_s,
+                    "end_time_s": event.end_time_s,
+                    "baseline_value": event.baseline_value,
+                    "peak_value": event.peak_value,
                     "amplitude": event.amplitude,
                     "duration_s": event.duration_s,
                     "confidence": event.confidence,
                     "cycle_state": event.cycle_state,
                     "review_state": event.review_state,
+                    "rejection_reasons": event.rejection_reasons_json,
                     "detection_source": event.detection_source,
                     "actor": event.actor,
                     "reason": event.reason,
@@ -781,7 +1060,10 @@ class PoseBiologicalMeasurementService:
                     "identity_id": series.animal_identity_id,
                     "definition_id": series.definition_id,
                     "measurement_kind": series.measurement_kind,
+                    "display_name": series.display_name,
                     "landmark_ids": series.landmark_ids_json,
+                    "formula_version": series.formula_version,
+                    "unit_dimension": series.unit_dimension,
                     "pixel_unit": series.pixel_unit,
                     "physical_unit": series.physical_unit,
                     "summary": series.summary_json,
@@ -795,72 +1077,138 @@ class PoseBiologicalMeasurementService:
                             "confidence": sample.confidence,
                             "valid": sample.valid,
                             "quality_flags": sample.quality_flags_json,
+                            "source_observation_ids": sample.source_observation_ids_json,
+                            "source_observation_revisions": (
+                                sample.source_observation_revisions_json
+                            ),
                         }
                         for sample in self.samples(series.id)
                     ],
                 }
                 for series in self.series(measurement.id)
             ],
+            "individual_summaries": self.individual_summaries(run.id),
         }
         payload["package_sha256"] = canonical_package_hash(payload)
         return payload
 
-    def export_csv(self, event_run_id: str, *, reviewed_only: bool = True) -> str:
-        package = self.export_json(event_run_id, reviewed_only=reviewed_only)
+    @staticmethod
+    def _csv_bytes(columns: list[str], rows: list[dict[str, Any]]) -> bytes:
         output = io.StringIO(newline="")
-        columns = [
-            "record_type",
+        writer = csv.DictWriter(output, fieldnames=columns, lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+        return output.getvalue().encode("utf-8")
+
+    def export_csv(self, event_run_id: str, *, reviewed_only: bool = True) -> bytes:
+        package = self.export_json(event_run_id, reviewed_only=reviewed_only)
+        measurement_columns = [
             "series_id",
-            "event_series_id",
-            "revision",
             "identity_id",
+            "definition_id",
             "frame_index",
             "time_s",
             "pixel_value",
             "physical_value",
+            "pixel_unit",
+            "physical_unit",
+            "confidence",
+            "valid",
+            "quality_flags",
+            "source_observation_ids",
+            "source_observation_revisions",
+        ]
+        measurement_rows: list[dict[str, Any]] = []
+        for series in package["measurement_series"]:
+            for sample in series["samples"]:
+                measurement_rows.append(
+                    {
+                        "series_id": series["id"],
+                        "identity_id": series["identity_id"],
+                        "definition_id": series["definition_id"],
+                        "frame_index": sample["frame_index"],
+                        "time_s": sample["time_s"],
+                        "pixel_value": sample["pixel_value"],
+                        "physical_value": sample["physical_value"],
+                        "pixel_unit": series["pixel_unit"],
+                        "physical_unit": series["physical_unit"],
+                        "confidence": sample["confidence"],
+                        "valid": sample["valid"],
+                        "quality_flags": "|".join(sample["quality_flags"]),
+                        "source_observation_ids": "|".join(sample["source_observation_ids"]),
+                        "source_observation_revisions": "|".join(
+                            str(value) for value in sample["source_observation_revisions"]
+                        ),
+                    }
+                )
+        event_columns = [
+            "event_series_id",
+            "revision",
+            "identity_id",
+            "measurement_series_id",
             "start_frame",
             "peak_frame",
             "end_frame",
+            "start_time_s",
+            "peak_time_s",
+            "end_time_s",
             "amplitude",
             "duration_s",
             "confidence",
             "cycle_state",
             "review_state",
-            "quality_flags",
+            "detection_source",
         ]
-        writer = csv.DictWriter(output, fieldnames=columns, lineterminator="\n")
-        writer.writeheader()
-        for series in package["measurement_series"]:
-            for sample in series["samples"]:
-                writer.writerow(
+        files = {
+            "measurements.csv": self._csv_bytes(measurement_columns, measurement_rows),
+            "events.csv": self._csv_bytes(
+                event_columns,
+                [
+                    {column: event.get(column) for column in event_columns}
+                    for event in package["events"]
+                ],
+            ),
+            "individual_summaries.csv": self._csv_bytes(
+                list(package["individual_summaries"][0].keys())
+                if package["individual_summaries"]
+                else ["measurement_series_id"],
+                package["individual_summaries"],
+            ),
+            "review_history.csv": self._csv_bytes(
+                [*event_columns, "actor", "reason", "rejection_reasons", "is_current"],
+                [
                     {
-                        "record_type": "measurement",
-                        "series_id": series["id"],
-                        "identity_id": series["identity_id"],
-                        "frame_index": sample["frame_index"],
-                        "time_s": sample["time_s"],
-                        "pixel_value": sample["pixel_value"],
-                        "physical_value": sample["physical_value"],
-                        "confidence": sample["confidence"],
-                        "quality_flags": "|".join(sample["quality_flags"]),
+                        **{column: event.get(column) for column in event_columns},
+                        "actor": event["actor"],
+                        "reason": event["reason"],
+                        "rejection_reasons": "|".join(event["rejection_reasons"]),
+                        "is_current": event["is_current"],
                     }
-                )
-        for event in package["event_history"]:
-            writer.writerow(
-                {
-                    "record_type": "event_revision",
-                    "series_id": event["measurement_series_id"],
-                    "event_series_id": event["event_series_id"],
-                    "revision": event["revision"],
-                    "identity_id": event["identity_id"],
-                    "start_frame": event["start_frame"],
-                    "peak_frame": event["peak_frame"],
-                    "end_frame": event["end_frame"],
-                    "amplitude": event["amplitude"],
-                    "duration_s": event["duration_s"],
-                    "confidence": event["confidence"],
-                    "cycle_state": event["cycle_state"],
-                    "review_state": event["review_state"],
-                }
-            )
+                    for event in package["event_history"]
+                ],
+            ),
+        }
+        manifest = {
+            "schema_version": "reefpose-biological-movement-csv-package-1",
+            "source_json_package_sha256": package["package_sha256"],
+            "verification_state": package["measurement_run"]["verification_state"],
+            "scientific_status": package["scientific_status"],
+            "measurement_run": package["measurement_run"],
+            "event_run": package["event_run"],
+            "files": {
+                name: {"sha256": sha256(content).hexdigest(), "bytes": len(content)}
+                for name, content in sorted(files.items())
+            },
+        }
+        manifest["package_sha256"] = canonical_package_hash(manifest)
+        files["manifest.json"] = json.dumps(
+            manifest, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode("utf-8")
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_STORED) as archive:
+            for name, content in sorted(files.items()):
+                info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+                info.compress_type = zipfile.ZIP_STORED
+                info.external_attr = 0o600 << 16
+                archive.writestr(info, content)
         return output.getvalue()

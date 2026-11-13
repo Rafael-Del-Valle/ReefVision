@@ -6,6 +6,7 @@ import json
 import math
 from dataclasses import asdict, dataclass, replace
 from hashlib import sha256
+from itertools import pairwise
 from statistics import fmean, median
 from typing import Literal
 
@@ -193,6 +194,7 @@ def detect_biological_events(
     last_valid: EventSignalSample | None = None
     previous_end_time: float | None = None
     partial_start = False
+    closed_observed = False
     for sample in ordered:
         valid = (
             sample.valid
@@ -222,44 +224,48 @@ def detect_biological_events(
                 active = False
                 start = peak = None
                 confidences = []
+                closed_observed = False
+                last_valid = None
             continue
-        if (
-            active
-            and last_valid is not None
-            and sample.time_s - last_valid.time_s > definition.maximum_gap_s
-        ):
-            assert start is not None and peak is not None
-            events.append(
-                _candidate(
-                    start,
-                    peak,
-                    None,
-                    baseline,
-                    "partial_gap",
-                    confidences,
-                    definition,
-                    previous_end_time,
+        if last_valid is not None and sample.time_s - last_valid.time_s > definition.maximum_gap_s:
+            if active:
+                assert start is not None and peak is not None
+                events.append(
+                    _candidate(
+                        start,
+                        peak,
+                        None,
+                        baseline,
+                        "partial_gap",
+                        confidences,
+                        definition,
+                        previous_end_time,
+                    )
                 )
-            )
             active = False
             start = peak = None
             confidences = []
+            closed_observed = False
+            last_valid = None
+        value = sample.value
+        assert value is not None
         if not active:
-            if sample.value >= definition.open_threshold:
+            if value >= definition.open_threshold:
                 active = True
                 start = peak = sample
                 baseline = last_closed_value
-                partial_start = last_valid is None
+                partial_start = not closed_observed
                 confidences = [sample.confidence] if sample.confidence is not None else []
-            else:
-                last_closed_value = sample.value
+            elif value <= definition.close_threshold:
+                last_closed_value = value
+                closed_observed = True
         else:
             if sample.confidence is not None:
                 confidences.append(sample.confidence)
             assert peak is not None and start is not None
-            if sample.value > (peak.value if peak.value is not None else -math.inf):
+            if value > (peak.value if peak.value is not None else -math.inf):
                 peak = sample
-            if sample.value <= definition.close_threshold:
+            if value <= definition.close_threshold:
                 state = "partial_start" if partial_start else "complete"
                 event = _candidate(
                     start, peak, sample, baseline, state, confidences, definition, previous_end_time
@@ -269,7 +275,8 @@ def detect_biological_events(
                 active = False
                 start = peak = None
                 confidences = []
-                last_closed_value = sample.value
+                last_closed_value = value
+                closed_observed = True
         last_valid = sample
     if active:
         assert start is not None and peak is not None
@@ -286,8 +293,12 @@ def detect_biological_events(
             )
         )
 
-    valid_times = [s.time_s for s in ordered if s.valid and s.value is not None]
-    duration = max(valid_times) - min(valid_times) if len(valid_times) > 1 else 0.0
+    valid_samples = [sample for sample in ordered if sample.valid and sample.value is not None]
+    duration = sum(
+        current.time_s - previous.time_s
+        for previous, current in pairwise(valid_samples)
+        if 0 <= current.time_s - previous.time_s <= definition.maximum_gap_s
+    )
     accepted = [event for event in events if event.accepted and event.cycle_state == "complete"]
     summary: dict[str, float | int | None] = {
         "candidate_count": len(events),

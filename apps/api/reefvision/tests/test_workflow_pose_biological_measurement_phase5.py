@@ -8,10 +8,21 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 import reefvision.jobs.video_tracking as tracking_job_module
-from reefvision.db.models import Job, ModelRegistration, PoseLandmarkSchemaRevision
+from reefvision.db.models import (
+    Job,
+    ModelRegistration,
+    PoseLandmarkSchemaRevision,
+    WorkflowArtifact,
+    WorkflowNodeRun,
+)
+from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.pose_schemas import definition_for_revision
-from reefvision.services.workflow_pose import POSE_WORKFLOW_RUNTIME_NODE_TYPES
+from reefvision.services.workflow_pose import (
+    POSE_WORKFLOW_RUNTIME_NODE_TYPES,
+    execute_biological_event_review_gate_adapter,
+    execute_biological_movement_export_adapter,
+)
 from reefvision.services.workflow_review import REVIEW_GATE_NODE_TYPES
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project
@@ -312,8 +323,20 @@ def test_saved_phase5_workflow_executes_jobs_review_and_export(
         source_observations[0]["landmarks_json"],
         measurement_landmark_ids,
     )
-    rejected = client.post(
+    adjusted_partial = client.post(
         f"/api/v1/pose-biological-events/{events[0]['id']}/corrections",
+        json={
+            "action": "adjust_boundaries",
+            "start_frame": events[0]["start_frame"],
+            "end_frame": events[0]["end_frame"],
+            "reason": "No-op boundary audit",
+            "actor": "phase5-workflow-test",
+        },
+    )
+    assert adjusted_partial.status_code == 201, adjusted_partial.text
+    assert adjusted_partial.json()["cycle_state"] == "partial_start"
+    rejected = client.post(
+        f"/api/v1/pose-biological-events/{adjusted_partial.json()['id']}/corrections",
         json={
             "action": "reject",
             "reason": "Synthetic partial is not a confirmed observation",
@@ -336,9 +359,44 @@ def test_saved_phase5_workflow_executes_jobs_review_and_export(
     package = artifacts["biological_movement_package"]["payload_json"]
     assert package["truth_status"] == "scientist_reviewed"
     assert resolve_managed_project_path(app.state.settings, package["managed_path"]).is_file()
+    reviewed_artifact_payload = artifacts["reviewed_pose_events"]["payload_json"]
+    assert reviewed_artifact_payload["review_readiness"]["review_state_sha256"]
+    removed = client.post(
+        f"/api/v1/pose-biological-events/{rejected.json()['id']}/corrections",
+        json={
+            "action": "remove",
+            "reason": "Exercise approval invalidation",
+            "actor": "phase5-workflow-test",
+        },
+    )
+    assert removed.status_code == 201, removed.text
     with app.state.session_factory() as session:
         measurement_job = session.get(
             Job, artifacts["pose_measurement_series"]["payload_json"]["measurement_job_id"]
         )
         assert measurement_job is not None
         assert measurement_job.request_json["workflow_run_id"] == queued.json()["id"]
+        reviewed_artifact = session.get(WorkflowArtifact, artifacts["reviewed_pose_events"]["id"])
+        candidate_artifact = session.get(WorkflowArtifact, artifacts["pose_event_candidates"]["id"])
+        assert reviewed_artifact is not None
+        assert candidate_artifact is not None
+        review_node = session.get(WorkflowNodeRun, nodes["event_review"]["id"])
+        assert review_node is not None
+        review_node.status = "running"
+        session.flush()
+        with pytest.raises(ValidationError, match="changed since scientist approval"):
+            execute_biological_event_review_gate_adapter(
+                session,
+                app.state.settings,
+                str(project["id"]),
+                {},
+                {"events": [candidate_artifact]},
+            )
+        with pytest.raises(ValidationError, match="changed since scientist approval"):
+            execute_biological_movement_export_adapter(
+                session,
+                app.state.settings,
+                str(project["id"]),
+                {"format": "json"},
+                {"events": [reviewed_artifact]},
+            )

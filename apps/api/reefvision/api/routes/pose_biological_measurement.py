@@ -151,7 +151,11 @@ def export_events(
     if format == "csv":
         return Response(
             service.export_csv(run_id, reviewed_only=reviewed_only),
-            media_type="text/csv",
-            headers={"Content-Disposition": f'attachment; filename="reefpose-events-{run_id}.csv"'},
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="reefpose-biological-movement-{run_id}.zip"'
+                )
+            },
         )
     return JSONResponse(service.export_json(run_id, reviewed_only=reviewed_only))

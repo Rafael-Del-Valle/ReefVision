@@ -78,6 +78,23 @@ def test_start_and_end_partials_and_low_confidence_are_never_confirmed() -> None
     assert "minimum_confidence" in result.events[0].rejection_reasons
 
 
+def test_complete_cycle_requires_observed_closed_baseline_and_long_gaps_reset_readiness() -> None:
+    ambiguous = detect_biological_events(samples([4, 7, 2]), definition())
+    assert ambiguous.events[0].cycle_state == "partial_start"
+    assert ambiguous.summary["confirmed_eligible_count"] == 0
+
+    irregular = [
+        EventSignalSample(0, 0.0, 1, 0.9, True, "fish-1"),
+        EventSignalSample(1, 0.1, None, None, False, "fish-1"),
+        EventSignalSample(2, 10.0, 8, 0.9, True, "fish-1"),
+        EventSignalSample(3, 10.1, 2, 0.9, True, "fish-1"),
+    ]
+    after_gap = detect_biological_events(irregular, definition(maximum_gap_s=0.25))
+    assert after_gap.events[0].cycle_state == "partial_start"
+    assert after_gap.summary["confirmed_eligible_count"] == 0
+    assert after_gap.summary["evaluated_duration_s"] == pytest.approx(0.1)
+
+
 def test_smoothing_is_deterministic_and_identities_cannot_mix() -> None:
     with pytest.raises(ValueError, match="one identity"):
         detect_biological_events(

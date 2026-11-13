@@ -227,9 +227,12 @@ describe("BiologicalMovementPanel", () => {
     expect(
       await screen.findByText("Gape distance time series"),
     ).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Fish 2/ })).toBeInTheDocument();
     expect(
-      screen.queryByRole("option", { name: /Fish 2/ }),
-    ).not.toBeInTheDocument();
+      screen.getByText(
+        /Scientific eligibility is validated from every selected current/,
+      ),
+    ).toBeInTheDocument();
     expect(
       screen.getByLabelText("Anatomical measurement time series"),
     ).toBeInTheDocument();

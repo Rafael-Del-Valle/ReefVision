@@ -124,12 +124,7 @@ export function BiologicalMovementPanel({
     queryFn: ({ signal }) => getPoseIdentityIdentities(identityRunId, signal),
     enabled: Boolean(identityRunId),
   });
-  const identities = (identitiesQuery.data ?? []).filter(
-    (identity) =>
-      verificationMode === "exploratory" ||
-      identity.verification_state === "scientist_confirmed" ||
-      identity.verification_state === "scientist_verified",
-  );
+  const identities = identitiesQuery.data ?? [];
   useEffect(() => {
     if (!identities.some((identity) => identity.id === identityId)) {
       setIdentityId(identities[0]?.id ?? "");
@@ -344,6 +339,45 @@ export function BiologicalMovementPanel({
     (event) =>
       event.cycle_state === "complete" && event.review_state === "confirmed",
   ).length;
+  const confirmedAmplitudes = events
+    .filter(
+      (event) =>
+        event.cycle_state === "complete" &&
+        event.review_state === "confirmed" &&
+        event.amplitude !== null,
+    )
+    .map((event) => event.amplitude as number);
+  const cycleConfiguration = (
+    Array.isArray(eventRun?.configuration_json.cycles)
+      ? eventRun.configuration_json.cycles
+      : []
+  ).find(
+    (value): value is Record<string, unknown> =>
+      typeof value === "object" &&
+      value !== null &&
+      value.measurement_series_id === selectedSeries?.id,
+  );
+  const maximumGapSeconds =
+    typeof cycleConfiguration?.maximum_gap_s === "number"
+      ? cycleConfiguration.maximum_gap_s
+      : 0.25;
+  const validSamples = samples.filter(
+    (sample) =>
+      sample.valid &&
+      (sample.pixel_value !== null || sample.physical_value !== null),
+  );
+  const evaluatedDuration = validSamples
+    .slice(1)
+    .reduce((total, sample, index) => {
+      const delta = sample.time_s - validSamples[index].time_s;
+      return total + (delta > 0 && delta <= maximumGapSeconds ? delta : 0);
+    }, 0);
+  const confirmedFrequency =
+    evaluatedDuration > 0 ? completeConfirmed / evaluatedDuration : null;
+  const meanConfirmedAmplitude = confirmedAmplitudes.length
+    ? confirmedAmplitudes.reduce((total, value) => total + value, 0) /
+      confirmedAmplitudes.length
+    : null;
 
   return (
     <section
@@ -372,6 +406,12 @@ export function BiologicalMovementPanel({
             <option value="exploratory">Exploratory measurement</option>
           </select>
         </label>
+        {verificationMode === "scientific" && (
+          <p className="muted">
+            Scientific eligibility is validated from every selected current
+            identity observation when calculation starts.
+          </p>
+        )}
         <label>
           Reviewed identity run
           <select
@@ -639,6 +679,9 @@ export function BiologicalMovementPanel({
             ? ` · ${eventRun.progress_json.stage}`
             : ""}
           . Confirmed complete cycles: {completeConfirmed}.
+          {` Evaluated duration: ${evaluatedDuration.toFixed(3)} s.`}
+          {` Confirmed frequency: ${confirmedFrequency?.toFixed(3) ?? "not available"} Hz.`}
+          {` Mean confirmed amplitude: ${meanConfirmedAmplitude?.toFixed(3) ?? "not available"}.`}
         </p>
       )}
       {eventRuns.length > 0 && (
@@ -753,7 +796,7 @@ export function BiologicalMovementPanel({
             Reviewed JSON
           </a>
           <a href={biologicalMovementExportUrl(eventRunId, "csv")}>
-            Reviewed CSV
+            Reviewed CSV package
           </a>
         </div>
       )}

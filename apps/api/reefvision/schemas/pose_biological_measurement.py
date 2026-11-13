@@ -105,6 +105,15 @@ class EventDetectionCreateRequest(BaseModel):
     measurement_run_id: str
     cycles: list[CycleDefinition] = Field(min_length=1)
 
+    @model_validator(mode="after")
+    def validate_unique_series(self) -> EventDetectionCreateRequest:
+        series_ids = [cycle.measurement_series_id for cycle in self.cycles]
+        if len(series_ids) != len(set(series_ids)):
+            raise ValueError(
+                "Each measurement series may have only one cycle definition per event run"
+            )
+        return self
+
 
 class MeasurementRunResponse(BaseModel):
     model_config = {"from_attributes": True}

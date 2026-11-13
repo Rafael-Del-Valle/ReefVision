@@ -33,7 +33,6 @@ from reefvision.db.models.pose_active_learning import (
     PoseActiveLearningCandidate,
     PoseActiveLearningRound,
 )
-from reefvision.db.models.pose_evaluation import PoseEvaluationRun
 from reefvision.db.models.pose_biological_measurement import (
     PoseBiologicalEventRevision,
     PoseEventDetectionRun,
@@ -41,6 +40,7 @@ from reefvision.db.models.pose_biological_measurement import (
     PoseMeasurementSample,
     PoseMeasurementSeries,
 )
+from reefvision.db.models.pose_evaluation import PoseEvaluationRun
 from reefvision.db.models.pose_identity_tracking import (
     PoseAnimalIdentity,
     PoseIdentityAssociationDecision,
@@ -119,12 +119,9 @@ __all__ = [
     "PoseActiveLearningCandidate",
     "PoseActiveLearningRound",
     "PoseAnimalIdentity",
-    "PoseEvaluationRun",
     "PoseBiologicalEventRevision",
+    "PoseEvaluationRun",
     "PoseEventDetectionRun",
-    "PoseMeasurementRun",
-    "PoseMeasurementSample",
-    "PoseMeasurementSeries",
     "PoseIdentityAssociationDecision",
     "PoseIdentityAssociationRun",
     "PoseIdentityCorrection",
@@ -140,6 +137,9 @@ __all__ = [
     "PoseLandmarkSchema",
     "PoseLandmarkSchemaRevision",
     "PoseLandmarkTrack",
+    "PoseMeasurementRun",
+    "PoseMeasurementSample",
+    "PoseMeasurementSeries",
     "PoseModelSchemaBinding",
     "PoseTrainingDataset",
     "PoseTrainingDatasetItem",

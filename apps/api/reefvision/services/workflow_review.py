@@ -31,6 +31,9 @@ from reefvision.schemas.workflow_execution import (
 from reefvision.services.pose_active_learning import (
     PoseActiveLearningService,
 )
+from reefvision.services.pose_biological_measurement import (
+    PoseBiologicalMeasurementService,
+)
 from reefvision.services.pose_temporal_tracking import (
     PoseTemporalTrackingService,
 )
@@ -474,6 +477,9 @@ def biological_event_review_status(
         "stale": stale,
         "current_event_count": total,
         "unreviewed_event_count": unreviewed,
+        "review_state_sha256": PoseBiologicalMeasurementService(session).review_state_sha256(
+            event_run.id
+        ),
     }
 
 
