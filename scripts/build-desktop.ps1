@@ -237,6 +237,7 @@ $MediaView = $MsiDatabase.OpenView(
 $MediaView.Execute()
 
 $MissingExternalCabinets = @()
+$DeclaredCabinets = @()
 
 while ($true) {
     $MediaRecord = $MediaView.Fetch()
@@ -253,6 +254,107 @@ while ($true) {
     ) {
         continue
     }
+
+    # Media is authoritative; reject unsafe paths and duplicate references.
+    if ($Cabinet -notmatch '^[A-Za-z0-9_-][A-Za-z0-9_.-]*\.cab
+
+    if (-not (Test-Path -LiteralPath $ExpectedCabinet -PathType Leaf)) {
+        $MissingExternalCabinets += $Cabinet
+    }
+}
+
+$MediaView.Close()
+
+if ($MissingExternalCabinets.Count -gt 0) {
+    throw (
+        "MSI references missing external cabinets: " +
+        ($MissingExternalCabinets -join ", ")
+    )
+}
+
+# Reject leftovers from earlier builds before signing them into release provenance.
+# Refuse the package, not the researcher's existing assets.
+$CabinetFiles = @(Get-ChildItem -LiteralPath $InstallerDirectory -Filter '*.cab' -File)
+$ActualCabinets = @($CabinetFiles | ForEach-Object { $_.Name })
+$UnexpectedCabinets = @($ActualCabinets | Where-Object { $_ -notin $DeclaredCabinets })
+if ($DeclaredCabinets.Count -eq 0) {
+    throw 'MSI declares no external cabinets; refusing incomplete split-media evidence.'
+}
+if ($UnexpectedCabinets.Count -gt 0 -or $ActualCabinets.Count -ne $DeclaredCabinets.Count) {
+    throw (
+        'MSI external cabinet inventory differs from the output directory. ' +
+        "Declared: $($DeclaredCabinets -join ', '); actual: $($ActualCabinets -join ', ')."
+    )
+}
+foreach ($CabinetFile in $CabinetFiles) {
+    if ($CabinetFile.Length -le 0) {
+        throw "MSI external cabinet is empty: $($CabinetFile.Name)"
+    }
+}
+Write-Host "MSI external cabinet inventory matches Media table." -ForegroundColor Green
+
+if (-not $SkipMsiVerification) {
+    Write-ReefVisionStep "Verifying the Windows MSI and packaged backend"
+    & (Join-Path $PSScriptRoot "verify-windows-msi.ps1") `
+        -TargetTriple $TargetTriple `
+        -InstallerDirectory $InstallerDirectory
+    if ($LASTEXITCODE -ne 0) {
+        throw "Windows MSI verification failed with exit code $LASTEXITCODE."
+    }
+}
+else {
+    Write-Warning "MSI verification was explicitly skipped. This build is not release-validated."
+}
+
+if ((git rev-parse HEAD) -ne $BuildCommit -or -not (Test-ReefVisionSourceTreeClean)) {
+    throw 'Source tree changed while packaging; do not release these artifacts.'
+}
+# Hash installer payloads with the framework SHA256 implementation.
+# Some Windows PowerShell build agents do not expose Get-FileHash inside
+# the pipeline scriptblock at this stage of the packaging process.
+function Get-ReefVisionArtifactSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $Stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $Sha256 = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            return ([System.BitConverter]::ToString($Sha256.ComputeHash($Stream))).Replace('-', '').ToLowerInvariant()
+        }
+        finally {
+            $Sha256.Dispose()
+        }
+    }
+    finally {
+        $Stream.Dispose()
+    }
+}
+$BuildArtifactRecords = @(
+    Get-ChildItem -LiteralPath $InstallerDirectory -File |
+        Where-Object { $_.Extension -in @('.msi', '.cab') } |
+        ForEach-Object {
+            [ordered]@{
+                name = $_.Name
+                sha256 = Get-ReefVisionArtifactSha256 -Path $_.FullName
+            }
+        }
+)
+[ordered]@{
+    version = $TauriConfig.version
+    source_commit = $BuildCommit
+    source_tree_clean = $true
+    msi_verified = (-not [bool]$SkipMsiVerification)
+    media_cabinets = @($DeclaredCabinets | Sort-Object)
+    files = $BuildArtifactRecords
+} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $InstallerDirectory 'build-provenance.json') -Encoding UTF8
+) {
+        $MediaView.Close()
+        throw "MSI Media contains an unsafe external cabinet name: $Cabinet"
+    }
+    if ($Cabinet -in $DeclaredCabinets) {
+        $MediaView.Close()
+        throw "MSI Media contains a duplicate external cabinet: $Cabinet"
+    }
+    $DeclaredCabinets += $Cabinet
 
     $ExpectedCabinet = Join-Path $InstallerDirectory $Cabinet
 

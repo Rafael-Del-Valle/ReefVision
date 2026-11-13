@@ -97,6 +97,20 @@ def validate_bundle(
         _reject("Expected source commit must be a full 40-character SHA")
     if expected_commit is not None and commit.lower() != expected_commit.lower():
         _reject("Build provenance source commit differs from expected HEAD")
+    # Read independently from MSI Media, not derived from on-disk CAB files.
+    media_cabinets = manifest.get("media_cabinets")
+    if not isinstance(media_cabinets, list) or not media_cabinets:
+        _reject("Media cabinet inventory must list external cabinets")
+    if any(
+        not isinstance(name, str)
+        or not re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9_.-]*\.cab", name, re.I)
+        for name in media_cabinets
+    ):
+        _reject("Media cabinet inventory contains an unsafe cabinet name")
+    media_names = [name.casefold() for name in media_cabinets]
+    if len(media_names) != len(set(media_names)):
+        _reject("Media cabinet inventory contains duplicate cabinet names")
+
     records = manifest.get("files")
     if not isinstance(records, list) or len(records) < 2:
         _reject("Build provenance must list an MSI and at least one external CAB")
@@ -129,6 +143,10 @@ def validate_bundle(
 
     if len(msi) != 1 or not cabinets:
         _reject("Bundle must have exactly one MSI and at least one CAB")
+    if len(cabinets) != len(media_names) or {
+        name.casefold() for name in cabinets
+    } != set(media_names):
+        _reject("MSI Media cabinet inventory differs from bundled CAB records")
     if not re.fullmatch(
         rf"ReefVision_{re.escape(expected_version)}_[A-Za-z0-9_.-]+\.msi",
         msi[0],

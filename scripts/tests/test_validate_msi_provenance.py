@@ -32,6 +32,7 @@ def make_bundle(tmp_path: Path) -> tuple[Path, dict]:
         "source_commit": COMMIT,
         "source_tree_clean": True,
         "msi_verified": True,
+        "media_cabinets": ["rv1.cab"],
         "files": files,
     }
     save(directory, manifest)
@@ -109,6 +110,40 @@ def test_unlisted_cab(tmp_path: Path) -> None:
     (directory / "unexpected.cab").write_bytes(b"extra")
     with pytest.raises(validator.BundleValidationError, match="Unexpected"):
         verify(directory)
+
+
+@pytest.mark.parametrize(
+    ("media_cabinets", "message"),
+    [
+        (None, "must list"),
+        ([], "must list"),
+        ("rv1.cab", "must list"),
+        (["../rv1.cab"], "unsafe"),
+        (["rv1.cab", "RV1.CAB"], "duplicate"),
+        (["unreferenced.cab"], "differs"),
+    ],
+)
+def test_reject_invalid_media_cabinet_inventory(
+    tmp_path: Path, media_cabinets: object, message: str
+) -> None:
+    directory, manifest = make_bundle(tmp_path)
+    manifest["media_cabinets"] = media_cabinets
+    save(directory, manifest)
+    with pytest.raises(validator.BundleValidationError, match=message):
+        verify(directory)
+
+
+def test_reject_hashed_stale_cab_not_in_msi_media(tmp_path: Path) -> None:
+    directory, manifest = make_bundle(tmp_path)
+    stale_cab = directory / "old-split.cab"
+    stale_cab.write_bytes(b"leftover from a previous split-media build")
+    manifest["files"].append(
+        {"name": stale_cab.name, "sha256": hashlib.sha256(stale_cab.read_bytes()).hexdigest()}
+    )
+    save(directory, manifest)
+    with pytest.raises(validator.BundleValidationError, match="differs"):
+        verify(directory)
+    assert stale_cab.read_bytes() == b"leftover from a previous split-media build"
 
 
 def test_duplicate_manifest_key(tmp_path: Path) -> None:
