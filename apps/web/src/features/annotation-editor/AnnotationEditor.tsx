@@ -4202,149 +4202,149 @@ export function AnnotationEditor({
                   </filter>
                 </defs>
                 {viewportPredictions.map((proposal) => {
-                    const labelClass =
-                      (proposal.label_class_id
-                        ? labelClassesById.get(proposal.label_class_id)
-                        : null) ?? null;
-                    const selected = selectedPredictionIds.includes(
-                      proposal.id,
-                    );
-                    const highlighted = highlightedPredictionIds.has(
-                      proposal.id,
-                    );
-                    return (
-                      <g key={`prediction-${proposal.id}`}>
-                        {proposal.geometry_kind === "raster_mask" && (
-                          <image
-                            href={`${predictionMaskUrl(proposal.id)}?sha=${proposal.mask_content_sha256 ?? ""}`}
-                            filter="url(#prediction-cyan)"
-                            x={0}
-                            y={0}
-                            width={image.width_px}
-                            height={image.height_px}
-                            opacity={selected ? 0.48 : 0.25}
-                            preserveAspectRatio="none"
-                            pointerEvents="none"
-                            data-testid={`proposal-mask-${proposal.id}`}
-                          />
-                        )}
-                        <rect
-                          data-testid={`prediction-${proposal.id}`}
-                          x={proposal.x_min}
-                          y={proposal.y_min}
-                          width={proposal.x_max - proposal.x_min}
-                          height={proposal.y_max - proposal.y_min}
-                          fill={
-                            selected
-                              ? "rgba(255, 196, 0, 0.14)"
-                              : highlighted
-                                ? "rgba(255, 196, 0, 0.16)"
-                                : "rgba(255, 196, 0, 0.06)"
-                          }
-                          stroke={labelClass?.display_color ?? "#f5c542"}
-                          strokeWidth={highlighted ? 2.5 : 1.5}
-                          strokeDasharray={`${6 * strokeScale} ${4 * strokeScale}`}
-                          vectorEffect="non-scaling-stroke"
-                          onPointerDown={(event) => {
-                            event.stopPropagation();
-                            togglePredictionSelection(proposal.id);
-                          }}
+                  const labelClass =
+                    (proposal.label_class_id
+                      ? labelClassesById.get(proposal.label_class_id)
+                      : null) ?? null;
+                  const selected = selectedPredictionIds.includes(
+                    proposal.id,
+                  );
+                  const highlighted = highlightedPredictionIds.has(
+                    proposal.id,
+                  );
+                  return (
+                    <g key={`prediction-${proposal.id}`}>
+                      {proposal.geometry_kind === "raster_mask" && (
+                        <image
+                          href={`${predictionMaskUrl(proposal.id)}?sha=${proposal.mask_content_sha256 ?? ""}`}
+                          filter="url(#prediction-cyan)"
+                          x={0}
+                          y={0}
+                          width={image.width_px}
+                          height={image.height_px}
+                          opacity={selected ? 0.48 : 0.25}
+                          preserveAspectRatio="none"
+                          pointerEvents="none"
+                          data-testid={`proposal-mask-${proposal.id}`}
                         />
-                        <text
-                          x={proposal.x_min + 4 * strokeScale}
-                          y={proposal.y_min + 14 * strokeScale}
-                          fill={labelClass?.display_color ?? "#f5c542"}
-                          fontSize={12 * strokeScale}
-                        >
-                          {`${labelClass?.name ?? proposal.predicted_label} ${proposal.confidence.toFixed(2)}`}
-                        </text>
-                      </g>
-                    );
-                  })}
+                      )}
+                      <rect
+                        data-testid={`prediction-${proposal.id}`}
+                        x={proposal.x_min}
+                        y={proposal.y_min}
+                        width={proposal.x_max - proposal.x_min}
+                        height={proposal.y_max - proposal.y_min}
+                        fill={
+                          selected
+                            ? "rgba(255, 196, 0, 0.14)"
+                            : highlighted
+                              ? "rgba(255, 196, 0, 0.16)"
+                              : "rgba(255, 196, 0, 0.06)"
+                        }
+                        stroke={labelClass?.display_color ?? "#f5c542"}
+                        strokeWidth={highlighted ? 2.5 : 1.5}
+                        strokeDasharray={`${6 * strokeScale} ${4 * strokeScale}`}
+                        vectorEffect="non-scaling-stroke"
+                        onPointerDown={(event) => {
+                          event.stopPropagation();
+                          togglePredictionSelection(proposal.id);
+                        }}
+                      />
+                      <text
+                        x={proposal.x_min + 4 * strokeScale}
+                        y={proposal.y_min + 14 * strokeScale}
+                        fill={labelClass?.display_color ?? "#f5c542"}
+                        fontSize={12 * strokeScale}
+                      >
+                        {`${labelClass?.name ?? proposal.predicted_label} ${proposal.confidence.toFixed(2)}`}
+                      </text>
+                    </g>
+                  );
+                })}
                 {viewportAnnotations.map((annotation) => {
-                    const labelClass = labelClassesById.get(
-                      annotation.label_class_id,
-                    );
-                    const selected = state.selectedIds.includes(annotation.id);
-                    const highlighted = highlightedAnnotationIds.has(
-                      annotation.id,
-                    );
-                    return (
-                      <g key={annotation.id}>
-                        <rect
-                          data-testid={`annotation-${annotation.id}`}
-                          x={annotation.x_min}
-                          y={annotation.y_min}
-                          width={annotation.x_max - annotation.x_min}
-                          height={annotation.y_max - annotation.y_min}
-                          fill={
-                            selected
-                              ? "rgba(255,255,255,0.10)"
-                              : highlighted
-                                ? "rgba(114, 219, 201, 0.15)"
-                                : "rgba(255,255,255,0.03)"
-                          }
-                          stroke={labelClass?.display_color ?? "#72dbc9"}
-                          strokeWidth={highlighted ? 2.5 : 1.5}
-                          vectorEffect="non-scaling-stroke"
-                          onPointerDown={(event) =>
-                            handleAnnotationPointerDown(event, annotation.id)
-                          }
-                        />
-                        <text
-                          x={annotation.x_min + 4 * strokeScale}
-                          y={annotation.y_min + 14 * strokeScale}
-                          fill={labelClass?.display_color ?? "#72dbc9"}
-                          fontSize={12 * strokeScale}
-                        >
-                          {labelClass?.name ?? annotation.label_class_id}
-                        </text>
-                        {selected &&
-                          (
-                            [
-                              {
-                                handle: "nw",
-                                x: annotation.x_min,
-                                y: annotation.y_min,
-                              },
-                              {
-                                handle: "ne",
-                                x: annotation.x_max,
-                                y: annotation.y_min,
-                              },
-                              {
-                                handle: "sw",
-                                x: annotation.x_min,
-                                y: annotation.y_max,
-                              },
-                              {
-                                handle: "se",
-                                x: annotation.x_max,
-                                y: annotation.y_max,
-                              },
-                            ] as const
-                          ).map((corner) => (
-                            <circle
-                              key={`${annotation.id}-${corner.handle}`}
-                              cx={corner.x}
-                              cy={corner.y}
-                              r={handleRadius}
-                              fill="#ffffff"
-                              stroke={labelClass?.display_color ?? "#72dbc9"}
-                              strokeWidth={1.5}
-                              vectorEffect="non-scaling-stroke"
-                              onPointerDown={(event) =>
-                                handleResizePointerDown(
-                                  event,
-                                  annotation,
-                                  corner.handle,
-                                )
-                              }
-                            />
-                          ))}
-                      </g>
-                    );
-                  })}
+                  const labelClass = labelClassesById.get(
+                    annotation.label_class_id,
+                  );
+                  const selected = state.selectedIds.includes(annotation.id);
+                  const highlighted = highlightedAnnotationIds.has(
+                    annotation.id,
+                  );
+                  return (
+                    <g key={annotation.id}>
+                      <rect
+                        data-testid={`annotation-${annotation.id}`}
+                        x={annotation.x_min}
+                        y={annotation.y_min}
+                        width={annotation.x_max - annotation.x_min}
+                        height={annotation.y_max - annotation.y_min}
+                        fill={
+                          selected
+                            ? "rgba(255,255,255,0.10)"
+                            : highlighted
+                              ? "rgba(114, 219, 201, 0.15)"
+                              : "rgba(255,255,255,0.03)"
+                        }
+                        stroke={labelClass?.display_color ?? "#72dbc9"}
+                        strokeWidth={highlighted ? 2.5 : 1.5}
+                        vectorEffect="non-scaling-stroke"
+                        onPointerDown={(event) =>
+                          handleAnnotationPointerDown(event, annotation.id)
+                        }
+                      />
+                      <text
+                        x={annotation.x_min + 4 * strokeScale}
+                        y={annotation.y_min + 14 * strokeScale}
+                        fill={labelClass?.display_color ?? "#72dbc9"}
+                        fontSize={12 * strokeScale}
+                      >
+                        {labelClass?.name ?? annotation.label_class_id}
+                      </text>
+                      {selected &&
+                        (
+                          [
+                            {
+                              handle: "nw",
+                              x: annotation.x_min,
+                              y: annotation.y_min,
+                            },
+                            {
+                              handle: "ne",
+                              x: annotation.x_max,
+                              y: annotation.y_min,
+                            },
+                            {
+                              handle: "sw",
+                              x: annotation.x_min,
+                              y: annotation.y_max,
+                            },
+                            {
+                              handle: "se",
+                              x: annotation.x_max,
+                              y: annotation.y_max,
+                            },
+                          ] as const
+                        ).map((corner) => (
+                          <circle
+                            key={`${annotation.id}-${corner.handle}`}
+                            cx={corner.x}
+                            cy={corner.y}
+                            r={handleRadius}
+                            fill="#ffffff"
+                            stroke={labelClass?.display_color ?? "#72dbc9"}
+                            strokeWidth={1.5}
+                            vectorEffect="non-scaling-stroke"
+                            onPointerDown={(event) =>
+                              handleResizePointerDown(
+                                event,
+                                annotation,
+                                corner.handle,
+                              )
+                            }
+                          />
+                        ))}
+                    </g>
+                  );
+                })}
                 {!hideAnnotations &&
                   draftBox &&
                   boxArea({
