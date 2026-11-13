@@ -589,13 +589,34 @@ def process_workflow_run_job(
             session.commit()
         return True
     except WorkflowReviewRequired as exc:
-        _set_waiting_for_review(
-            factory,
-            job_id,
-            run_id,
-            completed_nodes=completed_nodes,
-            review=exc,
-        )
+        try:
+            _set_waiting_for_review(
+                factory,
+                job_id,
+                run_id,
+                completed_nodes=completed_nodes,
+                review=exc,
+            )
+        except Exception as pause_error:
+            # A stale or cross-run review-node ID must fail the persisted
+            # execution, not strand its job and node in the running state.
+            error = f"Workflow review pause failed: {pause_error}"
+            with factory() as session:
+                failed_node = session.scalar(
+                    select(WorkflowNodeRun)
+                    .where(
+                        WorkflowNodeRun.workflow_run_id == run_id,
+                        WorkflowNodeRun.status == "running",
+                    )
+                    .order_by(WorkflowNodeRun.execution_order)
+                )
+                if failed_node is not None:
+                    failed_node.status = "failed"
+                    failed_node.error_message = error
+                    failed_node.completed_at = _now()
+                session.commit()
+            _set_terminal(factory, job_id, run_id, status="failed", error=error)
+            return False
         return True
     except Exception as exc:
         with factory() as session:
