@@ -179,6 +179,53 @@ def test_managed_video_import_extraction_and_track_analytics(
     assert stale.status_code == 422
 
 
+def test_explicit_vfr_keyframe_timestamps_drive_interpolation_and_speed(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Variable frame rate track")
+    video = _import_video(client, str(project["id"]), monkeypatch)
+    classes = cast(list[dict[str, object]], project["label_classes"])
+    base = {
+        "label_class_id": str(classes[0]["id"]),
+        "interpolation": "linear",
+        "status": "verified",
+    }
+    partial = client.post(
+        f"/api/v1/videos/{video['id']}/tracks",
+        json={
+            **base,
+            "keyframes": [
+                {"frame": 0, "timestamp_seconds": 0, "bbox": [10, 10, 20, 10]},
+                {"frame": 10, "bbox": [30, 10, 20, 10]},
+            ],
+        },
+    )
+    assert partial.status_code == 422
+
+    created = client.post(
+        f"/api/v1/videos/{video['id']}/tracks",
+        json={
+            **base,
+            "keyframes": [
+                {"frame": 0, "timestamp_seconds": 0, "bbox": [10, 10, 20, 10]},
+                {"frame": 10, "timestamp_seconds": 2, "bbox": [30, 10, 20, 10]},
+            ],
+        },
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["keyframes_json"][1]["timestamp_seconds"] == 2
+
+    interpolation = client.get(f"/api/v1/video-tracks/{created.json()['id']}/interpolation")
+    assert interpolation.status_code == 200, interpolation.text
+    assert interpolation.json()["frames"][5]["timestamp_seconds"] == pytest.approx(1)
+
+    analytics = client.get(f"/api/v1/video-tracks/{created.json()['id']}/analytics")
+    assert analytics.status_code == 200, analytics.text
+    assert analytics.json()["duration_seconds"] == pytest.approx(2)
+    assert analytics.json()["mean_speed_pixels_per_second"] == pytest.approx(10)
+
+
 def test_fake_detector_tracker_creates_editable_machine_track(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,

@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     cloud_inference_enabled: bool = False
     cloud_request_timeout_seconds: float = Field(default=90.0, gt=1, le=600)
     cloud_max_inline_image_bytes: int = Field(default=15_000_000, ge=65_536, le=20_000_000)
+    copernicus_username: SecretStr | None = Field(default=None, exclude=True)
+    copernicus_password: SecretStr | None = Field(default=None, exclude=True)
+    copernicus_python_executable: Path | None = None
     openai_api_key: SecretStr | None = None
     gemini_api_key: SecretStr | None = None
     anthropic_api_key: SecretStr | None = None

@@ -1,0 +1,685 @@
+import { expect, it } from "vitest";
+import {
+  currentComponentUncertaintyText,
+  currentVectors,
+  currentVectorsCsv,
+  summarizeCurrentSlice,
+} from "./currentVectors";
+import type { ScientificRecord } from "./environmentalContextApi";
+function component(
+  variable: string,
+  value: number,
+  patch: Partial<ScientificRecord> = {},
+): ScientificRecord {
+  return {
+    id: variable,
+    project_id: "project",
+    variable,
+    value,
+    unit: "m/s",
+    normalized_value: value,
+    normalized_unit: "m/s",
+    normalized_uncertainty: null,
+    observed_at: "2026-04-03T00:00:00Z",
+    source_kind: "modeled",
+    location: { latitude: 32.5, longitude: -79.5, crs: "EPSG:4326" },
+    depth_m: 5,
+    depth_reference: "sea_surface",
+    qc: "unassessed",
+    environmental_cache_key: "cache",
+    provenance: {
+      source: "Copernicus Marine",
+      dataset_id: "synthetic",
+      model_version: "202601",
+      acquired_at: "2026-04-04T00:00:00Z",
+    },
+    content_sha256: "hash",
+    ...patch,
+  };
+}
+it("computes speed and true-north bearing from east/north components", () => {
+  const vectors = currentVectors([
+    component("current_eastward_velocity", 3),
+    component("current_northward_velocity", 4),
+  ]);
+  expect(vectors).toHaveLength(1);
+  expect(vectors[0].speed).toBe(5);
+  expect(vectors[0].bearing).toBeCloseTo(36.86989765);
+});
+it("rejects velocity components with the same immutable record ID", () => {
+  const east = component("current_eastward_velocity", 3, { id: "same-record" });
+  const north = component("current_northward_velocity", 4, {
+    id: "same-record",
+  });
+  expect(currentVectors([east, north])).toEqual([]);
+  expect(
+    currentVectors([east, { ...north, id: "different-record" }]),
+  ).toHaveLength(1);
+});
+it("rejects reuse of one immutable component ID across separate times", () => {
+  const east = component("current_eastward_velocity", 3, { id: "east-reused" });
+  const north = component("current_northward_velocity", 4, {
+    id: "north-first",
+  });
+  const laterEast = {
+    ...east,
+    observed_at: "2026-04-03T01:00:00Z",
+  };
+  const laterNorth = component("current_northward_velocity", 2, {
+    id: "north-later",
+    observed_at: "2026-04-03T01:00:00Z",
+  });
+  expect(currentVectors([east, north, laterEast, laterNorth])).toEqual([]);
+  const distinctRecords = currentVectors([
+    east,
+    north,
+    { ...laterEast, id: "east-later" },
+    laterNorth,
+  ]);
+  expect(distinctRecords).toHaveLength(2);
+});
+it("preserves component uncertainty without deriving uncertainty", () => {
+  const vectors = currentVectors([
+    component("current_eastward_velocity", 3, {
+      normalized_uncertainty: 0.25,
+      uncertainty: { value: 0.25, kind: "standard_deviation" },
+    }),
+    component("current_northward_velocity", 4, {
+      normalized_uncertainty: 0.1,
+      uncertainty: { value: 0.1, kind: "bound" },
+    }),
+  ]);
+  expect(vectors).toHaveLength(1);
+  expect(vectors[0]).toMatchObject({
+    eastUncertainty: { value: 0.25, kind: "standard_deviation" },
+    northUncertainty: { value: 0.1, kind: "bound" },
+  });
+  expect(
+    currentComponentUncertaintyText("East", vectors[0].eastUncertainty),
+  ).toBe("East component uncertainty: 0.250 m/s (standard deviation)");
+  expect(
+    currentComponentUncertaintyText("North", vectors[0].northUncertainty),
+  ).toBe("North component uncertainty: 0.100 m/s (bound)");
+});
+it("keeps missing, zero and invalid component uncertainties distinct", () => {
+  const unknown = currentVectors([
+    component("current_eastward_velocity", 3),
+    component("current_northward_velocity", 4, {
+      normalized_uncertainty: 0,
+      uncertainty: { value: 0, kind: "standard_error" },
+    }),
+  ])[0];
+  expect(unknown.eastUncertainty).toBeNull();
+  expect(unknown.northUncertainty).toEqual({
+    value: 0,
+    kind: "standard_error",
+  });
+  expect(currentComponentUncertaintyText("East", unknown.eastUncertainty)).toBe(
+    "East component uncertainty: unknown",
+  );
+  const invalid = currentVectors([
+    component("current_eastward_velocity", 3, {
+      normalized_uncertainty: -1,
+      uncertainty: { value: 1, kind: "bound" },
+    }),
+    component("current_northward_velocity", 4, {
+      normalized_uncertainty: Number.NaN,
+      uncertainty: { value: 1, kind: "bound" },
+    }),
+  ])[0];
+  expect(invalid.eastUncertainty).toBeNull();
+  expect(invalid.northUncertainty).toBeNull();
+});
+it("preserves tiny nonzero uncertainty in the display instead of rounding to zero", () => {
+  const vectors = currentVectors([
+    component("current_eastward_velocity", 1, {
+      normalized_uncertainty: 0.00000023,
+      uncertainty: { value: 0.00000023, kind: "standard_deviation" },
+    }),
+    component("current_northward_velocity", 0, {
+      normalized_uncertainty: 0,
+      uncertainty: { value: 0, kind: "standard_error" },
+    }),
+  ]);
+  expect(vectors).toHaveLength(1);
+  expect(
+    currentComponentUncertaintyText("East", vectors[0].eastUncertainty),
+  ).toBe("East component uncertainty: 2.30e-7 m/s (standard deviation)");
+  expect(
+    currentComponentUncertaintyText("North", vectors[0].northUncertainty),
+  ).toBe("North component uncertainty: 0.000 m/s (standard error)");
+});
+it("omits currents whose magnitude overflows finite components", () => {
+  expect(
+    currentVectors([
+      component("current_eastward_velocity", Number.MAX_VALUE),
+      component("current_northward_velocity", Number.MAX_VALUE),
+    ]),
+  ).toEqual([]);
+});
+it.each([
+  [0, 1, 0],
+  [1, 0, 90],
+  [0, -1, 180],
+  [-1, 0, 270],
+  [0, 0, null],
+])("handles cardinal and stationary vectors %s/%s", (east, north, bearing) => {
+  expect(
+    currentVectors([
+      component("current_eastward_velocity", east!),
+      component("current_northward_velocity", north!),
+    ])[0].bearing,
+  ).toBe(bearing);
+});
+it("never combines mismatched depth, time, acquisition or source", () => {
+  for (const patch of [
+    { depth_m: 10 },
+    { observed_at: "2026-04-03T01:00:00Z" },
+    { source_kind: "observed" as const },
+    { provenance: { ...component("x", 0).provenance, model_version: "other" } },
+    {
+      provenance: {
+        ...component("x", 0).provenance,
+        acquired_at: "2026-04-04T01:00:00Z",
+      },
+    },
+  ]) {
+    expect(
+      currentVectors([
+        component("current_eastward_velocity", 3),
+        component("current_northward_velocity", 4, patch),
+      ]),
+    ).toEqual([]);
+  }
+});
+it("pairs current components only with matching processing provenance", () => {
+  const provenance = {
+    ...component("x", 0).provenance,
+    source_url: "https://example.org/model",
+    method: "rectilinear_grid_no_interpolation",
+    spatial_resolution_m: 100,
+    temporal_resolution_s: 3600,
+    processing_parameters: { interpolation: "none" },
+  };
+  const east = component("current_eastward_velocity", 3, { provenance });
+  const north = component("current_northward_velocity", 4, { provenance });
+  expect(currentVectors([east, north])).toHaveLength(1);
+
+  for (const difference of [
+    { source_url: "https://example.org/another-model" },
+    { method: "interpolated" },
+    { spatial_resolution_m: 200 },
+    { temporal_resolution_s: 7200 },
+    { processing_parameters: { interpolation: "linear" } },
+  ]) {
+    expect(
+      currentVectors([
+        east,
+        { ...north, provenance: { ...provenance, ...difference } },
+      ]),
+    ).toEqual([]);
+  }
+});
+it("pairs identical nested processing settings regardless of JSON object key order", () => {
+  const provenance = {
+    ...component("x", 0).provenance,
+    processing_parameters: {
+      variables: ["uo", "vo"],
+      subset: { north: 33, south: 32 },
+      method: { interpolation: "none", grid: { x: 0.25, y: 0.25 } },
+    },
+  };
+  const east = component("current_eastward_velocity", 3, { provenance });
+  const north = component("current_northward_velocity", 4, {
+    provenance: {
+      ...provenance,
+      processing_parameters: {
+        method: { grid: { y: 0.25, x: 0.25 }, interpolation: "none" },
+        subset: { south: 32, north: 33 },
+        variables: ["uo", "vo"],
+      },
+    },
+  });
+  const paired = currentVectors([east, north]);
+  expect(paired).toHaveLength(1);
+  expect(currentVectors([north, east])[0].id).toBe(paired[0].id);
+  expect(
+    currentVectors([
+      east,
+      {
+        ...north,
+        provenance: {
+          ...north.provenance,
+          processing_parameters: {
+            ...provenance.processing_parameters,
+            subset: { south: 32, north: 34 },
+          },
+        },
+      },
+    ]),
+  ).toEqual([]);
+  // Array order can encode meaningful provider configuration and is preserved.
+  expect(
+    currentVectors([
+      east,
+      {
+        ...north,
+        provenance: {
+          ...north.provenance,
+          processing_parameters: {
+            ...provenance.processing_parameters,
+            variables: ["vo", "uo"],
+          },
+        },
+      },
+    ]),
+  ).toEqual([]);
+});
+it("rejects mismatched model-run source metadata while allowing uo/vo names", () => {
+  const base = component("current_eastward_velocity", 3).provenance;
+  const east = component("current_eastward_velocity", 3, {
+    provenance: {
+      ...base,
+      source_metadata: {
+        provider_variable: "uo",
+        provider_unit: "m s-1",
+        standard_name: "eastward_sea_water_velocity",
+        dataset: { run: "r1", member: 0 },
+        coordinate_resolution: { time: 3600, latitude: 0.25 },
+      },
+    },
+  });
+  const north = component("current_northward_velocity", 4, {
+    provenance: {
+      ...base,
+      source_metadata: {
+        coordinate_resolution: { latitude: 0.25, time: 3600 },
+        dataset: { member: 0, run: "r1" },
+        standard_name: "northward_sea_water_velocity",
+        provider_unit: "m/s",
+        provider_variable: "vo",
+      },
+    },
+  });
+  expect(currentVectors([east, north])).toHaveLength(1);
+  expect(currentVectors([north, east])).toHaveLength(1);
+
+  for (const incompatible of [
+    { dataset: { run: "r2", member: 0 } },
+    { coordinate_resolution: { time: 7200, latitude: 0.25 } },
+    { ensemble_member: "different-member" },
+  ]) {
+    expect(
+      currentVectors([
+        east,
+        {
+          ...north,
+          provenance: {
+            ...north.provenance,
+            source_metadata: {
+              ...north.provenance.source_metadata,
+              ...incompatible,
+            },
+          },
+        },
+      ]),
+    ).toEqual([]);
+  }
+  expect(
+    currentVectors([
+      east,
+      {
+        ...north,
+        provenance: { ...north.provenance, source_metadata: undefined },
+      },
+    ]),
+  ).toEqual([]);
+});
+
+it("excludes non-finite and out-of-range WGS84 current coordinates", () => {
+  const east = component("current_eastward_velocity", 3);
+  const north = component("current_northward_velocity", 4);
+  const invalidLocations: NonNullable<ScientificRecord["location"]>[] = [
+    { latitude: Number.NaN, longitude: -79.5, crs: "EPSG:4326" },
+    { latitude: 91, longitude: -79.5, crs: "EPSG:4326" },
+    { latitude: 32.5, longitude: Number.POSITIVE_INFINITY, crs: "EPSG:4326" },
+    { latitude: 32.5, longitude: -181, crs: "EPSG:4326" },
+  ];
+  for (const location of invalidLocations) {
+    expect(
+      currentVectors([
+        { ...east, location },
+        { ...north, location },
+      ]),
+    ).toEqual([]);
+    expect(currentVectors([east, { ...north, location }])).toEqual([]);
+    expect(currentVectors([{ ...east, location }, north])).toEqual([]);
+  }
+});
+it("rejects non-finite or negative current depth on either component", () => {
+  const east = component("current_eastward_velocity", 3);
+  const north = component("current_northward_velocity", 4);
+  const invalidDepths = [
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+    -1,
+  ];
+  for (const depth_m of invalidDepths) {
+    expect(currentVectors([{ ...east, depth_m }, north])).toEqual([]);
+    expect(currentVectors([east, { ...north, depth_m }])).toEqual([]);
+  }
+  expect(currentVectors([{ ...east, depth_m: null }, north])).toEqual([]);
+  expect(currentVectors([east, { ...north, depth_m: null }])).toEqual([]);
+});
+
+it("excludes rejected, superseded, duplicate or mismatched coordinates", () => {
+  const east = component("current_eastward_velocity", 3);
+  const north = component("current_northward_velocity", 4);
+  const duplicateVectors = currentVectors([
+    east,
+    { ...east, id: "duplicate" },
+    north,
+  ]);
+  expect(duplicateVectors).toEqual([]);
+  expect(currentVectors([east, { ...north, qc: "rejected" }])).toEqual([]);
+  expect(
+    currentVectors([east, { ...north, environmental_snapshot_current: false }]),
+  ).toEqual([]);
+  expect(currentVectors([east, { ...north, location: null }])).toEqual([]);
+});
+
+it("pairs current components only within one scientific subject and frame", () => {
+  const subject = {
+    video_id: "00000000-0000-4000-8000-000000000001",
+    frame_index: 0,
+    track_id: "00000000-0000-4000-8000-000000000002",
+  };
+  const east = component("current_eastward_velocity", 3, { subject });
+  const north = component("current_northward_velocity", 4, { subject });
+  expect(currentVectors([east, north])).toHaveLength(1);
+  for (const other of [
+    { ...subject, frame_index: 1 },
+    { ...subject, track_id: "00000000-0000-4000-8000-000000000003" },
+    { ...subject, video_id: "00000000-0000-4000-8000-000000000004" },
+  ]) {
+    expect(currentVectors([east, { ...north, subject: other }])).toEqual([]);
+  }
+  expect(currentVectors([east, { ...north, subject: {} }])).toEqual([]);
+});
+
+it("retains independent currents for different subjects at the same grid cell", () => {
+  const first = { image_id: "00000000-0000-4000-8000-000000000005" };
+  const second = { image_id: "00000000-0000-4000-8000-000000000006" };
+  const rows = [
+    component("current_eastward_velocity", 3, { id: "east-a", subject: first }),
+    component("current_northward_velocity", 4, {
+      id: "north-a",
+      subject: first,
+    }),
+    component("current_eastward_velocity", 5, {
+      id: "east-b",
+      subject: second,
+    }),
+    component("current_northward_velocity", 12, {
+      id: "north-b",
+      subject: second,
+    }),
+  ];
+  expect(currentVectors(rows).map((vector) => vector.speed)).toEqual([5, 13]);
+  expect(currentVectors([rows[0], rows[3]])).toEqual([]);
+});
+
+it("exports selected current vectors with units, source IDs and explicit uncertainty limits", () => {
+  const vectors = currentVectors([
+    component("current_eastward_velocity", -3, {
+      id: "east-1",
+      normalized_uncertainty: 0,
+      uncertainty: { value: 0, kind: "bound" },
+      provenance: {
+        ...component("x", 0).provenance,
+        source: 'Model "A", =danger',
+        source_url: "https://example.org/model",
+        method: "native_grid",
+      },
+    }),
+    component("current_northward_velocity", 4, {
+      id: "north-1",
+      provenance: {
+        ...component("x", 0).provenance,
+        source: 'Model "A", =danger',
+        source_url: "https://example.org/model",
+        method: "native_grid",
+      },
+    }),
+  ]);
+  const context = {
+    cacheKey: "cache-123",
+    cacheStatus: "stale_offline",
+    fetchedAt: "2026-04-04T00:00:00Z",
+    expiresAt: "2026-04-05T00:00:00Z",
+  };
+  const csv = currentVectorsCsv(vectors, context);
+  const [header, data] = csv.trimEnd().split("\r\n");
+  expect(header.split(",")).toContain("bearing_deg_true_north");
+  expect(header.split(",")).toContain("derived_uncertainty_status");
+  expect(header.split(",")).toContain("aggregation_provenance_key_json");
+  expect(data).toContain('"east-1","north-1"');
+  expect(data).toContain('"-3","4","5"');
+  expect(data).toContain('"0","bound"');
+  expect(data).toContain('"stale_offline"');
+  expect(header).toContain(
+    "source_acquired_at_utc,source_url,processing_method",
+  );
+  expect(data).toContain('"2026-04-04T00:00:00Z"');
+  expect(data).toContain('"https://example.org/model","native_grid"');
+  expect(data).toContain('"not_estimated"');
+  // CSV quoting must preserve the exact canonical provenance used to decide
+  // whether vectors can be pooled, including JSON quotes and cache identity.
+  const key = vectors[0].aggregationProvenanceKey;
+  const quotedProvenance = `"${key.replaceAll('"', '""')}"`;
+  expect(data).toContain(quotedProvenance);
+  expect(vectors[0].aggregationProvenanceKey).toContain('"cache"');
+  expect(data).toContain('"Model ""A"", =danger"');
+  expect(csv.endsWith("\r\n")).toBe(true);
+  expect(currentVectorsCsv([], context).split("\r\n")).toHaveLength(2);
+});
+
+it("neutralizes spreadsheet formulas in imported provenance without changing numeric signs", () => {
+  const east = component("current_eastward_velocity", -2, {
+    provenance: { ...component("x", 0).provenance, source: " \t=1+1" },
+  });
+  const north = component("current_northward_velocity", 0, {
+    provenance: { ...component("x", 0).provenance, source: " \t=1+1" },
+  });
+  const csv = currentVectorsCsv(currentVectors([east, north]), {
+    cacheKey: "+formula",
+    cacheStatus: "fresh",
+    fetchedAt: "2026-04-04T00:00:00Z",
+    expiresAt: "2026-04-05T00:00:00Z",
+  });
+  expect(csv).toContain('"\' \t=1+1"');
+  expect(csv).toContain('"\'+formula"');
+  expect(csv).toContain('"-2"');
+  expect(csv).toContain('"-79.5"');
+});
+
+it("preserves the depth datum and each component QC in exported vectors", () => {
+  const east = component("current_eastward_velocity", 1, {
+    depth_reference: "mean_sea_level",
+    qc: "accepted",
+  });
+  const north = component("current_northward_velocity", 2, {
+    depth_reference: "mean_sea_level",
+    qc: "unassessed",
+  });
+  const vectors = currentVectors([east, north]);
+  expect(vectors).toHaveLength(1);
+  expect(vectors[0]).toMatchObject({
+    depthReference: "mean_sea_level",
+    eastQc: "accepted",
+    northQc: "unassessed",
+  });
+  const csv = currentVectorsCsv(vectors, {
+    cacheKey: "local-cache",
+    cacheStatus: "stale_offline",
+    fetchedAt: "2026-04-04T00:00:00Z",
+    expiresAt: "2026-04-05T00:00:00Z",
+  });
+  expect(csv).toContain("depth_m,depth_reference,east_velocity_m_per_s");
+  expect(csv).toContain("east_qc,north_qc");
+  expect(csv).toContain('"mean_sea_level"');
+  expect(csv).toContain('"accepted","unassessed"');
+  // Identical numeric depths do not justify combining different depth datums.
+  expect(
+    currentVectors([east, { ...north, depth_reference: "sea_surface" }]),
+  ).toEqual([]);
+});
+
+it("distinguishes mean current speed from vector-mean flow and cancellation", () => {
+  const east = component("current_eastward_velocity", 1, { id: "east-a" });
+  const north = component("current_northward_velocity", 0, { id: "north-a" });
+  const oppositeEast = component("current_eastward_velocity", -1, {
+    id: "east-b",
+    location: { latitude: 32.6, longitude: -79.5, crs: "EPSG:4326" },
+  });
+  const oppositeNorth = component("current_northward_velocity", 0, {
+    id: "north-b",
+    location: { latitude: 32.6, longitude: -79.5, crs: "EPSG:4326" },
+  });
+  const vectors = currentVectors([east, north, oppositeEast, oppositeNorth]);
+  expect(vectors).toHaveLength(2);
+  expect(summarizeCurrentSlice(vectors)).toEqual({
+    count: 2,
+    meanSpeed: 1,
+    maximumSpeed: 1,
+    vectorMeanSpeed: 0,
+    vectorMeanBearing: null,
+  });
+  expect(summarizeCurrentSlice([])).toBeNull();
+});
+
+it("rejects pooling incompatible cache, method and subject", () => {
+  const base = component("current_eastward_velocity", 1);
+  const firstEast = { ...base, id: "east-a" };
+  const firstNorth = component("current_northward_velocity", 0, {
+    id: "north-a",
+  });
+  const otherLocation = {
+    latitude: 32.6,
+    longitude: -79.5,
+    crs: "EPSG:4326" as const,
+  };
+  for (const difference of [
+    { environmental_cache_key: "another-cache" },
+    {
+      provenance: {
+        ...base.provenance,
+        processing_parameters: { interpolation: "linear" },
+      },
+    },
+    {
+      provenance: {
+        ...base.provenance,
+        source_metadata: { dataset: { ensemble_member: 1 } },
+      },
+    },
+    { subject: { image_id: "00000000-0000-4000-8000-000000000005" } },
+  ]) {
+    const secondEast = component("current_eastward_velocity", 2, {
+      id: "east-b",
+      location: otherLocation,
+      ...difference,
+    });
+    const secondNorth = component("current_northward_velocity", 0, {
+      id: "north-b",
+      location: otherLocation,
+      ...difference,
+    });
+    const vectors = currentVectors([
+      firstEast,
+      firstNorth,
+      secondEast,
+      secondNorth,
+    ]);
+    expect(vectors).toHaveLength(2);
+    expect(summarizeCurrentSlice(vectors)).toBeNull();
+  }
+});
+
+it("summarizes equivalent processing regardless of JSON key order", () => {
+  const base = component("current_eastward_velocity", 1);
+  const firstProvenance = {
+    ...base.provenance,
+    processing_parameters: {
+      subset: { north: 33, south: 32 },
+      method: "native",
+    },
+  };
+  const secondProvenance = {
+    ...base.provenance,
+    processing_parameters: {
+      method: "native",
+      subset: { south: 32, north: 33 },
+    },
+  };
+  const otherLocation = {
+    latitude: 32.6,
+    longitude: -79.5,
+    crs: "EPSG:4326" as const,
+  };
+  const vectors = currentVectors([
+    component("current_eastward_velocity", 1, {
+      id: "east-a",
+      provenance: firstProvenance,
+    }),
+    component("current_northward_velocity", 0, {
+      id: "north-a",
+      provenance: firstProvenance,
+    }),
+    component("current_eastward_velocity", 2, {
+      id: "east-b",
+      location: otherLocation,
+      provenance: secondProvenance,
+    }),
+    component("current_northward_velocity", 0, {
+      id: "north-b",
+      location: otherLocation,
+      provenance: secondProvenance,
+    }),
+  ]);
+  expect(vectors).toHaveLength(2);
+  expect(summarizeCurrentSlice(vectors)).toMatchObject({
+    count: 2,
+    meanSpeed: 1.5,
+    maximumSpeed: 2,
+  });
+});
+
+it("does not aggregate incompatible current times or depth datums", () => {
+  const east = component("current_eastward_velocity", 3, { id: "east-a" });
+  const north = component("current_northward_velocity", 4, { id: "north-a" });
+  const laterEast = component("current_eastward_velocity", 0, {
+    id: "east-b",
+    observed_at: "2026-04-03T01:00:00Z",
+  });
+  const laterNorth = component("current_northward_velocity", 2, {
+    id: "north-b",
+    observed_at: "2026-04-03T01:00:00Z",
+  });
+  const vectors = currentVectors([east, north, laterEast, laterNorth]);
+  expect(vectors).toHaveLength(2);
+  expect(summarizeCurrentSlice([vectors[0]])).toMatchObject({
+    count: 1,
+    meanSpeed: 5,
+    maximumSpeed: 5,
+    vectorMeanSpeed: 5,
+  });
+  expect(summarizeCurrentSlice(vectors)).toBeNull();
+  expect(
+    summarizeCurrentSlice([
+      vectors[0],
+      { ...vectors[0], depthReference: "chart_datum" },
+    ]),
+  ).toBeNull();
+});

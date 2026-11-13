@@ -49,6 +49,8 @@ def _keyframe_payload(item: VideoTrackKeyframe) -> dict[str, object]:
         "bbox": list(item.bbox),
         "confidence": item.confidence,
     }
+    if item.timestamp_seconds is not None:
+        payload["timestamp_seconds"] = item.timestamp_seconds
     if item.keypoints is not None:
         payload["keypoints"] = [list(point) for point in item.keypoints]
     if item.mask_polygons is not None:
@@ -88,6 +90,13 @@ class VideoTrackService:
         for keyframe in keyframes:
             if keyframe.frame >= video.frame_count:
                 raise ValidationError("Track keyframes cannot exceed the video frame range")
+            if (
+                keyframe.timestamp_seconds is not None
+                and keyframe.timestamp_seconds > video.duration_seconds
+            ):
+                raise ValidationError(
+                    "Keyframe presentation timestamps cannot exceed the video duration"
+                )
             x, y, width, height = keyframe.bbox
             if x + width > video.width_px or y + height > video.height_px:
                 raise ValidationError("Track boxes cannot extend outside the source video bounds")
@@ -399,8 +408,19 @@ class VideoTrackService:
         frames: list[InterpolatedTrackFrame] = []
         for first, second in pairwise(keyframes):
             span = second.frame - first.frame
+            first_time = (
+                float(first.timestamp_seconds)
+                if first.timestamp_seconds is not None
+                else first.frame / video.fps
+            )
+            second_time = (
+                float(second.timestamp_seconds)
+                if second.timestamp_seconds is not None
+                else second.frame / video.fps
+            )
             for frame in range(first.frame, second.frame):
                 ratio = 0.0 if track.interpolation == "hold" else (frame - first.frame) / span
+                time_ratio = (frame - first.frame) / span
                 bbox = (
                     first.bbox[0] + (second.bbox[0] - first.bbox[0]) * ratio,
                     first.bbox[1] + (second.bbox[1] - first.bbox[1]) * ratio,
@@ -415,7 +435,7 @@ class VideoTrackService:
                 frames.append(
                     InterpolatedTrackFrame(
                         frame=frame,
-                        timestamp_seconds=frame / video.fps,
+                        timestamp_seconds=first_time + (second_time - first_time) * time_ratio,
                         bbox=bbox,
                         center_x=location.pixel_x,
                         center_y=location.pixel_y,
@@ -431,7 +451,11 @@ class VideoTrackService:
         frames.append(
             InterpolatedTrackFrame(
                 frame=last.frame,
-                timestamp_seconds=last.frame / video.fps,
+                timestamp_seconds=(
+                    float(last.timestamp_seconds)
+                    if last.timestamp_seconds is not None
+                    else last.frame / video.fps
+                ),
                 bbox=last.bbox,
                 center_x=location.pixel_x,
                 center_y=location.pixel_y,
@@ -455,8 +479,12 @@ class VideoTrackService:
             hypot(second[0] - first[0], second[1] - first[1]) for first, second in pairwise(centers)
         ]
         path_length = sum(distances)
-        duration = max(0.0, (frames[-1].frame - frames[0].frame) / video.fps)
-        speeds = [distance * video.fps for distance in distances]
+        duration = max(0.0, frames[-1].timestamp_seconds - frames[0].timestamp_seconds)
+        speeds = [
+            distance / (second.timestamp_seconds - first.timestamp_seconds)
+            for distance, (first, second) in zip(distances, pairwise(frames), strict=True)
+            if second.timestamp_seconds > first.timestamp_seconds
+        ]
         displacement = hypot(
             centers[-1][0] - centers[0][0],
             centers[-1][1] - centers[0][1],

@@ -165,13 +165,13 @@ def test_payload_exposes_versioned_algorithm_contract() -> None:
     assert algorithm["version"] == ("opencv-dji-enu-flat-wgs84-v3")
     assert algorithm["surface_model"] == ("local_horizontal_plane")
     assert algorithm["minimum_ray_depression_deg"] == pytest.approx(8.0)
-    assert algorithm["synchronization_version"] == ("nearest-frame-time-v1")
+    assert algorithm["synchronization_version"] == ("explicit-pts-evidence-gated-srt-utc-v2")
 
 
 def test_payload_exposes_mavic3t_dynamic_camera_identity() -> None:
     payload = canonical_configuration_payload(snapshot())
 
-    assert payload["schema_version"] == "georeferencing-configuration-0003"
+    assert payload["schema_version"] == "georeferencing-configuration-0004"
 
     dynamic_camera = payload["dynamic_camera"]
 
