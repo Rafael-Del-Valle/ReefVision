@@ -166,6 +166,7 @@ interface VisibilityMutationInput {
   target: VisibilityMutationTarget;
   hiddenClassIds?: string[];
   expectedUpdatedAt?: string | null;
+  expectedRecordId?: string | null;
 }
 
 interface VisibilityMutationResult {
@@ -1025,6 +1026,7 @@ export function AnnotationEditor({
         const payload = {
           hidden_class_ids: input.hiddenClassIds ?? [],
           expected_updated_at: input.expectedUpdatedAt ?? null,
+          expected_record_id: input.expectedRecordId ?? null,
         };
         const state =
           input.target === "my_preference"
@@ -1060,12 +1062,14 @@ export function AnnotationEditor({
           input.projectId,
           input.layerType,
           input.expectedUpdatedAt,
+          input.expectedRecordId,
         );
       } else {
         await deleteProjectClassVisibilityDefault(
           input.projectId,
           input.layerType,
           input.expectedUpdatedAt,
+          input.expectedRecordId,
         );
       }
       return {
@@ -1567,10 +1571,12 @@ export function AnnotationEditor({
       target: "my_preference",
       hiddenClassIds: currentLayerVisibility.hiddenClassIds,
       expectedUpdatedAt: currentLayerVisibility.userPreference.updated_at,
+      expectedRecordId: currentLayerVisibility.userPreference.record_id,
     });
   }, [
     currentLayerVisibility.hiddenClassIds,
     currentLayerVisibility.userPreference.updated_at,
+    currentLayerVisibility.userPreference.record_id,
     selectedVisibilityLayer,
     project.id,
     visibilityMutation,
@@ -1584,10 +1590,12 @@ export function AnnotationEditor({
       target: "project_default",
       hiddenClassIds: currentLayerVisibility.hiddenClassIds,
       expectedUpdatedAt: currentLayerVisibility.projectDefault.updated_at,
+      expectedRecordId: currentLayerVisibility.projectDefault.record_id,
     });
   }, [
     currentLayerVisibility.hiddenClassIds,
     currentLayerVisibility.projectDefault.updated_at,
+    currentLayerVisibility.projectDefault.record_id,
     selectedVisibilityLayer,
     project.id,
     visibilityMutation,
@@ -1602,6 +1610,7 @@ export function AnnotationEditor({
       layerType: selectedVisibilityLayer,
       target: "my_preference",
       expectedUpdatedAt: preference.updated_at,
+      expectedRecordId: preference.record_id,
     });
   }, [
     currentLayerVisibility.userPreference,
@@ -1629,9 +1638,11 @@ export function AnnotationEditor({
       layerType: selectedVisibilityLayer,
       target: "project_default",
       expectedUpdatedAt,
+      expectedRecordId: currentLayerVisibility.projectDefault.record_id,
     });
   }, [
     currentLayerVisibility.projectDefault.saved,
+    currentLayerVisibility.projectDefault.record_id,
     currentLayerVisibility.projectDefault.updated_at,
     project.id,
     selectedVisibilityLayer,
