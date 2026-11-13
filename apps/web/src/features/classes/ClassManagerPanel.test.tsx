@@ -85,12 +85,160 @@ function sourceClassRow() {
   return row as HTMLLIElement;
 }
 
+function classUsage(canDelete: boolean, total = canDelete ? 0 : 1) {
+  return {
+    class_id: "class-1",
+    project_id: project.id,
+    class_name: "Muricea Closed",
+    is_active: true,
+    archived_at: null,
+    total_references: total,
+    mutable_reference_count: total,
+    immutable_reference_count: 0,
+    can_delete: canDelete,
+    delete_blockers: [],
+    compatibility_warnings: [],
+    counts: [],
+  };
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
 
 describe("ClassManagerPanel", () => {
+
+  it("requires a completed usage review before enabling deletion", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    let resolveUsage: ((response: Response) => void) | undefined;
+    let requests = 0;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input, init) => {
+        const url = String(input);
+        if (url.endsWith(`/projects/${project.id}/classes/class-1/usage`)) {
+          requests += 1;
+          if (requests === 1) {
+            return new Promise<Response>((resolve) => {
+              resolveUsage = resolve;
+            });
+          }
+          return jsonResponse(classUsage(true));
+        }
+        if (url.endsWith("/classes/class-1") && init?.method === "DELETE") {
+          return new Response(null, { status: 204 });
+        }
+        throw new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`);
+      },
+    );
+    renderPanel();
+    const row = sourceClassRow();
+    const remove = within(row).getByRole("button", { name: "Delete unused" });
+    expect(remove).toBeDisabled();
+    expect(
+      within(row).getByText(/Open Usage to verify class references/),
+    ).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole("button", { name: "Usage" }));
+    await waitFor(() => expect(resolveUsage).toBeDefined());
+    expect(remove).toBeDisabled();
+    resolveUsage?.(jsonResponse(classUsage(true)));
+    await waitFor(() => expect(remove).toBeEnabled());
+    expect(
+      within(row).getByText(/has no references and is eligible for deletion/),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      within(row).getByRole("button", { name: "Hide usage" }),
+    );
+    expect(remove).toBeDisabled();
+    await userEvent.click(within(row).getByRole("button", { name: "Usage" }));
+    await waitFor(() => expect(remove).toBeEnabled());
+    await userEvent.click(remove);
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) =>
+            String(input).endsWith("/classes/class-1") &&
+            init?.method === "DELETE",
+        ),
+      ).toBe(true),
+    );
+  });
+
+  it.each([
+    ["referenced", 200],
+    ["unavailable", 503],
+  ] as const)("fails closed when usage is %s", async (_reason, status) => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input) => {
+        const url = String(input);
+        if (url.endsWith(`/projects/${project.id}/classes/class-1/usage`)) {
+          return status === 200
+            ? jsonResponse(classUsage(false))
+            : jsonResponse({ detail: "Usage unavailable" }, 503);
+        }
+        throw new Error(`Unexpected request: GET ${url}`);
+      },
+    );
+    renderPanel();
+    const row = sourceClassRow();
+    const remove = within(row).getByRole("button", { name: "Delete unused" });
+    await userEvent.click(within(row).getByRole("button", { name: "Usage" }));
+    if (status === 200) {
+      expect(
+        await within(row).findByText("1 total references"),
+      ).toBeInTheDocument();
+      expect(
+        within(row).getByText(/No itemized references are available/),
+      ).toBeInTheDocument();
+    } else {
+      expect(
+        await within(row).findByText(/Class usage could not be verified/),
+      ).toBeInTheDocument();
+    }
+    expect(remove).toBeDisabled();
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/classes/class-1") &&
+          init?.method === "DELETE",
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a cached eligible result while usage is being refetched", async () => {
+    let resolveRefresh: ((response: Response) => void) | undefined;
+    let reads = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith(`/projects/${project.id}/classes/class-1/usage`)) {
+        reads += 1;
+        if (reads === 2) {
+          return new Promise<Response>((resolve) => {
+            resolveRefresh = resolve;
+          });
+        }
+        return jsonResponse(classUsage(true));
+      }
+      throw new Error(`Unexpected request: GET ${url}`);
+    });
+    renderPanel();
+    const row = sourceClassRow();
+    const remove = within(row).getByRole("button", { name: "Delete unused" });
+    await userEvent.click(within(row).getByRole("button", { name: "Usage" }));
+    await waitFor(() => expect(remove).toBeEnabled());
+    await userEvent.click(
+      within(row).getByRole("button", { name: "Hide usage" }),
+    );
+    await userEvent.click(within(row).getByRole("button", { name: "Usage" }));
+    await waitFor(() => expect(resolveRefresh).toBeDefined());
+    expect(remove).toBeDisabled();
+    resolveRefresh?.(jsonResponse(classUsage(false)));
+    expect(
+      await within(row).findByText("1 total references"),
+    ).toBeInTheDocument();
+    expect(remove).toBeDisabled();
+  });
+
   it("previews and executes a reassignment with the reviewed checksum", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const fetchMock = vi

@@ -286,7 +286,12 @@ function ClassRow({
     usage.error;
 
   const usageRows = usage.data?.counts.filter((item) => item.count > 0) ?? [];
-  const canDelete = usage.data?.can_delete ?? true;
+  // Missing, failed, or refetching reference evidence cannot authorize deletion.
+  const canDelete =
+    showUsage &&
+    usage.isSuccess &&
+    !usage.isFetching &&
+    usage.data?.can_delete === true;
 
   return (
     <li className={`class-row ${labelClass.is_active ? "" : "inactive"}`}>
@@ -384,6 +389,21 @@ function ClassRow({
           Delete unused
         </button>
       </div>
+      {!showUsage && (
+        <p className="annotation-helper">
+          Open Usage to verify class references before deleting.
+        </p>
+      )}
+      {showUsage && usage.isFetching && (
+        <p className="annotation-helper" role="status">
+          Checking current class references before deletion...
+        </p>
+      )}
+      {showUsage && usage.isError && (
+        <p className="form-error" role="alert">
+          Class usage could not be verified. Deletion remains disabled.
+        </p>
+      )}
 
       <div className="class-merge-panel">
         <label>
@@ -543,7 +563,7 @@ function ClassRow({
         </div>
       </div>
 
-      {showUsage && usage.data && (
+      {showUsage && usage.isSuccess && !usage.isFetching && usage.data && (
         <div className="class-usage-card">
           <div className="class-usage-summary">
             <strong>{usage.data.total_references} total references</strong>
@@ -554,7 +574,9 @@ function ClassRow({
           </div>
           {usageRows.length === 0 ? (
             <p className="annotation-helper">
-              This class is unused and can be deleted safely.
+              {usage.data.total_references === 0 && usage.data.can_delete
+                ? "This class has no references and is eligible for deletion."
+                : "No itemized references are available; check the reference total and blockers."}
             </p>
           ) : (
             <div className="class-usage-list">
