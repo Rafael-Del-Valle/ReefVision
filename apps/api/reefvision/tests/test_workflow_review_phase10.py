@@ -434,3 +434,58 @@ def test_review_resume_rejects_undeclared_and_ambiguous_same_port_outputs(
     finished = client.get(f"/api/v1/workflow-runs/{run_id}")
     assert finished.status_code == 200, finished.text
     assert finished.json()["run"]["status"] == "succeeded"
+
+
+def test_review_resume_rejects_post_pause_frozen_parameter_mutation(
+    client: TestClient,
+) -> None:
+    # A persisted, completed upstream node can be modified while a human
+    # reviews the output. Approval must not certify altered training/model
+    # parameters that differ from the checksum-pinned workflow graph.
+    _, run_id, job_id = _queue_seeded_review_run(client)
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(app.state.settings, app.state.session_factory, job_id) is True
+
+    with app.state.session_factory() as session:
+        nodes = {
+            node.node_id: node
+            for node in session.scalars(
+                select(WorkflowNodeRun).where(WorkflowNodeRun.workflow_run_id == run_id)
+            )
+        }
+        assert nodes["model"].status == "succeeded"
+        assert nodes["review"].status == "waiting_for_review"
+        original_parameters = dict(nodes["model"].parameters_json or {})
+        assert original_parameters.get("model_id")
+        review_node_id = nodes["review"].id
+        nodes["model"].parameters_json = {
+            **original_parameters,
+            "model_id": "tampered-after-review-paused",
+        }
+        session.commit()
+
+    endpoint = f"/api/v1/workflow-node-runs/{review_node_id}/resume-review"
+    approval = {"reviewed_by": "scientist", "note": "I reviewed the consensus."}
+    rejected = client.post(endpoint, json=approval)
+    assert rejected.status_code == 409, rejected.text
+    assert "node lineage does not match saved graph" in rejected.text
+
+    with app.state.session_factory() as session:
+        run = session.get(WorkflowRun, run_id)
+        job = session.get(Job, job_id)
+        model_node = session.get(WorkflowNodeRun, nodes["model"].id)
+        review_node = session.get(WorkflowNodeRun, review_node_id)
+        assert run is not None and run.status == "waiting_for_review"
+        assert job is not None and job.status == "waiting_for_review"
+        assert review_node is not None and review_node.status == "waiting_for_review"
+        assert "review_approval" not in (review_node.result_json or {})
+        assert model_node is not None
+        model_node.parameters_json = original_parameters
+        session.commit()
+
+    accepted = client.post(endpoint, json=approval)
+    assert accepted.status_code == 202, accepted.text
+    assert process_workflow_run_job(app.state.settings, app.state.session_factory, job_id) is True
+    finished = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert finished.status_code == 200, finished.text
+    assert finished.json()["run"]["status"] == "succeeded"
