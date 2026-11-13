@@ -37,14 +37,18 @@ def _create_review_event_parents(connection: object) -> None:
 
 def _create_review_event_history_indexes(connection: object) -> None:
     """Preserve the original ascending, non-unique reviewer history indexes."""
-    connection.execute(text(
-        "CREATE INDEX ix_review_queue_item_events_item_created "
-        "ON review_queue_item_events (review_queue_item_id, created_at)"
-    ))
-    connection.execute(text(
-        "CREATE INDEX ix_review_queue_item_events_queue_created "
-        "ON review_queue_item_events (review_queue_id, created_at)"
-    ))
+    connection.execute(
+        text(
+            "CREATE INDEX ix_review_queue_item_events_item_created "
+            "ON review_queue_item_events (review_queue_item_id, created_at)"
+        )
+    )
+    connection.execute(
+        text(
+            "CREATE INDEX ix_review_queue_item_events_queue_created "
+            "ON review_queue_item_events (review_queue_id, created_at)"
+        )
+    )
 
 
 @pytest.mark.parametrize("revision", ["0038", "0039", "0040", "0041"])
@@ -107,7 +111,8 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
                 "actor TEXT NOT NULL, comment TEXT, assignee TEXT, "
                 "created_at TEXT NOT NULL, "
                 "FOREIGN KEY (review_queue_id) REFERENCES review_queues(id) ON DELETE CASCADE, "
-                "FOREIGN KEY (review_queue_item_id) REFERENCES review_queue_items(id) ON DELETE CASCADE, "
+                "FOREIGN KEY (review_queue_item_id) "
+                "REFERENCES review_queue_items(id) ON DELETE CASCADE, "
                 "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE, "
                 "CONSTRAINT uq_review_queue_item_event_request "
                 "UNIQUE (review_queue_item_id, client_request_id)"
@@ -142,7 +147,8 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
                 text(
                     "CREATE TABLE review_queue_bulk_requests ("
                     "id TEXT NOT NULL PRIMARY KEY, "
-                    "review_queue_id TEXT NOT NULL REFERENCES review_queues(id) ON DELETE RESTRICT, "
+                    "review_queue_id TEXT NOT NULL "
+                    "REFERENCES review_queues(id) ON DELETE RESTRICT, "
                     "project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT, "
                     "action TEXT NOT NULL, actor TEXT NOT NULL, reason TEXT, "
                     "item_ids_json JSON NOT NULL, created_at TEXT NOT NULL)"
@@ -179,10 +185,7 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
     with engine.connect() as connection:
         assert connection.execute(schema_query).all() == schema_before
         for table, expected in parents_before.items():
-            assert (
-                connection.execute(text(f"SELECT id FROM {table} ORDER BY id")).all()
-                == expected
-            )
+            assert connection.execute(text(f"SELECT id FROM {table} ORDER BY id")).all() == expected
         if revision == "0041":
             # Desktop preflight must not silently modify the persisted bulk
             # request identity, researcher attribution, action, or evidence.
@@ -193,8 +196,14 @@ def test_desktop_accepts_native_review_lineage_at_head_without_upgrade(
                     "FROM review_queue_bulk_requests"
                 )
             ).one() == (
-                "bulk-preserved", "queue-1", "project-1", "approve",
-                "researcher", None, '["item-1"]', "2026-11-09",
+                "bulk-preserved",
+                "queue-1",
+                "project-1",
+                "approve",
+                "researcher",
+                None,
+                '["item-1"]',
+                "2026-11-09",
             )
         assert connection.execute(text("PRAGMA foreign_key_check")).all() == []
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
@@ -239,11 +248,13 @@ def test_desktop_rejects_defaulted_audit_event_type_at_head(
             )
         )
         connection.execute(
-            text("INSERT INTO review_queue_item_events "
+            text(
+                "INSERT INTO review_queue_item_events "
                 "(id, review_queue_id, review_queue_item_id, project_id, "
                 "client_request_id, actor, created_at) "
                 "VALUES ('forged-comment', 'queue-1', 'item-1', 'project-1', "
-                "'request-1', 'researcher', '2026-11-09')")
+                "'request-1', 'researcher', '2026-11-09')"
+            )
         )
     _prepare_desktop_migration(monkeypatch, engine, head=revision)
     settings = SimpleNamespace(resolved_database_url=str(engine.url))
@@ -335,7 +346,8 @@ def test_desktop_verifies_successful_native_review_migration(
                     "actor TEXT NOT NULL, comment TEXT, assignee TEXT, "
                     "created_at TEXT NOT NULL, "
                     "FOREIGN KEY (review_queue_id) REFERENCES review_queues(id) ON DELETE CASCADE, "
-                    "FOREIGN KEY (review_queue_item_id) REFERENCES review_queue_items(id) ON DELETE CASCADE, "
+                    "FOREIGN KEY (review_queue_item_id) "
+                    "REFERENCES review_queue_items(id) ON DELETE CASCADE, "
                     "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE, "
                     "CONSTRAINT uq_review_queue_item_event_request "
                     "UNIQUE (review_queue_item_id, client_request_id), "

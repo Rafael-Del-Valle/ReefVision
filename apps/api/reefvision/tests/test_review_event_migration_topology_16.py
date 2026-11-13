@@ -3,11 +3,11 @@
 import importlib.util
 from pathlib import Path
 
+import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
-import pytest
 
 from reefvision.db.review_event_topology_16 import assert_review_event_relationship_topology
 
@@ -66,15 +66,21 @@ def test_review_event_migration_retains_foreign_keys_and_ordering_indexes() -> N
                 )
             ).all()
             assert_review_event_relationship_topology(connection)
-            assert connection.execute(
-                text("SELECT * FROM review_queue_item_events WHERE id='event'")
-            ).one() == before
-            assert connection.execute(
-                text(
-                    "SELECT type, name, sql FROM sqlite_master "
-                    "WHERE tbl_name='review_queue_item_events' ORDER BY type, name"
-                )
-            ).all() == schema_before
+            assert (
+                connection.execute(
+                    text("SELECT * FROM review_queue_item_events WHERE id='event'")
+                ).one()
+                == before
+            )
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT type, name, sql FROM sqlite_master "
+                        "WHERE tbl_name='review_queue_item_events' ORDER BY type, name"
+                    )
+                ).all()
+                == schema_before
+            )
 
             inspector = inspect(connection)
             foreign_keys = {
@@ -160,19 +166,35 @@ def test_review_event_migration_enforces_cascading_links_with_foreign_keys_enabl
                 values[missing_column] = "missing"
                 with pytest.raises(IntegrityError):
                     connection.execute(event_sql, values)
-            assert connection.execute(
-                text("SELECT COUNT(*) FROM review_queue_item_events")
-            ).scalar_one() == 0
-            connection.execute(
-                event_sql, {"id": "valid", "queue": "parent", "item": "parent", "project": "parent", "request": "good"}
+            assert (
+                connection.execute(
+                    text("SELECT COUNT(*) FROM review_queue_item_events")
+                ).scalar_one()
+                == 0
             )
-            assert connection.execute(
-                text("SELECT COUNT(*) FROM review_queue_item_events")
-            ).scalar_one() == 1
+            connection.execute(
+                event_sql,
+                {
+                    "id": "valid",
+                    "queue": "parent",
+                    "item": "parent",
+                    "project": "parent",
+                    "request": "good",
+                },
+            )
+            assert (
+                connection.execute(
+                    text("SELECT COUNT(*) FROM review_queue_item_events")
+                ).scalar_one()
+                == 1
+            )
             connection.execute(text(f"DELETE FROM {parent_to_delete} WHERE id='parent'"))
-            assert connection.execute(
-                text("SELECT COUNT(*) FROM review_queue_item_events")
-            ).scalar_one() == 0
+            assert (
+                connection.execute(
+                    text("SELECT COUNT(*) FROM review_queue_item_events")
+                ).scalar_one()
+                == 0
+            )
     finally:
         engine.dispose()
 
@@ -222,10 +244,7 @@ def test_review_event_migration_rejects_orphaned_parent_reassignment(
             }[changed_column]
             with pytest.raises(IntegrityError):
                 connection.execute(
-                    text(
-                        f"UPDATE review_queue_item_events SET {column}='missing' "
-                        "WHERE id='event'"
-                    )
+                    text(f"UPDATE review_queue_item_events SET {column}='missing' WHERE id='event'")
                 )
             # A rejected reassignment must preserve immutable reviewer attribution.
             row = connection.execute(

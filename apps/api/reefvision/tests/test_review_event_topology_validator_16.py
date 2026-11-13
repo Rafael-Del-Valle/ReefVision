@@ -60,7 +60,8 @@ def test_review_event_topology_is_read_only_and_fails_closed(broken: str) -> Non
                     "CREATE TABLE review_queue_item_events ("
                     "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
                     "project_id TEXT, created_at TEXT, "
-                    f"FOREIGN KEY (review_queue_id) REFERENCES review_queues(id) ON DELETE {delete}, "
+                    "FOREIGN KEY (review_queue_id) REFERENCES review_queues(id) "
+                    f"ON DELETE {delete}, "
                     "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
                     f"{item_fk}{extra_fk}{duplicate_fk})"
                 )
@@ -148,9 +149,11 @@ def test_non_sqlite_composite_foreign_key_rejected_without_querying_rows() -> No
             "options": {"ondelete": "CASCADE"},
         }
     ]
-    with patch("reefvision.db.review_event_topology_16.inspect", return_value=inspector):
-        with pytest.raises(RuntimeError, match="composite or incomplete"):
-            assert_review_event_relationship_topology(connection)
+    with (
+        patch("reefvision.db.review_event_topology_16.inspect", return_value=inspector),
+        pytest.raises(RuntimeError, match="composite or incomplete"),
+    ):
+        assert_review_event_relationship_topology(connection)
     connection.execute.assert_not_called()
     inspector.get_indexes.assert_not_called()
 
@@ -191,9 +194,11 @@ def test_non_sqlite_duplicate_inspection_entries_fail_closed(duplicate: str) -> 
         indexes.append(dict(indexes[0]))
     inspector.get_foreign_keys.return_value = foreign_keys
     inspector.get_indexes.return_value = indexes
-    with patch("reefvision.db.review_event_topology_16.inspect", return_value=inspector):
-        with pytest.raises(RuntimeError, match="duplicate"):
-            assert_review_event_relationship_topology(connection)
+    with (
+        patch("reefvision.db.review_event_topology_16.inspect", return_value=inspector),
+        pytest.raises(RuntimeError, match="duplicate"),
+    ):
+        assert_review_event_relationship_topology(connection)
     connection.execute.assert_not_called()
     if duplicate == "foreign_key":
         inspector.get_indexes.assert_not_called()

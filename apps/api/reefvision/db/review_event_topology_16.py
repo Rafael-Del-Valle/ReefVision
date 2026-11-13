@@ -85,10 +85,7 @@ def assert_review_event_relationship_topology(connection: Connection) -> None:
             "Unsafe QC review-event history index topology: unique, partial, or "
             "expression index. Preserve reviewer history."
         )
-    indexes = {
-        index["name"]: tuple(index["column_names"])
-        for index in inspected_indexes
-    }
+    indexes = {index["name"]: tuple(index["column_names"]) for index in inspected_indexes}
     if len(inspected_indexes) != len(indexes):
         raise RuntimeError(
             "Unsafe QC review-event history index topology: duplicate index name. "
@@ -104,9 +101,7 @@ def assert_review_event_relationship_topology(connection: Connection) -> None:
                 continue
             key_columns = [
                 row
-                for row in connection.execute(
-                    text(f"PRAGMA index_xinfo({index_name})")
-                ).mappings()
+                for row in connection.execute(text(f"PRAGMA index_xinfo({index_name})")).mappings()
                 if row["key"]
             ]
             if any(str(row["coll"]).upper() != "BINARY" for row in key_columns):

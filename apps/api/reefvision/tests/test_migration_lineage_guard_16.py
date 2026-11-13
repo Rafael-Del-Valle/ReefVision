@@ -68,7 +68,8 @@ def test_review_lineage_is_accepted_without_writes(revision: str) -> None:
         # ascending history indexes; previous positive fixture omitted these.
         schema += (
             ", FOREIGN KEY (review_queue_id) REFERENCES review_queues(id) ON DELETE CASCADE"
-            ", FOREIGN KEY (review_queue_item_id) REFERENCES review_queue_items(id) ON DELETE CASCADE"
+            ", FOREIGN KEY (review_queue_item_id) "
+            "REFERENCES review_queue_items(id) ON DELETE CASCADE"
             ", FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
         )
         for parent, parent_id in (
