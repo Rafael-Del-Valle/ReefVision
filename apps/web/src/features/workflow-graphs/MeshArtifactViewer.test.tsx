@@ -676,7 +676,10 @@ describe("MeshArtifactViewer", () => {
     expect(parseMeshRenderArtifact(valid)?.routeInspections[0]).toMatchObject({
       lengthScaleIntervalM: [9e-17, 1.1e-16],
       edgeScaleIntervalsM: [[9e-17, 1.1e-16]],
-      cumulativeScaleIntervalsM: [[0, 0], [9e-17, 1.1e-16]],
+      cumulativeScaleIntervalsM: [
+        [0, 0],
+        [9e-17, 1.1e-16],
+      ],
     });
     expect(
       parseMeshRenderArtifact({
