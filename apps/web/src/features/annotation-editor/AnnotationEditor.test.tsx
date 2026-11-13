@@ -1209,6 +1209,128 @@ describe("AnnotationEditor", () => {
     expect(panel.queryByText("Muricea Closed")).not.toBeInTheDocument();
   });
 
+  it("reveals only highlighted QC observations temporarily without changing saved class visibility", async () => {
+    const savedVisibility = buildVisibilityBundle({
+      userPreferences: {
+        annotations: ["class-1"],
+        predictions: ["class-1"],
+      },
+    });
+    const anotherAnnotation = {
+      ...session.annotations[0],
+      id: "annotation-2",
+      x_min: 500,
+      x_max: 600,
+    };
+    const anotherPrediction = {
+      ...pendingProposal,
+      id: "proposal-2",
+      x_min: 700,
+      x_max: 800,
+    };
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (
+          url.endsWith(`/images/${session.image.id}/annotations`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse({
+            ...session,
+            annotations: [...session.annotations, anotherAnnotation],
+          });
+        }
+        if (
+          url.endsWith(`/projects/${project.id}/class-visibility`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse(savedVisibility);
+        }
+        if (
+          url.includes(`/images/${session.image.id}/prediction-proposals`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse({
+            items: [pendingProposal, anotherPrediction],
+            counts: { pending: 2 },
+          });
+        }
+        const fallback = handleDefaultEditorRequests(url, init);
+        if (fallback) return fallback;
+        throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+      });
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const qcContext = {
+      returnLabel: "Return to QC queue",
+      contextTitle: "Review highlighted scientific evidence",
+      highlightAnnotationIds: ["annotation-1"],
+      highlightPredictionIds: ["proposal-1"],
+    };
+    const editorFor = (launchContext?: typeof qcContext) => (
+      <QueryClientProvider client={queryClient}>
+        <AnnotationEditor
+          project={project}
+          initialImageId={session.image.id}
+          launchContext={launchContext}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(editorFor(qcContext));
+    expect(
+      await screen.findByTestId("annotation-annotation-1"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("prediction-proposal-1"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("annotation-annotation-2")).toBeNull();
+    expect(screen.queryByTestId("prediction-proposal-2")).toBeNull();
+    expect(
+      screen.getByTestId("review-evidence-reveal"),
+    ).toHaveTextContent("Saved visibility and scientific records are unchanged.");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Hide boxes (H)" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Hide predictions" }),
+    );
+    expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
+    expect(screen.getByTestId("prediction-proposal-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("annotation-annotation-2")).toBeNull();
+    expect(screen.queryByTestId("prediction-proposal-2")).toBeNull();
+
+    // Closing/replacing the review launch removes the ephemeral exception.
+    rerender(editorFor());
+    expect(screen.queryByTestId("review-evidence-reveal")).toBeNull();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show boxes (H)" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show predictions" }),
+    );
+    expect(screen.queryByTestId("annotation-annotation-1")).toBeNull();
+    expect(screen.queryByTestId("prediction-proposal-1")).toBeNull();
+    expect(
+      queryClient.getQueryData<ClassVisibilityBundle>([
+        "class-visibility",
+        project.id,
+      ]),
+    ).toEqual(savedVisibility);
+    expect(
+      fetchMock.mock.calls.filter(([, init]) =>
+        ["POST", "PUT", "PATCH", "DELETE"].includes(init?.method ?? "GET"),
+      ),
+    ).toHaveLength(0);
+  });
+
   it("updates class visibility locally without refetching annotations", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
