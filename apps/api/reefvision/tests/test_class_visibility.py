@@ -4,7 +4,7 @@ from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
@@ -498,3 +498,79 @@ def test_conditional_visibility_revisions_advance_during_clock_rollback(
     saved = bundle.json()[scope_key]["annotations"]
     assert saved["hidden_class_ids"] == [label_class["id"]]
     assert saved["updated_at"] == third_stamp
+
+
+@pytest.mark.parametrize("scope", ["preferences", "defaults"])
+def test_visibility_row_identity_rejects_recreated_scope(
+    tmp_path: Path, scope: str
+) -> None:
+    """A stale row ID must fail even when a recreated row has the same timestamp."""
+    settings = Settings(
+        env="test",
+        data_dir=tmp_path / "aba-data",
+        database_url=f"sqlite:///{(tmp_path / 'aba.db').as_posix()}",
+        web_origin="http://testserver",
+        background_worker_enabled=False,
+    )
+    app = create_app(settings)
+    Base.metadata.create_all(app.state.engine)
+    with TestClient(app) as client:
+        project = create_project(client)
+        label_class = create_label_class(
+            client, project["id"], class_index=0,
+            name="Swiftia Open", display_color="#C74343",
+        )
+        path = f"/api/v1/projects/{project['id']}/class-visibility/{scope}/annotations"
+        initial = client.put(
+            path, json={"hidden_class_ids": [], "expected_updated_at": None}
+        )
+        assert initial.status_code == 200, initial.text
+        old = initial.json()
+        assert old["record_id"]
+        precondition = {
+            "expected_updated_at": old["updated_at"],
+            "expected_record_id": old["record_id"],
+        }
+        assert client.delete(path, params=precondition).status_code == 204
+        restored = client.put(
+            path, json={
+                "hidden_class_ids": [label_class["id"]],
+                "expected_updated_at": None,
+            },
+        )
+        assert restored.status_code == 200, restored.text
+        new = restored.json()
+        assert new["record_id"] != old["record_id"]
+        model = (
+            ClassVisibilityPreference
+            if scope == "preferences"
+            else ProjectClassVisibilityDefault
+        )
+        with Session(app.state.engine) as db:
+            db.execute(
+                update(model)
+                .where(model.id == new["record_id"])
+                .values(updated_at=datetime.fromisoformat(old["updated_at"]))
+            )
+            db.commit()
+
+        assert client.put(
+            path, json={"hidden_class_ids": [], **precondition}
+        ).status_code == 409
+        assert client.delete(path, params=precondition).status_code == 409
+        saved = client.get(
+            f"/api/v1/projects/{project['id']}/class-visibility"
+        ).json()["user_preferences" if scope == "preferences" else "project_defaults"]["annotations"]
+        assert saved["record_id"] == new["record_id"]
+        assert saved["hidden_class_ids"] == [label_class["id"]]
+        valid = client.put(
+            path,
+            json={
+                "hidden_class_ids": [],
+                "expected_updated_at": saved["updated_at"],
+                "expected_record_id": saved["record_id"],
+            },
+        )
+        assert valid.status_code == 200, valid.text
+        assert valid.json()["record_id"] == new["record_id"]
+    Base.metadata.drop_all(app.state.engine)
