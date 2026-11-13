@@ -97,9 +97,7 @@ def _input_artifacts(session: Session, node_run: WorkflowNodeRun) -> list[Workfl
     # audit event. Recheck the complete node identity, frozen parameters, and
     # execution order before recording review approval or post-review outputs.
     saved_nodes = list(
-        session.scalars(
-            select(WorkflowNodeRun).where(WorkflowNodeRun.workflow_run_id == run.id)
-        )
+        session.scalars(select(WorkflowNodeRun).where(WorkflowNodeRun.workflow_run_id == run.id))
     )
     verify_workflow_run_node_graph_lineage(graph, saved_nodes)
     raw_edges = graph.graph_json.get("edges")
