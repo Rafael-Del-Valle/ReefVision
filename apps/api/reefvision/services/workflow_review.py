@@ -181,16 +181,37 @@ def _disagreement_artifact_for_consensus(
     session: Session,
     consensus_artifact: WorkflowArtifact,
 ) -> WorkflowArtifact | None:
-    return session.scalar(
-        select(WorkflowArtifact)
-        .where(
-            WorkflowArtifact.workflow_run_id == consensus_artifact.workflow_run_id,
-            WorkflowArtifact.producer_node_run_id == consensus_artifact.producer_node_run_id,
-            WorkflowArtifact.data_type == "detection_disagreements",
+    disagreements = list(
+        session.scalars(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.workflow_run_id == consensus_artifact.workflow_run_id,
+                WorkflowArtifact.producer_node_run_id == consensus_artifact.producer_node_run_id,
+                WorkflowArtifact.data_type == "detection_disagreements",
+            )
         )
-        .order_by(WorkflowArtifact.created_at.desc(), WorkflowArtifact.id.desc())
-        .limit(1)
     )
+    if not disagreements:
+        return None
+    # Never choose the newest of multiple checksum-valid outputs: that would
+    # allow an undeclared artifact to change the scientist's AL handoff.
+    if len(disagreements) != 1:
+        raise ConflictError("Workflow consensus disagreement outputs are ambiguous")
+
+    disagreement = disagreements[0]
+    producer = session.get(WorkflowNodeRun, consensus_artifact.producer_node_run_id)
+    if (
+        producer is None
+        or producer.workflow_run_id != consensus_artifact.workflow_run_id
+        or not isinstance(producer.output_artifact_ids_json, list)
+        or disagreement.id not in producer.output_artifact_ids_json
+        or disagreement.producer_port_id != "disagreements"
+    ):
+        raise ConflictError("Workflow disagreement is not a declared producer output")
+    verify_workflow_artifact(
+        disagreement,
+        expected_run_id=consensus_artifact.workflow_run_id,
+    )
+    return disagreement
 
 
 def _auto_label_post_review(
