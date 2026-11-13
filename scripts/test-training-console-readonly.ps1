@@ -16,6 +16,7 @@ $script:requests = [System.Collections.Generic.List[string]]::new()
 $script:messages = [System.Collections.Generic.List[string]]::new()
 $script:pollCount = 0
 $script:sleeps = 0
+$script:holdCount = 0
 $script:scenario = 'completed'
 
 # Summary values deliberately lag the per-epoch history. The live monitor
@@ -128,6 +129,10 @@ function Write-Host {
 }
 function Start-Sleep {
   param([int]$Seconds)
+  if ($Seconds -eq 3600) {
+    $script:holdCount++
+    throw 'Simulated observer window closed.'
+  }
   if ($Seconds -ne 2) { throw "Unexpected polling interval: $Seconds" }
   $script:sleeps++
   $maxSleeps = if ($script:scenario -eq 'transient') { 2 } else { 1 }
@@ -135,8 +140,16 @@ function Start-Sleep {
 }
 
 # The production script runs unchanged; only its loopback GET responses,
-# terminal display, and timer are mocked. It must exit on terminal status.
-Invoke-Expression $match.Groups['body'].Value
+# terminal display, and timer are mocked. It must stop polling at terminal
+# status and keep the read-only window visible without a command prompt.
+function Invoke-ReadOnlyMonitor {
+  try {
+    Invoke-Expression $match.Groups['body'].Value
+  } catch {
+    if ($_.Exception.Message -cne 'Simulated observer window closed.') { throw }
+  }
+}
+Invoke-ReadOnlyMonitor
 $output = $script:messages -join [char]10
 $expectedRequests = @(
   "Get $url",
@@ -147,8 +160,8 @@ $expectedRequests = @(
 if (($script:requests -join [char]10) -cne ($expectedRequests -join [char]10)) {
   throw "Unexpected monitor requests: $($script:requests -join ', ')"
 }
-if ($script:pollCount -ne 2 -or $script:sleeps -ne 1) {
-  throw 'Monitor did not poll an active run and then stop after completion.'
+if ($script:pollCount -ne 2 -or $script:sleeps -ne 1 -or $script:holdCount -ne 1) {
+  throw 'Monitor did not stop polling and hold its read-only window after completion.'
 }
 # ConvertFrom-Json parses JSON numbers as numeric values, so PowerShell may
 # display 0.30 as 0.3. Match equivalent values without accepting 0.31/0.21.
@@ -188,14 +201,15 @@ foreach ($terminalStatus in @('failed', 'cancelled')) {
   $script:messages.Clear()
   $script:pollCount = 0
   $script:sleeps = 0
-  Invoke-Expression $match.Groups['body'].Value
+  $script:holdCount = 0
+  Invoke-ReadOnlyMonitor
   $terminalOutput = $script:messages -join [char]10
   $expectedTerminalRequests = @("Get $url", "Get $url/logs/tail")
   if (($script:requests -join [char]10) -cne ($expectedTerminalRequests -join [char]10)) {
     throw "Unexpected $terminalStatus monitor requests: $($script:requests -join ', ')"
   }
-  if ($script:pollCount -ne 1 -or $script:sleeps -ne 0) {
-    throw "Monitor did not stop immediately after $terminalStatus."
+  if ($script:pollCount -ne 1 -or $script:sleeps -ne 0 -or $script:holdCount -ne 1) {
+    throw "Monitor did not stop polling and hold safely after $terminalStatus."
   }
   if (-not $terminalOutput.Contains("Status: $terminalStatus") -or
       -not $terminalOutput.Contains('Run ended. This window can now be closed.')) {
@@ -220,7 +234,8 @@ $script:requests.Clear()
 $script:messages.Clear()
 $script:pollCount = 0
 $script:sleeps = 0
-Invoke-Expression $match.Groups['body'].Value
+$script:holdCount = 0
+Invoke-ReadOnlyMonitor
 $recoveryOutput = $script:messages -join [char]10
 $expectedRecoveryRequests = @(
   "Get $url",
@@ -232,8 +247,8 @@ $expectedRecoveryRequests = @(
 if (($script:requests -join [char]10) -cne ($expectedRecoveryRequests -join [char]10)) {
   throw "Unexpected monitor requests during transient API recovery: $($script:requests -join ', ')"
 }
-if ($script:pollCount -ne 3 -or $script:sleeps -ne 2) {
-  throw 'Monitor failed to recover from an API outage and stop after completion.'
+if ($script:pollCount -ne 3 -or $script:sleeps -ne 2 -or $script:holdCount -ne 1) {
+  throw 'Monitor failed to recover, stop polling, and hold its final read-only display.'
 }
 foreach ($expected in @(
   'Waiting for ReefVision training status:',

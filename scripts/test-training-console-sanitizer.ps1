@@ -220,6 +220,16 @@ if (-not $consoleCommand.Success -or
     $consoleCommand.Value -match 'frontend_api_base_url|renderer_api_base_url') {
   throw 'Training monitor must validate the run ID and use the trusted desktop API origin.'
 }
+# -NoExit exposes an unrestricted PowerShell prompt after the read-only observer
+# reaches a terminal state. Keep the final logs visible with an idle observer
+# instead; no interactive command surface or training write access is permitted.
+if ($consoleCommand.Value -notmatch '\.args\(\["-NoProfile", "-NonInteractive", "-Command", &script\]\)' -or
+    $consoleCommand.Value -match '"-NoExit"') {
+  throw 'External training console must not expose an interactive PowerShell prompt.'
+}
+if ($monitorScript -notmatch 'while \(\$true\) \{ Start-Sleep -Seconds 3600 \}') {
+  throw 'Final read-only training status must remain inspectable without -NoExit.'
+}
 
 # Protect the actual loss-source precedence: the newest finite persisted epoch
 # history must override stale summary metrics, not the reverse. These are

@@ -298,9 +298,13 @@ while ($true) {
   }
   Start-Sleep -Seconds 2
 }
+# Keep the completed or failed run visible for inspection without exposing a
+# writable PowerShell prompt. Closing this observer window ends only this
+# idle process; it never cancels or modifies the independent training worker.
+while ($true) { Start-Sleep -Seconds 3600 }
 "#;
         Command::new("powershell.exe")
-            .args(["-NoProfile", "-NoExit", "-Command", &script])
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
             .spawn()
             .map_err(|error| format!("Could not open PowerShell training monitor: {error}"))?;
         Ok(())
