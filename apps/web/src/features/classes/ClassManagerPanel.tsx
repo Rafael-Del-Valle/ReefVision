@@ -45,6 +45,28 @@ function previewHasNoBlockingEvidence(
   );
 }
 
+// A can_delete flag alone is not sufficient evidence to destroy a class.
+// Reject cross-project results and internally contradictory reference counts.
+function usageConfirmsEmptyClass(
+  usage: Awaited<ReturnType<typeof getProjectLabelClassUsage>> | undefined,
+  projectId: string,
+  classId: string,
+): boolean {
+  return (
+    usage !== undefined &&
+    usage.project_id === projectId &&
+    usage.class_id === classId &&
+    usage.can_delete === true &&
+    usage.total_references === 0 &&
+    usage.mutable_reference_count === 0 &&
+    usage.immutable_reference_count === 0 &&
+    Array.isArray(usage.counts) &&
+    usage.counts.every((item) => item.count === 0) &&
+    Array.isArray(usage.delete_blockers) &&
+    usage.delete_blockers.length === 0
+  );
+}
+
 function OperationSummary({
   operation,
   title,
@@ -323,11 +345,13 @@ function ClassRow({
 
   const usageRows = usage.data?.counts.filter((item) => item.count > 0) ?? [];
   // Missing, failed, or refetching reference evidence cannot authorize deletion.
+  const usageIsVerifiedEmpty = usageConfirmsEmptyClass(
+    usage.data,
+    project.id,
+    labelClass.id,
+  );
   const canDelete =
-    showUsage &&
-    usage.isSuccess &&
-    !usage.isFetching &&
-    usage.data?.can_delete === true;
+    showUsage && usage.isSuccess && !usage.isFetching && usageIsVerifiedEmpty;
 
   return (
     <li className={`class-row ${labelClass.is_active ? "" : "inactive"}`}>
@@ -440,6 +464,18 @@ function ClassRow({
           Class usage could not be verified. Deletion remains disabled.
         </p>
       )}
+
+      {showUsage &&
+        usage.isSuccess &&
+        !usage.isFetching &&
+        usage.data &&
+        !usageIsVerifiedEmpty &&
+        usage.data.can_delete === true && (
+          <p className="form-error" role="alert">
+            Usage evidence has an inconsistent class scope or reference count.
+            Deletion remains disabled.
+          </p>
+        )}
 
       <div className="class-merge-panel">
         <label>
@@ -599,7 +635,12 @@ function ClassRow({
         </div>
       </div>
 
-      {showUsage && usage.isSuccess && !usage.isFetching && usage.data && (
+      {showUsage &&
+        usage.isSuccess &&
+        !usage.isFetching &&
+        usage.data &&
+        usage.data.project_id === project.id &&
+        usage.data.class_id === labelClass.id && (
         <div className="class-usage-card">
           <div className="class-usage-summary">
             <strong>{usage.data.total_references} total references</strong>
