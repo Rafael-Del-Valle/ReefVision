@@ -36,6 +36,21 @@ The intervals share a single calibration uncertainty and must **not** be
 interpreted as independent edge-specific errors or confidence intervals.
 No segment is automatically accepted as a biological branch or centerline.
 
+Connected routes also carry `path_turn_angles_deg`, one source-frame
+**geometric turning angle per route waypoint**, and `maximum_turn_angle_deg`.
+Angles use the incoming and outgoing edge direction: a straight continuation
+is 0 degrees, a right-angle bend is 90 degrees, and the mathematical range is
+0–180 degrees. The first and last route waypoints have null turning angles;
+an interior waypoint with either adjacent edge of zero length is also null,
+rather than falsely recording a straight route. When a route contains no
+defined interior angle, its maximum is null. Disconnected and unreferenced
+routes use null for both fields. Source-frame unit vectors make these
+angles invariant to a common positive calibration scale; no angle-specific
+uncertainty interval is asserted. The quantities remain **provisional mesh-edge
+geometry**, not validated anatomical centerlines, biological joint angles,
+coral health, or growth. They are produced by the common standalone and typed
+persisted Workflow Builder measurement engine with unchanged provenance.
+
 The interactive route inspector now prefers the persisted per-edge lengths
 and per-edge scale-only bounds instead of differencing cumulative lengths,
 which can discard precision on very long routes. When older artifacts omit
