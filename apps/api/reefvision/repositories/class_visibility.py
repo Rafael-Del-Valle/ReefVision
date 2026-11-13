@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
@@ -53,6 +53,45 @@ class ClassVisibilityPreferenceRepository:
             )
         )
         return result.rowcount == 1
+
+    def save_if_revision(
+        self,
+        project_id: str,
+        user_identity: str,
+        layer_type: str,
+        hidden_class_ids: list[str],
+        expected_updated_at: datetime | None,
+    ) -> bool:
+        """Atomic compare-and-save. None means create only if the scope is absent."""
+        if expected_updated_at is None:
+            statement = (
+                sqlite_insert(ClassVisibilityPreference)
+                .values(
+                    project_id=project_id,
+                    user_identity=user_identity,
+                    layer_type=layer_type,
+                    hidden_class_ids_json=hidden_class_ids,
+                )
+                .on_conflict_do_nothing(
+                    index_elements=[
+                        ClassVisibilityPreference.project_id,
+                        ClassVisibilityPreference.user_identity,
+                        ClassVisibilityPreference.layer_type,
+                    ]
+                )
+            )
+        else:
+            statement = (
+                update(ClassVisibilityPreference)
+                .where(
+                    ClassVisibilityPreference.project_id == project_id,
+                    ClassVisibilityPreference.user_identity == user_identity,
+                    ClassVisibilityPreference.layer_type == layer_type,
+                    ClassVisibilityPreference.updated_at == expected_updated_at,
+                )
+                .values(hidden_class_ids_json=hidden_class_ids, updated_at=utc_now())
+            )
+        return self.session.execute(statement).rowcount == 1
 
     def upsert(
         self, project_id: str, user_identity: str, layer_type: str, hidden_class_ids: list[str]
@@ -115,6 +154,47 @@ class ProjectClassVisibilityDefaultRepository:
             )
         )
         return result.rowcount == 1
+
+    def save_if_revision(
+        self,
+        project_id: str,
+        layer_type: str,
+        hidden_class_ids: list[str],
+        updated_by_identity: str,
+        expected_updated_at: datetime | None,
+    ) -> bool:
+        """Create or update only the project-default revision observed by the editor."""
+        if expected_updated_at is None:
+            statement = (
+                sqlite_insert(ProjectClassVisibilityDefault)
+                .values(
+                    project_id=project_id,
+                    layer_type=layer_type,
+                    hidden_class_ids_json=hidden_class_ids,
+                    updated_by_identity=updated_by_identity,
+                )
+                .on_conflict_do_nothing(
+                    index_elements=[
+                        ProjectClassVisibilityDefault.project_id,
+                        ProjectClassVisibilityDefault.layer_type,
+                    ]
+                )
+            )
+        else:
+            statement = (
+                update(ProjectClassVisibilityDefault)
+                .where(
+                    ProjectClassVisibilityDefault.project_id == project_id,
+                    ProjectClassVisibilityDefault.layer_type == layer_type,
+                    ProjectClassVisibilityDefault.updated_at == expected_updated_at,
+                )
+                .values(
+                    hidden_class_ids_json=hidden_class_ids,
+                    updated_by_identity=updated_by_identity,
+                    updated_at=utc_now(),
+                )
+            )
+        return self.session.execute(statement).rowcount == 1
 
     def upsert(
         self,
