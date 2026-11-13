@@ -13,6 +13,7 @@ from reefvision.db.models import (
     PoseIdentityAssociationRun,
     PoseIdentityObservation,
 )
+from reefvision.repositories.jobs import JobRepository
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_pose_biological_measurement_migration import _config
 from reefvision.tests.test_pose_identity_tracking_api import _first_class, _track, _video
@@ -108,6 +109,47 @@ def test_reference_cannot_relabel_a_test_video_for_development(
     response = client.post(url, json=payload)
     assert response.status_code == 400
     assert "another split" in response.text
+
+
+def test_reference_rejects_invalid_physical_calibration(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    url, payload, _ = freeze_fixture(client, monkeypatch)
+    payload["recordings"][0]["calibration"] = {
+        "pixels_per_unit": 0,
+        "unit": "mm",
+        "source": "synthetic calibration",
+    }
+    response = client.post(url, json=payload)
+    assert response.status_code == 422
+    assert "pixels_per_unit" in response.text
+
+
+def test_validation_dispatcher_leaves_workflow_child_for_its_parent(
+    client: TestClient,
+) -> None:
+    with client.app.state.session_factory() as session:
+        child = Job(
+            job_type="reefpose_validation",
+            status="queued",
+            request_json={"workflow_run_id": "parent", "workflow_node_run_id": "score"},
+        )
+        direct = Job(job_type="reefpose_validation", status="queued", request_json={})
+        session.add(child)
+        session.flush()
+        session.add(direct)
+        session.commit()
+        child_id = child.id
+        assert JobRepository(session).next_queued() is direct
+        direct.status = "succeeded"
+        session.commit()
+        assert JobRepository(session).next_queued() is None
+        child.status = "failed"
+        session.commit()
+    retry = client.post(f"/api/v1/jobs/{child_id}/retry")
+    assert retry.status_code == 409
+    assert "parent workflow" in retry.text
 
 
 def test_complete_zero_detection_job_can_be_scored(
@@ -376,6 +418,16 @@ def test_validation_persists_original_machine_comparison_and_development_sensiti
     from reefvision.jobs.reefpose_validation import process_reefpose_validation_job
 
     job_id = response.json()["id"]
+    cancelled = client.post(validation_url, json=body)
+    assert cancelled.status_code == 202, cancelled.text
+    cancelled_id = cancelled.json()["id"]
+    cancel = client.post(f"/api/v1/jobs/{cancelled_id}/cancel")
+    assert cancel.status_code == 200, cancel.text
+    assert cancel.json()["status"] == "cancelled"
+    assert not process_reefpose_validation_job(
+        client.app.state.settings, client.app.state.session_factory, cancelled_id
+    )
+    assert client.get(f"{validation_url}/{cancelled_id}/export").status_code == 400
     assert process_reefpose_validation_job(
         client.app.state.settings, client.app.state.session_factory, job_id
     )

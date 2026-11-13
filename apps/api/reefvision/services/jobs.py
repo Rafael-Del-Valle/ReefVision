@@ -138,6 +138,8 @@ class JobService:
 
     def retry(self, job_id: str) -> Job:
         job = self.get(job_id)
+        if job.job_type == "reefpose_validation" and job.request_json.get("workflow_run_id"):
+            raise ConflictError("Retry scientific validation through its parent workflow")
         training_run = (
             self.session.scalar(select(TrainingRun).where(TrainingRun.job_id == job.id))
             if job.job_type == "training"
