@@ -138,9 +138,7 @@ class ClassVisibilityService:
             project_id, payload.hidden_class_ids
         )
         user_identity = get_local_user_identity(self.settings)
-        self.preferences.upsert(
-            project_id, user_identity, resolved_layer_type, hidden_class_ids
-        )
+        self.preferences.upsert(project_id, user_identity, resolved_layer_type, hidden_class_ids)
         self.session.commit()
         self.session.expire_all()
         preference = self.preferences.get(project_id, user_identity, resolved_layer_type)
