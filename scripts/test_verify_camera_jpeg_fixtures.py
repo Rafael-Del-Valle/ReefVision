@@ -182,10 +182,15 @@ class CameraFixtureInventoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             names = ("CON.JPG", "com1.jpeg", "LPT9.JFIF", "safe.jpg")
-            original = bytes.fromhex("ffd8") + b"unchanged" + bytes.fromhex("ffd9")
+            # Distinct bytes isolate Win32 device-name checks from the separate
+            # SHA-256 duplicate-capture safeguard tested above.
+            originals = {
+                name: bytes.fromhex("ffd8") + name.encode("ascii") + bytes.fromhex("ffd9")
+                for name in names
+            }
             try:
                 for name in names:
-                    (root / name).write_bytes(original)
+                    (root / name).write_bytes(originals[name])
             except OSError:
                 self.skipTest("Host filesystem rejects Windows device filenames")
             records, errors = MODULE.inventory(root)
@@ -194,8 +199,10 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                 set(errors),
                 {f"Windows reserved device filename: {name}" for name in names[:3]},
             )
-            self.assertEqual([p.read_bytes() for p in (root / name for name in names)],
-                             [original] * len(names))
+            self.assertEqual(
+                [p.read_bytes() for p in (root / name for name in names)],
+                [originals[name] for name in names],
+            )
 
     def test_windows_superscript_device_aliases_are_rejected_read_only(self) -> None:
         """Win32 treats COM¹/²/³ and LPT¹/²/³ as reserved device names."""
