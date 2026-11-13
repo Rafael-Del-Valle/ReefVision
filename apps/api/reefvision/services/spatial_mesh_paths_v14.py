@@ -5,8 +5,39 @@ from __future__ import annotations
 from collections import Counter
 from heapq import heappop, heappush
 from itertools import accumulate, pairwise
-from math import dist, isfinite
+from math import acos, degrees, dist, isfinite
 from typing import Any
+
+
+def _route_turn_angles(
+    points: list[tuple[float, float, float]],
+    route: list[int],
+    adjacency: dict[int, dict[int, float]],
+) -> list[float | None]:
+    """Per-vertex geometric turning angles; undefined at ends and zero edges.
+
+    Angles are computed from unit vectors in source coordinates, so a common
+    positive calibration scale cancels. They are not anatomical joint angles,
+    coral curvature estimates, or uncertainty-qualified measurements.
+    """
+    angles: list[float | None] = [None] * len(route)
+    for offset in range(1, len(route) - 1):
+        previous, current, following = route[offset - 1 : offset + 2]
+        incoming_length = adjacency[previous][current]
+        outgoing_length = adjacency[current][following]
+        if incoming_length == 0 or outgoing_length == 0:
+            continue
+        incoming = [
+            (points[current][axis] - points[previous][axis]) / incoming_length
+            for axis in range(3)
+        ]
+        outgoing = [
+            (points[following][axis] - points[current][axis]) / outgoing_length
+            for axis in range(3)
+        ]
+        cosine = sum(a * b for a, b in zip(incoming, outgoing, strict=True))
+        angles[offset] = degrees(acos(max(-1.0, min(1.0, cosine))))
+    return angles
 
 
 def mesh_edge_paths(
@@ -124,11 +155,20 @@ def mesh_edge_paths(
         path_cumulative_length_scale_intervals_m: list[list[float]] | None = None
         path_vertices_in_source_frame_m: list[list[float]] | None = None
         path_edge_length_scale_intervals_m: list[list[float]] | None = None
+        path_turn_angles_deg: list[float | None] | None = None
+        maximum_turn_angle_deg: float | None = None
         if status == "connected":
             route = [end]
             while route[-1] != start:
                 route.append(parent[route[-1]])
             route.reverse()
+            # Source-frame turn angles are scale-independent geometric evidence.
+            # Endpoints and vertices adjacent to zero-length edges stay unknown.
+            path_turn_angles_deg = _route_turn_angles(points, route, adjacency)
+            maximum_turn_angle_deg = max(
+                (angle for angle in path_turn_angles_deg if angle is not None),
+                default=None,
+            )
             # Export the complete selected polyline even when render triangles
             # are decimated. Coordinates retain unregistered source axes.
             path_vertices_in_source_frame_m = [
@@ -251,6 +291,8 @@ def mesh_edge_paths(
                 "path_vertices_in_source_frame_m": path_vertices_in_source_frame_m,
                 "path_edge_lengths_m": path_edge_lengths_m,
                 "path_edge_length_scale_intervals_m": path_edge_length_scale_intervals_m,
+                "path_turn_angles_deg": path_turn_angles_deg,
+                "maximum_turn_angle_deg": maximum_turn_angle_deg,
                 "path_cumulative_lengths_m": path_cumulative_lengths_m,
                 "path_cumulative_length_scale_intervals_m": (
                     path_cumulative_length_scale_intervals_m
