@@ -2,16 +2,21 @@ from __future__ import annotations
 
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from reefvision.db.models import (
+    Job,
     ModelRegistration,
+    WorkflowArtifact,
     WorkflowNodeRun,
     WorkflowRun,
 )
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.services.workflow_execution import WorkflowArtifactSpec, WorkflowExecutionService
+from reefvision.services.workflow_review import WorkflowReviewRequired
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.workflow_review_test_support import seed_review_upstream_artifacts
 
@@ -238,3 +243,59 @@ def test_waiting_for_review_workflow_can_be_cancelled(client: TestClient) -> Non
     assert detail["run"]["status"] == "cancelled"
     review_node = next(node for node in detail["nodes"] if node["node_id"] == "review")
     assert review_node["status"] == "cancelled"
+
+
+def test_invalid_review_node_identity_fails_persisted_run_instead_of_stranding_it(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project, run_id, job_id = _queue_seeded_review_run(client)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        original_artifact_ids = set(
+            session.scalars(
+                select(WorkflowArtifact.id).where(WorkflowArtifact.workflow_run_id == run_id)
+            )
+        )
+    assert original_artifact_ids
+
+    def malformed_review_pause(
+        _service: WorkflowExecutionService,
+        **_inputs: object,
+    ) -> list[WorkflowArtifactSpec]:
+        raise WorkflowReviewRequired(
+            "Human review requires a saved node",
+            details={"node_run_id": "nonexistent-or-cross-run-review-node"},
+        )
+
+    # Execute the actual persisted review workflow. A broken adapter-supplied
+    # node identity must not leave its job perpetually marked running.
+    monkeypatch.setattr(WorkflowExecutionService, "execute_node", malformed_review_pause)
+    assert process_workflow_run_job(app.state.settings, app.state.session_factory, job_id) is False
+
+    with app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        run = session.get(WorkflowRun, run_id)
+        review_node = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "review",
+            )
+        )
+        assert job is not None and job.status == "failed"
+        assert run is not None and run.status == "failed"
+        assert review_node is not None and review_node.status == "failed"
+        assert "Workflow review pause failed" in (job.error_message or "")
+        assert "active node in this run" in (run.error_message or "")
+        assert review_node.error_message == job.error_message
+        assert set(
+            session.scalars(
+                select(WorkflowArtifact.id).where(WorkflowArtifact.workflow_run_id == run_id)
+            )
+        ) == original_artifact_ids
+
+    # The project-scoped persisted run remains inspectable after the failure.
+    detail = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["project_id"] == project["id"]
+    assert detail.json()["run"]["status"] == "failed"
