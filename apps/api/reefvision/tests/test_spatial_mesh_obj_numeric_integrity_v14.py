@@ -230,3 +230,68 @@ def test_representable_weighted_coordinate_preserves_standalone_workflow_parity(
     )
     assert artifact["payload_json"] == expected
     assert len(artifact["payload_sha256"]) == 64
+
+@pytest.mark.parametrize(
+    "directive",
+    [
+        "p 1",
+        "l 1 2",
+        "vp 0 0 0",
+        "cstype bspline",
+        "curv 0 1 1 2 3",
+        "surf 0 1 0 1 1 2 3",
+        "call other.obj",
+    ],
+)
+def test_obj_unsupported_geometry_cannot_be_silently_dropped(directive: str) -> None:
+    # A face-only preview of a mixed primitive/free-form reconstruction would
+    # be an incomplete scientific surface even when its triangles are sound.
+    obj_text = OBJ.replace("f 1 2 3\n", f"{directive}\nf 1 2 3\n")
+    with pytest.raises(ValueError, match="unsupported geometry directive"):
+        parse_obj_triangles(obj_text)
+
+
+@pytest.mark.parametrize("directive", ["l 1 2", "surf 0 1 0 1 1 2 3"])
+def test_unsupported_obj_geometry_rejected_by_api_and_saved_workflow(
+    client: TestClient, directive: str
+) -> None:
+    project_id = str(create_project(client, "Mixed-primitive OBJ source rejection")["id"])
+    obj_text = OBJ.replace("f 1 2 3\n", f"{directive}\nf 1 2 3\n")
+    standalone = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-preview",
+        json={**PARAMS, "obj_text": obj_text},
+    )
+    assert standalone.status_code in (400, 422), standalone.text
+    detail = _run_saved(client, project_id, obj_text)
+    assert detail["run"]["status"] == "failed"
+    assert not any(item["data_type"] == "mesh_measurement_preview" for item in detail["artifacts"])
+
+
+def test_inert_obj_metadata_keeps_standalone_and_workflow_measurements_identical(
+    client: TestClient,
+) -> None:
+    decorated = (
+        "mtllib coral.mtl\n"
+        "o coral_fragment\n"
+        "g branch_A\n"
+        "s off\n"
+        "usemtl tissue\n"
+        + OBJ
+    )
+    assert parse_obj_triangles(decorated) == parse_obj_triangles(OBJ)
+    project_id = str(create_project(client, "OBJ metadata replay")["id"])
+    standalone = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-preview",
+        json={**PARAMS, "obj_text": decorated},
+    )
+    assert standalone.status_code == 200, standalone.text
+    result = standalone.json()
+    assert result["surface_area_m2"] == pytest.approx(0.0003)
+    assert result["measurement_status"] == "caller_supplied_unverified"
+    assert result["provenance"]["calibration_verified"] is False
+    detail = _run_saved(client, project_id, decorated)
+    assert detail["run"]["status"] == "succeeded"
+    artifact = next(
+        item for item in detail["artifacts"] if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["payload_json"] == result
