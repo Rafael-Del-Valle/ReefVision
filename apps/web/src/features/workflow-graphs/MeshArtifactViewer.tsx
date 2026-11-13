@@ -33,6 +33,7 @@ interface MeshRouteInspection {
   lengthM: number | null;
   lengthScaleIntervalM: [number, number] | null;
   qcWarnings: string[] | null;
+  geometryQc: "consistent" | "inconsistent" | "unverifiable";
 }
 
 function isVec3(value: unknown): value is Vec3 {
@@ -44,6 +45,71 @@ function isVec3(value: unknown): value is Vec3 {
         typeof coordinate === "number" && Number.isFinite(coordinate),
     )
   );
+}
+
+/**
+ * Independent read-only QC of complete persisted source-frame route geometry.
+ * Compare every supplied edge and cumulative measurement, not only the total:
+ * incorrect individual edges can still sum to a plausible route length.
+ * This does not establish calibration accuracy or biological centerlines.
+ */
+function checkSavedRoutePolylineGeometry(
+  coordinates: Vec3[],
+  nominal: unknown,
+  edges: unknown,
+  cumulative: unknown,
+): "consistent" | "inconsistent" | "unverifiable" {
+  if (
+    typeof nominal !== "number" ||
+    !Number.isFinite(nominal) ||
+    nominal < 0
+  ) {
+    return "unverifiable";
+  }
+  const hasEdges = edges !== undefined && edges !== null;
+  const hasCumulative = cumulative !== undefined && cumulative !== null;
+  if (
+    (hasEdges &&
+      (!Array.isArray(edges) || edges.length !== coordinates.length - 1)) ||
+    (hasCumulative &&
+      (!Array.isArray(cumulative) ||
+        cumulative.length !== coordinates.length))
+  ) {
+    return "inconsistent";
+  }
+  const matches = (a: number, b: number) =>
+    Number.isFinite(a) &&
+    Number.isFinite(b) &&
+    a >= 0 &&
+    b >= 0 &&
+    Math.abs(a - b) <= Math.max(a, b) * 1e-8;
+
+  if (hasCumulative && !matches((cumulative as number[])[0], 0)) {
+    return "inconsistent";
+  }
+  let distance = 0;
+  for (let index = 1; index < coordinates.length; index += 1) {
+    const previous = coordinates[index - 1];
+    const current = coordinates[index];
+    const segment = Math.hypot(
+      current[0] - previous[0],
+      current[1] - previous[1],
+      current[2] - previous[2],
+    );
+    distance += segment;
+    // Finite stored XYZ can still overflow during subtraction or summation.
+    // Do not certify the stored evidence when geometry is uncomputable.
+    if (!Number.isFinite(segment) || !Number.isFinite(distance)) {
+      return "unverifiable";
+    }
+    if (
+      (hasEdges && !matches((edges as number[])[index - 1], segment)) ||
+      (hasCumulative && !matches((cumulative as number[])[index], distance))
+    ) {
+      return "inconsistent";
+    }
+  }
+  return matches(nominal, distance) ? "consistent" : "inconsistent";
 }
 
 /**
@@ -359,6 +425,12 @@ function parsePathInspections(
       )
         ? (rawAngles as (number | null)[])
         : null;
+    const geometryQc = checkSavedRoutePolylineGeometry(
+      coordinates as Vec3[],
+      nominal,
+      rawEdges,
+      rawCumulative,
+    );
     const warnings = route.path_qc_warnings;
     const qcWarnings =
       Array.isArray(warnings) &&
@@ -386,6 +458,7 @@ function parsePathInspections(
         lengthM,
         lengthScaleIntervalM,
         qcWarnings,
+        geometryQc,
       },
     ];
   });
@@ -508,7 +581,13 @@ function formatRouteInspection(route: MeshRouteInspection): string {
       : route.qcWarnings.length === 0
         ? "no route-specific flags"
         : route.qcWarnings.join(", ");
-  return `Route ${route.sourceIndex + 1}, mesh vertices ${route.startVertexIndex} to ${route.endVertexIndex}. Saved geometric route length: ${length}. Scale-only length interval: ${interval}. Path QC: ${qc}. Provisional mesh geometry, not a verified biological branch length.`;
+  const geometryQc =
+    route.geometryQc === "consistent"
+      ? "consistent with saved source-frame XYZ (provisional, not verified calibration)"
+      : route.geometryQc === "inconsistent"
+        ? "INCONSISTENT: route lengths and saved XYZ disagree; human review required"
+        : "unverifiable: incomplete or numerically unusable evidence";
+  return `Route ${route.sourceIndex + 1}, mesh vertices ${route.startVertexIndex} to ${route.endVertexIndex}. Saved geometric route length: ${length}. Scale-only length interval: ${interval}. Independent polyline-to-measurement QC: ${geometryQc}. Path QC: ${qc}. Provisional mesh geometry, not a verified biological branch length.`;
 }
 
 /** Inspect a persisted segment increment, not an anatomical branch or independently reviewed measure. */
