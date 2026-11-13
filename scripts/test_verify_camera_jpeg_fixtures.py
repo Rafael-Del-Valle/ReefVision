@@ -248,6 +248,30 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertTrue(errors[0].startswith(f"JPEG decode failed: {fixture.name}:"))
             self.assertEqual(fixture.read_bytes(), original)
 
+    def test_opt_in_pixel_decode_reports_pillow_decompression_bomb_guard(self) -> None:
+        """Large camera images must fail QC explicitly, not abort the manifest."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; decompression-bomb guard unverified")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = root / "overlarge_camera.JPG"
+            original = bytes.fromhex("ffd8") + b"camera-payload" + bytes.fromhex("ffd9")
+            fixture.write_bytes(original)
+            with mock.patch.object(
+                Image, "open", side_effect=Image.DecompressionBombError("too many pixels")
+            ):
+                records, errors = MODULE.inventory(root, verify_decode=True)
+            self.assertEqual(len(records), 1)
+            self.assertTrue(records[0]["jpeg_boundary_markers"])
+            self.assertFalse(records[0]["jpeg_decodable"])
+            self.assertEqual(
+                errors,
+                ["JPEG decode failed: overlarge_camera.JPG: DecompressionBombError"],
+            )
+            self.assertEqual(fixture.read_bytes(), original)
+
     def test_exif_oriented_camera_jpeg_is_inventoried_without_rewriting_metadata(self) -> None:
         """Camera EXIF orientation must survive read-only JPEG inventory."""
         try:
