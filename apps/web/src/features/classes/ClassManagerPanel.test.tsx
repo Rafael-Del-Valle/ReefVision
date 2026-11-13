@@ -435,10 +435,15 @@ describe("ClassManagerPanel", () => {
               failures: [],
             });
           }
-          throw new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`);
+          throw new Error(
+            `Unexpected request: ${init?.method ?? "GET"} ${url}`,
+          );
         });
       const queryClient = new QueryClient({
-        defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
       });
       render(
         <QueryClientProvider client={queryClient}>
@@ -536,7 +541,10 @@ describe("ClassManagerPanel", () => {
       throw new Error("Unexpected class-operation request");
     });
     const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
     render(
       <QueryClientProvider client={queryClient}>
@@ -572,5 +580,4 @@ describe("ClassManagerPanel", () => {
     await userEvent.click(previewButton);
     await waitFor(() => expect(runButton).toBeEnabled());
   });
-
 });
