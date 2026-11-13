@@ -1300,9 +1300,9 @@ describe("AnnotationEditor", () => {
     ).toBeInTheDocument();
     expect(screen.queryByTestId("annotation-annotation-2")).toBeNull();
     expect(screen.queryByTestId("prediction-proposal-2")).toBeNull();
-    expect(
-      screen.getByTestId("review-evidence-reveal"),
-    ).toHaveTextContent("Saved visibility and scientific records are unchanged.");
+    expect(screen.getByTestId("review-evidence-reveal")).toHaveTextContent(
+      "Saved visibility and scientific records are unchanged.",
+    );
 
     await userEvent.click(
       screen.getByRole("button", { name: "Hide boxes (H)" }),
