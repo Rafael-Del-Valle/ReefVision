@@ -60,8 +60,38 @@ jobs:
         working-directory: apps/web
       - run: npm run test
         working-directory: apps/web
-      - run: npm run format:check
+      - name: Enforce frontend Prettier formatting
+        id: frontend_format
+        run: npm run format:check
         working-directory: apps/web
+      # Diagnostics run only after the strict formatting gate fails. Formatting
+      # occurs in this disposable runner checkout and is NEVER committed or
+      # used to make the failed CI run pass. The exact patch makes corrections
+      # reproducible when a local git clone or npm install is unavailable.
+      - name: Print Prettier remediation patch (diagnostic only)
+        if: ${{ failure() && steps.frontend_format.outcome == 'failure' }}
+        working-directory: apps/web
+        run: |
+          npx prettier --write \
+            src/App.test.tsx \
+            src/features/annotation-editor/ImageViewport.test.tsx \
+            src/features/gallery/Gallery.test.tsx \
+            src/features/gallery/Gallery.tsx \
+            src/features/gallery/galleryNavigation.test.ts \
+            src/features/gallery/galleryNavigation.ts \
+            src/features/training/TrainingRunDetail.test.tsx \
+            src/features/training/TrainingRunDetail.tsx \
+            tests/e2e/gallery-viewport-103.spec.ts
+          git diff --no-ext-diff --src-prefix=a/ --dst-prefix=b/ -- \
+            apps/web/src/App.test.tsx \
+            apps/web/src/features/annotation-editor/ImageViewport.test.tsx \
+            apps/web/src/features/gallery/Gallery.test.tsx \
+            apps/web/src/features/gallery/Gallery.tsx \
+            apps/web/src/features/gallery/galleryNavigation.test.ts \
+            apps/web/src/features/gallery/galleryNavigation.ts \
+            apps/web/src/features/training/TrainingRunDetail.test.tsx \
+            apps/web/src/features/training/TrainingRunDetail.tsx \
+            apps/web/tests/e2e/gallery-viewport-103.spec.ts
       - run: npx playwright install --with-deps chromium
         working-directory: apps/web
       - run: npm run test:e2e
