@@ -1,6 +1,8 @@
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -430,3 +432,73 @@ def test_conditional_visibility_saves_reject_stale_and_recreated_scopes(
         legacy = client.put(path, json={"hidden_class_ids": [second["id"]]})
         assert legacy.status_code == 200
         assert legacy.json()["hidden_class_ids"] == [second["id"]]
+
+
+@pytest.mark.parametrize("scope", ["preferences", "defaults"])
+def test_conditional_visibility_revisions_advance_during_clock_rollback(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, scope: str
+) -> None:
+    """Clock rollback must not recycle a CAS token and permit stale editor writes."""
+    project = create_project(client)
+    label_class = create_label_class(
+        client,
+        project["id"],
+        class_index=0,
+        name="Swiftia Open",
+        display_color="#C74343",
+    )
+    path = f"/api/v1/projects/{project['id']}/class-visibility/{scope}/annotations"
+
+    original = client.put(
+        path,
+        json={"hidden_class_ids": [label_class["id"]], "expected_updated_at": None},
+    )
+    assert original.status_code == 200, original.text
+    first_stamp = original.json()["updated_at"]
+    first_timestamp = datetime.fromisoformat(first_stamp)
+    previous_utc = (
+        first_timestamp.replace(tzinfo=UTC)
+        if first_timestamp.tzinfo is None
+        else first_timestamp.astimezone(UTC)
+    )
+
+    # SQLite persists microsecond-precision timestamps. Simulate a clock that
+    # moves backwards and then stops, with two independently committed writes.
+    frozen_past = previous_utc - timedelta(days=1)
+    monkeypatch.setattr(
+        "reefvision.repositories.class_visibility.utc_now", lambda: frozen_past
+    )
+    next_save = client.put(
+        path,
+        json={"hidden_class_ids": [], "expected_updated_at": first_stamp},
+    )
+    assert next_save.status_code == 200, next_save.text
+    second_stamp = next_save.json()["updated_at"]
+    assert datetime.fromisoformat(second_stamp) > first_timestamp
+
+    following_save = client.put(
+        path,
+        json={
+            "hidden_class_ids": [label_class["id"]],
+            "expected_updated_at": second_stamp,
+        },
+    )
+    assert following_save.status_code == 200, following_save.text
+    third_stamp = following_save.json()["updated_at"]
+    assert datetime.fromisoformat(third_stamp) > datetime.fromisoformat(second_stamp)
+
+    # An editor still holding either prior token cannot overwrite or reset
+    # the latest settings; no scientific annotations are changed.
+    stale_save = client.put(
+        path, json={"hidden_class_ids": [], "expected_updated_at": first_stamp}
+    )
+    assert stale_save.status_code == 409
+    stale_reset = client.delete(path, params={"expected_updated_at": second_stamp})
+    assert stale_reset.status_code == 409
+
+    bundle = client.get(f"/api/v1/projects/{project['id']}/class-visibility")
+    assert bundle.status_code == 200
+    scope_key = "user_preferences" if scope == "preferences" else "project_defaults"
+    saved = bundle.json()[scope_key]["annotations"]
+    assert saved["hidden_class_ids"] == [label_class["id"]]
+    assert saved["updated_at"] == third_stamp
