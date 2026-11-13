@@ -21,6 +21,11 @@ JPEG_SOI = b"\xff\xd8"
 JPEG_EOI = b"\xff\xd9"
 
 
+def _file_fingerprint(stat: os.stat_result) -> tuple[int, int, int, int, int]:
+    """Compare file identity and modification metadata across an opened handle."""
+    return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+
+
 def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str, object]], list[str]]:
     # This function is also imported directly by tests and acceptance tools.
     # Enforce the same root boundary as the CLI before rglob can follow a
@@ -119,20 +124,32 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
         try:
             before = path.stat()
             with path.open("rb") as stream:
+                # A camera source can be replaced between path.stat() and
+                # open(). Hash only the actual file handle that was validated,
+                # never a substituted file with another study's image bytes.
+                opened = os.fstat(stream.fileno())
+                if _file_fingerprint(opened) != _file_fingerprint(before):
+                    errors.append(f"JPEG fixture changed during inventory: {relative}")
+                    continue
                 for block in iter(lambda: stream.read(1024 * 1024), b""):
                     if not first:
                         first = block[:2]
                     tail = (tail + block)[-2:]
                     size += len(block)
                     digest.update(block)
+                read_finished = os.fstat(stream.fileno())
             after = path.stat()
         except OSError as exc:
             errors.append(f"cannot read JPEG fixture: {relative}: {type(exc).__name__}")
             continue
-        if (before.st_size != size or after.st_size != size or
-                before.st_mtime_ns != after.st_mtime_ns or
-                before.st_ctime_ns != after.st_ctime_ns or
-                before.st_ino != after.st_ino or before.st_dev != after.st_dev):
+        if (
+            size != before.st_size
+            or path.is_symlink()
+            or any(
+                _file_fingerprint(observed) != _file_fingerprint(before)
+                for observed in (opened, read_finished, after)
+            )
+        ):
             errors.append(f"JPEG fixture changed during inventory: {relative}")
             continue
         # Two directory entries may be hard links to one underlying capture.
@@ -170,45 +187,46 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                 # application's or any other thread's decoder settings.
                 with warnings.catch_warnings():
                     warnings.simplefilter("error", Image.DecompressionBombWarning)
-                    with Image.open(path) as decoded:
-                        if decoded.format != "JPEG":
-                            raise ValueError("decoded format is not JPEG")
-                        decoded.load()
-                        # Raster dimensions are deliberately not EXIF-transposed:
-                        # recording the orientation separately lets scientific
-                        # reviewers compare native and displayed geometry.
-                        orientation = decoded.getexif().get(274)
-                        # EXIF orientation is an integer in [1, 8]. Do not
-                        # silently claim a display geometry for invalid
-                        # metadata: scientific overlays and scale calibration
-                        # depend on the distinction from native pixel axes.
-                        if orientation is not None and (
-                            not isinstance(orientation, int)
-                            or orientation not in range(1, 9)
-                        ):
-                            raise ValueError("invalid EXIF orientation")
-                        display_width, display_height = (
-                            (decoded.height, decoded.width)
-                            if orientation in (5, 6, 7, 8)
-                            else (decoded.width, decoded.height)
-                        )
-                        decoded_metadata = {
-                            "jpeg_pixel_width": decoded.width,
-                            "jpeg_pixel_height": decoded.height,
-                            "jpeg_display_width": display_width,
-                            "jpeg_display_height": display_height,
-                            "jpeg_color_mode": decoded.mode,
-                            "jpeg_exif_orientation": orientation,
-                        }
+                    with path.open("rb") as decode_stream:
+                        # Decode the exact verified file, not another image
+                        # swapped into the path between hashing and Pillow.
+                        decode_opened = os.fstat(decode_stream.fileno())
+                        if _file_fingerprint(decode_opened) != _file_fingerprint(after):
+                            raise ValueError("JPEG fixture changed before decoding")
+                        with Image.open(decode_stream) as decoded:
+                            if decoded.format != "JPEG":
+                                raise ValueError("decoded format is not JPEG")
+                            decoded.load()
+                            # Native camera pixels are not EXIF-transposed.
+                            orientation = decoded.getexif().get(274)
+                            if orientation is not None and (
+                                not isinstance(orientation, int)
+                                or orientation not in range(1, 9)
+                            ):
+                                raise ValueError("invalid EXIF orientation")
+                            display_width, display_height = (
+                                (decoded.height, decoded.width)
+                                if orientation in (5, 6, 7, 8)
+                                else (decoded.width, decoded.height)
+                            )
+                            decoded_metadata = {
+                                "jpeg_pixel_width": decoded.width,
+                                "jpeg_pixel_height": decoded.height,
+                                "jpeg_display_width": display_width,
+                                "jpeg_display_height": display_height,
+                                "jpeg_color_mode": decoded.mode,
+                                "jpeg_exif_orientation": orientation,
+                            }
+                        decode_finished = os.fstat(decode_stream.fileno())
                 # A modified camera fixture cannot be accepted against the
                 # SHA-256 generated by the prior immutable manifest pass.
                 decoded_stat = path.stat()
                 if (
-                    decoded_stat.st_size != after.st_size
-                    or decoded_stat.st_mtime_ns != after.st_mtime_ns
-                    or decoded_stat.st_ctime_ns != after.st_ctime_ns
-                    or decoded_stat.st_ino != after.st_ino
-                    or decoded_stat.st_dev != after.st_dev
+                    path.is_symlink()
+                    or any(
+                        _file_fingerprint(observed) != _file_fingerprint(after)
+                        for observed in (decode_opened, decode_finished, decoded_stat)
+                    )
                 ):
                     errors.append(f"JPEG fixture changed during decoding: {relative}")
                 else:

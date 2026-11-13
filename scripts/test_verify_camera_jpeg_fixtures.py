@@ -570,6 +570,9 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                     def read(self, *read_args, **read_kwargs):
                         return stream.read(*read_args, **read_kwargs)
 
+                    def fileno(self):
+                        return stream.fileno()
+
                 return ObservedStream()
 
             def changed_stat(path: Path, *args: object, **kwargs: object):
@@ -592,6 +595,66 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertIn("JPEG fixture changed during inventory: changing.jpg", errors)
             self.assertEqual(fixture.read_bytes(), original)
             self.assertEqual(len(original), 11)
+
+    def test_swapped_open_handle_cannot_hash_unrelated_camera_image(self) -> None:
+        """A substituted fd must fail even if the approved path stays unchanged."""
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root = Path(directory)
+            photo = root / "approved.JPG"
+            private = Path(outside) / "other_study.JPEG"
+            approved_bytes = b"\xff\xd8approved-camera\xff\xd9"
+            private_bytes = b"\xff\xd8different-camera\xff\xd9"
+            photo.write_bytes(approved_bytes)
+            private.write_bytes(private_bytes)
+            original_open = Path.open
+
+            def substituted_open(path: Path, *args: object, **kwargs: object):
+                if path == photo:
+                    return original_open(private, *args, **kwargs)
+                return original_open(path, *args, **kwargs)
+
+            with mock.patch.object(Path, "open", substituted_open):
+                records, errors = MODULE.inventory(root)
+            self.assertEqual(records, [])
+            self.assertEqual(errors, ["JPEG fixture changed during inventory: approved.JPG"])
+            self.assertEqual(photo.read_bytes(), approved_bytes)
+            self.assertEqual(private.read_bytes(), private_bytes)
+
+    def test_pixel_decode_rejects_swapped_handle_after_hash(self) -> None:
+        """EXIF and pixel geometry must correspond to the hashed camera source."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; file-identity decode guard unverified")
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root = Path(directory)
+            photo = root / "approved.JPG"
+            private = Path(outside) / "other_study.jpeg"
+            Image.new("RGB", (12, 8), (15, 20, 45)).save(photo, format="JPEG")
+            Image.new("RGB", (8, 12), (90, 30, 10)).save(private, format="JPEG")
+            approved_bytes = photo.read_bytes()
+            private_bytes = private.read_bytes()
+            original_open = Path.open
+            opened = 0
+
+            def substituted_decode_open(path: Path, *args: object, **kwargs: object):
+                nonlocal opened
+                if path == photo:
+                    opened += 1
+                    if opened == 2:
+                        return original_open(private, *args, **kwargs)
+                return original_open(path, *args, **kwargs)
+
+            with mock.patch.object(Path, "open", substituted_decode_open):
+                records, errors = MODULE.inventory(root, verify_decode=True)
+            self.assertEqual(opened, 2)
+            self.assertEqual(len(records), 1)
+            self.assertTrue(records[0]["jpeg_boundary_markers"])
+            self.assertFalse(records[0]["jpeg_decodable"])
+            self.assertNotIn("jpeg_display_width", records[0])
+            self.assertEqual(errors, ["JPEG decode failed: approved.JPG: ValueError"])
+            self.assertEqual(photo.read_bytes(), approved_bytes)
+            self.assertEqual(private.read_bytes(), private_bytes)
 
     def test_direct_inventory_rejects_linked_root_and_parent_read_only(self) -> None:
         """Library callers must not bypass the CLI's approved fixture boundary."""
