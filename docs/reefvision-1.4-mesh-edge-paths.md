@@ -51,6 +51,18 @@ geometry**, not validated anatomical centerlines, biological joint angles,
 coral health, or growth. They are produced by the common standalone and typed
 persisted Workflow Builder measurement engine with unchanged provenance.
 
+The interactive mesh viewer also exposes each saved route waypoint's
+`path_turn_angles_deg` alongside its calibrated cumulative distance and
+preceding edge length. The display requires one value per waypoint, null
+endpoints, finite interior angles within 0–180 degrees (or null for undefined
+angles), and a `maximum_turn_angle_deg` consistent with the non-null turns.
+Malformed, missing, or contradictory evidence is shown as **unknown**, never
+recalculated from the decimated preview or silently treated as a verified
+anatomical result. Valid endpoint or zero-length-adjacent turns are shown as
+**undefined**. Tiny valid nonzero turns are retained at scientific precision.
+These are read-only provisional source-frame geometric measurements, not
+coral branch curvature, reidentification, condition, or growth results.
+
 The interactive route inspector now prefers the persisted per-edge lengths
 and per-edge scale-only bounds instead of differencing cumulative lengths,
 which can discard precision on very long routes. When older artifacts omit
