@@ -14,6 +14,8 @@ from reefvision.db.models import (
     PoseIdentityObservation,
 )
 from reefvision.repositories.jobs import JobRepository
+from reefvision.schemas.reefpose_validation import ReferenceRecording, ValidationConfiguration
+from reefvision.services.reefpose_validation_analysis import analyze
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_pose_biological_measurement_migration import _config
 from reefvision.tests.test_pose_identity_tracking_api import _first_class, _track, _video
@@ -124,6 +126,76 @@ def test_reference_rejects_invalid_physical_calibration(
     response = client.post(url, json=payload)
     assert response.status_code == 422
     assert "pixels_per_unit" in response.text
+
+
+def test_validation_distinguishes_identity_switches_from_missing_landmarks(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, payload, _ = freeze_fixture(client, monkeypatch)
+    recording = payload["recordings"][0]
+    subjects = [("animal-a", 10), ("animal-b", 100)]
+    recording["individuals"].append({"id": "animal-b", "species": "synthetic fish"})
+    poses = []
+    observations = []
+    for frame in range(3):
+        for index, (individual, x) in enumerate(subjects):
+            bbox = [x, 10, 30, 30]
+            poses.append(
+                {
+                    "individual_id": individual,
+                    "frame": frame,
+                    "bbox": bbox,
+                    "landmarks": [{"id": "jaw", "x": x, "y": 15, "visibility": "visible"}],
+                    "crossing": frame == 2,
+                }
+            )
+            observations.append(
+                {
+                    "id": f"det-{frame}-{index}",
+                    "identity_id": f"pred-{index if frame < 2 else 1 - index}",
+                    "frame": frame,
+                    "time_s": frame / 10,
+                    "bbox": bbox,
+                    "landmarks": (
+                        []
+                        if (frame, index) == (2, 1)
+                        else [
+                            {
+                                "landmark_id": "jaw",
+                                "x": x,
+                                "y": 15,
+                                "confidence": 0.9,
+                                "visibility": "visible",
+                            }
+                        ]
+                    ),
+                    "association_confidence": 0.9,
+                }
+            )
+    for annotation in recording["annotations"]:
+        annotation["poses"] = poses
+    reference = ReferenceRecording.model_validate(recording)
+    report = analyze(
+        [
+            (
+                reference,
+                reference.annotations[0],
+                {"fps": 10, "observations": observations},
+                {"jaw": "Jaw"},
+            )
+        ],
+        [ValidationConfiguration()],
+        7,
+        lambda: None,
+    )
+    assert report["identity"]["id_f1"] == pytest.approx(2 / 3)
+    assert report["identity"]["identity_switches"] == 2
+    identity = report["recordings"][0]["identity"]
+    assert identity["crossing_total"] == 2
+    assert identity["crossing_identity_matches"] == 0
+    assert {row["frame"] for row in identity["switches"]} == {2}
+    assert report["pose"]["matched_visible_count"] == 5
 
 
 def test_validation_dispatcher_leaves_workflow_child_for_its_parent(
