@@ -387,4 +387,187 @@ describe("ClassManagerPanel", () => {
       ),
     ).toBeInTheDocument();
   });
+  it.each([
+    ["reassign", "reassign", "Preview reassign", "Run reassign"],
+    [
+      "reassign_delete",
+      "reassign-delete",
+      "Preview Reassign and Delete",
+      "Run Reassign and Delete",
+    ],
+  ] as const)(
+    "invalidates a %s preview after target change, reversion and audit-note edit",
+    async (operationType, endpoint, previewLabel, runLabel) => {
+      const thirdClass = {
+        ...project.label_classes[1],
+        id: "class-3",
+        class_index: 2,
+        name: "Swiftia Open",
+      };
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async (input, init) => {
+          const url = String(input);
+          if (
+            url.endsWith(
+              `/projects/${project.id}/classes/class-1/${endpoint}/preview`,
+            ) &&
+            init?.method === "POST"
+          ) {
+            const requested = JSON.parse(String(init.body)) as {
+              target_class_id: string;
+              notes: string | null;
+            };
+            return jsonResponse({
+              id: "preview-" + requested.target_class_id,
+              project_id: project.id,
+              source_class_id: "class-1",
+              target_class_id: requested.target_class_id,
+              operation_type: operationType,
+              status: "previewed",
+              preview_checksum: "c".repeat(64),
+              plan: {
+                mutable_records: [],
+                protected_records: [],
+                compatibility_impacts: [],
+                blockers: [],
+              },
+              failures: [],
+            });
+          }
+          throw new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`);
+        });
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ClassManagerPanel
+            project={{
+              ...project,
+              label_classes: [...project.label_classes, thirdClass],
+            }}
+          />
+        </QueryClientProvider>,
+      );
+      const row = sourceClassRow();
+      const runButton = within(row).getByRole("button", { name: runLabel });
+      const previewButton = within(row).getByRole("button", {
+        name: previewLabel,
+      });
+      const target = within(row).getByRole("combobox", {
+        name: "Reassign into",
+      });
+      const notes = within(row).getByRole("textbox", {
+        name: "Operation notes",
+      });
+      expect(runButton).toBeDisabled();
+      await userEvent.click(previewButton);
+      await waitFor(() => expect(runButton).toBeEnabled());
+      await userEvent.selectOptions(target, "class-3");
+      expect(runButton).toBeDisabled();
+      await userEvent.selectOptions(target, "class-2");
+      expect(runButton).toBeDisabled();
+      await userEvent.click(previewButton);
+      await waitFor(() => expect(runButton).toBeEnabled());
+      await userEvent.type(notes, "researcher changed rationale");
+      expect(runButton).toBeDisabled();
+      await userEvent.click(previewButton);
+      await waitFor(() => expect(runButton).toBeEnabled());
+
+      const previews = fetchMock.mock.calls.filter(([input]) =>
+        String(input).endsWith(`/${endpoint}/preview`),
+      );
+      expect(previews).toHaveLength(3);
+      expect(previews[2]?.[1]?.body).toContain("researcher changed rationale");
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).endsWith(`/classes/class-1/${endpoint}`),
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it("cannot execute a delayed preview for the previously selected class", async () => {
+    const thirdClass = {
+      ...project.label_classes[1],
+      id: "class-3",
+      class_index: 2,
+      name: "Swiftia Open",
+    };
+    let resolveFirstPreview: ((response: Response) => void) | undefined;
+    let previewCount = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (
+        String(input).endsWith(
+          `/projects/${project.id}/classes/class-1/reassign/preview`,
+        ) &&
+        init?.method === "POST"
+      ) {
+        previewCount += 1;
+        const requested = JSON.parse(String(init.body)) as {
+          target_class_id: string;
+        };
+        const response = jsonResponse({
+          id: "preview-" + requested.target_class_id,
+          project_id: project.id,
+          source_class_id: "class-1",
+          target_class_id: requested.target_class_id,
+          operation_type: "reassign",
+          status: "previewed",
+          preview_checksum: "d".repeat(64),
+          plan: {
+            mutable_records: [],
+            protected_records: [],
+            compatibility_impacts: [],
+            blockers: [],
+          },
+          failures: [],
+        });
+        if (previewCount === 1) {
+          return new Promise<Response>((resolve) => {
+            resolveFirstPreview = resolve;
+          });
+        }
+        return response;
+      }
+      throw new Error("Unexpected class-operation request");
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ClassManagerPanel
+          project={{
+            ...project,
+            label_classes: [...project.label_classes, thirdClass],
+          }}
+        />
+      </QueryClientProvider>,
+    );
+    const row = sourceClassRow();
+    const runButton = within(row).getByRole("button", {
+      name: "Run reassign",
+    });
+    const previewButton = within(row).getByRole("button", {
+      name: "Preview reassign",
+    });
+    await userEvent.click(previewButton);
+    await waitFor(() => expect(resolveFirstPreview).toBeDefined());
+    await userEvent.selectOptions(
+      within(row).getByRole("combobox", { name: "Reassign into" }),
+      "class-3",
+    );
+    resolveFirstPreview?.(jsonResponse({}));
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Reassignment preview no longer matches/),
+      ).toBeInTheDocument(),
+    );
+    expect(runButton).toBeDisabled();
+    await userEvent.click(previewButton);
+    await waitFor(() => expect(runButton).toBeEnabled());
+  });
+
 });
