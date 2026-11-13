@@ -57,8 +57,9 @@ def delete_class_visibility_preference(
     layer_type: str,
     request: Request,
     session: DbSession,
+    expected_updated_at: Annotated[datetime | None, Query()] = None,
 ) -> None:
-    service(request, session).reset_user_preference(project_id, layer_type)
+    service(request, session).reset_user_preference(project_id, layer_type, expected_updated_at)
 
 
 @router.put(
