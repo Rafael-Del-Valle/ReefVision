@@ -1683,8 +1683,9 @@ describe("MeshArtifactViewer", () => {
     expect(details).toHaveTextContent(
       "consistent with saved endpoint XYZ (provisional)",
     );
-    expect(details).toHaveTextContent("not a verified biological branch length");
+    expect(details).toHaveTextContent(
+      "not a verified biological branch length",
+    );
     expect(JSON.stringify(artifact)).toBe(unchanged);
   });
-
 });
