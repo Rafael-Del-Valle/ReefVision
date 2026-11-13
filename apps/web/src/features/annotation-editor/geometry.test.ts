@@ -111,6 +111,37 @@ describe("annotation editor geometry", () => {
     );
   });
 
+  it("fully fits high-resolution camera originals and preserves cursor zoom", () => {
+    const frame = { width: 720, height: 480 };
+    for (const image of [
+      { width: 7952, height: 5304 },
+      { width: 16384, height: 9216 },
+    ]) {
+      const fitted = fitTransform(image, frame);
+      // The former 0.1 minimum zoom clipped both of these real-world camera
+      // dimensions in a narrowed editor panel.
+      expect(fitted.scale).toBeLessThan(0.1);
+      expect(fitted.scale).toBeGreaterThan(0);
+      const topLeft = imageToScreen({ x: 0, y: 0 }, fitted);
+      const bottomRight = imageToScreen(
+        { x: image.width, y: image.height },
+        fitted,
+      );
+      expect(topLeft.x).toBeGreaterThanOrEqual(0);
+      expect(topLeft.y).toBeGreaterThanOrEqual(0);
+      expect(bottomRight.x).toBeLessThanOrEqual(frame.width);
+      expect(bottomRight.y).toBeLessThanOrEqual(frame.height);
+
+      const cursor = { x: frame.width / 2, y: frame.height / 2 };
+      const zoomed = zoomAtPoint(fitted, cursor, fitted.scale * 1.08);
+      expect(zoomed.scale).toBeCloseTo(fitted.scale * 1.08);
+      const sourceBefore = screenToImage(cursor, fitted);
+      const sourceAfter = screenToImage(cursor, zoomed);
+      expect(sourceAfter.x).toBeCloseTo(sourceBefore.x, 6);
+      expect(sourceAfter.y).toBeCloseTo(sourceBefore.y, 6);
+    }
+  });
+
   it("round-trips source-image edge coordinates through arbitrary views", () => {
     const sourcePoints = [
       { x: 0, y: 0 },
