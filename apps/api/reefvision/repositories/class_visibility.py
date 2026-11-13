@@ -93,7 +93,7 @@ class ProjectClassVisibilityDefaultRepository:
         self, project_id: str, layer_type: str, expected_updated_at: datetime
     ) -> bool:
         """Atomically delete only the version observed by this editor."""
-        result = self.session.execute(
+        result = self.session.connection().execute(
             delete(ProjectClassVisibilityDefault).where(
                 ProjectClassVisibilityDefault.project_id == project_id,
                 ProjectClassVisibilityDefault.layer_type == layer_type,
