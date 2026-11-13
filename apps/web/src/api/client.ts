@@ -331,6 +331,7 @@ export interface ClassVisibilityScopeState {
   hidden_class_ids: string[];
   updated_at: string | null;
   updated_by_identity: string | null;
+  record_id?: string | null;
 }
 
 export interface ClassVisibilityBundle {
@@ -346,6 +347,7 @@ export interface ClassVisibilityUpdatePayload {
   hidden_class_ids: string[];
   /** Explicit null creates only when absent; a timestamp updates that revision. */
   expected_updated_at?: string | null;
+  expected_record_id?: string | null;
 }
 
 export interface AnnotationDraftPayload {
@@ -2029,10 +2031,13 @@ export async function deleteClassVisibilityPreference(
   projectId: string,
   layerType: ClassVisibilityLayerType,
   expectedUpdatedAt?: string,
+  expectedRecordId?: string | null,
 ): Promise<void> {
-  const revision = expectedUpdatedAt
-    ? `?expected_updated_at=${encodeURIComponent(expectedUpdatedAt)}`
-    : "";
+  const params = new URLSearchParams();
+  if (expectedUpdatedAt) params.set("expected_updated_at", expectedUpdatedAt);
+  if (expectedRecordId) params.set("expected_record_id", expectedRecordId);
+  const query = params.toString();
+  const revision = query ? `?${query}` : "";
   return request<void>(
     `/projects/${projectId}/class-visibility/preferences/${layerType}${revision}`,
     {
@@ -2059,10 +2064,13 @@ export async function deleteProjectClassVisibilityDefault(
   projectId: string,
   layerType: ClassVisibilityLayerType,
   expectedUpdatedAt?: string,
+  expectedRecordId?: string | null,
 ): Promise<void> {
-  const revision = expectedUpdatedAt
-    ? `?expected_updated_at=${encodeURIComponent(expectedUpdatedAt)}`
-    : "";
+  const params = new URLSearchParams();
+  if (expectedUpdatedAt) params.set("expected_updated_at", expectedUpdatedAt);
+  if (expectedRecordId) params.set("expected_record_id", expectedRecordId);
+  const query = params.toString();
+  const revision = query ? `?${query}` : "";
   return request<void>(
     `/projects/${projectId}/class-visibility/defaults/${layerType}${revision}`,
     {
