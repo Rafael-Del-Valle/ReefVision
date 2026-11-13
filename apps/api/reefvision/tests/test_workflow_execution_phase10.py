@@ -11,6 +11,7 @@ from reefvision.db.models import (
     ProjectExchangePackage,
     WorkflowArtifact,
     WorkflowNodeRun,
+    WorkflowRun,
 )
 from reefvision.domain.errors import ConflictError
 from reefvision.jobs.workflow import process_workflow_run_job
@@ -261,6 +262,34 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         assert artifact is not None and producer is not None
         artifact.producer_port_id = original_port
         producer.result_json = original_result
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
+    # This graph was actually executed and its provenance frozen at closeout.
+    # Removing *both* saved provenance fields used to bypass the integrity check.
+    with app.state.session_factory() as session:
+        saved_run = session.get(WorkflowRun, str(run["id"]))
+        assert saved_run is not None
+        original_result = dict(saved_run.result_json or {})
+        assert "provenance_manifest" in original_result
+        assert "provenance_sha256" in original_result
+        saved_run.result_json = {
+            key: value
+            for key, value in original_result.items()
+            if key not in {"provenance_manifest", "provenance_sha256"}
+        }
+        session.commit()
+
+    missing_provenance = client.get(f"/api/v1/workflow-runs/{run['id']}")
+    assert missing_provenance.status_code == 409, missing_provenance.text
+    assert missing_provenance.json() == {
+        "detail": "Succeeded workflow run is missing saved provenance"
+    }
+
+    with app.state.session_factory() as session:
+        saved_run = session.get(WorkflowRun, str(run["id"]))
+        assert saved_run is not None
+        saved_run.result_json = original_result
         session.commit()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
