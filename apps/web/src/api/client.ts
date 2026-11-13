@@ -2026,9 +2026,13 @@ export async function saveClassVisibilityPreference(
 export async function deleteClassVisibilityPreference(
   projectId: string,
   layerType: ClassVisibilityLayerType,
+  expectedUpdatedAt?: string,
 ): Promise<void> {
+  const revision = expectedUpdatedAt
+    ? `?expected_updated_at=${encodeURIComponent(expectedUpdatedAt)}`
+    : "";
   return request<void>(
-    `/projects/${projectId}/class-visibility/preferences/${layerType}`,
+    `/projects/${projectId}/class-visibility/preferences/${layerType}${revision}`,
     {
       method: "DELETE",
     },
