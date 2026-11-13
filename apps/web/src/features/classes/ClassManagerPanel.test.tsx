@@ -108,13 +108,13 @@ afterEach(() => {
 });
 
 describe("ClassManagerPanel", () => {
-
   it("requires a completed usage review before enabling deletion", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     let resolveUsage: ((response: Response) => void) | undefined;
     let requests = 0;
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
-      async (input, init) => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
         const url = String(input);
         if (url.endsWith(`/projects/${project.id}/classes/class-1/usage`)) {
           requests += 1;
@@ -129,8 +129,7 @@ describe("ClassManagerPanel", () => {
           return new Response(null, { status: 204 });
         }
         throw new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`);
-      },
-    );
+      });
     renderPanel();
     const row = sourceClassRow();
     const remove = within(row).getByRole("button", { name: "Delete unused" });
@@ -168,8 +167,9 @@ describe("ClassManagerPanel", () => {
     ["referenced", 200],
     ["unavailable", 503],
   ] as const)("fails closed when usage is %s", async (_reason, status) => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
-      async (input) => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
         const url = String(input);
         if (url.endsWith(`/projects/${project.id}/classes/class-1/usage`)) {
           return status === 200
@@ -177,8 +177,7 @@ describe("ClassManagerPanel", () => {
             : jsonResponse({ detail: "Usage unavailable" }, 503);
         }
         throw new Error(`Unexpected request: GET ${url}`);
-      },
-    );
+      });
     renderPanel();
     const row = sourceClassRow();
     const remove = within(row).getByRole("button", { name: "Delete unused" });
