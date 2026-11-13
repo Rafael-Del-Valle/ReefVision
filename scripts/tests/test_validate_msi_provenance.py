@@ -190,7 +190,10 @@ def test_invalid_expected_commit(tmp_path: Path) -> None:
 def test_foreign_checkout_commit_is_rejected_before_install(tmp_path: Path) -> None:
     """Valid CAB hashes do not excuse a bundle built from a different commit."""
     directory, _ = make_bundle(tmp_path)
-    assert validator.validate_bundle(directory, expected_version=VERSION)["source_commit"] == COMMIT
+    assert (
+        validator.validate_bundle(directory, expected_version=VERSION)["source_commit"]
+        == COMMIT
+    )
     original_msi = (directory / "ReefVision_1.0.2_x64_en-US.msi").read_bytes()
     with pytest.raises(validator.BundleValidationError, match="differs from expected HEAD"):
         validator.validate_bundle(
@@ -209,7 +212,9 @@ def test_disposable_windows_ci_checks_bundle_provenance_before_install() -> None
     guard = acceptance.index(
         "- name: Verify downloaded MSI/CAB provenance against clean-runner checkout"
     )
-    media = acceptance.index("- name: Verify MSI-declared cabinet payload before any install")
+    media = acceptance.index(
+        "- name: Verify MSI-declared cabinet payload before any install"
+    )
     install = acceptance.index("- name: Test isolated MSI installation")
     assert guard < media < install
     preinstall = acceptance[guard:media]
