@@ -1,5 +1,40 @@
 # ReefVision 1.4 provisional mesh-edge paths
 
+## Exact-cost route alternatives (provisional QC)
+
+A shortest mesh-edge route need not be geometrically unique: a square mesh can
+have two equally short perimeter paths with different waypoint sequences and
+potentially different turning-angle summaries. The shared 1.4 engine now
+reports `shortest_route_alternatives_status` on every requested route:
+
+- `multiple_exact_equal_cost_routes`: at least two edge paths reach the
+  selected endpoint with the same floating-point accumulated cost; also emits
+  `multiple_equal_cost_mesh_routes` in `path_qc_warnings`.
+- `no_exact_equal_cost_alternative_detected`: exactly one minimum-cost path
+  was found by the strictly positive-weight, bounded graph search. This is
+  **not** proof that the biological path or an approximately equal-cost
+  route is unique.
+- `unassessable_zero_length_edges`: the imported mesh contains at least one
+  zero-length edge. This conservative guard applies even when that edge is
+  outside the selected route; zero-weight cycles invalidate the simple
+  positive-weight counting method.
+- `null`: disconnected or unreferenced endpoints have no route to compare.
+
+Shortest-path multiplicity is counted only to two; exponential counts are not
+persisted. A deterministic tie-breaking route remains available for inspection,
+but its turning angles and vertex sequence cannot be interpreted as a uniquely
+identified coral branch when alternative paths tie. The diagnostic compares
+**exact recorded floating-point path costs**, with no asserted tolerance,
+reconstruction-error model, independent calibration review, or biological
+centerline verification. A near tie may therefore remain undetected.
+
+The project-scoped standalone preview and executable typed persisted
+`mesh_surface_preview` Workflow Builder graph share this implementation.
+Regression checks cover tied and untied routes, unresolved zero-length edges,
+workflow planning, saved execution, artifact/provenance equality, and unchanged
+provisional status. Historical artifacts without this field remain valid and
+must not be retroactively relabeled as unique.
+
 The `mesh_surface_preview` standalone API and persisted Workflow Builder node
 accept up to 16 `surface_path_vertex_pairs`, each containing two distinct
 zero-based source vertex indices. The engine finds a shortest route **along
