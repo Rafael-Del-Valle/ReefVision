@@ -215,7 +215,8 @@ function parsePathInspections(
             Math.max(
               distance,
               cumulativeLengthsM[index + 1] - cumulativeLengthsM[index],
-            ) * 1e-8 +
+            ) *
+              1e-8 +
               cumulativeLengthsM[index + 1] * Number.EPSILON * 8,
         ))
         ? (rawEdges as number[])
