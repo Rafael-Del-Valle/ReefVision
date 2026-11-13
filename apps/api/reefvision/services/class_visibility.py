@@ -5,11 +5,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
-from reefvision.db.models.class_visibility_preference import ClassVisibilityPreference
-from reefvision.db.models.project_class_visibility_default import (
-    ProjectClassVisibilityDefault,
-)
-from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.repositories.class_visibility import (
     ClassVisibilityPreferenceRepository,
     ProjectClassVisibilityDefaultRepository,
@@ -142,18 +138,14 @@ class ClassVisibilityService:
             project_id, payload.hidden_class_ids
         )
         user_identity = get_local_user_identity(self.settings)
+        self.preferences.upsert(
+            project_id, user_identity, resolved_layer_type, hidden_class_ids
+        )
+        self.session.commit()
+        self.session.expire_all()
         preference = self.preferences.get(project_id, user_identity, resolved_layer_type)
         if preference is None:
-            preference = ClassVisibilityPreference(
-                project_id=project_id,
-                user_identity=user_identity,
-                layer_type=resolved_layer_type,
-                hidden_class_ids_json=hidden_class_ids,
-            )
-            self.preferences.add(preference)
-        else:
-            preference.hidden_class_ids_json = hidden_class_ids
-        self.session.commit()
+            raise ConflictError("Visibility preference changed during save")
         self.session.refresh(preference)
         return self._scope_state(
             hidden_class_ids=preference.hidden_class_ids_json,
@@ -184,19 +176,14 @@ class ClassVisibilityService:
             project_id, payload.hidden_class_ids
         )
         user_identity = get_local_user_identity(self.settings)
+        self.project_defaults.upsert(
+            project_id, resolved_layer_type, hidden_class_ids, user_identity
+        )
+        self.session.commit()
+        self.session.expire_all()
         project_default = self.project_defaults.get(project_id, resolved_layer_type)
         if project_default is None:
-            project_default = ProjectClassVisibilityDefault(
-                project_id=project_id,
-                layer_type=resolved_layer_type,
-                hidden_class_ids_json=hidden_class_ids,
-                updated_by_identity=user_identity,
-            )
-            self.project_defaults.add(project_default)
-        else:
-            project_default.hidden_class_ids_json = hidden_class_ids
-            project_default.updated_by_identity = user_identity
-        self.session.commit()
+            raise ConflictError("Project visibility default changed during save")
         self.session.refresh(project_default)
         return self._scope_state(
             hidden_class_ids=project_default.hidden_class_ids_json,
