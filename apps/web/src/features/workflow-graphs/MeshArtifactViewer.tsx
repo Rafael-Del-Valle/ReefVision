@@ -28,6 +28,8 @@ interface MeshRouteInspection {
   edgeLengthsProvided: boolean;
   edgeIntervalsProvided: boolean;
   turnAnglesDeg: (number | null)[] | null;
+  totalTurnDeg: number | null;
+  totalTurnStatus: "valid" | "undefined" | "unknown";
   startVertexIndex: number;
   endVertexIndex: number;
   lengthM: number | null;
@@ -420,6 +422,33 @@ function parsePathInspections(
       )
         ? (rawAngles as (number | null)[])
         : null;
+    // The persisted aggregate must agree with every independently validated
+    // full-resolution route turn. Never infer a missing historical field, or
+    // reinterpret a zero-length-adjacent undefined bend as zero.
+    const rawTotalTurn = route.total_absolute_geometric_turn_deg;
+    let totalTurnStatus: "valid" | "undefined" | "unknown" = "unknown";
+    let totalTurnDeg: number | null = null;
+    if (turnAnglesDeg !== null) {
+      const interiorTurns = turnAnglesDeg.slice(1, -1);
+      if (interiorTurns.some((angle) => angle === null)) {
+        if (rawTotalTurn === null) totalTurnStatus = "undefined";
+      } else {
+        const expectedTotal = interiorTurns.reduce(
+          (sum, angle) => sum + (angle ?? 0),
+          0,
+        );
+        if (
+          typeof rawTotalTurn === "number" &&
+          Number.isFinite(rawTotalTurn) &&
+          rawTotalTurn >= 0 &&
+          Math.abs(rawTotalTurn - expectedTotal) <=
+            Math.max(rawTotalTurn, expectedTotal) * 1e-8
+        ) {
+          totalTurnStatus = "valid";
+          totalTurnDeg = rawTotalTurn;
+        }
+      }
+    }
     const geometryQc = checkSavedRoutePolylineGeometry(
       coordinates as Vec3[],
       nominal,
@@ -448,6 +477,8 @@ function parsePathInspections(
         edgeLengthsProvided,
         edgeIntervalsProvided,
         turnAnglesDeg,
+        totalTurnDeg,
+        totalTurnStatus,
         startVertexIndex: indices[0] as number,
         endVertexIndex: indices[indices.length - 1] as number,
         lengthM,
@@ -576,13 +607,19 @@ function formatRouteInspection(route: MeshRouteInspection): string {
       : route.qcWarnings.length === 0
         ? "no route-specific flags"
         : route.qcWarnings.join(", ");
+  const totalTurn =
+    route.totalTurnStatus === "valid" && route.totalTurnDeg !== null
+      ? `${route.totalTurnDeg.toPrecision(6)} deg`
+      : route.totalTurnStatus === "undefined"
+        ? "undefined (zero-length-adjacent geometric turn)"
+        : "unknown (missing or contradictory saved bending evidence)";
   const geometryQc =
     route.geometryQc === "consistent"
       ? "consistent with saved source-frame XYZ (provisional, not verified calibration)"
       : route.geometryQc === "inconsistent"
         ? "INCONSISTENT: route lengths and saved XYZ disagree; human review required"
         : "unverifiable: incomplete or numerically unusable evidence";
-  return `Route ${route.sourceIndex + 1}, mesh vertices ${route.startVertexIndex} to ${route.endVertexIndex}. Saved geometric route length: ${length}. Scale-only length interval: ${interval}. Independent polyline-to-measurement QC: ${geometryQc}. Path QC: ${qc}. Provisional mesh geometry, not a verified biological branch length.`;
+  return `Route ${route.sourceIndex + 1}, mesh vertices ${route.startVertexIndex} to ${route.endVertexIndex}. Saved geometric route length: ${length}. Scale-only length interval: ${interval}. Saved total absolute geometric turn: ${totalTurn}. Independent polyline-to-measurement QC: ${geometryQc}. Path QC: ${qc}. Provisional mesh geometry, not a verified biological branch length.`;
 }
 
 /** Inspect a persisted segment increment, not an anatomical branch or independently reviewed measure. */
