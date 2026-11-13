@@ -170,7 +170,10 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                     decoded_ok = True
             except ImportError:
                 errors.append(f"Pillow JPEG decoder unavailable: {relative}")
-            except (OSError, ValueError) as exc:
+            except (OSError, ValueError, Image.DecompressionBombError) as exc:
+                # Pillow's explicit decompression-bomb protection is neither
+                # an OSError nor a ValueError; report it as a failed decode,
+                # rather than aborting the entire camera fixture inventory.
                 errors.append(f"JPEG decode failed: {relative}: {type(exc).__name__}")
         record: dict[str, object] = {
             "path": relative,
