@@ -1621,7 +1621,10 @@ describe("AnnotationEditor", () => {
             expected_updated_at: "2026-07-10T00:00:00Z",
           });
           return jsonResponse(
-            { detail: "Personal visibility preference changed in another editor." },
+            {
+              detail:
+                "Personal visibility preference changed in another editor.",
+            },
             409,
           );
         }
