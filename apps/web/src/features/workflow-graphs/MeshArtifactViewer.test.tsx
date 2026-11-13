@@ -267,6 +267,52 @@ describe("MeshArtifactViewer", () => {
     );
   });
 
+  it("rejects backwards scale bounds in saved waypoint metadata", () => {
+    const artifact = {
+      ...validArtifact,
+      surface_edge_paths: [
+        {
+          status: "connected",
+          path_vertex_indices: [0, 1, 2],
+          path_vertices_in_source_frame_m: [
+            [0, 0, 0],
+            [1, 0, 0],
+            [1, 1, 0],
+          ],
+          length_m: 2,
+          length_scale_interval_m: [1.8, 2.2],
+          path_cumulative_lengths_m: [0, 1, 2],
+          path_cumulative_length_scale_intervals_m: [
+            [0, 0],
+            [0.9, 1.1],
+            [0.8, 2.2],
+          ],
+          path_qc_warnings: [],
+        },
+      ],
+    };
+    const before = JSON.stringify(artifact);
+    const { container } = render(<MeshArtifactViewer artifact={artifact} />);
+    expect(container.querySelectorAll("polyline")).toHaveLength(1);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect provisional route 1" }),
+    );
+    fireEvent.change(screen.getByRole("slider", { name: "Route vertex" }), {
+      target: { value: "1" },
+    });
+    const waypoint = screen.getByText(/Route waypoint 2 of 3/);
+    expect(waypoint).toHaveTextContent(
+      "Saved cumulative mesh-edge distance: 1.00000 m",
+    );
+    expect(waypoint).toHaveTextContent(
+      "Scale-only cumulative interval: unknown",
+    );
+    expect(waypoint).toHaveTextContent(
+      "not a verified coral anatomical landmark",
+    );
+    expect(JSON.stringify(artifact)).toBe(before);
+  });
+
   it("fails closed on invalid saved path measurements but retains renderable geometry", () => {
     const artifact = {
       ...validArtifact,
