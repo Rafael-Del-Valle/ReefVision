@@ -123,7 +123,8 @@ describe("ImageViewport", () => {
     const overlay = screen.getByTestId("pixel-aligned-overlay");
     const transform = screen.getByTestId("image-viewport-transform");
     const initialTransform = transform.style.transform;
-    const originalPoints = overlay.querySelector("polygon")?.getAttribute("points");
+    const originalPolygon = overlay.querySelector("polygon");
+    const originalPoints = originalPolygon?.getAttribute("points");
     const wheel = new WheelEvent("wheel", {
       bubbles: true,
       cancelable: true,
@@ -150,24 +151,36 @@ describe("ImageViewport", () => {
         </svg>
       </ImageViewport>,
     );
-    const frame = screen.getByRole("region", { name: "Multi-pointer viewport" });
+    const frame = screen.getByRole("region", {
+      name: "Multi-pointer viewport",
+    });
     const transform = screen.getByTestId("image-viewport-transform");
-    const polygon = screen
-      .getByTestId("fixed-overlay")
-      .querySelector("polygon");
+    const polygon = screen.getByTestId("fixed-overlay").querySelector("polygon");
     const originalGeometry = polygon?.getAttribute("points");
     const initial = transform.style.transform;
 
     fireEvent.pointerDown(frame, {
-      button: 0, altKey: true, pointerId: 11, clientX: 50, clientY: 60,
+      button: 0,
+      altKey: true,
+      pointerId: 11,
+      clientX: 50,
+      clientY: 60,
     });
-    fireEvent.pointerMove(window, { pointerId: 12, clientX: 180, clientY: 200 });
+    fireEvent.pointerMove(window, {
+      pointerId: 12,
+      clientX: 180,
+      clientY: 200,
+    });
     fireEvent.pointerUp(window, { pointerId: 12 });
     expect(transform.style.transform).toBe(initial);
 
     // A second pointerdown must not replace the original pan anchor.
     fireEvent.pointerDown(frame, {
-      button: 0, altKey: true, pointerId: 12, clientX: 100, clientY: 100,
+      button: 0,
+      altKey: true,
+      pointerId: 12,
+      clientX: 100,
+      clientY: 100,
     });
     fireEvent.pointerMove(window, { pointerId: 11, clientX: 90, clientY: 110 });
     const afterOwnerMove = transform.style.transform;
@@ -180,7 +193,11 @@ describe("ImageViewport", () => {
 
     fireEvent.pointerUp(window, { pointerId: 11 });
     const finished = transform.style.transform;
-    fireEvent.pointerMove(window, { pointerId: 11, clientX: 150, clientY: 170 });
+    fireEvent.pointerMove(window, {
+      pointerId: 11,
+      clientX: 150,
+      clientY: 170,
+    });
     expect(transform.style.transform).toBe(finished);
     expect(polygon).toHaveAttribute("points", originalGeometry);
   });
@@ -195,9 +212,7 @@ describe("ImageViewport", () => {
     );
     const frame = screen.getByRole("region", { name: "Escape viewport" });
     const transform = screen.getByTestId("image-viewport-transform");
-    const polygon = screen
-      .getByTestId("escape-overlay")
-      .querySelector("polygon");
+    const polygon = screen.getByTestId("escape-overlay").querySelector("polygon");
     const originalPoints = polygon?.getAttribute("points");
 
     fireEvent.pointerDown(frame, {
@@ -213,7 +228,11 @@ describe("ImageViewport", () => {
     // Cancelling the gesture must not leave a stale drag that moves the
     // image when the pointer continues moving after the keypress.
     fireEvent.keyDown(frame, { key: "Escape" });
-    fireEvent.pointerMove(window, { pointerId: 11, clientX: 140, clientY: 160 });
+    fireEvent.pointerMove(window, {
+      pointerId: 11,
+      clientX: 140,
+      clientY: 160,
+    });
     expect(transform.style.transform).toBe(panned);
     expect(polygon).toHaveAttribute("points", originalPoints);
 
