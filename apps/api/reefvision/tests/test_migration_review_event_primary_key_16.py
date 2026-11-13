@@ -59,8 +59,8 @@ def test_review_event_primary_key_preserves_scientific_and_qc_records(
                     f"{composite}{REVIEW_EVENT_FK_SQL})"
                 )
             )
-        install_review_event_parent_rows(connection)
-        install_review_event_history_indexes(connection)
+            install_review_event_parent_rows(connection)
+            install_review_event_history_indexes(connection)
             connection.execute(
                 text(
                     "INSERT INTO review_queue_item_events "
