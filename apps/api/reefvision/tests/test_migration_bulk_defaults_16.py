@@ -61,8 +61,8 @@ def test_0041_bulk_registry_defaults_fail_closed_without_writes(
                     f"{REVIEW_EVENT_FK_SQL})"
                 )
             )
-        install_review_event_parent_rows(connection)
-        install_review_event_history_indexes(connection)
+            install_review_event_parent_rows(connection)
+            install_review_event_history_indexes(connection)
             connection.execute(
                 text(
                     "INSERT INTO review_queue_item_events "
