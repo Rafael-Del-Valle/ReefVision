@@ -312,6 +312,73 @@ def test_reviewed_consensus_materializes_annotation_and_routes_disagreement(
         assert approval["active_learning_handoff"][0]["round_id"] == round_record.id
 
 
+def test_review_rejects_undeclared_disagreement_before_active_learning_handoff(
+    client: TestClient,
+) -> None:
+    project, _, _, run_id, job_id, _, disagreement_id = _seed_valid_consensus_review(client)
+    app = cast(FastAPI, client.app)
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            job_id,
+        )
+        is True
+    )
+
+    with app.state.session_factory() as session:
+        source = session.get(WorkflowArtifact, disagreement_id)
+        assert source is not None
+        # This is a persisted, checksum-valid output from the correct producer,
+        # but the producer never declared it in its saved output IDs.
+        forged = WorkflowArtifact(
+            workflow_run_id=run_id,
+            producer_node_run_id=source.producer_node_run_id,
+            producer_port_id=source.producer_port_id,
+            data_type=source.data_type,
+            payload_json=source.payload_json,
+            payload_sha256=source.payload_sha256,
+        )
+        session.add(forged)
+        session.commit()
+        forged_id = forged.id
+        review = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "review",
+            )
+        )
+        assert review is not None
+        review_id = review.id
+
+    rejected = client.post(
+        f"/api/v1/workflow-node-runs/{review_id}/resume-review",
+        json={"reviewed_by": "scientist", "note": "Review approved."},
+    )
+    assert rejected.status_code == 409, rejected.text
+    assert "disagreement outputs are ambiguous" in rejected.json()["detail"]
+    with app.state.session_factory() as session:
+        review = session.get(WorkflowNodeRun, review_id)
+        assert review is not None
+        assert review.status == "waiting_for_review"
+        assert "review_approval" not in (review.result_json or {})
+        assert session.scalar(select(func.count(ActiveLearningRound.id))) == 0
+        assert session.scalar(select(func.count(Annotation.id))) == 0
+        forged = session.get(WorkflowArtifact, forged_id)
+        assert forged is not None
+        session.delete(forged)
+        session.commit()
+
+    resumed = client.post(
+        f"/api/v1/workflow-node-runs/{review_id}/resume-review",
+        json={"reviewed_by": "scientist", "note": "Review approved."},
+    )
+    assert resumed.status_code == 202, resumed.text
+    with app.state.session_factory() as session:
+        assert session.scalar(select(func.count(ActiveLearningRound.id))) == 1
+        assert session.scalar(select(func.count(Annotation.id))) == 1
+
+
 def test_auto_label_postprocessing_is_idempotent(client: TestClient) -> None:
     project, _, _, _, _, consensus_id, disagreement_id = _seed_valid_consensus_review(client)
     app = cast(FastAPI, client.app)
