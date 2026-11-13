@@ -69,8 +69,8 @@ def _input_artifacts(session: Session, node_run: WorkflowNodeRun) -> list[Workfl
         not isinstance(value, str) or not value for value in raw_ids
     ):
         raise ConflictError("Workflow review input artifact IDs are invalid")
-    if not raw_ids:
-        return []
+    # Even an empty saved list must be checked against frozen graph edges;
+    # otherwise a paused review can be approved without scientific evidence.
     artifacts = list(
         session.scalars(select(WorkflowArtifact).where(WorkflowArtifact.id.in_(raw_ids)))
     )
