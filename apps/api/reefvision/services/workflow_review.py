@@ -112,6 +112,21 @@ def _input_artifacts(session: Session, node_run: WorkflowNodeRun) -> list[Workfl
             or producer.execution_order >= node_run.execution_order
         ):
             raise ConflictError("Workflow review input lacks an earlier succeeded producer")
+        # A hash-valid replacement from the same producer/port is not review
+        # evidence unless it was declared by that completed node. Reject
+        # ambiguous duplicate outputs rather than approving one arbitrarily.
+        declared_output_ids = producer.output_artifact_ids_json
+        if not isinstance(declared_output_ids, list) or artifact.id not in declared_output_ids:
+            raise ConflictError("Workflow review input is not a declared producer output")
+        producer_port_count = session.scalar(
+            select(func.count(WorkflowArtifact.id)).where(
+                WorkflowArtifact.workflow_run_id == node_run.workflow_run_id,
+                WorkflowArtifact.producer_node_run_id == producer.id,
+                WorkflowArtifact.producer_port_id == artifact.producer_port_id,
+            )
+        )
+        if producer_port_count != 1:
+            raise ConflictError("Workflow review producer output is ambiguous")
         actual_bindings.append((producer.node_id, artifact.producer_port_id))
     if actual_bindings != expected_bindings:
         raise ConflictError("Workflow review inputs do not match saved graph edges")

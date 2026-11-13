@@ -360,3 +360,77 @@ def test_review_resume_rejects_valid_artifact_from_wrong_saved_edge(
     finished = client.get(f"/api/v1/workflow-runs/{run_id}")
     assert finished.status_code == 200, finished.text
     assert finished.json()["run"]["status"] == "succeeded"
+
+
+def test_review_resume_rejects_undeclared_and_ambiguous_same_port_outputs(
+    client: TestClient,
+) -> None:
+    # Exercise the actual persisted paused review, not just a helper or
+    # fabricated provenance map. A same-producer, same-port artifact can
+    # carry a correct checksum while being absent from the saved output IDs.
+    _, run_id, job_id = _queue_seeded_review_run(client)
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(app.state.settings, app.state.session_factory, job_id) is True
+
+    with app.state.session_factory() as session:
+        review_node = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "review",
+            )
+        )
+        assert review_node is not None
+        review_node_id = review_node.id
+        original_input_ids = list(review_node.input_artifact_ids_json or [])
+        assert len(original_input_ids) == 1
+        original = session.get(WorkflowArtifact, original_input_ids[0])
+        assert original is not None
+        duplicate = WorkflowArtifact(
+            workflow_run_id=run_id,
+            producer_node_run_id=original.producer_node_run_id,
+            producer_port_id=original.producer_port_id,
+            data_type=original.data_type,
+            payload_json=dict(original.payload_json),
+            payload_sha256=original.payload_sha256,
+        )
+        session.add(duplicate)
+        session.flush()
+        duplicate_id = duplicate.id
+        review_node.input_artifact_ids_json = [duplicate_id]
+        session.commit()
+
+    endpoint = f"/api/v1/workflow-node-runs/{review_node_id}/resume-review"
+    approval = {"reviewed_by": "scientist", "note": "Consensus checked."}
+    undeclared = client.post(endpoint, json=approval)
+    assert undeclared.status_code == 409, undeclared.text
+    assert "not a declared producer output" in undeclared.text
+
+    with app.state.session_factory() as session:
+        review_node = session.get(WorkflowNodeRun, review_node_id)
+        assert review_node is not None
+        review_node.input_artifact_ids_json = original_input_ids
+        session.commit()
+
+    ambiguous = client.post(endpoint, json=approval)
+    assert ambiguous.status_code == 409, ambiguous.text
+    assert "producer output is ambiguous" in ambiguous.text
+
+    with app.state.session_factory() as session:
+        run = session.get(WorkflowRun, run_id)
+        job = session.get(Job, job_id)
+        review_node = session.get(WorkflowNodeRun, review_node_id)
+        assert run is not None and run.status == "waiting_for_review"
+        assert job is not None and job.status == "waiting_for_review"
+        assert review_node is not None and review_node.status == "waiting_for_review"
+        assert "review_approval" not in (review_node.result_json or {})
+        duplicate = session.get(WorkflowArtifact, duplicate_id)
+        assert duplicate is not None
+        session.delete(duplicate)
+        session.commit()
+
+    approved = client.post(endpoint, json=approval)
+    assert approved.status_code == 202, approved.text
+    assert process_workflow_run_job(app.state.settings, app.state.session_factory, job_id) is True
+    finished = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert finished.status_code == 200, finished.text
+    assert finished.json()["run"]["status"] == "succeeded"
