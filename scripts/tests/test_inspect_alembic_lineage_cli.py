@@ -25,7 +25,7 @@ def test_cli_strict_mode_is_opt_in_and_never_mutates_database(
 ) -> None:
     database = tmp_path / "research.sqlite"
     with sqlite3.connect(database) as connection:
-        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
         connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
         for table in (
             "scientific_records",
@@ -157,7 +157,7 @@ def test_strict_preflight_detects_sidecars_through_symlink_without_mutation(
 def test_sqlite_integrity_preflight_reports_clean_database(tmp_path: Path) -> None:
     database = tmp_path / "clean.sqlite"
     with sqlite3.connect(database) as connection:
-        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
         connection.execute("INSERT INTO alembic_version VALUES ('0037')")
         for name in (
             "scientific_records",
@@ -184,7 +184,7 @@ def test_sqlite_integrity_preflight_reports_clean_database(tmp_path: Path) -> No
 def test_full_integrity_preflight_preserves_indexed_research_data(tmp_path: Path) -> None:
     database = tmp_path / "indexed.sqlite"
     with sqlite3.connect(database) as connection:
-        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
         connection.execute("INSERT INTO alembic_version VALUES ('0037')")
         for name in (
             "scientific_records",
@@ -271,7 +271,7 @@ def test_orphaned_foreign_key_blocks_strict_preflight_without_mutation(tmp_path:
 def test_valid_foreign_keys_allow_warning_free_preflight(tmp_path: Path) -> None:
     database = tmp_path / "linked.sqlite"
     with sqlite3.connect(database) as connection:
-        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
         connection.execute("INSERT INTO alembic_version VALUES ('0037')")
         for name in (
             "scientific_records",
