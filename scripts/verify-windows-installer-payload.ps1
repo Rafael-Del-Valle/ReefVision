@@ -9,6 +9,23 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+function Get-ReefVisionArtifactSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    # The Tauri build subprocess can lack the Get-FileHash cmdlet.
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            return ([System.BitConverter]::ToString($sha256.ComputeHash($stream))).Replace('-', '').ToLowerInvariant()
+        } finally {
+            $sha256.Dispose()
+        }
+    } finally {
+        $stream.Dispose()
+    }
+}
+
 function Get-ReefVisionMsiPayload {
     param([string]$Directory, [string]$ProductVersion)
 
@@ -66,7 +83,7 @@ function Get-ReefVisionMsiPayload {
         [ordered]@{
             name = $item.Name
             size_bytes = $item.Length
-            sha256 = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            sha256 = Get-ReefVisionArtifactSha256 -Path $item.FullName
         }
     })
     [ordered]@{ identity = $identity; media = $media; files = $files }

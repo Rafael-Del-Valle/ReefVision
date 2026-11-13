@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+function Get-FileHash { throw 'The installer verifier must also work without this cmdlet.' }
 $folder = Join-Path $env:TEMP ('reefvision-rc-payload-test-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $folder | Out-Null
 $verifier = Join-Path $PSScriptRoot 'verify-windows-installer-payload.ps1'
@@ -24,10 +25,13 @@ try {
     $null = [Runtime.InteropServices.Marshal]::FinalReleaseComObject($db)
     $null = [Runtime.InteropServices.Marshal]::FinalReleaseComObject($installer)
     [GC]::Collect(); [GC]::WaitForPendingFinalizers()
-    Set-Content -LiteralPath (Join-Path $folder 'rv1.cab') -Value 'Synthetic cabinet data'
+    [System.IO.File]::WriteAllText((Join-Path $folder 'rv1.cab'), "Synthetic cabinet data`r`n")
     $payload = & $verifier -InstallerDirectory $folder -Version '1.1.0'
     if ($payload.media.Count -ne 2 -or -not $payload.media[0].embedded -or $payload.media[1].embedded -or $payload.files.Count -ne 2) {
         throw 'MSI Media or external file inventory does not match the fixture.'
+    }
+    if ($payload.files[1].sha256 -ne '6b0872641b805bea38a49ba61eeee5c9cca7833fdbe95f0d91143a6a7eaa73ff') {
+        throw 'Unexpected SHA-256 for the known cabinet fixture.'
     }
     [ordered]@{
         version = '1.1.0'
