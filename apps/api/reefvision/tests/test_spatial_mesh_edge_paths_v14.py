@@ -957,3 +957,33 @@ def test_coincident_mesh_route_endpoints_require_scientist_review() -> None:
     assert routes[0]["geometric_detour_ratio"] is None
     assert "coincident_route_endpoints" in routes[0]["path_qc_warnings"]
     assert "coincident_route_endpoints" not in routes[1]["path_qc_warnings"]
+
+
+def test_coincident_mesh_route_endpoints_are_symmetric_and_scale_uncertain() -> None:
+    # Reversing the selected vertex pair must not change a provisional route's
+    # physical length, correlated calibration interval, or review warning.
+    # The route is geometric evidence, not an anatomically verified centerline.
+    from reefvision.services.spatial_mesh_paths_v14 import mesh_edge_paths
+
+    routes = mesh_edge_paths(
+        points=[
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+        ],
+        faces=[[0, 1, 3], [1, 2, 3]],
+        pairs=[[0, 2], [2, 0]],
+        scale=0.1,
+        scale_uncertainty=0.1,
+    )
+    assert routes is not None
+    forward, reverse = routes
+    for route in (forward, reverse):
+        assert route["status"] == "connected"
+        assert route["length_m"] == pytest.approx(0.2)
+        assert route["endpoint_chord_length_m"] == 0
+        assert route["geometric_detour_ratio"] is None
+        assert "coincident_route_endpoints" in route["path_qc_warnings"]
+    assert forward["length_m"] == reverse["length_m"]
+    assert forward["path_qc_warnings"] == reverse["path_qc_warnings"]
