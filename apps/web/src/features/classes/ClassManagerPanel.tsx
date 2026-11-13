@@ -651,50 +651,50 @@ function ClassRow({
         usage.data &&
         usage.data.project_id === project.id &&
         usage.data.class_id === labelClass.id && (
-        <div className="class-usage-card">
-          <div className="class-usage-summary">
-            <strong>{usage.data.total_references} total references</strong>
-            <span>
-              {usage.data.mutable_reference_count} mutable |{" "}
-              {usage.data.immutable_reference_count} immutable
-            </span>
+          <div className="class-usage-card">
+            <div className="class-usage-summary">
+              <strong>{usage.data.total_references} total references</strong>
+              <span>
+                {usage.data.mutable_reference_count} mutable |{" "}
+                {usage.data.immutable_reference_count} immutable
+              </span>
+            </div>
+            {usageRows.length === 0 ? (
+              <p className="annotation-helper">
+                {usageIsVerifiedEmpty
+                  ? "This class has no references and is eligible for deletion."
+                  : "No itemized references are available; check the reference total and blockers."}
+              </p>
+            ) : (
+              <div className="class-usage-list">
+                {usageRows.map((item) => (
+                  <div key={item.key} className="class-usage-row">
+                    <span>{item.label}</span>
+                    <strong>{item.count}</strong>
+                  </div>
+                ))}
+              </div>
+            )}
+            {deleteBlockers.length > 0 && (
+              <div className="class-warning-list">
+                {deleteBlockers.map((warning) => (
+                  <p key={warning} className="annotation-helper">
+                    {warning}
+                  </p>
+                ))}
+              </div>
+            )}
+            {compatibilityWarnings.length > 0 && (
+              <div className="class-warning-list">
+                {compatibilityWarnings.map((warning) => (
+                  <p key={warning} className="annotation-helper">
+                    {warning}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
-          {usageRows.length === 0 ? (
-            <p className="annotation-helper">
-              {usage.data.total_references === 0 && usage.data.can_delete
-                ? "This class has no references and is eligible for deletion."
-                : "No itemized references are available; check the reference total and blockers."}
-            </p>
-          ) : (
-            <div className="class-usage-list">
-              {usageRows.map((item) => (
-                <div key={item.key} className="class-usage-row">
-                  <span>{item.label}</span>
-                  <strong>{item.count}</strong>
-                </div>
-              ))}
-            </div>
-          )}
-          {deleteBlockers.length > 0 && (
-            <div className="class-warning-list">
-              {deleteBlockers.map((warning) => (
-                <p key={warning} className="annotation-helper">
-                  {warning}
-                </p>
-              ))}
-            </div>
-          )}
-          {compatibilityWarnings.length > 0 && (
-            <div className="class-warning-list">
-              {compatibilityWarnings.map((warning) => (
-                <p key={warning} className="annotation-helper">
-                  {warning}
-                </p>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+        )}
 
       {reassignPreview && matchesReassignPreview && (
         <OperationSummary
