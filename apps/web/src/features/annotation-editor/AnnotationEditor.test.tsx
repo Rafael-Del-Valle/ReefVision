@@ -1562,12 +1562,98 @@ describe("AnnotationEditor", () => {
       screen.queryByTestId("annotation-annotation-1"),
     ).not.toBeInTheDocument();
 
+    const savedRequest = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).endsWith(
+          `/projects/${project.id}/class-visibility/preferences/annotations`,
+        ) && init?.method === "PUT",
+    );
+    expect(JSON.parse(String(savedRequest?.[1]?.body))).toMatchObject({
+      expected_updated_at: null,
+      hidden_class_ids: ["class-1"],
+    });
+
     const annotationGets = fetchMock.mock.calls.filter(
       ([request, requestInit]) =>
         String(request).endsWith(`/images/${session.image.id}/annotations`) &&
         (!requestInit?.method || requestInit.method === "GET"),
     );
     expect(annotationGets).toHaveLength(1);
+  });
+
+  it("rejects stale personal visibility saves and reloads the newer scoped state", async () => {
+    let reads = 0;
+    let writes = 0;
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (
+          url.endsWith(`/images/${session.image.id}/annotations`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse(session);
+        }
+        if (
+          url.endsWith(`/projects/${project.id}/class-visibility`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          reads += 1;
+          const bundle = buildVisibilityBundle({
+            userPreferences: {
+              annotations: [reads > 1 ? "class-2" : "class-1"],
+            },
+          });
+          if (reads > 1) {
+            bundle.user_preferences.annotations.updated_at =
+              "2026-07-11T00:00:00Z";
+          }
+          return jsonResponse(bundle);
+        }
+        if (
+          url.endsWith(
+            `/projects/${project.id}/class-visibility/preferences/annotations`,
+          ) &&
+          init?.method === "PUT"
+        ) {
+          writes += 1;
+          expect(JSON.parse(String(init.body))).toMatchObject({
+            expected_updated_at: "2026-07-10T00:00:00Z",
+          });
+          return jsonResponse(
+            { detail: "Personal visibility preference changed in another editor." },
+            409,
+          );
+        }
+        const shared = handleDefaultEditorRequests(url, init);
+        if (shared) return shared;
+        throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+      });
+    const { queryClient } = renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save as My Preference" }),
+    );
+    await waitFor(() => expect(writes).toBe(1));
+    await waitFor(() => expect(reads).toBeGreaterThan(1));
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<ClassVisibilityBundle>([
+          "class-visibility",
+          project.id,
+        ])?.user_preferences.annotations.hidden_class_ids,
+      ).toEqual(["class-2"]),
+    );
+    expect(screen.getByTestId("class-visibility-status")).toHaveTextContent(
+      "changed in another editor",
+    );
+    expect(
+      fetchMock.mock.calls.filter(([, init]) =>
+        ["POST", "PATCH", "DELETE"].includes(init?.method ?? "GET"),
+      ),
+    ).toHaveLength(0);
   });
 
   it("resets only an observed personal preference version without touching research records", async () => {
