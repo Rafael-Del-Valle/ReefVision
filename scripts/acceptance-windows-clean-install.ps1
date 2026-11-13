@@ -918,7 +918,11 @@ try {
     }
     $report.completed_at_utc = [DateTime]::UtcNow.ToString('o')
     Save-Report
-    if (-not $KeepArtifacts -and (Test-Path (Join-Path $RunRoot '.reefvision-acceptance-run')) -and $report.uninstall.status -eq 'PASS') {
+    # A successful msiexec /x alone is not enough to authorize cleanup:
+    # preserve evidence when byte-level research retention or any later gate fails.
+    if (-not $KeepArtifacts -and (Test-Path (Join-Path $RunRoot '.reefvision-acceptance-run')) -and
+        $report.uninstall.status -eq 'PASS' -and $report.data_retention.status -eq 'PASS' -and
+        $null -eq $report.failure_reason) {
         $ExpectedRunRoot = [System.IO.Path]::GetFullPath((Join-Path $AcceptanceRoot "reefvision-clean-$Token"))
         if ([System.IO.Path]::GetFullPath($RunRoot) -ne $ExpectedRunRoot) { throw 'Refusing cleanup outside the generated acceptance run.' }
         [void](Assert-ReefVisionAcceptanceTreeNoReparsePoints -Path $RunRoot)
