@@ -1664,6 +1664,76 @@ describe("AnnotationEditor", () => {
     ).toHaveLength(0);
   });
 
+  it("retains a saved project default after failed reset and allows explicit retry", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    let deleteAttempts = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse(session);
+      }
+      if (
+        url.endsWith(`/projects/${project.id}/class-visibility`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse(
+          buildVisibilityBundle({
+            projectDefaults: { annotations: ["class-1"] },
+          }),
+        );
+      }
+      if (
+        url.endsWith(
+          `/projects/${project.id}/class-visibility/defaults/annotations`,
+        ) &&
+        init?.method === "DELETE"
+      ) {
+        deleteAttempts += 1;
+        return deleteAttempts === 1
+          ? jsonResponse({ detail: "Temporary SQLite write lock" }, 503)
+          : new Response(null, { status: 204 });
+      }
+      const fallback = handleDefaultEditorRequests(url, init);
+      if (fallback) return fallback;
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+
+    const { queryClient } = renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    const resetButton = screen.getByRole("button", {
+      name: "Reset Project Default",
+    });
+    await waitFor(() => expect(resetButton).not.toBeDisabled());
+    await userEvent.click(resetButton);
+    await waitFor(() => expect(deleteAttempts).toBe(1));
+    await waitFor(() => expect(resetButton).not.toBeDisabled());
+    expect(
+      queryClient.getQueryData<ClassVisibilityBundle>([
+        "class-visibility",
+        project.id,
+      ])?.project_defaults.annotations.hidden_class_ids,
+    ).toEqual(["class-1"]);
+
+    await userEvent.click(resetButton);
+    await waitFor(() =>
+      expect(screen.getByTestId("class-visibility-status")).toHaveTextContent(
+        "Reset the project default for Annotations.",
+      ),
+    );
+    expect(deleteAttempts).toBe(2);
+    expect(
+      queryClient.getQueryData<ClassVisibilityBundle>([
+        "class-visibility",
+        project.id,
+      ])?.project_defaults.annotations.saved,
+    ).toBe(false);
+  });
+
   it("waits for a project visibility identity before enabling persistent controls", async () => {
     let resolveVisibility: (response: Response) => void = () => {
       throw new Error("The visibility request was not started");
