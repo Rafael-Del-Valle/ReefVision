@@ -1209,7 +1209,7 @@ describe("AnnotationEditor", () => {
     expect(panel.queryByText("Muricea Closed")).not.toBeInTheDocument();
   });
 
-  it("reveals only highlighted QC observations temporarily without changing saved class visibility", async () => {
+  it("temporarily reveals only QC-highlighted evidence", async () => {
     const savedVisibility = buildVisibilityBundle({
       userPreferences: {
         annotations: ["class-1"],
@@ -1284,6 +1284,14 @@ describe("AnnotationEditor", () => {
       </QueryClientProvider>
     );
     const { rerender } = render(editorFor(qcContext));
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<ClassVisibilityBundle>([
+          "class-visibility",
+          project.id,
+        ]),
+      ).toEqual(savedVisibility),
+    );
     expect(
       await screen.findByTestId("annotation-annotation-1"),
     ).toBeInTheDocument();
