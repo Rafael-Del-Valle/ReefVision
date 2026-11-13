@@ -62,6 +62,7 @@ import {
   writeInternalAnnotationClipboard,
 } from "./annotationClipboard";
 import { deleteMaskAnnotations } from "./maskDocumentOperations";
+import { boundedDenseObjectRows } from "./denseObjectList";
 import {
   cullViewportItems,
   cullViewportMasks,
@@ -357,6 +358,7 @@ export function AnnotationEditor({
   const [predictionGeometryOverrides, setPredictionGeometryOverrides] =
     useState<Record<string, ReviewedPredictionGeometry>>({});
   const [objectFilter, setObjectFilter] = useState("");
+  const [objectListLimit, setObjectListLimit] = useState(200);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [fullImageRetry, setFullImageRetry] = useState(0);
   const [imagePreload, setImagePreload] = useState<{
@@ -400,6 +402,10 @@ export function AnnotationEditor({
     setSessionVisibilityOverrides({});
     setVisibilityStatusMessage(null);
   }, [project.id]);
+
+  useEffect(() => {
+    setObjectListLimit(200);
+  }, [currentImageId, objectFilter, project.id]);
 
   const sessionQuery = useQuery({
     queryKey: ["annotation-session", currentImageId],
@@ -710,6 +716,46 @@ export function AnnotationEditor({
     () =>
       new Map(labelClasses.map((labelClass) => [labelClass.id, labelClass])),
     [labelClasses],
+  );
+  const normalizedObjectFilter = objectFilter.trim().toLowerCase();
+  const filteredObjectAnnotations = useMemo(
+    () =>
+      state.document.annotations.filter((annotation) =>
+        (
+          labelClassesById.get(annotation.label_class_id)?.name ?? ""
+        ).toLowerCase().includes(normalizedObjectFilter),
+      ),
+    [labelClassesById, normalizedObjectFilter, state.document.annotations],
+  );
+  const filteredObjectMasks = useMemo(
+    () =>
+      state.document.maskAnnotations.filter(
+        (mask) =>
+          mask != null &&
+          (labelClassesById.get(mask.label_class_id ?? "")?.name ?? "")
+            .toLowerCase()
+            .includes(normalizedObjectFilter),
+      ),
+    [labelClassesById, normalizedObjectFilter, state.document.maskAnnotations],
+  );
+  const filteredObjectCount =
+    filteredObjectAnnotations.length + filteredObjectMasks.length;
+  const denseObjectRows = useMemo(
+    () =>
+      boundedDenseObjectRows(
+        filteredObjectAnnotations,
+        filteredObjectMasks,
+        objectListLimit,
+        state.selectedIds,
+        state.selectedMaskIds,
+      ),
+    [
+      filteredObjectAnnotations,
+      filteredObjectMasks,
+      objectListLimit,
+      state.selectedIds,
+      state.selectedMaskIds,
+    ],
   );
   const allClassIds = useMemo(
     () => labelClasses.map((labelClass) => labelClass.id),
@@ -3742,30 +3788,37 @@ export function AnnotationEditor({
                 state.document.maskAnnotations.length === 0 && (
                   <p>No annotations yet.</p>
                 )}
-              {state.document.annotations
-                .filter((annotation) =>
-                  (labelClassesById.get(annotation.label_class_id)?.name ?? "")
-                    .toLowerCase()
-                    .includes(objectFilter.toLowerCase()),
-                )
-                .map((annotation, index) => {
+              {state.document.annotations.length === 0 &&
+                state.document.maskAnnotations.length === 0 && (
+                  <p>No annotations yet.</p>
+                )}
+              {filteredObjectCount === 0 &&
+                (state.document.annotations.length > 0 ||
+                  state.document.maskAnnotations.length > 0) && (
+                  <p>No objects match this filter.</p>
+                )}
+              {denseObjectRows.map((row) => {
+                if (row.kind === "annotation") {
+                  const annotation = row.item;
                   const labelClass = labelClassesById.get(
                     annotation.label_class_id,
                   );
                   const selected = state.selectedIds.includes(annotation.id);
                   return (
                     <button
-                      key={annotation.id}
+                      key={`annotation-${annotation.id}`}
                       type="button"
                       role="option"
                       aria-selected={selected}
+                      aria-posinset={row.position + 1}
+                      aria-setsize={filteredObjectCount}
                       className={`annotation-selection-row object-row ${selected ? "selected" : ""}`}
                       onClick={() => {
                         setMaskSelection([]);
                         setSelection([annotation.id]);
                       }}
                     >
-                      <span className="object-index">{index + 1}</span>
+                      <span className="object-index">{row.position + 1}</span>
                       <span
                         className="annotation-class-swatch"
                         style={{
@@ -3783,57 +3836,69 @@ export function AnnotationEditor({
                       </span>
                     </button>
                   );
-                })}
-              {state.document.maskAnnotations
-                .filter((mask) =>
-                  (labelClassesById.get(mask.label_class_id ?? "")?.name ?? "")
-                    .toLowerCase()
-                    .includes(objectFilter.toLowerCase()),
-                )
-                .map((mask, index) => {
-                  const labelClass = mask.label_class_id
-                    ? labelClassesById.get(mask.label_class_id)
-                    : null;
-                  const selected = state.selectedMaskIds.includes(mask.id);
-                  const kindLabel =
-                    mask.geometry_kind === "raster_mask"
-                      ? "Brush mask"
-                      : "Polygon / Fill";
-                  return (
-                    <button
-                      key={mask.id}
-                      type="button"
-                      role="option"
-                      aria-selected={selected}
-                      className={`annotation-selection-row object-row ${selected ? "selected" : ""}`}
-                      onClick={() => {
-                        setSelection([]);
-                        setMaskSelection([mask.id]);
+                }
+                const mask = row.item;
+                const labelClass = mask.label_class_id
+                  ? labelClassesById.get(mask.label_class_id)
+                  : null;
+                const selected = state.selectedMaskIds.includes(mask.id);
+                const kindLabel =
+                  mask.geometry_kind === "raster_mask"
+                    ? "Brush mask"
+                    : "Polygon / Fill";
+                return (
+                  <button
+                    key={`mask-${mask.id}`}
+                    type="button"
+                    role="option"
+                    aria-selected={selected}
+                    aria-posinset={row.position + 1}
+                    aria-setsize={filteredObjectCount}
+                    className={`annotation-selection-row object-row ${selected ? "selected" : ""}`}
+                    onClick={() => {
+                      setSelection([]);
+                      setMaskSelection([mask.id]);
+                    }}
+                  >
+                    <span className="object-index">{row.position + 1}</span>
+                    <span
+                      className="annotation-class-swatch"
+                      style={{
+                        backgroundColor:
+                          labelClass?.display_color ?? "#72dbc9",
                       }}
-                    >
-                      <span className="object-index">
-                        {state.document.annotations.length + index + 1}
-                      </span>
-                      <span
-                        className="annotation-class-swatch"
-                        style={{
-                          backgroundColor:
-                            labelClass?.display_color ?? "#72dbc9",
-                        }}
-                      />
-                      <span>
-                        <strong>{labelClass?.name ?? "Unassigned"}</strong>
-                        <small>
-                          {kindLabel}
-                          {mask.area_pixels !== null
-                            ? ` · ${mask.area_pixels} px²`
-                            : ""}
-                        </small>
-                      </span>
-                    </button>
-                  );
-                })}
+                    />
+                    <span>
+                      <strong>{labelClass?.name ?? "Unassigned"}</strong>
+                      <small>
+                        {kindLabel}
+                        {mask.area_pixels !== null
+                          ? ` · ${mask.area_pixels} px²`
+                          : ""}
+                      </small>
+                    </span>
+                  </button>
+                );
+              })}
             </div>
+            <p className="annotation-helper" role="status">
+              Showing {denseObjectRows.length} of {filteredObjectCount} matching
+              objects. Selected objects outside the current window remain
+              accessible.
+            </p>
+            {filteredObjectCount > objectListLimit && (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() =>
+                  setObjectListLimit((current) =>
+                    Math.min(filteredObjectCount, current + 200),
+                  )
+                }
+              >
+                Show 200 more objects
+              </button>
+            )}
             <div
               className="prediction-inspector-slot"
               data-testid="prediction-inspector-slot"
