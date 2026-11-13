@@ -142,6 +142,8 @@ $retentionUninstallOffset = $acceptanceSource.IndexOf('Run-Msi -Action Uninstall
 $retentionAfterOffset = $acceptanceSource.IndexOf('$retainedResearchAfter = Get-ReefVisionResearchFileSnapshot', [System.StringComparison]::Ordinal)
 Assert-True ($retentionBeforeOffset -gt 0 -and $retentionBeforeOffset -lt $retentionUninstallOffset -and $retentionUninstallOffset -lt $retentionAfterOffset) 'Uninstall retention must hash research files before and after msiexec.'
 Assert-True ($acceptanceSource.Contains('Assert-ReefVisionResearchFileSnapshotRetained -Before $retainedResearchBefore -After $retainedResearchAfter')) 'Installed retention PASS must depend on byte-level verification.'
+Assert-True ($acceptanceSource.Contains('$report.uninstall.status -eq ''PASS'' -and $report.data_retention.status -eq ''PASS''')) 'Disposable cleanup must not erase evidence following research-retention failure.'
+Assert-True ($acceptanceSource.Contains('$null -eq $report.failure_reason)')) 'Disposable cleanup must preserve evidence on any acceptance error.'
 
 $arguments = New-ReefVisionMsiArguments -Action Install -PackageOrProduct 'C:\build\ReefVision.msi' -InstallRoot 'C:\rv-test\install' -LogPath 'C:\rv-test\install.log'
 Assert-True ($arguments[0] -eq '/i') 'Install command does not use /i.'
