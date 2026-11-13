@@ -4,12 +4,12 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from reefvision.db.migration_lineage_guard import assert_compatible_revision_0038
+from reefvision.db.review_event_topology_16 import assert_review_event_relationship_topology
 from reefvision.tests.review_lineage_fixture_16 import (
     REVIEW_EVENT_FK_SQL,
     install_review_event_history_indexes,
     install_review_event_parent_rows,
 )
-from reefvision.db.review_event_topology_16 import assert_review_event_relationship_topology
 
 REVIEW_SCHEMA = (
     "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
