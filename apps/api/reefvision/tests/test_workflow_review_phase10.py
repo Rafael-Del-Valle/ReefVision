@@ -302,3 +302,60 @@ def test_invalid_review_node_identity_fails_persisted_run_instead_of_stranding_i
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["project_id"] == project["id"]
     assert detail.json()["run"]["status"] == "failed"
+
+def test_review_resume_rejects_valid_artifact_from_wrong_saved_edge(
+    client: TestClient,
+) -> None:
+    _, run_id, job_id = _queue_seeded_review_run(client)
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(app.state.settings, app.state.session_factory, job_id) is True
+
+    with app.state.session_factory() as session:
+        review_node = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "review",
+            )
+        )
+        foreign_input = session.scalar(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.workflow_run_id == run_id,
+                WorkflowArtifact.data_type == "model_reference",
+            )
+        )
+        assert review_node is not None and foreign_input is not None
+        original_input_ids = list(review_node.input_artifact_ids_json or [])
+        assert len(original_input_ids) == 1
+        review_node_id = review_node.id
+        # This model artifact has a valid SHA and is in the same run, but the
+        # graph routes the consensus artifact to the human-review node.
+        review_node.input_artifact_ids_json = [foreign_input.id]
+        session.commit()
+
+    refused = client.post(
+        f"/api/v1/workflow-node-runs/{review_node_id}/resume-review",
+        json={"reviewed_by": "scientist", "note": "Checked the consensus."},
+    )
+    assert refused.status_code == 409, refused.text
+    assert "inputs do not match saved graph edges" in refused.text
+
+    with app.state.session_factory() as session:
+        run = session.get(WorkflowRun, run_id)
+        job = session.get(Job, job_id)
+        review_node = session.get(WorkflowNodeRun, review_node_id)
+        assert run is not None and run.status == "waiting_for_review"
+        assert job is not None and job.status == "waiting_for_review"
+        assert review_node is not None and review_node.status == "waiting_for_review"
+        assert "review_approval" not in (review_node.result_json or {})
+        review_node.input_artifact_ids_json = original_input_ids
+        session.commit()
+
+    approved = client.post(
+        f"/api/v1/workflow-node-runs/{review_node_id}/resume-review",
+        json={"reviewed_by": "scientist", "note": "Checked the consensus."},
+    )
+    assert approved.status_code == 202, approved.text
+    assert process_workflow_run_job(app.state.settings, app.state.session_factory, job_id) is True
+    finished = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert finished.status_code == 200, finished.text
+    assert finished.json()["run"]["status"] == "succeeded"
