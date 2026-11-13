@@ -1494,4 +1494,125 @@ describe("MeshArtifactViewer", () => {
     ).toEqual([null, null, null]);
     expect(JSON.stringify(artifact)).toBe(before);
   });
+
+  it("independently checks saved cumulative route bends without upgrading scientific status", () => {
+    const route = {
+      status: "connected",
+      path_vertex_indices: [0, 1, 2, 3],
+      path_vertices_in_source_frame_m: [
+        [0, 0, 0],
+        [1, 0, 0],
+        [1, 1, 0],
+        [0, 1, 0],
+      ],
+      path_turn_angles_deg: [null, 90, 90, null],
+      maximum_turn_angle_deg: 90,
+      total_absolute_geometric_turn_deg: 180,
+    };
+    const artifact = { ...validArtifact, surface_edge_paths: [route] };
+    const saved = JSON.stringify(artifact);
+    const inspect = (updates: Record<string, unknown>) =>
+      parseMeshRenderArtifact({
+        ...artifact,
+        surface_edge_paths: [{ ...route, ...updates }],
+      })?.routeInspections[0];
+
+    expect(inspect({})?.totalTurnStatus).toBe("valid");
+    expect(inspect({})?.totalTurnDeg).toBe(180);
+    expect(
+      inspect({ total_absolute_geometric_turn_deg: 90 })?.totalTurnStatus,
+    ).toBe("unknown");
+    expect(
+      inspect({ total_absolute_geometric_turn_deg: -180 })?.totalTurnStatus,
+    ).toBe("unknown");
+    expect(
+      inspect({
+        total_absolute_geometric_turn_deg: Number.POSITIVE_INFINITY,
+      })?.totalTurnStatus,
+    ).toBe("unknown");
+    expect(
+      inspect({ total_absolute_geometric_turn_deg: undefined })?.totalTurnStatus,
+    ).toBe("unknown");
+    expect(
+      inspect({
+        path_turn_angles_deg: [null, 45, 135, null],
+        maximum_turn_angle_deg: 135,
+      })?.totalTurnStatus,
+    ).toBe("unknown");
+
+    const { rerender } = render(<MeshArtifactViewer artifact={artifact} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect provisional route 1" }),
+    );
+    expect(screen.getByText(/Saved geometric route length:/)).toHaveTextContent(
+      "Saved total absolute geometric turn: 180.000 deg",
+    );
+    expect(screen.getByText(/Saved geometric route length:/)).toHaveTextContent(
+      "not a verified biological branch length",
+    );
+    expect(JSON.stringify(artifact)).toBe(saved);
+
+    const undefinedBend = {
+      status: "connected",
+      path_vertex_indices: [0, 1, 2],
+      path_vertices_in_source_frame_m: [
+        [0, 0, 0],
+        [0, 0, 0],
+        [1, 0, 0],
+      ],
+      path_turn_angles_deg: [null, null, null],
+      maximum_turn_angle_deg: null,
+      total_absolute_geometric_turn_deg: null,
+    };
+    const undefinedArtifact = {
+      ...validArtifact,
+      surface_edge_paths: [undefinedBend],
+    };
+    expect(
+      parseMeshRenderArtifact(undefinedArtifact)?.routeInspections[0]
+        ?.totalTurnStatus,
+    ).toBe("undefined");
+    expect(
+      parseMeshRenderArtifact({
+        ...validArtifact,
+        surface_edge_paths: [
+          { ...undefinedBend, total_absolute_geometric_turn_deg: 0 },
+        ],
+      })?.routeInspections[0]?.totalTurnStatus,
+    ).toBe("unknown");
+
+    rerender(<MeshArtifactViewer artifact={undefinedArtifact} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect provisional route 1" }),
+    );
+    expect(screen.getByText(/Saved geometric route length:/)).toHaveTextContent(
+      "Saved total absolute geometric turn: undefined (zero-length-adjacent geometric turn)",
+    );
+    rerender(
+      <MeshArtifactViewer
+        artifact={{
+          ...validArtifact,
+          surface_edge_paths: [
+            {
+              status: "connected",
+              path_vertex_indices: [0, 1],
+              path_vertices_in_source_frame_m: [
+                [0, 0, 0],
+                [1, 0, 0],
+              ],
+              path_turn_angles_deg: [null, null],
+              maximum_turn_angle_deg: null,
+              total_absolute_geometric_turn_deg: 0,
+            },
+          ],
+        }}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect provisional route 1" }),
+    );
+    expect(screen.getByText(/Saved geometric route length:/)).toHaveTextContent(
+      "Saved total absolute geometric turn: 0.00000 deg",
+    );
+  });
 });
