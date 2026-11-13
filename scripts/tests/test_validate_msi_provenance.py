@@ -187,6 +187,40 @@ def test_invalid_expected_commit(tmp_path: Path) -> None:
         )
 
 
+def test_foreign_checkout_commit_is_rejected_before_install(tmp_path: Path) -> None:
+    """Valid CAB hashes do not excuse a bundle built from a different commit."""
+    directory, _ = make_bundle(tmp_path)
+    assert validator.validate_bundle(directory, expected_version=VERSION)["source_commit"] == COMMIT
+    original_msi = (directory / "ReefVision_1.0.2_x64_en-US.msi").read_bytes()
+    with pytest.raises(validator.BundleValidationError, match="differs from expected HEAD"):
+        validator.validate_bundle(
+            directory, expected_version=VERSION, expected_commit="b" * 40
+        )
+    assert (directory / "ReefVision_1.0.2_x64_en-US.msi").read_bytes() == original_msi
+
+
+def test_disposable_windows_ci_checks_bundle_provenance_before_install() -> None:
+    """A passing build-runner check alone must not authorize a fresh-runner install."""
+    repo_root = Path(__file__).resolve().parents[2]
+    workflow = (repo_root / ".github/workflows/build-desktop.yml").read_text(
+        encoding="utf-8"
+    )
+    acceptance = workflow.split("  windows-clean-install-acceptance:", 1)[1]
+    guard = acceptance.index(
+        "- name: Verify downloaded MSI/CAB provenance against clean-runner checkout"
+    )
+    media = acceptance.index("- name: Verify MSI-declared cabinet payload before any install")
+    install = acceptance.index("- name: Test isolated MSI installation")
+    assert guard < media < install
+    preinstall = acceptance[guard:media]
+    assert "scripts/validate_msi_provenance.py" in preinstall
+    assert "--expected-version $version" in preinstall
+    assert "--expected-commit $expectedCommit" in preinstall
+    assert "(git rev-parse HEAD).Trim()" in preinstall
+    assert "$LASTEXITCODE -ne 0" in preinstall
+    assert "python-version: \"3.12\"" in acceptance[:guard]
+
+
 def test_rejection_preserves_user_artifacts(tmp_path: Path) -> None:
     directory, _ = make_bundle(tmp_path)
     cab = directory / "rv1.cab"
