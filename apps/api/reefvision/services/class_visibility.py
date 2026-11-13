@@ -107,7 +107,6 @@ class ClassVisibilityService:
                     saved=True,
                     updated_at=preference.updated_at,
                     updated_by_identity=preference.user_identity,
-            record_id=preference.id,
                     record_id=preference.id,
                 )
 
@@ -121,7 +120,6 @@ class ClassVisibilityService:
                     saved=True,
                     updated_at=project_default.updated_at,
                     updated_by_identity=project_default.updated_by_identity,
-            record_id=project_default.id,
                     record_id=project_default.id,
                 )
 
@@ -146,8 +144,6 @@ class ClassVisibilityService:
             project_id, payload.hidden_class_ids
         )
         user_identity = get_local_user_identity(self.settings)
-        if payload.expected_record_id is not None and payload.expected_updated_at is None:
-            raise ValidationError("Visibility record id requires an existing revision")
         if payload.expected_record_id is not None and payload.expected_updated_at is None:
             raise ValidationError("Visibility record id requires an existing revision")
         if "expected_updated_at" in payload.model_fields_set:
@@ -180,6 +176,7 @@ class ClassVisibilityService:
             saved=True,
             updated_at=preference.updated_at,
             updated_by_identity=preference.user_identity,
+            record_id=preference.id,
         )
 
     def reset_user_preference(
@@ -194,11 +191,13 @@ class ClassVisibilityService:
         user_identity = get_local_user_identity(self.settings)
         if expected_record_id is not None and expected_updated_at is None:
             raise ValidationError("Visibility record id requires an existing revision")
-        if expected_record_id is not None and expected_updated_at is None:
-            raise ValidationError("Visibility record id requires an existing revision")
         if expected_updated_at is not None:
             if not self.preferences.delete_if_updated_at(
-                project_id, user_identity, resolved_layer_type, expected_updated_at, expected_record_id
+                project_id,
+                user_identity,
+                resolved_layer_type,
+                expected_updated_at,
+                expected_record_id,
             ):
                 raise ConflictError(
                     "Personal visibility preference changed in another editor. "
@@ -226,6 +225,8 @@ class ClassVisibilityService:
             project_id, payload.hidden_class_ids
         )
         user_identity = get_local_user_identity(self.settings)
+        if payload.expected_record_id is not None and payload.expected_updated_at is None:
+            raise ValidationError("Visibility record id requires an existing revision")
         if "expected_updated_at" in payload.model_fields_set:
             if not self.project_defaults.save_if_revision(
                 project_id,
@@ -255,6 +256,7 @@ class ClassVisibilityService:
             saved=True,
             updated_at=project_default.updated_at,
             updated_by_identity=project_default.updated_by_identity,
+            record_id=project_default.id,
         )
 
     def reset_project_default(
@@ -266,6 +268,8 @@ class ClassVisibilityService:
     ) -> None:
         self._project(project_id)
         resolved_layer_type = self._layer_type(layer_type)
+        if expected_record_id is not None and expected_updated_at is None:
+            raise ValidationError("Visibility record id requires an existing revision")
         if expected_updated_at is not None:
             if not self.project_defaults.delete_if_updated_at(
                 project_id, resolved_layer_type, expected_updated_at, expected_record_id
