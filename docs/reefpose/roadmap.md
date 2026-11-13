@@ -21,8 +21,11 @@ Updated: 2026-11-12
   integrated Biological Movement Workspace: complete for the synthetic engineering
   vertical slice, subject to real biological validation.
 
-Recommended next task: Phase 6 real-data scientific validation and study management.
-Freeze independently annotated multi-species videos, quantify pose/identity/event
-agreement and calibration/threshold sensitivity, add inter-observer and uncertainty
-reports, and complete advanced-formula/manual-event GUI controls. Defer learned behavior
-classifiers and biological claims until that baseline is established.
+- Phase 6 — independent reference revisions, automatic output scoring, development
+  threshold locks, observer agreement, clustered uncertainty, scientific reports,
+  and validation review. Engineering fixtures are available. Empirical validation is
+  pending independently annotated recordings.
+
+Recommended research milestone: freeze a blinded multi-species pilot with disjoint
+training, development and test recording groups. Estimate observer variability,
+calibration sensitivity, and event agreement, then run the locked held-out comparison.

@@ -2,6 +2,7 @@ import pytest
 
 from reefvision.domain.reefpose_agreement import (
     ScoredEvent,
+    cluster_interval,
     event_agreement,
     icc_absolute,
     measurement_agreement,
@@ -61,3 +62,11 @@ def test_censored_onset_uses_observed_offset_only() -> None:
     assert report["matches"][0]["onset_error_s"] is None
     assert report["matches"][0]["offset_error_s"] == 0
     assert report["matches"][0]["duration_error_s"] is None
+
+
+def test_uncertainty_requires_independent_groups() -> None:
+    from statistics import fmean
+
+    assert cluster_interval({"single-video": [2.0] * 1000}, fmean, 7) is None
+    groups = {f"group-{i}": [2.0] * (i + 1) for i in range(5)}
+    assert cluster_interval(groups, fmean, 7) == [2.0, 2.0]

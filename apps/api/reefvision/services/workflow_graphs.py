@@ -54,6 +54,8 @@ _MODEL_PURPOSES_BY_NODE: dict[str, set[str]] = {
 }
 
 _ACTIONS: dict[str, str] = {
+    "reefpose_reference_source": "Freeze or resolve an independent scientific reference revision.",
+    "reefpose_scientific_validation": "Score original pose outputs and persist a report.",
     "project_source": "Resolve the project selected in the API route.",
     "project_images": "Resolve project images using the configured filters.",
     "dataset_version_source": "Load one immutable dataset version and its image membership.",

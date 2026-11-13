@@ -28,18 +28,18 @@ Use grouped development and test recordings. Require a completed development rep
 
 ## Increment 1 — Frozen references
 
-- [ ] Add failing tests in `test_reefpose_validation.py` for freezing a two-rater reference, append-only revisions and shared groups across splits.
-- [ ] Implement typed manifests in `schemas/reefpose_validation.py`, persistent rows in `db/models/reefpose_validation.py`, migration `0043`, and freeze/list/get in `services/reefpose_validation.py` and the new routes. Check registered videos and schema revisions.
-- [ ] Run focused tests and migration round trips, then commit.
+- [x] Add failing tests in `test_reefpose_validation.py` for freezing a two-rater reference, append-only revisions and shared groups across splits.
+- [x] Implement typed manifests in `schemas/reefpose_validation.py`, persistent rows in `db/models/reefpose_validation.py`, migration `0043`, and freeze/list/get in `services/reefpose_validation.py` and the new routes. Check registered videos and schema revisions.
+- [x] Run focused tests and migration round trips, then commit.
 
 ## Increment 2 — Scientific evaluation and reporting
 
-- [ ] Add independently derived expected values for one-to-one event matching, ICC(A,1), signed measurement error, pose/identity misses, and development-only sensitivity.
-- [ ] Implement `domain/reefpose_agreement.py` and `services/reefpose_validation_analysis.py`. Reuse Phase 3 localization, Phase 4 identity and Phase 5 measurement/detection functions. Preserve per-recording diagnostics and clustered uncertainty.
-- [ ] Persist reproducible configuration selection, job input and report hashes. Add worker integration, progress/cancellation and JSON/CSV exports. Exercise real services against deterministic synthetic fixtures, then commit.
+- [x] Add independently derived expected values for one-to-one event matching, ICC(A,1), signed measurement error, pose/identity misses, and development-only sensitivity.
+- [x] Implement `domain/reefpose_agreement.py` and `services/reefpose_validation_analysis.py`. Reuse Phase 3 localization, Phase 4 identity and Phase 5 measurement/detection functions. Preserve per-recording diagnostics and clustered uncertainty.
+- [x] Persist reproducible configuration selection, job input and report hashes. Add worker integration, progress/cancellation and JSON/CSV exports. Exercise real services against deterministic synthetic fixtures, then commit.
 
 ## Increment 3 — Application integration and acceptance
 
-- [ ] Add executable source and validation nodes to Workflow Builder with dataset and prediction lineage checks. Test via persisted artifacts.
-- [ ] Add a shared validation panel to Model Hub and Video Tracking Workspace. Use REST-backed dataset import, rater selection, submission, report history, charts and exports. Run the guarded Chromium acceptance test.
+- [x] Add executable source and validation nodes to Workflow Builder with dataset and prediction lineage checks. Test via persisted artifacts.
+- [x] Add a shared validation panel to Model Hub and Video Tracking Workspace. Use REST-backed dataset import, rater selection, submission, report history, charts and exports. Run the guarded Chromium acceptance test.
 - [ ] Run backend/frontend suites, strict typing, Ruff, Prettier, production build, migration and installed CUDA checks. Document empirical data availability, fixture results and remaining limitations. Commit verified changes.

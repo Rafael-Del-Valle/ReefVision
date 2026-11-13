@@ -2,6 +2,7 @@ import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { AnnotatedVideoExportPanel } from "./AnnotatedVideoExportPanel";
 import { BehaviorDynamicsPanel } from "./BehaviorDynamicsPanel";
 import { BiologicalMovementPanel } from "./BiologicalMovementPanel";
+import { ReefPoseValidationPanel } from "./ReefPoseValidationPanel";
 import { GeoreferencedMapPanel } from "./GeoreferencedMapPanel";
 import { GeoreferencingSetupPanel } from "./GeoreferencingSetupPanel";
 import { GeographicExportPanel } from "./GeographicExportPanel";
@@ -1906,6 +1907,15 @@ export function VideoTrackingWorkspace({
               projectId={project.id}
               videoId={selectedVideo.id}
               tracks={tracksQuery.data ?? []}
+              onFrameChange={(nextFrame) => {
+                setFrameIndex(nextFrame);
+                setPreviewFrameIndex(nextFrame);
+              }}
+            />
+            <ReefPoseValidationPanel
+              key={project.id}
+              projectId={project.id}
+              videoId={selectedVideo.id}
               onFrameChange={(nextFrame) => {
                 setFrameIndex(nextFrame);
                 setPreviewFrameIndex(nextFrame);

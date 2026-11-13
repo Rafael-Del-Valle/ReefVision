@@ -258,6 +258,60 @@ def test_saved_phase5_workflow_executes_jobs_review_and_export(
             },
         ],
     }
+    # Exercise the Phase 6 nodes in the same saved graph using the original
+    # prediction artifact, independently of the Phase 5 human-review branch.
+    graph["nodes"].extend(
+        [
+            {
+                "node_id": "independent_reference",
+                "node_type": "reefpose_reference_source",
+                "parameters": {
+                    "manifest": {
+                        "name": "Synthetic workflow reference",
+                        "data_kind": "synthetic",
+                        "recordings": [
+                            {
+                                "video_id": video["id"],
+                                "video_sha256": video["sha256"],
+                                "schema_id": schema["schema_id"],
+                                "schema_revision": schema["schema_revision"],
+                                "schema_sha256": schema["content_hash"],
+                                "group_id": "workflow-fixture",
+                                "split": "development",
+                                "individuals": [{"id": "jelly", "species": "synthetic jellyfish"}],
+                                "annotations": [
+                                    {"rater_id": key, "blinded": True} for key in ("r1", "r2")
+                                ],
+                            }
+                        ],
+                    }
+                },
+            },
+            {
+                "node_id": "independent_score",
+                "node_type": "reefpose_scientific_validation",
+                "parameters": {"rater_id": "r1"},
+            },
+        ]
+    )
+    graph["edges"].extend(
+        [
+            {
+                "edge_id": "reference-score",
+                "source_node_id": "independent_reference",
+                "source_port_id": "reference",
+                "target_node_id": "independent_score",
+                "target_port_id": "reference",
+            },
+            {
+                "edge_id": "tracks-score",
+                "source_node_id": "associate",
+                "source_port_id": "tracks",
+                "target_node_id": "independent_score",
+                "target_port_id": "tracks",
+            },
+        ]
+    )
     saved = client.post(
         f"/api/v1/projects/{project['id']}/workflow-graphs",
         json={"graph": graph, "create_new_revision": True},
@@ -356,6 +410,11 @@ def test_saved_phase5_workflow_executes_jobs_review_and_export(
     finished = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json()
     assert finished["run"]["status"] == "succeeded"
     artifacts = {item["data_type"]: item for item in finished["artifacts"]}
+    validation = artifacts["reefpose_validation_report"]["payload_json"]
+    exported = client.get(f"/api/v1{validation['export_path']}")
+    assert exported.status_code == 200, exported.text
+    assert exported.json()["result_sha256"] == validation["result_sha256"]
+    assert exported.json()["prediction_sources"][0]["id"] == identity_payload["run_id"]
     package = artifacts["biological_movement_package"]["payload_json"]
     assert package["truth_status"] == "scientist_reviewed"
     assert resolve_managed_project_path(app.state.settings, package["managed_path"]).is_file()

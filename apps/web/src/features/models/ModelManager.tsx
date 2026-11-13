@@ -29,6 +29,7 @@ import {
   type PoseTrainingDataset,
 } from "../video/poseActiveLearningApi";
 import { PoseEvaluationComparisonPanel } from "./PoseEvaluationComparisonPanel";
+import { ReefPoseValidationPanel } from "../video/ReefPoseValidationPanel";
 
 const optionalModelProviders = [
   { id: "grounding_dino", label: "Grounding DINO", extension: ".zip" },
@@ -1527,6 +1528,7 @@ export function ModelManager({
           datasets={poseDatasetsQuery.data ?? []}
         />
       )}
+      <ReefPoseValidationPanel key={project.id} projectId={project.id} />
       <div className="image-grid">
         {models.map((model) => (
           <ModelRow
