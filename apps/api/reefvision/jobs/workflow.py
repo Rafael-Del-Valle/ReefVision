@@ -176,17 +176,34 @@ def _input_artifacts(
         )
         if producer is None or producer.status != "succeeded":
             raise RuntimeError(f"Node {step_node_id} requires unfinished producer {source_node_id}")
-        artifact = session.scalar(
-            select(WorkflowArtifact).where(
-                WorkflowArtifact.workflow_run_id == run_id,
-                WorkflowArtifact.producer_node_run_id == producer.id,
-                WorkflowArtifact.producer_port_id == source_port_id,
-                WorkflowArtifact.data_type == expected_type,
+        matches = list(
+            session.scalars(
+                select(WorkflowArtifact).where(
+                    WorkflowArtifact.workflow_run_id == run_id,
+                    WorkflowArtifact.producer_node_run_id == producer.id,
+                    WorkflowArtifact.producer_port_id == source_port_id,
+                    WorkflowArtifact.data_type == expected_type,
+                )
             )
         )
-        if artifact is None:
+        if not matches:
             raise RuntimeError(
                 f"Node {step_node_id} is missing artifact {source_node_id}.{source_port_id}"
+            )
+        # A retry must consume the output ID actually declared by the
+        # completed producer, not an arbitrary duplicate in the same port.
+        # The artifact table has no uniqueness constraint for producer/port.
+        if len(matches) != 1:
+            raise RuntimeError(
+                f"Node {step_node_id} has ambiguous saved output "
+                f"{source_node_id}.{source_port_id}"
+            )
+        artifact = matches[0]
+        declared_ids = producer.output_artifact_ids_json
+        if not isinstance(declared_ids, list) or artifact.id not in declared_ids:
+            raise RuntimeError(
+                f"Node {step_node_id} cannot consume undeclared output "
+                f"{source_node_id}.{source_port_id}"
             )
 
         verify_workflow_artifact(
