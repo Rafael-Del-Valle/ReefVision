@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from math import atan, degrees, hypot
 from typing import cast
 
 import pytest
@@ -60,9 +61,7 @@ def test_straight_route_turn_is_zero_not_missing() -> None:
     ("lateral", "vertical"),
     [(1e-9, 0.0), (-1e-9, 0.0), (0.0, 1e-9)],
 )
-def test_tiny_genuine_bends_do_not_round_to_zero(
-    lateral: float, vertical: float
-) -> None:
+def test_tiny_genuine_bends_do_not_round_to_zero(lateral: float, vertical: float) -> None:
     # acos(dot) rounded the cosine of these valid tiny turns to exactly 1,
     # producing a false zero despite a nonzero 3D change of direction.
     paths = mesh_edge_paths(
@@ -82,8 +81,6 @@ def test_tiny_genuine_bends_do_not_round_to_zero(
     assert route["path_vertex_indices"] == [0, 1, 2]
     assert route["path_turn_angles_deg"][0] is None
     assert route["path_turn_angles_deg"][2] is None
-    from math import atan, degrees, hypot
-
     expected = degrees(atan(hypot(lateral, vertical)))
     assert route["path_turn_angles_deg"][1] == pytest.approx(expected, rel=1e-6)
     assert route["path_turn_angles_deg"][1] > 0
