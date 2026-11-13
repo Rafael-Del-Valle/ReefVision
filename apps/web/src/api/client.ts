@@ -344,6 +344,8 @@ export interface ClassVisibilityBundle {
 
 export interface ClassVisibilityUpdatePayload {
   hidden_class_ids: string[];
+  /** Explicit null creates only when absent; a timestamp updates that revision. */
+  expected_updated_at?: string | null;
 }
 
 export interface AnnotationDraftPayload {
