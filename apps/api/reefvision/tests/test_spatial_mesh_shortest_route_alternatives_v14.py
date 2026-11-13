@@ -56,12 +56,17 @@ def test_zero_length_edges_withhold_route_uniqueness_instead_of_guessing() -> No
             (1.0, 1.0, 0.0),
         ],
         faces=[[0, 1, 2], [1, 3, 2], [2, 3, 4]],
-        pairs=[[0, 3], [0, 1], [0, 4], [0, 8]],
+        pairs=[[0, 3], [0, 1], [0, 4]],
         scale=0.02,
         scale_uncertainty=None,
     )
-    # An invalid endpoint is rejected, not converted into missing evidence.
     assert paths is not None
+    assert all(route["status"] == "connected" for route in paths)
+    assert all(
+        route["shortest_route_alternatives_status"] == "unassessable_zero_length_edges"
+        for route in paths
+    )
+    assert all("multiple_equal_cost_mesh_routes" not in route["path_qc_warnings"] for route in paths)
 
 
 def test_tied_route_qc_roundtrips_standalone_and_persisted_graph(
