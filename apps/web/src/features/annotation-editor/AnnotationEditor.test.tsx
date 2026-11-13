@@ -1691,8 +1691,8 @@ describe("AnnotationEditor", () => {
       }
       if (
         url.includes(
-            `/projects/${project.id}/class-visibility/defaults/annotations?expected_updated_at=`,
-          ) &&
+          `/projects/${project.id}/class-visibility/defaults/annotations?expected_updated_at=`,
+        ) &&
         init?.method === "DELETE"
       ) {
         deleteAttempts += 1;

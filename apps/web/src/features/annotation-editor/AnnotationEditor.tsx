@@ -1053,7 +1053,9 @@ export function AnnotationEditor({
         await deleteClassVisibilityPreference(input.projectId, input.layerType);
       } else {
         if (!input.expectedUpdatedAt) {
-          throw new Error("Reload project visibility before resetting its default.");
+          throw new Error(
+            "Reload project visibility before resetting its default.",
+          );
         }
         await deleteProjectClassVisibilityDefault(
           input.projectId,
