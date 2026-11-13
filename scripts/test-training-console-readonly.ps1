@@ -43,11 +43,12 @@ $script:completed = @'
   "stage": "done",
   "progress_epoch": 3,
   "progress_total_epochs": 3,
-  "metrics": {"train/box_loss": 0.99},
+  "metrics": {"train/box_loss": 0.99, "val/seg_loss": 0.17},
   "metrics_history": {
     "train/box_loss": [0.50, 0.25, 0.20, null],
     "train/cls_loss": [0.60, 0.30, 0.24, null],
-    "train/dfl_loss": [0.20, 0.10, 0.08, null]
+    "train/dfl_loss": [0.20, 0.10, 0.08, null],
+    "val/seg_loss": [null, null]
   }
 }
 '@ | ConvertFrom-Json
@@ -184,6 +185,11 @@ foreach ($expected in @(
 }
 if ($output -match 'train/box_loss\s+0\.99') {
   throw 'Stale summary loss overrode the latest persisted epoch history.'
+}
+# A fully invalid persisted epoch series cannot validate the summary loss.
+# Display the actual summary with its source uncertainty, not a new value.
+if ($output -notmatch 'val/seg_loss\s+0\.17 \[summary fallback; no finite history entry among 2\]') {
+  throw 'Monitor hid the source uncertainty of an invalid epoch history.'
 }
 # Persisted history may end with a null or nonfinite placeholder while
 # training continues. Show the last measured value, but explicitly identify

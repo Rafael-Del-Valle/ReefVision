@@ -301,6 +301,10 @@ Invoke-Expression $selectionCode
 if ($latestMetrics['train/box_loss'] -ne 9.0) {
   throw 'Invalid epoch history must not erase the last finite summary loss.'
 }
+if ($staleMetricSamples['train/box_loss'] -cne ' [summary fallback; no finite history entry among 2]' -or
+    $staleMetricSamples.ContainsKey('train/cls_loss')) {
+  throw 'Invalid epoch history summary fallback provenance was not disclosed.'
+}
 
 # An epoch value of zero is a legitimate measurement and must override stale
 # summary losses. Non-numeric JSON values and nonfinite trailing entries must
@@ -336,6 +340,9 @@ Invoke-Expression $selectionCode
 if ($latestMetrics.ContainsKey('train/box_loss')) {
   throw 'Invalid summary/history values fabricated a box-loss measurement.'
 }
+if ($staleMetricSamples.ContainsKey('train/box_loss')) {
+  throw 'No finite loss existed, but a fallback annotation was fabricated.'
+}
 
 
 # A newly created training job may have a finite summary before its first epoch
@@ -362,6 +369,9 @@ foreach ($expected in @(
       $latestMetrics[$expected.key] -ne $expected.value) {
     throw ('Empty epoch history erased a finite summary loss: {0}' -f $expected.key)
   }
+}
+if ($staleMetricSamples.Count -ne 0) {
+  throw 'Empty history was mistaken for an invalid observed epoch.'
 }
 # Conversely, no metric may appear when the worker has not yet recorded any.
 $run.metrics = [pscustomobject]@{}

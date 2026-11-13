@@ -237,14 +237,21 @@ while ($true) {
     if ($null -ne $run.metrics_history) {
       foreach ($series in $run.metrics_history.PSObject.Properties) {
         $values = @($series.Value)
+        $foundFiniteSample = $false
         for ($index = $values.Count - 1; $index -ge 0; $index -= 1) {
           if (Test-FiniteMetricValue -Value $values[$index]) {
+            $foundFiniteSample = $true
             $latestMetrics[$series.Name] = $values[$index]
             if ($index -lt ($values.Count - 1)) {
               $staleMetricSamples[$series.Name] = (' [prior history entry {0}/{1}; latest unavailable]' -f ($index + 1), $values.Count)
             }
             break
           }
+        }
+        # An invalid nonempty epoch series cannot support a current loss.
+        # Keep a finite summary, but disclose that it is not an epoch sample.
+        if (-not $foundFiniteSample -and $values.Count -gt 0 -and $latestMetrics.ContainsKey($series.Name)) {
+          $staleMetricSamples[$series.Name] = (' [summary fallback; no finite history entry among {0}]' -f $values.Count)
         }
       }
     }
