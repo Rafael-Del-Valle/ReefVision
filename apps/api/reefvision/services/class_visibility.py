@@ -155,10 +155,28 @@ class ClassVisibilityService:
             updated_by_identity=preference.user_identity,
         )
 
-    def reset_user_preference(self, project_id: str, layer_type: str) -> None:
+    def reset_user_preference(
+        self,
+        project_id: str,
+        layer_type: str,
+        expected_updated_at: datetime | None = None,
+    ) -> None:
         self._project(project_id)
         resolved_layer_type = self._layer_type(layer_type)
         user_identity = get_local_user_identity(self.settings)
+        if expected_updated_at is not None:
+            if not self.preferences.delete_if_updated_at(
+                project_id, user_identity, resolved_layer_type, expected_updated_at
+            ):
+                raise ConflictError(
+                    "Personal visibility preference changed in another editor. "
+                    "Reload visibility settings before resetting it."
+                )
+            self.session.commit()
+            return
+
+        # Preserve the historical local API for existing scripts. The editor
+        # supplies the observed revision to avoid deleting newer preferences.
         preference = self.preferences.get(project_id, user_identity, resolved_layer_type)
         if preference is not None:
             self.session.delete(preference)
