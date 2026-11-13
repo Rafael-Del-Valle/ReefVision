@@ -47,8 +47,8 @@ def test_review_event_check_literals_are_case_sensitive(
                     f"{REVIEW_EVENT_FK_SQL})"
                 )
             )
-        install_review_event_parent_rows(connection)
-        install_review_event_history_indexes(connection)
+            install_review_event_parent_rows(connection)
+            install_review_event_history_indexes(connection)
             before = tuple(
                 connection.execute(text("SELECT name, sql FROM sqlite_master ORDER BY name")).all()
             )
