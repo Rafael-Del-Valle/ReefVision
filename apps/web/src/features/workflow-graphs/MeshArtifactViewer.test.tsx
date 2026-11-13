@@ -429,6 +429,141 @@ describe("MeshArtifactViewer", () => {
     expect(JSON.stringify(badInterval)).toBe(original);
   });
 
+  it("independently audits each persisted edge and waypoint against source-frame XYZ", () => {
+    const route = {
+      status: "connected",
+      path_vertex_indices: [10, 12, 16],
+      path_vertices_in_source_frame_m: [
+        [0, 0, 0],
+        [3, 0, 0],
+        [3, 4, 0],
+      ],
+      length_m: 7,
+      path_edge_lengths_m: [3, 4],
+      path_cumulative_lengths_m: [0, 3, 7],
+      path_qc_warnings: [],
+    };
+    const makeArtifact = (changes: Record<string, unknown>) => ({
+      ...validArtifact,
+      surface_edge_paths: [{ ...route, ...changes }],
+    });
+    const valid = makeArtifact({});
+    const original = JSON.stringify(valid);
+    expect(parseMeshRenderArtifact(valid)?.routeInspections[0].geometryQc).toBe(
+      "consistent",
+    );
+
+    // Each saved edge may be wrong even if their sum matches the total.
+    const staleEdges = makeArtifact({
+      path_edge_lengths_m: [2, 5],
+      path_cumulative_lengths_m: null,
+    });
+    const staleCumulative = makeArtifact({
+      path_cumulative_lengths_m: [0, 3.5, 7],
+    });
+    const staleTotal = makeArtifact({ length_m: 8 });
+    const wrongEdgeCount = makeArtifact({ path_edge_lengths_m: [7] });
+    for (const artifact of [
+      staleEdges,
+      staleCumulative,
+      staleTotal,
+      wrongEdgeCount,
+    ]) {
+      expect(
+        parseMeshRenderArtifact(artifact)?.routeInspections[0].geometryQc,
+      ).toBe("inconsistent");
+    }
+    expect(
+      parseMeshRenderArtifact(
+        makeArtifact({
+          path_edge_lengths_m: null,
+          path_cumulative_lengths_m: null,
+        }),
+      )?.routeInspections[0].geometryQc,
+    ).toBe("consistent");
+    expect(
+      parseMeshRenderArtifact(
+        makeArtifact({ length_m: null }),
+      )?.routeInspections[0].geometryQc,
+    ).toBe("unverifiable");
+
+    const { container, rerender } = render(
+      <MeshArtifactViewer artifact={valid} />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect provisional route 1" }),
+    );
+    const inspection = screen.getByText(/Saved geometric route length:/);
+    expect(inspection).toHaveTextContent(
+      "Independent polyline-to-measurement QC: consistent",
+    );
+    fireEvent.change(screen.getByRole("slider", { name: "Yaw" }), {
+      target: { value: "100" },
+    });
+    expect(inspection).toHaveTextContent(
+      "consistent with saved source-frame XYZ",
+    );
+    rerender(<MeshArtifactViewer artifact={staleEdges} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect provisional route 1" }),
+    );
+    expect(screen.getByText(/Saved geometric route length:/)).toHaveTextContent(
+      "INCONSISTENT: route lengths and saved XYZ disagree",
+    );
+    expect(container.querySelectorAll("polyline")).toHaveLength(1);
+    expect(JSON.stringify(valid)).toBe(original);
+  });
+
+  it("does not certify overflowing or microscopic provisional route geometry", () => {
+    const tinyRoute = {
+      status: "connected",
+      path_vertex_indices: [0, 1, 2],
+      path_vertices_in_source_frame_m: [
+        [0, 0, 0],
+        [1e-16, 0, 0],
+        [1e-16, 2e-16, 0],
+      ],
+      length_m: 3e-16,
+      path_edge_lengths_m: [1e-16, 2e-16],
+      path_cumulative_lengths_m: [0, 1e-16, 3e-16],
+    };
+    const inspect = (route: Record<string, unknown>) =>
+      parseMeshRenderArtifact({
+        ...validArtifact,
+        surface_edge_paths: [route],
+      })?.routeInspections[0].geometryQc;
+    expect(inspect(tinyRoute)).toBe("consistent");
+    expect(
+      inspect({
+        ...tinyRoute,
+        path_edge_lengths_m: [2e-16, 1e-16],
+      }),
+    ).toBe("inconsistent");
+    expect(
+      inspect({
+        ...tinyRoute,
+        path_vertices_in_source_frame_m: [
+          [Number.MAX_VALUE, 0, 0],
+          [-Number.MAX_VALUE, 0, 0],
+          [0, 0, 0],
+        ],
+      }),
+    ).toBe("unverifiable");
+    expect(
+      inspect({
+        ...tinyRoute,
+        path_vertices_in_source_frame_m: [
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+        ],
+        length_m: 0,
+        path_edge_lengths_m: [0, 0],
+        path_cumulative_lengths_m: [0, 0, 0],
+      }),
+    ).toBe("consistent");
+  });
+
   it("keeps invalid or legacy cumulative route measurements unknown", () => {
     const artifact = {
       ...validArtifact,
