@@ -79,9 +79,7 @@ def _input_artifacts(session: Session, node_run: WorkflowNodeRun) -> list[Workfl
     # not prevent a different same-run artifact from being approved instead.
     run = session.get(WorkflowRun, node_run.workflow_run_id)
     graph = (
-        session.get(WorkflowGraphRecord, run.workflow_graph_record_id)
-        if run is not None
-        else None
+        session.get(WorkflowGraphRecord, run.workflow_graph_record_id) if run is not None else None
     )
     if (
         run is None
@@ -94,8 +92,7 @@ def _input_artifacts(session: Session, node_run: WorkflowNodeRun) -> list[Workfl
         raise ConflictError("Workflow review graph provenance checksum failed")
     raw_edges = graph.graph_json.get("edges")
     if not isinstance(raw_edges, list) or any(
-        not isinstance(edge, dict) or not isinstance(edge.get("edge_id"), str)
-        for edge in raw_edges
+        not isinstance(edge, dict) or not isinstance(edge.get("edge_id"), str) for edge in raw_edges
     ):
         raise ConflictError("Workflow review graph edges are invalid")
     expected_bindings = [
