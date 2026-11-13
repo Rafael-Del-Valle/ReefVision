@@ -87,6 +87,102 @@ describe("MeshArtifactViewer", () => {
     expect(JSON.stringify(artifact)).toBe(original);
   });
 
+  it("inspects saved path lengths, scale bounds, and QC without promoting routes to centerlines", () => {
+    const artifact = {
+      ...validArtifact,
+      surface_edge_paths: [
+        {
+          status: "connected",
+          path_vertex_indices: [0, 1, 2],
+          path_vertices_in_source_frame_m: [
+            [0, 0, 0],
+            [1, 0, 0],
+            [1, 1, 0],
+          ],
+          length_m: 2,
+          length_scale_interval_m: [1.8, 2.2],
+          path_qc_warnings: ["open_boundary_edge_on_path"],
+        },
+        {
+          status: "connected",
+          path_vertex_indices: [5, 6],
+          path_vertices_in_source_frame_m: [
+            [0, 0, 0],
+            [1, 0, 0],
+          ],
+          length_m: 1,
+          length_scale_interval_m: null,
+          path_qc_warnings: ["coincident_route_endpoints"],
+        },
+        {
+          status: "disconnected",
+          path_vertex_indices: null,
+          path_vertices_in_source_frame_m: null,
+        },
+      ],
+    };
+    const unchanged = JSON.stringify(artifact);
+    const { container, rerender } = render(
+      <MeshArtifactViewer artifact={artifact} />,
+    );
+    expect(container.querySelectorAll("polyline")).toHaveLength(2);
+    expect(
+      screen.getByText("Select a connected route for provisional measurement details."),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect provisional route 1" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Inspect provisional route 1" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/Saved geometric route length: 2.00000 m/))
+      .toHaveTextContent("Scale-only length interval: [1.80000, 2.20000] m");
+    expect(screen.getByText(/Saved geometric route length: 2.00000 m/))
+      .toHaveTextContent("open_boundary_edge_on_path");
+    expect(screen.getByText(/Saved geometric route length: 2.00000 m/))
+      .toHaveTextContent("not a verified biological branch length");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect provisional route 2" }),
+    );
+    expect(screen.getByText(/Saved geometric route length: 1.00000 m/))
+      .toHaveTextContent("Scale-only length interval: unknown");
+    expect(screen.getByText(/Saved geometric route length: 1.00000 m/))
+      .toHaveTextContent("coincident_route_endpoints");
+    expect(JSON.stringify(artifact)).toBe(unchanged);
+    rerender(<MeshArtifactViewer artifact={validArtifact} />);
+    expect(screen.queryByText(/Saved geometric route length:/)).toBeNull();
+  });
+
+  it("fails closed on invalid saved path measurements but retains renderable geometry", () => {
+    const artifact = {
+      ...validArtifact,
+      surface_edge_paths: [
+        {
+          status: "connected",
+          path_vertex_indices: [0, 1],
+          path_vertices_in_source_frame_m: [
+            [0, 0, 0],
+            [1, 0, 0],
+          ],
+          length_m: -3,
+          length_scale_interval_m: [4, 5],
+          path_qc_warnings: ["<untrusted>"],
+        },
+      ],
+    };
+    const { container } = render(<MeshArtifactViewer artifact={artifact} />);
+    expect(container.querySelectorAll("polyline")).toHaveLength(1);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect provisional route 1" }),
+    );
+    const result = screen.getByText(/Saved geometric route length: unknown/);
+    expect(result).toHaveTextContent("Scale-only length interval: unknown");
+    expect(result).toHaveTextContent("missing or invalid saved QC");
+    expect(result).not.toHaveTextContent("<untrusted>");
+  });
+
   it("does not draw malformed or legacy route geometry", () => {
     const malformed = {
       ...validArtifact,
