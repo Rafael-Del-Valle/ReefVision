@@ -303,6 +303,7 @@ def test_invalid_review_node_identity_fails_persisted_run_instead_of_stranding_i
     assert detail.json()["run"]["project_id"] == project["id"]
     assert detail.json()["run"]["status"] == "failed"
 
+
 def test_review_resume_rejects_valid_artifact_from_wrong_saved_edge(
     client: TestClient,
 ) -> None:
