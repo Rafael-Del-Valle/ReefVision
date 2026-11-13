@@ -24,16 +24,41 @@ from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.scientific_heatmaps import (
     HeatmapKind,
     HeatmapLayer,
+    HeatmapPhysicalDensity,
     ScientificHeatmapResponse,
 )
 from reefvision.services.annotations import (
     annotation_snapshot,
     mask_annotation_snapshot,
 )
+from reefvision.services.computed_mask_coverage import mask_coverage_calibration
 from reefvision.services.scientific_data import content_hash
 
 ALGORITHM = "reefvision-centroid-grid-1"
+DENSITY_ALGORITHM = "reefvision-centroid-density-grid-2"
 MAX_OBJECTS = 25_000
+HEATMAP_RESULT_FIELDS = (
+    "algorithm",
+    "project_id",
+    "image_id",
+    "image_sha256",
+    "annotation_revision",
+    "annotation_status",
+    "width_px",
+    "height_px",
+    "columns",
+    "rows",
+    "label_class_id",
+    "layers",
+    "source_sha256",
+)
+
+
+def scientific_heatmap_content_hash(result: dict[str, Any]) -> str:
+    fields: tuple[str, ...] = HEATMAP_RESULT_FIELDS
+    if result["algorithm"] == DENSITY_ALGORITHM:
+        fields += ("physical_density", "physical_unavailable_reason")
+    return content_hash({key: result[key] for key in fields})
 
 
 def _center(
@@ -94,6 +119,33 @@ def _layer(
     )
 
 
+def _physical_density(
+    image: ImageAsset, columns: int, rows: int, layers: list[HeatmapLayer]
+) -> tuple[HeatmapPhysicalDensity | None, str | None]:
+    snapshot, unavailable = mask_coverage_calibration(
+        dict(image.metadata_json or {}).get("measurement_calibration"),
+        image.width_px,
+        image.height_px,
+        use_reference_plane=False,
+    )
+    if unavailable is not None:
+        return None, unavailable
+    scale = float(snapshot["distance_per_pixel"])
+    area = image.width_px / columns * (image.height_px / rows) * scale * scale
+    if area <= 0 or not math.isfinite(area) or not math.isfinite(MAX_OBJECTS / area):
+        return None, "invalid_calibration"
+    return HeatmapPhysicalDensity(
+        area_unit=f"{snapshot['unit']}2",
+        cell_areas=[[area for _ in range(columns)] for _ in range(rows)],
+        layers={
+            layer.kind: [[count / area for count in row] for row in layer.counts]
+            for layer in layers
+        },
+        calibration_sha256=content_hash(snapshot),
+        calibration_snapshot=snapshot,
+    ), None
+
+
 class ScientificHeatmapService:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -106,6 +158,7 @@ class ScientificHeatmapService:
         columns: int,
         rows: int,
         label_class_id: str | None,
+        include_physical_density: bool = False,
     ) -> ScientificHeatmapResponse:
         if not (2 <= columns <= 64 and 2 <= rows <= 64):
             raise ValidationError("Heatmap grid must be between 2 and 64 cells per axis")
@@ -243,8 +296,14 @@ class ScientificHeatmapService:
             ),
         ]
 
+        algorithm = DENSITY_ALGORITHM if include_physical_density else ALGORITHM
+        physical_density, physical_unavailable = (
+            _physical_density(image, columns, rows, layers)
+            if include_physical_density
+            else (None, None)
+        )
         source_snapshot: dict[str, Any] = {
-            "algorithm": ALGORITHM,
+            "algorithm": algorithm,
             "image_id": image.id,
             "image_sha256": image.sha256,
             "annotation_status": image.annotation_status,
@@ -269,11 +328,22 @@ class ScientificHeatmapService:
                 for proposal in predictions
             ],
         }
+        physical: dict[str, Any] = {}
+        if include_physical_density:
+            physical = {
+                "physical_density": (
+                    physical_density.model_dump(mode="json") if physical_density else None
+                ),
+                "physical_unavailable_reason": physical_unavailable,
+            }
+            source_snapshot["calibration"] = dict(image.metadata_json or {}).get(
+                "measurement_calibration"
+            )
 
         source_sha = content_hash(source_snapshot)
 
         result = {
-            "algorithm": ALGORITHM,
+            "algorithm": algorithm,
             "project_id": project_id,
             "image_id": image_id,
             "image_sha256": image.sha256,
@@ -286,11 +356,12 @@ class ScientificHeatmapService:
             "label_class_id": label_class_id,
             "layers": [layer.model_dump(mode="json") for layer in layers],
             "source_sha256": source_sha,
+            **physical,
         }
 
         return ScientificHeatmapResponse(
             schema_version="1.1.0",
-            algorithm=ALGORITHM,
+            algorithm=algorithm,
             project_id=UUID(project_id),
             image_id=UUID(image_id),
             image_sha256=image.sha256,
@@ -303,7 +374,9 @@ class ScientificHeatmapService:
             label_class_id=(UUID(label_class_id) if label_class_id is not None else None),
             layers=layers,
             source_sha256=source_sha,
-            content_sha256=content_hash(result),
+            source_snapshot=source_snapshot,
+            content_sha256=scientific_heatmap_content_hash(result),
+            **physical,
             methodological_notes=[
                 "Each object contributes to exactly one grid cell.",
                 "Object location uses bounding rectangle centroid.",
@@ -313,9 +386,12 @@ class ScientificHeatmapService:
                 "The grid is expressed in source-image pixel coordinates.",
                 "Normalized intensity is independently scaled per layer.",
                 "This grid is not polygon coverage or union area.",
-                "It is not a calibrated physical density measurement.",
+                (
+                    "Physical density divides each centroid count by scalar-calibrated cell area."
+                    if include_physical_density
+                    else "It is not a calibrated physical density measurement."
+                ),
                 "Rejected and accepted proposals are not pending predictions.",
                 "No reviewer disagreement metric is inferred.",
-                "This result is computed on demand and is not persisted.",
             ],
         )

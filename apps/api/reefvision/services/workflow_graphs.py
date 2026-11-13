@@ -86,6 +86,7 @@ _ACTIONS: dict[str, str] = {
     ),
     "lagged_comparison": "Re-match a saved environmental join at explicit descriptive lags.",
     "project_images": "Resolve project images using the configured filters.",
+    "scientific_heatmap": "Persist an image's scientific heatmap with its source evidence.",
     "dataset_version_source": "Load one immutable dataset version and its image membership.",
     "dataset_version_create": (
         "Freeze current reviewed project state into a new immutable dataset version."

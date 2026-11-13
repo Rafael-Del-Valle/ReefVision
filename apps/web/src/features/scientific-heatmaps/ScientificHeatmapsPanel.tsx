@@ -60,6 +60,7 @@ export function ScientificHeatmapsPanel({ project }: { project: Project }) {
   const [rows, setRows] = useState(16);
   const [opacity, setOpacity] = useState(0.65);
   const [scaleMode, setScaleMode] = useState<ScaleMode>("per_layer");
+  const [physicalDensity, setPhysicalDensity] = useState(false);
   const [predictionJobId, setPredictionJobId] = useState("");
   const [referenceSide, setReferenceSide] = useState<"a" | "b" | "">("a");
   const [comparisonGeometry, setComparisonGeometry] = useState<
@@ -96,6 +97,7 @@ export function ScientificHeatmapsPanel({ project }: { project: Project }) {
       columns,
       rows,
       classId,
+      physicalDensity,
     ],
     enabled: Boolean(selectedImage),
     queryFn: ({ signal }) => {
@@ -109,6 +111,7 @@ export function ScientificHeatmapsPanel({ project }: { project: Project }) {
         rows,
         classId,
         signal,
+        physicalDensity,
       );
     },
   });
@@ -279,6 +282,14 @@ export function ScientificHeatmapsPanel({ project }: { project: Project }) {
             </select>
           </label>
 
+          <label>
+            <input
+              type="checkbox"
+              checked={physicalDensity}
+              onChange={(event) => setPhysicalDensity(event.target.checked)}
+            />
+            Show scalar-calibrated density
+          </label>
           <p className="form-help">
             Each object contributes to one cell based on its bounding-rectangle
             center. Overlapping masks are not converted to union coverage or
@@ -500,6 +511,21 @@ export function ScientificHeatmapsPanel({ project }: { project: Project }) {
               Export heatmap JSON
             </button>
           </div>
+          {heatmap.physical_density && (
+            <p>
+              Density in objects/{heatmap.physical_density.area_unit}. Cell area{" "}
+              {heatmap.physical_density.cell_areas[0][0]}{" "}
+              {heatmap.physical_density.area_unit}. Calibration uncertainty is
+              unquantified.
+            </p>
+          )}
+          {physicalDensity && heatmap.physical_unavailable_reason && (
+            <p>
+              Physical density unavailable (
+              {heatmap.physical_unavailable_reason.replaceAll("_", " ")}).
+              Showing source-pixel counts.
+            </p>
+          )}
 
           <div
             style={{
@@ -592,6 +618,17 @@ export function ScientificHeatmapsPanel({ project }: { project: Project }) {
                 </h4>
                 <p>Objects: {layer.object_count}</p>
                 <p>Maximum objects per cell: {layer.max_cell_count}</p>
+                {heatmap.physical_density && (
+                  <p>
+                    Maximum density:{" "}
+                    {Number(
+                      Math.max(
+                        ...heatmap.physical_density.layers[layer.kind].flat(),
+                      ).toPrecision(6),
+                    )}{" "}
+                    objects/{heatmap.physical_density.area_unit}
+                  </p>
+                )}
                 <p>Overlay: {visible[layer.kind] ? "Visible" : "Hidden"}</p>
               </article>
             ))}

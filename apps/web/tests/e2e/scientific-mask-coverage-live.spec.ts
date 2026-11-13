@@ -138,4 +138,23 @@ test("saves and reloads projected polygon coverage against the local API", async
   );
   expect(csv.ok(), await csv.text()).toBeTruthy();
   expect(await csv.text()).toContain("projective_reference_plane");
+
+  await page.getByRole("tab", { name: "Scientific Heatmaps" }).click();
+  await page.getByLabel("Show scalar-calibrated density").check();
+  await expect(page.getByText(/Physical density unavailable/)).toBeVisible();
+  const scalar = await page.request.put(
+    `${api}/images/${imageId}/measurement-calibration`,
+    { data: { unit: "cm", distance_per_pixel: 0.5 } },
+  );
+  expect(scalar.ok(), await scalar.text()).toBeTruthy();
+  await page.reload();
+  await page.getByRole("button", { name: new RegExp(name) }).click();
+  await page.getByRole("tab", { name: "Scientific Heatmaps" }).click();
+  await page.getByLabel("Show scalar-calibrated density").check();
+  await expect(
+    page.getByText(/Calibration uncertainty is unquantified/),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Maximum density: .* objects\/cm2/).nth(1),
+  ).toBeVisible();
 });

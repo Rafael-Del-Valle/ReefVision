@@ -12,6 +12,7 @@ WorkflowDataType = Literal[
     "computed_metric_result",
     "environmental_threshold_samples",
     "environmental_analysis_result",
+    "scientific_heatmap",
     "image_collection",
     "dataset_version",
     "classification_dataset",

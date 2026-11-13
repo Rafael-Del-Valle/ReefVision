@@ -25,6 +25,7 @@ def get_scientific_heatmaps(
     columns: int = Query(default=16, ge=2, le=64),
     rows: int = Query(default=16, ge=2, le=64),
     label_class_id: UUID | None = None,
+    include_physical_density: bool = False,
 ) -> ScientificHeatmapResponse:
     service = ScientificHeatmapService(session)
     return service.image_heatmaps(
@@ -33,4 +34,5 @@ def get_scientific_heatmaps(
         columns=columns,
         rows=rows,
         label_class_id=(str(label_class_id) if label_class_id is not None else None),
+        include_physical_density=include_physical_density,
     )

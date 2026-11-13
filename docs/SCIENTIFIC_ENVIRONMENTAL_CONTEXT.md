@@ -237,6 +237,21 @@ coverage columns. Project exchange remaps project image IDs, preserves the polyg
 coordinates and recalculates the result hashes. The calculation uses the existing
 definition and result tables.
 
+### Calibrated image heatmaps and saved workflows
+
+Enable **Show scalar-calibrated density** to divide each layer's centroid count
+by the calibrated cell area. The grid remains aligned to the source image. Its
+legend and JSON report the physical area unit, density values, calibration
+snapshot and hash. Missing or unsupported calibration keeps the source-pixel
+counts available. This calculation assumes a uniform image scale and does not
+estimate measurement uncertainty or physical density for a projective scene.
+
+The **Scientific Heatmap** Workflow Builder node accepts a project and explicit
+image ID plus grid, class and calibration options. It saves the same report as a
+typed artifact with the evidence snapshot, content hash and calculation version.
+Project exchange preserves the original evidence snapshot and binds a new result
+hash to remapped project and image IDs.
+
 ### Sampling effort in environmental joins
 
 Choose **Retain unmatched observations** to keep a row when a bounded environmental

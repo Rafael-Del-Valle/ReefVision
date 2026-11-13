@@ -42,6 +42,7 @@ from reefvision.schemas.environmental_analysis import (
 )
 from reefvision.schemas.environmental_context import EnvironmentalThresholdRequest
 from reefvision.schemas.geographic_pairwise import GeographicPairwiseCalculateRequest
+from reefvision.schemas.scientific_heatmaps import ScientificHeatmapSelection
 from reefvision.schemas.workflow_execution import (
     WorkflowArtifactResponse,
     WorkflowGraphRecordResponse,
@@ -65,6 +66,7 @@ from reefvision.services.environmental_context import EnvironmentalContextServic
 from reefvision.services.geographic_pairwise import GeographicPairwiseService
 from reefvision.services.project_exchange import FORMAT_VERSION, ProjectExchangeService
 from reefvision.services.scientific_data import ScientificDataService
+from reefvision.services.scientific_heatmaps import ScientificHeatmapService
 from reefvision.services.workflow_classification import (
     materialize_workflow_classification_dataset,
     train_workflow_classifier,
@@ -97,6 +99,7 @@ EXECUTABLE_NODE_TYPES = {
     "event_window_analysis",
     "observation_environment_join",
     "lagged_comparison",
+    "scientific_heatmap",
     "project_images",
     "dataset_version_source",
     "dataset_version_create",
@@ -954,6 +957,36 @@ class WorkflowExecutionService:
             workflow_node_run_id=node_run.id,
         )
         return self._environmental_analysis_artifact(response)
+
+    def _execute_scientific_heatmap(
+        self,
+        *,
+        project_id: str,
+        parameters: dict[str, Any],
+        inputs: dict[str, list[WorkflowArtifact]],
+        **_: object,
+    ) -> list[WorkflowArtifactSpec]:
+        if self._single_payload(inputs, "project").get("project_id") != project_id:
+            raise ValidationError("Scientific heatmap project artifact is mismatched")
+        try:
+            request = ScientificHeatmapSelection.model_validate(parameters)
+        except ValueError as exc:
+            raise ValidationError("Invalid scientific heatmap parameters") from exc
+        heatmap = ScientificHeatmapService(self.session).image_heatmaps(
+            project_id,
+            str(request.image_id),
+            columns=request.columns,
+            rows=request.rows,
+            label_class_id=str(request.label_class_id) if request.label_class_id else None,
+            include_physical_density=request.include_physical_density,
+        )
+        return [
+            WorkflowArtifactSpec(
+                port_id="result",
+                data_type="scientific_heatmap",
+                payload=heatmap.model_dump(mode="json"),
+            )
+        ]
 
     def _execute_project_images(
         self,

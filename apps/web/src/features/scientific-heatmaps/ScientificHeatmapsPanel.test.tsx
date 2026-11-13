@@ -152,6 +152,41 @@ function renderPanel() {
 afterEach(() => vi.restoreAllMocks());
 
 describe("ScientificHeatmapsPanel", () => {
+  it("requests calibrated density and reports its unit and uncertainty", async () => {
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (url) => {
+        const path = String(url);
+        if (!path.includes("scientific-heatmaps")) return json(imagePage);
+        if (!path.includes("include_physical_density=true"))
+          return json(heatmap);
+        return json({
+          ...heatmap,
+          physical_density: {
+            area_unit: "cm2",
+            cell_areas: [[100]],
+            layers: {
+              reviewed_boxes: [[0.01]],
+              verified_masks: [[0.02]],
+              pending_predictions: [[0]],
+            },
+            uncertainty_status: "unquantified",
+          },
+        });
+      });
+    renderPanel();
+    await screen.findByRole("img", { name: "Source-pixel heatmap overlay" });
+    fireEvent.click(screen.getByLabelText("Show scalar-calibrated density"));
+    expect(
+      await screen.findByText(/Calibration uncertainty is unquantified/),
+    ).toBeVisible();
+    expect(screen.getByText("Maximum density: 0.01 objects/cm2")).toBeVisible();
+    expect(
+      fetch.mock.calls.some(([url]) =>
+        String(url).includes("include_physical_density=true"),
+      ),
+    ).toBe(true);
+  });
   it("shows separate reviewed and verified layers", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (url) =>
       json(String(url).includes("scientific-heatmaps") ? heatmap : imagePage),

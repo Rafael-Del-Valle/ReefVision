@@ -57,6 +57,7 @@ from reefvision.schemas.project_exchange import (
     ProjectExchangePackageResponse,
 )
 from reefvision.schemas.projects import ProjectCreate
+from reefvision.schemas.scientific_heatmaps import ScientificHeatmapResponse
 from reefvision.services.project_exchange_computed import (
     COMPUTED_SECTIONS,
     remap_computed_sections,
@@ -78,6 +79,8 @@ from reefvision.services.project_exchange_scientific import (
     validate_exchange_records,
 )
 from reefvision.services.projects import ProjectService
+from reefvision.services.scientific_data import content_hash
+from reefvision.services.scientific_heatmaps import scientific_heatmap_content_hash
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -241,6 +244,42 @@ def _refresh_json_checksum(model: type[Any], values: dict[str, Any]) -> None:
         values[hash_field] = canonical_json_sha256(payload)
 
 
+def _validate_heatmap_artifacts(project_id: str, sections: dict[str, list[dict[str, Any]]]) -> None:
+    images = {row["id"]: row for row in sections.get("images", [])}
+    labels = {row["id"]: row for row in sections.get("label_classes", [])}
+    for artifact in sections.get("workflow_artifacts", []):
+        if artifact.get("data_type") != "scientific_heatmap":
+            continue
+        payload = artifact.get("payload_json")
+        if not isinstance(payload, dict):
+            raise ValidationError("Invalid scientific heatmap artifact")
+        try:
+            parsed = ScientificHeatmapResponse.model_validate(payload)
+        except ValueError as exc:
+            raise ValidationError("Invalid scientific heatmap artifact") from exc
+        image = images.get(str(parsed.image_id))
+        label = labels.get(str(parsed.label_class_id))
+        source = parsed.source_snapshot or {}
+        if (
+            str(parsed.project_id) != project_id
+            or image is None
+            or image.get("project_id") != project_id
+            or parsed.image_sha256 != image.get("sha256")
+            or (
+                parsed.label_class_id is not None
+                and (label is None or label.get("project_id") != project_id)
+            )
+            or parsed.content_sha256 != scientific_heatmap_content_hash(payload)
+            or parsed.source_snapshot is None
+            or source.get("image_sha256") != parsed.image_sha256
+            or source.get("algorithm") != parsed.algorithm
+            or source.get("annotation_revision") != parsed.annotation_revision
+            or parsed.source_sha256 != content_hash(parsed.source_snapshot)
+            or canonical_json_sha256(payload) != artifact.get("payload_sha256")
+        ):
+            raise ValidationError("Scientific heatmap artifact provenance or checksum mismatch")
+
+
 def _media_inventory(manifest: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
     result: dict[tuple[str, str], dict[str, Any]] = {}
     raw = manifest.get("media", [])
@@ -348,6 +387,7 @@ def import_project_exchange(
         validate_exchange_records(old_project_id, section_rows, SECTION_MODELS)
         validate_computed_exchange_records(old_project_id, section_rows)
         validate_environmental_analysis_exchange(old_project_id, section_rows)
+        _validate_heatmap_artifacts(old_project_id, section_rows)
 
         project: Project | None = None
         try:
@@ -485,6 +525,9 @@ def import_project_exchange(
                     if section_name == "workflow_artifacts":
                         payload = values["payload_json"]
                         result_id = payload.get("result_id")
+                        if values["data_type"] == "scientific_heatmap":
+                            payload["source_snapshot"] = row["payload_json"]["source_snapshot"]
+                            payload["content_sha256"] = scientific_heatmap_content_hash(payload)
                         if (
                             values["data_type"] == "environmental_analysis_result"
                             and (analysis := analysis_results.get(result_id)) is not None

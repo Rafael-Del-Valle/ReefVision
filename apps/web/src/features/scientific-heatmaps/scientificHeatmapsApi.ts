@@ -14,7 +14,8 @@ export interface HeatmapLayer {
 
 export interface ScientificHeatmap {
   schema_version: "1.1.0";
-  algorithm: "reefvision-centroid-grid-1";
+  algorithm:
+    "reefvision-centroid-grid-1" | "reefvision-centroid-density-grid-2";
   project_id: string;
   image_id: string;
   image_sha256: string;
@@ -27,8 +28,18 @@ export interface ScientificHeatmap {
   label_class_id: string | null;
   layers: HeatmapLayer[];
   source_sha256: string;
+  source_snapshot?: Record<string, unknown> | null;
   content_sha256: string;
   methodological_notes: string[];
+  physical_density?: {
+    area_unit: string;
+    cell_areas: number[][];
+    layers: Record<HeatmapKind, number[][]>;
+    calibration_sha256: string;
+    calibration_snapshot: Record<string, unknown>;
+    uncertainty_status: "unquantified";
+  } | null;
+  physical_unavailable_reason?: string | null;
 }
 
 export async function getScientificHeatmap(
@@ -38,6 +49,7 @@ export async function getScientificHeatmap(
   rows: number,
   labelClassId: string,
   signal?: AbortSignal,
+  includePhysicalDensity = false,
 ): Promise<ScientificHeatmap> {
   const endpoint =
     `${getApiBaseUrl()}/projects/${encodeURIComponent(projectId)}` +
@@ -51,6 +63,7 @@ export async function getScientificHeatmap(
   if (labelClassId) {
     params.set("label_class_id", labelClassId);
   }
+  if (includePhysicalDensity) params.set("include_physical_density", "true");
 
   let response: Response;
   try {
