@@ -322,6 +322,7 @@ def test_versioned_project_default_reset_is_safe_against_other_editor(
         is False
     )
 
+
 def test_versioned_personal_visibility_reset_preserves_newer_editor_save(
     client: TestClient,
 ) -> None:
@@ -339,7 +340,9 @@ def test_versioned_personal_visibility_reset_preserves_newer_editor_save(
     assert original.status_code == 200
     old_stamp = original.json()["updated_at"]
     assert old_stamp
-    assert client.put(other_layer, json={"hidden_class_ids": [first["id"]]}).status_code == 200
+    assert (
+        client.put(other_layer, json={"hidden_class_ids": [first["id"]]}).status_code == 200
+    )
     newer = client.put(path, json={"hidden_class_ids": [second["id"]]})
     assert newer.status_code == 200
     new_stamp = newer.json()["updated_at"]
