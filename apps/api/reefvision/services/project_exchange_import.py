@@ -10,7 +10,7 @@ from pathlib import PurePosixPath
 from typing import Any, BinaryIO
 from uuid import uuid4
 
-from sqlalchemy import DateTime
+from sqlalchemy import DateTime, select
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
@@ -53,6 +53,7 @@ from reefvision.services.project_exchange_inspection import (
     inspect_project_exchange,
 )
 from reefvision.services.projects import ProjectService
+from reefvision.services.workflow_provenance import build_workflow_run_provenance
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -385,6 +386,21 @@ def import_project_exchange(
                             values["parent_version_id"] = None
 
                     if section_name == "workflow_runs":
+                        source_result = row.get("result_json")
+                        if isinstance(source_result, dict) and (
+                            "provenance_manifest" in source_result
+                            or "provenance_sha256" in source_result
+                        ):
+                            source_provenance = source_result.get("provenance_manifest")
+                            source_digest = source_result.get("provenance_sha256")
+                            if (
+                                not isinstance(source_provenance, dict)
+                                or not isinstance(source_digest, str)
+                                or canonical_json_sha256(source_provenance) != source_digest
+                            ):
+                                raise ValidationError(
+                                    "Exported workflow run provenance checksum is invalid"
+                                )
                         graph_id = values.get("workflow_graph_record_id")
                         if isinstance(graph_id, str):
                             graph = imported_graphs.get(graph_id)
@@ -443,6 +459,26 @@ def import_project_exchange(
                 new_parent_id = id_map.get(old_parent_id)
                 if new_parent_id is not None:
                     version.parent_version_id = new_parent_id
+            session.flush()
+
+            # Remapped run, node, artifact, and project IDs invalidate the original
+            # lineage digest. Rebuild only provenance already attested in the
+            # source archive; do not upgrade legacy unverified runs on import.
+            for imported_run in session.scalars(
+                select(WorkflowRun).where(
+                    WorkflowRun.project_id == project.id,
+                    WorkflowRun.status == "succeeded",
+                )
+            ):
+                result = imported_run.result_json
+                if not isinstance(result, dict) or "provenance_manifest" not in result:
+                    continue
+                lineage = build_workflow_run_provenance(session, run_id=imported_run.id)
+                imported_run.result_json = {
+                    **result,
+                    "provenance_manifest": lineage,
+                    "provenance_sha256": canonical_json_sha256(lineage),
+                }
             session.flush()
 
             # Persist the source archive as import provenance inside the new project.
