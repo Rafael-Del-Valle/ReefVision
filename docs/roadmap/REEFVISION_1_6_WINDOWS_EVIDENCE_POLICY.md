@@ -51,3 +51,26 @@ reparse points. A structurally valid report is **not** evidence that an MSI
 upgrade, rollback or installed interactive GUI was executed. Exact-head CI,
 native Windows acceptance, cross-version Alembic reconciliation and biological
 validation remain release blockers.
+
+## Uninstall scientific-file retention (2026-11-13)
+
+The installed Windows harness previously marked `data_retention=PASS` merely
+because the isolated data **directory** still existed after `msiexec /x`.
+Uninstall could have erased `reefvision.db` or imported coral imagery while
+leaving a log directory behind, creating false-positive release evidence.
+
+The disposable acceptance now takes an SHA-256/length snapshot of the SQLite
+database and stable scientific files (imported imagery, data exports and
+metadata) **after closing the installed desktop**, then compares it against
+a fresh post-uninstall snapshot. Missing or modified project files fail the
+acceptance before `data_retention` becomes `PASS`. Volatile logs, runtime
+state and model caches are excluded to avoid conflating nonresearch cleanup
+with biological-data loss. The harness requires at least a database and one
+other persisted research file, and checks for directory reparse points before
+reading. Hashes remain in-memory; research contents are not uploaded.
+
+Native Windows regression fixtures verify unchanged data, deliberately
+altered image bytes, removed imagery, missing SQLite and changed log content.
+This **does not** establish MSI rollback safety, complete project-folder
+coverage for unknown extensions, real biological correctness or installed
+interactive-GUI acceptance. Those remain release HOLD gates.
