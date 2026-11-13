@@ -27,7 +27,6 @@ def _next_visibility_revision(observed: datetime) -> datetime:
     return max(utc_now(), previous_utc + timedelta(microseconds=1))
 
 
-
 def _atomic_next_visibility_revision(column: Any, now: datetime) -> Any:
     """Bump a SQLite revision inside an upsert, even after a wall-clock rollback.
 
@@ -48,9 +47,7 @@ def _atomic_next_visibility_revision(column: Any, now: datetime) -> Any:
         ),
         String,
     ) + literal(".000000")
-    incremented = case(
-        (microseconds < 999999, next_microsecond), else_=next_second
-    )
+    incremented = case((microseconds < 999999, next_microsecond), else_=next_second)
     return case((column >= now, incremented), else_=now)
 
 

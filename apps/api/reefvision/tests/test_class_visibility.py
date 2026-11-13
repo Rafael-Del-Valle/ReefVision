@@ -606,9 +606,7 @@ def test_legacy_visibility_put_cannot_recycle_cas_revision(
         app = cast(Any, client.app)
         with Session(app.state.engine) as session:
             session.execute(
-                update(model)
-                .where(model.id == first["record_id"])
-                .values(updated_at=previous)
+                update(model).where(model.id == first["record_id"]).values(updated_at=previous)
             )
             session.commit()
 
