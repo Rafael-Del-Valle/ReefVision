@@ -120,6 +120,16 @@ def mesh_edge_paths(
             adjacency[first][second] = length
             adjacency[second][first] = length
 
+    # Shortest-route multiplicity is only decidable by the positive-weight
+    # Dijkstra count below. A zero-length edge anywhere in the imported
+    # mesh makes this bounded exact-cost diagnostic conservatively unknown:
+    # equal-distance predecessor updates need not be acyclic.
+    has_zero_length_edges = any(
+        edge_length == 0.0
+        for neighbors in adjacency.values()
+        for edge_length in neighbors.values()
+    )
+
     results: list[dict[str, Any]] = []
     for pair in pairs:
         if (
@@ -132,6 +142,9 @@ def mesh_edge_paths(
         start, end = pair
         status = "unreferenced_endpoint" if start not in referenced or end not in referenced else ""
         shortest = {start: 0.0}
+        # Saturate at two: science needs to know whether an equally short
+        # alternative exists, not count a potentially exponential path set.
+        shortest_counts = {start: 1}
         parent: dict[int, int] = {}
         queue = [(0.0, start)]
         if not status:
@@ -145,12 +158,19 @@ def mesh_edge_paths(
                     candidate = length + edge_length
                     if not isfinite(candidate):
                         raise ValueError("Accumulated mesh path length overflowed")
-                    if candidate < shortest.get(neighbor, float("inf")):
+                    prior = shortest.get(neighbor, float("inf"))
+                    if candidate < prior:
                         shortest[neighbor] = candidate
+                        shortest_counts[neighbor] = shortest_counts[vertex]
                         parent[neighbor] = vertex
                         heappush(queue, (candidate, neighbor))
+                    elif candidate == prior:
+                        shortest_counts[neighbor] = min(
+                            2, shortest_counts[neighbor] + shortest_counts[vertex]
+                        )
             status = "connected" if end in shortest else "disconnected"
         route: list[int] | None = None
+        shortest_route_alternatives_status: str | None = None
         meters: float | None = None
         chord_m: float | None = None
         detour_ratio: float | None = None
@@ -165,6 +185,12 @@ def mesh_edge_paths(
         maximum_turn_angle_deg: float | None = None
         total_absolute_geometric_turn_deg: float | None = None
         if status == "connected":
+            if has_zero_length_edges:
+                shortest_route_alternatives_status = "unassessable_zero_length_edges"
+            elif shortest_counts[end] > 1:
+                shortest_route_alternatives_status = "multiple_exact_equal_cost_routes"
+            else:
+                shortest_route_alternatives_status = "no_exact_equal_cost_alternative_detected"
             route = [end]
             while route[-1] != start:
                 route.append(parent[route[-1]])
@@ -256,6 +282,10 @@ def mesh_edge_paths(
             # Route flags are topology evidence, not biological branch validation.
             route_edges = [(min(a, b), max(a, b)) for a, b in pairwise(route)]
             path_qc_warnings = []
+            if shortest_route_alternatives_status == "multiple_exact_equal_cost_routes":
+                # Turning angles and route shape depend on a deterministic
+                # but scientifically arbitrary choice between tied edge paths.
+                path_qc_warnings.append("multiple_equal_cost_mesh_routes")
             if shortest[end] > 0 and meters == 0:
                 path_qc_warnings.append("calibrated_path_length_underflow")
             if chord_mesh_units == 0 and shortest[end] > 0:
@@ -302,6 +332,7 @@ def mesh_edge_paths(
                 "start_vertex_index": start,
                 "end_vertex_index": end,
                 "status": status,
+                "shortest_route_alternatives_status": shortest_route_alternatives_status,
                 "path_vertex_indices": route,
                 "path_vertices_in_source_frame_m": path_vertices_in_source_frame_m,
                 "path_edge_lengths_m": path_edge_lengths_m,
