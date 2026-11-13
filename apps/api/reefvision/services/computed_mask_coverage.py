@@ -477,7 +477,11 @@ class ComputedMaskCoverageService:
         }
 
     def _build_preview(
-        self, definition: ComputedMetricDefinition, image_ids: list[str]
+        self,
+        definition: ComputedMetricDefinition,
+        image_ids: list[str],
+        *,
+        historical_image_snapshots: dict[str, dict[str, Any]] | None = None,
     ) -> ComputedMaskCoveragePreview:
         config = definition.configuration_json or {}
         images = self._resolve_images(definition.project_id, image_ids)
@@ -570,8 +574,14 @@ class ComputedMaskCoverageService:
                 if has_roi
                 else len(targets)
             )
+            historical = (historical_image_snapshots or {}).get(image.id)
+            raw_calibration = (
+                historical["calibration"]
+                if historical is not None
+                else dict(image.metadata_json or {}).get(CALIBRATION_KEY)
+            )
             calibration, unavailable = mask_coverage_calibration(
-                dict(image.metadata_json or {}).get(CALIBRATION_KEY),
+                raw_calibration,
                 image.width_px,
                 image.height_px,
                 use_reference_plane=use_reference_plane,
@@ -666,7 +676,11 @@ class ComputedMaskCoverageService:
                     "annotation_revision": image.annotation_revision,
                     "annotation_status": image.annotation_status,
                     "group_key": image.group_key,
-                    "updated_at": _utc(image.updated_at).isoformat(),
+                    "updated_at": (
+                        historical["updated_at"]
+                        if historical is not None
+                        else _utc(image.updated_at).isoformat()
+                    ),
                     "calibration": calibration,
                     "physical_unavailable_reason": unavailable,
                     **({"roi_polygon": roi_polygon} if roi_polygon is not None else {}),
@@ -839,6 +853,21 @@ class ComputedMaskCoverageService:
         return ComputedMaskCoverageResultPage(
             items=[self.result_response(row) for row in rows], total=total
         )
+
+    def validate_historical_result(self, row: ComputedMetricResult) -> None:
+        """Replay archived calibration against the restored image and mask evidence."""
+        saved = self.result_response(row)
+        snapshots = {str(item["image_id"]): item for item in saved.image_snapshot}
+        replayed = self._build_preview(
+            self.get_definition(row.project_id, row.definition_id),
+            sorted(snapshots),
+            historical_image_snapshots=snapshots,
+        ).model_dump(mode="json")
+        if replayed["evidence_sha256"] != saved.evidence_sha256:
+            raise ValidationError("Imported mask coverage evidence does not reproduce")
+        saved_payload = saved.model_dump(mode="json")
+        if any(saved_payload[field] != value for field, value in replayed.items()):
+            raise ValidationError("Imported mask coverage summary does not reproduce")
 
     def validate_result(
         self, project_id: str, result_id: str

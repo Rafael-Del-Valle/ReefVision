@@ -1076,6 +1076,10 @@ def import_project_exchange_v1(
         computed = ComputedMetricService(session)
         aggregates = ComputedAggregateMetricService(session)
         mask_coverage = ComputedMaskCoverageService(session, settings)
+        # Raster coverage replay reads the restored mask bytes before commit.
+        copied_generated = _restore_generated_artifacts(
+            source, project=project, settings=settings, manifest=dict(package.manifest_json)
+        )
         for definition_row in session.scalars(
             select(ComputedMetricDefinition).where(
                 ComputedMetricDefinition.project_id == project.id
@@ -1104,13 +1108,7 @@ def import_project_exchange_v1(
                         + ", ".join(aggregate_validation.reasons)
                     )
             elif result_row.result_kind == "mask_coverage":
-                mask_coverage.result_response(result_row)
-                coverage_validation = mask_coverage.validate_result(project.id, result_row.id)
-                if not coverage_validation.current:
-                    raise ValidationError(
-                        "Imported mask coverage evidence is stale after remapping: "
-                        + ", ".join(coverage_validation.reasons)
-                    )
+                mask_coverage.validate_historical_result(result_row)
             elif result_row.result_kind in {
                 "annotation_comparison",
                 "geographic_pairwise",
@@ -1138,21 +1136,13 @@ def import_project_exchange_v1(
             )
         ):
             analyses.result_response(analysis_result_row)
-            validation = analyses.validate_result(project.id, analysis_result_row.id)
-            if not validation.current:
-                raise ValidationError(
-                    "Imported environmental analysis evidence is stale after remapping: "
-                    + ", ".join(validation.reasons)
-                )
+            analyses.validate_historical_result(analysis_result_row)
         copied_telemetry = _restore_telemetry_sidecars(
             source,
             project=project,
             session=session,
             settings=settings,
             manifest=dict(package.manifest_json),
-        )
-        copied_generated = _restore_generated_artifacts(
-            source, project=project, settings=settings, manifest=dict(package.manifest_json)
         )
         package.options_json = {
             **dict(package.options_json or {}),

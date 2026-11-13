@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
-from reefvision.tests.test_annotations import create_project
+from reefvision.tests.test_annotations import create_project, import_one
 from reefvision.tests.test_scientific_data import observation
 from reefvision.tests.test_workflow_environmental_threshold import threshold_query
 
@@ -305,3 +306,77 @@ def test_join_rejects_foreign_or_tampered_source_records_atomically(client: Test
     assert rejected.status_code == 400, rejected.text
     assert client.get(f"{base}/definitions").json()["total"] == 0
     assert client.get(f"{base}/results").json()["total"] == 0
+
+
+@pytest.mark.parametrize("stale_source", ["observation", "environment"])
+def test_join_does_not_use_calibration_stale_sources(client: TestClient, stale_source: str) -> None:
+    project_id = create_project(client, "Calibration change")["id"]
+    image_id = import_one(client, project_id)["successful"][0]["image_id"]
+    calibration = f"/api/v1/images/{image_id}/measurement-calibration"
+    assert client.put(calibration, json={"distance_per_pixel": 0.1, "unit": "mm"}).is_success
+    biological = observation(variable="body_length", value=8, unit="mm")
+    closest = observation(value=77)
+    source = biological if stale_source == "observation" else closest
+    source["subject"] = {"image_id": image_id}
+    record, _, fallback = _records(
+        client,
+        project_id,
+        [biological, closest, observation(observed_at="2026-04-03T13:00:20Z")],
+    )
+    assert client.put(calibration, json={"distance_per_pixel": 0.2, "unit": "mm"}).is_success
+
+    base = _base(project_id)
+    joined = client.post(
+        f"{base}/observation-environment-join",
+        json={
+            "name": "Length and temperature",
+            "observation_record_ids": [record["id"]],
+            "environmental_variable": "water_temperature",
+            "max_time_delta_s": 60,
+            "max_distance_m": 1000,
+        },
+    )
+    if stale_source == "observation":
+        assert joined.status_code == 400, joined.text
+        assert client.get(f"{base}/results").json()["total"] == 0
+    else:
+        assert joined.status_code == 201, joined.text
+        result = joined.json()["result"]
+        assert result["payload"]["pairs"][0]["environmental_record_id"] == fallback["id"]
+        assert client.get(f"{base}/results/{result['id']}/validation").json()["current"]
+
+
+def test_new_lag_rejects_historical_join_after_calibration_change(client: TestClient) -> None:
+    project_id = create_project(client, "Historical join")["id"]
+    image_id = import_one(client, project_id)["successful"][0]["image_id"]
+    calibration = f"/api/v1/images/{image_id}/measurement-calibration"
+    assert client.put(calibration, json={"distance_per_pixel": 0.1, "unit": "mm"}).is_success
+    record, _, _ = _records(
+        client,
+        project_id,
+        [
+            observation(variable="body_length", value=8, unit="mm"),
+            observation(subject={"image_id": image_id}),
+            observation(observed_at="2026-04-03T13:00:20Z"),
+        ],
+    )
+    base = _base(project_id)
+    joined = client.post(
+        f"{base}/observation-environment-join",
+        json={
+            "name": "Length and temperature",
+            "observation_record_ids": [record["id"]],
+            "environmental_variable": "water_temperature",
+            "max_time_delta_s": 60,
+            "max_distance_m": 1000,
+        },
+    )
+    assert joined.status_code == 201, joined.text
+    assert client.put(calibration, json={"distance_per_pixel": 0.2, "unit": "mm"}).is_success
+
+    lagged = client.post(
+        f"{base}/lagged-comparison",
+        json={"name": "Zero lag", "join_result_id": joined.json()["result"]["id"], "lags_s": [0]},
+    )
+    assert lagged.status_code == 400, lagged.text
+    assert client.get(f"{base}/results").json()["total"] == 1

@@ -6,6 +6,7 @@ from collections import Counter, defaultdict
 from copy import deepcopy
 from datetime import UTC, datetime
 from math import isclose
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any
 
 from pydantic import ValidationError as SchemaError
@@ -482,12 +483,24 @@ def _validate_mask_coverage_result(
         polygon = roi_polygons.get(snapshot["image_id"])
         if roi_polygons and polygon is None:
             raise ValidationError("Mask coverage evidence image has no saved ROI")
-        calibration, unavailable = mask_coverage_calibration(
+        current_calibration, _ = mask_coverage_calibration(
             dict(image.get("metadata_json") or {}).get("measurement_calibration"),
             image["width_px"],
             image["height_px"],
             use_reference_plane=bool(config.get("use_reference_plane")),
         )
+        calibration, unavailable = mask_coverage_calibration(
+            snapshot.get("calibration"),
+            image["width_px"],
+            image["height_px"],
+            use_reference_plane=bool(config.get("use_reference_plane")),
+        )
+        updated_at = _utc(image["updated_at"])
+        if calibration != current_calibration:
+            historical_at = _utc(snapshot["updated_at"])
+            if not _utc(image["created_at"]) <= historical_at < updated_at:
+                raise ValidationError("Mask coverage historical image timestamp is invalid")
+            updated_at = historical_at
         # Import recomputes run-level numerical validity after restoring masks.
         if (
             unavailable is None
@@ -503,7 +516,7 @@ def _validate_mask_coverage_result(
             "annotation_revision": image["annotation_revision"],
             "annotation_status": image["annotation_status"],
             "group_key": image.get("group_key"),
-            "updated_at": _utc(image["updated_at"]).isoformat(),
+            "updated_at": updated_at.isoformat(),
             "calibration": calibration,
             "physical_unavailable_reason": unavailable,
             **({"roi_polygon": polygon} if polygon is not None else {}),
@@ -580,7 +593,7 @@ def _validate_mask_coverage_result(
     if provenance != expected_provenance:
         raise ValidationError("Mask coverage provenance mismatch")
     observed_at = _utc(row["observed_at"])
-    expected_observed_at = max(_utc(images[image_id]["updated_at"]) for image_id in image_ids)
+    expected_observed_at = max(_utc(item["updated_at"]) for item in image_snapshot)
     if _utc(payload["observed_at"]) != observed_at or observed_at != expected_observed_at:
         raise ValidationError("Mask coverage observation timestamp mismatch")
 
@@ -1111,6 +1124,8 @@ def remap_computed_sections(
     sections: dict[str, list[dict[str, Any]]],
     id_map: dict[str, str],
     remapped_science: dict[str, list[dict[str, Any]]],
+    *,
+    mask_paths: dict[str, str],
 ) -> dict[str, list[dict[str, Any]]]:
     """Remap declared computed links and rebuild snapshots from remapped science."""
 
@@ -1239,6 +1254,15 @@ def remap_computed_sections(
                 snapshot["image_id"] = id_map[snapshot["image_id"]]
             payload["image_snapshot"].sort(key=lambda item: item["image_id"])
             for snapshot in payload["mask_snapshot"]:
+                mask_path = snapshot.get("mask_path")
+                if mask_path is not None:
+                    if (
+                        mask_path not in mask_paths
+                        or ".." in PurePosixPath(mask_path).parts
+                        or ".." in PureWindowsPath(mask_path).parts
+                    ):
+                        raise ValidationError("Mask coverage path must stay within its project")
+                    snapshot["mask_path"] = mask_paths[mask_path]
                 snapshot["id"] = id_map[snapshot["id"]]
                 snapshot["image_id"] = id_map[snapshot["image_id"]]
                 if snapshot.get("label_class_id") is not None:

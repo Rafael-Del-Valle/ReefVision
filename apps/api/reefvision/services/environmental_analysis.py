@@ -474,8 +474,12 @@ class EnvironmentalAnalysisService:
             items=[self.result_response(row) for row in rows], total=int(total or 0)
         )
 
-    def _currentness_reasons(
-        self, row: EnvironmentalAnalysisResult, visited: set[str]
+    def _validation_reasons(
+        self,
+        row: EnvironmentalAnalysisResult,
+        visited: set[str],
+        *,
+        require_current_sources: bool = True,
     ) -> list[str]:
         if row.id in visited:
             return [f"source_analysis_cycle:{row.id}"]
@@ -497,9 +501,9 @@ class EnvironmentalAnalysisService:
             except (ConflictError, ValidationError):
                 reasons.append(f"source_record_invalid:{record_id}")
                 continue
-            if response.environmental_snapshot_current is False:
+            if require_current_sources and response.environmental_snapshot_current is False:
                 reasons.append(f"source_record_snapshot_stale:{record_id}")
-            if response.calibration_current is False:
+            if require_current_sources and response.calibration_current is False:
                 reasons.append(f"source_record_calibration_stale:{record_id}")
 
         for source_result_id in row.source_analysis_result_ids_json:
@@ -513,7 +517,9 @@ class EnvironmentalAnalysisService:
                 and row.input_snapshot_json.get("join_result_sha256") != source.content_sha256
             ):
                 reasons.append(f"source_analysis_checksum_mismatch:{source_result_id}")
-            nested = self._currentness_reasons(source, visited)
+            nested = self._validation_reasons(
+                source, visited, require_current_sources=require_current_sources
+            )
             reasons.extend(f"source_analysis:{source_result_id}:{reason}" for reason in nested)
 
         try:
@@ -542,6 +548,14 @@ class EnvironmentalAnalysisService:
         visited.remove(row.id)
         return reasons
 
+    def validate_historical_result(self, row: EnvironmentalAnalysisResult) -> None:
+        reasons = self._validation_reasons(row, set(), require_current_sources=False)
+        if reasons:
+            raise ValidationError(
+                "Invalid imported environmental analysis evidence: "
+                + ", ".join(sorted(set(reasons)))
+            )
+
     def validate_result(
         self, project_id: str, result_id: str
     ) -> EnvironmentalAnalysisValidationResponse:
@@ -549,7 +563,7 @@ class EnvironmentalAnalysisService:
         row = self.session.get(EnvironmentalAnalysisResult, result_id)
         if row is None or row.project_id != project_id:
             raise NotFoundError("Environmental analysis result not found")
-        reasons = sorted(set(self._currentness_reasons(row, set())))
+        reasons = sorted(set(self._validation_reasons(row, set())))
         return EnvironmentalAnalysisValidationResponse(
             result_id=row.id,
             current=not reasons,
@@ -897,6 +911,13 @@ class EnvironmentalAnalysisService:
             if row is None or row.project_id != project_id:
                 raise ValidationError("Observation scientific records must belong to this project")
             record = self.science.response(row)
+            if (
+                record.calibration_current is False
+                or record.environmental_snapshot_current is False
+            ):
+                raise ValidationError(
+                    f"Observation record {record.id} uses an obsolete calibration or snapshot"
+                )
             if record.location is None:
                 raise ValidationError("Observation records require an explicit EPSG:4326 location")
             if record.qc in ("suspect", "rejected"):
@@ -950,6 +971,7 @@ class EnvironmentalAnalysisService:
                 if (
                     environmental.location is None
                     or environmental.qc in ("suspect", "rejected")
+                    or environmental.calibration_current is False
                     or environmental.environmental_snapshot_current is False
                 ):
                     continue
@@ -1114,6 +1136,10 @@ class EnvironmentalAnalysisService:
         source_result = self.get_result(project_id, str(request.join_result_id))
         if source_result.analysis_kind != "observation_environment_join":
             raise ValidationError("Lagged comparisons require an observation-environment join")
+        if self._validation_reasons(source_result, set()):
+            raise ValidationError(
+                "Lagged comparisons require a current observation-environment join"
+            )
         join_request = ObservationEnvironmentJoinRequest.model_validate(
             source_result.input_snapshot_json
         )

@@ -155,6 +155,10 @@ Import validates ownership, references and scientific integrity and commits once
 after media and artifact restoration. A failure rolls back all imported rows and
 removes only the new import directory. Existing projects are never overwritten.
 
+Intact environmental analyses with superseded source snapshots or stale calibration
+remain available as history after import. They continue to show their currentness
+status, and new joins and lag analyses require current source evidence.
+
 Computed results are accepted only when their archived definition, input record IDs,
 input snapshots, timestamps, units, values, uncertainty and provenance hashes reproduce
 the stored result under the recorded safe formula-engine version. Import remaps declared
@@ -236,6 +240,13 @@ node. CSV includes polygon coordinates, calibration method and the physical
 coverage columns. Project exchange remaps project image IDs, preserves the polygon
 coordinates and recalculates the result hashes. The calculation uses the existing
 definition and result tables.
+
+If calibration has changed since coverage was saved, exchange can restore the
+historical result when the image and verified mask evidence still reproduce its
+snapshot. Import replays the saved calculation with the archived calibration and
+checks its outputs. Validation against current calibration still marks it stale.
+When exporting coverage that uses raster masks, include generated artifacts so
+import can verify and replay the original mask bytes.
 
 ### Calibrated image heatmaps and saved workflows
 

@@ -439,7 +439,20 @@ def import_project_exchange(
                             id_map.setdefault(value, str(uuid4()))
 
             scientific_rows = remap_scientific_sections(section_rows, id_map)
-            computed_rows = remap_computed_sections(section_rows, id_map, scientific_rows)
+            mask_paths: dict[str, str] = {}
+            for mask in section_rows.get("mask_annotations", []):
+                path = mask.get("mask_path")
+                if isinstance(path, str):
+                    source_prefix = source_storage_root.rstrip("/") + "/"
+                    if path.startswith(source_prefix):
+                        mask_values: dict[str, Any] = {"mask_path": path}
+                        _rewrite_project_paths(
+                            mask_values, MaskAnnotation, source_storage_root, project.storage_root
+                        )
+                        mask_paths[path] = mask_values["mask_path"]
+            computed_rows = remap_computed_sections(
+                section_rows, id_map, scientific_rows, mask_paths=mask_paths
+            )
             environmental_analysis_rows = remap_environmental_analysis_sections(
                 section_rows, id_map
             )

@@ -22,9 +22,10 @@ from reefvision.tests.test_scientific_data import observation
 MANIFEST = "reefvision-exchange-manifest.json"
 
 
-def export_archive(client, settings, project_id):
+def export_archive(client, settings, project_id, *, include_generated_artifacts=False):
     queued = client.post(
-        f"/api/v1/projects/{project_id}/exchange-packages", json={"include_media": True}
+        f"/api/v1/projects/{project_id}/exchange-packages",
+        json={"include_media": True, "include_generated_artifacts": include_generated_artifacts},
     )
     assert queued.status_code == 202, queued.text
     package = queued.json()

@@ -230,6 +230,14 @@ def remap_study_assignments(value: Any, id_map: dict[str, str]) -> Any:
     )
 
 
+def _remap_legacy_unit_id(value: str, id_map: dict[str, str]) -> str:
+    kind, separator, identifier_and_frame = value.partition(":")
+    if not separator or kind not in {"record", "image", "video"}:
+        return value
+    identifier, separator, frame = identifier_and_frame.partition(":")
+    return f"{kind}:{id_map.get(identifier, identifier)}{separator}{frame}"
+
+
 def _remap_analysis_field(key: str, value: Any, id_map: dict[str, str]) -> Any:
     if key == "study_assignment":
         return _remap_study_assignment(value, id_map)
@@ -237,6 +245,12 @@ def _remap_analysis_field(key: str, value: Any, id_map: dict[str, str]) -> Any:
         return remap_study_assignments(value, id_map)
     if key == "environmental_record_reuse_counts":
         return {id_map.get(identifier, identifier): count for identifier, count in value.items()}
+    if key == "independent_unit_id":
+        return _remap_legacy_unit_id(value, id_map)
+    if key == "independent_unit_reuse_counts":
+        return {
+            _remap_legacy_unit_id(identifier, id_map): count for identifier, count in value.items()
+        }
     if key == "experimental_unit_reuse_counts":
         return value
     return _remap_json(value, id_map)
