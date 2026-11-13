@@ -15,6 +15,7 @@ from reefvision.db.models import (
     VideoAsset,
     VideoTrack,
     WorkflowArtifact,
+    WorkflowGraphRecord,
     WorkflowNodeRun,
     WorkflowRun,
 )
@@ -34,6 +35,7 @@ from reefvision.services.workflow_auto_label import (
     materialize_consensus_annotations,
 )
 from reefvision.services.workflow_provenance import verify_workflow_artifact
+from reefvision.storage.datasets import canonical_json_sha256
 
 REVIEW_GATE_NODE_TYPES = {
     "detection_review_gate",
@@ -72,9 +74,51 @@ def _input_artifacts(session: Session, node_run: WorkflowNodeRun) -> list[Workfl
     by_id = {artifact.id: artifact for artifact in artifacts}
     if len(by_id) != len(set(raw_ids)):
         raise ConflictError("Workflow review input artifact is missing")
-    for artifact in artifacts:
+    # A review approval must refer to the outputs that the frozen workflow
+    # actually routed into this review node. Valid artifact hashes alone do
+    # not prevent a different same-run artifact from being approved instead.
+    run = session.get(WorkflowRun, node_run.workflow_run_id)
+    graph = (
+        session.get(WorkflowGraphRecord, run.workflow_graph_record_id)
+        if run is not None
+        else None
+    )
+    if (
+        run is None
+        or graph is None
+        or graph.project_id != run.project_id
+        or not isinstance(graph.graph_json, dict)
+        or graph.graph_sha256 != run.graph_sha256
+        or canonical_json_sha256(graph.graph_json) != run.graph_sha256
+    ):
+        raise ConflictError("Workflow review graph provenance checksum failed")
+    raw_edges = graph.graph_json.get("edges")
+    if not isinstance(raw_edges, list) or any(
+        not isinstance(edge, dict) or not isinstance(edge.get("edge_id"), str)
+        for edge in raw_edges
+    ):
+        raise ConflictError("Workflow review graph edges are invalid")
+    expected_bindings = [
+        (edge.get("source_node_id"), edge.get("source_port_id"))
+        for edge in sorted(raw_edges, key=lambda edge: edge["edge_id"])
+        if edge.get("target_node_id") == node_run.node_id
+    ]
+    ordered_artifacts = [by_id[artifact_id] for artifact_id in raw_ids]
+    actual_bindings: list[tuple[str, str]] = []
+    for artifact in ordered_artifacts:
         verify_workflow_artifact(artifact, expected_run_id=node_run.workflow_run_id)
-    return [by_id[artifact_id] for artifact_id in raw_ids]
+        producer = session.get(WorkflowNodeRun, artifact.producer_node_run_id)
+        if (
+            producer is None
+            or producer.workflow_run_id != node_run.workflow_run_id
+            or producer.status != "succeeded"
+            or producer.execution_order >= node_run.execution_order
+        ):
+            raise ConflictError("Workflow review input lacks an earlier succeeded producer")
+        actual_bindings.append((producer.node_id, artifact.producer_port_id))
+    if actual_bindings != expected_bindings:
+        raise ConflictError("Workflow review inputs do not match saved graph edges")
+    return ordered_artifacts
 
 
 def _pending_review_count(session: Session, artifacts: list[WorkflowArtifact]) -> int:
