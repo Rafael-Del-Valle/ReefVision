@@ -68,9 +68,12 @@ function isSavedScaleInterval(
     return false;
   }
   if (relativeScaleUncertainty === null) return true;
-  const tolerance = Math.max(1e-12, nominal * 1e-8);
+  // A fixed absolute tolerance can certify incorrect sub-micrometer bounds.
+  // Zero-length routes must also have exactly zero scale-only bounds.
+  const tolerance = nominal * 1e-8;
   return (
-    Math.abs(value[0] - nominal * (1 - relativeScaleUncertainty)) <= tolerance &&
+    Math.abs(value[0] - nominal * (1 - relativeScaleUncertainty)) <=
+      tolerance &&
     Math.abs(value[1] - nominal * (1 + relativeScaleUncertainty)) <= tolerance
   );
 }
@@ -229,10 +232,10 @@ function parsePathInspections(
           ) &&
           Math.abs(
             pair[0] - edgeLengthsM[index] * (1 - relativeScaleUncertainty),
-          ) <= Math.max(1e-12, edgeLengthsM[index] * 1e-8) &&
+          ) <= edgeLengthsM[index] * 1e-8 &&
           Math.abs(
             pair[1] - edgeLengthsM[index] * (1 + relativeScaleUncertainty),
-          ) <= Math.max(1e-12, edgeLengthsM[index] * 1e-8),
+          ) <= edgeLengthsM[index] * 1e-8,
       )
         ? (rawEdgeIntervals as [number, number][])
         : null;
@@ -302,7 +305,7 @@ export function parseMeshRenderArtifact(
       (typeof relativeScaleUncertainty !== "number" ||
         !Number.isFinite(relativeScaleUncertainty) ||
         relativeScaleUncertainty < 0 ||
-        relativeScaleUncertainty > 1))
+        relativeScaleUncertainty >= 1))
   ) {
     return null;
   }
