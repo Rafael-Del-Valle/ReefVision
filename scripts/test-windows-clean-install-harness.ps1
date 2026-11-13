@@ -205,7 +205,7 @@ foreach ($payloadMarker in @('$qcSkipBody = @{', '$qcReturnBody = @{', '$qcStart
     $payloadEnd = $acceptanceScript.IndexOf('| ConvertTo-Json', $payloadStart, [System.StringComparison]::Ordinal)
     Assert-True ($payloadEnd -gt $payloadStart) "Installed QC payload not serialized: $payloadMarker"
     $payloadText = $acceptanceScript.Substring($payloadStart, $payloadEnd - $payloadStart)
-    Assert-True ($payloadText -match 'client_request_id\\s*=\\s*\\[guid\\]::NewGuid\\(\\)\\.ToString\\(\\)') "Installed QC action must allocate one stable retry UUID: $payloadMarker"
+    Assert-True ($payloadText -match 'client_request_id\s*=\s*\[guid\]::NewGuid\(\)\.ToString\(\)') "Installed QC action must allocate one stable retry UUID: $payloadMarker"
 }
 Assert-True ($acceptanceScript.Contains('$qcLateStartRetry.changed_count -ne 0')) 'Stale keyed start must be a no-op after scientist completion.'
 Assert-True ($acceptanceScript.Contains('$qcLateStartRetry.items)[0].review_state -ne ''completed''')) 'Stale start must preserve completed review state.'
