@@ -187,6 +187,9 @@ function parsePathInspections(
     // saved evidence instead of reconstructing an apparently valid segment.
     const rawEdges = route.path_edge_lengths_m;
     const edgeLengthsProvided = rawEdges !== undefined && rawEdges !== null;
+    const rawEdgeSumM: number | null = Array.isArray(rawEdges)
+      ? rawEdges.reduce((sum: number, distance: number) => sum + distance, 0)
+      : null;
     const edgeLengthsM: number[] | null =
       lengthM !== null &&
       Array.isArray(rawEdges) &&
@@ -197,13 +200,10 @@ function parsePathInspections(
           Number.isFinite(distance) &&
           distance >= 0,
       ) &&
-      Math.abs(
-        rawEdges.reduce((sum, distance) => sum + distance, 0) - lengthM,
-      ) <=
-        Math.max(
-          rawEdges.reduce((sum, distance) => sum + distance, 0),
-          lengthM,
-        ) * 1e-8 &&
+      rawEdgeSumM !== null &&
+      Number.isFinite(rawEdgeSumM) &&
+      Math.abs(rawEdgeSumM - lengthM) <=
+        Math.max(rawEdgeSumM, lengthM) * 1e-8 &&
       (cumulativeLengthsM === null ||
         rawEdges.every(
           (distance, index) =>
