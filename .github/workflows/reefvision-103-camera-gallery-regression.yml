@@ -14,6 +14,8 @@ on:
       - apps/api/reefvision/storage/images.py
       - apps/api/reefvision/services/images.py
       - apps/api/reefvision/tests/test_camera_jpeg_regression_103.py
+      - scripts/verify_camera_jpeg_fixtures.py
+      - scripts/test_verify_camera_jpeg_fixtures.py
       - apps/api/reefvision/tests/test_image_import_collision_103.py
       - apps/api/reefvision/api/routes/training.py
       - apps/api/reefvision/tests/test_training_log_tail_103.py
@@ -84,6 +86,9 @@ jobs:
       - name: Verify MSI/CAB artifact, upgrade, and offline-policy regression guards
         shell: pwsh
         run: python -m pytest apps/api/reefvision/tests/test_windows_installer_preflight_103.py -q
+      - name: Verify read-only camera JPEG fixture inventory, aliases, and EXIF
+        shell: pwsh
+        run: python -m unittest discover -s scripts -p test_verify_camera_jpeg_fixtures.py -v
       - name: Verify JPEG camera formats and immutable original storage
         shell: pwsh
         env:
@@ -180,6 +185,9 @@ jobs:
         run: |
           npm run typecheck
           npx vitest run --config vite.config.mjs --configLoader runner src/App.test.tsx src/features/gallery/Gallery.test.tsx src/features/gallery/galleryNavigation.test.ts src/features/annotation-editor/ImageViewport.test.tsx src/features/workflow-graphs/WorkflowGraphWorkspace.test.tsx src/features/workflow-graphs/WorkflowVisualEditor.test.tsx src/features/workflow-graphs/workflowTemplates.test.ts
+      - name: Verify POSIX-only camera inventory filesystem guards
+        shell: bash
+        run: python3 -m unittest discover -s scripts -p 'test_verify_camera_jpeg_fixtures.py' -v
       - name: Install Chromium for browser-level acceptance
         working-directory: apps/web
         run: npx playwright install --with-deps chromium
