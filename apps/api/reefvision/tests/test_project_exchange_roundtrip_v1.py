@@ -26,6 +26,7 @@ from reefvision.jobs.project_exchange import process_project_exchange_export_job
 from reefvision.main import create_app
 from reefvision.services import video_assets as video_assets_module
 from reefvision.services.workflow_depth_3d import execute_video_depth_3d_adapter
+from reefvision.services.workflow_provenance import build_workflow_run_provenance
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_images import create_project, image_bytes, import_one
 
@@ -391,6 +392,13 @@ def test_project_exchange_round_trip_preserves_restart_safe_metric_3d_science(
         session.add(artifact)
         session.flush()
         node_run.output_artifact_ids_json = [artifact.id]
+        session.flush()
+        source_lineage = build_workflow_run_provenance(session, run_id=run.id)
+        run.result_json = {
+            **run.result_json,
+            "provenance_manifest": source_lineage,
+            "provenance_sha256": canonical_json_sha256(source_lineage),
+        }
         session.commit()
         source_graph_id = graph.id
         source_run_id = run.id
@@ -481,6 +489,13 @@ def test_project_exchange_round_trip_preserves_restart_safe_metric_3d_science(
         assert imported_graph is not None and imported_graph.id != source_graph_id
         assert imported_run is not None and imported_run.id != source_run_id
         assert imported_artifact is not None and imported_artifact.id != source_artifact_id
+        imported_lineage = build_workflow_run_provenance(session, run_id=imported_run.id)
+        assert imported_lineage["workflow_run_id"] == imported_run.id
+        assert imported_lineage["project_id"] == imported_project_id
+        assert imported_run.result_json["provenance_manifest"] == imported_lineage
+        assert imported_run.result_json["provenance_sha256"] == canonical_json_sha256(
+            imported_lineage
+        )
         serialized_state = str(
             {
                 "graph": imported_graph.graph_json,
