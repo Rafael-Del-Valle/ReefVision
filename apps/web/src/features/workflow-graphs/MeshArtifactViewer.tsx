@@ -79,6 +79,71 @@ function isSavedScaleInterval(
   );
 }
 
+/**
+ * Cross-check persisted geometric angles against the complete saved route
+ * polyline, never against decimated display triangles. A stale or mutated
+ * angle remains unknown rather than being certified by a matching maximum.
+ * Calibrated coordinates can lose precision; fail closed if they cannot
+ * independently reproduce the saved source-frame angle.
+ */
+function anglesAgreeWithSavedPolyline(
+  angles: (number | null)[],
+  coordinates: Vec3[],
+): boolean {
+  for (let index = 1; index < coordinates.length - 1; index += 1) {
+    const previous = coordinates[index - 1];
+    const current = coordinates[index];
+    const next = coordinates[index + 1];
+    const incoming: Vec3 = [
+      current[0] - previous[0],
+      current[1] - previous[1],
+      current[2] - previous[2],
+    ];
+    const outgoing: Vec3 = [
+      next[0] - current[0],
+      next[1] - current[1],
+      next[2] - current[2],
+    ];
+    const incomingLength = Math.hypot(...incoming);
+    const outgoingLength = Math.hypot(...outgoing);
+    if (!Number.isFinite(incomingLength) || !Number.isFinite(outgoingLength)) {
+      return false;
+    }
+    if (incomingLength === 0 || outgoingLength === 0) {
+      // Subnormal nonzero edges may underflow during length calculation.
+      if (
+        (incomingLength === 0 && incoming.some((value) => value !== 0)) ||
+        (outgoingLength === 0 && outgoing.some((value) => value !== 0))
+      ) {
+        return false;
+      }
+      if (angles[index] !== null) return false;
+      continue;
+    }
+    const saved = angles[index];
+    if (saved === null) return false;
+    const unitIn: Vec3 = incoming.map((value) => value / incomingLength) as Vec3;
+    const unitOut: Vec3 = outgoing.map((value) => value / outgoingLength) as Vec3;
+    const cosine =
+      unitIn[0] * unitOut[0] +
+      unitIn[1] * unitOut[1] +
+      unitIn[2] * unitOut[2];
+    const cross: Vec3 = [
+      unitIn[1] * unitOut[2] - unitIn[2] * unitOut[1],
+      unitIn[2] * unitOut[0] - unitIn[0] * unitOut[2],
+      unitIn[0] * unitOut[1] - unitIn[1] * unitOut[0],
+    ];
+    const expected = (Math.atan2(Math.hypot(...cross), cosine) * 180) / Math.PI;
+    if (
+      !Number.isFinite(expected) ||
+      Math.abs(saved - expected) > Math.max(saved, expected) * 1e-8
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function isFace(value: unknown, vertexCount: number): value is Face {
   return (
     Array.isArray(value) &&
@@ -251,8 +316,8 @@ function parsePathInspections(
         : null;
     // Turning angles are persisted source-frame geometry, not reviewed
     // anatomical landmarks. Require valid endpoints, bounded finite interior
-    // values, and agreement with the persisted maximum; never derive missing
-    // scientific evidence from a simplified rendering.
+    // values, agreement with the persisted maximum, and the complete saved
+    // polyline; never derive display evidence from a simplified rendering.
     const rawAngles = route.path_turn_angles_deg;
     const rawMaximumTurn = route.maximum_turn_angle_deg;
     const anglesHaveValidShape =
@@ -284,7 +349,12 @@ function parsePathInspections(
             : Math.abs(rawMaximumTurn - computedMaximum) <=
               computedMaximum * 1e-8);
     const turnAnglesDeg: (number | null)[] | null =
-      anglesHaveValidShape && maximumAgrees
+      anglesHaveValidShape &&
+      maximumAgrees &&
+      anglesAgreeWithSavedPolyline(
+        rawAngles as (number | null)[],
+        coordinates as Vec3[],
+      )
         ? (rawAngles as (number | null)[])
         : null;
     const warnings = route.path_qc_warnings;
