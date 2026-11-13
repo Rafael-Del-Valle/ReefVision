@@ -223,8 +223,15 @@ if (-not $consoleCommand.Success -or
 # -NoExit exposes an unrestricted PowerShell prompt after the read-only observer
 # reaches a terminal state. Keep the final logs visible with an idle observer
 # instead; no interactive command surface or training write access is permitted.
-if ($consoleCommand.Value -notmatch '\.args\(\["-NoProfile", "-NonInteractive", "-Command", &script\]\)' -or
-    $consoleCommand.Value -match '"-NoExit"') {
+# The Rust function contains unindented braces inside the embedded PowerShell
+# raw string. Do not use $consoleCommand's first-brace regex to inspect Rust's
+# process launcher: it stops at a PowerShell function before .args() appears.
+$launcher = [regex]::Match(
+  $source,
+  '(?s)Command::new\("powershell\.exe"\)\s*\.args\(\["-NoProfile", "-NonInteractive", "-Command", &script\]\)\s*\.spawn\(\)'
+)
+if (-not $launcher.Success -or
+    $launcher.Value -match '"-NoExit"') {
   throw 'External training console must not expose an interactive PowerShell prompt.'
 }
 if ($monitorScript -notmatch 'while \(\$true\) \{ Start-Sleep -Seconds 3600 \}') {
