@@ -124,6 +124,31 @@ caller-supplied and unverified. Scale uncertainty is not a confidence interval
 and does not include reconstruction, endpoint, or registration uncertainty.
 Review is required before interpreting these provisional measurements.
 
+## Independent saved-route geometric consistency QC
+
+The interactive viewer now independently compares the complete persisted
+calibrated source-frame route polyline with its saved total geometric length,
+**each** supplied segment length, and **each** supplied cumulative waypoint
+distance. Checking each edge is necessary because incorrect edge lengths can
+still sum to a plausible total. Relative, scale-aware numeric agreement is
+used without an absolute tolerance that would misclassify microscopic routes.
+Finite XYZ coordinates whose differences or accumulated length overflow are
+**unverifiable**, not certified. A missing or malformed total is also
+unverifiable. Malformed explicitly supplied segment or cumulative arrays and
+contradictory finite measurements are shown as **inconsistent**, with a
+human-review warning. Older artifacts with no segment/cumulative arrays can
+still be assessed against their reported total.
+
+This independent QC is **read-only inspection** of the original numerical
+evidence from the common standalone API and executable persisted Workflow
+Builder preview artifacts. The underlying shared measurement engine,
+source hashes, calibration and workflow persistence are unchanged. A
+**consistent** result establishes only numerical agreement between reported
+measurements and available saved source-frame coordinates, not verified
+calibration, registration, anatomical centerline, organism identity, or
+biological condition. An inconsistent result leaves the saved route geometry
+visible for investigation; no user data or provenance is silently rewritten.
+
 ## Provenance parity for direct, API, and saved-workflow previews
 
 The pure geometry measurement function returns core calibration and geometry
