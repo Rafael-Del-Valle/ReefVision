@@ -56,6 +56,40 @@ def test_straight_route_turn_is_zero_not_missing() -> None:
     assert paths[0]["maximum_turn_angle_deg"] == pytest.approx(0.0)
 
 
+@pytest.mark.parametrize(
+    ("lateral", "vertical"),
+    [(1e-9, 0.0), (-1e-9, 0.0), (0.0, 1e-9)],
+)
+def test_tiny_genuine_bends_do_not_round_to_zero(
+    lateral: float, vertical: float
+) -> None:
+    # acos(dot) rounded the cosine of these valid tiny turns to exactly 1,
+    # producing a false zero despite a nonzero 3D change of direction.
+    paths = mesh_edge_paths(
+        points=[
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (2.0, lateral, vertical),
+            (1.0, 1.0, 0.0),
+        ],
+        faces=[[0, 1, 3], [1, 2, 3]],
+        pairs=[[0, 2]],
+        scale=0.02,
+        scale_uncertainty=0.1,
+    )
+    assert paths is not None
+    route = paths[0]
+    assert route["path_vertex_indices"] == [0, 1, 2]
+    assert route["path_turn_angles_deg"][0] is None
+    assert route["path_turn_angles_deg"][2] is None
+    from math import atan, degrees, hypot
+
+    expected = degrees(atan(hypot(lateral, vertical)))
+    assert route["path_turn_angles_deg"][1] == pytest.approx(expected, rel=1e-6)
+    assert route["path_turn_angles_deg"][1] > 0
+    assert route["maximum_turn_angle_deg"] == pytest.approx(expected, rel=1e-6)
+
+
 def test_zero_length_incident_edge_keeps_undefined_turn_unknown() -> None:
     paths = mesh_edge_paths(
         points=[
