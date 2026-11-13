@@ -305,6 +305,132 @@ describe("MeshArtifactViewer", () => {
     expect(screen.queryByTestId("mesh-route-selected-segment")).toBeNull();
   });
 
+  it("inspects persisted per-edge measurements independently of missing cumulative arrays", () => {
+    const artifact = {
+      ...validArtifact,
+      provenance: {
+        calibration_verified: false,
+        relative_scale_uncertainty: 0.1,
+      },
+      surface_edge_paths: [
+        {
+          status: "connected",
+          path_vertex_indices: [10, 12, 16],
+          path_vertices_in_source_frame_m: [
+            [0, 0, 0],
+            [3, 0, 0],
+            [3, 4, 0],
+          ],
+          length_m: 7,
+          path_edge_lengths_m: [3, 4],
+          path_edge_length_scale_intervals_m: [
+            [2.7, 3.3],
+            [3.6, 4.4],
+          ],
+          path_qc_warnings: [],
+        },
+      ],
+    };
+    const original = JSON.stringify(artifact);
+    render(<MeshArtifactViewer artifact={artifact} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect provisional route 1" }),
+    );
+    fireEvent.change(screen.getByRole("slider", { name: "Route vertex" }), {
+      target: { value: "1" },
+    });
+    const first = screen.getByText(/Route waypoint 2 of 3/);
+    expect(first).toHaveTextContent(
+      "Saved cumulative mesh-edge distance: unknown",
+    );
+    expect(first).toHaveTextContent(
+      "Saved preceding mesh-edge segment length: 3.00000 m",
+    );
+    expect(first).toHaveTextContent(
+      "Scale-only segment interval: [2.70000, 3.30000] m",
+    );
+    fireEvent.change(screen.getByRole("slider", { name: "Route vertex" }), {
+      target: { value: "2" },
+    });
+    const second = screen.getByText(/Route waypoint 3 of 3/);
+    expect(second).toHaveTextContent(
+      "Saved preceding mesh-edge segment length: 4.00000 m",
+    );
+    expect(second).toHaveTextContent(
+      "Scale-only segment interval: [3.60000, 4.40000] m",
+    );
+    expect(second).toHaveTextContent("Not a verified anatomical segment");
+    expect(JSON.stringify(artifact)).toBe(original);
+  });
+
+  it("keeps inconsistent saved edge values and uncertainty unknown rather than recomputing", () => {
+    const route = {
+      status: "connected",
+      path_vertex_indices: [10, 12, 16],
+      path_vertices_in_source_frame_m: [
+        [0, 0, 0],
+        [3, 0, 0],
+        [3, 4, 0],
+      ],
+      length_m: 7,
+      path_edge_lengths_m: [3, 40],
+      path_edge_length_scale_intervals_m: [
+        [2.7, 3.3],
+        [3.6, 4.4],
+      ],
+      path_qc_warnings: [],
+    };
+    const provenance = {
+      calibration_verified: false,
+      relative_scale_uncertainty: 0.1,
+    };
+    const corrupted = {
+      ...validArtifact,
+      provenance,
+      surface_edge_paths: [route],
+    };
+    const { rerender } = render(<MeshArtifactViewer artifact={corrupted} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect provisional route 1" }),
+    );
+    fireEvent.change(screen.getByRole("slider", { name: "Route vertex" }), {
+      target: { value: "1" },
+    });
+    expect(screen.getByText(/Route waypoint 2 of 3/)).toHaveTextContent(
+      "Saved preceding mesh-edge segment length: unknown",
+    );
+    const badInterval = {
+      ...validArtifact,
+      provenance,
+      surface_edge_paths: [
+        {
+          ...route,
+          path_edge_lengths_m: [3, 4],
+          path_edge_length_scale_intervals_m: [
+            [1, 6],
+            [3.6, 4.4],
+          ],
+        },
+      ],
+    };
+    const original = JSON.stringify(badInterval);
+    rerender(<MeshArtifactViewer artifact={badInterval} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inspect provisional route 1" }),
+    );
+    fireEvent.change(screen.getByRole("slider", { name: "Route vertex" }), {
+      target: { value: "1" },
+    });
+    const inspected = screen.getByText(/Route waypoint 2 of 3/);
+    expect(inspected).toHaveTextContent(
+      "Saved preceding mesh-edge segment length: 3.00000 m",
+    );
+    expect(inspected).toHaveTextContent(
+      "Scale-only segment interval: unknown",
+    );
+    expect(JSON.stringify(badInterval)).toBe(original);
+  });
+
   it("keeps invalid or legacy cumulative route measurements unknown", () => {
     const artifact = {
       ...validArtifact,
