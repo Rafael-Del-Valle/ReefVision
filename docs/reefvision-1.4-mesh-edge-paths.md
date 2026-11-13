@@ -63,6 +63,20 @@ anatomical result. Valid endpoint or zero-length-adjacent turns are shown as
 These are read-only provisional source-frame geometric measurements, not
 coral branch curvature, reidentification, condition, or growth results.
 
+Saved angles must also agree with turns independently reconstructed from
+the **complete persisted calibrated source-frame route polyline** (not from
+sampled display triangles). A maximum angle can agree with a stale or altered
+angle array, so internal maximum consistency alone is insufficient. The
+inspector rejects contradictory geometric turns, missing interior values for
+nonzero adjacent segments, and non-null turns at zero-length segments. If
+coordinate subtraction, normalization, or subnormal arithmetic cannot
+reproduce the source-frame angle reliably, angle inspection stays
+**unknown**, while the geometric route remains visible. Valid undefined
+turns at endpoints and genuine zero-length segments remain distinct from
+unknown. This check does not replace saved measurements, confer biological
+verification, or cover uncertainties arising from reconstruction or
+landmark selection.
+
 The interactive route inspector now prefers the persisted per-edge lengths
 and per-edge scale-only bounds instead of differencing cumulative lengths,
 which can discard precision on very long routes. When older artifacts omit
