@@ -18,6 +18,17 @@ import {
   type Project,
 } from "../../api/client";
 
+type ClassPreviewSelection = {
+  targetClassId: string;
+  notes: string;
+  selectionKey: string;
+};
+
+type BoundClassPreview = {
+  operation: ClassOperationRecord;
+  selectionKey: string;
+};
+
 function OperationSummary({
   operation,
   title,
@@ -85,6 +96,8 @@ function ClassRow({
   const [description, setDescription] = useState(labelClass.description ?? "");
   const [showUsage, setShowUsage] = useState(false);
   const [reassignNotes, setReassignNotes] = useState("");
+  // An edit invalidates prior researcher approval, even after value reversion.
+  const [previewEpoch, setPreviewEpoch] = useState(0);
   const mergeTargets = useMemo(
     () =>
       allClasses.filter(
@@ -100,11 +113,34 @@ function ClassRow({
     mergeTargets[0]?.id ?? "",
   );
   const [reassignPreview, setReassignPreview] =
-    useState<ClassOperationRecord | null>(null);
+    useState<BoundClassPreview | null>(null);
   const [reassignDeletePreview, setReassignDeletePreview] =
-    useState<ClassOperationRecord | null>(null);
+    useState<BoundClassPreview | null>(null);
   const [latestOperation, setLatestOperation] =
     useState<ClassOperationRecord | null>(null);
+  const previewSelectionKey = JSON.stringify([
+    project.id,
+    labelClass.id,
+    reassignTargetId,
+    reassignNotes.trim(),
+    previewEpoch,
+  ]);
+  const matchesPreview = (
+    candidate: BoundClassPreview | null,
+    operationType: "reassign" | "reassign_delete",
+  ) =>
+    candidate !== null &&
+    candidate.selectionKey === previewSelectionKey &&
+    candidate.operation.status === "previewed" &&
+    candidate.operation.project_id === project.id &&
+    candidate.operation.source_class_id === labelClass.id &&
+    candidate.operation.target_class_id === reassignTargetId &&
+    candidate.operation.operation_type === operationType;
+  const canRunReassign = matchesPreview(reassignPreview, "reassign");
+  const canRunReassignDelete = matchesPreview(
+    reassignDeletePreview,
+    "reassign_delete",
+  );
 
   useEffect(() => {
     setName(labelClass.name);
@@ -174,58 +210,59 @@ function ClassRow({
     onSuccess: refresh,
   });
   const previewReassign = useMutation({
-    mutationFn: () =>
+    mutationFn: (selection: ClassPreviewSelection) =>
       previewLabelClassReassign(project.id, labelClass.id, {
-        target_class_id: reassignTargetId,
-        notes: reassignNotes.trim() || null,
+        target_class_id: selection.targetClassId,
+        notes: selection.notes || null,
       }),
-    onSuccess: (operation) => {
-      setReassignPreview(operation);
+    onSuccess: (operation, selection) => {
+      // Delayed HTTP responses remain non-executable if inputs have changed.
+      setReassignPreview({ operation, selectionKey: selection.selectionKey });
       setLatestOperation(operation);
     },
   });
   const runReassign = useMutation({
     mutationFn: () => {
-      if (!reassignPreview) {
-        throw new Error("Preview the reassignment before executing it.");
+      if (!canRunReassign || !reassignPreview) {
+        throw new Error("Preview the current reassignment target and notes first.");
       }
       return executeLabelClassReassign(project.id, labelClass.id, {
-        operation_id: reassignPreview.id,
-        preview_checksum: reassignPreview.preview_checksum,
+        operation_id: reassignPreview.operation.id,
+        preview_checksum: reassignPreview.operation.preview_checksum,
         notes: reassignNotes.trim() || null,
       });
     },
     onSuccess: async (operation) => {
       setLatestOperation(operation);
-      setReassignPreview(operation);
+      setReassignPreview(null);
       await refresh();
     },
   });
   const previewReassignDelete = useMutation({
-    mutationFn: () =>
+    mutationFn: (selection: ClassPreviewSelection) =>
       previewLabelClassReassignDelete(project.id, labelClass.id, {
-        target_class_id: reassignTargetId,
-        notes: reassignNotes.trim() || null,
+        target_class_id: selection.targetClassId,
+        notes: selection.notes || null,
       }),
-    onSuccess: (operation) => {
-      setReassignDeletePreview(operation);
+    onSuccess: (operation, selection) => {
+      setReassignDeletePreview({ operation, selectionKey: selection.selectionKey });
       setLatestOperation(operation);
     },
   });
   const runReassignDelete = useMutation({
     mutationFn: () => {
-      if (!reassignDeletePreview) {
-        throw new Error("Preview reassign-and-delete before executing it.");
+      if (!canRunReassignDelete || !reassignDeletePreview) {
+        throw new Error("Preview the current reassign-and-delete target and notes first.");
       }
       return executeLabelClassReassignDelete(project.id, labelClass.id, {
-        operation_id: reassignDeletePreview.id,
-        preview_checksum: reassignDeletePreview.preview_checksum,
+        operation_id: reassignDeletePreview.operation.id,
+        preview_checksum: reassignDeletePreview.operation.preview_checksum,
         notes: reassignNotes.trim() || null,
       });
     },
     onSuccess: async (operation) => {
       setLatestOperation(operation);
-      setReassignDeletePreview(operation);
+      setReassignDeletePreview(null);
       await refresh();
     },
   });
@@ -383,7 +420,10 @@ function ClassRow({
           Reassign into
           <select
             value={reassignTargetId}
-            onChange={(event) => setReassignTargetId(event.target.value)}
+            onChange={(event) => {
+              setReassignTargetId(event.target.value);
+              setPreviewEpoch((current) => current + 1);
+            }}
             disabled={mergeTargets.length === 0}
           >
             {mergeTargets.length === 0 ? (
@@ -401,7 +441,10 @@ function ClassRow({
           Operation notes
           <textarea
             value={reassignNotes}
-            onChange={(event) => setReassignNotes(event.target.value)}
+            onChange={(event) => {
+            setReassignNotes(event.target.value);
+            setPreviewEpoch((current) => current + 1);
+          }}
             placeholder="Optional audit notes for the reassignment plan"
           />
         </label>
@@ -409,15 +452,31 @@ function ClassRow({
           <button
             type="button"
             className="secondary"
-            disabled={!reassignTargetId || previewReassign.isPending}
-            onClick={() => previewReassign.mutate()}
+            disabled={
+              !reassignTargetId ||
+              previewReassign.isPending ||
+              runReassign.isPending ||
+              runReassignDelete.isPending
+            }
+            onClick={() =>
+              previewReassign.mutate({
+                targetClassId: reassignTargetId,
+                notes: reassignNotes.trim(),
+                selectionKey: previewSelectionKey,
+              })
+            }
           >
             {previewReassign.isPending ? "Previewing..." : "Preview reassign"}
           </button>
           <button
             type="button"
             className="secondary"
-            disabled={!reassignPreview || runReassign.isPending}
+            disabled={
+              !canRunReassign ||
+              previewReassign.isPending ||
+              runReassign.isPending ||
+              runReassignDelete.isPending
+            }
             onClick={() => {
               if (
                 window.confirm(
@@ -433,8 +492,19 @@ function ClassRow({
           <button
             type="button"
             className="danger-ghost"
-            disabled={!reassignTargetId || previewReassignDelete.isPending}
-            onClick={() => previewReassignDelete.mutate()}
+            disabled={
+              !reassignTargetId ||
+              previewReassignDelete.isPending ||
+              runReassign.isPending ||
+              runReassignDelete.isPending
+            }
+            onClick={() =>
+              previewReassignDelete.mutate({
+                targetClassId: reassignTargetId,
+                notes: reassignNotes.trim(),
+                selectionKey: previewSelectionKey,
+              })
+            }
           >
             {previewReassignDelete.isPending
               ? "Previewing..."
@@ -443,7 +513,12 @@ function ClassRow({
           <button
             type="button"
             className="danger-ghost"
-            disabled={!reassignDeletePreview || runReassignDelete.isPending}
+            disabled={
+              !canRunReassignDelete ||
+              previewReassignDelete.isPending ||
+              runReassign.isPending ||
+              runReassignDelete.isPending
+            }
             onClick={() => {
               if (
                 window.confirm(
@@ -505,18 +580,30 @@ function ClassRow({
         </div>
       )}
 
-      {reassignPreview && (
+      {reassignPreview && canRunReassign && (
         <OperationSummary
-          operation={reassignPreview}
+          operation={reassignPreview.operation}
           title="Reassign preview"
         />
       )}
+      {reassignPreview && !canRunReassign && (
+        <p className="annotation-helper" role="status">
+          Reassignment preview no longer matches this target or its notes.
+          Preview again before executing.
+        </p>
+      )}
 
-      {reassignDeletePreview && (
+      {reassignDeletePreview && canRunReassignDelete && (
         <OperationSummary
-          operation={reassignDeletePreview}
+          operation={reassignDeletePreview.operation}
           title="Reassign and Delete preview"
         />
+      )}
+      {reassignDeletePreview && !canRunReassignDelete && (
+        <p className="annotation-helper" role="status">
+          Reassign-and-delete preview no longer matches this target or its notes.
+          Preview again before executing.
+        </p>
       )}
 
       {latestOperation && latestOperation.status !== "previewed" && (
