@@ -1050,7 +1050,9 @@ export function AnnotationEditor({
       }
 
       if (!input.expectedUpdatedAt) {
-        throw new Error("Reload visibility settings before resetting saved preferences.");
+        throw new Error(
+          "Reload visibility settings before resetting saved preferences.",
+        );
       }
       if (input.target === "my_preference") {
         await deleteClassVisibilityPreference(
