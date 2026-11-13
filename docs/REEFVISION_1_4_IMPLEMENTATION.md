@@ -29,6 +29,29 @@ installed desktop/GPU/scientific acceptance. A separate bounded ASCII PLY
 point-cloud preview and interactive viewer already exist, but their transient
 visualization and chord measurements do not establish verified anatomy.
 
+## Saved mesh-route segment inspection (provisional)
+
+The read-only 3D mesh artifact viewer now highlights the segment immediately
+preceding the selected waypoint along a saved connected surface-edge route.
+The inspector displays the **persisted cumulative-distance increment** for
+that pair of original mesh vertex indices; it does not calculate route length
+from the decimated triangle preview. When the artifact supplies a finite
+relative scale uncertainty, it displays multiplicative **scale-only**
+segment bounds using the same caller-supplied scale factor for both ends.
+Missing or invalid saved cumulative lengths remain unknown, and missing
+scale uncertainty is not treated as zero.
+
+Changing the view yaw/pitch does not change segment measurements; selected
+segment highlights and waypoint markers follow camera rotation. The
+selected segment clears when its saved artifact is replaced. A frontend
+regression exercises a three-vertex route with independent 3- and 4-meter
+segment references, the common-scale intervals, camera rotation, and
+artifact immutability. This inspector consumes the same provisional results
+produced by the standalone mesh API and persisted executable
+`mesh_surface_preview` Workflow Builder graphs. It adds **no new
+anatomical-centerline model**, review approval, reconstruction uncertainty
+estimate, or claim that surface-edge segments are biological branches.
+
 ## Calibrated per-patch surface-area underflow guard (provisional)
 
 A positive edge-connected source-frame mesh patch can be many orders of
