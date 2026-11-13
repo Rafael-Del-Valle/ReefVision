@@ -23,6 +23,20 @@ GEOMETRY = {
 }
 
 
+# The additional degenerate triangle has a zero-length edge, but is not
+# connected to the calibrated square. It must not hide square route ties.
+DISCONNECTED_ZERO_EDGE_GEOMETRY = {
+    **GEOMETRY,
+    "vertices": [
+        *GEOMETRY["vertices"],
+        [10.0, 0.0, 0.0],
+        [11.0, 0.0, 0.0],
+        [11.0, 0.0, 0.0],
+    ],
+    "faces": [*GEOMETRY["faces"], [4, 5, 6]],
+}
+
+
 def test_tied_mesh_routes_are_not_reported_as_unique_anatomical_paths() -> None:
     paths = mesh_edge_paths(
         points=[tuple(point) for point in GEOMETRY["vertices"]],
@@ -71,12 +85,34 @@ def test_zero_length_edges_withhold_route_uniqueness_instead_of_guessing() -> No
     )
 
 
+def test_zero_length_edges_in_other_components_do_not_hide_shortest_route_ties() -> None:
+    geometry = DISCONNECTED_ZERO_EDGE_GEOMETRY
+    routes = mesh_edge_paths(
+        points=[tuple(point) for point in geometry["vertices"]],
+        faces=geometry["faces"],
+        pairs=[[0, 3], [0, 1], [4, 5]],
+        scale=0.02,
+        scale_uncertainty=0.1,
+    )
+    assert routes is not None
+    tied, unique, zero_edge_component = routes
+    assert tied["shortest_route_alternatives_status"] == "multiple_exact_equal_cost_routes"
+    assert "multiple_equal_cost_mesh_routes" in tied["path_qc_warnings"]
+    assert unique["shortest_route_alternatives_status"] == (
+        "no_exact_equal_cost_alternative_detected"
+    )
+    assert zero_edge_component["shortest_route_alternatives_status"] == (
+        "unassessable_zero_length_edges"
+    )
+
+
+@pytest.mark.parametrize("geometry", (GEOMETRY, DISCONNECTED_ZERO_EDGE_GEOMETRY))
 def test_tied_route_qc_roundtrips_standalone_and_persisted_graph(
-    client: TestClient,
+    client: TestClient, geometry: dict[str, object]
 ) -> None:
     project_id = str(create_project(client, "Mesh shortest-route tie QC")["id"])
     base = f"/api/v1/projects/{project_id}"
-    standalone = client.post(f"{base}/spatial/mesh-preview", json=GEOMETRY)
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=geometry)
     assert standalone.status_code == 200, standalone.text
     measured = standalone.json()
     tied, unique = measured["surface_edge_paths"]
@@ -92,7 +128,7 @@ def test_tied_route_qc_roundtrips_standalone_and_persisted_graph(
         "name": "Provisional mesh path multiplicity QC",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
-            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": GEOMETRY},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": geometry},
         ],
         "edges": [
             {
