@@ -1294,4 +1294,71 @@ describe("MeshArtifactViewer", () => {
     );
     expect(JSON.stringify(artifact)).toBe(before);
   });
+  it("checks saved turning angles against complete source-frame geometry rather than the saved maximum alone", () => {
+    const route = {
+      status: "connected",
+      path_vertex_indices: [0, 1, 2],
+      path_vertices_in_source_frame_m: [
+        [0, 0, 0],
+        [1, 0, 0],
+        [1, 1, 0],
+      ],
+      path_turn_angles_deg: [null, 90, null],
+      maximum_turn_angle_deg: 90,
+    };
+    const artifact = { ...validArtifact, surface_edge_paths: [route] };
+    const before = JSON.stringify(artifact);
+    const inspect = (change: Record<string, unknown>) =>
+      parseMeshRenderArtifact({
+        ...artifact,
+        surface_edge_paths: [{ ...route, ...change }],
+      })?.routeInspections[0]?.turnAnglesDeg;
+
+    expect(inspect({})).toEqual([null, 90, null]);
+    // These arrays have consistent numeric maxima but contradict the actual
+    // saved polyline or claim an undefined turn at a nondegenerate corner.
+    expect(
+      inspect({
+        path_turn_angles_deg: [null, 45, null],
+        maximum_turn_angle_deg: 45,
+      }),
+    ).toBeNull();
+    expect(
+      inspect({
+        path_vertices_in_source_frame_m: [
+          [0, 0, 0],
+          [1, 0, 0],
+          [2, 0, 0],
+        ],
+      }),
+    ).toBeNull();
+    expect(
+      inspect({
+        path_turn_angles_deg: [null, null, null],
+        maximum_turn_angle_deg: null,
+      }),
+    ).toBeNull();
+    expect(
+      inspect({
+        path_vertices_in_source_frame_m: [
+          [0, 0, 0],
+          [0, 0, 0],
+          [1, 1, 0],
+        ],
+      }),
+    ).toBeNull();
+    expect(
+      inspect({
+        path_vertices_in_source_frame_m: [
+          [0, 0, 0],
+          [0, 0, 0],
+          [1, 1, 0],
+        ],
+        path_turn_angles_deg: [null, null, null],
+        maximum_turn_angle_deg: null,
+      }),
+    ).toEqual([null, null, null]);
+    expect(JSON.stringify(artifact)).toBe(before);
+  });
+
 });
