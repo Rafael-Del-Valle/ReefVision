@@ -163,6 +163,7 @@ def mesh_edge_paths(
         path_edge_length_scale_intervals_m: list[list[float]] | None = None
         path_turn_angles_deg: list[float | None] | None = None
         maximum_turn_angle_deg: float | None = None
+        total_absolute_geometric_turn_deg: float | None = None
         if status == "connected":
             route = [end]
             while route[-1] != start:
@@ -175,6 +176,14 @@ def mesh_edge_paths(
                 (angle for angle in path_turn_angles_deg if angle is not None),
                 default=None,
             )
+            # Cumulative absolute mesh-polyline turning is scale-independent.
+            # An undefined interior turn invalidates the aggregate rather than
+            # silently treating missing geometric evidence as a zero bend.
+            interior_turns = path_turn_angles_deg[1:-1]
+            if all(angle is not None for angle in interior_turns):
+                total_absolute_geometric_turn_deg = sum(
+                    angle for angle in interior_turns if angle is not None
+                )
             # Export the complete selected polyline even when render triangles
             # are decimated. Coordinates retain unregistered source axes.
             path_vertices_in_source_frame_m = [
@@ -299,6 +308,7 @@ def mesh_edge_paths(
                 "path_edge_length_scale_intervals_m": path_edge_length_scale_intervals_m,
                 "path_turn_angles_deg": path_turn_angles_deg,
                 "maximum_turn_angle_deg": maximum_turn_angle_deg,
+                "total_absolute_geometric_turn_deg": total_absolute_geometric_turn_deg,
                 "path_cumulative_lengths_m": path_cumulative_lengths_m,
                 "path_cumulative_length_scale_intervals_m": (
                     path_cumulative_length_scale_intervals_m
