@@ -116,14 +116,16 @@ def inspect(path: Path) -> dict:
                 warnings.append(warning)
         if not version_table_present:
             warnings.append("missing_alembic_version_table")
-        elif not canonical_stamp_constraints:
-            warnings.append("noncanonical_alembic_stamp_constraints")
-        elif "version_num" not in version_columns:
-            warnings.append("missing_alembic_version_column")
-        elif version_columns != {"version_num"}:
-            # Match the desktop migration guard: a foreign metadata column
-            # makes the Alembic stamp ambiguous even if its revision is valid.
-            warnings.append("unexpected_alembic_version_columns")
+        else:
+            # Preserve specific provenance diagnostics as well as the strict
+            # canonical-constraint warning. The latter must not conceal a
+            # missing or foreign column in read-only researcher reports.
+            if "version_num" not in version_columns:
+                warnings.append("missing_alembic_version_column")
+            elif version_columns != {"version_num"}:
+                warnings.append("unexpected_alembic_version_columns")
+            if not canonical_stamp_constraints:
+                warnings.append("noncanonical_alembic_stamp_constraints")
         if (
             version_table_present
             and "version_num" in version_columns
