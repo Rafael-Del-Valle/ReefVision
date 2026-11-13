@@ -50,6 +50,9 @@ class ClassVisibilityBundleResponse(BaseModel):
 
 class ClassVisibilityUpdateRequest(BaseModel):
     hidden_class_ids: list[str] = Field(default_factory=list)
+    # Field omission retains the legacy unconditional PUT; explicit null means
+    # create only if absent, and a timestamp means update only that revision.
+    expected_updated_at: datetime | None = None
 
     @field_validator("hidden_class_ids")
     @classmethod
