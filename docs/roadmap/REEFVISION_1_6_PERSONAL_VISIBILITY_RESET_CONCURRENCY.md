@@ -23,9 +23,10 @@ observed revision. A failed reset invalidates the cached visibility bundle,
 so another window's changes are reloaded before a new action. When no project
 default exists, `Apply Project Defaults to My Preferences` uses the same
 conditional reset for a saved personal preference and does not send a
-delete when none was saved. Session overrides, project defaults, scientific
-annotations, predictions, review decisions and saved workflow artifacts are
-not modified by these preference operations.
+delete when none was saved. The no-preference/no-default `Apply Project Defaults` action clears the
+unsaved session visibility override; the persistent personal reset never
+modifies a session override itself. Project defaults, scientific annotations,
+predictions, review decisions and saved workflow artifacts are untouched.
 
 This is UI persistence, not a new scientific analysis. The previously shipped
 typed, executable `qc_review_queue` Workflow Builder and researcher approval
