@@ -20,6 +20,9 @@ export interface MeshRenderArtifact {
 interface MeshRouteInspection {
   sourceIndex: number;
   pathVertices: Vec3[];
+  vertexIndices: number[];
+  cumulativeLengthsM: number[] | null;
+  cumulativeScaleIntervalsM: [number, number][] | null;
   startVertexIndex: number;
   endVertexIndex: number;
   lengthM: number | null;
@@ -102,6 +105,49 @@ function parsePathInspections(value: unknown): MeshRouteInspection[] {
       interval[1] >= lengthM
         ? [interval[0], interval[1]]
         : null;
+    // Persisted cumulative distances are scientific artifacts, not values
+    // reconstructed from the decimated display triangles. Reject malformed
+    // or inconsistent arrays rather than presenting invented measurements.
+    const rawCumulative = route.path_cumulative_lengths_m;
+    const cumulativeLengthsM =
+      lengthM !== null &&
+      Array.isArray(rawCumulative) &&
+      rawCumulative.length === indices.length &&
+      rawCumulative.every(
+        (distance) =>
+          typeof distance === "number" &&
+          Number.isFinite(distance) &&
+          distance >= 0,
+      ) &&
+      rawCumulative[0] === 0 &&
+      rawCumulative.every(
+        (distance, index) =>
+          index === 0 || distance >= rawCumulative[index - 1],
+      ) &&
+      Math.abs(rawCumulative[rawCumulative.length - 1] - lengthM) <=
+        Math.max(1e-12, lengthM * 1e-8)
+        ? (rawCumulative as number[])
+        : null;
+    const rawCumulativeIntervals = route.path_cumulative_length_scale_intervals_m;
+    const cumulativeScaleIntervalsM: [number, number][] | null =
+      cumulativeLengthsM !== null &&
+      Array.isArray(rawCumulativeIntervals) &&
+      rawCumulativeIntervals.length === indices.length &&
+      rawCumulativeIntervals.every(
+        (pair, index) =>
+          Array.isArray(pair) &&
+          pair.length === 2 &&
+          pair.every(
+            (bound) =>
+              typeof bound === "number" &&
+              Number.isFinite(bound) &&
+              bound >= 0,
+          ) &&
+          pair[0] <= cumulativeLengthsM[index] &&
+          pair[1] >= cumulativeLengthsM[index],
+      )
+        ? (rawCumulativeIntervals as [number, number][])
+        : null;
     const warnings = route.path_qc_warnings;
     const qcWarnings =
       Array.isArray(warnings) &&
@@ -116,6 +162,9 @@ function parsePathInspections(value: unknown): MeshRouteInspection[] {
       {
         sourceIndex,
         pathVertices: coordinates as Vec3[],
+        vertexIndices: indices as number[],
+        cumulativeLengthsM,
+        cumulativeScaleIntervalsM,
         startVertexIndex: indices[0] as number,
         endVertexIndex: indices[indices.length - 1] as number,
         lengthM,
@@ -381,6 +430,28 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
     mesh?.routeInspections.find(
       (route) => route.sourceIndex === selectedRouteIndex,
     ) ?? null;
+  const [selectedWaypoint, setSelectedWaypoint] = useState<{
+    artifact: unknown;
+    routeIndex: number;
+    vertexIndex: number;
+  } | null>(null);
+  const selectedWaypointIndex =
+    selectedRouteInspection !== null &&
+    selectedWaypoint?.artifact === artifact &&
+    selectedWaypoint.routeIndex === selectedRouteInspection.sourceIndex
+      ? Math.min(selectedWaypoint.vertexIndex, selectedRouteInspection.pathVertices.length - 1)
+      : 0;
+  const selectedWaypointPosition =
+    mesh !== null && selectedRouteInspection !== null
+      ? project(
+          selectedRouteInspection.pathVertices[selectedWaypointIndex],
+          mesh.cameraTarget,
+          mesh.cameraRadius,
+          yaw,
+          pitch,
+          zoom,
+        )
+      : null;
   // A source triangle number is scoped to the reconstruction, not the organism.
   const [selection, setSelection] = useState<{
     artifact: unknown;
@@ -529,6 +600,18 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
             <title>Unverified source-frame mesh edge route {index + 1}</title>
           </polyline>
         ))}
+        {selectedWaypointPosition !== null && (
+          <circle
+            data-testid="mesh-route-waypoint-marker"
+            cx={selectedWaypointPosition.x}
+            cy={selectedWaypointPosition.y}
+            r={6}
+            fill="#fef08a"
+            stroke="#172554"
+            strokeWidth={2}
+            pointerEvents="none"
+          />
+        )}
       </svg>
       {routePolylines.length > 0 && (
         <p className="annotation-helper">
@@ -563,6 +646,31 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
               ? "Select a connected route for provisional measurement details."
               : formatRouteInspection(selectedRouteInspection)}
           </p>
+          {selectedRouteInspection !== null && (
+            <div aria-label="Provisional route vertex inspector">
+              <label>
+                Route vertex
+                <input
+                  aria-label="Route vertex"
+                  type="range"
+                  min={0}
+                  max={selectedRouteInspection.pathVertices.length - 1}
+                  step={1}
+                  value={selectedWaypointIndex}
+                  onChange={(event) =>
+                    setSelectedWaypoint({
+                      artifact,
+                      routeIndex: selectedRouteInspection.sourceIndex,
+                      vertexIndex: Number(event.target.value),
+                    })
+                  }
+                />
+              </label>
+              <p className="annotation-helper" aria-live="polite">
+                {`Route waypoint ${selectedWaypointIndex + 1} of ${selectedRouteInspection.pathVertices.length}, source vertex ${selectedRouteInspection.vertexIndices[selectedWaypointIndex]}. Saved cumulative mesh-edge distance: ${selectedRouteInspection.cumulativeLengthsM === null ? "unknown" : `${selectedRouteInspection.cumulativeLengthsM[selectedWaypointIndex].toPrecision(6)} m`}. Scale-only cumulative interval: ${selectedRouteInspection.cumulativeScaleIntervalsM === null ? "unknown" : `[${selectedRouteInspection.cumulativeScaleIntervalsM[selectedWaypointIndex][0].toPrecision(6)}, ${selectedRouteInspection.cumulativeScaleIntervalsM[selectedWaypointIndex][1].toPrecision(6)}] m`}. Coordinates in unregistered source frame: (${selectedRouteInspection.pathVertices[selectedWaypointIndex].map((coordinate) => coordinate.toPrecision(6)).join(", ")}) m. Provisional geometric waypoint, not a verified coral anatomical landmark.`}
+              </p>
+            </div>
+          )}
         </div>
       )}
       <p className="annotation-helper" aria-live="polite">
