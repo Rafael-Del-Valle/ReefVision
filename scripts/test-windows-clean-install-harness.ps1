@@ -138,6 +138,26 @@ try {
         Assert-True ($retentionBefore.ContainsKey($relative.ToLowerInvariant())) "Missing stable file from retention snapshot: $relative"
     }
 
+    # Legitimate Alembic updates may change SQLite when a newly installed
+    # desktop starts. MSI itself must leave SQLite unchanged; a migrated DB
+    # must not mask the loss of user imagery or locally trained checkpoints.
+    Set-Content -LiteralPath (Join-Path $retentionFixture 'reefvision.db') -Value 'migrated-synthetic-sqlite-fixture' -Encoding UTF8
+    $migratedSnapshot = Get-ReefVisionResearchFileSnapshot -DataRoot $retentionFixture
+    Assert-ThrowsContaining { Assert-ReefVisionResearchFileSnapshotRetained -Before $retentionBefore -After $migratedSnapshot } 'modified retained research file'
+    Assert-True ((Assert-ReefVisionResearchFileSnapshotRetained -Before $retentionBefore -After $migratedSnapshot -AllowSqliteChanges) -eq ($stableFixtures.Count - 1)) 'SQLite migration allowance incorrectly rejected intact stable scientific assets.'
+    Set-Content -LiteralPath (Join-Path $retentionFixture 'images\coral.png') -Value 'lost-original-image' -Encoding UTF8
+    $corruptAfterMigration = Get-ReefVisionResearchFileSnapshot -DataRoot $retentionFixture
+    Assert-ThrowsContaining {
+        Assert-ReefVisionResearchFileSnapshotRetained -Before $retentionBefore -After $corruptAfterMigration -AllowSqliteChanges
+    } 'modified retained research file'
+    Set-Content -LiteralPath (Join-Path $retentionFixture 'reefvision.db') -Value $stableFixtures['reefvision.db'] -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $retentionFixture 'images\coral.png') -Value $stableFixtures['images\coral.png'] -Encoding UTF8
+
+    # Never accept upgrade proof based only on mutable SQLite records.
+    Assert-ThrowsContaining {
+        Assert-ReefVisionResearchFileSnapshotRetained -Before @{'reefvision.db' = 'old'} -After @{'reefvision.db' = 'new'} -AllowSqliteChanges
+    } 'no non-SQLite scientific assets'
+
     # Nonresearch runtime/cache/log churn must not produce false failures.
     Set-Content -LiteralPath (Join-Path $retentionFixture 'logs\backend.log') -Value 'after' -Encoding UTF8
     Set-Content -LiteralPath (Join-Path $retentionFixture 'cache\derived.pt') -Value 'after' -Encoding UTF8
@@ -186,6 +206,13 @@ $retentionUninstallOffset = $acceptanceSource.IndexOf('Run-Msi -Action Uninstall
 $retentionAfterOffset = $acceptanceSource.IndexOf('$retainedResearchAfter = Get-ReefVisionResearchFileSnapshot', [System.StringComparison]::Ordinal)
 Assert-True ($retentionBeforeOffset -gt 0 -and $retentionBeforeOffset -lt $retentionUninstallOffset -and $retentionUninstallOffset -lt $retentionAfterOffset) 'Uninstall retention must hash research files before and after msiexec.'
 Assert-True ($acceptanceSource.Contains('Assert-ReefVisionResearchFileSnapshotRetained -Before $retainedResearchBefore -After $retainedResearchAfter')) 'Installed retention PASS must depend on byte-level verification.'
+$upgradeBeforeOffset = $acceptanceSource.IndexOf('$retainedResearchBeforeUpgrade = Get-ReefVisionResearchFileSnapshot', [System.StringComparison]::Ordinal)
+$upgradeInstallOffset = $acceptanceSource.IndexOf("Run-Msi -Action Install -PackageOrProduct `$InstallerPath -LogName 'upgrade.log'", [System.StringComparison]::Ordinal)
+$upgradeAfterInstallOffset = $acceptanceSource.IndexOf('$retainedResearchAfterInstall = Get-ReefVisionResearchFileSnapshot', [System.StringComparison]::Ordinal)
+$upgradeAfterReplayOffset = $acceptanceSource.IndexOf('$retainedResearchAfterUpgrade = Get-ReefVisionResearchFileSnapshot', [System.StringComparison]::Ordinal)
+Assert-True ($upgradeBeforeOffset -gt 0 -and $upgradeBeforeOffset -lt $upgradeInstallOffset -and $upgradeInstallOffset -lt $upgradeAfterInstallOffset -and $upgradeAfterInstallOffset -lt $upgradeAfterReplayOffset -and $upgradeAfterReplayOffset -lt $retentionUninstallOffset) 'Upgrade must verify research assets before installer, after installer, and after workflow replay before uninstall.'
+Assert-True ($acceptanceSource.Contains('Assert-ReefVisionResearchFileSnapshotRetained -Before $retainedResearchBeforeUpgrade -After $retainedResearchAfterInstall')) 'MSI upgrade must preserve every research file before application migration.'
+Assert-True ($acceptanceSource.Contains('Assert-ReefVisionResearchFileSnapshotRetained -Before $retainedResearchBeforeUpgrade -After $retainedResearchAfterUpgrade -AllowSqliteChanges')) 'MSI upgrade must preserve non-SQLite scientific assets after migrated desktop workflow replay.'
 Assert-True ($acceptanceSource.Contains('$report.uninstall.status -eq ''PASS'' -and $report.data_retention.status -eq ''PASS''')) 'Disposable cleanup must not erase evidence following research-retention failure.'
 Assert-True ($acceptanceSource.Contains('$null -eq $report.failure_reason)')) 'Disposable cleanup must preserve evidence on any acceptance error.'
 
