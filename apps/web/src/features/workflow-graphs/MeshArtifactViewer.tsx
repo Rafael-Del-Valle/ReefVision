@@ -226,6 +226,24 @@ export function parseMeshRenderArtifact(
   };
 }
 
+
+/** Report persisted provisional evidence without deriving anatomical claims. */
+function formatRouteInspection(route: MeshRouteInspection): string {
+  const length =
+    route.lengthM === null ? "unknown" : `${route.lengthM.toPrecision(6)} m`;
+  const interval =
+    route.lengthScaleIntervalM === null
+      ? "unknown"
+      : `[${route.lengthScaleIntervalM[0].toPrecision(6)}, ${route.lengthScaleIntervalM[1].toPrecision(6)}] m`;
+  const qc =
+    route.qcWarnings === null
+      ? "unknown (missing or invalid saved QC)"
+      : route.qcWarnings.length === 0
+        ? "no route-specific flags"
+        : route.qcWarnings.join(", ");
+  return `Route ${route.sourceIndex + 1}, mesh vertices ${route.startVertexIndex} to ${route.endVertexIndex}. Saved geometric route length: ${length}. Scale-only length interval: ${interval}. Path QC: ${qc}. Provisional mesh geometry, not a verified biological branch length.`;
+}
+
 function project(
   point: Vec3,
   target: Vec3,
@@ -545,7 +563,7 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
           <p className="annotation-helper" aria-live="polite">
             {selectedRouteInspection === null
               ? "Select a connected route for provisional measurement details."
-              : `Route ${selectedRouteInspection.sourceIndex + 1}, mesh vertices ${selectedRouteInspection.startVertexIndex} to ${selectedRouteInspection.endVertexIndex}. Saved geometric route length: ${selectedRouteInspection.lengthM === null ? "unknown" : `${selectedRouteInspection.lengthM.toPrecision(6)} m`}. Scale-only length interval: ${selectedRouteInspection.lengthScaleIntervalM === null ? "unknown" : `[${selectedRouteInspection.lengthScaleIntervalM[0].toPrecision(6)}, ${selectedRouteInspection.lengthScaleIntervalM[1].toPrecision(6)}] m`}. Path QC: ${selectedRouteInspection.qcWarnings === null ? "unknown (missing or invalid saved QC)" : selectedRouteInspection.qcWarnings.length === 0 ? "no route-specific flags" : selectedRouteInspection.qcWarnings.join(", ")}. Provisional mesh geometry, not a verified biological branch length.`}
+              : formatRouteInspection(selectedRouteInspection)}
           </p>
         </div>
       )}
