@@ -177,6 +177,43 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert payload["project_id"] == project_id
     assert payload["dataset_id"] == dataset_id
     assert payload["manifest_sha256"] == dataset["manifest_sha256"]
+    # Both executions are genuine saved Workflow Builder runs referencing
+    # this reviewed frozen dataset. Their identical output contracts must
+    # not allow the first node to write an artifact into the second run.
+    alternate_queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": graph_record["id"]},
+    )
+    assert alternate_queued.status_code == 202, alternate_queued.text
+    alternate_run_id = str(alternate_queued.json()["id"])
+    assert alternate_run_id != str(queued.json()["id"])
+    with app.state.session_factory() as session:
+        original_node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert original_node is not None
+        with pytest.raises(
+            ConflictError, match="producer belongs to a different workflow run"
+        ):
+            WorkflowExecutionService(session).persist_artifact(
+                run_id=alternate_run_id,
+                node_run=original_node,
+                specification=WorkflowArtifactSpec(
+                    port_id=outputs[0]["producer_port_id"],
+                    data_type=outputs[0]["data_type"],
+                    payload=payload,
+                ),
+            )
+        assert (
+            session.scalar(
+                select(WorkflowArtifact.id).where(
+                    WorkflowArtifact.workflow_run_id == alternate_run_id
+                )
+            )
+            is None
+        )
+    alternate_detail = client.get(f"/api/v1/workflow-runs/{alternate_run_id}")
+    assert alternate_detail.status_code == 200, alternate_detail.text
+    assert alternate_detail.json()["artifacts"] == []
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
     # Saved workflow artifacts must preserve active-learning source lineage,
     # including explicit nulls for scientist-verified datasets without a round.
     with app.state.session_factory() as session:
