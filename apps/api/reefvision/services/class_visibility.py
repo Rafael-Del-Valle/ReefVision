@@ -69,12 +69,14 @@ class ClassVisibilityService:
         saved: bool,
         updated_at: object | None,
         updated_by_identity: str | None,
+        record_id: str | None,
     ) -> ClassVisibilityScopeStateResponse:
         return ClassVisibilityScopeStateResponse(
             saved=saved,
             hidden_class_ids=self._sanitize_hidden_class_ids(hidden_class_ids, valid_class_ids),
             updated_at=updated_at,
             updated_by_identity=updated_by_identity,
+            record_id=record_id,
         )
 
     def _empty_scope_state(self) -> ClassVisibilityScopeStateResponse:
@@ -105,6 +107,8 @@ class ClassVisibilityService:
                     saved=True,
                     updated_at=preference.updated_at,
                     updated_by_identity=preference.user_identity,
+            record_id=preference.id,
+                    record_id=preference.id,
                 )
 
             project_default = defaults_by_layer.get(layer_type)
@@ -117,6 +121,8 @@ class ClassVisibilityService:
                     saved=True,
                     updated_at=project_default.updated_at,
                     updated_by_identity=project_default.updated_by_identity,
+            record_id=project_default.id,
+                    record_id=project_default.id,
                 )
 
         return ClassVisibilityBundleResponse(
@@ -140,6 +146,10 @@ class ClassVisibilityService:
             project_id, payload.hidden_class_ids
         )
         user_identity = get_local_user_identity(self.settings)
+        if payload.expected_record_id is not None and payload.expected_updated_at is None:
+            raise ValidationError("Visibility record id requires an existing revision")
+        if payload.expected_record_id is not None and payload.expected_updated_at is None:
+            raise ValidationError("Visibility record id requires an existing revision")
         if "expected_updated_at" in payload.model_fields_set:
             if not self.preferences.save_if_revision(
                 project_id,
@@ -147,6 +157,7 @@ class ClassVisibilityService:
                 resolved_layer_type,
                 hidden_class_ids,
                 payload.expected_updated_at,
+                payload.expected_record_id,
             ):
                 raise ConflictError(
                     "Personal visibility preference changed in another editor. "
@@ -176,13 +187,18 @@ class ClassVisibilityService:
         project_id: str,
         layer_type: str,
         expected_updated_at: datetime | None = None,
+        expected_record_id: str | None = None,
     ) -> None:
         self._project(project_id)
         resolved_layer_type = self._layer_type(layer_type)
         user_identity = get_local_user_identity(self.settings)
+        if expected_record_id is not None and expected_updated_at is None:
+            raise ValidationError("Visibility record id requires an existing revision")
+        if expected_record_id is not None and expected_updated_at is None:
+            raise ValidationError("Visibility record id requires an existing revision")
         if expected_updated_at is not None:
             if not self.preferences.delete_if_updated_at(
-                project_id, user_identity, resolved_layer_type, expected_updated_at
+                project_id, user_identity, resolved_layer_type, expected_updated_at, expected_record_id
             ):
                 raise ConflictError(
                     "Personal visibility preference changed in another editor. "
@@ -217,6 +233,7 @@ class ClassVisibilityService:
                 hidden_class_ids,
                 user_identity,
                 payload.expected_updated_at,
+                payload.expected_record_id,
             ):
                 raise ConflictError(
                     "Project visibility default changed in another editor. "
@@ -245,12 +262,13 @@ class ClassVisibilityService:
         project_id: str,
         layer_type: str,
         expected_updated_at: datetime | None = None,
+        expected_record_id: str | None = None,
     ) -> None:
         self._project(project_id)
         resolved_layer_type = self._layer_type(layer_type)
         if expected_updated_at is not None:
             if not self.project_defaults.delete_if_updated_at(
-                project_id, resolved_layer_type, expected_updated_at
+                project_id, resolved_layer_type, expected_updated_at, expected_record_id
             ):
                 raise ConflictError(
                     "Project visibility default changed in another editor. "
