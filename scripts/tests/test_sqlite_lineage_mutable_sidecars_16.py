@@ -61,7 +61,11 @@ def test_live_wal_sidecar_requires_review_on_both_comparison_sides(
             before = (primary.read_bytes(), reference.read_bytes(), wal.read_bytes())
 
             command = ("--compare-to", str(reference))
-            for strict in ((), ("--fail-on-integrity-error",), ("--fail-on-lineage-collision",)):
+            for strict in (
+                (),
+                ("--fail-on-integrity-error",),
+                ("--fail-on-lineage-collision",),
+            ):
                 result = _run(primary, *command, *strict)
                 assert result.returncode == (2 if strict else 0), result.stderr
                 report = json.loads(result.stdout)
@@ -69,7 +73,8 @@ def test_live_wal_sidecar_requires_review_on_both_comparison_sides(
                 assert report["schema_comparison"]["matches"] is True
                 assert report["schema_comparison"]["revision_markers_match"] is True
                 live_report = (
-                    report if live_side == "primary"
+                    report
+                    if live_side == "primary"
                     else report["schema_comparison"]["reference_integrity"]
                 )
                 assert live_report["sqlite_sidecar_presence"]["-wal"] is True
