@@ -292,6 +292,39 @@ function formatRouteInspection(route: MeshRouteInspection): string {
   return `Route ${route.sourceIndex + 1}, mesh vertices ${route.startVertexIndex} to ${route.endVertexIndex}. Saved geometric route length: ${length}. Scale-only length interval: ${interval}. Path QC: ${qc}. Provisional mesh geometry, not a verified biological branch length.`;
 }
 
+/** Inspect a persisted segment increment, not an anatomical branch or independently reviewed measure. */
+function formatRouteSegmentInspection(
+  route: MeshRouteInspection,
+  waypointIndex: number,
+  relativeScaleUncertainty: number | null,
+): string {
+  if (waypointIndex === 0) {
+    return "Starting waypoint has no preceding route segment.";
+  }
+  if (route.cumulativeLengthsM === null) {
+    return "Saved preceding mesh-edge segment length: unknown. Scale-only segment interval: unknown.";
+  }
+  const length =
+    route.cumulativeLengthsM[waypointIndex] -
+    route.cumulativeLengthsM[waypointIndex - 1];
+  const lower =
+    relativeScaleUncertainty === null
+      ? null
+      : length * (1 - relativeScaleUncertainty);
+  const upper =
+    relativeScaleUncertainty === null
+      ? null
+      : length * (1 + relativeScaleUncertainty);
+  const interval =
+    lower === null ||
+    upper === null ||
+    !Number.isFinite(lower) ||
+    !Number.isFinite(upper)
+      ? "unknown"
+      : `[${lower.toPrecision(6)}, ${upper.toPrecision(6)}] m`;
+  return `Saved preceding mesh-edge segment length: ${length.toPrecision(6)} m. Scale-only segment interval: ${interval} (shared caller-supplied scale; excludes reconstruction and endpoint uncertainty). Not a verified anatomical segment.`;
+}
+
 function project(
   point: Vec3,
   target: Vec3,
@@ -458,6 +491,19 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
           zoom,
         )
       : null;
+  const selectedSegmentStartPosition =
+    mesh !== null &&
+    selectedRouteInspection !== null &&
+    selectedWaypointIndex > 0
+      ? project(
+          selectedRouteInspection.pathVertices[selectedWaypointIndex - 1],
+          mesh.cameraTarget,
+          mesh.cameraRadius,
+          yaw,
+          pitch,
+          zoom,
+        )
+      : null;
   // A source triangle number is scoped to the reconstruction, not the organism.
   const [selection, setSelection] = useState<{
     artifact: unknown;
@@ -606,6 +652,20 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
             <title>Unverified source-frame mesh edge route {index + 1}</title>
           </polyline>
         ))}
+        {selectedSegmentStartPosition !== null &&
+          selectedWaypointPosition !== null && (
+            <line
+              data-testid="mesh-route-selected-segment"
+              x1={selectedSegmentStartPosition.x}
+              y1={selectedSegmentStartPosition.y}
+              x2={selectedWaypointPosition.x}
+              y2={selectedWaypointPosition.y}
+              stroke="#fef08a"
+              strokeWidth={4}
+              vectorEffect="non-scaling-stroke"
+              pointerEvents="none"
+            />
+          )}
         {selectedWaypointPosition !== null && (
           <circle
             data-testid="mesh-route-waypoint-marker"
@@ -673,7 +733,7 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
                 />
               </label>
               <p className="annotation-helper" aria-live="polite">
-                {`Route waypoint ${selectedWaypointIndex + 1} of ${selectedRouteInspection.pathVertices.length}, source vertex ${selectedRouteInspection.vertexIndices[selectedWaypointIndex]}. Saved cumulative mesh-edge distance: ${selectedRouteInspection.cumulativeLengthsM === null ? "unknown" : `${selectedRouteInspection.cumulativeLengthsM[selectedWaypointIndex].toPrecision(6)} m`}. Scale-only cumulative interval: ${selectedRouteInspection.cumulativeScaleIntervalsM === null ? "unknown" : `[${selectedRouteInspection.cumulativeScaleIntervalsM[selectedWaypointIndex][0].toPrecision(6)}, ${selectedRouteInspection.cumulativeScaleIntervalsM[selectedWaypointIndex][1].toPrecision(6)}] m`}. Coordinates in unregistered source frame: (${selectedRouteInspection.pathVertices[selectedWaypointIndex].map((coordinate) => coordinate.toPrecision(6)).join(", ")}) m. Provisional geometric waypoint, not a verified coral anatomical landmark.`}
+                {`Route waypoint ${selectedWaypointIndex + 1} of ${selectedRouteInspection.pathVertices.length}, source vertex ${selectedRouteInspection.vertexIndices[selectedWaypointIndex]}. Saved cumulative mesh-edge distance: ${selectedRouteInspection.cumulativeLengthsM === null ? "unknown" : `${selectedRouteInspection.cumulativeLengthsM[selectedWaypointIndex].toPrecision(6)} m`}. Scale-only cumulative interval: ${selectedRouteInspection.cumulativeScaleIntervalsM === null ? "unknown" : `[${selectedRouteInspection.cumulativeScaleIntervalsM[selectedWaypointIndex][0].toPrecision(6)}, ${selectedRouteInspection.cumulativeScaleIntervalsM[selectedWaypointIndex][1].toPrecision(6)}] m`}. Coordinates in unregistered source frame: (${selectedRouteInspection.pathVertices[selectedWaypointIndex].map((coordinate) => coordinate.toPrecision(6)).join(", ")}) m. Provisional geometric waypoint, not a verified coral anatomical landmark. ${formatRouteSegmentInspection(selectedRouteInspection, selectedWaypointIndex, mesh.relativeScaleUncertainty)}`}
               </p>
             </div>
           )}
