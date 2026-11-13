@@ -14,10 +14,11 @@ reports `shortest_route_alternatives_status` on every requested route:
   was found by the strictly positive-weight, bounded graph search. This is
   **not** proof that the biological path or an approximately equal-cost
   route is unique.
-- `unassessable_zero_length_edges`: the imported mesh contains at least one
-  zero-length edge. This conservative guard applies even when that edge is
-  outside the selected route; zero-weight cycles invalidate the simple
-  positive-weight counting method.
+- `unassessable_zero_length_edges`: the route's **connected mesh component**
+  contains at least one zero-length edge. This guard applies even when that
+  edge is outside the selected route, because zero-weight cycles invalidate
+  simple positive-weight path counting. Zero-length edges in **disconnected**
+  components cannot affect this route and do not suppress its diagnostic.
 - `null`: disconnected or unreferenced endpoints have no route to compare.
 
 Shortest-path multiplicity is counted only to two; exponential counts are not
@@ -31,8 +32,9 @@ centerline verification. A near tie may therefore remain undetected.
 The project-scoped standalone preview and executable typed persisted
 `mesh_surface_preview` Workflow Builder graph share this implementation.
 Regression checks cover tied and untied routes, unresolved zero-length edges,
-workflow planning, saved execution, artifact/provenance equality, and unchanged
-provisional status. Historical artifacts without this field remain valid and
+disconnected zero-edge component isolation, workflow planning, saved execution
+of both isolated and ordinary meshes, artifact/provenance equality, and
+unchanged provisional status. Historical artifacts without this field remain valid and
 must not be retroactively relabeled as unique.
 
 The `mesh_surface_preview` standalone API and persisted Workflow Builder node
