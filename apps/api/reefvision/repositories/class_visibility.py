@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from sqlalchemy import select
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from reefvision.db.models.class_visibility_preference import ClassVisibilityPreference
+from reefvision.db.models.project import utc_now
 from reefvision.db.models.project_class_visibility_default import ProjectClassVisibilityDefault
 
 
@@ -36,8 +38,34 @@ class ClassVisibilityPreferenceRepository:
         )
         return self.session.scalar(statement)
 
-    def add(self, preference: ClassVisibilityPreference) -> None:
-        self.session.add(preference)
+    def upsert(
+        self, project_id: str, user_identity: str, layer_type: str, hidden_class_ids: list[str]
+    ) -> None:
+        """Atomically replace one user's layer, even if two editors save its first row.
+
+        The unique project/user/layer constraint serializes concurrent first writes.
+        SQLite remains the local-first storage backend; this is not a blind
+        check-then-insert and does not mutate scientific observations.
+        """
+        statement = sqlite_insert(ClassVisibilityPreference).values(
+            project_id=project_id,
+            user_identity=user_identity,
+            layer_type=layer_type,
+            hidden_class_ids_json=hidden_class_ids,
+        )
+        self.session.execute(
+            statement.on_conflict_do_update(
+                index_elements=[
+                    ClassVisibilityPreference.project_id,
+                    ClassVisibilityPreference.user_identity,
+                    ClassVisibilityPreference.layer_type,
+                ],
+                set_={
+                    "hidden_class_ids_json": hidden_class_ids,
+                    "updated_at": utc_now(),
+                },
+            )
+        )
 
 
 class ProjectClassVisibilityDefaultRepository:
@@ -59,5 +87,30 @@ class ProjectClassVisibilityDefaultRepository:
         )
         return self.session.scalar(statement)
 
-    def add(self, preference: ProjectClassVisibilityDefault) -> None:
-        self.session.add(preference)
+    def upsert(
+        self,
+        project_id: str,
+        layer_type: str,
+        hidden_class_ids: list[str],
+        updated_by_identity: str,
+    ) -> None:
+        """Use the project's unique scope constraint for atomic default saves."""
+        statement = sqlite_insert(ProjectClassVisibilityDefault).values(
+            project_id=project_id,
+            layer_type=layer_type,
+            hidden_class_ids_json=hidden_class_ids,
+            updated_by_identity=updated_by_identity,
+        )
+        self.session.execute(
+            statement.on_conflict_do_update(
+                index_elements=[
+                    ProjectClassVisibilityDefault.project_id,
+                    ProjectClassVisibilityDefault.layer_type,
+                ],
+                set_={
+                    "hidden_class_ids_json": hidden_class_ids,
+                    "updated_by_identity": updated_by_identity,
+                    "updated_at": utc_now(),
+                },
+            )
+        )
