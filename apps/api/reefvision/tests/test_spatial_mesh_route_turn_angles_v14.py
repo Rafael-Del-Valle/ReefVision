@@ -32,9 +32,12 @@ def test_route_turns_are_geometric_and_scale_invariant() -> None:
         assert corner["status"] == "connected"
         assert corner["path_turn_angles_deg"] == [None, pytest.approx(90.0), None]
         assert corner["maximum_turn_angle_deg"] == pytest.approx(90.0)
+        assert corner["total_absolute_geometric_turn_deg"] == pytest.approx(90.0)
         assert corner["length_m"] == pytest.approx(2 * scale)
         assert single_edge["path_turn_angles_deg"] == [None, None]
         assert single_edge["maximum_turn_angle_deg"] is None
+        # A single valid edge has no interior bends; this is zero, not missing.
+        assert single_edge["total_absolute_geometric_turn_deg"] == 0.0
         assert measurement["measurement_status"] == "caller_supplied_unverified"
 
 
@@ -55,6 +58,7 @@ def test_straight_route_turn_is_zero_not_missing() -> None:
     assert paths[0]["path_vertex_indices"] == [0, 1, 2]
     assert paths[0]["path_turn_angles_deg"] == [None, pytest.approx(0.0), None]
     assert paths[0]["maximum_turn_angle_deg"] == pytest.approx(0.0)
+    assert paths[0]["total_absolute_geometric_turn_deg"] == pytest.approx(0.0)
 
 
 @pytest.mark.parametrize(
@@ -85,6 +89,7 @@ def test_tiny_genuine_bends_do_not_round_to_zero(lateral: float, vertical: float
     assert route["path_turn_angles_deg"][1] == pytest.approx(expected, rel=1e-6)
     assert route["path_turn_angles_deg"][1] > 0
     assert route["maximum_turn_angle_deg"] == pytest.approx(expected, rel=1e-6)
+    assert route["total_absolute_geometric_turn_deg"] == pytest.approx(expected, rel=1e-6)
 
 
 def test_zero_length_incident_edge_keeps_undefined_turn_unknown() -> None:
@@ -105,6 +110,8 @@ def test_zero_length_incident_edge_keeps_undefined_turn_unknown() -> None:
     assert paths[0]["path_vertex_indices"] == [0, 1, 3]
     assert paths[0]["path_turn_angles_deg"] == [None, None, None]
     assert paths[0]["maximum_turn_angle_deg"] is None
+    # Undefined interior bend cannot be mistaken for a perfectly straight route.
+    assert paths[0]["total_absolute_geometric_turn_deg"] is None
     assert "zero_length_edge_on_path" in paths[0]["path_qc_warnings"]
 
 
@@ -117,6 +124,7 @@ def test_route_turns_roundtrip_in_typed_persisted_workflow(client: TestClient) -
     route = measured["surface_edge_paths"][0]
     assert route["path_turn_angles_deg"] == [None, pytest.approx(90.0), None]
     assert route["maximum_turn_angle_deg"] == pytest.approx(90.0)
+    assert route["total_absolute_geometric_turn_deg"] == pytest.approx(90.0)
 
     graph = {
         "graph_id": "mesh-turn-angles-v14",
@@ -156,6 +164,9 @@ def test_route_turns_roundtrip_in_typed_persisted_workflow(client: TestClient) -
         if item["data_type"] == "mesh_measurement_preview"
     )
     assert artifact["surface_edge_paths"] == measured["surface_edge_paths"]
+    assert artifact["surface_edge_paths"][0]["total_absolute_geometric_turn_deg"] == pytest.approx(
+        90.0
+    )
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"] == measured["provenance"]
     assert artifact["provenance"]["calibration_verified"] is False
