@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Read-only JPEG camera-fixture inventory for ReefVision 1.0.3 acceptance.
 
-This validates JPEG signatures and produces an integrity manifest; it does NOT
-prove that Pillow, the backend decoder, or installed WebView2 can render files.
-No source files are modified. Run against a backed-up, owner-approved fixture set.
+By default this validates JPEG signatures and produces an integrity manifest.
+--verify-decode additionally asks Pillow to load every JPEG pixel stream, so
+syntactically marked but undecodable images fail acceptance. Neither mode
+proves installed WebView2 or GPU behavior. No originals are modified.
+Run against a backed-up, owner-approved fixture set.
 """
 from __future__ import annotations
 
