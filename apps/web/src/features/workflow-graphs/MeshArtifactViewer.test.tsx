@@ -1360,5 +1360,4 @@ describe("MeshArtifactViewer", () => {
     ).toEqual([null, null, null]);
     expect(JSON.stringify(artifact)).toBe(before);
   });
-
 });
