@@ -465,9 +465,7 @@ def test_conditional_visibility_revisions_advance_during_clock_rollback(
     # SQLite persists microsecond-precision timestamps. Simulate a clock that
     # moves backwards and then stops, with two independently committed writes.
     frozen_past = previous_utc - timedelta(days=1)
-    monkeypatch.setattr(
-        "reefvision.repositories.class_visibility.utc_now", lambda: frozen_past
-    )
+    monkeypatch.setattr("reefvision.repositories.class_visibility.utc_now", lambda: frozen_past)
     next_save = client.put(
         path,
         json={"hidden_class_ids": [], "expected_updated_at": first_stamp},
@@ -489,9 +487,7 @@ def test_conditional_visibility_revisions_advance_during_clock_rollback(
 
     # An editor still holding either prior token cannot overwrite or reset
     # the latest settings; no scientific annotations are changed.
-    stale_save = client.put(
-        path, json={"hidden_class_ids": [], "expected_updated_at": first_stamp}
-    )
+    stale_save = client.put(path, json={"hidden_class_ids": [], "expected_updated_at": first_stamp})
     assert stale_save.status_code == 409
     stale_reset = client.delete(path, params={"expected_updated_at": second_stamp})
     assert stale_reset.status_code == 409
