@@ -165,7 +165,7 @@ interface VisibilityMutationInput {
   layerType: ClassVisibilityLayerType;
   target: VisibilityMutationTarget;
   hiddenClassIds?: string[];
-  expectedUpdatedAt?: string;
+  expectedUpdatedAt?: string | null;
 }
 
 interface VisibilityMutationResult {
@@ -1024,6 +1024,7 @@ export function AnnotationEditor({
       if (input.action === "save") {
         const payload = {
           hidden_class_ids: input.hiddenClassIds ?? [],
+          expected_updated_at: input.expectedUpdatedAt ?? null,
         };
         const state =
           input.target === "my_preference"
@@ -1130,13 +1131,11 @@ export function AnnotationEditor({
       }
     },
     onError: (error: Error, input, context) => {
-      if (input.action === "reset") {
-        // Refresh stale settings before another reset; never cache a false deletion.
-        void queryClient.invalidateQueries({
-          queryKey: ["class-visibility", input.projectId],
-          exact: true,
-        });
-      }
+      // Refresh authoritative revisions after any save or reset failure.
+      void queryClient.invalidateQueries({
+        queryKey: ["class-visibility", input.projectId],
+        exact: true,
+      });
       const activeUserIdentity =
         queryClient.getQueryData<ClassVisibilityBundle>([
           "class-visibility",
@@ -1567,9 +1566,11 @@ export function AnnotationEditor({
       layerType: selectedVisibilityLayer,
       target: "my_preference",
       hiddenClassIds: currentLayerVisibility.hiddenClassIds,
+      expectedUpdatedAt: currentLayerVisibility.userPreference.updated_at,
     });
   }, [
     currentLayerVisibility.hiddenClassIds,
+    currentLayerVisibility.userPreference.updated_at,
     selectedVisibilityLayer,
     project.id,
     visibilityMutation,
@@ -1582,9 +1583,11 @@ export function AnnotationEditor({
       layerType: selectedVisibilityLayer,
       target: "project_default",
       hiddenClassIds: currentLayerVisibility.hiddenClassIds,
+      expectedUpdatedAt: currentLayerVisibility.projectDefault.updated_at,
     });
   }, [
     currentLayerVisibility.hiddenClassIds,
+    currentLayerVisibility.projectDefault.updated_at,
     selectedVisibilityLayer,
     project.id,
     visibilityMutation,
@@ -1642,9 +1645,11 @@ export function AnnotationEditor({
       layerType: selectedVisibilityLayer,
       target: "project_default",
       hiddenClassIds: currentLayerVisibility.hiddenClassIds,
+      expectedUpdatedAt: currentLayerVisibility.projectDefault.updated_at,
     });
   }, [
     currentLayerVisibility.hiddenClassIds,
+    currentLayerVisibility.projectDefault.updated_at,
     selectedVisibilityLayer,
     project.id,
     visibilityMutation,
@@ -1675,6 +1680,7 @@ export function AnnotationEditor({
       layerType: selectedVisibilityLayer,
       target: "my_preference",
       hiddenClassIds: currentLayerVisibility.projectDefault.hidden_class_ids,
+      expectedUpdatedAt: currentLayerVisibility.userPreference.updated_at,
     });
   }, [
     clearSessionVisibilityOverride,
