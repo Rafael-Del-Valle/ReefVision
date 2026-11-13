@@ -266,3 +266,27 @@ imports produce no `mesh_measurement_preview` artifact. This is numerical
 source-integrity protection only: the original OBJ, calibration scale, mesh
 reconstruction, anatomical branch lengths, and biological identity remain
 unverified; a valid parse is not scientific acceptance.
+
+## Persisted 3D endpoint chord inspection (Track C, 2026-11-13)
+
+The interactive read-only route inspector now reports the **saved** calibrated
+endpoint-to-endpoint chord and its caller-provided **scale-only** interval,
+independently checking the chord against the full-resolution source-frame
+endpoint XYZ. Stale or contradictory nominal chord evidence displays
+**unknown** and is marked inconsistent; missing or numerically unusable
+chord evidence is marked unverifiable. Missing, malformed, or contradictory
+uncertainty bounds stay **unknown**, rather than being silently recomputed.
+The inspector preserves historical artifacts without these fields and never
+mutates the saved record. Tests cover valid and stale chords, valid and
+invalid bounds, absent evidence, display text, and source immutability.
+
+The standalone mesh analysis and executable persisted typed Workflow Builder
+already emit the same endpoint-chord metrics through the shared measurement
+engine; this update adds an independent inspection/QC surface for that
+existing scientific artifact, not a duplicate analysis engine or new node.
+A chord is a geometric straight-line distance, **not** the surface route,
+coral branch centerline, biological growth, or verified specimen dimension.
+The interval propagates only caller-supplied scale uncertainty; it does not
+include reconstruction error, endpoint selection error, registration error,
+or independent calibration verification. All release and biological
+validation gates remain open.
