@@ -501,9 +501,7 @@ def test_conditional_visibility_revisions_advance_during_clock_rollback(
 
 
 @pytest.mark.parametrize("scope", ["preferences", "defaults"])
-def test_visibility_row_identity_rejects_recreated_scope(
-    tmp_path: Path, scope: str
-) -> None:
+def test_visibility_row_identity_rejects_recreated_scope(tmp_path: Path, scope: str) -> None:
     """A stale row ID must fail even when a recreated row has the same timestamp."""
     settings = Settings(
         env="test",
@@ -517,13 +515,14 @@ def test_visibility_row_identity_rejects_recreated_scope(
     with TestClient(app) as client:
         project = create_project(client)
         label_class = create_label_class(
-            client, project["id"], class_index=0,
-            name="Swiftia Open", display_color="#C74343",
+            client,
+            project["id"],
+            class_index=0,
+            name="Swiftia Open",
+            display_color="#C74343",
         )
         path = f"/api/v1/projects/{project['id']}/class-visibility/{scope}/annotations"
-        initial = client.put(
-            path, json={"hidden_class_ids": [], "expected_updated_at": None}
-        )
+        initial = client.put(path, json={"hidden_class_ids": [], "expected_updated_at": None})
         assert initial.status_code == 200, initial.text
         old = initial.json()
         assert old["record_id"]
@@ -533,7 +532,8 @@ def test_visibility_row_identity_rejects_recreated_scope(
         }
         assert client.delete(path, params=precondition).status_code == 204
         restored = client.put(
-            path, json={
+            path,
+            json={
                 "hidden_class_ids": [label_class["id"]],
                 "expected_updated_at": None,
             },
@@ -542,9 +542,7 @@ def test_visibility_row_identity_rejects_recreated_scope(
         new = restored.json()
         assert new["record_id"] != old["record_id"]
         model = (
-            ClassVisibilityPreference
-            if scope == "preferences"
-            else ProjectClassVisibilityDefault
+            ClassVisibilityPreference if scope == "preferences" else ProjectClassVisibilityDefault
         )
         with Session(app.state.engine) as db:
             db.execute(
@@ -554,13 +552,11 @@ def test_visibility_row_identity_rejects_recreated_scope(
             )
             db.commit()
 
-        assert client.put(
-            path, json={"hidden_class_ids": [], **precondition}
-        ).status_code == 409
+        assert client.put(path, json={"hidden_class_ids": [], **precondition}).status_code == 409
         assert client.delete(path, params=precondition).status_code == 409
-        saved = client.get(
-            f"/api/v1/projects/{project['id']}/class-visibility"
-        ).json()["user_preferences" if scope == "preferences" else "project_defaults"]["annotations"]
+        saved = client.get(f"/api/v1/projects/{project['id']}/class-visibility").json()[
+            "user_preferences" if scope == "preferences" else "project_defaults"
+        ]["annotations"]
         assert saved["record_id"] == new["record_id"]
         assert saved["hidden_class_ids"] == [label_class["id"]]
         valid = client.put(
