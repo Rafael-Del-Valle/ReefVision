@@ -36,6 +36,20 @@ The intervals share a single calibration uncertainty and must **not** be
 interpreted as independent edge-specific errors or confidence intervals.
 No segment is automatically accepted as a biological branch or centerline.
 
+The interactive route inspector now prefers the persisted per-edge lengths
+and per-edge scale-only bounds instead of differencing cumulative lengths,
+which can discard precision on very long routes. When older artifacts omit
+per-edge arrays, the viewer retains its legacy cumulative-length fallback.
+Persisted edge lengths must be finite, nonnegative, the correct array length,
+and consistent with the saved total and any usable cumulative array.
+Persisted edge intervals are checked against their shared calibration factor.
+When an explicitly supplied edge field is inconsistent, that segment
+measurement or interval is shown as **unknown** rather than silently replaced
+with a freshly calculated value. Renderable provisional route coordinates
+remain available for inspection, and no saved scientific artifact is changed.
+Standalone API and saved Workflow Builder artifacts already export these
+per-edge arrays from the same engine; the inspector is a read-only consumer.
+
 A disconnected pair returns `status: disconnected` with unknown length.
 A vertex not referenced by any face returns `status: unreferenced_endpoint`.
 Neither is assigned an artificial zero or straight-line distance. An omitted
