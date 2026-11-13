@@ -109,30 +109,74 @@ finally {
 # profile previously passed the retention gate. Exercise byte-level snapshots
 # with disposable science and volatile fixtures; never touch real user data.
 $retentionFixture = Join-Path $env:TEMP ('rv-research-retention-' + [guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Path (Join-Path $retentionFixture 'images'),(Join-Path $retentionFixture 'logs') -Force | Out-Null
 try {
-    Set-Content -LiteralPath (Join-Path $retentionFixture 'reefvision.db') -Value 'synthetic-sqlite-fixture' -Encoding UTF8
-    Set-Content -LiteralPath (Join-Path $retentionFixture 'images\coral.png') -Value 'synthetic-image-fixture' -Encoding UTF8
-    Set-Content -LiteralPath (Join-Path $retentionFixture 'observations.json') -Value '{"polyp_count":2}' -Encoding UTF8
+    foreach ($subdir in @('images', 'logs', 'cache', 'runtime', 'field', 'models', 'projects')) {
+        New-Item -ItemType Directory -Path (Join-Path $retentionFixture $subdir) -Force | Out-Null
+    }
+    # The fixture contents are deliberately synthetic: test asset persistence,
+    # not video decoding, checkpoint loading or researcher-scored accuracy.
+    $stableFixtures = @{
+        'reefvision.db'                   = 'synthetic-sqlite-fixture'
+        'images\coral.png'               = 'synthetic-image-fixture'
+        'observations.json'              = '{"polyp_count":2}'
+        'field\transect.mp4'             = 'synthetic-video-fixture'
+        'field\camera.srt'               = 'synthetic-telemetry-fixture'
+        'models\own-trained.onnx'        = 'synthetic-local-model-fixture'
+        'projects\opaque.custom-research' = 'synthetic-plugin-output-fixture'
+        'projects\no_extension'          = 'synthetic-extensionless-fixture'
+    }
+    foreach ($relative in $stableFixtures.Keys) {
+        Set-Content -LiteralPath (Join-Path $retentionFixture $relative) -Value $stableFixtures[$relative] -Encoding UTF8
+    }
     Set-Content -LiteralPath (Join-Path $retentionFixture 'logs\backend.log') -Value 'before' -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $retentionFixture 'cache\derived.pt') -Value 'before' -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $retentionFixture 'runtime\backend-port.txt') -Value 'before' -Encoding UTF8
+
     $retentionBefore = Get-ReefVisionResearchFileSnapshot -DataRoot $retentionFixture
-    Assert-True ($retentionBefore.Count -eq 3) 'Retention snapshot did not capture SQLite, imported image and biological metadata.'
+    Assert-True ($retentionBefore.Count -eq $stableFixtures.Count) 'Snapshot must include SQLite, images, video, telemetry, local models, arbitrary and extensionless scientific files.'
+    foreach ($relative in $stableFixtures.Keys) {
+        Assert-True ($retentionBefore.ContainsKey($relative.ToLowerInvariant())) "Missing stable file from retention snapshot: $relative"
+    }
+
+    # Nonresearch runtime/cache/log churn must not produce false failures.
     Set-Content -LiteralPath (Join-Path $retentionFixture 'logs\backend.log') -Value 'after' -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $retentionFixture 'cache\derived.pt') -Value 'after' -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $retentionFixture 'runtime\backend-port.txt') -Value 'after' -Encoding UTF8
     $retentionAfter = Get-ReefVisionResearchFileSnapshot -DataRoot $retentionFixture
-    Assert-True ((Assert-ReefVisionResearchFileSnapshotRetained -Before $retentionBefore -After $retentionAfter) -eq 3) 'Volatile log changes should not fail research retention.'
-    Set-Content -LiteralPath (Join-Path $retentionFixture 'images\coral.png') -Value 'altered-image-fixture' -Encoding UTF8
-    $retentionAfter = Get-ReefVisionResearchFileSnapshot -DataRoot $retentionFixture
-    Assert-ThrowsContaining { Assert-ReefVisionResearchFileSnapshotRetained -Before $retentionBefore -After $retentionAfter } 'modified retained research file'
-    Remove-Item -LiteralPath (Join-Path $retentionFixture 'images\coral.png') -Force
-    $retentionAfter = Get-ReefVisionResearchFileSnapshot -DataRoot $retentionFixture
-    Assert-ThrowsContaining { Assert-ReefVisionResearchFileSnapshotRetained -Before $retentionBefore -After $retentionAfter } 'removed retained research file'
-    Remove-Item -LiteralPath (Join-Path $retentionFixture 'observations.json') -Force
+    Assert-True ((Assert-ReefVisionResearchFileSnapshotRetained -Before $retentionBefore -After $retentionAfter) -eq $stableFixtures.Count) 'Only explicitly volatile top-level directories may be excluded.'
+
+    # Detect a byte change to both familiar research media and arbitrary plugin
+    # formats. Then restore the disposable sample for independent delete checks.
+    foreach ($relative in @('images\coral.png', 'projects\opaque.custom-research', 'models\own-trained.onnx')) {
+        Set-Content -LiteralPath (Join-Path $retentionFixture $relative) -Value 'changed' -Encoding UTF8
+        $retentionAfter = Get-ReefVisionResearchFileSnapshot -DataRoot $retentionFixture
+        Assert-ThrowsContaining { Assert-ReefVisionResearchFileSnapshotRetained -Before $retentionBefore -After $retentionAfter } 'modified retained research file'
+        Set-Content -LiteralPath (Join-Path $retentionFixture $relative) -Value $stableFixtures[$relative] -Encoding UTF8
+    }
+
+    # No extension-based blind spots: reject deletion of clips, telemetry,
+    # local trained weights, plugin outputs and extensionless research records.
+    foreach ($relative in @('field\transect.mp4', 'field\camera.srt', 'models\own-trained.onnx', 'projects\opaque.custom-research', 'projects\no_extension', 'images\coral.png')) {
+        Remove-Item -LiteralPath (Join-Path $retentionFixture $relative) -Force
+        $retentionAfter = Get-ReefVisionResearchFileSnapshot -DataRoot $retentionFixture
+        Assert-ThrowsContaining { Assert-ReefVisionResearchFileSnapshotRetained -Before $retentionBefore -After $retentionAfter } 'removed retained research file'
+        Set-Content -LiteralPath (Join-Path $retentionFixture $relative) -Value $stableFixtures[$relative] -Encoding UTF8
+    }
+
+    # Keep the existing minimum-science-payload and mandatory SQLite gates.
+    foreach ($relative in $stableFixtures.Keys) {
+        if ($relative -ne 'reefvision.db') {
+            Remove-Item -LiteralPath (Join-Path $retentionFixture $relative) -Force
+        }
+    }
     Assert-ThrowsContaining { Get-ReefVisionResearchFileSnapshot -DataRoot $retentionFixture } 'at least one persisted research file'
     Set-Content -LiteralPath (Join-Path $retentionFixture 'images\coral.png') -Value 'synthetic-image-fixture' -Encoding UTF8
     Remove-Item -LiteralPath (Join-Path $retentionFixture 'reefvision.db') -Force
     Assert-ThrowsContaining { Get-ReefVisionResearchFileSnapshot -DataRoot $retentionFixture } 'SQLite database is missing'
 } finally {
-    Remove-Item -LiteralPath $retentionFixture -Recurse -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $retentionFixture) {
+        Remove-Item -LiteralPath $retentionFixture -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 $acceptanceSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'acceptance-windows-clean-install.ps1') -Raw
