@@ -358,6 +358,17 @@ def process_workflow_run_job(
                     raise RuntimeError(f"Workflow node-run record is missing: {step.node_id}")
                 if node_run.status == "succeeded":
                     try:
+                        # A completed node's artifacts cannot be replayed under
+                        # different parameters, node type, or execution order.
+                        # The plan is rebuilt from the checksum-pinned graph.
+                        if (
+                            node_run.node_type != step.node_type
+                            or node_run.execution_order != step.order
+                            or node_run.parameters_json != dict(step.parameters)
+                        ):
+                            raise RuntimeError(
+                                "Recovered succeeded-node plan identity or parameters changed"
+                            )
                         verify_succeeded_node_artifacts(
                             session,
                             run_id=run_id,
