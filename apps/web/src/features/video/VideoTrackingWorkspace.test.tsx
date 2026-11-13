@@ -41,6 +41,12 @@ vi.mock("./PoseIdentityReviewPanel", () => ({
   ),
 }));
 
+vi.mock("./BiologicalMovementPanel", () => ({
+  BiologicalMovementPanel: ({ videoId }: { videoId: string }) => (
+    <section data-testid="mock-biological-movement-panel">{videoId}</section>
+  ),
+}));
+
 vi.mock("./GeoreferencedMapPanel", () => ({
   GeoreferencedMapPanel: ({
     videoId,
@@ -592,6 +598,9 @@ describe("VideoTrackingWorkspace", () => {
     expect(
       screen.getByTestId("mock-pose-identity-review-panel"),
     ).toHaveTextContent("video-1 · frame 0");
+    expect(
+      screen.getByTestId("mock-biological-movement-panel"),
+    ).toHaveTextContent("video-1");
     fireEvent.change(screen.getByLabelText("Existing track"), {
       target: { value: machineTrack.id },
     });

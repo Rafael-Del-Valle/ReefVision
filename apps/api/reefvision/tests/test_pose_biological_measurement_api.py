@@ -166,6 +166,12 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
         client.app.state.session_factory,
         measurement_job["id"],
     )
+    saved_measurements = client.get(
+        f"/api/v1/projects/{project['id']}/pose-measurement-runs"
+    )
+    assert saved_measurements.status_code == 200, saved_measurements.text
+    assert saved_measurements.json()[0]["source_job_id"] == measurement_job["id"]
+    assert saved_measurements.json()[0]["definitions_json"][0]["id"] == "gape"
     series = client.get(f"/api/v1/pose-measurement-runs/{measurement_run_id}/series").json()
     assert len(series) == 1
     samples = client.get(f"/api/v1/pose-measurement-series/{series[0]['id']}/samples").json()
@@ -213,6 +219,12 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
         client.app.state.session_factory,
         event_job["id"],
     )
+    saved_event_runs = client.get(f"/api/v1/projects/{project['id']}/pose-event-runs")
+    assert saved_event_runs.status_code == 200, saved_event_runs.text
+    assert saved_event_runs.json()[0]["source_job_id"] == event_job["id"]
+    assert saved_event_runs.json()[0]["configuration_json"]["cycles"][0][
+        "measurement_series_id"
+    ] == series[0]["id"]
     events = client.get(f"/api/v1/pose-event-runs/{event_run_id}/events").json()
     assert [
         (event["start_frame"], event["peak_frame"], event["end_frame"]) for event in events

@@ -1,6 +1,7 @@
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { AnnotatedVideoExportPanel } from "./AnnotatedVideoExportPanel";
 import { BehaviorDynamicsPanel } from "./BehaviorDynamicsPanel";
+import { BiologicalMovementPanel } from "./BiologicalMovementPanel";
 import { GeoreferencedMapPanel } from "./GeoreferencedMapPanel";
 import { GeoreferencingSetupPanel } from "./GeoreferencingSetupPanel";
 import { GeographicExportPanel } from "./GeographicExportPanel";
@@ -1890,16 +1891,27 @@ export function VideoTrackingWorkspace({
         (tracksQuery.data ?? []).some((track) =>
           Boolean(poseLandmarkSchemaFromMetadata(track.metadata_json)),
         ) && (
-          <PoseIdentityReviewPanel
-            projectId={project.id}
-            videoId={selectedVideo.id}
-            frameIndex={frameIndex}
-            tracks={tracksQuery.data ?? []}
-            onFrameChange={(nextFrame) => {
-              setFrameIndex(nextFrame);
-              setPreviewFrameIndex(nextFrame);
-            }}
-          />
+          <>
+            <PoseIdentityReviewPanel
+              projectId={project.id}
+              videoId={selectedVideo.id}
+              frameIndex={frameIndex}
+              tracks={tracksQuery.data ?? []}
+              onFrameChange={(nextFrame) => {
+                setFrameIndex(nextFrame);
+                setPreviewFrameIndex(nextFrame);
+              }}
+            />
+            <BiologicalMovementPanel
+              projectId={project.id}
+              videoId={selectedVideo.id}
+              tracks={tracksQuery.data ?? []}
+              onFrameChange={(nextFrame) => {
+                setFrameIndex(nextFrame);
+                setPreviewFrameIndex(nextFrame);
+              }}
+            />
+          </>
         )}
 
       {selectedVideo && (

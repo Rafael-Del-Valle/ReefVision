@@ -93,6 +93,17 @@ def get_event_run(run_id: str, session: DbSession) -> EventDetectionRunResponse:
     )
 
 
+@router.get(
+    "/projects/{project_id}/pose-event-runs",
+    response_model=list[EventDetectionRunResponse],
+)
+def list_event_runs(project_id: str, session: DbSession) -> list[EventDetectionRunResponse]:
+    return [
+        EventDetectionRunResponse.model_validate(run)
+        for run in PoseBiologicalMeasurementService(session).event_runs(project_id)
+    ]
+
+
 @router.get("/pose-event-runs/{run_id}/events", response_model=list[BiologicalEventResponse])
 def list_events(
     run_id: str, session: DbSession, include_history: Annotated[bool, Query()] = False

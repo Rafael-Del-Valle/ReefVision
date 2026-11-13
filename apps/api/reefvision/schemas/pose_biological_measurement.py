@@ -113,6 +113,9 @@ class MeasurementRunResponse(BaseModel):
     video_id: str
     source_identity_run_id: str
     source_identity_run_revision: int
+    source_job_id: str | None
+    definitions_json: list[dict[str, Any]]
+    configuration_json: dict[str, Any]
     status: str
     progress_json: dict[str, Any]
     verification_state: str
@@ -123,6 +126,8 @@ class EventDetectionRunResponse(BaseModel):
     model_config = {"from_attributes": True}
     id: str
     measurement_run_id: str
+    source_job_id: str | None
+    configuration_json: dict[str, Any]
     status: str
     progress_json: dict[str, Any]
     result_sha256: str | None

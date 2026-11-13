@@ -660,6 +660,19 @@ class PoseBiologicalMeasurementService:
             )
         )
 
+    def event_runs(self, project_id: str) -> list[PoseEventDetectionRun]:
+        return list(
+            self.session.scalars(
+                select(PoseEventDetectionRun)
+                .join(
+                    PoseMeasurementRun,
+                    PoseMeasurementRun.id == PoseEventDetectionRun.measurement_run_id,
+                )
+                .where(PoseMeasurementRun.project_id == project_id)
+                .order_by(PoseEventDetectionRun.created_at.desc())
+            )
+        )
+
     def samples(self, series_id: str) -> list[PoseMeasurementSample]:
         return list(
             self.session.scalars(
