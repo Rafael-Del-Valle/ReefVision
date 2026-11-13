@@ -37,6 +37,7 @@ class ClassVisibilityScopeStateResponse(BaseModel):
     hidden_class_ids: list[str] = Field(default_factory=list)
     updated_at: datetime | None = None
     updated_by_identity: str | None = None
+    record_id: str | None = None
 
 
 class ClassVisibilityBundleResponse(BaseModel):
@@ -53,6 +54,7 @@ class ClassVisibilityUpdateRequest(BaseModel):
     # Field omission retains the legacy unconditional PUT; explicit null means
     # create only if absent, and a timestamp means update only that revision.
     expected_updated_at: datetime | None = None
+    expected_record_id: str | None = None
 
     @field_validator("hidden_class_ids")
     @classmethod
