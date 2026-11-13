@@ -142,6 +142,32 @@ describe("annotation editor geometry", () => {
     }
   });
 
+  it("keeps stitched camera panoramas fully visible below 1% scale", () => {
+    const frame = { width: 320, height: 220 };
+    const image = { width: 65536, height: 8192 };
+    const fitted = fitTransform(image, frame);
+    expect(fitted.scale).toBeGreaterThan(0);
+    expect(fitted.scale).toBeLessThan(0.01);
+
+    const topLeft = imageToScreen({ x: 0, y: 0 }, fitted);
+    const bottomRight = imageToScreen(
+      { x: image.width, y: image.height },
+      fitted,
+    );
+    expect(topLeft.x).toBeGreaterThanOrEqual(0);
+    expect(topLeft.y).toBeGreaterThanOrEqual(0);
+    expect(bottomRight.x).toBeLessThanOrEqual(frame.width);
+    expect(bottomRight.y).toBeLessThanOrEqual(frame.height);
+
+    const cursor = { x: 120, y: 110 };
+    const zoomedOut = zoomAtPoint(fitted, cursor, fitted.scale / 1.08);
+    expect(zoomedOut.scale).toBeCloseTo(fitted.scale / 1.08, 8);
+    const before = screenToImage(cursor, fitted);
+    const after = screenToImage(cursor, zoomedOut);
+    expect(after.x).toBeCloseTo(before.x, 7);
+    expect(after.y).toBeCloseTo(before.y, 7);
+  });
+
   it("round-trips source-image edge coordinates through arbitrary views", () => {
     const sourcePoints = [
       { x: 0, y: 0 },
