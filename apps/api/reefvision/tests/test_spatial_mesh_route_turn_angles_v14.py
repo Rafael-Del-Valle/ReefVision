@@ -39,8 +39,12 @@ def test_route_turns_are_geometric_and_scale_invariant() -> None:
 
 def test_straight_route_turn_is_zero_not_missing() -> None:
     paths = mesh_edge_paths(
-        points=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0),
-                (2.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        points=[
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (2.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ],
         faces=[[0, 1, 3], [1, 2, 3]],
         pairs=[[0, 2]],
         scale=1.0,
@@ -54,8 +58,13 @@ def test_straight_route_turn_is_zero_not_missing() -> None:
 
 def test_zero_length_incident_edge_keeps_undefined_turn_unknown() -> None:
     paths = mesh_edge_paths(
-        points=[(0.0, 0.0, 0.0), (0.0, 0.0, 0.0),
-                (0.0, 1.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0)],
+        points=[
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+        ],
         faces=[[0, 1, 2], [1, 3, 4]],
         pairs=[[0, 3], [0, 4]],
         scale=1.0,
