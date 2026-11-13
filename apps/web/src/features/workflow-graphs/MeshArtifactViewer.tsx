@@ -45,6 +45,36 @@ function isVec3(value: unknown): value is Vec3 {
   );
 }
 
+/**
+ * Validate caller-supplied scale-only bounds when the saved calibration
+ * factor is available. Without it, preserve legacy inspection behavior but
+ * never infer verified calibration or biological geometry.
+ */
+function isSavedScaleInterval(
+  value: unknown,
+  nominal: number,
+  relativeScaleUncertainty: number | null,
+): value is [number, number] {
+  if (
+    !Array.isArray(value) ||
+    value.length !== 2 ||
+    !value.every(
+      (bound) =>
+        typeof bound === "number" && Number.isFinite(bound) && bound >= 0,
+    ) ||
+    value[0] > nominal ||
+    value[1] < nominal
+  ) {
+    return false;
+  }
+  if (relativeScaleUncertainty === null) return true;
+  const tolerance = Math.max(1e-12, nominal * 1e-8);
+  return (
+    Math.abs(value[0] - nominal * (1 - relativeScaleUncertainty)) <= tolerance &&
+    Math.abs(value[1] - nominal * (1 + relativeScaleUncertainty)) <= tolerance
+  );
+}
+
 function isFace(value: unknown, vertexCount: number): value is Face {
   return (
     Array.isArray(value) &&
@@ -102,14 +132,7 @@ function parsePathInspections(
     const interval = route.length_scale_interval_m;
     const lengthScaleIntervalM: [number, number] | null =
       lengthM !== null &&
-      Array.isArray(interval) &&
-      interval.length === 2 &&
-      interval.every(
-        (bound) =>
-          typeof bound === "number" && Number.isFinite(bound) && bound >= 0,
-      ) &&
-      interval[0] <= lengthM &&
-      interval[1] >= lengthM
+      isSavedScaleInterval(interval, lengthM, relativeScaleUncertainty)
         ? [interval[0], interval[1]]
         : null;
     // Persisted cumulative distances are scientific artifacts, not values
@@ -143,14 +166,11 @@ function parsePathInspections(
       rawCumulativeIntervals.length === indices.length &&
       rawCumulativeIntervals.every(
         (pair, index) =>
-          Array.isArray(pair) &&
-          pair.length === 2 &&
-          pair.every(
-            (bound) =>
-              typeof bound === "number" && Number.isFinite(bound) && bound >= 0,
+          isSavedScaleInterval(
+            pair,
+            cumulativeLengthsM[index],
+            relativeScaleUncertainty,
           ) &&
-          pair[0] <= cumulativeLengthsM[index] &&
-          pair[1] >= cumulativeLengthsM[index] &&
           (index === 0 ||
             (pair[0] >= rawCumulativeIntervals[index - 1][0] &&
               pair[1] >= rawCumulativeIntervals[index - 1][1])),
@@ -172,8 +192,9 @@ function parsePathInspections(
           Number.isFinite(distance) &&
           distance >= 0,
       ) &&
-      Math.abs(rawEdges.reduce((sum, distance) => sum + distance, 0) - lengthM) <=
-        Math.max(1e-12, lengthM * 1e-8) &&
+      Math.abs(
+        rawEdges.reduce((sum, distance) => sum + distance, 0) - lengthM,
+      ) <= Math.max(1e-12, lengthM * 1e-8) &&
       (cumulativeLengthsM === null ||
         rawEdges.every(
           (distance, index) =>
@@ -204,9 +225,7 @@ function parsePathInspections(
           pair.length === 2 &&
           pair.every(
             (bound) =>
-              typeof bound === "number" &&
-              Number.isFinite(bound) &&
-              bound >= 0,
+              typeof bound === "number" && Number.isFinite(bound) && bound >= 0,
           ) &&
           Math.abs(
             pair[0] - edgeLengthsM[index] * (1 - relativeScaleUncertainty),
