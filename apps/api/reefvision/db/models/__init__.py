@@ -76,6 +76,7 @@ from reefvision.db.models.project_class_visibility_default import (
 from reefvision.db.models.project_exchange_package import ProjectExchangePackage
 from reefvision.db.models.quality_control_issue import QualityControlIssue
 from reefvision.db.models.quality_control_run import QualityControlRun
+from reefvision.db.models.reefpose_validation import ReefPoseReference
 from reefvision.db.models.review_queue import ReviewQueue
 from reefvision.db.models.review_queue_item import ReviewQueueItem
 from reefvision.db.models.skeleton_analysis import SkeletonAnalysisRevision
@@ -149,6 +150,7 @@ __all__ = [
     "ProjectExchangePackage",
     "QualityControlIssue",
     "QualityControlRun",
+    "ReefPoseReference",
     "ReviewQueue",
     "ReviewQueueItem",
     "SkeletonAnalysisRevision",
