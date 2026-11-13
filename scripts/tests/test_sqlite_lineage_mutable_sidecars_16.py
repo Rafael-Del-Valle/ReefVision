@@ -79,7 +79,9 @@ def test_live_wal_sidecar_requires_review_on_both_comparison_sides(
                 )
                 assert live_report["sqlite_sidecar_presence"]["-wal"] is True
                 assert live_report["sqlite_sidecar_presence"]["-shm"] is True
-                assert live_report["sqlite_sidecar_consistent_snapshot_required"] is True
+                assert (
+                    live_report["sqlite_sidecar_consistent_snapshot_required"] is True
+                )
                 assert "private coral" not in result.stdout + result.stderr
                 assert "private new observation" not in result.stdout + result.stderr
 
