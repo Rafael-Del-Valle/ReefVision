@@ -437,9 +437,13 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
   } | null>(null);
   const selectedWaypointIndex =
     selectedRouteInspection !== null &&
-    selectedWaypoint?.artifact === artifact &&
+    selectedWaypoint !== null &&
+    selectedWaypoint.artifact === artifact &&
     selectedWaypoint.routeIndex === selectedRouteInspection.sourceIndex
-      ? Math.min(selectedWaypoint.vertexIndex, selectedRouteInspection.pathVertices.length - 1)
+      ? Math.min(
+          selectedWaypoint.vertexIndex,
+          selectedRouteInspection.pathVertices.length - 1,
+        )
       : 0;
   const selectedWaypointPosition =
     mesh !== null && selectedRouteInspection !== null
