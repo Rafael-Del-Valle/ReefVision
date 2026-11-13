@@ -140,7 +140,21 @@ class ClassVisibilityService:
             project_id, payload.hidden_class_ids
         )
         user_identity = get_local_user_identity(self.settings)
-        self.preferences.upsert(project_id, user_identity, resolved_layer_type, hidden_class_ids)
+        if "expected_updated_at" in payload.model_fields_set:
+            if not self.preferences.save_if_revision(
+                project_id,
+                user_identity,
+                resolved_layer_type,
+                hidden_class_ids,
+                payload.expected_updated_at,
+            ):
+                raise ConflictError(
+                    "Personal visibility preference changed in another editor. "
+                    "Reload visibility settings before saving."
+                )
+        else:
+            # Older local clients omit the revision field and retain legacy PUT behavior.
+            self.preferences.upsert(project_id, user_identity, resolved_layer_type, hidden_class_ids)
         self.session.commit()
         self.session.expire_all()
         preference = self.preferences.get(project_id, user_identity, resolved_layer_type)
@@ -194,9 +208,22 @@ class ClassVisibilityService:
             project_id, payload.hidden_class_ids
         )
         user_identity = get_local_user_identity(self.settings)
-        self.project_defaults.upsert(
-            project_id, resolved_layer_type, hidden_class_ids, user_identity
-        )
+        if "expected_updated_at" in payload.model_fields_set:
+            if not self.project_defaults.save_if_revision(
+                project_id,
+                resolved_layer_type,
+                hidden_class_ids,
+                user_identity,
+                payload.expected_updated_at,
+            ):
+                raise ConflictError(
+                    "Project visibility default changed in another editor. "
+                    "Reload visibility settings before saving."
+                )
+        else:
+            self.project_defaults.upsert(
+                project_id, resolved_layer_type, hidden_class_ids, user_identity
+            )
         self.session.commit()
         self.session.expire_all()
         project_default = self.project_defaults.get(project_id, resolved_layer_type)
