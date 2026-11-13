@@ -63,6 +63,19 @@ artifacts. Legacy artifacts without the field remain valid historical
 measurements; the new aggregate is not independently verified anatomical
 evidence.
 
+The interactive route inspector also presents the saved
+`total_absolute_geometric_turn_deg` aggregate, but **only** after checking
+it against the sum of individually validated interior turns reconstructed
+from the complete persisted route polyline. Contradictory, nonfinite, negative,
+or missing aggregate measurements display **unknown**; an explicitly saved
+null aggregate accompanying a genuinely undefined interior turn displays
+**undefined**, not zero. A valid single-edge path displays 0 degrees. Older
+artifacts without the aggregate stay inspectable without fabricating a value.
+The aggregate remains provisional geometric bending—not calibrated curvature,
+coral condition, anatomical branch length, or reviewed biological evidence.
+This is read-only GUI inspection of the common standalone API / persisted
+Workflow Builder artifact, without modifying provenance or stored results.
+
 The interactive mesh viewer also exposes each saved route waypoint's
 `path_turn_angles_deg` alongside its calibrated cumulative distance and
 preceding edge length. The display requires one value per waypoint, null
