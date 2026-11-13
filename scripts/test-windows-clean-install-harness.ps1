@@ -104,8 +104,40 @@ finally {
     if (Test-Path -LiteralPath $linkedRoot) { Remove-Item -LiteralPath $linkedRoot -Force }
     if (Test-Path -LiteralPath $fixtureRoot) { Remove-Item -LiteralPath $fixtureRoot -Recurse -Force }
 }
+
+# A real uninstall that deletes reefvision.db but leaves logs/ or an empty
+# profile previously passed the retention gate. Exercise byte-level snapshots
+# with disposable science and volatile fixtures; never touch real user data.
+$retentionFixture = Join-Path $env:TEMP ('rv-research-retention-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path (Join-Path $retentionFixture 'images'),(Join-Path $retentionFixture 'logs') -Force | Out-Null
+try {
+    Set-Content -LiteralPath (Join-Path $retentionFixture 'reefvision.db') -Value 'synthetic-sqlite-fixture' -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $retentionFixture 'images\coral.png') -Value 'synthetic-image-fixture' -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $retentionFixture 'logs\backend.log') -Value 'before' -Encoding UTF8
+    $retentionBefore = Get-ReefVisionResearchFileSnapshot -DataRoot $retentionFixture
+    Assert-True ($retentionBefore.Count -eq 2) 'Retention snapshot did not capture SQLite and imported image.'
+    Set-Content -LiteralPath (Join-Path $retentionFixture 'logs\backend.log') -Value 'after' -Encoding UTF8
+    $retentionAfter = Get-ReefVisionResearchFileSnapshot -DataRoot $retentionFixture
+    Assert-True ((Assert-ReefVisionResearchFileSnapshotRetained -Before $retentionBefore -After $retentionAfter) -eq 2) 'Volatile log changes should not fail research retention.'
+    Set-Content -LiteralPath (Join-Path $retentionFixture 'images\coral.png') -Value 'altered-image-fixture' -Encoding UTF8
+    $retentionAfter = Get-ReefVisionResearchFileSnapshot -DataRoot $retentionFixture
+    Assert-ThrowsContaining { Assert-ReefVisionResearchFileSnapshotRetained -Before $retentionBefore -After $retentionAfter } 'modified retained research file'
+    Remove-Item -LiteralPath (Join-Path $retentionFixture 'images\coral.png') -Force
+    Assert-ThrowsContaining { Get-ReefVisionResearchFileSnapshot -DataRoot $retentionFixture } 'at least one persisted research file'
+    Set-Content -LiteralPath (Join-Path $retentionFixture 'images\coral.png') -Value 'synthetic-image-fixture' -Encoding UTF8
+    Remove-Item -LiteralPath (Join-Path $retentionFixture 'reefvision.db') -Force
+    Assert-ThrowsContaining { Get-ReefVisionResearchFileSnapshot -DataRoot $retentionFixture } 'SQLite database is missing'
+} finally {
+    Remove-Item -LiteralPath $retentionFixture -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 $acceptanceSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'acceptance-windows-clean-install.ps1') -Raw
 Assert-True ($acceptanceSource.Contains('Assert-ReefVisionAcceptanceTreeNoReparsePoints -Path $RunRoot')) 'MSI acceptance cleanup must recheck linked descendants.'
+$retentionBeforeOffset = $acceptanceSource.IndexOf('$retainedResearchBefore = Get-ReefVisionResearchFileSnapshot', [System.StringComparison]::Ordinal)
+$retentionUninstallOffset = $acceptanceSource.IndexOf('Run-Msi -Action Uninstall', [System.StringComparison]::Ordinal)
+$retentionAfterOffset = $acceptanceSource.IndexOf('$retainedResearchAfter = Get-ReefVisionResearchFileSnapshot', [System.StringComparison]::Ordinal)
+Assert-True ($retentionBeforeOffset -gt 0 -and $retentionBeforeOffset -lt $retentionUninstallOffset -and $retentionUninstallOffset -lt $retentionAfterOffset) 'Uninstall retention must hash research files before and after msiexec.'
+Assert-True ($acceptanceSource.Contains('Assert-ReefVisionResearchFileSnapshotRetained -Before $retainedResearchBefore -After $retainedResearchAfter')) 'Installed retention PASS must depend on byte-level verification.'
 
 $arguments = New-ReefVisionMsiArguments -Action Install -PackageOrProduct 'C:\build\ReefVision.msi' -InstallRoot 'C:\rv-test\install' -LogPath 'C:\rv-test\install.log'
 Assert-True ($arguments[0] -eq '/i') 'Install command does not use /i.'
