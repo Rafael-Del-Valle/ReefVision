@@ -34,7 +34,10 @@ from reefvision.services.workflow_auto_label import (
     ensure_disagreement_active_learning_round,
     materialize_consensus_annotations,
 )
-from reefvision.services.workflow_provenance import verify_workflow_artifact
+from reefvision.services.workflow_provenance import (
+    verify_workflow_artifact,
+    verify_workflow_run_node_graph_lineage,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 
 REVIEW_GATE_NODE_TYPES = {
@@ -90,6 +93,15 @@ def _input_artifacts(session: Session, node_run: WorkflowNodeRun) -> list[Workfl
         or canonical_json_sha256(graph.graph_json) != run.graph_sha256
     ):
         raise ConflictError("Workflow review graph provenance checksum failed")
+    # Paused runs are mutable database records, while approval is a scientific
+    # audit event. Recheck the complete node identity, frozen parameters, and
+    # execution order before recording review approval or post-review outputs.
+    saved_nodes = list(
+        session.scalars(
+            select(WorkflowNodeRun).where(WorkflowNodeRun.workflow_run_id == run.id)
+        )
+    )
+    verify_workflow_run_node_graph_lineage(graph, saved_nodes)
     raw_edges = graph.graph_json.get("edges")
     if not isinstance(raw_edges, list) or any(
         not isinstance(edge, dict) or not isinstance(edge.get("edge_id"), str) for edge in raw_edges
