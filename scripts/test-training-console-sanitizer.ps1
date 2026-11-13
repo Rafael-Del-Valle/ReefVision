@@ -284,6 +284,14 @@ if ($latestMetrics['train/box_loss'] -ne 0.25 -or
     $latestMetrics['train/dfl_loss'] -ne 0.1) {
   throw 'Latest finite persisted box/cls/dfl losses did not override stale summaries.'
 }
+# A trailing nonfinite sample must be disclosed, but a valid last sample must
+# not be mislabeled as stale. This describes the history entry, not an assumed
+# biological observation or an inferred training epoch.
+if ($staleMetricSamples['train/cls_loss'] -cne ' [prior history entry 2/3; latest unavailable]' -or
+    $staleMetricSamples.ContainsKey('train/box_loss') -or
+    $staleMetricSamples.ContainsKey('train/dfl_loss')) {
+  throw 'Training monitor misstated the provenance/freshness of recorded loss samples.'
+}
 # When a series has no finite epoch sample, retain its finite summary rather
 # than inventing a zero or showing an invalid sentinel.
 $run.metrics_history = [pscustomobject]@{
@@ -394,6 +402,10 @@ foreach ($expected in @(
 }
 if ($latestMetrics.Count -ne 4) {
   throw 'Metric selection introduced unexpected or fabricated keys.'
+}
+if ($staleMetricSamples['train/cls_loss'] -cne ' [prior history entry 1/2; latest unavailable]' -or
+    $staleMetricSamples.ContainsKey('val/box_loss')) {
+  throw 'Stale training history and current validation history were conflated.'
 }
 
 # Sparse histories are common when a worker persists different loss keys at
