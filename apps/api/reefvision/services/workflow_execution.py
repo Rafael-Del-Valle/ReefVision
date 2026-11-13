@@ -1044,9 +1044,7 @@ class WorkflowExecutionService:
         # A node from another execution must never publish an output into
         # this run, even when its port, type and payload are identical.
         if node_run.workflow_run_id != run_id:
-            raise ConflictError(
-                "Workflow artifact producer belongs to a different workflow run"
-            )
+            raise ConflictError("Workflow artifact producer belongs to a different workflow run")
         checksum = self.artifact_checksum(specification.payload)
 
         existing = list(
