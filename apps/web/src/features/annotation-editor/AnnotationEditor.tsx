@@ -1581,6 +1581,31 @@ export function AnnotationEditor({
     });
   }, [project.id, selectedVisibilityLayer, visibilityMutation]);
 
+  const resetProjectVisibilityDefault = useCallback(() => {
+    if (!currentLayerVisibility.projectDefault.saved) {
+      return;
+    }
+    const layerLabel = visibilityLayerLabel(selectedVisibilityLayer);
+    if (
+      !window.confirm(
+        `Remove the saved ${layerLabel} default for this entire project? Users without their own saved preference will see all classes in this layer. Personal preferences and scientific annotations are not changed.`,
+      )
+    ) {
+      return;
+    }
+    visibilityMutation.mutate({
+      projectId: project.id,
+      action: "reset",
+      layerType: selectedVisibilityLayer,
+      target: "project_default",
+    });
+  }, [
+    currentLayerVisibility.projectDefault.saved,
+    project.id,
+    selectedVisibilityLayer,
+    visibilityMutation,
+  ]);
+
   const copyCurrentVisibilityToProjectDefaults = useCallback(() => {
     visibilityMutation.mutate({
       projectId: project.id,
@@ -3444,6 +3469,18 @@ export function AnnotationEditor({
                   onClick={copyCurrentVisibilityToProjectDefaults}
                 >
                   Copy Current Visibility to Project Defaults
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={
+                    visibilityMutation.isPending ||
+                    !visibilityQuery.data ||
+                    !currentLayerVisibility.projectDefault.saved
+                  }
+                  onClick={resetProjectVisibilityDefault}
+                >
+                  Reset Project Default
                 </button>
                 <button
                   type="button"
