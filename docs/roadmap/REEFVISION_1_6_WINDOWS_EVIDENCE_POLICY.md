@@ -100,3 +100,43 @@ A failed post-uninstall research-retention check also suppresses automatic
 cleanup of the disposable run directory, even when `msiexec /x` itself
 succeeded. The generated profile remains available for failure diagnosis;
 a genuinely successful acceptance may still remove its marker-owned profile.
+
+
+## MSI upgrade scientific-asset retention (2026-11-13)
+
+An earlier upgrade gate verified the Windows product registration, packaged
+API version, migrated schema, project ID and one existing annotation. Those
+checks could still pass if an MSI upgrade removed other original research
+assets—such as field video, telemetry, researcher-trained checkpoints or plugin
+outputs—while leaving the database and test annotation intact.
+
+For an explicitly supplied, independently verified previous MSI, the disposable
+Windows acceptance now captures the full stable-file SHA-256/byte-length
+inventory **after the old desktop closes, before the new MSI runs**. It repeats
+the inventory **immediately after MSI installation but before restarting the
+new app**, and requires *every* pre-upgrade file, including SQLite, to be
+unchanged. A second comparison **after the new desktop has migrated the
+database and completed installed QC/Workflow Builder replay** requires every
+pre-upgrade non-SQLite asset to remain byte-for-byte unchanged. Only
+`reefvision.db` and its `-wal`/`-shm` sidecars may change during the latter
+comparison, because authorized schema migrations and append-only review
+events modify SQLite. A real SQLite file and at least one other stable asset
+are still mandatory in the captured snapshots.
+
+This adds an upgrade guard rather than another Workflow Builder node. It
+preserves existing typed `qc_review_queue` execution, saved workflow results,
+researcher approval and evidence boundaries. A passing upgrade report is not
+recorded until the final stable-asset check succeeds, and failed acceptance
+preserves its disposable data for investigation.
+
+PowerShell regression fixtures test a changed SQLite file rejected in
+pre-migration mode, accepted in explicit post-migration mode, and a damaged
+image rejected in both modes. Static harness-order assertions require the
+three samples to straddle MSI installation, installed QC replay and uninstall.
+
+**Limitations:** This requires a disposable Windows environment and a previous
+MSI honoring isolated acceptance; this change alone is neither a successful
+native MSI upgrade nor proof of migration correctness, rollback or interactive
+GUI behavior. Cross-version Alembic-0038 reconciliation, exact-head CI,
+representative biology and full installed-GUI acceptance remain release
+blockers. No research file content or pretrained weights are uploaded.
