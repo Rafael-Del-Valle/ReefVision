@@ -172,6 +172,7 @@ function buildVisibilityBundle(options?: {
       saved: Boolean(hiddenByLayer?.annotations),
       hidden_class_ids: hiddenByLayer?.annotations ?? [],
       updated_at: hiddenByLayer?.annotations ? "2026-07-10T00:00:00Z" : null,
+      record_id: hiddenByLayer?.annotations ? "row-annotations" : null,
       updated_by_identity: hiddenByLayer?.annotations
         ? "local-user:test"
         : null,
@@ -1619,6 +1620,7 @@ describe("AnnotationEditor", () => {
           writes += 1;
           expect(JSON.parse(String(init.body))).toMatchObject({
             expected_updated_at: "2026-07-10T00:00:00Z",
+            expected_record_id: "row-annotations",
           });
           return jsonResponse(
             {
@@ -1720,6 +1722,9 @@ describe("AnnotationEditor", () => {
     expect(deletions).toHaveLength(1);
     expect(decodeURIComponent(String(deletions[0][0]))).toContain(
       "expected_updated_at=2026-07-10T00:00:00Z",
+    );
+    expect(decodeURIComponent(String(deletions[0][0]))).toContain(
+      "expected_record_id=row-annotations",
     );
     expect(
       fetchMock.mock.calls.filter(([, init]) =>
@@ -1901,6 +1906,9 @@ describe("AnnotationEditor", () => {
     expect(deleteRequests).toHaveLength(1);
     expect(decodeURIComponent(String(deleteRequests[0][0]))).toContain(
       "expected_updated_at=2026-07-10T00:00:00Z",
+    );
+    expect(decodeURIComponent(String(deleteRequests[0][0]))).toContain(
+      "expected_record_id=row-annotations",
     );
     expect(
       fetchMock.mock.calls.filter(([, init]) =>
