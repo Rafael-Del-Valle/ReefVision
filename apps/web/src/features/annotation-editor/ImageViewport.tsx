@@ -120,7 +120,12 @@ export function ImageViewport({
     // zooming the scientific image and its aligned annotation overlays.
     const handleNativeWheel = (event: globalThis.WheelEvent) => {
       if (event.ctrlKey || event.metaKey) return;
-      if (!Number.isFinite(event.deltaX) || !Number.isFinite(event.deltaY)) return;
+      if (
+        !Number.isFinite(event.deltaX) ||
+        !Number.isFinite(event.deltaY)
+      ) {
+        return;
+      }
       if (event.deltaX === 0 && event.deltaY === 0) return;
 
       event.preventDefault();
