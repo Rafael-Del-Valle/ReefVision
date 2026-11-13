@@ -127,7 +127,9 @@ describe("MeshArtifactViewer", () => {
     );
     expect(container.querySelectorAll("polyline")).toHaveLength(2);
     expect(
-      screen.getByText("Select a connected route for provisional measurement details."),
+      screen.getByText(
+        "Select a connected route for provisional measurement details.",
+      ),
     ).toBeInTheDocument();
 
     fireEvent.click(
@@ -136,20 +138,25 @@ describe("MeshArtifactViewer", () => {
     expect(
       screen.getByRole("button", { name: "Inspect provisional route 1" }),
     ).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText(/Saved geometric route length: 2.00000 m/))
-      .toHaveTextContent("Scale-only length interval: [1.80000, 2.20000] m");
-    expect(screen.getByText(/Saved geometric route length: 2.00000 m/))
-      .toHaveTextContent("open_boundary_edge_on_path");
-    expect(screen.getByText(/Saved geometric route length: 2.00000 m/))
-      .toHaveTextContent("not a verified biological branch length");
+    expect(
+      screen.getByText(/Saved geometric route length: 2.00000 m/),
+    ).toHaveTextContent("Scale-only length interval: [1.80000, 2.20000] m");
+    expect(
+      screen.getByText(/Saved geometric route length: 2.00000 m/),
+    ).toHaveTextContent("open_boundary_edge_on_path");
+    expect(
+      screen.getByText(/Saved geometric route length: 2.00000 m/),
+    ).toHaveTextContent("not a verified biological branch length");
 
     fireEvent.click(
       screen.getByRole("button", { name: "Inspect provisional route 2" }),
     );
-    expect(screen.getByText(/Saved geometric route length: 1.00000 m/))
-      .toHaveTextContent("Scale-only length interval: unknown");
-    expect(screen.getByText(/Saved geometric route length: 1.00000 m/))
-      .toHaveTextContent("coincident_route_endpoints");
+    expect(
+      screen.getByText(/Saved geometric route length: 1.00000 m/),
+    ).toHaveTextContent("Scale-only length interval: unknown");
+    expect(
+      screen.getByText(/Saved geometric route length: 1.00000 m/),
+    ).toHaveTextContent("coincident_route_endpoints");
     expect(JSON.stringify(artifact)).toBe(unchanged);
     rerender(<MeshArtifactViewer artifact={validArtifact} />);
     expect(screen.queryByText(/Saved geometric route length:/)).toBeNull();
