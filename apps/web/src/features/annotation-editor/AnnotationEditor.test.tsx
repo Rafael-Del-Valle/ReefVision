@@ -1570,6 +1570,100 @@ describe("AnnotationEditor", () => {
     expect(annotationGets).toHaveLength(1);
   });
 
+  it("confirms project-wide default reset without changing personal preferences or scientific records", async () => {
+    const confirmReset = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (
+          url.endsWith(`/images/${session.image.id}/annotations`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse(session);
+        }
+        if (
+          url.endsWith(`/projects/${project.id}/class-visibility`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse(
+            buildVisibilityBundle({
+              userPreferences: { annotations: ["class-2"] },
+              projectDefaults: {
+                annotations: ["class-1"],
+                predictions: ["class-2"],
+              },
+            }),
+          );
+        }
+        if (
+          url.endsWith(
+            `/projects/${project.id}/class-visibility/defaults/annotations`,
+          ) &&
+          init?.method === "DELETE"
+        ) {
+          return new Response(null, { status: 204 });
+        }
+        const fallback = handleDefaultEditorRequests(url, init);
+        if (fallback) return fallback;
+        throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+      });
+
+    const { queryClient } = renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    const resetButton = screen.getByRole("button", {
+      name: "Reset Project Default",
+    });
+    await waitFor(() => expect(resetButton).not.toBeDisabled());
+
+    await userEvent.click(resetButton);
+    expect(confirmReset).toHaveBeenCalledWith(
+      expect.stringContaining("entire project"),
+    );
+    expect(
+      fetchMock.mock.calls.filter(([, init]) => init?.method === "DELETE"),
+    ).toHaveLength(0);
+    expect(
+      queryClient.getQueryData<ClassVisibilityBundle>([
+        "class-visibility",
+        project.id,
+      ])?.project_defaults.annotations.saved,
+    ).toBe(true);
+
+    confirmReset.mockReturnValue(true);
+    await userEvent.click(resetButton);
+    await waitFor(() =>
+      expect(screen.getByTestId("class-visibility-status")).toHaveTextContent(
+        "Reset the project default for Annotations.",
+      ),
+    );
+    const bundle = queryClient.getQueryData<ClassVisibilityBundle>([
+      "class-visibility",
+      project.id,
+    ]);
+    expect(bundle?.project_defaults.annotations.saved).toBe(false);
+    expect(bundle?.project_defaults.annotations.hidden_class_ids).toEqual([]);
+    expect(bundle?.project_defaults.predictions.hidden_class_ids).toEqual([
+      "class-2",
+    ]);
+    expect(bundle?.user_preferences.annotations.saved).toBe(true);
+    expect(bundle?.user_preferences.annotations.hidden_class_ids).toEqual([
+      "class-2",
+    ]);
+    expect(resetButton).toBeDisabled();
+    expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.filter(([, init]) => init?.method === "DELETE"),
+    ).toHaveLength(1);
+    expect(
+      fetchMock.mock.calls.filter(([, init]) =>
+        ["POST", "PUT", "PATCH"].includes(init?.method ?? "GET"),
+      ),
+    ).toHaveLength(0);
+  });
+
   it("waits for a project visibility identity before enabling persistent controls", async () => {
     let resolveVisibility: (response: Response) => void = () => {
       throw new Error("The visibility request was not started");
@@ -1603,6 +1697,7 @@ describe("AnnotationEditor", () => {
       "Save as My Preference",
       "Save as Project Default",
       "Reset My Preferences",
+      "Reset Project Default",
       "Copy Current Visibility to Project Defaults",
       "Apply Project Defaults to My Preferences",
     ]) {
