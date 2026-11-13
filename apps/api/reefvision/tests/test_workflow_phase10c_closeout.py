@@ -371,12 +371,8 @@ def test_recovered_completed_node_rejects_modified_scientific_parameters(
         }
         session.commit()
 
-    assert worker.recover_interrupted_jobs(
-        app.state.session_factory, app.state.settings
-    ) >= 1
-    assert not process_workflow_run_job(
-        app.state.settings, app.state.session_factory, job_id
-    )
+    assert worker.recover_interrupted_jobs(app.state.session_factory, app.state.settings) >= 1
+    assert not process_workflow_run_job(app.state.settings, app.state.session_factory, job_id)
 
     with app.state.session_factory() as session:
         run = session.get(WorkflowRun, run_id)
