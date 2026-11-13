@@ -756,11 +756,13 @@ describe("MeshArtifactViewer", () => {
       path_edge_lengths_m: [0, 0],
     };
     expect(inspect(zero)?.edgeLengthsM).toEqual([0, 0]);
-    expect(inspect({ ...zero, path_edge_lengths_m: [1e-16, 0] })).toMatchObject({
-      lengthM: 0,
-      cumulativeLengthsM: [0, 0, 0],
-      edgeLengthsM: null,
-    });
+    expect(inspect({ ...zero, path_edge_lengths_m: [1e-16, 0] })).toMatchObject(
+      {
+        lengthM: 0,
+        cumulativeLengthsM: [0, 0, 0],
+        edgeLengthsM: null,
+      },
+    );
     // Individually finite edges can overflow when summed. An infinite
     // accumulated length must never pass a relative-tolerance comparison.
     expect(
