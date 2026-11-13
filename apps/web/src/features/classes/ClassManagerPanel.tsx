@@ -224,7 +224,9 @@ function ClassRow({
   const runReassign = useMutation({
     mutationFn: () => {
       if (!canRunReassign || !reassignPreview) {
-        throw new Error("Preview the current reassignment target and notes first.");
+        throw new Error(
+          "Preview the current reassignment target and notes first.",
+        );
       }
       return executeLabelClassReassign(project.id, labelClass.id, {
         operation_id: reassignPreview.operation.id,
@@ -245,14 +247,19 @@ function ClassRow({
         notes: selection.notes || null,
       }),
     onSuccess: (operation, selection) => {
-      setReassignDeletePreview({ operation, selectionKey: selection.selectionKey });
+      setReassignDeletePreview({
+        operation,
+        selectionKey: selection.selectionKey,
+      });
       setLatestOperation(operation);
     },
   });
   const runReassignDelete = useMutation({
     mutationFn: () => {
       if (!canRunReassignDelete || !reassignDeletePreview) {
-        throw new Error("Preview the current reassign-and-delete target and notes first.");
+        throw new Error(
+          "Preview the current reassign-and-delete target and notes first.",
+        );
       }
       return executeLabelClassReassignDelete(project.id, labelClass.id, {
         operation_id: reassignDeletePreview.operation.id,
@@ -442,9 +449,9 @@ function ClassRow({
           <textarea
             value={reassignNotes}
             onChange={(event) => {
-            setReassignNotes(event.target.value);
-            setPreviewEpoch((current) => current + 1);
-          }}
+              setReassignNotes(event.target.value);
+              setPreviewEpoch((current) => current + 1);
+            }}
             placeholder="Optional audit notes for the reassignment plan"
           />
         </label>
@@ -601,8 +608,8 @@ function ClassRow({
       )}
       {reassignDeletePreview && !canRunReassignDelete && (
         <p className="annotation-helper" role="status">
-          Reassign-and-delete preview no longer matches this target or its notes.
-          Preview again before executing.
+          Reassign-and-delete preview no longer matches this target or its
+          notes. Preview again before executing.
         </p>
       )}
 
