@@ -185,6 +185,14 @@ foreach ($expected in @(
 if ($output -match 'train/box_loss\s+0\.99') {
   throw 'Stale summary loss overrode the latest persisted epoch history.'
 }
+# Persisted history may end with a null or nonfinite placeholder while
+# training continues. Show the last measured value, but explicitly identify
+# that it comes from an earlier history entry, not the current epoch.
+if ($output -notmatch 'train/box_loss\s+0\.25 \[prior history entry 2/3; latest unavailable\]' -or
+    $output -notmatch 'train/cls_loss\s+0\.24 \[prior history entry 3/4; latest unavailable\]' -or
+    $output -notmatch 'train/dfl_loss\s+0\.08 \[prior history entry 3/4; latest unavailable\]') {
+  throw 'Read-only monitor failed to disclose stale measured-loss provenance.'
+}
 if ($output.Contains('spoofed console title') -or $output.Contains('spoofed log title')) {
   throw 'Untrusted run metadata or persisted logs escaped display sanitization.'
 }
