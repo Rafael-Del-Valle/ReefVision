@@ -37,6 +37,9 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
     seen_casefolded_paths: dict[str, str] = {}
     seen_casefolded_components: dict[tuple[str, ...], str] = {}
     seen_file_identities: dict[tuple[int, int], str] = {}
+    # Separate copied captures are not independent scientific observations
+    # merely because they have distinct filenames and filesystem inodes.
+    seen_content_hashes: dict[str, str] = {}
     # os.walk separates directories from files without statting unrelated
     # scientific files. Never follow directory links outside the approved root.
     jpeg_paths: list[Path] = []
@@ -137,11 +140,19 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
         # downstream acceptance cannot mistake aliases for independent images.
         # Some filesystems report inode zero (unknown); never infer an alias
         # from an unavailable file identity.
+        hardlink_alias = False
         if after.st_ino:
             identity = (after.st_dev, after.st_ino)
             previous_identity = seen_file_identities.setdefault(identity, relative)
             if previous_identity != relative:
+                hardlink_alias = True
                 errors.append(f"JPEG hard-link alias (same source image): {previous_identity} / {relative}")
+        checksum = digest.hexdigest()
+        previous_source = seen_content_hashes.setdefault(checksum, relative)
+        if previous_source != relative and not hardlink_alias:
+            # Flag byte-identical copies in different files or directories.
+            # Do not double-report an already identified hard-link alias.
+            errors.append(f"JPEG duplicate source bytes (SHA-256): {previous_source} / {relative}")
         signature_ok = first == JPEG_SOI and tail == JPEG_EOI
         if not signature_ok:
             errors.append(f"invalid JPEG boundary markers: {relative}")
@@ -201,7 +212,7 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
             "path": relative,
             "extension": path.suffix.lower(),
             "bytes": size,
-            "sha256": digest.hexdigest(),
+            "sha256": checksum,
             "jpeg_boundary_markers": signature_ok,
         }
         if verify_decode:

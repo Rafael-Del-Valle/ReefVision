@@ -65,6 +65,41 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual(first.read_bytes(), original)
             self.assertEqual(alias.read_bytes(), original)
 
+    def test_copied_camera_captures_are_not_counted_as_independent(self) -> None:
+        """Different filenames cannot make byte-identical camera files independent."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first_dir = root / "a_captures"
+            copy_dir = root / "z_archive"
+            first_dir.mkdir()
+            copy_dir.mkdir()
+            original = bytes.fromhex("ffd8") + b"same-immutable-capture" + bytes.fromhex("ffd9")
+            first = first_dir / "IMG_0001.JPG"
+            copied = copy_dir / "reexport.jpeg"
+            first.write_bytes(original)
+            copied.write_bytes(original)
+
+            records, errors = MODULE.inventory(root)
+            self.assertEqual(len(records), 2)
+            self.assertEqual({record["sha256"] for record in records}, {records[0]["sha256"]})
+            self.assertEqual(errors, [
+                "JPEG duplicate source bytes (SHA-256): a_captures/IMG_0001.JPG / z_archive/reexport.jpeg"
+            ])
+            self.assertEqual(first.read_bytes(), original)
+            self.assertEqual(copied.read_bytes(), original)
+
+    def test_distinct_camera_bytes_do_not_trigger_duplicate_source_warning(self) -> None:
+        """Inventory must not conflate distinct exposures by name, size or alias."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = root / "DSC_0001.JPG"
+            second = root / "DSC_0002.jpeg"
+            first.write_bytes(bytes.fromhex("ffd8") + b"exposure-1" + bytes.fromhex("ffd9"))
+            second.write_bytes(bytes.fromhex("ffd8") + b"exposure-2" + bytes.fromhex("ffd9"))
+            records, errors = MODULE.inventory(root)
+            self.assertEqual(errors, [])
+            self.assertEqual(len({record["sha256"] for record in records}), 2)
+
     def test_windows_case_insensitive_camera_name_collision(self) -> None:
         """Distinct Linux filenames must not silently alias on Windows."""
         with tempfile.TemporaryDirectory() as directory:
