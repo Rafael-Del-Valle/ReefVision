@@ -1570,6 +1570,153 @@ describe("AnnotationEditor", () => {
     expect(annotationGets).toHaveLength(1);
   });
 
+  it("resets only an observed personal preference version without touching research records", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (
+          url.endsWith(`/images/${session.image.id}/annotations`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse(session);
+        }
+        if (
+          url.endsWith(`/projects/${project.id}/class-visibility`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse(
+            buildVisibilityBundle({
+              userPreferences: { annotations: ["class-1"] },
+              projectDefaults: { predictions: ["class-2"] },
+            }),
+          );
+        }
+        if (
+          url.includes(
+            `/projects/${project.id}/class-visibility/preferences/annotations?expected_updated_at=`,
+          ) &&
+          init?.method === "DELETE"
+        ) {
+          return new Response(null, { status: 204 });
+        }
+        const shared = handleDefaultEditorRequests(url, init);
+        if (shared) return shared;
+        throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+      });
+    const { queryClient } = renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    const reset = screen.getByRole("button", { name: "Reset My Preferences" });
+    await waitFor(() => expect(reset).not.toBeDisabled());
+    await userEvent.click(reset);
+    await waitFor(() =>
+      expect(screen.getByTestId("class-visibility-status")).toHaveTextContent(
+        "Reset my saved preference for Annotations.",
+      ),
+    );
+    const bundle = queryClient.getQueryData<ClassVisibilityBundle>([
+      "class-visibility",
+      project.id,
+    ]);
+    expect(bundle?.user_preferences.annotations.saved).toBe(false);
+    expect(bundle?.project_defaults.predictions.hidden_class_ids).toEqual([
+      "class-2",
+    ]);
+    expect(reset).toBeDisabled();
+    const deletions = fetchMock.mock.calls.filter(
+      ([, init]) => init?.method === "DELETE",
+    );
+    expect(deletions).toHaveLength(1);
+    expect(decodeURIComponent(String(deletions[0][0]))).toContain(
+      "expected_updated_at=2026-07-10T00:00:00Z",
+    );
+    expect(
+      fetchMock.mock.calls.filter(([, init]) =>
+        ["POST", "PUT", "PATCH"].includes(init?.method ?? "GET"),
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("refetches a newer personal preference after a stale-editor reset conflict", async () => {
+    let reads = 0;
+    let deletes = 0;
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (
+          url.endsWith(`/images/${session.image.id}/annotations`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse(session);
+        }
+        if (
+          url.endsWith(`/projects/${project.id}/class-visibility`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          reads += 1;
+          const bundle = buildVisibilityBundle({
+            userPreferences: {
+              annotations: [reads > 1 ? "class-2" : "class-1"],
+            },
+          });
+          if (reads > 1) {
+            bundle.user_preferences.annotations.updated_at =
+              "2026-07-11T00:00:00Z";
+          }
+          return jsonResponse(bundle);
+        }
+        if (
+          url.includes(
+            `/projects/${project.id}/class-visibility/preferences/annotations?expected_updated_at=`,
+          ) &&
+          init?.method === "DELETE"
+        ) {
+          deletes += 1;
+          expect(decodeURIComponent(url)).toContain(
+            "expected_updated_at=2026-07-10T00:00:00Z",
+          );
+          return jsonResponse(
+            { detail: "Personal visibility preference changed in another editor." },
+            409,
+          );
+        }
+        const shared = handleDefaultEditorRequests(url, init);
+        if (shared) return shared;
+        throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+      });
+    const { queryClient } = renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Reset My Preferences" }),
+      ).not.toBeDisabled(),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Reset My Preferences" }));
+    await waitFor(() => expect(deletes).toBe(1));
+    await waitFor(() => expect(reads).toBeGreaterThan(1));
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<ClassVisibilityBundle>([
+          "class-visibility",
+          project.id,
+        ])?.user_preferences.annotations.hidden_class_ids,
+      ).toEqual(["class-2"]),
+    );
+    expect(screen.getByTestId("class-visibility-status")).toHaveTextContent(
+      "changed in another editor",
+    );
+    expect(
+      fetchMock.mock.calls.filter(([, init]) =>
+        ["POST", "PUT", "PATCH"].includes(init?.method ?? "GET"),
+      ),
+    ).toHaveLength(0);
+  });
+
   it("confirms project-wide default reset without changing personal preferences or scientific records", async () => {
     const confirmReset = vi.spyOn(window, "confirm").mockReturnValue(false);
     const fetchMock = vi
