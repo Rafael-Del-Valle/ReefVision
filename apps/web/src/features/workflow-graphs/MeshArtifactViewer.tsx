@@ -14,6 +14,17 @@ export interface MeshRenderArtifact {
   areaFraction: number | null;
   relativeScaleUncertainty: number | null;
   pathPolylines: Vec3[][];
+  routeInspections: MeshRouteInspection[];
+}
+
+interface MeshRouteInspection {
+  sourceIndex: number;
+  pathVertices: Vec3[];
+  startVertexIndex: number;
+  endVertexIndex: number;
+  lengthM: number | null;
+  lengthScaleIntervalM: [number, number] | null;
+  qcWarnings: string[] | null;
 }
 
 function isVec3(value: unknown): value is Vec3 {
@@ -45,9 +56,9 @@ function isFace(value: unknown, vertexCount: number): value is Face {
  * Keep complete selected edge paths visible when the triangle preview is
  * decimated. Invalid or legacy path evidence is never drawn as a route.
  */
-function parsePathPolylines(value: unknown): Vec3[][] {
+function parsePathInspections(value: unknown): MeshRouteInspection[] {
   if (!Array.isArray(value) || value.length > 16) return [];
-  return value.flatMap((entry) => {
+  return value.flatMap((entry, sourceIndex) => {
     if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
       return [];
     }
@@ -70,7 +81,50 @@ function parsePathPolylines(value: unknown): Vec3[][] {
     ) {
       return [];
     }
-    return [coordinates as Vec3[]];
+
+    // A saved route is provisional evidence. Invalid or missing numerical
+    // metadata must remain unknown rather than being displayed as a result.
+    const nominal = route.length_m;
+    const lengthM =
+      typeof nominal === "number" && Number.isFinite(nominal) && nominal >= 0
+        ? nominal
+        : null;
+    const interval = route.length_scale_interval_m;
+    const lengthScaleIntervalM: [number, number] | null =
+      lengthM !== null &&
+      Array.isArray(interval) &&
+      interval.length === 2 &&
+      interval.every(
+        (bound) =>
+          typeof bound === "number" &&
+          Number.isFinite(bound) &&
+          bound >= 0,
+      ) &&
+      interval[0] <= lengthM &&
+      interval[1] >= lengthM
+        ? [interval[0], interval[1]]
+        : null;
+    const warnings = route.path_qc_warnings;
+    const qcWarnings =
+      Array.isArray(warnings) &&
+      warnings.length <= 20 &&
+      warnings.every(
+        (code) => typeof code === "string" && /^[a-z0-9_]{1,80}$/.test(code),
+      )
+        ? (warnings as string[])
+        : null;
+
+    return [
+      {
+        sourceIndex,
+        pathVertices: coordinates as Vec3[],
+        startVertexIndex: indices[0] as number,
+        endVertexIndex: indices[indices.length - 1] as number,
+        lengthM,
+        lengthScaleIntervalM,
+        qcWarnings,
+      },
+    ];
   });
 }
 
@@ -153,6 +207,7 @@ export function parseMeshRenderArtifact(
   ) {
     return null;
   }
+  const routeInspections = parsePathInspections(data.surface_edge_paths);
   return {
     vertices: vertices as Vec3[],
     faces: faces as Face[],
@@ -166,7 +221,8 @@ export function parseMeshRenderArtifact(
       typeof relativeScaleUncertainty === "number"
         ? relativeScaleUncertainty
         : null,
-    pathPolylines: parsePathPolylines(data.surface_edge_paths),
+    pathPolylines: routeInspections.map((route) => route.pathVertices),
+    routeInspections,
   };
 }
 
@@ -298,6 +354,17 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
   const [yaw, setYaw] = useState(30);
   const [pitch, setPitch] = useState(20);
   const [zoom, setZoom] = useState(1);
+  const [selectedRoute, setSelectedRoute] = useState<{
+    artifact: unknown;
+    sourceIndex: number;
+  } | null>(null);
+  const selectedRouteIndex =
+    selectedRoute !== null && selectedRoute.artifact === artifact
+      ? selectedRoute.sourceIndex
+      : null;
+  const selectedRouteInspection =
+    mesh?.routeInspections.find((route) => route.sourceIndex === selectedRouteIndex) ??
+    null;
   // A source triangle number is scoped to the reconstruction, not the organism.
   const [selection, setSelection] = useState<{
     artifact: unknown;
@@ -430,8 +497,16 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
             data-testid="mesh-route-polyline"
             points={points}
             fill="none"
-            stroke="#fbbf24"
-            strokeWidth={2.5}
+            stroke={
+              selectedRouteIndex === mesh.routeInspections[index].sourceIndex
+                ? "#fb7185"
+                : "#fbbf24"
+            }
+            strokeWidth={
+              selectedRouteIndex === mesh.routeInspections[index].sourceIndex
+                ? 4
+                : 2.5
+            }
             vectorEffect="non-scaling-stroke"
             aria-label={`Provisional mesh edge route ${index + 1}`}
           >
@@ -445,6 +520,34 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
           route(s), including vertices omitted from sampled triangles. Routes
           are not verified coral branch centerlines or registered positions.
         </p>
+      )}
+      {mesh.routeInspections.length > 0 && (
+        <div aria-label="Provisional mesh route inspector">
+          <p className="annotation-helper">
+            Select a connected route to inspect its saved geometric length,
+            scale-only uncertainty, and scientific QC. No route establishes
+            anatomical branch length or verified calibration.
+          </p>
+          {mesh.routeInspections.map((route) => (
+            <button
+              type="button"
+              className="secondary"
+              key={route.sourceIndex}
+              aria-label={`Inspect provisional route ${route.sourceIndex + 1}`}
+              aria-pressed={selectedRouteIndex === route.sourceIndex}
+              onClick={() =>
+                setSelectedRoute({ artifact, sourceIndex: route.sourceIndex })
+              }
+            >
+              Route {route.sourceIndex + 1}
+            </button>
+          ))}
+          <p className="annotation-helper" aria-live="polite">
+            {selectedRouteInspection === null
+              ? "Select a connected route for provisional measurement details."
+              : `Route ${selectedRouteInspection.sourceIndex + 1}, mesh vertices ${selectedRouteInspection.startVertexIndex} to ${selectedRouteInspection.endVertexIndex}. Saved geometric route length: ${selectedRouteInspection.lengthM === null ? "unknown" : `${selectedRouteInspection.lengthM.toPrecision(6)} m`}. Scale-only length interval: ${selectedRouteInspection.lengthScaleIntervalM === null ? "unknown" : `[${selectedRouteInspection.lengthScaleIntervalM[0].toPrecision(6)}, ${selectedRouteInspection.lengthScaleIntervalM[1].toPrecision(6)}] m`}. Path QC: ${selectedRouteInspection.qcWarnings === null ? "unknown (missing or invalid saved QC)" : selectedRouteInspection.qcWarnings.length === 0 ? "no route-specific flags" : selectedRouteInspection.qcWarnings.join(", ")}. Provisional mesh geometry, not a verified biological branch length.`}
+          </p>
+        </div>
       )}
       <p className="annotation-helper" aria-live="polite">
         {selectedVertices !== null && selectedSourceFaceIndex !== null
