@@ -9,6 +9,11 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from reefvision.db.migration_lineage_guard import assert_compatible_revision_0038
+from reefvision.tests.review_lineage_fixture_16 import (
+    REVIEW_EVENT_FK_SQL,
+    install_review_event_history_indexes,
+    install_review_event_parent_rows,
+)
 
 _ATTRIBUTION_FIELDS = ("id", "review_queue_id", "project_id", "actor", "created_at")
 _EVENT_TYPES = (
@@ -57,7 +62,10 @@ def test_0041_rejects_nullable_audit_attribution_without_mutating_records(
                     f"CHECK (event_type IN ({_EVENT_TYPES}))",
                 ]
             )
+            fields.append(REVIEW_EVENT_FK_SQL.lstrip(", "))
             connection.execute(text(f"CREATE TABLE review_queue_item_events ({', '.join(fields)})"))
+            install_review_event_parent_rows(connection)
+            install_review_event_history_indexes(connection)
             connection.execute(
                 text(
                     "CREATE TABLE review_queue_bulk_requests ("
