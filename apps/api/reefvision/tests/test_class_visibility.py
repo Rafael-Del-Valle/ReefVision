@@ -321,3 +321,48 @@ def test_versioned_project_default_reset_is_safe_against_other_editor(
         ]["saved"]
         is False
     )
+
+def test_versioned_personal_visibility_reset_preserves_newer_editor_save(
+    client: TestClient,
+) -> None:
+    """A delayed personal reset cannot erase a newer same-user editor save."""
+    project = create_project(client)
+    first = create_label_class(
+        client, project["id"], class_index=0, name="Swiftia Open", display_color="#C74343"
+    )
+    second = create_label_class(
+        client, project["id"], class_index=1, name="Swiftia Closed", display_color="#326EA8"
+    )
+    path = f"/api/v1/projects/{project['id']}/class-visibility/preferences/annotations"
+    other_layer = f"/api/v1/projects/{project['id']}/class-visibility/preferences/predictions"
+    original = client.put(path, json={"hidden_class_ids": [first["id"]]})
+    assert original.status_code == 200
+    old_stamp = original.json()["updated_at"]
+    assert old_stamp
+    assert client.put(other_layer, json={"hidden_class_ids": [first["id"]]}).status_code == 200
+    newer = client.put(path, json={"hidden_class_ids": [second["id"]]})
+    assert newer.status_code == 200
+    new_stamp = newer.json()["updated_at"]
+    assert new_stamp != old_stamp
+
+    stale = client.delete(path, params={"expected_updated_at": old_stamp})
+    assert stale.status_code == 409, stale.text
+    assert "changed in another editor" in stale.json()["detail"]
+    bundle = client.get(f"/api/v1/projects/{project['id']}/class-visibility").json()
+    assert bundle["user_preferences"]["annotations"]["hidden_class_ids"] == [second["id"]]
+    assert bundle["user_preferences"]["predictions"]["hidden_class_ids"] == [first["id"]]
+
+    assert client.delete(path, params={"expected_updated_at": new_stamp}).status_code == 204
+    recreated = client.put(path, json={"hidden_class_ids": [first["id"]]})
+    assert recreated.status_code == 200
+    # The old retry must not delete a newly created preference row.
+    assert client.delete(path, params={"expected_updated_at": new_stamp}).status_code == 409
+    bundle = client.get(f"/api/v1/projects/{project['id']}/class-visibility").json()
+    assert bundle["user_preferences"]["annotations"]["hidden_class_ids"] == [first["id"]]
+    assert bundle["user_preferences"]["predictions"]["hidden_class_ids"] == [first["id"]]
+
+    # The old local API contract is retained for integrations without a revision token.
+    assert client.delete(path).status_code == 204
+    bundle = client.get(f"/api/v1/projects/{project['id']}/class-visibility").json()
+    assert bundle["user_preferences"]["annotations"]["saved"] is False
+    assert bundle["user_preferences"]["predictions"]["saved"] is True
