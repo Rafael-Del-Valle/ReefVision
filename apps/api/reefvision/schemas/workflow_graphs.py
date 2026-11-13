@@ -45,6 +45,8 @@ WorkflowDataType = Literal[
     "pose_training_dataset",
     "pose_training_package",
     "pose_evaluation_comparison",
+    "reefpose_reference",
+    "reefpose_validation_report",
     "results_package",
     "project_exchange_package",
 ]

@@ -28,7 +28,9 @@ from reefvision.services.georeferenced_observations import GeoReferencedObservat
 from reefvision.services.pose_temporal_tracking import PoseTemporalTrackingService
 from reefvision.services.video_georeferencing import VideoGeoreferencingService
 from reefvision.services.video_georeferencing_readiness import VideoGeoreferencingReadinessService
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.results_packages import sha256_file
 
 LOGGER = logging.getLogger("reefvision.video_tracking")
 PROGRESS_WRITE_INTERVAL_SECONDS = 0.5
@@ -364,6 +366,7 @@ def process_video_tracking_job(
             class_mapping[f"project:{class_id}"] = class_id
         project_id = video.project_id
         video_id = video.id
+        video_sha256 = video.sha256
         model_id = model.id
         model_task = "hybrid" if hybrid else model.task
         secondary_model_id = secondary.id if secondary is not None else None
@@ -523,9 +526,22 @@ def process_video_tracking_job(
         iou = float(request.get("iou", 0.5))
         device = str(request.get("device", "auto"))
 
+        checkpoint_path = resolve_managed_project_path(settings, model_path)
+        source_video_path = resolve_managed_project_path(settings, video_path)
+        # Record actual input hashes for scientific provenance. Existing fake/provider
+        # fixtures may lack managed files and retain their ordinary inference behavior.
+        input_hashes = (
+            {
+                "model_sha256": sha256_file(checkpoint_path),
+                "video_sha256": sha256_file(source_video_path),
+            }
+            if model_task == "pose" and checkpoint_path.is_file() and source_video_path.is_file()
+            else {}
+        )
+
         observations = provider.track(
-            resolve_managed_project_path(settings, model_path),
-            resolve_managed_project_path(settings, video_path),
+            checkpoint_path,
+            source_video_path,
             tracker=tracker_name,
             confidence=confidence,
             iou=iou,
@@ -657,6 +673,7 @@ def process_video_tracking_job(
             )
 
             created = 0
+            pose_outputs: dict[str, str] = {}
             observation_count = 0
             pose_landmark_track_count = 0
             pose_temporal_observation_count = 0
@@ -724,6 +741,8 @@ def process_video_tracking_job(
                 # We need the persistent ReefVision track UUID before
                 # constructing GeoReferencedObservation.track_id.
                 session.flush()
+                if model_task == "pose":
+                    pose_outputs[track.id] = canonical_json_sha256(track.keyframes_json)
 
                 if (
                     model_task == "pose"
@@ -778,6 +797,25 @@ def process_video_tracking_job(
                 "project_id": project_id,
                 "video_id": video_id,
                 "model_id": model_id,
+                **(
+                    {
+                        "pose_input_hashes": input_hashes,
+                        "pose_track_hashes": pose_outputs,
+                        "source_video_sha256": video_sha256,
+                        "pose_inference_protocol": {
+                            "tracker": tracker_name,
+                            "confidence": confidence,
+                            "iou": iou,
+                            "link_detections": link_detections,
+                            "device": device,
+                            "minimum_frames": minimum_frames,
+                            "provider": provider.provider_id,
+                            "version": provider.provider_version,
+                        },
+                    }
+                    if model_task == "pose"
+                    else {}
+                ),
                 "model_task": model_task,
                 "tracking_mode": tracking_mode if tracking_mode != "auto" else model.task,
                 "segmentation_model_id": secondary_model_id,

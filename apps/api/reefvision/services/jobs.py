@@ -36,6 +36,7 @@ RUNNING_CANCELLABLE_JOB_TYPES = frozenset(
         "video_metric_depth_3d",
         "workflow_run",
         "pose_evaluation",
+        "reefpose_validation",
         "pose_identity_tracking",
         "pose_biological_measurement",
         "pose_biological_event_detection",
@@ -149,6 +150,7 @@ class JobService:
             and bool(dict(training_run.artifact_manifest_json or {}).get("resume_checkpoint_path"))
         )
         ordinary_retry = job.status == "failed" and job.job_type in {
+            "reefpose_validation",
             "thumbnail",
             "inference",
             "sam_image_proposals",

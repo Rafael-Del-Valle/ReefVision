@@ -29,3 +29,14 @@ class ReefPoseReference(Base):
     manifest: Mapped[dict[str, Any]] = mapped_column(JSON)
     manifest_sha256: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class ReefPoseHeldoutLock(Base):
+    """Write-once scoring protocol for a model and held-out video."""
+
+    __tablename__ = "reefpose_heldout_locks"
+
+    scope_sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
+    protocol_sha256: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

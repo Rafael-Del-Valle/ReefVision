@@ -37,6 +37,7 @@ from reefvision.jobs.pose_evaluation import process_pose_evaluation_job
 from reefvision.jobs.pose_identity_tracking import process_pose_identity_tracking_job
 from reefvision.jobs.project_exchange import process_project_exchange_export_job
 from reefvision.jobs.quality_control import process_quality_control_job
+from reefvision.jobs.reefpose_validation import process_reefpose_validation_job
 from reefvision.jobs.restores import process_restore_job
 from reefvision.jobs.sam_image_proposals import process_sam_image_proposals_job
 from reefvision.jobs.training import recover_training_run
@@ -748,6 +749,8 @@ def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session
             return process_workflow_run_job(settings, factory, job_id)
         if job_type == "pose_evaluation":
             return process_pose_evaluation_job(settings, factory, job_id)
+        if job_type == "reefpose_validation":
+            return process_reefpose_validation_job(settings, factory, job_id)
         if job_type == "pose_identity_tracking":
             return process_pose_identity_tracking_job(settings, factory, job_id)
         if job_type in {"pose_biological_measurement", "pose_biological_event_detection"}:

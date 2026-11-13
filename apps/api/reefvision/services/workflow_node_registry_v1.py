@@ -20,6 +20,7 @@ from reefvision.services.workflow_pose_evaluation import (
 from reefvision.services.workflow_pose_training import (
     register_pose_training_workflow_adapter,
 )
+from reefvision.services.workflow_reefpose_validation import register_reefpose_validation_nodes
 from reefvision.services.workflow_results_packages import (
     register_results_package_workflow_adapter,
 )
@@ -30,12 +31,14 @@ register_pose_workflow_adapters()
 register_pose_evaluation_workflow_adapter()
 register_pose_training_workflow_adapter()
 register_results_package_workflow_adapter()
+_REEFPOSE_VALIDATION_NODES = register_reefpose_validation_nodes()
 
 
 def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
     """Return the M10 registry plus ReefVision 1.0 completion nodes."""
 
     registry = dict(base_workflow_node_registry())
+    registry.update(_REEFPOSE_VALIDATION_NODES)
     registry["video_depth_3d_analytics"] = WorkflowNodeDefinitionResponse(
         node_type="video_depth_3d_analytics",
         display_name="Metric Depth 3D Trajectories",
@@ -185,6 +188,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 optional_parameters={
                     "device": "auto",
                     "confidence": 0.25,
+                    "allow_zero_detections": False,
                 },
                 execution_state="executable_pose_workflow",
                 executable=True,

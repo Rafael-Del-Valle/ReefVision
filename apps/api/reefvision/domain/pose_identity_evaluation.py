@@ -56,7 +56,7 @@ def _iou(first: IdentityObservation, second: IdentityObservation) -> float:
     return intersection / union if union > 0 else 0.0
 
 
-def _frame_matches(
+def match_identity_frame(
     truth: list[IdentityObservation],
     predictions: list[IdentityObservation],
     threshold: float,
@@ -132,7 +132,7 @@ def evaluate_pose_identities(
             for prediction in prediction_by_frame.get(frame, []):
                 if _iou(truth_item, prediction) >= iou_threshold:
                     eligible_pair_counts[(truth_item.identity_id, prediction.identity_id)] += 1
-        for truth_item, prediction in _frame_matches(
+        for truth_item, prediction in match_identity_frame(
             truth_by_frame.get(frame, []),
             prediction_by_frame.get(frame, []),
             iou_threshold,

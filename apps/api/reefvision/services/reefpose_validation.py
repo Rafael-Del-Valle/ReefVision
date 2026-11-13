@@ -4,16 +4,22 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import PoseLandmarkSchema, PoseLandmarkSchemaRevision, Project, VideoAsset
 from reefvision.db.models.reefpose_validation import ReefPoseReference
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
-from reefvision.schemas.reefpose_validation import FreezeReferenceRequest
+from reefvision.schemas.reefpose_validation import FreezeReferenceRequest, ReferenceRecording
 from reefvision.services.pose_schemas import definition_for_revision
 from reefvision.storage.datasets import canonical_json_sha256
+
+
+def frozen_recording(value: dict[str, Any]) -> ReferenceRecording:
+    return ReferenceRecording.model_validate(
+        {key: value[key] for key in ReferenceRecording.model_fields if key in value}
+    )
 
 
 class ReferenceService:
@@ -40,7 +46,15 @@ class ReferenceService:
         )
 
     def freeze(self, project_id: str, payload: FreezeReferenceRequest) -> ReefPoseReference:
-        if self.session.get(Project, project_id) is None:
+        # Serialize freeze writers for the project before checking split membership.
+        # A no-op UPDATE acquires the write lock without altering project metadata.
+        project = self.session.scalar(
+            update(Project)
+            .where(Project.id == project_id)
+            .values(id=Project.id)
+            .returning(Project.id)
+        )
+        if project is None:
             raise NotFoundError("Project was not found")
         parent = self.get(project_id, str(payload.parent_id)) if payload.parent_id else None
         if parent and parent.data_kind != payload.data_kind:
@@ -50,10 +64,9 @@ class ReferenceService:
         )
         prior_partitions: dict[tuple[str, str], str] = {}
         for revision in revisions:
-            if revision.data_kind == payload.data_kind:
-                for record in revision.manifest["recordings"]:
-                    for field in ("video_sha256", "group_id"):
-                        prior_partitions[(field, record[field])] = record["split"]
+            for record in revision.manifest["recordings"]:
+                for field in ("video_sha256", "group_id"):
+                    prior_partitions[(field, record[field])] = record["split"]
         records: list[dict[str, Any]] = []
         for record in payload.recordings:
             video = self.session.get(VideoAsset, str(record.video_id))
@@ -89,6 +102,18 @@ class ReferenceService:
                 raise ValidationError("Reference anatomy schema revision or hash does not match")
             definition = definition_for_revision(revision_row)
             landmark_ids = {item["id"] for item in definition["landmarks"]}
+            if any(
+                not set(item.landmark_ids) <= landmark_ids for item in record.measurement_protocol
+            ):
+                raise ValidationError("Reference measurement protocol has unknown landmarks")
+            if (
+                payload.data_kind == "biological"
+                and (any(item.measurements for item in record.annotations) or record.event_windows)
+                and not record.measurement_protocol
+            ):
+                raise ValidationError(
+                    "Biological measurements and events require a frozen measurement protocol"
+                )
             for annotation in record.annotations:
                 for pose in annotation.poses:
                     if pose.frame >= video.frame_count:
@@ -114,6 +139,10 @@ class ReferenceService:
                         raise ValidationError("Reference landmark exceeds source dimensions")
                 if any(sample.frame >= video.frame_count for sample in annotation.measurements):
                     raise ValidationError("Reference measurement frame is outside the video")
+                if any(sample.frame >= video.frame_count for sample in annotation.frame_states):
+                    raise ValidationError("Reference state frame is outside the video")
+                if any(frame >= video.frame_count for frame in annotation.empty_identity_frames):
+                    raise ValidationError("Empty identity frame is outside the video")
             if any(window.end_s > video.duration_seconds + 1e-6 for window in record.event_windows):
                 raise ValidationError("Reference scoring window exceeds source duration")
             frozen = record.model_dump(mode="json")
@@ -140,6 +169,19 @@ class ReferenceService:
             "parent_sha256": parent.manifest_sha256 if parent else None,
             "recordings": records,
         }
+        manifest_hash = canonical_json_sha256(manifest)
+        existing = self.session.scalar(
+            select(ReefPoseReference)
+            .where(
+                ReefPoseReference.project_id == project_id,
+                ReefPoseReference.manifest_sha256 == manifest_hash,
+            )
+            .order_by(ReefPoseReference.id)
+            .limit(1)
+        )
+        if existing is not None:
+            self.session.commit()
+            return existing
         row = ReefPoseReference(
             project_id=project_id,
             name=payload.name,
@@ -147,7 +189,7 @@ class ReferenceService:
             revision=manifest["revision"],
             parent_id=parent.id if parent else None,
             manifest=manifest,
-            manifest_sha256=canonical_json_sha256(manifest),
+            manifest_sha256=manifest_hash,
         )
         self.session.add(row)
         try:

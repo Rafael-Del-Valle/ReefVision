@@ -363,7 +363,10 @@ def execute_pose_inference_adapter(
         )
     )
 
-    if not tracks:
+    if not tracks and not (
+        parameters.get("allow_zero_detections")
+        and (child_job.result_json or {}).get("detection_count") == 0
+    ):
         raise ValidationError("Pose Inference produced no retained pose tracks")
 
     return [
