@@ -1049,14 +1049,16 @@ export function AnnotationEditor({
         };
       }
 
+      if (!input.expectedUpdatedAt) {
+        throw new Error("Reload visibility settings before resetting saved preferences.");
+      }
       if (input.target === "my_preference") {
-        await deleteClassVisibilityPreference(input.projectId, input.layerType);
+        await deleteClassVisibilityPreference(
+          input.projectId,
+          input.layerType,
+          input.expectedUpdatedAt,
+        );
       } else {
-        if (!input.expectedUpdatedAt) {
-          throw new Error(
-            "Reload project visibility before resetting its default.",
-          );
-        }
         await deleteProjectClassVisibilityDefault(
           input.projectId,
           input.layerType,
@@ -1126,8 +1128,8 @@ export function AnnotationEditor({
       }
     },
     onError: (error: Error, input, context) => {
-      if (input.action === "reset" && input.target === "project_default") {
-        // Refresh stale settings before another explicitly confirmed reset.
+      if (input.action === "reset") {
+        // Refresh stale settings before another reset; never cache a false deletion.
         void queryClient.invalidateQueries({
           queryKey: ["class-visibility", input.projectId],
           exact: true,
@@ -1587,13 +1589,21 @@ export function AnnotationEditor({
   ]);
 
   const resetMyVisibilityPreferences = useCallback(() => {
+    const preference = currentLayerVisibility.userPreference;
+    if (!preference.saved || !preference.updated_at) return;
     visibilityMutation.mutate({
       projectId: project.id,
       action: "reset",
       layerType: selectedVisibilityLayer,
       target: "my_preference",
+      expectedUpdatedAt: preference.updated_at,
     });
-  }, [project.id, selectedVisibilityLayer, visibilityMutation]);
+  }, [
+    currentLayerVisibility.userPreference,
+    project.id,
+    selectedVisibilityLayer,
+    visibilityMutation,
+  ]);
 
   const resetProjectVisibilityDefault = useCallback(() => {
     const expectedUpdatedAt = currentLayerVisibility.projectDefault.updated_at;
@@ -1640,12 +1650,21 @@ export function AnnotationEditor({
 
   const applyProjectDefaultsToMyPreferences = useCallback(() => {
     if (!currentLayerVisibility.projectDefault.saved) {
-      visibilityMutation.mutate({
-        projectId: project.id,
-        action: "reset",
-        layerType: selectedVisibilityLayer,
-        target: "my_preference",
-      });
+      const preference = currentLayerVisibility.userPreference;
+      if (preference.saved && preference.updated_at) {
+        visibilityMutation.mutate({
+          projectId: project.id,
+          action: "reset",
+          layerType: selectedVisibilityLayer,
+          target: "my_preference",
+          expectedUpdatedAt: preference.updated_at,
+        });
+      } else if (!preference.saved) {
+        clearSessionVisibilityOverride(selectedVisibilityLayer);
+        setVisibilityStatusMessage(
+          `No saved personal or project default for ${visibilityLayerLabel(selectedVisibilityLayer)}.`,
+        );
+      }
       return;
     }
     visibilityMutation.mutate({
@@ -1656,8 +1675,10 @@ export function AnnotationEditor({
       hiddenClassIds: currentLayerVisibility.projectDefault.hidden_class_ids,
     });
   }, [
+    clearSessionVisibilityOverride,
     currentLayerVisibility.projectDefault.hidden_class_ids,
     currentLayerVisibility.projectDefault.saved,
+    currentLayerVisibility.userPreference,
     selectedVisibilityLayer,
     project.id,
     visibilityMutation,
@@ -3463,10 +3484,13 @@ export function AnnotationEditor({
                 <button
                   type="button"
                   className="secondary"
-                  disabled={
-                    visibilityMutation.isPending || !visibilityQuery.data
-                  }
                   onClick={resetMyVisibilityPreferences}
+                  disabled={
+                    visibilityMutation.isPending ||
+                    !visibilityQuery.data ||
+                    !currentLayerVisibility.userPreference.saved ||
+                    !currentLayerVisibility.userPreference.updated_at
+                  }
                 >
                   Reset My Preferences
                 </button>
