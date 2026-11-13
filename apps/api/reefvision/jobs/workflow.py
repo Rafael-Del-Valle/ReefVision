@@ -195,8 +195,7 @@ def _input_artifacts(
         # The artifact table has no uniqueness constraint for producer/port.
         if len(matches) != 1:
             raise RuntimeError(
-                f"Node {step_node_id} has ambiguous saved output "
-                f"{source_node_id}.{source_port_id}"
+                f"Node {step_node_id} has ambiguous saved output {source_node_id}.{source_port_id}"
             )
         artifact = matches[0]
         declared_ids = producer.output_artifact_ids_json
