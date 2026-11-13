@@ -74,3 +74,8 @@ altered image bytes, removed imagery, missing SQLite and changed log content.
 This **does not** establish MSI rollback safety, complete project-folder
 coverage for unknown extensions, real biological correctness or installed
 interactive-GUI acceptance. Those remain release HOLD gates.
+
+A failed post-uninstall research-retention check also suppresses automatic
+cleanup of the disposable run directory, even when `msiexec /x` itself
+succeeded. The generated profile remains available for failure diagnosis;
+a genuinely successful acceptance may still remove its marker-owned profile.
