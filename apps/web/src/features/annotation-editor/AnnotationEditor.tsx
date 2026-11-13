@@ -4206,12 +4206,8 @@ export function AnnotationEditor({
                     (proposal.label_class_id
                       ? labelClassesById.get(proposal.label_class_id)
                       : null) ?? null;
-                  const selected = selectedPredictionIds.includes(
-                    proposal.id,
-                  );
-                  const highlighted = highlightedPredictionIds.has(
-                    proposal.id,
-                  );
+                  const selected = selectedPredictionIds.includes(proposal.id);
+                  const highlighted = highlightedPredictionIds.has(proposal.id);
                   return (
                     <g key={`prediction-${proposal.id}`}>
                       {proposal.geometry_kind === "raster_mask" && (
