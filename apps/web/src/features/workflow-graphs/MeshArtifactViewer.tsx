@@ -27,6 +27,7 @@ interface MeshRouteInspection {
   edgeScaleIntervalsM: [number, number][] | null;
   edgeLengthsProvided: boolean;
   edgeIntervalsProvided: boolean;
+  turnAnglesDeg: (number | null)[] | null;
   startVertexIndex: number;
   endVertexIndex: number;
   lengthM: number | null;
@@ -248,6 +249,44 @@ function parsePathInspections(
       )
         ? (rawEdgeIntervals as [number, number][])
         : null;
+    // Turning angles are persisted source-frame geometry, not reviewed
+    // anatomical landmarks. Require valid endpoints, bounded finite interior
+    // values, and agreement with the persisted maximum; never derive missing
+    // scientific evidence from a simplified rendering.
+    const rawAngles = route.path_turn_angles_deg;
+    const rawMaximumTurn = route.maximum_turn_angle_deg;
+    const anglesHaveValidShape =
+      Array.isArray(rawAngles) &&
+      rawAngles.length === indices.length &&
+      rawAngles.every((angle, index) =>
+        index === 0 || index === indices.length - 1
+          ? angle === null
+          : angle === null ||
+            (typeof angle === "number" &&
+              Number.isFinite(angle) &&
+              angle >= 0 &&
+              angle <= 180),
+      );
+    const finiteAngles: number[] = anglesHaveValidShape
+      ? (rawAngles as (number | null)[]).filter(
+          (angle): angle is number => angle !== null,
+        )
+      : [];
+    const computedMaximum =
+      finiteAngles.length === 0 ? null : Math.max(...finiteAngles);
+    const maximumAgrees =
+      computedMaximum === null
+        ? rawMaximumTurn === null
+        : typeof rawMaximumTurn === "number" &&
+          Number.isFinite(rawMaximumTurn) &&
+          (computedMaximum === 0
+            ? rawMaximumTurn === 0
+            : Math.abs(rawMaximumTurn - computedMaximum) <=
+              computedMaximum * 1e-8);
+    const turnAnglesDeg: (number | null)[] | null =
+      anglesHaveValidShape && maximumAgrees
+        ? (rawAngles as (number | null)[])
+        : null;
     const warnings = route.path_qc_warnings;
     const qcWarnings =
       Array.isArray(warnings) &&
@@ -269,6 +308,7 @@ function parsePathInspections(
         edgeScaleIntervalsM,
         edgeLengthsProvided,
         edgeIntervalsProvided,
+        turnAnglesDeg,
         startVertexIndex: indices[0] as number,
         endVertexIndex: indices[indices.length - 1] as number,
         lengthM,
@@ -436,6 +476,21 @@ function formatRouteSegmentInspection(
       ? "unknown"
       : `[${lower.toPrecision(6)}, ${upper.toPrecision(6)}] m`;
   return `Saved preceding mesh-edge segment length: ${length.toPrecision(6)} m. Scale-only segment interval: ${interval} (shared caller-supplied scale; excludes reconstruction and endpoint uncertainty). Not a verified anatomical segment.`;
+}
+
+/** Display saved geometric turns, never inventing anatomical certainty. */
+function formatRouteTurnInspection(
+  route: MeshRouteInspection,
+  waypointIndex: number,
+): string {
+  if (route.turnAnglesDeg === null) {
+    return "Saved geometric turning angle: unknown (missing or inconsistent saved angle evidence).";
+  }
+  const turn = route.turnAnglesDeg[waypointIndex];
+  if (turn === null) {
+    return "Saved geometric turning angle: undefined (endpoint or zero-length adjacent edge).";
+  }
+  return `Saved geometric turning angle: ${turn.toPrecision(6)} deg (source-frame, scale-invariant, provisional; not a verified anatomical angle).`;
 }
 
 function project(
@@ -846,7 +901,7 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
                 />
               </label>
               <p className="annotation-helper" aria-live="polite">
-                {`Route waypoint ${selectedWaypointIndex + 1} of ${selectedRouteInspection.pathVertices.length}, source vertex ${selectedRouteInspection.vertexIndices[selectedWaypointIndex]}. Saved cumulative mesh-edge distance: ${selectedRouteInspection.cumulativeLengthsM === null ? "unknown" : `${selectedRouteInspection.cumulativeLengthsM[selectedWaypointIndex].toPrecision(6)} m`}. Scale-only cumulative interval: ${selectedRouteInspection.cumulativeScaleIntervalsM === null ? "unknown" : `[${selectedRouteInspection.cumulativeScaleIntervalsM[selectedWaypointIndex][0].toPrecision(6)}, ${selectedRouteInspection.cumulativeScaleIntervalsM[selectedWaypointIndex][1].toPrecision(6)}] m`}. Coordinates in unregistered source frame: (${selectedRouteInspection.pathVertices[selectedWaypointIndex].map((coordinate) => coordinate.toPrecision(6)).join(", ")}) m. Provisional geometric waypoint, not a verified coral anatomical landmark. ${formatRouteSegmentInspection(selectedRouteInspection, selectedWaypointIndex, mesh.relativeScaleUncertainty)}`}
+                {`Route waypoint ${selectedWaypointIndex + 1} of ${selectedRouteInspection.pathVertices.length}, source vertex ${selectedRouteInspection.vertexIndices[selectedWaypointIndex]}. Saved cumulative mesh-edge distance: ${selectedRouteInspection.cumulativeLengthsM === null ? "unknown" : `${selectedRouteInspection.cumulativeLengthsM[selectedWaypointIndex].toPrecision(6)} m`}. Scale-only cumulative interval: ${selectedRouteInspection.cumulativeScaleIntervalsM === null ? "unknown" : `[${selectedRouteInspection.cumulativeScaleIntervalsM[selectedWaypointIndex][0].toPrecision(6)}, ${selectedRouteInspection.cumulativeScaleIntervalsM[selectedWaypointIndex][1].toPrecision(6)}] m`}. Coordinates in unregistered source frame: (${selectedRouteInspection.pathVertices[selectedWaypointIndex].map((coordinate) => coordinate.toPrecision(6)).join(", ")}) m. Provisional geometric waypoint, not a verified coral anatomical landmark. ${formatRouteSegmentInspection(selectedRouteInspection, selectedWaypointIndex, mesh.relativeScaleUncertainty)} ${formatRouteTurnInspection(selectedRouteInspection, selectedWaypointIndex)}`}
               </p>
             </div>
           )}
