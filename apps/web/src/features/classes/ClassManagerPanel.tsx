@@ -343,7 +343,17 @@ function ClassRow({
     runReassignDelete.error ??
     usage.error;
 
-  const usageRows = usage.data?.counts.filter((item) => item.count > 0) ?? [];
+  const usageRows = Array.isArray(usage.data?.counts)
+    ? usage.data.counts.filter((item) => item.count > 0)
+    : [];
+  const deleteBlockers = Array.isArray(usage.data?.delete_blockers)
+    ? usage.data.delete_blockers
+    : [];
+  const compatibilityWarnings = Array.isArray(
+    usage.data?.compatibility_warnings,
+  )
+    ? usage.data.compatibility_warnings
+    : [];
   // Missing, failed, or refetching reference evidence cannot authorize deletion.
   const usageIsVerifiedEmpty = usageConfirmsEmptyClass(
     usage.data,
@@ -665,18 +675,18 @@ function ClassRow({
               ))}
             </div>
           )}
-          {usage.data.delete_blockers.length > 0 && (
+          {deleteBlockers.length > 0 && (
             <div className="class-warning-list">
-              {usage.data.delete_blockers.map((warning) => (
+              {deleteBlockers.map((warning) => (
                 <p key={warning} className="annotation-helper">
                   {warning}
                 </p>
               ))}
             </div>
           )}
-          {usage.data.compatibility_warnings.length > 0 && (
+          {compatibilityWarnings.length > 0 && (
             <div className="class-warning-list">
-              {usage.data.compatibility_warnings.map((warning) => (
+              {compatibilityWarnings.map((warning) => (
                 <p key={warning} className="annotation-helper">
                   {warning}
                 </p>
