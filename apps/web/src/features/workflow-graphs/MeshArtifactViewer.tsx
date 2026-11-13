@@ -96,9 +96,7 @@ function parsePathInspections(value: unknown): MeshRouteInspection[] {
       interval.length === 2 &&
       interval.every(
         (bound) =>
-          typeof bound === "number" &&
-          Number.isFinite(bound) &&
-          bound >= 0,
+          typeof bound === "number" && Number.isFinite(bound) && bound >= 0,
       ) &&
       interval[0] <= lengthM &&
       interval[1] >= lengthM
@@ -225,7 +223,6 @@ export function parseMeshRenderArtifact(
     routeInspections,
   };
 }
-
 
 /** Report persisted provisional evidence without deriving anatomical claims. */
 function formatRouteInspection(route: MeshRouteInspection): string {
@@ -381,8 +378,9 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
       ? selectedRoute.sourceIndex
       : null;
   const selectedRouteInspection =
-    mesh?.routeInspections.find((route) => route.sourceIndex === selectedRouteIndex) ??
-    null;
+    mesh?.routeInspections.find(
+      (route) => route.sourceIndex === selectedRouteIndex,
+    ) ?? null;
   // A source triangle number is scoped to the reconstruction, not the organism.
   const [selection, setSelection] = useState<{
     artifact: unknown;
