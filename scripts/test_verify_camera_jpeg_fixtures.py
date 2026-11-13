@@ -278,6 +278,82 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             for name, content in originals.items():
                 self.assertEqual((root / name).read_bytes(), content)
 
+    def test_opt_in_pixel_decode_reports_exif_display_geometry_for_all_orientations(self) -> None:
+        """EXIF 5-8 transpose displayed axes; native pixels remain unchanged."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; EXIF display geometry unverified")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            originals = {}
+            for orientation in range(1, 9):
+                path = root / f"orientation_{orientation}.JPG"
+                exif = Image.Exif()
+                exif[274] = orientation
+                Image.new("RGB", (12, 8), (orientation * 15, 40, 100)).save(
+                    path, format="JPEG", exif=exif
+                )
+                originals[path.name] = path.read_bytes()
+            # No EXIF orientation means normal, untransposed display axes.
+            plain = root / "no_exif.jpeg"
+            Image.new("RGB", (12, 8), (4, 20, 70)).save(plain, format="JPEG")
+            originals[plain.name] = plain.read_bytes()
+
+            records, errors = MODULE.inventory(root, verify_decode=True)
+            self.assertEqual(errors, [])
+            self.assertEqual(len(records), 9)
+            by_path = {record["path"]: record for record in records}
+            for orientation in range(1, 9):
+                record = by_path[f"orientation_{orientation}.JPG"]
+                self.assertTrue(record["jpeg_decodable"])
+                self.assertEqual(record["jpeg_exif_orientation"], orientation)
+                self.assertEqual((record["jpeg_pixel_width"], record["jpeg_pixel_height"]), (12, 8))
+                expected = (8, 12) if orientation >= 5 else (12, 8)
+                self.assertEqual((record["jpeg_display_width"], record["jpeg_display_height"]), expected)
+            plain_record = by_path["no_exif.jpeg"]
+            self.assertIsNone(plain_record["jpeg_exif_orientation"])
+            self.assertEqual(
+                (plain_record["jpeg_display_width"], plain_record["jpeg_display_height"]),
+                (12, 8),
+            )
+            for name, original in originals.items():
+                self.assertEqual((root / name).read_bytes(), original)
+
+    def test_invalid_exif_orientation_fails_geometry_qc_read_only(self) -> None:
+        """Do not invent display dimensions for malformed camera EXIF."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; invalid EXIF orientation unverified")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            originals = {}
+            for orientation in (0, 9):
+                path = root / f"invalid_{orientation}.JPG"
+                exif = Image.Exif()
+                exif[274] = orientation
+                Image.new("RGB", (12, 8), (orientation * 15, 40, 100)).save(
+                    path, format="JPEG", exif=exif
+                )
+                originals[path.name] = path.read_bytes()
+            records, errors = MODULE.inventory(root, verify_decode=True)
+            self.assertEqual(len(records), 2)
+            self.assertEqual(
+                errors,
+                [
+                    "JPEG decode failed: invalid_0.JPG: ValueError",
+                    "JPEG decode failed: invalid_9.JPG: ValueError",
+                ],
+            )
+            for record in records:
+                self.assertFalse(record["jpeg_decodable"])
+                self.assertNotIn("jpeg_display_width", record)
+                self.assertNotIn("jpeg_display_height", record)
+                self.assertNotIn("jpeg_pixel_width", record)
+            for name, original in originals.items():
+                self.assertEqual((root / name).read_bytes(), original)
+
     def test_opt_in_pixel_decode_rejects_corruption_with_valid_jpeg_markers(self) -> None:
         """SOI/EOI and SHA-256 alone cannot prove that an image is usable."""
         try:
