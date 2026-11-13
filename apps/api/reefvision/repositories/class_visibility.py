@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -11,6 +11,19 @@ from sqlalchemy.orm import Session
 from reefvision.db.models.class_visibility_preference import ClassVisibilityPreference
 from reefvision.db.models.project import utc_now
 from reefvision.db.models.project_class_visibility_default import ProjectClassVisibilityDefault
+
+
+def _next_visibility_revision(observed: datetime) -> datetime:
+    """Advance an observed SQLite timestamp even if the system clock moves backwards.
+
+    SQLite stores DateTime at microsecond precision without a timezone. Conditional
+    writes must never reuse their predecessor's revision: otherwise a second editor
+    can replay a stale save or reset against an unchanged timestamp.
+    """
+    previous_utc = (
+        observed.replace(tzinfo=UTC) if observed.tzinfo is None else observed.astimezone(UTC)
+    )
+    return max(utc_now(), previous_utc + timedelta(microseconds=1))
 
 
 class ClassVisibilityPreferenceRepository:
@@ -89,7 +102,10 @@ class ClassVisibilityPreferenceRepository:
                     ClassVisibilityPreference.layer_type == layer_type,
                     ClassVisibilityPreference.updated_at == expected_updated_at,
                 )
-                .values(hidden_class_ids_json=hidden_class_ids, updated_at=utc_now())
+                .values(
+                    hidden_class_ids_json=hidden_class_ids,
+                    updated_at=_next_visibility_revision(expected_updated_at),
+                )
             )
         if expected_updated_at is None:
             return self.session.connection().execute(insert_statement).rowcount == 1
@@ -193,7 +209,7 @@ class ProjectClassVisibilityDefaultRepository:
                 .values(
                     hidden_class_ids_json=hidden_class_ids,
                     updated_by_identity=updated_by_identity,
-                    updated_at=utc_now(),
+                    updated_at=_next_visibility_revision(expected_updated_at),
                 )
             )
         if expected_updated_at is None:
