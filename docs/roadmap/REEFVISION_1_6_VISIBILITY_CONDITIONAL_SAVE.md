@@ -51,3 +51,27 @@ Exact-head CI lint/type/backend/frontend/E2E and Windows installed-MSI/GUI
 testing are required before claiming acceptance. This change does not constitute
 a verified release; the native installer upgrade/rollback, representative
 biological-data tests and cross-version migration issues remain release blockers.
+
+## Monotonic revisions under clock rollback
+
+The 1.6 conditional save path derives a new microsecond-precision timestamp
+strictly greater than the observed saved timestamp, even if the workstation's
+wall clock stops or moves backwards. Both personal and project-default scopes
+share this guard. Without it, a successful save could reuse the old timestamp
+and a second stale editor could overwrite or remove the new visibility settings
+despite its optimistic-concurrency check. An aware or naive SQLite timestamp is
+normalized to UTC before calculating the next revision. Client request/response
+formats, existing tables and legacy unversioned PUT compatibility are unchanged.
+
+The guard applies to **conditional** saves only; historical unconditional PUTs
+remain supported for older local integrations, and revisions are not a globally
+ordered time-series clock. A monotonic visibility timestamp should never be
+used as biological observation time, camera timing or scientific event evidence.
+This is a display-preference consistency fix, not a research Workflow Builder
+feature. The existing typed and persisted QC review workflow remains unchanged.
+
+The parameterized API regression in `test_class_visibility.py` forces the
+clock one day backwards for consecutive conditional saves of both visibility
+scopes, verifies strictly advancing revision tokens, rejects stale save/reset,
+and confirms the latest settings remain intact. Full repository CI and native
+Windows installed-GUI/installer validation are still required for acceptance.
