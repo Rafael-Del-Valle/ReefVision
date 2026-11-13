@@ -2597,7 +2597,11 @@ export function AnnotationEditor({
           )}
           {(highlightedAnnotationIds.size > 0 ||
             highlightedPredictionIds.size > 0) && (
-            <p className="annotation-editor-subtitle" role="status" data-testid="review-evidence-reveal">
+            <p
+              className="annotation-editor-subtitle"
+              role="status"
+              data-testid="review-evidence-reveal"
+            >
               Only explicitly highlighted review observations bypass hidden
               class/layer controls in this editor view. Saved visibility and
               scientific records are unchanged.
