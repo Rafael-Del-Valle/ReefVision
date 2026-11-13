@@ -999,9 +999,13 @@ def test_coincident_route_review_warning_survives_saved_workflow(
             [0.0, 0.0, 0.0],
             [1.0, 0.0, 0.0],
             [0.0, 0.0, 0.0],
-            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, -1.0, 0.0],
         ],
-        "faces": [[0, 1, 3], [1, 2, 3]],
+        # Triangles are distinct in physical XYZ, even though the selected
+        # endpoint vertices coincide. Duplicating the original triangle
+        # would correctly fail the full surface-area validation instead.
+        "faces": [[0, 1, 3], [1, 2, 4]],
         "meters_per_unit": 0.1,
         "calibration_method": "ruler",
         "calibration_evidence": "Synthetic coincident endpoints; unverified",
