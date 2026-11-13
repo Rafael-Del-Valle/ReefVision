@@ -141,6 +141,13 @@ def verify_succeeded_node_artifacts(
             or producer.execution_order >= node_run.execution_order
         ):
             raise ConflictError("Succeeded workflow node input lacks an earlier succeeded producer")
+        # A checksum-valid artifact on the expected port is not necessarily
+        # one the upstream node actually published. Recovery must reject
+        # undeclared producer outputs before reusing saved scientific inputs.
+        if artifact.id not in _artifact_ids(
+            producer.output_artifact_ids_json, field="output IDs"
+        ):
+            raise ConflictError("Succeeded workflow node input is not a declared producer output")
         actual_bindings.append((producer.node_id, artifact.producer_port_id))
 
     run = session.get(WorkflowRun, run_id)
