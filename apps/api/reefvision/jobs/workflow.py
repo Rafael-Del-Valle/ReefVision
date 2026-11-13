@@ -184,7 +184,6 @@ def _input_artifacts(
                     WorkflowArtifact.workflow_run_id == run_id,
                     WorkflowArtifact.producer_node_run_id == producer.id,
                     WorkflowArtifact.producer_port_id == source_port_id,
-                    WorkflowArtifact.data_type == expected_type,
                 )
             )
         )
@@ -200,6 +199,11 @@ def _input_artifacts(
                 f"Node {step_node_id} has ambiguous saved output {source_node_id}.{source_port_id}"
             )
         artifact = matches[0]
+        if artifact.data_type != expected_type:
+            raise RuntimeError(
+                f"Node {step_node_id} has mismatched saved output type "
+                f"{source_node_id}.{source_port_id}"
+            )
         declared_ids = producer.output_artifact_ids_json
         if not isinstance(declared_ids, list) or artifact.id not in declared_ids:
             raise RuntimeError(

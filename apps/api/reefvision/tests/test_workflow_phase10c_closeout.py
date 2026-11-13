@@ -403,8 +403,10 @@ def test_recovered_completed_node_rejects_modified_scientific_parameters(
         assert pending.output_artifact_ids_json == []
 
 
+@pytest.mark.parametrize("duplicate_data_type", ["project_reference", "forged_reference"])
 def test_recovered_workflow_refuses_ambiguous_saved_producer_output(
     client: TestClient,
+    duplicate_data_type: str,
 ) -> None:
     project = create_project(client, "Phase 10C ambiguous persisted producer")
     run_id, job_id, original_id = _prime_interrupted_run(client, str(project["id"]))
@@ -420,7 +422,7 @@ def test_recovered_workflow_refuses_ambiguous_saved_producer_output(
             workflow_run_id=run_id,
             producer_node_run_id=original.producer_node_run_id,
             producer_port_id=original.producer_port_id,
-            data_type=original.data_type,
+            data_type=duplicate_data_type,
             payload_json=dict(original.payload_json),
             payload_sha256=original.payload_sha256,
         )
