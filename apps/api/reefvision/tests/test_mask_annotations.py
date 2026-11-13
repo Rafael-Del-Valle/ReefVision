@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any, cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -23,7 +25,13 @@ def _mask_payload(
     }
 
 
-def test_polygon_mask_create_update_delete_and_audit(client: TestClient) -> None:
+def test_polygon_mask_create_update_delete_and_audit(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    event_time = datetime(2026, 1, 1, tzinfo=UTC)
+    # SQLite can persist consecutive changes with equal UTC timestamps.
+    event_default = MaskAnnotationEvent.__table__.c.created_at.default
+    monkeypatch.setattr(event_default, "arg", lambda _context: event_time)
     project = create_project(client, "Mask lifecycle")
     report = import_one(client, project["id"])
     image_id = report["successful"][0]["image_id"]
@@ -90,15 +98,20 @@ def test_polygon_mask_create_update_delete_and_audit(client: TestClient) -> None
         assert mask.deleted_at is not None
         assert mask.revision == 3
         events = session.scalars(
-            select(MaskAnnotationEvent)
-            .where(MaskAnnotationEvent.mask_annotation_id == mask_id)
-            .order_by(MaskAnnotationEvent.created_at, MaskAnnotationEvent.id)
-        )
-        assert [event.event_type for event in events] == [
-            "created",
-            "class_changed",
-            "deleted",
-        ]
+            select(MaskAnnotationEvent).where(MaskAnnotationEvent.mask_annotation_id == mask_id)
+        ).all()
+        assert len(events) == 3
+        assert {event.created_at.replace(tzinfo=UTC) for event in events} == {event_time}
+        observed = {
+            (
+                event.event_type,
+                (event.before_json or {}).get("revision"),
+                event.after_json["revision"],
+            )
+            for event in events
+            if event.after_json is not None
+        }
+        assert observed == {("created", None, 1), ("class_changed", 1, 2), ("deleted", 2, 3)}
 
 
 def test_duplicated_polygon_may_be_created_as_unverified_draft(client: TestClient) -> None:
