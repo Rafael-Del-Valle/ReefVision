@@ -403,6 +403,61 @@ def test_recovered_completed_node_rejects_modified_scientific_parameters(
         assert pending.output_artifact_ids_json == []
 
 
+def test_recovered_workflow_refuses_ambiguous_saved_producer_output(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Phase 10C ambiguous persisted producer")
+    run_id, job_id, original_id = _prime_interrupted_run(client, str(project["id"]))
+    app = cast(FastAPI, client.app)
+
+    # A legacy import or corrupted database can contain two checksum-valid
+    # artifacts for the same saved producer port. Exercise the persisted run
+    # and recovery worker, rather than bypassing its input binding logic.
+    with app.state.session_factory() as session:
+        original = session.get(WorkflowArtifact, original_id)
+        assert original is not None
+        duplicate = WorkflowArtifact(
+            workflow_run_id=run_id,
+            producer_node_run_id=original.producer_node_run_id,
+            producer_port_id=original.producer_port_id,
+            data_type=original.data_type,
+            payload_json=dict(original.payload_json),
+            payload_sha256=original.payload_sha256,
+        )
+        session.add(duplicate)
+        session.commit()
+        duplicate_id = duplicate.id
+
+    assert worker.recover_interrupted_jobs(app.state.session_factory, app.state.settings) >= 1
+    assert not process_workflow_run_job(app.state.settings, app.state.session_factory, job_id)
+
+    with app.state.session_factory() as session:
+        run = session.get(WorkflowRun, run_id)
+        producer = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "project",
+            )
+        )
+        consumer = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "images",
+            )
+        )
+        original = session.get(WorkflowArtifact, original_id)
+        assert run is not None and producer is not None and consumer is not None
+        assert original is not None
+        assert run.status == "failed"
+        assert "ambiguous saved output" in (run.error_message or "")
+        assert producer.status == "succeeded"
+        assert producer.output_artifact_ids_json == [original_id]
+        assert consumer.status == "pending"
+        assert consumer.output_artifact_ids_json == []
+        assert canonical_json_sha256(original.payload_json) == original.payload_sha256
+        assert session.get(WorkflowArtifact, duplicate_id) is not None
+
+
 def test_review_pause_rejects_foreign_and_completed_nodes_without_mutating_science(
     client: TestClient,
 ) -> None:
