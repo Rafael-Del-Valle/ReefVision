@@ -60,7 +60,9 @@ def delete_class_visibility_preference(
     expected_updated_at: Annotated[datetime | None, Query()] = None,
     expected_record_id: Annotated[str | None, Query()] = None,
 ) -> None:
-    service(request, session).reset_user_preference(project_id, layer_type, expected_updated_at, expected_record_id)
+    service(request, session).reset_user_preference(
+        project_id, layer_type, expected_updated_at, expected_record_id
+    )
 
 
 @router.put(
@@ -89,4 +91,6 @@ def delete_project_class_visibility_default(
     expected_updated_at: Annotated[datetime | None, Query()] = None,
     expected_record_id: Annotated[str | None, Query()] = None,
 ) -> None:
-    service(request, session).reset_project_default(project_id, layer_type, expected_updated_at, expected_record_id)
+    service(request, session).reset_project_default(
+        project_id, layer_type, expected_updated_at, expected_record_id
+    )
