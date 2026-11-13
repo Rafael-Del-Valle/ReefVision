@@ -29,6 +29,20 @@ type BoundClassPreview = {
   selectionKey: string;
 };
 
+// A preview is not permission to execute while any safety evidence is blocked
+// or absent. The backend also validates the immutable preview checksum.
+function previewHasNoBlockingEvidence(operation: ClassOperationRecord): boolean {
+  const plan = operation.plan;
+  return (
+    Array.isArray(plan?.blockers) &&
+    plan.blockers.length === 0 &&
+    Array.isArray(plan.blocking_records) &&
+    plan.blocking_records.length === 0 &&
+    Array.isArray(operation.failures) &&
+    operation.failures.length === 0
+  );
+}
+
 function OperationSummary({
   operation,
   title,
@@ -66,16 +80,28 @@ function OperationSummary({
           {item.label}: {item.status}. {item.message}
         </p>
       ))}
-      {operation.plan.blockers.map((blocker) => (
+      {(operation.plan.blocking_records ?? []).map((item) => (
+        <p key={item.key} className="form-error">
+          {item.label}: {item.count}
+        </p>
+      ))}
+      {(operation.plan.blockers ?? []).map((blocker) => (
         <p key={blocker} className="form-error">
           {blocker}
         </p>
       ))}
-      {operation.failures.map((failure) => (
+      {(operation.failures ?? []).map((failure) => (
         <p key={failure} className="form-error">
           {failure}
         </p>
       ))}
+      {operation.status === "previewed" &&
+        !previewHasNoBlockingEvidence(operation) && (
+          <p className="form-error" role="status">
+            Execution disabled: preview contains blockers or incomplete safety
+            evidence. Resolve the issues and preview again.
+          </p>
+        )}
     </div>
   );
 }
@@ -136,11 +162,19 @@ function ClassRow({
     candidate.operation.source_class_id === labelClass.id &&
     candidate.operation.target_class_id === reassignTargetId &&
     candidate.operation.operation_type === operationType;
-  const canRunReassign = matchesPreview(reassignPreview, "reassign");
-  const canRunReassignDelete = matchesPreview(
+  const matchesReassignPreview = matchesPreview(reassignPreview, "reassign");
+  const matchesReassignDeletePreview = matchesPreview(
     reassignDeletePreview,
     "reassign_delete",
   );
+  const canRunReassign =
+    matchesReassignPreview &&
+    reassignPreview !== null &&
+    previewHasNoBlockingEvidence(reassignPreview.operation);
+  const canRunReassignDelete =
+    matchesReassignDeletePreview &&
+    reassignDeletePreview !== null &&
+    previewHasNoBlockingEvidence(reassignDeletePreview.operation);
 
   useEffect(() => {
     setName(labelClass.name);
@@ -609,26 +643,26 @@ function ClassRow({
         </div>
       )}
 
-      {reassignPreview && canRunReassign && (
+      {reassignPreview && matchesReassignPreview && (
         <OperationSummary
           operation={reassignPreview.operation}
           title="Reassign preview"
         />
       )}
-      {reassignPreview && !canRunReassign && (
+      {reassignPreview && !matchesReassignPreview && (
         <p className="annotation-helper" role="status">
           Reassignment preview no longer matches this target or its notes.
           Preview again before executing.
         </p>
       )}
 
-      {reassignDeletePreview && canRunReassignDelete && (
+      {reassignDeletePreview && matchesReassignDeletePreview && (
         <OperationSummary
           operation={reassignDeletePreview.operation}
           title="Reassign and Delete preview"
         />
       )}
-      {reassignDeletePreview && !canRunReassignDelete && (
+      {reassignDeletePreview && !matchesReassignDeletePreview && (
         <p className="annotation-helper" role="status">
           Reassign-and-delete preview no longer matches this target or its
           notes. Preview again before executing.

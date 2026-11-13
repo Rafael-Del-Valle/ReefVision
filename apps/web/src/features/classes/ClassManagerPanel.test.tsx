@@ -238,6 +238,105 @@ describe("ClassManagerPanel", () => {
     expect(remove).toBeDisabled();
   });
 
+  it.each([
+    ["reassign", "blockers"],
+    ["reassign", "blocking_records"],
+    ["reassign", "failures"],
+    ["reassign_delete", "blockers"],
+    ["reassign_delete", "blocking_records"],
+    ["reassign_delete", "failures"],
+  ] as const)(
+    "keeps %s execution disabled when preview contains %s",
+    async (operationType, evidenceType) => {
+      const endpoint =
+        operationType === "reassign" ? "reassign" : "reassign-delete";
+      const previewLabel =
+        operationType === "reassign"
+          ? "Preview reassign"
+          : "Preview Reassign and Delete";
+      const runLabel =
+        operationType === "reassign"
+          ? "Run reassign"
+          : "Run Reassign and Delete";
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async (input, init) => {
+          const url = String(input);
+          if (
+            url.endsWith(
+              `/projects/${project.id}/classes/class-1/${endpoint}/preview`,
+            ) &&
+            init?.method === "POST"
+          ) {
+            return jsonResponse({
+              id: "blocked-preview-1",
+              project_id: project.id,
+              source_class_id: "class-1",
+              target_class_id: "class-2",
+              operation_type: operationType,
+              status: "previewed",
+              preview_checksum: "c".repeat(64),
+              plan: {
+                mutable_records: [],
+                protected_records: [],
+                blocking_records:
+                  evidenceType === "blocking_records"
+                    ? [
+                        {
+                          key: "archived_annotation",
+                          label: "Protected historical annotation",
+                          count: 1,
+                          record_ids: ["annotation-3"],
+                        },
+                      ]
+                    : [],
+                compatibility_impacts: [],
+                warnings: [],
+                blockers:
+                  evidenceType === "blockers"
+                    ? ["A protected class reference prevents this operation."]
+                    : [],
+              },
+              failures:
+                evidenceType === "failures"
+                  ? ["Preview could not validate scientific references."]
+                  : [],
+            });
+          }
+          throw new Error(
+            `Unexpected class request: ${init?.method ?? "GET"} ${url}`,
+          );
+        });
+
+      renderPanel();
+      const row = sourceClassRow();
+      const runButton = within(row).getByRole("button", { name: runLabel });
+      expect(runButton).toBeDisabled();
+      await userEvent.click(
+        within(row).getByRole("button", { name: previewLabel }),
+      );
+      const summaryTitle =
+        operationType === "reassign"
+          ? "Reassign preview"
+          : "Reassign and Delete preview";
+      expect(
+        await within(row).findByText(summaryTitle),
+      ).toBeInTheDocument();
+      expect(
+        within(row).getByText(/Execution disabled: preview contains blockers/),
+      ).toBeInTheDocument();
+      expect(runButton).toBeDisabled();
+      await userEvent.click(runButton);
+      expect(
+        fetchMock.mock.calls.filter(
+          ([input, init]) =>
+            String(input).endsWith(`/classes/class-1/${endpoint}`) &&
+            init?.method === "POST",
+        ),
+      ).toHaveLength(0);
+    },
+  );
+
   it("previews and executes a reassignment with the reviewed checksum", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const fetchMock = vi
@@ -576,6 +675,7 @@ describe("ClassManagerPanel", () => {
               plan: {
                 mutable_records: [],
                 protected_records: [],
+                blocking_records: [],
                 compatibility_impacts: [],
                 blockers: [],
               },
@@ -672,6 +772,7 @@ describe("ClassManagerPanel", () => {
           plan: {
             mutable_records: [],
             protected_records: [],
+            blocking_records: [],
             compatibility_impacts: [],
             blockers: [],
           },
