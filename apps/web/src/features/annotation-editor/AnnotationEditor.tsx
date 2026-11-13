@@ -1588,7 +1588,7 @@ export function AnnotationEditor({
     const layerLabel = visibilityLayerLabel(selectedVisibilityLayer);
     if (
       !window.confirm(
-        `Remove the saved ${layerLabel} default for this entire project? Users without their own saved preference will see all classes in this layer. Personal preferences and scientific annotations are not changed.`,
+        `Remove the saved ${layerLabel} default for this entire project? Users without a saved personal preference or session override will see all classes in this layer. Personal preferences and scientific annotations are not changed.`,
       )
     ) {
       return;
