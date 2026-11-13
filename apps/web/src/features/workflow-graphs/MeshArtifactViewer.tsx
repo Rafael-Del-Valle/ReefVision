@@ -232,10 +232,12 @@ function parsePathInspections(
           ) &&
           Math.abs(
             pair[0] - edgeLengthsM[index] * (1 - relativeScaleUncertainty),
-          ) <= edgeLengthsM[index] * 1e-8 &&
+          ) <=
+            edgeLengthsM[index] * 1e-8 &&
           Math.abs(
             pair[1] - edgeLengthsM[index] * (1 + relativeScaleUncertainty),
-          ) <= edgeLengthsM[index] * 1e-8,
+          ) <=
+            edgeLengthsM[index] * 1e-8,
       )
         ? (rawEdgeIntervals as [number, number][])
         : null;
