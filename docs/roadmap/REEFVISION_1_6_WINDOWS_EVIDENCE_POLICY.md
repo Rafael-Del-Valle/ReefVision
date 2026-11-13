@@ -71,9 +71,30 @@ reading. Hashes remain in-memory; research contents are not uploaded.
 
 Native Windows regression fixtures verify unchanged data, deliberately
 altered image bytes, removed imagery, missing SQLite and changed log content.
-This **does not** establish MSI rollback safety, complete project-folder
-coverage for unknown extensions, real biological correctness or installed
-interactive-GUI acceptance. Those remain release HOLD gates.
+
+### All stable scientific asset formats (2026-11-13)
+
+The original snapshot used a fixed extension allowlist. It overlooked imported
+field videos (\`.mp4\`), camera/telemetry subtitles (\`.srt\`), user-trained
+checkpoints (\`.onnx\`), extensionless research records and unknown plugin
+output formats. Uninstall could have deleted those files while the retained
+SQLite, PNG and JSON passed the gate.
+
+The snapshot now checks **every regular file inside the isolated data root**
+except files beneath explicitly volatile *top-level* directories
+(\`cache\`, \`logs\`, \`runtime\`, \`tmp\`, \`temp\`). It preserves the existing
+reparse-point checks, case-insensitive relative-path keys and SHA-256/byte-size
+comparison. There is no science-file extension allowlist to become outdated.
+New disposable PowerShell regressions assert both byte mutation and deletion
+of representative video, telemetry, local-model, arbitrary-extension and
+extensionless files, while changing logs, cache and runtime state remains
+permissible. A trained checkpoint under \`models/\` is treated as a persistent
+research asset, *not* excluded as a cache.
+
+This tests byte retention for a **disposable** installed profile, not the
+accuracy of media/model decoding, real-user profile coverage, files outside
+the isolated root, model provenance, MSI rollback, or interactive-GUI/scientific
+acceptance. Hashes and file contents are not uploaded. Release remains HOLD.
 
 A failed post-uninstall research-retention check also suppresses automatic
 cleanup of the disposable run directory, even when `msiexec /x` itself
