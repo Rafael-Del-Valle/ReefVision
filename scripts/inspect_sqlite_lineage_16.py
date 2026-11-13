@@ -9,6 +9,14 @@ import json
 import sqlite3
 from pathlib import Path
 
+def _sidecar_presence(path: Path) -> dict[str, bool]:
+    """Sidecars prevent treating a live SQLite file as an immutable backup."""
+    return {
+        suffix: Path(f"{path}{suffix}").exists()
+        for suffix in ("-wal", "-shm", "-journal")
+    }
+
+
 TABLES = (
     "scientific_records", "environmental_cache_entries",
     "computed_metric_definitions", "computed_metric_results",
@@ -20,7 +28,11 @@ def inspect(path: Path) -> dict:
     if not path.is_file():
         raise FileNotFoundError(path)
     # mode=ro prevents writes; do not use immutable=1, which may hide WAL changes.
-    connection = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
+    # Record sidecars before and after inspection: a live writer can change
+    # their existence while a consistent read transaction is held.
+    resolved_path = path.resolve()
+    sidecars_before = _sidecar_presence(resolved_path)
+    connection = sqlite3.connect(resolved_path.as_uri() + "?mode=ro", uri=True)
     try:
         connection.execute("PRAGMA query_only=ON")
         # Pin one read snapshot: concurrent WAL writers must not mix schema,
@@ -140,8 +152,18 @@ def inspect(path: Path) -> dict:
                 "extended_columns": extended_columns,
                 "foreign_keys": fks, "indexes": indexes,
             }
+        sidecars_after = _sidecar_presence(resolved_path)
+        sidecars = {
+            suffix: sidecars_before[suffix] or sidecars_after[suffix]
+            for suffix in sidecars_before
+        }
         return {
-            "database": str(path.resolve()), "read_only": True,
+            "database": str(resolved_path), "read_only": True,
+            # A WAL, shared-memory or rollback journal is evidence that a
+            # single DB file may not represent a complete immutable snapshot.
+            # This does not mean a sidecar-free file is proven to be a backup.
+            "sqlite_sidecar_presence": sidecars,
+            "sqlite_sidecar_consistent_snapshot_required": any(sidecars.values()),
             "quick_check": integrity,
             "quick_check_details": quick_check_details,
             "integrity_check_details": integrity_check_details,
@@ -175,7 +197,7 @@ def main() -> None:
     parser.add_argument(
         "--fail-on-integrity-error",
         action="store_true",
-        help="Exit 2 on SQLite integrity, FK, or Alembic metadata errors in either input; "
+        help="Exit 2 on SQLite integrity, FK, Alembic metadata, or live sidecars in either input; "
         "still emit complete read-only JSON evidence",
     )
     parser.add_argument(
@@ -253,6 +275,10 @@ def main() -> None:
             "reference_alembic_stamps": reference["alembic_stamps"],
             "reference_integrity": {
                 "quick_check_details": reference["quick_check_details"],
+                "sqlite_sidecar_presence": reference["sqlite_sidecar_presence"],
+                "sqlite_sidecar_consistent_snapshot_required": reference[
+                    "sqlite_sidecar_consistent_snapshot_required"
+                ],
                 "integrity_check_details": reference["integrity_check_details"],
                 "foreign_key_violation_count": reference["foreign_key_violation_count"],
                 "foreign_key_check_error": reference["foreign_key_check_error"],
@@ -289,6 +315,7 @@ def main() -> None:
     def has_integrity_error(report: dict) -> bool:
         return (
             report["quick_check_details"] != ["ok"]
+            or report["sqlite_sidecar_consistent_snapshot_required"]
             or report["integrity_check_details"] != ["ok"]
             or report["foreign_key_check_error"] is not None
             or report["foreign_key_violation_count"] != 0
