@@ -34,6 +34,9 @@ interface MeshRouteInspection {
   endVertexIndex: number;
   lengthM: number | null;
   lengthScaleIntervalM: [number, number] | null;
+  endpointChordLengthM: number | null;
+  endpointChordScaleIntervalM: [number, number] | null;
+  endpointChordQc: "consistent" | "inconsistent" | "unverifiable";
   qcWarnings: string[] | null;
   geometryQc: "consistent" | "inconsistent" | "unverifiable";
 }
@@ -455,6 +458,44 @@ function parsePathInspections(
       rawEdges,
       rawCumulative,
     );
+    // The saved endpoint chord is a dimension, not a verified anatomical
+    // measurement. Require agreement with the full source-frame route's
+    // endpoint coordinates before displaying its nominal value or bounds.
+    const rawChord = route.endpoint_chord_length_m;
+    const firstPoint = coordinates[0] as Vec3;
+    const lastPoint = coordinates[coordinates.length - 1] as Vec3;
+    const computedChord = Math.hypot(
+      lastPoint[0] - firstPoint[0],
+      lastPoint[1] - firstPoint[1],
+      lastPoint[2] - firstPoint[2],
+    );
+    const endpointChordLengthM: number | null =
+      typeof rawChord === "number" &&
+      Number.isFinite(rawChord) &&
+      rawChord >= 0 &&
+      Number.isFinite(computedChord) &&
+      Math.abs(rawChord - computedChord) <=
+        Math.max(rawChord, computedChord) * 1e-8
+        ? rawChord
+        : null;
+    const endpointChordQc =
+      rawChord === undefined ||
+      rawChord === null ||
+      !Number.isFinite(computedChord)
+        ? "unverifiable"
+        : endpointChordLengthM === null
+          ? "inconsistent"
+          : "consistent";
+    const rawChordInterval = route.endpoint_chord_scale_interval_m;
+    const endpointChordScaleIntervalM: [number, number] | null =
+      endpointChordLengthM !== null &&
+      isSavedScaleInterval(
+        rawChordInterval,
+        endpointChordLengthM,
+        relativeScaleUncertainty,
+      )
+        ? [rawChordInterval[0], rawChordInterval[1]]
+        : null;
     const warnings = route.path_qc_warnings;
     const qcWarnings =
       Array.isArray(warnings) &&
@@ -483,6 +524,9 @@ function parsePathInspections(
         endVertexIndex: indices[indices.length - 1] as number,
         lengthM,
         lengthScaleIntervalM,
+        endpointChordLengthM,
+        endpointChordScaleIntervalM,
+        endpointChordQc,
         qcWarnings,
         geometryQc,
       },
@@ -607,6 +651,20 @@ function formatRouteInspection(route: MeshRouteInspection): string {
       : route.qcWarnings.length === 0
         ? "no route-specific flags"
         : route.qcWarnings.join(", ");
+  const chord =
+    route.endpointChordLengthM === null
+      ? "unknown"
+      : `${route.endpointChordLengthM.toPrecision(6)} m`;
+  const chordInterval =
+    route.endpointChordScaleIntervalM === null
+      ? "unknown"
+      : `[${route.endpointChordScaleIntervalM[0].toPrecision(6)}, ${route.endpointChordScaleIntervalM[1].toPrecision(6)}] m`;
+  const chordQc =
+    route.endpointChordQc === "consistent"
+      ? "consistent with saved endpoint XYZ (provisional)"
+      : route.endpointChordQc === "inconsistent"
+        ? "INCONSISTENT: saved chord disagrees with endpoint XYZ"
+        : "unverifiable: missing or numerically unusable chord evidence";
   const totalTurn =
     route.totalTurnStatus === "valid" && route.totalTurnDeg !== null
       ? `${route.totalTurnDeg.toPrecision(6)} deg`
@@ -619,7 +677,7 @@ function formatRouteInspection(route: MeshRouteInspection): string {
       : route.geometryQc === "inconsistent"
         ? "INCONSISTENT: route lengths and saved XYZ disagree; human review required"
         : "unverifiable: incomplete or numerically unusable evidence";
-  return `Route ${route.sourceIndex + 1}, mesh vertices ${route.startVertexIndex} to ${route.endVertexIndex}. Saved geometric route length: ${length}. Scale-only length interval: ${interval}. Saved total absolute geometric turn: ${totalTurn}. Independent polyline-to-measurement QC: ${geometryQc}. Path QC: ${qc}. Provisional mesh geometry, not a verified biological branch length.`;
+  return `Route ${route.sourceIndex + 1}, mesh vertices ${route.startVertexIndex} to ${route.endVertexIndex}. Saved geometric route length: ${length}. Scale-only length interval: ${interval}. Saved endpoint chord: ${chord}. Scale-only chord interval: ${chordInterval}. Independent endpoint-chord QC: ${chordQc}. Saved total absolute geometric turn: ${totalTurn}. Independent polyline-to-measurement QC: ${geometryQc}. Path QC: ${qc}. Provisional mesh geometry, not a verified biological branch length.`;
 }
 
 /** Inspect a persisted segment increment, not an anatomical branch or independently reviewed measure. */
