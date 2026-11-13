@@ -496,6 +496,7 @@ describe("ClassManagerPanel", () => {
       name: "Swiftia Open",
     };
     let resolveFirstPreview: ((response: Response) => void) | undefined;
+    let delayedResponse: Response | null = null;
     let previewCount = 0;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       if (
@@ -525,6 +526,7 @@ describe("ClassManagerPanel", () => {
           failures: [],
         });
         if (previewCount === 1) {
+          delayedResponse = response;
           return new Promise<Response>((resolve) => {
             resolveFirstPreview = resolve;
           });
@@ -559,7 +561,8 @@ describe("ClassManagerPanel", () => {
       within(row).getByRole("combobox", { name: "Reassign into" }),
       "class-3",
     );
-    resolveFirstPreview?.(jsonResponse({}));
+    expect(delayedResponse).not.toBeNull();
+    resolveFirstPreview?.(delayedResponse!);
     await waitFor(() =>
       expect(
         screen.getByText(/Reassignment preview no longer matches/),
