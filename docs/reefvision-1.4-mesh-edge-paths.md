@@ -51,6 +51,18 @@ geometry**, not validated anatomical centerlines, biological joint angles,
 coral health, or growth. They are produced by the common standalone and typed
 persisted Workflow Builder measurement engine with unchanged provenance.
 
+Connected routes additionally expose `total_absolute_geometric_turn_deg`, the
+sum of all interior mesh-polyline turning angles. This is a **scale-invariant
+path-bending descriptor**, not a signed net orientation change, curvature
+per unit length, or a biological condition score. A single-edge route and a
+fully straight route return 0 degrees; disconnected routes and routes with
+any undefined interior angle return null, rather than disguising missing
+evidence as zero. The value is computed from full-resolution route geometry
+in both the standalone mesh preview and saved executable Workflow Builder
+artifacts. Legacy artifacts without the field remain valid historical
+measurements; the new aggregate is not independently verified anatomical
+evidence.
+
 The interactive mesh viewer also exposes each saved route waypoint's
 `path_turn_angles_deg` alongside its calibrated cumulative distance and
 preceding edge length. The display requires one value per waypoint, null
