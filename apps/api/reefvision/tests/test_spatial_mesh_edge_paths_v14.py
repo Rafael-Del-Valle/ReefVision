@@ -1053,8 +1053,9 @@ def test_coincident_route_review_warning_survives_saved_workflow(
         if item["data_type"] == "mesh_measurement_preview"
     )
     assert artifact["surface_edge_paths"] == standalone.json()["surface_edge_paths"]
-    assert artifact["provenance"]["geometry_sha256"] == (
-        standalone.json()["provenance"]["geometry_sha256"]
+    assert (
+        artifact["provenance"]["geometry_sha256"]
+        == (standalone.json()["provenance"]["geometry_sha256"])
     )
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
