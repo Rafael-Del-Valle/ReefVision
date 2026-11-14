@@ -1351,3 +1351,83 @@ def test_class_execution_failed_writer_cannot_overwrite_competing_completion(
             )
             == 1
         )
+
+
+def test_merge_preserves_accepted_predictions_and_completed_qc_history(
+    client: TestClient,
+) -> None:
+    """Merge mutable work, but never rewrite completed scientific review evidence."""
+    project = create_project(client, name="Historical merge integrity")
+    source = create_label_class(
+        client,
+        project["id"],
+        class_index=0,
+        name="Muricea Closed",
+        display_color="#E76F51",
+    )
+    target = create_label_class(
+        client,
+        project["id"],
+        class_index=1,
+        name="Muricea Open",
+        display_color="#2A9D8F",
+    )
+    seed_reassignment_records(client, project, source, target)
+    usage_response = client.get(f"/api/v1/classes/{source['id']}/usage")
+    assert usage_response.status_code == 200, usage_response.text
+    usage = usage_response.json()
+
+    merged = client.post(
+        f"/api/v1/classes/{source['id']}/merge",
+        json={
+            "target_class_id": target["id"],
+            "expected_usage_counts": {
+                item["key"]: item["count"] for item in usage["counts"]
+            },
+            "expected_usage_fingerprint": usage["reference_fingerprint"],
+        },
+    )
+    assert merged.status_code == 200, merged.text
+    result = merged.json()
+    assert result["source_class"]["is_active"] is False
+    counts = {item["key"]: item["count"] for item in result["affected_counts"]}
+    assert counts["annotations_active"] == 1
+    assert counts["prediction_proposals"] == 1
+    assert counts["quality_control_issues"] == 1
+    assert counts["review_queue_items"] == 1
+    assert any(
+        "archived source class retains historical scientific references" in warning
+        and "reviewed prediction proposals" in warning
+        and "resolved quality-control issues" in warning
+        and "completed review-queue items" in warning
+        for warning in result["warnings"]
+    )
+
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        source_record = session.get(LabelClass, source["id"])
+        active = session.get(Annotation, "annotation-active")
+        deleted = session.get(Annotation, "annotation-deleted")
+        pending = session.get(PredictionProposal, "proposal-pending")
+        accepted = session.get(PredictionProposal, "proposal-accepted")
+        open_issue = session.get(QualityControlIssue, "qc-issue-open")
+        dismissed_issue = session.get(QualityControlIssue, "qc-issue-dismissed")
+        pending_item = session.get(ReviewQueueItem, "queue-item-pending")
+        completed_item = session.get(ReviewQueueItem, "queue-item-completed")
+        frozen_dataset = session.get(DatasetVersion, "dataset-version-1")
+        assert source_record is not None and source_record.archived_at is not None
+        assert active is not None and active.label_class_id == target["id"]
+        assert deleted is not None and deleted.label_class_id == source["id"]
+        assert pending is not None and pending.label_class_id == target["id"]
+        assert accepted is not None and accepted.label_class_id == source["id"]
+        assert accepted.review_status == "accepted" and not accepted.was_edited
+        assert open_issue is not None and open_issue.class_ids_json == [target["id"]]
+        assert dismissed_issue is not None
+        assert dismissed_issue.class_ids_json == [source["id"]]
+        assert dismissed_issue.status == "dismissed"
+        assert pending_item is not None
+        assert pending_item.label_class_ids_json == [target["id"]]
+        assert completed_item is not None
+        assert completed_item.label_class_ids_json == [source["id"]]
+        assert completed_item.review_state == "completed"
+        assert frozen_dataset is not None
+        assert frozen_dataset.class_map_json[0]["id"] == source["id"]
