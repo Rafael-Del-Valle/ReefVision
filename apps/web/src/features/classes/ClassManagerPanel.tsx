@@ -60,7 +60,7 @@ function previewHasNoBlockingEvidence(
   );
 }
 
-// Keep the deletion review synchronized with the eight scientific reference
+// Keep the deletion review synchronized with the thirteen scientific reference
 // categories returned by ProjectService._usage_response. A partial or
 // unfamiliar breakdown must never authorize irreversible class deletion.
 const REQUIRED_USAGE_CATEGORIES: Readonly<
@@ -69,12 +69,27 @@ const REQUIRED_USAGE_CATEGORIES: Readonly<
   annotations_active: { mutable: true, immutable: false },
   annotations_deleted: { mutable: false, immutable: true },
   annotation_history: { mutable: false, immutable: true },
+  mask_annotations_active: { mutable: true, immutable: false },
+  mask_annotations_deleted: { mutable: false, immutable: true },
+  mask_annotation_history: { mutable: false, immutable: true },
+  image_labels_active: { mutable: true, immutable: false },
+  image_labels_deleted: { mutable: false, immutable: true },
   prediction_proposals: { mutable: true, immutable: false },
   quality_control_issues: { mutable: true, immutable: false },
   review_queue_items: { mutable: true, immutable: false },
   dataset_versions: { mutable: false, immutable: true },
   model_registrations: { mutable: false, immutable: true },
 };
+
+// The backend cannot yet reassign these source-class modalities during Merge.
+// Do not offer a misleading operation that would archive the class but strand them.
+const UNSUPPORTED_MERGE_CATEGORIES = [
+  "mask_annotations_active",
+  "mask_annotations_deleted",
+  "mask_annotation_history",
+  "image_labels_active",
+  "image_labels_deleted",
+] as const;
 
 function usageHasCompleteEmptyBreakdown(
   counts: Awaited<ReturnType<typeof getProjectLabelClassUsage>>["counts"],
@@ -127,7 +142,7 @@ function usageConfirmsEmptyClass(
 
 /** Fail closed if a merge approval is not bound to a complete, coherent
  * project-scoped usage count vector. Mutable and immutable totals must
- * reconcile with the eight actual backend scientific reference categories.
+ * reconcile with the thirteen backend scientific reference categories.
  */
 function reviewedMergeCounts(
   usage: Awaited<ReturnType<typeof getProjectLabelClassUsage>> | undefined,
@@ -486,6 +501,11 @@ function ClassRow({
     labelClass.id,
   );
   const mergeUsageFingerprint = usage.data?.reference_fingerprint;
+  const hasUnsupportedMergeReferences =
+    mergeUsageCounts !== null &&
+    UNSUPPORTED_MERGE_CATEGORIES.some(
+      (key) => (mergeUsageCounts[key] ?? 0) > 0,
+    );
   const canMerge =
     typeof mergeUsageFingerprint === "string" &&
     /^[0-9a-f]{64}$/.test(mergeUsageFingerprint) &&
@@ -493,6 +513,7 @@ function ClassRow({
     usage.isSuccess &&
     !usage.isFetching &&
     mergeUsageCounts !== null &&
+    !hasUnsupportedMergeReferences &&
     selectedMergeTarget !== undefined &&
     !merge.isPending;
 
@@ -682,8 +703,9 @@ function ClassRow({
         )}
         {showUsage && usage.isSuccess && !usage.isFetching && !canMerge && (
           <p className="form-error" role="status">
-            A complete, internally consistent class usage report is required
-            before merging. Refresh Usage and review again.
+            {hasUnsupportedMergeReferences
+              ? "Class merge is blocked while mask or image-level classification records reference this class. Review these records before merging."
+              : "A complete, internally consistent class usage report is required before merging. Refresh Usage and review again."}
           </p>
         )}
       </div>
