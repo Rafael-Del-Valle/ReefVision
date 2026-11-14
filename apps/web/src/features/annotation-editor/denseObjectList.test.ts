@@ -145,4 +145,65 @@ describe("dense object-browser window", () => {
     expect(annotationReads).toBe(104);
     expect(maskReads).toBe(0);
   });
+
+  it("bounds a 20,000-item range selection without losing scientific selection state", () => {
+    const annotations = Array.from({ length: 20_000 }, (_, index) => ({
+      id: `box-${index}`,
+    }));
+    const selectedIds = annotations.map((item) => item.id);
+    const originalSelection = [...selectedIds];
+    const rows = boundedDenseObjectRows(annotations, [], 200, selectedIds, []);
+
+    // 200 ordinary rows plus at most 200 pinned off-window selections.
+    expect(rows).toHaveLength(400);
+    expect(rows[0].position).toBe(0);
+    expect(rows[199].position).toBe(199);
+    expect(rows[200].position).toBe(19_800);
+    expect(rows[399].position).toBe(19_999);
+    expect(selectedIds).toEqual(originalSelection);
+    expect(annotations).toHaveLength(20_000);
+  });
+
+  it("bounds both selected types independently and preserves source ordering", () => {
+    const annotations = Array.from({ length: 2_000 }, (_, index) => ({
+      id: `box-${index}`,
+    }));
+    const masks = Array.from({ length: 3_000 }, (_, index) => ({
+      id: `mask-${index}`,
+    }));
+    const rows = boundedDenseObjectRows(
+      annotations,
+      masks,
+      200,
+      annotations.map((item) => item.id),
+      masks.map((item) => item.id),
+    );
+
+    expect(rows).toHaveLength(600);
+    expect(rows[200].position).toBe(1_800);
+    expect(rows[399].position).toBe(1_999);
+    expect(rows[400].position).toBe(4_800);
+    expect(rows[599].position).toBe(4_999);
+    expect(rows.map((row) => row.position)).toEqual(
+      [...rows.map((row) => row.position)].sort((left, right) => left - right),
+    );
+    expect(annotations).toHaveLength(2_000);
+    expect(masks).toHaveLength(3_000);
+  });
+
+  it("retains every sparse off-window selection when fewer than 200 are pinned", () => {
+    const annotations = Array.from({ length: 8_000 }, (_, index) => ({
+      id: `box-${index}`,
+    }));
+    const rows = boundedDenseObjectRows(
+      annotations,
+      [],
+      10,
+      ["box-7900", "box-12", "box-7999"],
+      [],
+    );
+    expect(rows.slice(10).map((row) => row.position)).toEqual([
+      12, 7900, 7999,
+    ]);
+  });
 });
