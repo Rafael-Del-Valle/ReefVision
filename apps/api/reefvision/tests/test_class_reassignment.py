@@ -906,6 +906,7 @@ def test_class_operation_preview_expires_after_observation_content_change(
         assert session.get(LabelClass, source["id"]) is not None
         assert session.get(LabelClass, target["id"]) is not None
 
+
 @pytest.mark.parametrize("operation_endpoint", ["reassign", "reassign-delete"])
 @pytest.mark.parametrize(
     "mutation",
