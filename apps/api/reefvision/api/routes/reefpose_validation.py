@@ -11,12 +11,14 @@ from reefvision.api.dependencies import get_db_session
 from reefvision.db.models import Job
 from reefvision.jobs.reefpose_validation import JOB_TYPE, completed_report, submit_validation
 from reefvision.schemas.jobs import JobResponse
+from reefvision.schemas.reefpose_temporal import TemporalDatasetRequest, TemporalDatasetResponse
 from reefvision.schemas.reefpose_validation import (
     FreezeReferenceRequest,
     ReferenceDetail,
     ReferenceSummary,
     ValidationRequest,
 )
+from reefvision.services.reefpose_temporal import export_temporal_training_data
 from reefvision.services.reefpose_validation import ReferenceService
 from reefvision.storage.reefpose_validation import validation_csv, validation_summary_csv
 
@@ -47,6 +49,16 @@ def list_references(
 @router.get("/reefpose-references/{reference_id}", response_model=ReferenceDetail)
 def get_reference(project_id: str, reference_id: str, session: DbSession) -> ReferenceDetail:
     return ReferenceDetail.model_validate(ReferenceService(session).get(project_id, reference_id))
+
+
+@router.post(
+    "/reefpose-references/{reference_id}/temporal-training-data",
+    response_model=TemporalDatasetResponse,
+)
+def temporal_training_data(
+    project_id: str, reference_id: str, payload: TemporalDatasetRequest, session: DbSession
+) -> TemporalDatasetResponse:
+    return export_temporal_training_data(session, project_id, reference_id, payload)
 
 
 @router.post("/reefpose-validations", response_model=JobResponse, status_code=202)
