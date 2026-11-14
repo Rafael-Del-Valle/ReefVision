@@ -105,6 +105,29 @@ def test_selected_trace_turn_angles_are_scale_invariant_and_provisional() -> Non
     assert first["turn_angles_deg"] == rescaled["turn_angles_deg"]
 
 
+@pytest.mark.parametrize("scale", [0.01, 0.02])
+def test_selected_trace_endpoint_chord_and_detour_are_scale_invariant(scale: float) -> None:
+    trace = measure_mesh_preview(**{**PARAMS, "meters_per_unit": scale})[
+        "surface_edge_traces"
+    ][0]
+    assert trace["endpoint_chord_length_m"] == pytest.approx(scale)
+    assert trace["endpoint_chord_scale_only_interval_m"] == pytest.approx(
+        [0.9 * scale, 1.1 * scale]
+    )
+    assert trace["geometric_detour_ratio"] == pytest.approx(1 + sqrt(2))
+    assert trace["human_review_verified"] is False
+
+
+def test_coincident_trace_endpoints_have_unknown_detour_not_infinity() -> None:
+    trace = measure_mesh_preview(**COINCIDENT_NONADJACENT_PARAMS)["surface_edge_traces"][0]
+    assert trace["length_m"] > 0
+    assert trace["endpoint_chord_length_m"] == 0
+    assert trace["endpoint_chord_scale_only_interval_m"] == [0.0, 0.0]
+    assert trace["geometric_detour_ratio"] is None
+    assert "surface_trace_zero_endpoint_chord" in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+
+
 def test_direct_trace_zero_edge_has_unknown_turn_not_a_fabricated_zero() -> None:
     # Direct diagnostic callers can inspect degenerate imported geometry,
     # although the full preview separately rejects invalid triangle area.
@@ -134,6 +157,9 @@ def test_straight_trace_distinguishes_zero_bend_from_no_interior_turn() -> None:
     assert straight["turn_angles_deg"] == [None, 0.0, None]
     assert straight["maximum_turn_angle_deg"] == 0.0
     assert straight["total_absolute_geometric_turn_deg"] == 0.0
+    assert straight["endpoint_chord_length_m"] == pytest.approx(0.02)
+    assert straight["geometric_detour_ratio"] == pytest.approx(1.0)
+    assert straight["endpoint_chord_scale_only_interval_m"] is None
     assert two_vertices["turn_angles_deg"] == [None, None]
     assert two_vertices["maximum_turn_angle_deg"] is None
     assert two_vertices["total_absolute_geometric_turn_deg"] == 0.0
@@ -374,13 +400,18 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     trace = artifact["surface_edge_traces"][0]
     assert trace["human_review_verified"] is False
+    assert "endpoint_chord_length_m" in trace
+    assert "geometric_detour_ratio" in trace
     assert len(trace["turn_angles_deg"]) == len(trace["vertex_indices"])
     assert trace["turn_angles_deg"][0] is None
     assert trace["turn_angles_deg"][-1] is None
     if case == "ordinary":
+        assert trace["geometric_detour_ratio"] == pytest.approx(1 + sqrt(2))
+        assert trace["endpoint_chord_length_m"] == pytest.approx(0.01)
         assert trace["maximum_turn_angle_deg"] == pytest.approx(135.0)
         assert trace["total_absolute_geometric_turn_deg"] == pytest.approx(135.0)
     if case == "uncertainty_missing":
+        assert trace["endpoint_chord_scale_only_interval_m"] is None
         assert trace["segment_length_scale_only_intervals_m"] is None
         assert trace["cumulative_length_scale_only_intervals_m"] is None
     else:
@@ -401,6 +432,8 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             in artifact["surface_edge_traces"][0]["qc_warnings"]
         )
     if case == "coincident_nonadjacent":
+        assert trace["geometric_detour_ratio"] is None
+        assert "surface_trace_zero_endpoint_chord" in trace["qc_warnings"]
         assert (
             "nonadjacent_coincident_surface_trace_vertices"
             in artifact["surface_edge_traces"][0]["qc_warnings"]
