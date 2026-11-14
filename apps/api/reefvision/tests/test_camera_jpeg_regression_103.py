@@ -5,6 +5,7 @@ from __future__ import annotations
 import struct
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from threading import Barrier, Lock
@@ -854,7 +855,7 @@ def test_decodable_camera_jpeg_with_broken_exif_parser_preserves_original(
 
         monkeypatch.setattr(Image.Exif, "get_ifd", broken_get_ifd)
 
-    inspected = image_storage.inspect_staged_image(source, "0" * 64, len(original))
+    inspected = image_storage.inspect_staged_image(source, sha256(original).hexdigest(), len(original))
     assert (inspected.width_px, inspected.height_px) == (64, 48)
     assert inspected.media_type == "image/jpeg"
     assert inspected.capture_timestamp is None
