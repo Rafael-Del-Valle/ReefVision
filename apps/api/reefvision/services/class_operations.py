@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
@@ -779,6 +779,27 @@ class ClassOperationsService:
 
         source_class = self._class(project_id, class_id)
         target_class = self._class(project_id, operation.target_class_id)
+
+        # Claim this approved preview with a conditional write BEFORE rebuilding
+        # its evidence. SQLite holds the writer lock until our final commit, so
+        # no other local editor can change the evidence after validation or
+        # execute the same preview concurrently. The previous early "running"
+        # commit released that lock and exposed partial operation state.
+        claim = self.session.execute(
+            update(ClassOperation)
+            .where(
+                ClassOperation.id == operation.id,
+                ClassOperation.status == "previewed",
+            )
+            .values(status="running", started_at=_utc_now())
+        )
+        if claim.rowcount != 1:
+            self.session.rollback()
+            raise ConflictError("This class operation was already claimed. Reload its status.")
+        # The earlier class reads happened before the write lock. Force fresh
+        # evidence reads under the claimed SQLite transaction.
+        self.session.expire(source_class)
+        self.session.expire(target_class)
         current_plan = self._plan(
             operation_type=operation_type,
             source_class=source_class,
@@ -818,12 +839,11 @@ class ClassOperationsService:
             self.session.commit()
             raise ConflictError("This class operation is blocked. Review the blocking records.")
 
-        operation.status = "running"
-        operation.started_at = _utc_now()
         if payload.notes is not None:
             operation.notes = payload.notes
-        self.session.commit()
 
+        # Status, biological record updates, append-only events, and deletion
+        # (when approved) commit atomically; no intermediate "running" commit.
         try:
             affected_counts: dict[str, int] = {}
 
