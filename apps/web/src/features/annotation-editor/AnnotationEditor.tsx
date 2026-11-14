@@ -3878,8 +3878,10 @@ export function AnnotationEditor({
             </div>
             <p className="annotation-helper" role="status">
               Showing {denseObjectRows.length} of {filteredObjectCount} matching
-              objects. Selected objects outside the current window remain
-              accessible.
+              objects. Up to 200 recent selected boxes and 200 recent
+              selected masks beyond this window stay visible. Larger
+              selections remain intact; expand the window to browse earlier
+              objects.
             </p>
             {filteredObjectCount > objectListLimit && (
               <button
