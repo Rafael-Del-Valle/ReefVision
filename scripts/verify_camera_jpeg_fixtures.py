@@ -68,6 +68,11 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
     seen_casefolded_paths: dict[str, str] = {}
     seen_casefolded_components: dict[tuple[str, ...], str] = {}
     seen_file_identities: dict[tuple[int, int], str] = {}
+    # A lone approved path can be a hard link to another study's image outside
+    # the fixture tree. Count every inventoried link to each known file ID;
+    # fail acceptance when the filesystem reports additional unseen links.
+    inventoried_link_counts: dict[tuple[int, int], int] = {}
+    filesystem_link_counts: dict[tuple[int, int], int] = {}
     # Separate copied captures are not independent scientific observations
     # merely because they have distinct filenames and filesystem inodes.
     seen_content_hashes: dict[str, str] = {}
@@ -208,6 +213,10 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
         hardlink_alias = False
         if after.st_ino:
             identity = (after.st_dev, after.st_ino)
+            inventoried_link_counts[identity] = inventoried_link_counts.get(identity, 0) + 1
+            filesystem_link_counts[identity] = max(
+                filesystem_link_counts.get(identity, 0), after.st_nlink
+            )
             previous_identity = seen_file_identities.setdefault(identity, relative)
             if previous_identity != relative:
                 hardlink_alias = True
@@ -313,6 +322,18 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
             if decoded_ok:
                 record.update(decoded_metadata)
         records.append(record)
+    # An in-root duplicate is already reported above. An additional hard
+    # link not inventoried by this read-only walk may point at an unapproved
+    # camera/study source; it cannot be accepted as independently sourced.
+    # Zero/unknown inode IDs are excluded from this inference above.
+    for identity, link_total in filesystem_link_counts.items():
+        inspected = inventoried_link_counts[identity]
+        if link_total > inspected:
+            relative = seen_file_identities[identity]
+            errors.append(
+                "JPEG hard-link alias outside approved fixture inventory: "
+                f"{relative} ({inspected} inventoried of {link_total} filesystem links)"
+            )
     # A read failure is not evidence that the fixture directory is empty.
     # Preserve the actionable read/integrity error without adding a false
     # missing-fixtures diagnosis when matching camera files were encountered.
