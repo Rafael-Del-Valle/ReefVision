@@ -400,6 +400,20 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
+    # Reuse must check the saved node type even when the original graph and
+    # artifacts still have valid SHA-256 checksums. Exercise the existing
+    # completed project-image workflow, not a fabricated execution record.
+    with app.state.session_factory() as session:
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert consumer is not None
+        assert consumer.node_type != payload["nodes"][0]["node_type"]
+        consumer.node_type = str(payload["nodes"][0]["node_type"])
+        session.flush()
+        with pytest.raises(ConflictError, match="node identity does not match saved graph"):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
 
 def test_workflow_graph_revisions_are_deduplicated_and_versioned(
     client: TestClient,
