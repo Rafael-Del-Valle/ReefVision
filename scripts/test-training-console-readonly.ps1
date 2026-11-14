@@ -61,7 +61,9 @@ $script:terminalFailures = @{
     stage = 'fit'
     progress_epoch = 1
     progress_total_epochs = 3
-    metrics = @{ 'train/box_loss' = 0.40 }
+    # Simulate the PSCustomObject produced by Invoke-RestMethod for real JSON.
+    # A hashtable here hides named metrics from PSObject.Properties.
+    metrics = [pscustomobject]@{ 'train/box_loss' = 0.40 }
     metrics_history = @{}
     error_message = ('GPU out of memory ' + [char]0x001B + ']0;spoofed error title' + [char]0x0007 + ' training stopped')
   }
