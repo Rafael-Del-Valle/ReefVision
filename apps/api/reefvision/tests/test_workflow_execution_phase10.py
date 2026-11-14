@@ -428,6 +428,21 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
+    # A direct consumer recovery must reject a checksum-valid upstream
+    # artifact whose persisted type no longer matches the target input port.
+    # The consumer cannot rely on the producer's separate verification call.
+    with app.state.session_factory() as session:
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        upstream = session.get(WorkflowArtifact, artifacts["project_reference"]["id"])
+        assert consumer is not None and upstream is not None
+        assert upstream.data_type == "project_reference"
+        upstream.data_type = "image_collection"
+        session.flush()
+        with pytest.raises(ConflictError, match="input type does not match registry"):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
     # A SHA-valid image artifact cannot be retyped to a project reference by
     # changing only persisted type metadata and its output summary. The typed
     # port registry remains authoritative during direct interrupted-run reuse.
