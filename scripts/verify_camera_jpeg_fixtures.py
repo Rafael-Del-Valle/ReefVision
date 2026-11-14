@@ -90,6 +90,15 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                 errors.append(f"symlinked directory not inspected: {child.relative_to(root)}")
             elif _is_windows_junction(child):
                 errors.append(f"junction directory not inspected: {child.relative_to(root)}")
+            elif Path(dirname.rstrip(" .")).suffix.lower() in JPEG_SUFFIXES:
+                # os.walk lists directories separately from filenames. A
+                # JPEG-suffixed directory could otherwise vanish from the
+                # camera-source manifest without an explicit acceptance error.
+                # Still inspect its contents for genuine captures; never open
+                # or alter the directory as if it were an image.
+                errors.append(
+                    f"non-regular JPEG fixture directory not inspected: {child.relative_to(root)}"
+                )
         dirnames[:] = sorted(name for name in dirnames if not _is_linked_path(parent / name))
         # Win32 ignores trailing spaces/dots in filenames. A POSIX export
         # containing frame.JPG. or frame.jpeg<space> must be inventoried and
