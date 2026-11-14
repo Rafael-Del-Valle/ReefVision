@@ -88,6 +88,26 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             )
             self.assertEqual(jpeg.read_bytes(), original)
 
+    def test_jpeg_named_directory_is_not_silently_omitted(self) -> None:
+        """A folder masquerading as a JPEG must fail read-only acceptance."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            apparent_capture = root / "missing_capture.JPEG"
+            apparent_capture.mkdir()
+            nested = apparent_capture / "real_capture.jpg"
+            valid = bytes.fromhex("ffd8") + b"raw-camera-source" + bytes.fromhex("ffd9")
+            nested.write_bytes(valid)
+            records, errors = MODULE.inventory(root)
+
+            # Continue inspecting actual files; only the apparent JPEG directory
+            # is rejected, and its contained camera capture stays unchanged.
+            self.assertEqual([record["path"] for record in records],
+                             ["missing_capture.JPEG/real_capture.jpg"])
+            self.assertEqual(errors, [
+                "non-regular JPEG fixture directory not inspected: missing_capture.JPEG"
+            ])
+            self.assertEqual(nested.read_bytes(), valid)
+
     def test_fifo_named_as_jpeg_is_rejected_without_opening(self) -> None:
         """A Unix FIFO must not block inspection or be accepted as a camera."""
         import os
