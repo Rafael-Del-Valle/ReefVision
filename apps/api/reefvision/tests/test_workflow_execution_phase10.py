@@ -427,7 +427,6 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
-
     # A SHA-valid image artifact cannot be retyped to a project reference by
     # changing only persisted type metadata and its output summary. The typed
     # port registry remains authoritative during direct interrupted-run reuse.
