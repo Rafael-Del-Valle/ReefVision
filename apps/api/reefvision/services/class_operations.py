@@ -791,7 +791,7 @@ class ClassOperationsService:
                 ClassOperation.id == operation.id,
                 ClassOperation.status == "previewed",
             )
-            .values(status="running", started_at=_utc_now())
+            .values(status="running")
         )
         if claim.rowcount != 1:
             self.session.rollback()
@@ -841,6 +841,11 @@ class ClassOperationsService:
 
         if payload.notes is not None:
             operation.notes = payload.notes
+
+        # A preflight rejection is not an attempted scientific execution.
+        # Record the start only after the locked evidence/review gate passes.
+        started_at = _utc_now()
+        operation.started_at = started_at
 
         # Status, biological record updates, append-only events, and deletion
         # (when approved) commit atomically; no intermediate "running" commit.
@@ -994,6 +999,7 @@ class ClassOperationsService:
             self.session.rollback()
             operation = self._operation(payload.operation_id)
             operation.status = "rolled_back"
+            operation.started_at = started_at
             operation.completed_at = _utc_now()
             operation.failures_json = [str(exc)]
             operation.rollback_result_json = {"rolled_back": True}
