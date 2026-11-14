@@ -249,6 +249,33 @@ def test_reused_geometric_segment_fraction_is_calibration_invariant(scale: float
     assert trace["human_review_verified"] is False
 
 
+def test_reuse_fraction_withholds_overflowed_source_total() -> None:
+    # Direct source-coordinate audit: the meter-scaled path remains finite,
+    # but a sum of individually representable source segments overflows.
+    # Never serialize an infinite reuse fraction or claim biological validity.
+    points = [
+        (0.0, 0.0, 0.0),
+        (1e308, 0.0, 0.0),
+        (0.0, 0.0, 0.0),
+        (1e308, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (1e308, 1.0, 0.0),
+        (0.0, -1.0, 0.0),
+    ]
+    trace = mesh_surface_edge_traces(
+        points, [[0, 1, 4], [1, 2, 5], [2, 3, 6]], [[0, 1, 2, 3]], 1e-308, 0.1
+    )[0]
+    assert trace["length_m"] == pytest.approx(3.0)
+    assert trace["source_trace_length_mesh_units"] is None
+    assert trace["reused_geometric_segment_source_length_mesh_units"] == pytest.approx(
+        1e308
+    )
+    assert trace["reused_geometric_segment_fraction_of_trace"] is None
+    assert "surface_trace_source_length_unrepresentable" in trace["qc_warnings"]
+    assert "surface_trace_reuse_fraction_unrepresentable" in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+
+
 def test_coincident_trace_endpoints_have_unknown_detour_not_infinity() -> None:
     trace = measure_mesh_preview(**COINCIDENT_NONADJACENT_PARAMS)["surface_edge_traces"][0]
     assert trace["length_m"] > 0
@@ -522,6 +549,8 @@ def test_genuinely_zero_source_trace_retains_exact_zero_intervals() -> None:
         0.1,
     )[0]
     assert trace["source_segment_lengths_mesh_units"] == [0.0]
+    assert trace["reused_geometric_segment_source_length_mesh_units"] == 0.0
+    assert trace["reused_geometric_segment_fraction_of_trace"] is None
     assert trace["segment_length_scale_only_intervals_m"] == [[0.0, 0.0]]
     assert trace["cumulative_length_scale_only_intervals_m"] == [
         [0.0, 0.0],
