@@ -587,11 +587,12 @@ test("initial image and gallery scrolling", async ({ page }) => {
   expect(displayRequests).toContain("image-12");
 });
 
-
 // A real one-image project does not take the same path as the twelve-image
 // project with its other thumbnails merely hidden by CSS. Exercise the actual
 // one-item API response and the first display request before any navigation.
-test("single-image camera gallery cold-start keeps pixels and wheel isolated", async ({ page }) => {
+test("single-image camera gallery cold-start keeps pixels and wheel isolated", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1280, height: 820 });
   const jpegBase64 = await page.evaluate(() => {
     const canvas = document.createElement("canvas");
@@ -623,7 +624,8 @@ test("single-image camera gallery cold-start keeps pixels and wheel isolated", a
     id: "single-camera-image",
     project_id: project.id,
     original_filename: "single-frame.JfIf",
-    managed_path: "projects/single-camera-project/images/originals/single-frame.jfif",
+    managed_path:
+      "projects/single-camera-project/images/originals/single-frame.jfif",
     thumbnail_path: null,
     sha256: "b".repeat(64),
     width_px: 1600,
@@ -669,35 +671,51 @@ test("single-image camera gallery cold-start keeps pixels and wheel isolated", a
 
   const assetDirectory = path.resolve("dist/assets");
   const assets = await readdir(assetDirectory);
-  const scriptName = assets.find((name) => name.startsWith("index-") && name.endsWith(".js"));
+  const scriptName = assets.find(
+    (name) => name.startsWith("index-") && name.endsWith(".js"),
+  );
   const styleName = assets.find((name) => name.endsWith(".css"));
-  if (!scriptName || !styleName) throw new Error("Built Vite assets are missing");
+  if (!scriptName || !styleName) {
+    throw new Error("Built Vite assets are missing");
+  }
   const [script, style] = await Promise.all([
     readFile(path.join(assetDirectory, scriptName), "utf8"),
     readFile(path.join(assetDirectory, styleName), "utf8"),
   ]);
   await page.route("http://127.0.0.1:8000/", (route) =>
-    route.fulfill({ contentType: "text/html", body: '<main id="root"></main>' }),
+    route.fulfill({
+      contentType: "text/html",
+      body: '<main id="root"></main>',
+    }),
   );
   await page.goto("http://127.0.0.1:8000/");
   const packageJson = await readFile(path.resolve("package.json"), "utf8");
   const pkg: { version: string } = JSON.parse(packageJson);
   await page.evaluate((version) => {
-    window.localStorage.setItem("reefvision.onboarding.dismissed." + version, "true");
+    window.localStorage.setItem(
+      "reefvision.onboarding.dismissed." + version,
+      "true",
+    );
   }, pkg.version);
   await page.addStyleTag({ content: style });
   await page.addScriptTag({ content: script, type: "module" });
-  await page.getByRole("button", { name: /Single Frame Camera Survey/ }).click();
+  await page
+    .getByRole("button", { name: /Single Frame Camera Survey/ })
+    .click();
 
   const workbench = page.getByRole("region", { name: "Image workbench" });
   const focused = workbench.locator(".rv-media-canvas img");
   const filmstrip = workbench.locator(".rv-media-filmstrip");
   await expect(focused).toBeVisible();
-  await expect.poll(() => focused.evaluate((img: HTMLImageElement) => ({
-    complete: img.complete,
-    width: img.naturalWidth,
-    height: img.naturalHeight,
-  }))).toEqual({ complete: true, width: 1600, height: 1200 });
+  await expect
+    .poll(() =>
+      focused.evaluate((img: HTMLImageElement) => ({
+        complete: img.complete,
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+      })),
+    )
+    .toEqual({ complete: true, width: 1600, height: 1200 });
   await expect(
     workbench.getByRole("listitem", { name: "Focus single-frame.JfIf" }),
   ).toHaveAttribute("aria-current", "true");
@@ -706,7 +724,8 @@ test("single-image camera gallery cold-start keeps pixels and wheel isolated", a
 
   // Real input, not a synthetic WheelEvent, catches document scroll-through
   // when the strip has only one item and the first image just loaded.
-  const pageScroll = () => page.evaluate(() => ({ x: scrollX, y: scrollY }));
+  const pageScroll = () =>
+    page.evaluate(() => ({ x: scrollX, y: scrollY }));
   const beforeScroll = await pageScroll();
   await focused.hover();
   const beforeBounds = await focused.boundingBox();
@@ -719,7 +738,9 @@ test("single-image camera gallery cold-start keeps pixels and wheel isolated", a
   const beforeStrip = await filmstrip.evaluate((element) => element.scrollLeft);
   await page.mouse.wheel(0, 320);
   await expect.poll(pageScroll).toEqual(beforeScroll);
-  expect(await filmstrip.evaluate((element) => element.scrollLeft).toBe(beforeStrip);
+  expect(await filmstrip.evaluate((element) => element.scrollLeft)).toBe(
+    beforeStrip,
+  );
 
   // A first-open window resize and keyboard navigation cannot change image
   // identity or move the page in a one-item gallery.
@@ -732,7 +753,10 @@ test("single-image camera gallery cold-start keeps pixels and wheel isolated", a
   ).toHaveAttribute("aria-current", "true");
   await expect.poll(pageScroll).toEqual(beforeScroll);
   await expect(focused).toBeVisible();
-  expect(await focused.evaluate((img: HTMLImageElement) =>
-    [img.naturalWidth, img.naturalHeight],
-  )).toEqual([1600, 1200]);
+  expect(
+    await focused.evaluate((img: HTMLImageElement) => [
+      img.naturalWidth,
+      img.naturalHeight,
+    ]),
+  ).toEqual([1600, 1200]);
 });
