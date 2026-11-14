@@ -167,6 +167,7 @@ def test_desktop_upgrade_preserves_reefvision_branch_data(
     "damage",
     (
         "DROP TABLE pose_identity_truth_datasets",
+        "ALTER TABLE reefpose_heldout_locks DROP COLUMN protocol_sha256",
         "CREATE TABLE scientific_records (id VARCHAR(36) PRIMARY KEY)",
         "CREATE TABLE review_queue_item_events (id VARCHAR(36) PRIMARY KEY)",
     ),

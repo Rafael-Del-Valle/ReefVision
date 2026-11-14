@@ -3,6 +3,8 @@
 from alembic.util import CommandError
 from sqlalchemy import Connection, inspect
 
+from reefvision.db.base import Base
+
 # Feature names without a dot are tables. Dotted names are columns or indexes
 # on tables that already existed at the common branch point.
 _SCIENCE_STEPS = {
@@ -82,6 +84,25 @@ def resolve_legacy_revision(connection: Connection, heads: tuple[str, ...]) -> s
             for index in indexes
             if index["unique"] and index["column_names"] == ["deduplication_key"]
         )
+    branch_tables = {
+        feature
+        for feature in _expected_features(_POSE_STEPS, "0044")
+        | _expected_features(_SCIENCE_STEPS, "0042")
+        | _ECOLOGY_TABLES
+        if "." not in feature
+    }
+    later_columns = {
+        # The revision signature checks these 1.1 additions separately.
+        "computed_metric_definitions": {"definition_kind", "configuration_json"},
+        "computed_metric_results": {"result_kind"},
+        "ecology_identity_image_evidence": {"source_metadata_sha256"},
+    }
+    missing_columns = []
+    for table in sorted(tables & branch_tables):
+        required = set(Base.metadata.tables[table].columns.keys()) - later_columns.get(table, set())
+        actual = {column["name"] for column in schema.get_columns(table)}
+        missing_columns.extend(f"{table}.{name}" for name in sorted(required - actual))
+
     pose_features = observed_features & _expected_features(_POSE_STEPS, "0044")
     science_features = observed_features & _expected_features(_SCIENCE_STEPS, "0042")
 
@@ -94,7 +115,7 @@ def resolve_legacy_revision(connection: Connection, heads: tuple[str, ...]) -> s
     unexpected_schema = "review_queue_item_events" in tables or bool(
         tables & _ECOLOGY_TABLES and not ecology_active
     )
-    if len(legacy_heads) == 1 and not unexpected_schema:
+    if len(legacy_heads) == 1 and not unexpected_schema and not missing_columns:
         if (
             legacy in _SCIENCE_STEPS
             and science_features == _expected_features(_SCIENCE_STEPS, legacy)
@@ -112,4 +133,5 @@ def resolve_legacy_revision(connection: Connection, heads: tuple[str, ...]) -> s
     raise CommandError(
         f"Cannot determine migration lineage for Alembic revision(s) {', '.join(heads)}. "
         "The database schema does not match its recorded ReefVision or ReefPose history."
+        + (f" Missing columns: {', '.join(missing_columns)}." if missing_columns else "")
     )
