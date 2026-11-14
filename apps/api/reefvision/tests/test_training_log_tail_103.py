@@ -97,9 +97,7 @@ def test_log_tail_rejects_path_replaced_after_bounded_read(
             tail_read_finished = True
         return observed
 
-    def stat_after_simulated_swap(
-        path: Path, *args: object, **kwargs: object
-    ) -> os.stat_result:
+    def stat_after_simulated_swap(path: Path, *args: object, **kwargs: object) -> os.stat_result:
         target = replacement if path == log and tail_read_finished else path
         return real_stat(target, *args, **kwargs)
 
@@ -113,6 +111,7 @@ def test_log_tail_rejects_path_replaced_after_bounded_read(
     assert tail_read_finished
     assert log.read_bytes() == original
     assert replacement.read_bytes() == unrelated
+
 
 def test_log_tail_allows_worker_append_during_read(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
