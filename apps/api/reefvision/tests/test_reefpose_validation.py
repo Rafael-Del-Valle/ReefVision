@@ -321,14 +321,14 @@ def test_reference_migration_round_trip(tmp_path, monkeypatch: pytest.MonkeyPatc
     config = _config(path)
     clear_settings_cache()
     try:
-        command.upgrade(config, "0044")
-        command.downgrade(config, "0042")
+        command.upgrade(config, "reefpose_0044")
+        command.downgrade(config, "reefpose_0042")
         with sqlite3.connect(path) as database:
             tables = {row[0] for row in database.execute("SELECT name FROM sqlite_master")}
             assert "reefpose_references" not in tables
             assert "reefpose_heldout_locks" not in tables
             assert "pose_measurement_runs" in tables
-        command.upgrade(config, "0044")
+        command.upgrade(config, "reefpose_0044")
         with sqlite3.connect(path) as database:
             assert database.execute("SELECT count(*) FROM reefpose_references").fetchone() == (0,)
             assert database.execute("SELECT count(*) FROM reefpose_heldout_locks").fetchone() == (

@@ -1,7 +1,7 @@
 """Add anatomical measurement and biological event runs.
 
-Revision ID: 0042
-Revises: 0041
+Revision ID: reefpose_0042
+Revises: reefpose_0041
 """
 
 from collections.abc import Sequence
@@ -9,8 +9,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0042"
-down_revision: str | None = "0041"
+revision: str = "reefpose_0042"
+down_revision: str | None = "reefpose_0041"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

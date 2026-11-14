@@ -1,6 +1,6 @@
 """Add stable-ID anatomical definitions to pose schema revisions.
 
-Revision ID: 0038
+Revision ID: reefpose_0038
 Revises: 0037
 """
 
@@ -9,7 +9,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0038"
+revision: str = "reefpose_0038"
 down_revision: str | None = "0037"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

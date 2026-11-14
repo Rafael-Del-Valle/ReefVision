@@ -14,12 +14,14 @@ from uuid import uuid4
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
+from alembic.util import CommandError
 from sqlalchemy import Engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from reefvision import __version__
 from reefvision.config import Settings
+from reefvision.db.migration_lineage import resolve_legacy_revision
 from reefvision.db.models import Job
 from reefvision.desktop import resolve_alembic_paths
 from reefvision.domain.errors import NotFoundError, ValidationError
@@ -332,21 +334,39 @@ class SystemService:
         database_path = self._database_path()
         database_exists = bool(database_path and database_path.is_file())
         with self.engine.connect() as connection:
-            context = MigrationContext.configure(connection)
-            current_revision = context.get_current_revision()
+            current_heads = MigrationContext.configure(connection).get_current_heads()
+            try:
+                alias = resolve_legacy_revision(connection, current_heads)
+            except CommandError:
+                recognized = False
+                applied = set()
+            else:
+                effective_heads = (alias,) if alias is not None else current_heads
+                recognized = all(head in ordered_revisions for head in effective_heads)
+                applied = (
+                    {
+                        revision.revision
+                        for revision in script.iterate_revisions(
+                            effective_heads, "base", inclusive=True
+                        )
+                    }
+                    if effective_heads and recognized
+                    else set()
+                )
 
-        if current_revision == head_revision:
-            status: SchemaStatus = "up_to_date"
+        current_revision = current_heads[0] if len(current_heads) == 1 else None
+        if not recognized:
+            status: SchemaStatus = "database_newer_than_code"
             pending = []
-        elif current_revision is None:
+        elif not current_heads:
             status = "uninitialized"
             pending = ordered_revisions
-        elif current_revision in ordered_revisions:
-            status = "migration_required"
-            pending = ordered_revisions[ordered_revisions.index(current_revision) + 1 :]
-        else:
-            status = "database_newer_than_code"
+        elif current_revision == head_revision:
+            status = "up_to_date"
             pending = []
+        else:
+            status = "migration_required"
+            pending = [revision for revision in ordered_revisions if revision not in applied]
 
         return MigrationSnapshot(
             schema_status=status,

@@ -82,7 +82,7 @@ def test_0041_upgrade_and_downgrade_preserve_existing_video_tracks(
     monkeypatch.setenv("REEFVISION_DATABASE_URL", f"sqlite:///{database_path.as_posix()}")
     clear_settings_cache()
     config = _alembic_config(database_path)
-    command.upgrade(config, "0040")
+    command.upgrade(config, "reefpose_0040")
 
     with sqlite3.connect(database_path) as connection:
         project_id = "00000000-0000-0000-0000-000000000001"
@@ -119,7 +119,7 @@ def test_0041_upgrade_and_downgrade_preserve_existing_video_tracks(
         )
         connection.commit()
 
-    command.upgrade(config, "0041")
+    command.upgrade(config, "reefpose_0041")
     with sqlite3.connect(database_path) as connection:
         tables = {
             row[0]
@@ -130,7 +130,7 @@ def test_0041_upgrade_and_downgrade_preserve_existing_video_tracks(
             "SELECT id, revision FROM video_tracks WHERE id = ?", (track_id,)
         ).fetchone() == (track_id, 1)
 
-    command.downgrade(config, "0040")
+    command.downgrade(config, "reefpose_0040")
     with sqlite3.connect(database_path) as connection:
         tables = {
             row[0]

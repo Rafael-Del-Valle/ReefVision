@@ -1,7 +1,7 @@
 """Add multi-animal pose identity tracking records.
 
-Revision ID: 0041
-Revises: 0040
+Revision ID: reefpose_0041
+Revises: reefpose_0040
 """
 
 from collections.abc import Sequence
@@ -9,8 +9,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0041"
-down_revision: str | None = "0040"
+revision: str = "reefpose_0041"
+down_revision: str | None = "reefpose_0040"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -79,7 +79,7 @@ def test_0042_round_trip_preserves_phase4_identity_run(tmp_path: Path, monkeypat
     monkeypatch.setenv("REEFVISION_DATABASE_URL", f"sqlite:///{path.as_posix()}")
     clear_settings_cache()
     config = _config(path)
-    command.upgrade(config, "0041")
+    command.upgrade(config, "reefpose_0041")
 
     with sqlite3.connect(path) as connection:
         project_id, video_id, run_id = "p" * 36, "v" * 36, "r" * 36
@@ -97,14 +97,14 @@ def test_0042_round_trip_preserves_phase4_identity_run(tmp_path: Path, monkeypat
         )
         connection.commit()
 
-    for target in ("0042", "0041", "0042"):
-        (command.upgrade if target == "0042" else command.downgrade)(config, target)
+    for target in ("reefpose_0042", "reefpose_0041", "reefpose_0042"):
+        (command.upgrade if target == "reefpose_0042" else command.downgrade)(config, target)
         with sqlite3.connect(path) as connection:
             tables = {
                 row[0]
                 for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
             }
-            assert (tables >= EXPECTED_TABLES) is (target == "0042")
+            assert (tables >= EXPECTED_TABLES) is (target == "reefpose_0042")
             assert connection.execute(
                 "SELECT revision FROM pose_identity_association_runs WHERE id=?", (run_id,)
             ).fetchone() == (3,)
