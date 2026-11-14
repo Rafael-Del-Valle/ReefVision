@@ -199,7 +199,6 @@ def test_positive_edge_cost_roundoff_does_not_claim_exact_route_multiplicity() -
         assert route["length_m"] == pytest.approx(2e7)
 
 
-
 def test_unrelated_overflowing_detour_does_not_discard_finite_route() -> None:
     # The direct route is representable, but expanding the destination's
     # reverse edge would produce 1e308 + 1e308 == infinity. That dominated
