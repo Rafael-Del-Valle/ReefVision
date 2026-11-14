@@ -37,6 +37,16 @@ DISCONNECTED_ZERO_EDGE_GEOMETRY = {
 }
 
 
+# A distant zero-length edge shares the connected component with two clean
+# selected routes. Unassessable uniqueness must also appear in QC warnings.
+CONNECTED_ZERO_EDGE_GEOMETRY = {
+    **GEOMETRY,
+    "vertices": [*GEOMETRY["vertices"], [1.0, 1.0, 0.0]],
+    "faces": [*GEOMETRY["faces"], [2, 3, 4]],
+    "surface_path_vertex_pairs": [[0, 1], [0, 3]],
+}
+
+
 def test_tied_mesh_routes_are_not_reported_as_unique_anatomical_paths() -> None:
     paths = mesh_edge_paths(
         points=[tuple(point) for point in GEOMETRY["vertices"]],
@@ -83,6 +93,75 @@ def test_zero_length_edges_withhold_route_uniqueness_instead_of_guessing() -> No
     assert all(
         "multiple_equal_cost_mesh_routes" not in route["path_qc_warnings"] for route in paths
     )
+
+
+
+def test_component_zero_edge_qc_is_visible_in_standalone_and_saved_graph(
+    client: TestClient,
+) -> None:
+    geometry = CONNECTED_ZERO_EDGE_GEOMETRY
+    direct = mesh_edge_paths(
+        points=[tuple(point) for point in geometry["vertices"]],
+        faces=geometry["faces"],
+        pairs=geometry["surface_path_vertex_pairs"],
+        scale=0.02,
+        scale_uncertainty=0.1,
+    )
+    assert direct is not None
+    for route in direct:
+        assert route["status"] == "connected"
+        assert route["shortest_route_alternatives_status"] == "unassessable_zero_length_edges"
+        assert "zero_length_mesh_edge_in_connected_component" in route["path_qc_warnings"]
+        assert "zero_length_edge_on_path" not in route["path_qc_warnings"]
+        assert "multiple_equal_cost_mesh_routes" not in route["path_qc_warnings"]
+
+    project_id = str(create_project(client, "Component-wide route ambiguity QC")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=geometry)
+    assert standalone.status_code == 200, standalone.text
+    measured = standalone.json()
+    assert measured["surface_edge_paths"] == direct
+    assert measured["measurement_status"] == "caller_supplied_unverified"
+
+    graph = {
+        "graph_id": "component-zero-edge-qc-v14",
+        "name": "Provisional zero-edge connected-component QC",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": geometry},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["surface_edge_paths"] == direct
+    assert artifact["provenance"] == measured["provenance"]
+    assert artifact["provenance"]["calibration_verified"] is False
 
 
 def test_zero_length_edges_in_other_components_do_not_hide_shortest_route_ties() -> None:
