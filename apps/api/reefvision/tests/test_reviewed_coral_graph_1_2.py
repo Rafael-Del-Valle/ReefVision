@@ -1,11 +1,15 @@
 from typing import Any, cast
 from uuid import uuid4
 
+import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import reefvision.jobs.inference as inference_module
 from reefvision.config import Settings
+from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.storage.datasets import canonical_json_sha256
-from reefvision.tests.test_annotations import import_one
+from reefvision.tests.test_annotations import create_project, import_one
 from reefvision.tests.test_connected_branch_preview_api_1_2 import _save_calibrated_analysis
 from reefvision.tests.test_scientific_project_exchange import (
     database_counts,
@@ -13,7 +17,140 @@ from reefvision.tests.test_scientific_project_exchange import (
     import_archive,
     rewrite,
 )
+from reefvision.tests.test_segmentation_phase3 import FakeSegmentationProvider, _seed_segmenter
 from reefvision.tests.test_workflow_connected_branch_preview_1_2 import _run
+
+
+def test_registered_segmenter_requires_review_before_publishing_coral_branches(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, test_settings: Settings
+) -> None:
+    project = create_project(client, "Segmentation-to-coral graph")
+    project_id = project["id"]
+    image_id = import_one(client, project_id)["successful"][0]["image_id"]
+    label_id = project["label_classes"][0]["id"]
+    model = _seed_segmenter(client, project_id, label_id)
+    monkeypatch.setattr(
+        inference_module, "segmentation_provider_for_name", lambda _: FakeSegmentationProvider()
+    )
+    graph = {
+        "graph_id": "registered-segmentation-coral",
+        "name": "Review model mask then extract branch candidates",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "images", "node_type": "project_images"},
+            {
+                "node_id": "model",
+                "node_type": "registered_model_source",
+                "parameters": {"model_id": model.id},
+            },
+            {
+                "node_id": "segment",
+                "node_type": "segmentation_inference",
+                "parameters": {"device": "cpu"},
+            },
+            {"node_id": "review", "node_type": "mask_review_gate"},
+            {"node_id": "branches", "node_type": "ecology_coral_skeleton"},
+        ],
+        "edges": [
+            {
+                "edge_id": f"{source}-{target}",
+                "source_node_id": source,
+                "source_port_id": output,
+                "target_node_id": target,
+                "target_port_id": port,
+            }
+            for source, output, target, port in (
+                ("project", "project", "images", "project"),
+                ("project", "project", "model", "project"),
+                ("images", "images", "segment", "images"),
+                ("model", "model", "segment", "model"),
+                ("segment", "proposals", "review", "proposals"),
+                ("review", "masks", "branches", "mask"),
+            )
+        ],
+    }
+    waiting = _run(client, project_id, graph)
+    assert waiting["run"]["status"] == "waiting_for_review", waiting
+    assert not any(row["data_type"] == "coral_skeleton_candidate" for row in waiting["artifacts"])
+    proposals = client.get(f"/api/v1/images/{image_id}/prediction-proposals").json()["items"]
+    assert len(proposals) == 1 and proposals[0]["review_status"] == "pending"
+    accepted = client.post(
+        f"/api/v1/prediction-proposals/{proposals[0]['id']}/accept",
+        json={"label_class_id": label_id},
+    )
+    assert accepted.status_code == 200, accepted.text
+    mask = accepted.json()["mask_annotation"]
+    mask_id = mask["id"]
+    session = client.get(f"/api/v1/images/{image_id}/annotations").json()
+    saved = client.put(
+        f"/api/v1/images/{image_id}/annotations",
+        json={
+            "base_revision": session["image"]["annotation_revision"],
+            "annotation_status": "reviewed",
+            "annotations": [],
+            "mask_annotations": [
+                {
+                    "id": mask_id,
+                    "label_class_id": label_id,
+                    "points": [{"x": x, "y": y} for x, y in mask["polygon_json"]],
+                }
+            ],
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    review = next(row for row in waiting["nodes"] if row["node_id"] == "review")
+    resumed = client.post(
+        f"/api/v1/workflow-node-runs/{review['id']}/resume-review",
+        json={"reviewed_by": "Scientist", "note": "Checked simulated colony outline"},
+    )
+    assert resumed.status_code == 202, resumed.text
+    app = cast(FastAPI, client.app)
+    run = waiting["run"]
+    assert process_workflow_run_job(app.state.settings, app.state.session_factory, run["job_id"])
+    detail = client.get(f"/api/v1/workflow-runs/{run['id']}").json()
+    assert detail["run"]["status"] == "succeeded", detail
+    proposal = next(
+        row["payload_json"]
+        for row in detail["artifacts"]
+        if row["data_type"] == "coral_skeleton_candidate"
+    )
+    assert proposal["mask_annotation_id"] == mask_id
+    assert proposal["evidence_level"] == "proposal_unverified"
+    assert proposal["source_model_id"] == model.id
+    assert proposal["source_model_sha256"] == model.sha256
+    endpoint = f"/api/v1/projects/{project_id}/ecology"
+    colony = post(
+        client,
+        f"{endpoint}/organisms",
+        {"organism_key": "marked", "kind": "colony", "reason": "Fixture"},
+    )
+    graph_record = post(
+        client,
+        f"{endpoint}/coral-graphs",
+        {
+            "identity_revision_id": colony["id"],
+            "analysis_id": proposal["analysis_id"],
+            "decision": "accepted",
+            "reviewer": "Scientist",
+            "reason": "Checked centerline against the reviewed mask",
+            "observed_at": "2026-01-01T00:00:00Z",
+        },
+    )
+    assert graph_record["snapshot"]["edges"]
+    assert graph_record["snapshot"]["source_model_sha256"] == model.sha256
+    result = client.get(f"{endpoint}/coral-graphs/{graph_record['id']}/measurements.csv")
+    assert result.status_code == 200, result.text
+    assert graph_record["snapshot"]["edges"][0]["id"] in result.text
+    assert model.sha256 in result.text
+    copied = import_archive(client, export_archive(client, test_settings, project_id))
+    assert copied.status_code == 201, copied.text
+    imported = copied.json()
+    copied_ids = imported["package"]["options_json"]["id_map"]
+    restored = client.get(
+        f"/api/v1/projects/{imported['project_id']}/ecology/coral-graphs/{copied_ids[graph_record['id']]}"
+    )
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["snapshot"] == graph_record["snapshot"]
 
 
 def test_saved_workflow_extracts_calibrated_branch_candidates_from_verified_mask(

@@ -300,7 +300,12 @@ def _snapshot_refs(name: str, row: dict[str, Any]) -> set[str]:
     if name == "coral_graph_revisions":
         graph = GraphSnapshot.model_validate(value)
         profile = graph.calibration.profile_source_image_id if graph.calibration else None
-        return {graph.image_id, graph.mask_annotation_id, *([profile] if profile else [])}
+        return {
+            graph.image_id,
+            graph.mask_annotation_id,
+            *([profile] if profile else []),
+            *([graph.source_model_id] if graph.source_model_id else []),
+        }
     if name == "coral_branch_correspondence_revisions":
         CorrespondenceSnapshot.model_validate(value)
     if name == "coral_growth_records":
@@ -354,6 +359,19 @@ def _validate_coral_lineage(by_section: dict[str, dict[Any, dict[str, Any]]]) ->
                 "Reviewed coral graph source does not match the exchange snapshot"
             )
         validated = GraphSnapshot.model_validate(snapshot)
+        if validated.source_model_id:
+            mask = by_section.get("mask_annotations", {}).get(analysis["mask_annotation_id"])
+            provenance = (mask or {}).get("provenance_json") or {}
+            if (
+                mask
+                and mask["revision"] == analysis["mask_revision"]
+                and (
+                    mapping.get(validated.source_model_id, validated.source_model_id)
+                    != provenance.get("source_model_id")
+                    or validated.source_model_sha256 != provenance.get("model_checksum")
+                )
+            ):
+                raise ValidationError("Reviewed coral graph model differs from its source mask")
         validate_graph_snapshot(
             validated,
             width=image["width_px"],

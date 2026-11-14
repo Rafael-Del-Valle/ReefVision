@@ -117,6 +117,8 @@ class GraphSnapshot(BaseModel):
     analysis_sha256: str
     analysis_algorithm: str
     analysis_algorithm_version: str
+    source_model_id: str | None = None
+    source_model_sha256: str | None = None
     observed_at: AwareDatetime
     nodes: list[ConnectedBranchNodeResponse]
     edges: list[ConnectedBranchEdgeResponse]

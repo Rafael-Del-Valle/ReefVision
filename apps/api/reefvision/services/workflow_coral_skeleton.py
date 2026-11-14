@@ -116,6 +116,8 @@ def execute_coral_skeleton(
                 "analysis_id": result.id,
                 "mask_annotation_id": result.mask_annotation_id,
                 "image_id": result.image_id,
+                "source_model_id": (mask.provenance_json or {}).get("source_model_id"),
+                "source_model_sha256": (mask.provenance_json or {}).get("model_checksum"),
                 "analysis_sha256": result.result_sha256,
                 "mask_sha256": result.input_mask_sha256,
                 "mask_revision": result.mask_revision,

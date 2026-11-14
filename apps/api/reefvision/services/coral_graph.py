@@ -470,6 +470,8 @@ class CoralGraphService:
             analysis_sha256=stored.result_sha256,
             analysis_algorithm=stored.algorithm,
             analysis_algorithm_version=stored.algorithm_version,
+            source_model_id=(mask.provenance_json or {}).get("source_model_id"),
+            source_model_sha256=(mask.provenance_json or {}).get("model_checksum"),
             observed_at=payload.observed_at,
             nodes=[
                 ConnectedBranchNodeResponse(
