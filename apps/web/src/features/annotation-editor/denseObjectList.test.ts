@@ -217,14 +217,7 @@ describe("dense object-browser window", () => {
         return Reflect.get(target, property, receiver);
       },
     });
-    const rows = boundedDenseObjectRows(
-      annotations,
-      [],
-      200,
-      [],
-      [],
-      18_800,
-    );
+    const rows = boundedDenseObjectRows(annotations, [], 200, [], [], 18_800);
     expect(rows).toHaveLength(200);
     expect(rows[0].position).toBe(18_800);
     expect(rows[199].position).toBe(18_999);
