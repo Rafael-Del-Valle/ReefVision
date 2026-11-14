@@ -329,6 +329,28 @@ reconstruction, localization, topology or inter-observer uncertainty. A 100%
 relative scale uncertainty yields [0, 2L] for representable nominal length L.
 Independent anatomical and calibration acceptance remains mandatory.
 
+### Segment and waypoint scale-only uncertainty for selected traces
+
+Each selected trace now records `segment_length_scale_only_intervals_m`
+and `cumulative_length_scale_only_intervals_m` alongside its existing
+total-length interval. Arrays align respectively with consecutive triangle
+edges and with all waypoints (including the initial zero). For nominal
+distance `L` and one shared relative calibration-scale uncertainty `u`,
+each interval is `[L(1-u), L(1+u)]`. With `u = 0`, all intervals are
+exact-width; with `u = 1`, representable bounds span `[0, 2L]`.
+If calibration uncertainty was not supplied, both arrays are `null`
+rather than made-up exact or confidence limits.
+
+Because the **same scale factor** applies to every segment and waypoint,
+these intervals are correlated; they are **not** independent errors that
+can be combined in quadrature. They do not include edge-selection,
+photogrammetry, anatomy, survey registration or reviewer uncertainty.
+They accompany the original source geometry and explicitly unverified
+human-review status, not a verified coral skeletal centerline. The
+standalone API and executable persisted typed Workflow Builder graph share
+the engine, and scientific regression cases check per-segment/waypoint
+bounds, unknown/zero/100% uncertainty, artifact equality and provenance.
+
 Numerical precision QC: a positive calibrated segment can be too small to
 increment an already large cumulative floating-point distance. In that case
 `surface_trace_cumulative_distance_resolution_loss` flags the unresolved
