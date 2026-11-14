@@ -116,6 +116,7 @@ class OperationPlan:
     # Bind approval to the actual class memberships and mutable review state,
     # not just to the unchanged IDs of QC and review-queue records.
     review_reference_evidence: dict[str, list[dict[str, Any]]]
+    observation_reference_evidence: dict[str, list[dict[str, Any]]]
 
 
 class ClassOperationsService:
@@ -488,6 +489,54 @@ class ClassOperationsService:
             compatibility_impacts=compatibility_impacts,
             warnings=warnings,
             blockers=blockers,
+            observation_reference_evidence={
+                "annotations": [
+                    {
+                        "id": annotation.id,
+                        "image_id": annotation.image_id,
+                        "revision": annotation.revision,
+                        "bounds_px": [
+                            annotation.x_min,
+                            annotation.y_min,
+                            annotation.x_max,
+                            annotation.y_max,
+                        ],
+                    }
+                    for annotation in sorted(annotations, key=lambda item: item.id)
+                ],
+                "prediction_proposals": [
+                    {
+                        "id": proposal.id,
+                        "image_id": proposal.image_id,
+                        "model_id": proposal.model_id,
+                        "model_checksum": proposal.model_checksum,
+                        "review_status": proposal.review_status,
+                        "predicted_label": proposal.predicted_label,
+                        "predicted_index": proposal.predicted_index,
+                        "confidence": proposal.confidence,
+                        "geometry_kind": proposal.geometry_kind,
+                        "bounds_px": [
+                            proposal.x_min,
+                            proposal.y_min,
+                            proposal.x_max,
+                            proposal.y_max,
+                        ],
+                        "polygon_sha256": (
+                            hashlib.sha256(
+                                json.dumps(
+                                    proposal.polygon_json,
+                                    sort_keys=True,
+                                    separators=(",", ":"),
+                                ).encode("utf-8")
+                            ).hexdigest()
+                            if proposal.polygon_json is not None
+                            else None
+                        ),
+                        "mask_content_sha256": proposal.mask_content_sha256,
+                    }
+                    for proposal in sorted(prediction_proposals, key=lambda item: item.id)
+                ],
+            },
             review_reference_evidence={
                 "quality_control_issues": [
                     {
@@ -546,6 +595,7 @@ class ClassOperationsService:
             "warnings": plan.warnings,
             "blockers": plan.blockers,
             "review_reference_evidence": plan.review_reference_evidence,
+            "observation_reference_evidence": plan.observation_reference_evidence,
         }
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
