@@ -650,6 +650,9 @@ class ProjectService:
                 "Review these records before merging; automatic reassignment is not supported."
             )
         affected_counts: dict[str, int] = defaultdict(int)
+        # A merge archives the source class; researcher-reviewed observations
+        # must remain tied to their original biological interpretation.
+        retained_review_kinds: set[str] = set()
 
         annotations = list(
             self.session.scalars(
@@ -686,6 +689,9 @@ class ProjectService:
             )
         )
         for prediction in predictions:
+            if prediction.review_status != "pending":
+                retained_review_kinds.add("reviewed prediction proposals")
+                continue
             prediction.label_class_id = target_class.id
             prediction.was_edited = True
             affected_counts["prediction_proposals"] += 1
@@ -700,6 +706,9 @@ class ProjectService:
         for issue in quality_control_issues:
             if source_class.id not in issue.class_ids_json:
                 continue
+            if issue.status not in {"open", "acknowledged"}:
+                retained_review_kinds.add("resolved quality-control issues")
+                continue
             issue.class_ids_json = _replace_class_id_list(
                 issue.class_ids_json, source_class.id, target_class.id
             )
@@ -712,6 +721,9 @@ class ProjectService:
         )
         for item in review_queue_items:
             if source_class.id not in item.label_class_ids_json:
+                continue
+            if item.review_state not in {"pending", "in_progress"}:
+                retained_review_kinds.add("completed review-queue items")
                 continue
             item.label_class_ids_json = _replace_class_id_list(
                 item.label_class_ids_json, source_class.id, target_class.id
@@ -747,5 +759,16 @@ class ProjectService:
                 if count > 0
             ],
             immutable_reference_counts=immutable_reference_counts,
-            warnings=source_usage.compatibility_warnings,
+            warnings=[
+                *source_usage.compatibility_warnings,
+                *(
+                    [
+                        "The archived source class retains historical scientific references: "
+                        + ", ".join(sorted(retained_review_kinds))
+                        + ". These records were not reclassified."
+                    ]
+                    if retained_review_kinds
+                    else []
+                ),
+            ],
         )
