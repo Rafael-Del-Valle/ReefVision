@@ -83,7 +83,7 @@ test("saves and reloads projected polygon coverage against the local API", async
   expect(calibration.ok(), await calibration.text()).toBeTruthy();
 
   await page.evaluate(() =>
-    localStorage.setItem("reefvision.onboarding.dismissed.1.1.0", "true"),
+    localStorage.setItem("reefvision.onboarding.dismissed.1.2.0", "true"),
   );
   await page.reload();
   await page.getByRole("button", { name: new RegExp(name) }).click();

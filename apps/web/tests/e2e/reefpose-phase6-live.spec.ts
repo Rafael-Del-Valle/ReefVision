@@ -137,7 +137,7 @@ test("freezes independent references and reviews an actual validation job", asyn
     ],
   };
   await page.addInitScript(() =>
-    localStorage.setItem("reefvision.onboarding.dismissed.1.0.3", "true"),
+    localStorage.setItem("reefvision.onboarding.dismissed.1.2.0", "true"),
   );
   await page.goto("http://127.0.0.1:5173/");
   await page.getByRole("button", { name: `Open ${projectName}` }).click();
