@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+from collections import defaultdict
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from math import isclose
 from typing import Annotated, Any, Literal
@@ -17,6 +20,10 @@ from pydantic import (
     model_validator,
 )
 
+from reefvision.domain.ecology_unit_coverage import (
+    summarize_planned_sampling_dates,
+    summarize_planned_sampling_effort,
+)
 from reefvision.domain.errors import ValidationError
 from reefvision.domain.experimental_unit_policy import (
     require_ecological_unit_id,
@@ -25,6 +32,8 @@ from reefvision.domain.experimental_unit_policy import (
 from reefvision.schemas.longitudinal_monitoring import (
     ExperimentalUnitSummary,
     LongitudinalChange,
+    PlannedSamplingDateCoverage,
+    PlannedSamplingEffort,
     PopulationUnitSummary,
 )
 from reefvision.storage.datasets import canonical_json_sha256
@@ -41,12 +50,51 @@ class GrowthSource(BaseModel):
     exclusion_reason: Text | None = None
 
 
+class GrowthPlanUnit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    experimental_unit_id: Text
+    organism_keys: list[Text] = Field(min_length=1, max_length=1000)
+    dates: list[date] = Field(min_length=2, max_length=1000)
+
+    @field_validator("dates", mode="before")
+    @classmethod
+    def explicit_utc_dates(cls, value: object) -> object:
+        if not isinstance(value, list) or any(
+            not isinstance(day, str) or re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) is None
+            for day in value
+        ):
+            raise ValueError("Planned sampling dates must be ISO YYYY-MM-DD strings")
+        return value
+
+    @model_validator(mode="after")
+    def distinct_dates(self) -> GrowthPlanUnit:
+        if len(self.dates) != len(set(self.dates)):
+            raise ValueError("Planned dates must be distinct within a unit")
+        return self
+
+
 class GrowthSelection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["growth"]
     metric: Metric
-    sources: list[GrowthSource] = Field(min_length=2, max_length=1000)
+    sources: list[GrowthSource] = Field(default_factory=list, max_length=1000)
+    sampling_plan: list[GrowthPlanUnit] | None = Field(default=None, min_length=1, max_length=1000)
+
+    @model_validator(mode="after")
+    def validate_plan(self) -> GrowthSelection:
+        if self.sampling_plan is None:
+            if len(self.sources) < 2:
+                raise ValueError("Growth without a plan requires at least two selected sources")
+            return self
+        units = [row.experimental_unit_id for row in self.sampling_plan]
+        organisms = [key for row in self.sampling_plan for key in row.organism_keys]
+        if len(set(units)) != len(units) or len(set(organisms)) != len(organisms):
+            raise ValueError("Each unit and organism can occur only once in the sampling plan")
+        if sum(len(row.organism_keys) * len(row.dates) for row in self.sampling_plan) > 10_000:
+            raise ValueError("A sampling plan can contain up to 10,000 planned organism visits")
+        return self
 
 
 class AbundanceSource(BaseModel):
@@ -146,12 +194,93 @@ class GrowthObservation(BaseModel):
     unit: str
 
 
+def growth_comparability(rows: list[GrowthObservation]) -> str | None:
+    if len({row.unit for row in rows}) != 1:
+        return "incomparable_units"
+    if len({row.measurement_method for row in rows}) != 1:
+        return "incomparable_calibration_methods"
+    if len({row.observed_at.astimezone(UTC).date() for row in rows}) != len(rows):
+        return "duplicate_utc_sampling_date"
+    return None
+
+
+@dataclass(slots=True)
+class ScheduledGrowthCoverage:
+    experimental_unit_id: str
+    metric_name: str
+    expected_sampling_dates: list[date]
+    expected_organism_count: int
+    observed_organism_count: int
+    observed_sampling_dates_by_organism: dict[str, set[date]]
+    missing_scheduled_dates_by_organism: dict[str, set[date]]
+    unobserved_organism_ids: list[str]
+
+
+def growth_sampling_coverage(
+    selection: GrowthSelection, observations: list[GrowthObservation]
+) -> tuple[list[PlannedSamplingEffort], list[PlannedSamplingDateCoverage]]:
+    plan = selection.sampling_plan or []
+    if not plan:
+        return [], []
+    roster = {key: unit for unit in plan for key in unit.organism_keys}
+    calendar = {unit.experimental_unit_id: set(unit.dates) for unit in plan}
+    grouped: dict[str, list[GrowthObservation]] = defaultdict(list)
+    for row in observations:
+        unit = roster.get(row.organism_key)
+        if (
+            unit is None
+            or row.experimental_unit_id != unit.experimental_unit_id
+            or row.observed_at.astimezone(UTC).date() not in calendar[unit.experimental_unit_id]
+        ):
+            raise ValueError(
+                "A selected growth observation is outside the planned unit, roster or UTC calendar"
+            )
+        grouped[row.organism_key].append(row)
+    rows = []
+    for unit in plan:
+        observed = {
+            key: {row.observed_at.astimezone(UTC).date() for row in grouped[key]}
+            for key in unit.organism_keys
+            if grouped[key] and growth_comparability(grouped[key]) is None
+        }
+        dates = calendar[unit.experimental_unit_id]
+        rows.append(
+            ScheduledGrowthCoverage(
+                experimental_unit_id=unit.experimental_unit_id,
+                metric_name=selection.metric,
+                expected_sampling_dates=sorted(dates),
+                expected_organism_count=len(unit.organism_keys),
+                observed_organism_count=len(observed),
+                observed_sampling_dates_by_organism=observed,
+                missing_scheduled_dates_by_organism={
+                    key: dates - days for key, days in observed.items()
+                },
+                unobserved_organism_ids=sorted(set(unit.organism_keys) - observed.keys()),
+            )
+        )
+    return (
+        [
+            PlannedSamplingEffort.model_validate(row)
+            for row in summarize_planned_sampling_effort(rows)
+        ],
+        [
+            PlannedSamplingDateCoverage.model_validate(row)
+            for row in summarize_planned_sampling_dates(rows)
+        ],
+    )
+
+
 class GrowthResult(BaseModel):
     kind: Literal["growth"] = "growth"
     observations: list[GrowthObservation]
     changes: list[LongitudinalChange] = Field(default_factory=list)
     unit_summaries: list[ExperimentalUnitSummary] = Field(default_factory=list)
     population_summaries: list[PopulationUnitSummary] = Field(default_factory=list)
+    planned_sampling_effort: list[PlannedSamplingEffort] = Field(default_factory=list)
+    planned_sampling_date_coverage: list[PlannedSamplingDateCoverage] = Field(default_factory=list)
+    sampling_identity_revisions: dict[str, Annotated[int, Field(ge=1, strict=True)]] = Field(
+        default_factory=dict
+    )
     exclusions: list[SourceExclusion]
 
 
@@ -219,9 +348,9 @@ class AbundanceResult(BaseModel):
 
 class EcologyAnalysisSnapshot(BaseModel):
     schema_version: Literal["reviewed-ecology-analysis-0001"] = "reviewed-ecology-analysis-0001"
-    method_version: Literal["reviewed-ecology-descriptive-0001"] = (
-        "reviewed-ecology-descriptive-0001"
-    )
+    method_version: Literal[
+        "reviewed-ecology-descriptive-0001", "reviewed-ecology-scheduled-0001"
+    ] = "reviewed-ecology-descriptive-0001"
     evidence_level: Literal["scientist_confirmed_project_evidence"] = (
         "scientist_confirmed_project_evidence"
     )
@@ -235,7 +364,36 @@ class EcologyAnalysisSnapshot(BaseModel):
     def result_matches_selection(self) -> EcologyAnalysisSnapshot:
         if self.selection.kind != self.result.kind:
             raise ValueError("Ecological analysis result kind disagrees with its selection")
+        planned = (
+            isinstance(self.selection, GrowthSelection) and self.selection.sampling_plan is not None
+        )
+        if planned != (self.method_version == "reviewed-ecology-scheduled-0001"):
+            raise ValueError("The ecological analysis method disagrees with its sampling plan")
         if isinstance(self.selection, GrowthSelection) and isinstance(self.result, GrowthResult):
+            roster = {
+                key for unit in self.selection.sampling_plan or [] for key in unit.organism_keys
+            }
+            effort, dates = growth_sampling_coverage(self.selection, self.result.observations)
+            if (
+                self.result.planned_sampling_effort != effort
+                or self.result.planned_sampling_date_coverage != dates
+                or set(self.result.sampling_identity_revisions) != roster
+                or any(
+                    row.identity_revision
+                    != self.result.sampling_identity_revisions[row.organism_key]
+                    for row in self.result.observations
+                    if planned
+                )
+                or any(
+                    summary.experimental_unit_id == row.experimental_unit_id
+                    and row.missing_organism_visits
+                    for row in effort
+                    for summary in self.result.unit_summaries
+                )
+            ):
+                raise ValueError(
+                    "Growth sampling effort disagrees with the reviewed roster or measurements"
+                )
             selected = {
                 row.calibration_evidence_id
                 for row in self.selection.sources

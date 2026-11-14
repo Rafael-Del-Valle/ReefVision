@@ -18,8 +18,19 @@ export interface SurveySource {
   exclusion_reason?: string;
 }
 
+export interface GrowthPlanUnit {
+  experimental_unit_id: string;
+  organism_keys: string[];
+  dates: string[];
+}
+
 export type AnalysisSelection =
-  | { kind: "growth"; metric: Metric; sources: GrowthSource[] }
+  | {
+      kind: "growth";
+      metric: Metric;
+      sources: GrowthSource[];
+      sampling_plan?: GrowthPlanUnit[] | null;
+    }
   | { kind: "abundance"; class_id: string; sources: SurveySource[] };
 
 export interface AnalysisCreate {
@@ -58,6 +69,18 @@ export type AnalysisResult =
         unit: string;
         independent_unit_count: number;
         mean_unit_absolute_change: number;
+      }[];
+      planned_sampling_effort?: {
+        experimental_unit_id: string;
+        expected_organism_visits: number;
+        observed_organism_visits: number;
+        missing_organism_visits: number;
+      }[];
+      planned_sampling_date_coverage?: {
+        experimental_unit_id: string;
+        sampling_date: string;
+        observed_organism_ids: string[];
+        missing_organism_ids: string[];
       }[];
       exclusions: Exclusion[];
     }

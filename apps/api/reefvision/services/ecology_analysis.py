@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, date
 from math import hypot, isfinite
@@ -52,6 +51,8 @@ from reefvision.schemas.ecology_analysis import (
     Selection,
     SourceExclusion,
     ecology_analysis_source_ids,
+    growth_comparability,
+    growth_sampling_coverage,
     validate_ecology_analysis_snapshot,
 )
 from reefvision.schemas.longitudinal_monitoring import (
@@ -278,6 +279,33 @@ class EcologyAnalysisService:
                 raise ValidationError("Select only one measurement per organism and image")
             occupied.add(key)
             observations.append(observation)
+        sampling_identity_revisions = {}
+        if selection.sampling_plan is not None:
+            identities = EcologyIdentityService(self.session)._latest(project_id)
+            for unit in selection.sampling_plan:
+                for organism_key in unit.organism_keys:
+                    identity = identities.get(organism_key)
+                    if (
+                        identity is None
+                        or identity.experimental_unit_id != unit.experimental_unit_id
+                    ):
+                        raise ValidationError(
+                            "Each planned organism must belong to its declared experimental unit"
+                        )
+                    sampling_identity_revisions[organism_key] = identity.revision
+        try:
+            effort, coverage = growth_sampling_coverage(selection, observations)
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+        incomplete_planned_units = {
+            row.experimental_unit_id for row in effort if row.missing_organism_visits
+        }
+        exclusions.extend(
+            SourceExclusion(
+                source=unit, reason="missing_scheduled_observations", source_kind="unit"
+            )
+            for unit in sorted(incomplete_planned_units)
+        )
         grouped: dict[str, list[GrowthObservation]] = defaultdict(list)
         for row in observations:
             grouped[row.organism_key].append(row)
@@ -285,27 +313,28 @@ class EcologyAnalysisService:
         comparable: list[GrowthObservation] = []
         complete_organisms: set[str] = set()
         for organism_key, repeats in grouped.items():
-            if len(repeats) < 2:
-                reason = "missing_follow_up"
-            elif len({row.unit for row in repeats}) != 1:
-                reason = "incomparable_units"
-            elif len({row.measurement_method for row in repeats}) != 1:
-                reason = "incomparable_calibration_methods"
-            elif len({row.observed_at.date() for row in repeats}) != len(repeats):
-                reason = "duplicate_utc_sampling_date"
-            else:
+            reason = "missing_follow_up" if len(repeats) < 2 else growth_comparability(repeats)
+            if reason is None:
                 comparable.extend(repeats)
                 complete_organisms.add(organism_key)
                 continue
             exclusions.append(
                 SourceExclusion(source=organism_key, reason=reason, source_kind="organism")
             )
+        result = GrowthResult(
+            observations=observations,
+            exclusions=exclusions,
+            planned_sampling_effort=effort,
+            planned_sampling_date_coverage=coverage,
+            sampling_identity_revisions=sampling_identity_revisions,
+        )
         if len(comparable) < 2:
-            return GrowthResult(observations=observations, exclusions=exclusions)
+            return result
         units = {row.experimental_unit_id for row in comparable}
         # A project with partial declarations has organism endpoints only.
-        use_units = None not in units and not any(
-            row.source_kind == "calibration" for row in exclusions
+        use_units = None not in units and (
+            selection.sampling_plan is not None
+            or not any(row.source_kind == "calibration" for row in exclusions)
         )
         if not use_units and any(unit is not None for unit in units):
             exclusions.append(
@@ -343,7 +372,7 @@ class EcologyAnalysisService:
             row.experimental_unit_id
             for row in observations
             if row.organism_key not in complete_organisms
-        }
+        } | incomplete_planned_units
         unit_summaries = [
             row
             for row in calculation.unit_summaries
@@ -353,13 +382,10 @@ class EcologyAnalysisService:
             SourceExclusion(source=row.experimental_unit_id, reason=row.reason, source_kind="unit")
             for row in calculation.excluded_units
         )
-        return GrowthResult(
-            observations=observations,
-            changes=calculation.changes,
-            unit_summaries=unit_summaries,
-            population_summaries=summarize_population_units(unit_summaries),
-            exclusions=exclusions,
-        )
+        result.changes = calculation.changes
+        result.unit_summaries = unit_summaries
+        result.population_summaries = summarize_population_units(unit_summaries)
+        return result
 
     def _abundance_visit(
         self, image: ImageAsset, class_id: str, item: AbundanceSource, unit_type: str
@@ -559,9 +585,8 @@ class EcologyAnalysisService:
         mapping = row.source_id_map_json
         if set(mapping) != source_ids or len(set(mapping.values())) != len(mapping):
             return False
-        saved = deepcopy(row.snapshot_json)
         selection = snapshot.selection
-        expected = saved["result"]
+        expected = snapshot.result.model_dump(mode="json")
         if isinstance(selection, GrowthSelection):
             result = self._compute(
                 row.project_id,
@@ -666,7 +691,21 @@ class EcologyAnalysisService:
                 "Counts describe annotated sample detections. Density requires reviewed, "
                 "nonoverlapping surveyed areas. Missing visits are recorded as exclusions."
             )
+        scheduled = (
+            isinstance(payload.selection, GrowthSelection)
+            and payload.selection.sampling_plan is not None
+        )
+        if scheduled:
+            limitations.append(
+                "Missing scheduled visits indicate missing measurements. Unit summaries require "
+                "measured visits for every roster member on every planned UTC date."
+            )
         snapshot: dict[str, Any] = EcologyAnalysisSnapshot(
+            method_version=(
+                "reviewed-ecology-scheduled-0001"
+                if scheduled
+                else "reviewed-ecology-descriptive-0001"
+            ),
             selection=payload.selection,
             reviewed_by=payload.reviewed_by,
             review_note=payload.review_note,

@@ -9,8 +9,10 @@ import {
   type AnalysisCreate,
   type AnalysisSelection,
   type EcologyAnalysis,
+  type GrowthPlanUnit,
   type SurveySource,
 } from "./ecologyAnalysisApi";
+import { GrowthSamplingPlan } from "./GrowthSamplingPlan";
 
 interface ImageOption {
   id: string;
@@ -229,6 +231,62 @@ function AnalysisResults({
               })}
             </details>
           )}
+          {Boolean(result.planned_sampling_effort?.length) && (
+            <>
+              <table>
+                <caption>Planned organism visits</caption>
+                <thead>
+                  <tr>
+                    <th>Unit</th>
+                    <th>Expected</th>
+                    <th>Observed</th>
+                    <th>Missing</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.planned_sampling_effort?.map((row) => (
+                    <tr key={row.experimental_unit_id}>
+                      <th scope="row">{row.experimental_unit_id}</th>
+                      <td>{row.expected_organism_visits}</td>
+                      <td>{row.observed_organism_visits}</td>
+                      <td>{row.missing_organism_visits}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <details>
+                <summary>Open planned-date coverage</summary>
+                <table>
+                  <caption>Organism measurements by planned UTC date</caption>
+                  <thead>
+                    <tr>
+                      <th>Unit</th>
+                      <th>UTC date</th>
+                      <th>Observed</th>
+                      <th>Missing measurements</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.planned_sampling_date_coverage?.map((row) => (
+                      <tr
+                        key={JSON.stringify([
+                          row.experimental_unit_id,
+                          row.sampling_date,
+                        ])}
+                      >
+                        <th scope="row">{row.experimental_unit_id}</th>
+                        <td>{row.sampling_date}</td>
+                        <td>
+                          {row.observed_organism_ids.join(", ") || "None"}
+                        </td>
+                        <td>{row.missing_organism_ids.join(", ") || "None"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </details>
+            </>
+          )}
           {result.population_summaries.length > 0 && (
             <details>
               <summary>Descriptive experimental-unit summaries</summary>
@@ -355,6 +413,7 @@ export function EcologyAnalysisPanel({
   const [kind, setKind] = useState<AnalysisSelection["kind"]>("growth");
   const [metric, setMetric] = useState<Metric>("mask_projected_area");
   const [growth, setGrowth] = useState<Record<string, string>>({});
+  const [plan, setPlan] = useState<GrowthPlanUnit[] | null>(null);
   const [surveys, setSurveys] = useState<SurveyDraft[]>([emptySurvey(0)]);
   const [classId, setClassId] = useState("");
   const [reviewer, setReviewer] = useState("");
@@ -383,6 +442,15 @@ export function EcologyAnalysisPanel({
   const reviewedImages = images.filter(
     (item) => item.annotation_status === "reviewed",
   );
+  const growthReady = plan
+    ? plan.length > 0 &&
+      plan.every(
+        (unit) =>
+          unit.organism_keys.length > 0 &&
+          unit.dates.every(Boolean) &&
+          new Set(unit.dates).size === unit.dates.length,
+      )
+    : Object.keys(growth).length >= 2;
   const observationRows = (registry?.calibration_evidence_links ?? []).map(
     (row, index) => {
       const annotation = registry?.annotation_evidence_links.find(
@@ -408,6 +476,7 @@ export function EcologyAnalysisPanel({
     setConfirmed(false);
     if (selection.kind === "growth") {
       setMetric(selection.metric);
+      setPlan(selection.sampling_plan ?? null);
       setGrowth(
         Object.fromEntries(
           selection.sources.map((row) => [
@@ -432,12 +501,13 @@ export function EcologyAnalysisPanel({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!confirmed) return;
+    if (!confirmed || (kind === "growth" && !growthReady)) return;
     const selection: AnalysisSelection =
       kind === "growth"
         ? {
             kind,
             metric,
+            ...(plan ? { sampling_plan: plan } : {}),
             sources: Object.entries(growth).map(
               ([calibration_evidence_id, exclusion_reason]) => ({
                 calibration_evidence_id,
@@ -486,7 +556,10 @@ export function EcologyAnalysisPanel({
               Measurement
               <select
                 value={metric}
-                onChange={(event) => setMetric(event.target.value as Metric)}
+                onChange={(event) => {
+                  setMetric(event.target.value as Metric);
+                  setConfirmed(false);
+                }}
               >
                 {Object.entries(metrics).map(([value, title]) => (
                   <option key={value} value={value}>
@@ -495,6 +568,27 @@ export function EcologyAnalysisPanel({
                 ))}
               </select>
             </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={plan !== null}
+                onChange={(event) => {
+                  setPlan(event.target.checked ? [] : null);
+                  setConfirmed(false);
+                }}
+              />
+              Track missing measurements against planned visits
+            </label>
+            {plan && (
+              <GrowthSamplingPlan
+                identities={registry?.identities ?? []}
+                plan={plan}
+                onChange={(next) => {
+                  setPlan(next);
+                  setConfirmed(false);
+                }}
+              />
+            )}
             <fieldset>
               <legend>Calibrated visits</legend>
               {observationRows.length === 0 && (
@@ -640,7 +734,7 @@ export function EcologyAnalysisPanel({
             !reviewer.trim() ||
             note.trim().length < 3 ||
             run.isPending ||
-            (kind === "growth" ? Object.keys(growth).length < 2 : !classId)
+            (kind === "growth" ? !growthReady : !classId)
           }
         >
           {run.isPending
