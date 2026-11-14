@@ -237,7 +237,9 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
     trace = result["surface_edge_traces"][0]
     expected = (1 + sqrt(2)) * 0.01
     assert trace["length_scale_only_interval_m"] == (
-        pytest.approx([0.0, 2 * expected]) if uncertainty is not None else None
+        pytest.approx([expected * (1 - uncertainty), expected * (1 + uncertainty)])
+        if uncertainty is not None
+        else None
     )
     for bound_key, values in (
         ("segment_length_scale_only_intervals_m", trace["segment_lengths_m"]),
