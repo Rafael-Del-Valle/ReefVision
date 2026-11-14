@@ -411,7 +411,7 @@ def test_review_rejects_missing_declared_disagreement_before_approval(
         json={"reviewed_by": "scientist", "note": "Review approved."},
     )
     assert rejected.status_code == 409, rejected.text
-    assert "declared producer output is missing" in rejected.json()["detail"]
+    assert "Workflow references a missing artifact:" in rejected.json()["detail"]
 
     with app.state.session_factory() as session:
         run = session.get(WorkflowRun, run_id)
