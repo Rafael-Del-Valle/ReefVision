@@ -166,15 +166,18 @@ def mesh_edge_paths(
         # evidence of genuinely equal shortest paths.
         lost_positive_edge_cost = False
 
-        def exact_selected_path_cost(vertex: int) -> Fraction:
-            """Exact sum of stored binary64 edge lengths for the parent path.
+        def exact_selected_path_cost(
+            vertex: int, *, path_start: int = start, path_parent: dict[int, int] = parent
+        ) -> Fraction:
+            """Exact sum of stored binary64 lengths for this pair's parent path.
 
-            Used only for suspected ties; the displayed distances and chosen
-            Dijkstra route retain their original floating-point semantics.
+            Bind the current pair's start and parent map at definition time,
+            avoiding late-bound loop variables. Displayed route distances and
+            selected Dijkstra paths retain their floating-point semantics.
             """
             total = Fraction(0)
-            while vertex != start:
-                predecessor = parent[vertex]
+            while vertex != path_start:
+                predecessor = path_parent[vertex]
                 total += Fraction(adjacency[predecessor][vertex])
                 vertex = predecessor
             return total
