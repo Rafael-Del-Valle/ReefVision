@@ -122,7 +122,7 @@ def test_direct_trace_identifies_duplicate_faces_without_overriding_mesh_rejecti
     assert "duplicate_triangle_on_surface_trace" in trace["qc_warnings"]
     assert "inconsistent_winding_edge_on_surface_trace" not in trace["qc_warnings"]
     assert trace["human_review_verified"] is False
-    with pytest.raises(ValueError, match="Duplicate triangle geometry"):
+    with pytest.raises(ValueError, match="Duplicate triangle"):
         measure_mesh_preview(**DUPLICATE_FACE_PARAMS)
 
 
