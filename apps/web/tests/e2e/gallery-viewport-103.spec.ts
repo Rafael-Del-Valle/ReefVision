@@ -649,7 +649,9 @@ test("single-image camera gallery cold-start keeps pixels and wheel isolated", a
       await route.fulfill({ json: { status: "ok", version: "1.0.3" } });
     } else if (url.pathname.endsWith("/project-summaries")) {
       await route.fulfill({
-        json: [{ ...project, label_class_count: 0, active_label_class_count: 0 }],
+        json: [
+          { ...project, label_class_count: 0, active_label_class_count: 0 },
+        ],
       });
     } else if (url.pathname.endsWith("/projects/" + project.id)) {
       await route.fulfill({ json: project });
@@ -726,8 +728,10 @@ test("single-image camera gallery cold-start keeps pixels and wheel isolated", a
   // when the strip has only one item and the first image just loaded.
   const pageScroll = () =>
     page.evaluate(() => ({ x: window.scrollX, y: window.scrollY }));
-  const beforeScroll = await pageScroll();
+  // Playwright's hover() may scroll the target into view. Measure the page
+  // after hover so only the following wheel events are checked for leakage.
   await focused.hover();
+  const beforeScroll = await pageScroll();
   const beforeBounds = await focused.boundingBox();
   await page.mouse.wheel(0, 320);
   await page.mouse.wheel(200, 0);
@@ -735,9 +739,10 @@ test("single-image camera gallery cold-start keeps pixels and wheel isolated", a
   expect(await focused.boundingBox()).toEqual(beforeBounds);
 
   await filmstrip.hover();
+  const beforeStripScroll = await pageScroll();
   const beforeStrip = await filmstrip.evaluate((element) => element.scrollLeft);
   await page.mouse.wheel(0, 320);
-  await expect.poll(pageScroll).toEqual(beforeScroll);
+  await expect.poll(pageScroll).toEqual(beforeStripScroll);
   expect(await filmstrip.evaluate((element) => element.scrollLeft)).toBe(
     beforeStrip,
   );
@@ -746,12 +751,15 @@ test("single-image camera gallery cold-start keeps pixels and wheel isolated", a
   // identity or move the page in a one-item gallery.
   await page.setViewportSize({ width: 960, height: 720 });
   await workbench.focus();
+  // Resizing and focusing can change document scroll independently of the
+  // navigation keys; check that Home/End themselves do not move the page.
+  const beforeNavigationScroll = await pageScroll();
   await page.keyboard.press("Home");
   await page.keyboard.press("End");
   await expect(
     workbench.getByRole("listitem", { name: "Focus single-frame.JfIf" }),
   ).toHaveAttribute("aria-current", "true");
-  await expect.poll(pageScroll).toEqual(beforeScroll);
+  await expect.poll(pageScroll).toEqual(beforeNavigationScroll);
   await expect(focused).toBeVisible();
   expect(
     await focused.evaluate((img: HTMLImageElement) => [
