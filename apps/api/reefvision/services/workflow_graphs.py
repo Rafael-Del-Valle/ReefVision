@@ -30,7 +30,7 @@ from reefvision.schemas.workflow_graphs import (
     WorkflowPlanStep,
 )
 from reefvision.services.pose_training_datasets import frozen_pose_item_fingerprints_match
-from reefvision.services.workflow_node_registry import workflow_node_registry
+from reefvision.services.workflow_node_registry import workflow_node_registry as workflow_node_registry
 from reefvision.services.workflow_vlm import SUPPORTED_VLM_PROVIDERS
 from reefvision.storage.datasets import canonical_json_sha256
 
