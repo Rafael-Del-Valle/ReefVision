@@ -8,6 +8,12 @@ import {
   LoadingState,
 } from "../../components/ui/AsyncState";
 import type { MaskAnnotationRecord } from "../annotation-editor/types";
+import { CoralGrowthPanel } from "./CoralGrowthPanel";
+import { EcologyAnalysisPanel } from "./EcologyAnalysisPanel";
+import {
+  PoseOrganismLinksPanel,
+  type PoseEvidenceNavigation,
+} from "./PoseOrganismLinksPanel";
 import { listMeasurementRuns } from "../video/biologicalMovementApi";
 import {
   ecologyCsv,
@@ -598,18 +604,44 @@ function ProjectPoseMeasurements({
 export function EcologyWorkspace({
   projectId,
   onOpenVideo,
+  onOpenPoseEvidence,
+  classes = [],
+  initialPoseOrganism,
 }: {
   projectId: string;
   onOpenVideo?: (videoId: string) => void;
+  onOpenPoseEvidence?: (
+    evidence: PoseEvidenceNavigation,
+    organismKey: string,
+  ) => void;
+  initialPoseOrganism?: string;
+  classes?: readonly { id: string; name: string }[];
 }) {
   const client = useQueryClient();
-  const [view, setView] = useState<"registry" | "longitudinal" | "pose">(
-    "registry",
-  );
-  const [selected, setSelected] = useState("");
+  const [view, setView] = useState<
+    "registry" | "longitudinal" | "pose" | "coral" | "analyses"
+  >(initialPoseOrganism ? "pose" : "registry");
+  const [selected, setSelected] = useState(initialPoseOrganism ?? "");
   const query = useQuery({
     queryKey: ["ecology-registry", projectId],
     queryFn: ({ signal }) => getRegistry(projectId, signal),
+  });
+  const analysisImages = useQuery({
+    queryKey: ["ecology-analysis-images", projectId],
+    queryFn: async ({ signal }) => {
+      const images = [];
+      for (let page = 1; ; page++) {
+        const result = await getImages(
+          projectId,
+          { page, pageSize: 100 },
+          signal,
+        );
+        images.push(...result.items);
+        if (images.length >= result.total || result.items.length === 0)
+          return images;
+      }
+    },
+    enabled: view === "analyses",
   });
   async function refresh() {
     await Promise.all([
@@ -650,14 +682,73 @@ export function EcologyWorkspace({
         >
           Pose measurements
         </button>
+        <button
+          type="button"
+          className="secondary"
+          aria-pressed={view === "coral"}
+          onClick={() => setView("coral")}
+        >
+          Coral branch growth
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          aria-pressed={view === "analyses"}
+          onClick={() => setView("analyses")}
+        >
+          Reviewed analyses
+        </button>
       </div>
-      {view === "longitudinal" ? (
+      {view === "coral" ? (
+        <CoralGrowthPanel key={projectId} projectId={projectId} />
+      ) : view === "analyses" ? (
+        <>
+          {analysisImages.error && (
+            <p role="alert">{analysisImages.error.message}</p>
+          )}
+          <EcologyAnalysisPanel
+            key={projectId}
+            projectId={projectId}
+            registry={query.data}
+            images={analysisImages.data ?? []}
+            classes={classes}
+          />
+        </>
+      ) : view === "longitudinal" ? (
         <LongitudinalCandidates projectId={projectId} />
       ) : view === "pose" ? (
-        <ProjectPoseMeasurements
-          projectId={projectId}
-          onOpenVideo={onOpenVideo}
-        />
+        <>
+          {current && (
+            <section className="management-card">
+              <label>
+                Organism for pose evidence
+                <select
+                  value={current.organism_key}
+                  onChange={(event) => setSelected(event.target.value)}
+                >
+                  {query.data?.identities.map((item) => (
+                    <option key={item.id} value={item.organism_key}>
+                      {item.organism_key}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <PoseOrganismLinksPanel
+                key={current.id}
+                projectId={projectId}
+                organismKey={current.organism_key}
+                organismRevisionId={current.id}
+                onOpenPoseEvidence={(evidence) =>
+                  onOpenPoseEvidence?.(evidence, current.organism_key)
+                }
+              />
+            </section>
+          )}
+          <ProjectPoseMeasurements
+            projectId={projectId}
+            onOpenVideo={onOpenVideo}
+          />
+        </>
       ) : (
         <>
           {query.isPending && (

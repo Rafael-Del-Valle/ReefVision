@@ -19,7 +19,7 @@ from reefvision.services.system import SystemService
 
 _API_ROOT = Path(__file__).resolve().parents[2]
 _VERSIONS = _API_ROOT / "migrations" / "versions"
-_INTEGRATED_HEAD = "b12_integrated_0001"
+_INTEGRATED_HEAD = "b12_integrated_0002"
 _POSE_MIGRATIONS = (
     "0038_pose_anatomy_definitions.py",
     "0039_pose_evaluation_runs.py",
@@ -196,7 +196,7 @@ def test_failed_merge_rolls_back_legacy_revision_and_schema_changes(
     with engine.begin() as connection:
         connection.exec_driver_sql(
             "CREATE TRIGGER block_merge BEFORE UPDATE ON alembic_version "
-            "WHEN NEW.version_num = 'b12_integrated_0001' "
+            "WHEN NEW.version_num = 'b12_integrated_0002' "
             "BEGIN SELECT RAISE(ABORT, 'simulated merge failure'); END"
         )
     before_tables = inspect(engine).get_table_names()

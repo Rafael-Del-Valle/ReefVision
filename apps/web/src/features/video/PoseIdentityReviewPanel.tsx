@@ -19,7 +19,10 @@ import {
   type VideoTrackRecord,
 } from "./videoApi";
 
+import type { PoseEvidenceNavigation } from "./videoWorkspaceBridge";
+
 interface PoseIdentityReviewPanelProps {
+  evidence?: PoseEvidenceNavigation | null;
   projectId: string;
   videoId: string;
   frameIndex: number;
@@ -44,15 +47,18 @@ export function PoseIdentityReviewPanel({
   frameIndex,
   tracks,
   onFrameChange,
+  evidence,
 }: PoseIdentityReviewPanelProps) {
   const queryClient = useQueryClient();
-  const [selectedRunId, setSelectedRunId] = useState("");
+  const [selectedRunId, setSelectedRunId] = useState(
+    evidence?.identityRunId ?? "",
+  );
   const [submittedJobId, setSubmittedJobId] = useState<string | null>(null);
   const [submittedRunId, setSubmittedRunId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [action, setAction] =
     useState<PoseIdentityCorrectionAction>("reassign");
-  const [targetId, setTargetId] = useState("");
+  const [targetId, setTargetId] = useState(evidence?.animalIdentityId ?? "");
   const [destinationId, setDestinationId] = useState("");
   const [reason, setReason] = useState("");
   const [frameStart, setFrameStart] = useState("");
@@ -368,6 +374,19 @@ export function PoseIdentityReviewPanel({
           </div>
         </div>
       )}
+      {evidence &&
+        identities.some(
+          (identity) => identity.id === evidence.animalIdentityId,
+        ) && (
+          <p className="annotation-helper">
+            Linked organism evidence ·{" "}
+            {
+              identities.find(
+                (identity) => identity.id === evidence.animalIdentityId,
+              )?.stable_identity_key
+            }
+          </p>
+        )}
       <div className="annotation-selection-list">
         {identities.map((identity) => (
           <div className="annotation-selection-row" key={identity.id}>

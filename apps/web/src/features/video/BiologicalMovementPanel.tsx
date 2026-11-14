@@ -24,7 +24,10 @@ import {
   type VideoTrackRecord,
 } from "./videoApi";
 
+import type { PoseEvidenceNavigation } from "./videoWorkspaceBridge";
+
 interface BiologicalMovementPanelProps {
+  evidence?: PoseEvidenceNavigation | null;
   projectId: string;
   videoId: string;
   tracks: VideoTrackRecord[];
@@ -71,21 +74,30 @@ export function BiologicalMovementPanel({
   videoId,
   tracks,
   onFrameChange,
+  evidence,
 }: BiologicalMovementPanelProps) {
   const queryClient = useQueryClient();
-  const [identityRunId, setIdentityRunId] = useState("");
-  const [identityId, setIdentityId] = useState("");
+  const [identityRunId, setIdentityRunId] = useState(
+    evidence?.identityRunId ?? "",
+  );
+  const [identityId, setIdentityId] = useState(
+    evidence?.animalIdentityId ?? "",
+  );
   const [verificationMode, setVerificationMode] = useState<
     "exploratory" | "scientific"
   >("scientific");
   const [kind, setKind] = useState<"distance" | "angle">("distance");
   const [landmarkIds, setLandmarkIds] = useState(["", "", ""]);
-  const [measurementRunId, setMeasurementRunId] = useState("");
-  const [seriesId, setSeriesId] = useState("");
-  const [eventRunId, setEventRunId] = useState("");
+  const [measurementRunId, setMeasurementRunId] = useState(
+    evidence?.measurementRunId ?? "",
+  );
+  const [seriesId, setSeriesId] = useState(evidence?.measurementSeriesId ?? "");
+  const [eventRunId, setEventRunId] = useState(evidence?.eventRunId ?? "");
   const [openThreshold, setOpenThreshold] = useState("6");
   const [closeThreshold, setCloseThreshold] = useState("3");
-  const [selectedEventId, setSelectedEventId] = useState("");
+  const [selectedEventId, setSelectedEventId] = useState(
+    evidence?.eventRevisionId ?? "",
+  );
   const [startFrame, setStartFrame] = useState("");
   const [endFrame, setEndFrame] = useState("");
   const [reason, setReason] = useState("Scientist review");
@@ -126,10 +138,13 @@ export function BiologicalMovementPanel({
   });
   const identities = identitiesQuery.data ?? [];
   useEffect(() => {
-    if (!identities.some((identity) => identity.id === identityId)) {
+    if (
+      identitiesQuery.data &&
+      !identities.some((identity) => identity.id === identityId)
+    ) {
       setIdentityId(identities[0]?.id ?? "");
     }
-  }, [identities, identityId]);
+  }, [identities, identitiesQuery.data, identityId]);
 
   const runsQuery = useQuery({
     queryKey: ["pose-measurement-runs", projectId],
@@ -158,9 +173,9 @@ export function BiologicalMovementPanel({
     (item) => !identityId || item.animal_identity_id === identityId,
   );
   useEffect(() => {
-    if (!series.some((item) => item.id === seriesId))
+    if (seriesQuery.data && !series.some((item) => item.id === seriesId))
       setSeriesId(series[0]?.id ?? "");
-  }, [series, seriesId]);
+  }, [series, seriesQuery.data, seriesId]);
   const selectedSeries = series.find((item) => item.id === seriesId);
   const samplesQuery = useQuery({
     queryKey: ["pose-measurement-samples", seriesId],
@@ -178,9 +193,9 @@ export function BiologicalMovementPanel({
     (run) => run.measurement_run_id === measurementRunId,
   );
   useEffect(() => {
-    if (!eventRuns.some((run) => run.id === eventRunId))
+    if (eventRunsQuery.data && !eventRuns.some((run) => run.id === eventRunId))
       setEventRunId(eventRuns[0]?.id ?? "");
-  }, [eventRunId, eventRuns]);
+  }, [eventRunId, eventRuns, eventRunsQuery.data]);
   const eventRun = eventRuns.find((run) => run.id === eventRunId);
   const eventsQuery = useQuery({
     queryKey: ["pose-biological-events", eventRunId],
@@ -195,12 +210,19 @@ export function BiologicalMovementPanel({
   const events = (eventsQuery.data ?? []).filter(
     (event) => !seriesId || event.measurement_series_id === seriesId,
   );
-  const selectedEvent = events.find((event) => event.id === selectedEventId);
+  const linkedHistoricalEvent = historyQuery.data?.find(
+    (event) => event.id === evidence?.eventRevisionId && !event.is_current,
+  );
+  const selectedEvent =
+    events.find((event) => event.id === selectedEventId) ?? events[0];
   useEffect(() => {
-    if (!events.some((event) => event.id === selectedEventId)) {
+    if (
+      eventsQuery.data &&
+      !events.some((event) => event.id === selectedEventId)
+    ) {
       setSelectedEventId(events[0]?.id ?? "");
     }
-  }, [events, selectedEventId]);
+  }, [events, eventsQuery.data, selectedEventId]);
   useEffect(() => {
     if (selectedEvent) {
       setStartFrame(String(selectedEvent.start_frame));
@@ -700,6 +722,14 @@ export function BiologicalMovementPanel({
         </label>
       )}
 
+      {linkedHistoricalEvent && (
+        <p role="status">
+          Linked historical event revision {linkedHistoricalEvent.revision} ·
+          frames {linkedHistoricalEvent.start_frame}–
+          {linkedHistoricalEvent.end_frame ?? "…"} ·{" "}
+          {linkedHistoricalEvent.review_state}
+        </p>
+      )}
       {events.length > 0 && (
         <div className="field-grid compact-grid">
           <label>

@@ -27,7 +27,9 @@ from reefvision.jobs.classification_inference import process_classification_infe
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.services.mask_measurements import MaskMeasurementService
+from reefvision.services.workflow_coral_growth import execute_coral_growth
 from reefvision.services.workflow_depth import create_depth_map_artifacts
+from reefvision.services.workflow_ecology_analysis import execute_verified_ecology_analysis
 from reefvision.services.workflow_prompt_assist import create_prompt_assist_mask_proposals
 from reefvision.services.workflow_review import WorkflowReviewRequired
 from reefvision.services.workflow_vlm import VlmClassDefinition, run_vlm_detection
@@ -47,6 +49,8 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "ecology_longitudinal_analysis",
     "ecology_identity_registry_source",
     "ecology_connected_branch_preview",
+    "ecology_coral_growth",
+    "ecology_verified_analysis",
     "ecology_measurement_csv_export",
     "ecology_population_csv_export",
     "ecology_paired_count_comparison",
@@ -1125,6 +1129,8 @@ _ADAPTERS = {
     "ecology_longitudinal_analysis": _ecology_longitudinal_analysis,
     "ecology_identity_registry_source": _ecology_identity_registry_source,
     "ecology_connected_branch_preview": _ecology_connected_branch_preview,
+    "ecology_coral_growth": execute_coral_growth,
+    "ecology_verified_analysis": execute_verified_ecology_analysis,
     "ecology_measurement_csv_export": _ecology_measurement_csv_export,
     "ecology_population_csv_export": _ecology_population_csv_export,
     "ecology_paired_count_comparison": _ecology_paired_count_comparison,

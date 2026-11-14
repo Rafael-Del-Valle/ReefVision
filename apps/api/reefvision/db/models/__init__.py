@@ -18,8 +18,14 @@ from reefvision.db.models.class_visibility_preference import ClassVisibilityPref
 from reefvision.db.models.classification_dataset import ClassificationDataset
 from reefvision.db.models.classification_prediction import ClassificationPrediction
 from reefvision.db.models.computed_metric import ComputedMetricDefinition, ComputedMetricResult
+from reefvision.db.models.coral_graph import (
+    CoralBranchCorrespondenceRevision,
+    CoralGraphRevision,
+    CoralGrowthRecord,
+)
 from reefvision.db.models.dataset_version import DatasetVersion
 from reefvision.db.models.dataset_version_item import DatasetVersionItem
+from reefvision.db.models.ecology_analysis import EcologyAnalysisRecord
 from reefvision.db.models.ecology_identity_annotation_evidence import (
     EcologyIdentityAnnotationEvidence,
 )
@@ -28,6 +34,7 @@ from reefvision.db.models.ecology_identity_calibration_evidence import (
 )
 from reefvision.db.models.ecology_identity_image_evidence import EcologyIdentityImageEvidence
 from reefvision.db.models.ecology_identity_revision import EcologyIdentityRevision
+from reefvision.db.models.ecology_pose_link_revision import EcologyPoseLinkRevision
 from reefvision.db.models.environmental_analysis import (
     EnvironmentalAnalysisDefinition,
     EnvironmentalAnalysisResult,
@@ -125,12 +132,17 @@ __all__ = [
     "ClassificationPrediction",
     "ComputedMetricDefinition",
     "ComputedMetricResult",
+    "CoralBranchCorrespondenceRevision",
+    "CoralGraphRevision",
+    "CoralGrowthRecord",
     "DatasetVersion",
     "DatasetVersionItem",
+    "EcologyAnalysisRecord",
     "EcologyIdentityAnnotationEvidence",
     "EcologyIdentityCalibrationEvidence",
     "EcologyIdentityImageEvidence",
     "EcologyIdentityRevision",
+    "EcologyPoseLinkRevision",
     "EnvironmentalAnalysisDefinition",
     "EnvironmentalAnalysisResult",
     "EnvironmentalCacheEntry",

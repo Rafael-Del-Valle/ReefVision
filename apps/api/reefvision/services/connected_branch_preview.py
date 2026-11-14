@@ -16,12 +16,14 @@ from reefvision.schemas.connected_branch_editing import (
     ConnectedBranchPreviewRequest,
     ConnectedBranchPreviewResponse,
 )
-from reefvision.schemas.skeletonization import SkeletonPixelEdit
+from reefvision.schemas.skeletonization import SkeletonAnalysisRevisionResponse, SkeletonPixelEdit
 from reefvision.services.connected_branch_editing import (
     BranchEditError,
     preview_connected_branch_addition,
 )
 from reefvision.services.skeleton_algorithms import (
+    SkeletonGraphEdge,
+    SkeletonGraphNode,
     build_initial_branch_graph,
     classify_skeleton_pixels,
     consolidate_junction_clusters,
@@ -39,28 +41,10 @@ def _point(x: int, y: int) -> SkeletonPixelEdit:
     return SkeletonPixelEdit(x=x, y=y)
 
 
-def preview_saved_branch_addition(
-    session: Session,
-    settings: Settings,
-    analysis_id: str,
-    payload: ConnectedBranchPreviewRequest,
-) -> ConnectedBranchPreviewResponse:
-    """Return an unverified graph proposal; never alter the approved revision."""
-    source = SkeletonizationService(session, settings).get_persisted_analysis(analysis_id)
-    if source.stale or not source.is_latest_revision:
-        raise ValidationError("Branch edits must use the latest non-stale skeleton analysis")
-    if canonical_json_sha256(source.result.model_dump(mode="json")) != source.result_sha256:
-        raise ValidationError("Persisted skeleton analysis result checksum does not match")
-
-    image = session.get(ImageAsset, source.image_id)
-    if image is None:
-        raise NotFoundError("Source image no longer exists")
-    calibration_sha256 = skeleton_calibration_sha256(image)
-    if calibration_sha256 != source.calibration_sha256:
-        raise ValidationError("Branch preview calibration has changed since the skeleton analysis")
-    if any(point.x >= image.width_px or point.y >= image.height_px for point in payload.points):
-        raise ValidationError("Proposed branch extends outside the source image")
-
+def source_skeleton_graph(
+    source: SkeletonAnalysisRevisionResponse, image: ImageAsset
+) -> tuple[list[SkeletonGraphNode], list[SkeletonGraphEdge]]:
+    """Recover ordered centerlines from the pinned skeleton raster."""
     pixels = source.result.final_skeleton_pixels
     if not pixels:
         raise ValidationError("Saved analysis has no final skeleton pixels")
@@ -90,6 +74,32 @@ def preview_saved_branch_addition(
             )
         ):
             raise ValidationError("Saved graph differs from source skeleton geometry")
+    return nodes, edges
+
+
+def preview_saved_branch_addition(
+    session: Session,
+    settings: Settings,
+    analysis_id: str,
+    payload: ConnectedBranchPreviewRequest,
+) -> ConnectedBranchPreviewResponse:
+    """Return an unverified graph proposal; never alter the approved revision."""
+    source = SkeletonizationService(session, settings).get_persisted_analysis(analysis_id)
+    if source.stale or not source.is_latest_revision:
+        raise ValidationError("Branch edits must use the latest non-stale skeleton analysis")
+    if canonical_json_sha256(source.result.model_dump(mode="json")) != source.result_sha256:
+        raise ValidationError("Persisted skeleton analysis result checksum does not match")
+
+    image = session.get(ImageAsset, source.image_id)
+    if image is None:
+        raise NotFoundError("Source image no longer exists")
+    calibration_sha256 = skeleton_calibration_sha256(image)
+    if calibration_sha256 != source.calibration_sha256:
+        raise ValidationError("Branch preview calibration has changed since the skeleton analysis")
+    if any(point.x >= image.width_px or point.y >= image.height_px for point in payload.points):
+        raise ValidationError("Proposed branch extends outside the source image")
+
+    nodes, edges = source_skeleton_graph(source, image)
     try:
         proposal = preview_connected_branch_addition(
             nodes,

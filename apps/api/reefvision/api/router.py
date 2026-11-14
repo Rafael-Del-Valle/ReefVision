@@ -23,10 +23,13 @@ from reefvision.api.routes.computed_aggregate_metrics import (
 )
 from reefvision.api.routes.computed_mask_coverage import router as computed_mask_coverage_router
 from reefvision.api.routes.computed_metrics import router as computed_metrics_router
+from reefvision.api.routes.coral_graph import router as coral_graph_router
 from reefvision.api.routes.coral_structure import router as coral_structure_router
 from reefvision.api.routes.current_field import router as current_field_router
 from reefvision.api.routes.dataset_versions import router as dataset_versions_router
+from reefvision.api.routes.ecology_analysis import router as ecology_analysis_router
 from reefvision.api.routes.ecology_identity import router as ecology_identity_router
+from reefvision.api.routes.ecology_pose_links import router as ecology_pose_links_router
 from reefvision.api.routes.environmental_analysis import router as environmental_analysis_router
 from reefvision.api.routes.environmental_context import router as environmental_context_router
 from reefvision.api.routes.geographic_movement_analytics import (
@@ -146,6 +149,9 @@ api_router.include_router(workflow_graphs_router)
 api_router.include_router(learning_evaluation_router)
 api_router.include_router(longitudinal_monitoring_router)
 api_router.include_router(ecology_identity_router)
+api_router.include_router(coral_graph_router)
+api_router.include_router(ecology_analysis_router)
+api_router.include_router(ecology_pose_links_router)
 api_router.include_router(model_agreement_router)
 api_router.include_router(segmentation_learning_evaluation_router)
 api_router.include_router(segmentation_deployment_router)

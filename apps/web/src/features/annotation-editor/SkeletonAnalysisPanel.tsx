@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { CoralGraphReview } from "./CoralGraphReview";
+import type { GraphRecord } from "../ecology/coralGraphApi";
 import type { EditorMaskAnnotation } from "./types";
 import {
   correctSkeletonAnalysis,
@@ -20,6 +22,7 @@ import type {
 } from "./SkeletonOverlayLayer";
 
 interface SkeletonAnalysisPanelProps {
+  projectId?: string;
   selectedMask: EditorMaskAnnotation | null;
   documentDirty: boolean;
   onOverlayChange: (overlay: SkeletonOverlayModel | null) => void;
@@ -76,6 +79,7 @@ function formatLength(
 }
 
 export function SkeletonAnalysisPanel({
+  projectId,
   selectedMask,
   documentDirty,
   onOverlayChange,
@@ -95,6 +99,7 @@ export function SkeletonAnalysisPanel({
   const [correctionNote, setCorrectionNote] = useState("");
   const [reviewNote, setReviewNote] = useState("");
   const [branchDraft, setBranchDraft] = useState(emptyBranch);
+  const [reviewedGraph, setReviewedGraph] = useState<GraphRecord | null>(null);
 
   const readinessQuery = useQuery({
     queryKey: ["skeleton-readiness", maskId],
@@ -141,6 +146,7 @@ export function SkeletonAnalysisPanel({
 
   useEffect(() => {
     setBranchDraft(emptyBranch);
+    setReviewedGraph(null);
     setEditMode((mode) => (mode === "branch" ? "view" : mode));
   }, [branchSource?.id, branchSource?.result_sha256]);
 
@@ -335,9 +341,15 @@ export function SkeletonAnalysisPanel({
     const finalOverlay = overlaySource === "final";
     const showBranch =
       finalOverlay && editMode === "branch" && branchSource !== null;
+    const review =
+      finalOverlay && reviewedGraph?.analysis_id === latest.id
+        ? reviewedGraph.snapshot
+        : null;
     onOverlayChange({
-      pixels,
-      nodes: showBranch && branchPreview ? branchPreview.nodes : nodes,
+      pixels: review ? review.edges.flatMap((edge) => edge.pixels) : pixels,
+      nodes:
+        review?.nodes ??
+        (showBranch && branchPreview ? branchPreview.nodes : nodes),
       addedPixels: finalOverlay && !showBranch ? addedPixels : [],
       removedPixels: finalOverlay && !showBranch ? removedPixels : [],
       branchPixels: showBranch
@@ -360,6 +372,7 @@ export function SkeletonAnalysisPanel({
     onOverlayChange,
     overlaySource,
     removedPixels,
+    reviewedGraph,
   ]);
 
   useEffect(
@@ -709,6 +722,16 @@ export function SkeletonAnalysisPanel({
                 </>
               )}
             </details>
+          )}
+          {projectId && maskId && branchSource && (
+            <CoralGraphReview
+              key={branchSource.id}
+              projectId={projectId}
+              analysisId={branchSource.id}
+              maskId={maskId}
+              drawn={branchPixels}
+              onGraph={setReviewedGraph}
+            />
           )}
 
           {latest.stale ? (

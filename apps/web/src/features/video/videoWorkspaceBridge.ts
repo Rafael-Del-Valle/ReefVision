@@ -55,7 +55,20 @@ export interface VideoWorkspaceContext {
   latestTrackingRunStage: string | null;
 }
 
+export interface PoseEvidenceNavigation {
+  videoId: string;
+  frameIndex: number;
+  identityRunId: string;
+  animalIdentityId: string;
+  sourceTrackId?: string;
+  measurementRunId?: string;
+  measurementSeriesId?: string;
+  eventRunId?: string;
+  eventRevisionId?: string;
+}
+
 export type VideoWorkspaceCommand =
+  | ({ id: number; type: "open_pose_evidence" } & PoseEvidenceNavigation)
   | {
       id: number;
       type: "select_video";

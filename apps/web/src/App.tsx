@@ -299,6 +299,10 @@ function ReefVisionMainApp() {
   const [videoWorkspaceCommand, setVideoWorkspaceCommand] =
     useState<VideoWorkspaceCommand | null>(null);
   const videoWorkspaceCommandSequenceRef = useRef(0);
+  const [poseOrganismOrigin, setPoseOrganismOrigin] = useState<{
+    projectId: string;
+    organismKey: string;
+  } | null>(null);
   const detachedInspectorSnapshotRef = useRef<DetachedInspectorSnapshot | null>(
     null,
   );
@@ -1007,6 +1011,25 @@ function ReefVisionMainApp() {
               <EcologyWorkspace
                 key={selectedProject.id}
                 projectId={selectedProject.id}
+                classes={selectedProject.label_classes}
+                initialPoseOrganism={
+                  poseOrganismOrigin?.projectId === selectedProject.id
+                    ? poseOrganismOrigin.organismKey
+                    : undefined
+                }
+                onOpenPoseEvidence={(evidence, organismKey) => {
+                  setPoseOrganismOrigin({
+                    projectId: selectedProject.id,
+                    organismKey,
+                  });
+                  videoWorkspaceCommandSequenceRef.current += 1;
+                  setVideoWorkspaceCommand({
+                    id: videoWorkspaceCommandSequenceRef.current,
+                    type: "open_pose_evidence",
+                    ...evidence,
+                  });
+                  setActiveView("video");
+                }}
                 onOpenVideo={(videoId) => {
                   handleVideoSelect(videoId);
                   setActiveView("video");
@@ -1036,6 +1059,15 @@ function ReefVisionMainApp() {
             )}
             {activeView === "video" && (
               <>
+                {poseOrganismOrigin?.projectId === selectedProject.id && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => setActiveView("ecology")}
+                  >
+                    Back to organism {poseOrganismOrigin.organismKey}
+                  </button>
+                )}
                 <VideoTrackingWorkspace
                   project={selectedProject}
                   onWorkspaceContextChange={handleVideoWorkspaceContextChange}

@@ -15,14 +15,17 @@ from reefvision.db.models.reefpose_validation import ReefPoseHeldoutLock
 from reefvision.desktop import run_pending_migrations
 from reefvision.jobs.backups import process_backup_job
 from reefvision.jobs.restores import process_restore_job
+from reefvision.jobs.worker import process_next_thumbnail_job
 from reefvision.main import create_app
 from reefvision.schemas.backups import (
     BackupCreateResponse,
     BackupRestoreResponse,
     BackupVerificationResponse,
 )
+from reefvision.tests.test_connected_branch_preview_api_1_2 import _save_calibrated_analysis
+from reefvision.tests.test_reviewed_coral_graph_1_2 import post
 
-_INTEGRATED_HEAD = "b12_integrated_0001"
+_INTEGRATED_HEAD = "b12_integrated_0002"
 
 
 @pytest.fixture
@@ -144,3 +147,59 @@ def test_verified_backup_restores_rows_from_all_integrated_histories(
     snapshot = _scientific_snapshot(source_db, project_id)
     assert _scientific_snapshot(backup_db, project_id) == snapshot
     assert _scientific_snapshot(restored_db, project_id) == snapshot
+
+
+def test_migrated_backup_restores_a_reviewed_coral_graph(
+    migrated_client: TestClient, test_settings: Settings, tmp_path: Path
+) -> None:
+    image_id, source, path = _save_calibrated_analysis(migrated_client)
+    project = migrated_client.get(f"/api/v1/images/{image_id}").json()["project_id"]
+    endpoint = f"/api/v1/projects/{project}/ecology"
+    identity = post(
+        migrated_client,
+        f"{endpoint}/organisms",
+        {"organism_key": "backup-colony", "kind": "colony", "reason": "Recorded field colony"},
+    )
+    graph = post(
+        migrated_client,
+        f"{endpoint}/coral-graphs",
+        {
+            "identity_revision_id": identity["id"],
+            "analysis_id": source["id"],
+            "decision": "accepted",
+            "reviewer": "Backup scientist",
+            "reason": "Reviewed visible path",
+            "observed_at": "2026-10-24T12:00:00Z",
+            "edit": {"kind": "add", "points": path},
+        },
+    )
+
+    factory = migrated_client.app.state.session_factory
+    assert process_next_thumbnail_job(test_settings, factory)
+    created = BackupCreateResponse.model_validate(
+        post(migrated_client, "/api/v1/backups", {"notes": "Coral graph backup"})
+    )
+    assert process_backup_job(test_settings, factory, created.job.id)
+    response = migrated_client.post(
+        f"/api/v1/backups/{created.backup.id}/restore",
+        json={"destination_name": "coral-backup"},
+    )
+    assert response.status_code == 200, response.text
+    restored = BackupRestoreResponse.model_validate(response.json())
+    assert process_restore_job(test_settings, factory, restored.job.id)
+    restore_root = test_settings.resolved_data_dir / restored.destination_path
+    restored_settings = Settings(
+        env="test",
+        data_dir=restore_root,
+        database_url=f"sqlite:///{(restore_root / 'test.db').as_posix()}",
+        background_worker_enabled=False,
+    )
+    assert restore_root.is_relative_to(tmp_path)
+    app = create_app(restored_settings)
+    try:
+        with TestClient(app) as reopened:
+            response = reopened.get(f"{endpoint}/coral-graphs/{graph['id']}")
+            assert response.status_code == 200, response.text
+            assert response.json() == graph
+    finally:
+        app.state.engine.dispose()

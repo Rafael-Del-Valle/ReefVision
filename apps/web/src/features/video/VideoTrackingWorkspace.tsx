@@ -64,6 +64,7 @@ import {
 } from "./videoApi";
 import { trackingBenchmarkCsv, trackingBenchmarkJson } from "./trackingReport";
 import type {
+  PoseEvidenceNavigation,
   VideoWorkspaceCommand,
   VideoWorkspaceContext,
   VideoWorkspaceTrackSource,
@@ -203,6 +204,9 @@ export function VideoTrackingWorkspace({
   const [everyNFrames, setEveryNFrames] = useState(1);
   const [frameIndex, setFrameIndex] = useState(0);
   const [selectedTrackId, setSelectedTrackId] = useState("");
+  const [poseEvidence, setPoseEvidence] = useState<
+    (PoseEvidenceNavigation & { id: number }) | null
+  >(null);
   const [selectedAnatomySchema, setSelectedAnatomySchema] =
     useState<AnatomySchemaRevision | null>(null);
   const [
@@ -1302,13 +1306,49 @@ export function VideoTrackingWorkspace({
     }
 
     if (
-      workspaceCommand.type === "select_video" &&
+      (workspaceCommand.type === "select_video" ||
+        workspaceCommand.type === "open_pose_evidence") &&
       videosQuery.data === undefined
     ) {
       return;
     }
 
+    if (workspaceCommand.type === "open_pose_evidence") {
+      const targetExists = videosQuery.data?.some(
+        (video) => video.id === workspaceCommand.videoId,
+      );
+      if (targetExists && selectedVideo?.id !== workspaceCommand.videoId) {
+        setSelectedVideoId(workspaceCommand.videoId);
+        return;
+      }
+      if (targetExists && workspaceCommand.sourceTrackId && !tracksQuery.data)
+        return;
+    }
+
     lastWorkspaceCommandIdRef.current = workspaceCommand.id;
+
+    if (
+      workspaceCommand.type === "open_pose_evidence" &&
+      selectedVideo?.id === workspaceCommand.videoId
+    ) {
+      const frame = Math.min(
+        workspaceCommand.frameIndex,
+        Math.max(0, selectedVideo.frame_count - 1),
+      );
+      seekVideoFromMap(
+        frame,
+        selectedVideo.fps > 0 ? frame / selectedVideo.fps : 0,
+      );
+      setPreviewFrameIndex(frame);
+      if (
+        tracksQuery.data?.some(
+          (track) => track.id === workspaceCommand.sourceTrackId,
+        )
+      ) {
+        setSelectedTrackId(workspaceCommand.sourceTrackId ?? "");
+      }
+      setPoseEvidence(workspaceCommand);
+    }
 
     if (workspaceCommand.type === "select_video") {
       if (
@@ -1964,6 +2004,10 @@ export function VideoTrackingWorkspace({
         ) && (
           <>
             <PoseIdentityReviewPanel
+              key={`identity-${selectedVideo.id}-${poseEvidence?.videoId === selectedVideo.id ? poseEvidence.id : ""}`}
+              evidence={
+                poseEvidence?.videoId === selectedVideo.id ? poseEvidence : null
+              }
               projectId={project.id}
               videoId={selectedVideo.id}
               frameIndex={frameIndex}
@@ -1974,6 +2018,10 @@ export function VideoTrackingWorkspace({
               }}
             />
             <BiologicalMovementPanel
+              key={`movement-${selectedVideo.id}-${poseEvidence?.videoId === selectedVideo.id ? poseEvidence.id : ""}`}
+              evidence={
+                poseEvidence?.videoId === selectedVideo.id ? poseEvidence : null
+              }
               projectId={project.id}
               videoId={selectedVideo.id}
               tracks={tracksQuery.data ?? []}

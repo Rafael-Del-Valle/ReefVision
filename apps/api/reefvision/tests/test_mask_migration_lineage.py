@@ -9,7 +9,10 @@ def test_mask_migrations_retain_the_common_lineage() -> None:
     config = Config(str(api_root / "alembic.ini"))
     scripts = ScriptDirectory.from_config(config)
 
-    assert scripts.get_heads() == ["b12_integrated_0001"]
+    assert scripts.get_heads() == ["b12_integrated_0002"]
+    reviewed_science = scripts.get_revision("b12_integrated_0002")
+    assert reviewed_science is not None
+    assert reviewed_science.down_revision == "b12_integrated_0001"
     frozen_image_metadata = scripts.get_revision("b12_identity_0005")
     assert frozen_image_metadata is not None
     assert frozen_image_metadata.down_revision == "b12_identity_0004"

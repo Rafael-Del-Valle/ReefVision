@@ -6,7 +6,9 @@ from reefvision.schemas.workflow_graphs import (
     WorkflowNodeDefinitionResponse,
     WorkflowPortDefinition,
 )
+from reefvision.services.workflow_coral_growth import coral_growth_node
 from reefvision.services.workflow_depth_3d import register_video_depth_3d_adapter
+from reefvision.services.workflow_ecology_analysis import verified_ecology_analysis_node
 from reefvision.services.workflow_metric_depth_3d import (
     register_video_metric_depth_3d_adapter,
 )
@@ -919,6 +921,9 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             ),
         ],
     )
+
+    registry["ecology_coral_growth"] = coral_growth_node()
+    registry["ecology_verified_analysis"] = verified_ecology_analysis_node()
 
     registry["ecology_connected_branch_preview"] = WorkflowNodeDefinitionResponse(
         node_type="ecology_connected_branch_preview",

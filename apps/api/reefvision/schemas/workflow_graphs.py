@@ -32,6 +32,8 @@ WorkflowDataType = Literal[
     "longitudinal_analysis",
     "ecology_identity_registry",
     "connected_branch_preview",
+    "coral_branch_growth",
+    "verified_ecology_analysis",
     "ecology_measurement_candidates",
     "ecology_measurement_csv",
     "ecology_population_csv",

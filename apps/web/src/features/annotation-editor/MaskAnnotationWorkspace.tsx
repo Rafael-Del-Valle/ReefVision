@@ -953,6 +953,7 @@ export function MaskAnnotationWorkspace({
               onRevisionCommitted={refreshAfterMeasurementChange}
             />
             <SkeletonAnalysisPanel
+              projectId={project.id}
               selectedMask={selectedMeasurementMask}
               documentDirty={isDirty(state)}
               onOverlayChange={setSkeletonOverlay}

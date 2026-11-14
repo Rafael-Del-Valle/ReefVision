@@ -105,8 +105,11 @@ def _edge(
     )
 
 
-def _validate_graph(
-    nodes: Sequence[SkeletonGraphNode], edges: Sequence[SkeletonGraphEdge]
+def validate_branch_graph(
+    nodes: Sequence[SkeletonGraphNode],
+    edges: Sequence[SkeletonGraphEdge],
+    *,
+    require_connected: bool = True,
 ) -> tuple[dict[str, SkeletonGraphNode], set[Pixel]]:
     node_by_id = {node.id: node for node in nodes}
     if len(node_by_id) != len(nodes) or len({edge.id for edge in edges}) != len(edges):
@@ -176,7 +179,7 @@ def _validate_graph(
         occupied.update(edge.pixels)
         adjacency[source.id].add(target.id)
         adjacency[target.id].add(source.id)
-    if nodes:
+    if nodes and require_connected:
         visited = {nodes[0].id}
         frontier = [nodes[0].id]
         while frontier:
@@ -208,7 +211,7 @@ def preview_connected_branch_addition(
             "Edit ID must contain 1-48 alphanumeric, hyphen or underscore characters"
         )
     path = _checked_path(branch_pixels)
-    node_by_id, occupied = _validate_graph(nodes, edges)
+    node_by_id, occupied = validate_branch_graph(nodes, edges)
     ids = {
         "root": f"manual-{edit_id}-root",
         "tip": f"manual-{edit_id}-tip",
