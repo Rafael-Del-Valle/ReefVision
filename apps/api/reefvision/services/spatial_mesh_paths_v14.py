@@ -125,6 +125,7 @@ def mesh_edge_paths(
     # but only within the connected component containing the requested pair.
     # Unrelated disconnected scans must not make a valid route indeterminate.
     zero_edge_in_component: dict[int, bool] = {}
+    component_by_vertex: dict[int, int] = {}
     unseen = set(referenced)
     while unseen:
         seed = min(unseen)
@@ -143,6 +144,7 @@ def mesh_edge_paths(
                     component.append(neighbor)
         for vertex in component:
             zero_edge_in_component[vertex] = contains_zero_edge
+            component_by_vertex[vertex] = seed
 
     results: list[dict[str, Any]] = []
     for pair in pairs:
@@ -165,6 +167,7 @@ def mesh_edge_paths(
         # a much larger accumulated cost. Such rounded route ties are not
         # evidence of genuinely equal shortest paths.
         lost_positive_edge_cost = False
+        overflowed_candidate_cost = False
 
         def exact_selected_path_cost(
             vertex: int,
@@ -198,13 +201,11 @@ def mesh_edge_paths(
                 for neighbor, edge_length in sorted(adjacency[vertex].items()):
                     candidate = length + edge_length
                     if not isfinite(candidate):
-                        # A finite destination has already been found. This
-                        # candidate cannot improve it, so overflow on an
-                        # unrelated detour must not invalidate its uncertainty
-                        # measurement. Unreachable finite routes still fail.
-                        if end in shortest:
-                            continue
-                        raise ValueError("Accumulated mesh path length overflowed")
+                        # A positive-weight overflow cannot improve any finite
+                        # route. Defer the error until all representable routes
+                        # are explored: a valid route may be discovered later.
+                        overflowed_candidate_cost = True
+                        continue
                     if edge_length > 0 and candidate == length:
                         lost_positive_edge_cost = True
                     prior = shortest.get(neighbor, float("inf"))
@@ -219,14 +220,22 @@ def mesh_edge_paths(
                         # prefix may be lost when a subsequent huge edge is
                         # added, even when no positive edge itself rounds
                         # away against the accumulated prefix.
-                        if (
-                            exact_selected_path_cost(vertex) + Fraction(edge_length)
-                            != exact_selected_path_cost(neighbor)
-                        ):
+                        if exact_selected_path_cost(vertex) + Fraction(
+                            edge_length
+                        ) != exact_selected_path_cost(neighbor):
                             lost_positive_edge_cost = True
                         shortest_counts[neighbor] = min(
                             2, shortest_counts[neighbor] + shortest_counts[vertex]
                         )
+            if (
+                end not in shortest
+                and overflowed_candidate_cost
+                and component_by_vertex[start] == component_by_vertex[end]
+            ):
+                # Topologically connected, but no finite path sum can be
+                # represented. Do not misreport numerical failure as a break
+                # in the reconstructed surface.
+                raise ValueError("Accumulated mesh path length overflowed")
             status = "connected" if end in shortest else "disconnected"
         route: list[int] | None = None
         shortest_route_alternatives_status: str | None = None
