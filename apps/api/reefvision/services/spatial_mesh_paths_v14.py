@@ -56,14 +56,28 @@ def mesh_edge_paths(
 ) -> list[dict[str, Any]] | None:
     if pairs is None:
         return None
-    # Keep the shared engine safe when invoked without the API schema. A
-    # negative or nonfinite calibration cannot produce defensible distances.
+    # Direct callers bypass the strict public schema. Python booleans are
+    # numeric subclasses, but True must never silently mean one meter/unit
+    # or 100% uncertainty. Huge integers must fail as ValueError, not overflow.
+    if type(scale) not in (int, float):
+        raise ValueError("Mesh path scale must be finite and positive")
+    try:
+        scale = float(scale)
+    except OverflowError as exc:
+        raise ValueError("Mesh path scale must be finite and positive") from exc
     if not isfinite(scale) or scale <= 0:
         raise ValueError("Mesh path scale must be finite and positive")
-    if scale_uncertainty is not None and (
-        not isfinite(scale_uncertainty) or not 0 <= scale_uncertainty <= 1
-    ):
-        raise ValueError("Mesh path relative scale uncertainty must be finite and in [0, 1]")
+    if scale_uncertainty is not None:
+        if type(scale_uncertainty) not in (int, float):
+            raise ValueError("Mesh path relative scale uncertainty must be finite and in [0, 1]")
+        try:
+            scale_uncertainty = float(scale_uncertainty)
+        except OverflowError as exc:
+            raise ValueError(
+                "Mesh path relative scale uncertainty must be finite and in [0, 1]"
+            ) from exc
+        if not isfinite(scale_uncertainty) or not 0 <= scale_uncertainty <= 1:
+            raise ValueError("Mesh path relative scale uncertainty must be finite and in [0, 1]")
     # Validate every source vertex, including unreferenced vertices, before
     # building a graph. Otherwise malformed geometry can escape QC when the
     # selected route never traverses the affected vertex.
