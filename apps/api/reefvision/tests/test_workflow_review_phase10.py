@@ -499,6 +499,53 @@ def test_review_resume_rejects_post_pause_frozen_parameter_mutation(
         model_node.parameters_json = original_parameters
         session.commit()
 
+    # A saved producer can still have checksum-valid artifacts and matching
+    # graph parameters while its persisted output summary has been modified
+    # after the workflow paused. Approval must revalidate that evidence.
+    with app.state.session_factory() as session:
+        producer = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "consensus",
+            )
+        )
+        assert producer is not None
+        producer_id = producer.id
+        original_result = dict(producer.result_json or {})
+        output_ids = list(producer.output_artifact_ids_json or [])
+        assert len(output_ids) == 1
+        output = session.get(WorkflowArtifact, output_ids[0])
+        assert output is not None
+        producer.result_json = {
+            **original_result,
+            "outputs": [
+                {
+                    "artifact_id": output.id,
+                    "port_id": output.producer_port_id,
+                    "data_type": output.data_type,
+                    "payload_sha256": "0" * 64,
+                }
+            ],
+        }
+        session.commit()
+
+    rejected_summary = client.post(endpoint, json=approval)
+    assert rejected_summary.status_code == 409, rejected_summary.text
+    assert "output summary does not match persisted artifact provenance" in rejected_summary.text
+
+    with app.state.session_factory() as session:
+        run = session.get(WorkflowRun, run_id)
+        job = session.get(Job, job_id)
+        review_node = session.get(WorkflowNodeRun, review_node_id)
+        producer = session.get(WorkflowNodeRun, producer_id)
+        assert run is not None and run.status == "waiting_for_review"
+        assert job is not None and job.status == "waiting_for_review"
+        assert review_node is not None and review_node.status == "waiting_for_review"
+        assert "review_approval" not in (review_node.result_json or {})
+        assert producer is not None
+        producer.result_json = original_result
+        session.commit()
+
     accepted = client.post(endpoint, json=approval)
     assert accepted.status_code == 202, accepted.text
     assert process_workflow_run_job(app.state.settings, app.state.session_factory, job_id) is True
