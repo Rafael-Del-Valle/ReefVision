@@ -167,7 +167,10 @@ def mesh_edge_paths(
         lost_positive_edge_cost = False
 
         def exact_selected_path_cost(
-            vertex: int, *, path_start: int = start, path_parent: dict[int, int] = parent
+            vertex: int,
+            *,
+            path_start: int = start,
+            path_parent: dict[int, int] = parent,
         ) -> Fraction:
             """Exact sum of stored binary64 lengths for this pair's parent path.
 
