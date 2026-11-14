@@ -516,9 +516,13 @@ def mesh_surface_edge_traces(
             scale_uncertainty = float(scale_uncertainty)
     except OverflowError as exc:
         raise ValueError("Surface trace calibration must be finite and within bounds") from exc
-    if not isfinite(scale) or scale <= 0 or (
-        scale_uncertainty is not None
-        and (not isfinite(scale_uncertainty) or not 0 <= scale_uncertainty <= 1)
+    if (
+        not isfinite(scale)
+        or scale <= 0
+        or (
+            scale_uncertainty is not None
+            and (not isfinite(scale_uncertainty) or not 0 <= scale_uncertainty <= 1)
+        )
     ):
         raise ValueError("Surface trace calibration must be finite and within bounds")
 
@@ -555,9 +559,7 @@ def mesh_surface_edge_traces(
     for face in faces:
         edges_in_face = ((face[0], face[1]), (face[1], face[2]), (face[2], face[0]))
         if face_counts[tuple(sorted(face))] > 1:
-            duplicate_face_edges.update(
-                (min(a, b), max(a, b)) for a, b in edges_in_face
-            )
+            duplicate_face_edges.update((min(a, b), max(a, b)) for a, b in edges_in_face)
         for a, b in edges_in_face:
             edge = (min(a, b), max(a, b))
             incidence[edge] += 1
@@ -621,6 +623,16 @@ def mesh_surface_edge_traces(
             warnings.append("inconsistent_winding_edge_on_surface_trace")
         if any(length == 0 for length in source_lengths):
             warnings.append("zero_length_edge_on_surface_trace")
+        # Distinct parsed vertex indices can refer to exactly the same XYZ.
+        # This makes a selected open-by-index trace return to an earlier
+        # location without containing a repeated index or a zero-length edge.
+        positions = [tuple(points[index]) for index in vertices]
+        if any(
+            positions[i] == positions[j]
+            for i in range(2, len(positions))
+            for j in range(i - 1)
+        ):
+            warnings.append("nonadjacent_coincident_surface_trace_vertices")
         if any(
             source > 0 and calibrated == 0
             for source, calibrated in zip(source_lengths, segment_lengths, strict=True)
