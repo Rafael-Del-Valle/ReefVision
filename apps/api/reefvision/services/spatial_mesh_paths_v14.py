@@ -627,6 +627,24 @@ def mesh_surface_edge_traces(
             if scale_uncertainty is not None
             else None
         )
+        # Use the same source-frame, scale-independent geometric turning
+        # calculation as shortest mesh-edge routes. A zero-length neighbor
+        # leaves that interior turn unknown; never replace it with zero.
+        trace_adjacency: dict[int, dict[int, float]] = {index: {} for index in vertices}
+        for (first, second), source_length in zip(
+            pairwise(vertices), source_lengths, strict=True
+        ):
+            trace_adjacency[first][second] = source_length
+            trace_adjacency[second][first] = source_length
+        turn_angles_deg = _route_turn_angles(points, vertices, trace_adjacency)
+        interior_turn_angles = turn_angles_deg[1:-1]
+        valid_turn_angles = [angle for angle in interior_turn_angles if angle is not None]
+        maximum_turn_angle_deg = max(valid_turn_angles, default=None)
+        total_absolute_geometric_turn_deg = (
+            fsum(valid_turn_angles)
+            if len(valid_turn_angles) == len(interior_turn_angles)
+            else None
+        )
         warnings = ["caller_selected_surface_trace_not_anatomical_centerline"]
         if any(incidence[edge] == 1 for edge in edges):
             warnings.append("open_boundary_edge_on_surface_trace")
@@ -675,6 +693,9 @@ def mesh_surface_edge_traces(
                 "vertices_in_source_frame_m": calibrated_vertices,
                 "edge_count": len(edges),
                 "segment_lengths_m": segment_lengths,
+                "turn_angles_deg": turn_angles_deg,
+                "maximum_turn_angle_deg": maximum_turn_angle_deg,
+                "total_absolute_geometric_turn_deg": total_absolute_geometric_turn_deg,
                 "segment_length_scale_only_intervals_m": segment_intervals,
                 "cumulative_lengths_m": cumulative,
                 "cumulative_length_scale_only_intervals_m": cumulative_intervals,
