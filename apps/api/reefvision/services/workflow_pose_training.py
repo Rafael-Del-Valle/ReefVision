@@ -590,6 +590,13 @@ def _completed_workflow_pose_training_run(
         if snapshot_version == "pose-workflow-training-snapshot-0004":
             digest = snapshot.get("experiment_package_versions_sha256")
             manifest = candidate.artifact_manifest_json
+            # Report invalid persisted JSON shape before evaluating a package
+            # digest. Both conditions fail closed, but a malformed manifest
+            # must retain its specific scientific-provenance error.
+            if manifest is not None and not isinstance(manifest, dict):
+                raise ValidationError(
+                    "Recovered pose-training artifact manifest must be a JSON object"
+                )
             if (
                 not isinstance(digest, str)
                 or len(digest) != 64
