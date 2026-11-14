@@ -65,34 +65,54 @@ def test_log_tail_rejects_file_swapped_between_validation_and_open(
 def test_log_tail_rejects_path_replaced_after_bounded_read(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A rotated/supplanted log cannot be reported as the current job's log."""
+    """A log path pointing at another inode after reading is rejected on every OS."""
     log = tmp_path / "training.log"
     original = b"epoch=2\ntrain/box_loss=0.25\n"
     log.write_bytes(original)
     replacement = tmp_path / "different-run.log"
     unrelated = b"epoch=90\ntrain/box_loss=9.99\n"
     replacement.write_bytes(unrelated)
-    real_fstat = os.fstat
-    fstat_calls = 0
+    original_identity = log.stat()
+    replacement_identity = replacement.stat()
+    assert (original_identity.st_dev, original_identity.st_ino) != (
+        replacement_identity.st_dev,
+        replacement_identity.st_ino,
+    )
 
-    def replace_after_tail_read(fd: int) -> os.stat_result:
-        nonlocal fstat_calls
+    # Windows can prohibit os.replace while the file is held open by the reader.
+    # Model that same read/rename race by changing only the path's observed inode
+    # after the second fstat, while leaving the actual files and handle intact.
+    # This exercises the production post-read path/handle identity guard on
+    # Windows and POSIX instead of accidentally testing OS rename permissions.
+    real_fstat = os.fstat
+    real_stat = Path.stat
+    fstat_calls = 0
+    tail_read_finished = False
+
+    def mark_tail_read(fd: int) -> os.stat_result:
+        nonlocal fstat_calls, tail_read_finished
         fstat_calls += 1
         observed = real_fstat(fd)
         if fstat_calls == 2:
-            # The first fstat anchors the opened handle. The second happens
-            # after reading the tail, before its metrics reach the caller.
-            os.replace(replacement, log)
+            tail_read_finished = True
         return observed
 
-    monkeypatch.setattr(training_routes.os, "fstat", replace_after_tail_read)
+    def stat_after_simulated_swap(
+        path: Path, *args: object, **kwargs: object
+    ) -> os.stat_result:
+        target = replacement if path == log and tail_read_finished else path
+        return real_stat(target, *args, **kwargs)
+
+    monkeypatch.setattr(training_routes.os, "fstat", mark_tail_read)
+    monkeypatch.setattr(Path, "stat", stat_after_simulated_swap)
     with pytest.raises(HTTPException) as error:
         training_routes._training_log_tail("training.log", tmp_path)
 
     assert error.value.status_code == 403
     assert fstat_calls == 2
-    assert log.read_bytes() == unrelated
-
+    assert tail_read_finished
+    assert log.read_bytes() == original
+    assert replacement.read_bytes() == unrelated
 
 def test_log_tail_allows_worker_append_during_read(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
