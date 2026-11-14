@@ -63,7 +63,7 @@ def mesh_edge_paths(
     if scale_uncertainty is not None and (
         not isfinite(scale_uncertainty) or not 0 <= scale_uncertainty <= 1
     ):
-        raise ValueError("Mesh path relative scale uncertainty must be finite and in [0, 1)")
+        raise ValueError("Mesh path relative scale uncertainty must be finite and in [0, 1]")
     # Validate every source vertex, including unreferenced vertices, before
     # building a graph. Otherwise malformed geometry can escape QC when the
     # selected route never traverses the affected vertex.
@@ -352,6 +352,13 @@ def mesh_edge_paths(
             # Route flags are topology evidence, not biological branch validation.
             route_edges = [(min(a, b), max(a, b)) for a, b in pairwise(route)]
             path_qc_warnings = []
+            if shortest_route_alternatives_status == "unassessable_zero_length_edges":
+                # The selected route can avoid all zero-weight edges even when
+                # the same connected mesh component makes route uniqueness
+                # unassessable. Surface that limitation in the QC warning list
+                # so downstream consumers cannot mistake a clean path for a
+                # uniquely determined anatomical branch.
+                path_qc_warnings.append("zero_length_mesh_edge_in_connected_component")
             if shortest_route_alternatives_status == "unassessable_floating_point_cost_resolution":
                 path_qc_warnings.append("positive_mesh_edge_cost_rounded_away")
             if shortest_route_alternatives_status == "multiple_exact_equal_cost_routes":
