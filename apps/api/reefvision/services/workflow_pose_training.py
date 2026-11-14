@@ -539,6 +539,7 @@ def _completed_workflow_pose_training_run(
             "pose-workflow-training-snapshot-0001",
             "pose-workflow-training-snapshot-0002",
             "pose-workflow-training-snapshot-0003",
+            "pose-workflow-training-snapshot-0004",
         ):
             raise ValidationError("Recovered pose-training node snapshot schema changed")
 
@@ -547,11 +548,16 @@ def _completed_workflow_pose_training_run(
         registry_snapshots = (
             "pose-workflow-training-snapshot-0002",
             "pose-workflow-training-snapshot-0003",
+            "pose-workflow-training-snapshot-0004",
         )
         if snapshot_version not in registry_snapshots and "parameter_registry_version" in snapshot:
             raise ValidationError("Recovered pose-training node snapshot schema changed")
         if (
-            snapshot_version != "pose-workflow-training-snapshot-0003"
+            snapshot_version
+            not in (
+                "pose-workflow-training-snapshot-0003",
+                "pose-workflow-training-snapshot-0004",
+            )
             and "metrics_history_sha256" in snapshot
         ):
             raise ValidationError("Recovered pose-training node snapshot schema changed")
@@ -565,15 +571,37 @@ def _completed_workflow_pose_training_run(
         ):
             raise ValidationError("Recovered pose-training provider registry version changed")
 
-        # Completed v3 nodes freeze the epoch-by-epoch metric history, not
+        # Completed v3/v4 nodes freeze the epoch-by-epoch metric history, not
         # just experiment summary metrics. Replays cannot silently rewrite it.
-        if snapshot_version == "pose-workflow-training-snapshot-0003" and (
+        if snapshot_version in (
+            "pose-workflow-training-snapshot-0003",
+            "pose-workflow-training-snapshot-0004",
+        ) and (
             not isinstance(candidate.metrics_history_json, dict)
             or not isinstance(snapshot.get("metrics_history_sha256"), str)
             or snapshot["metrics_history_sha256"]
             != canonical_json_sha256(dict(candidate.metrics_history_json or {}))
         ):
             raise ValidationError("Recovered pose-training metrics history changed")
+
+        # V4 makes the software environment digest mandatory and binds it
+        # independently to the saved snapshot, not just to two mutable
+        # copies of the checkpoint manifest.
+        if snapshot_version == "pose-workflow-training-snapshot-0004":
+            digest = snapshot.get("experiment_package_versions_sha256")
+            manifest = candidate.artifact_manifest_json
+            if (
+                not isinstance(digest, str)
+                or len(digest) != 64
+                or any(char not in "0123456789abcdef" for char in digest)
+                or not isinstance(manifest, dict)
+                or manifest.get("experiment_package_versions_sha256") != digest
+            ):
+                raise ValidationError(
+                    "Recovered pose-training node package-version provenance changed"
+                )
+        elif "experiment_package_versions_sha256" in snapshot:
+            raise ValidationError("Recovered pose-training node snapshot schema changed")
 
         if (
             snapshot.get("pose_training_dataset_id") != dataset.id
@@ -837,6 +865,7 @@ def _reused_pose_training_result(
         "pose-workflow-training-snapshot-0001",
         "pose-workflow-training-snapshot-0002",
         "pose-workflow-training-snapshot-0003",
+        "pose-workflow-training-snapshot-0004",
     }
     snapshot_version = snapshot.get("schema_version")
     if snapshot_version is not None and (
@@ -858,7 +887,10 @@ def _reused_pose_training_result(
     if is_current_snapshot and not isinstance(run.metrics_json, dict):
         raise ValidationError("Recovered pose-training summary metrics must be a JSON object")
 
-    if snapshot.get("schema_version") == "pose-workflow-training-snapshot-0003" and (
+    if snapshot_version in (
+        "pose-workflow-training-snapshot-0003",
+        "pose-workflow-training-snapshot-0004",
+    ) and (
         not isinstance(run.metrics_history_json, dict)
         or not isinstance(snapshot.get("metrics_history_sha256"), str)
         or snapshot["metrics_history_sha256"]
@@ -992,6 +1024,11 @@ def _reused_pose_training_result(
         # object and compare it with the digest frozen at first completion.
         if is_current_snapshot and (
             not isinstance(experiment.package_versions_json, dict)
+            or (
+                snapshot_version == "pose-workflow-training-snapshot-0004"
+                and frozen_checkpoint.get("experiment_package_versions_sha256")
+                != snapshot.get("experiment_package_versions_sha256")
+            )
             or (
                 "experiment_package_versions_sha256" in frozen_checkpoint
                 and frozen_checkpoint["experiment_package_versions_sha256"]
@@ -1830,14 +1867,17 @@ def create_pose_workflow_training_result(
         raise ValidationError("Completed pose-training metrics history must be a JSON object")
 
     # Upgrade the queued v2 snapshot only when the worker has completed.
-    # Historical completed v2 snapshots remain readable, while new results
-    # freeze epoch-level metrics in the same transaction as checkpoint hashes.
+    # Historical completed v2/v3 snapshots remain readable, while new v4
+    # results freeze both metric history and software environment lineage.
     if not isinstance(run.draft_snapshot_json, dict):
         raise ValidationError("Completed pose-training frozen snapshot must be a JSON object")
     run.draft_snapshot_json = {
         **run.draft_snapshot_json,
-        "schema_version": "pose-workflow-training-snapshot-0003",
+        "schema_version": "pose-workflow-training-snapshot-0004",
         "metrics_history_sha256": canonical_json_sha256(dict(run.metrics_history_json or {})),
+        "experiment_package_versions_sha256": run.artifact_manifest_json[
+            "experiment_package_versions_sha256"
+        ],
     }
 
     # Validate the final downstream artifact before committing checkpoint

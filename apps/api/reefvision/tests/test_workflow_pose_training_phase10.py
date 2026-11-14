@@ -768,6 +768,42 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
         session.commit()
     assert retry_completed_node()["training_run_id"] == result["training_run_id"]
 
+    # Removing the digest from both persisted manifests must not silently
+    # downgrade a completed v4 run to unchecked software provenance.
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        experiment = session.scalar(
+            select(ExperimentRecord).where(
+                ExperimentRecord.training_run_id == result["training_run_id"]
+            )
+        )
+        assert persisted is not None and experiment is not None
+        original_manifest = dict(persisted.artifact_manifest_json)
+        stripped_manifest = {
+            key: value
+            for key, value in original_manifest.items()
+            if key != "experiment_package_versions_sha256"
+        }
+        persisted.artifact_manifest_json = stripped_manifest
+        experiment.artifact_manifest_json = dict(stripped_manifest)
+        session.commit()
+
+    with pytest.raises(ValidationError, match="package-version provenance changed"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        experiment = session.scalar(
+            select(ExperimentRecord).where(
+                ExperimentRecord.training_run_id == result["training_run_id"]
+            )
+        )
+        assert persisted is not None and experiment is not None
+        persisted.artifact_manifest_json = original_manifest
+        experiment.artifact_manifest_json = dict(original_manifest)
+        session.commit()
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
     # A completed saved Workflow Builder node must have one unambiguous child
     # training run. A second older completed record must not be silently
     # ignored simply because its checkpoint was not chosen by the sort order.
@@ -806,7 +842,7 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
         assert persisted is not None
         original_registry = persisted.parameter_registry_version
         original_snapshot = dict(persisted.draft_snapshot_json or {})
-        assert original_snapshot["schema_version"] == "pose-workflow-training-snapshot-0003"
+        assert original_snapshot["schema_version"] == "pose-workflow-training-snapshot-0004"
         assert original_snapshot["parameter_registry_version"] == original_registry
         persisted.parameter_registry_version = "substituted-provider-registry"
         session.commit()
@@ -836,11 +872,12 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
 
     assert retry_completed_node()["training_run_id"] == result["training_run_id"]
 
-    # A completed v3 snapshot cannot evade its frozen metric history or
-    # provider-registry assertions by changing only the schema marker.
+    # A completed v4 snapshot cannot evade frozen metrics, package versions,
+    # or provider-registry assertions by changing only the schema marker.
     for downgraded_schema in (
         "pose-workflow-training-snapshot-0001",
         "pose-workflow-training-snapshot-0002",
+        "pose-workflow-training-snapshot-0003",
         None,
     ):
         with app.state.session_factory() as session:
