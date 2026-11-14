@@ -315,8 +315,15 @@ so this warning does not authorize a duplicate-mesh result. By contrast,
 `inconsistent_winding_edge_on_surface_trace` flags a shared edge used
 in the same orientation by exactly two distinct triangles; that QC warning is
 preserved in both standalone and executed saved-workflow outputs. Neither finding
-is anatomical evidence or an independent biological observation. The scale
-interval applies one common positive calibration factor across the complete
+is anatomical evidence or an independent biological observation. In addition,
+`nonadjacent_coincident_surface_trace_vertices` warns when two different,
+nonconsecutive parsed vertices in the selected trace have exactly identical
+source XYZ coordinates. The trace can return to the same physical point while
+having distinct indices and positive-length edges; this is an *exact-coordinate*
+QC diagnostic, not a tolerance-based self-intersection test, an anatomical
+centerline check, or proof of organism identity. Standalone and saved executable
+Workflow Builder tests preserve this warning without changing review status.
+The scale interval applies one common positive calibration factor across the complete
 trace. It is neither a sampling-based confidence interval nor an estimate of
 reconstruction, localization, topology or inter-observer uncertainty. A 100%
 relative scale uncertainty yields [0, 2L] for representable nominal length L.
