@@ -22,6 +22,8 @@ from reefvision.db.models import (
     ReviewQueue,
     ReviewQueueItem,
 )
+from reefvision.config import Settings
+from reefvision.schemas.class_operations import ClassOperationExecuteRequest
 from reefvision.services import class_operations as class_operations_module
 from reefvision.services.class_operations import ClassOperationsService
 
@@ -1260,3 +1262,89 @@ def test_class_execution_rolls_back_scientific_mutations_when_qc_rewrite_fails(
                 )
             )
         )
+
+
+def test_class_execution_failed_writer_cannot_overwrite_competing_completion(
+    client: TestClient, test_settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Rollback provenance must not overwrite a second writer's committed operation."""
+    project = create_project(client, name="Competing rollback provenance")
+    source = create_label_class(
+        client, project["id"], class_index=0, name="Thesea closed", display_color="#E76F51"
+    )
+    target = create_label_class(
+        client, project["id"], class_index=1, name="Thesea open", display_color="#2A9D8F"
+    )
+    seed_reassignment_records(
+        client,
+        project,
+        source,
+        target,
+        include_deleted_annotation=False,
+        include_historical_prediction=False,
+    )
+    route = f"/api/v1/projects/{project['id']}/classes/{source['id']}/reassign"
+    preview_response = client.post(f"{route}/preview", json={"target_class_id": target["id"]})
+    assert preview_response.status_code == 201, preview_response.text
+    approval = preview_response.json()
+    original_replace = class_operations_module._replace_class_id_list
+    original_now = class_operations_module._utc_now
+    now_calls = 0
+    competing_completed = False
+
+    def fail_first_writer(*_args: object) -> list[str]:
+        raise RuntimeError("first writer aborted after biological edits")
+
+    def run_second_writer_after_rollback() -> datetime:
+        nonlocal now_calls, competing_completed
+        now_calls += 1
+        if now_calls == 2:
+            # The first writer has released its SQLite lock by rolling back,
+            # but has not yet issued its conditional failure-status update.
+            monkeypatch.setattr(class_operations_module, "_replace_class_id_list", original_replace)
+            monkeypatch.setattr(class_operations_module, "_utc_now", original_now)
+            with Session(cast(FastAPI, client.app).state.engine) as other:
+                result = ClassOperationsService(other, test_settings).execute_reassign(
+                    project["id"],
+                    source["id"],
+                    ClassOperationExecuteRequest(
+                        operation_id=approval["id"],
+                        preview_checksum=approval["preview_checksum"],
+                    ),
+                )
+                assert result.status == "completed"
+                competing_completed = True
+        return original_now()
+
+    monkeypatch.setattr(class_operations_module, "_replace_class_id_list", fail_first_writer)
+    monkeypatch.setattr(class_operations_module, "_utc_now", run_second_writer_after_rollback)
+    with pytest.raises(RuntimeError, match="first writer aborted"):
+        client.post(
+            route,
+            json={"operation_id": approval["id"], "preview_checksum": approval["preview_checksum"]},
+        )
+
+    assert now_calls == 2
+    assert competing_completed
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        operation = session.get(ClassOperation, approval["id"])
+        annotation = session.get(Annotation, "annotation-active")
+        prediction = session.get(PredictionProposal, "proposal-pending")
+        issue = session.get(QualityControlIssue, "qc-issue-open")
+        item = session.get(ReviewQueueItem, "queue-item-pending")
+        assert operation is not None
+        assert operation.status == "completed" and operation.final_state == "reassigned"
+        assert operation.rollback_result_json == {"rolled_back": False}
+        assert annotation is not None and annotation.label_class_id == target["id"]
+        assert prediction is not None and prediction.label_class_id == target["id"]
+        assert issue is not None and issue.class_ids_json == [target["id"]]
+        assert item is not None and item.label_class_ids_json == [target["id"]]
+        assert len(
+            list(
+                session.scalars(
+                    select(AnnotationEvent.id).where(
+                        AnnotationEvent.event_type == "class_reassigned"
+                    )
+                )
+            )
+        ) == 1
