@@ -132,6 +132,29 @@ def test_imported_exif_captures_explicit_offset_through_sqlite(
     else:
         assert all(row["capture_time_status"] == "timezone_aware" for row in candidates)
         assert all(row["capture_timestamp_utc"] == "2025-10-01T16:00:00Z" for row in candidates)
+        app = cast(FastAPI, client.app)
+        with app.state.session_factory() as session:
+            image = session.get(ImageAsset, image_id)
+            assert image is not None
+            metadata = dict(image.metadata_json)
+            metadata["exif"] = {
+                **metadata["exif"],
+                "DateTimeOriginal": "2025:10:01 16:00:00",
+                "OffsetTimeOriginal": "+00:00",
+            }
+            image.metadata_json = metadata
+            session.commit()
+        assert _get(client, project_id).status_code == 200
+        with app.state.session_factory() as session:
+            image = session.get(ImageAsset, image_id)
+            assert image is not None
+            metadata = dict(image.metadata_json)
+            metadata["exif"] = {**metadata["exif"], "OffsetTimeOriginal": "+02:00"}
+            image.metadata_json = metadata
+            session.commit()
+        stale = _get(client, project_id)
+        assert stale.status_code == 400, stale.text
+        assert "metadata changed after linking" in stale.json()["detail"]
 
 
 def test_source_change_revokes_candidate_api_and_saved_workflow(

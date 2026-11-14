@@ -32,7 +32,6 @@ from reefvision.schemas.ecology_measurement_candidates import (
 )
 from reefvision.services.ecology_identity import EcologyIdentityService
 from reefvision.storage.datasets import canonical_json_sha256
-from reefvision.storage.images import recover_explicit_exif_capture_time
 
 
 def _full_parent_roster_feasible(
@@ -1069,7 +1068,9 @@ class EcologyMeasurementCandidateService:
                 time_status = "missing"
                 captured_utc = None
             elif captured.tzinfo is None or captured.utcoffset() is None:
-                captured_utc = recover_explicit_exif_capture_time(captured, image.metadata_json)
+                captured_utc = EcologyIdentityService.frozen_explicit_capture_time(
+                    image, image_link.source_metadata_sha256
+                )
                 time_status = "timezone_aware" if captured_utc is not None else "timezone_missing"
             else:
                 time_status = "timezone_aware"
