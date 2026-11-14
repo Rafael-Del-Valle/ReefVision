@@ -2539,6 +2539,13 @@ details.rv-inspector-card > summary,
   justify-content: flex-end;
 }
 
+.rv-project-search {
+  display: grid;
+  gap: var(--rv-space-1);
+  max-width: 100%;
+  width: 18rem;
+}
+
 @media (max-width: 70rem) {
   .rv-global-context,
   .rv-global-brand p {
