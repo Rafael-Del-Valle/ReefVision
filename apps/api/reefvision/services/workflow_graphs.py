@@ -192,9 +192,9 @@ _ACTIONS: dict[str, str] = {
     "ecology_coral_skeleton": "Extract coral segments from a project-owned verified mask.",
     "ecology_coral_growth": "Calculate 2D coral growth from reviewed correspondence.",
     "ecology_verified_analysis": "Recalculate a reviewed ecological analysis.",
-    "ecology_event_summary": "Publish a saved ecological event summary and verify its evidence.",
-    "scientific_comparison": "Publish a saved comparison from frozen held-out evidence.",
-    "research_publication_figure": "Publish a saved figure, table and methods with their source.",
+    "ecology_event_summary": "Calculate or replay an event summary from reviewed evidence.",
+    "scientific_comparison": "Calculate or replay agreement on frozen held-out evidence.",
+    "research_publication_figure": "Create or reopen a figure and table with its source.",
     "image_acquisition_quality": "Measure acquisition quality and retain reviewable image flags.",
     "ecology_connected_branch_preview": (
         "Preview an attached coral centerline segment without changing saved geometry."

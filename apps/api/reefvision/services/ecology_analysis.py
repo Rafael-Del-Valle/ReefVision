@@ -55,6 +55,7 @@ from reefvision.schemas.ecology_analysis import (
     growth_sampling_coverage,
     validate_ecology_analysis_snapshot,
 )
+from reefvision.schemas.ecology_study_assignment import EcologyStudyAssignmentRead
 from reefvision.schemas.longitudinal_monitoring import (
     LongitudinalAnalysisRequest,
     MonitoringObservation,
@@ -168,6 +169,11 @@ class EcologyAnalysisService:
         value, unit = measurement
         if not isfinite(value) or value <= 0:
             raise ValidationError("Selected growth does not yield a finite positive measurement")
+        study = (
+            EcologyStudyAssignmentRead.model_validate(identity.study_assignment)
+            if identity.study_assignment
+            else None
+        )
         return GrowthObservation(
             calibration_evidence_id=UUID(link.id),
             annotation_evidence_id=UUID(annotation.id),
@@ -191,6 +197,8 @@ class EcologyAnalysisService:
             ),
             experimental_unit_type=identity.experimental_unit_type,
             experimental_unit_id=identity.experimental_unit_id,
+            treatment_code=study.treatment_code if study else None,
+            study_tank_code=study.tank_code if study else None,
             observed_at=observed,
             value=value,
             unit=unit,

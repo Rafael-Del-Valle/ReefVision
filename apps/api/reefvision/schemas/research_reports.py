@@ -12,6 +12,7 @@ ReportSource = Literal["ecology", "event_summary", "comparison"]
 Figure = Literal[
     "trajectory",
     "group_summary",
+    "treatment_summary",
     "sample_coverage",
     "event_rate",
     "identity_scatter",

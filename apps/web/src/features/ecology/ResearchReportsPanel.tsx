@@ -10,6 +10,7 @@ type SourceKind = "ecology" | "event_summary" | "comparison";
 type FigureKind =
   | "trajectory"
   | "group_summary"
+  | "treatment_summary"
   | "sample_coverage"
   | "event_rate"
   | "identity_scatter"
@@ -18,6 +19,7 @@ type Source = { id: string; label: string; figures: FigureKind[] };
 const labels: Record<FigureKind, string> = {
   trajectory: "Longitudinal trajectory",
   group_summary: "Independent-unit group summary",
+  treatment_summary: "Growth by reviewed treatment",
   sample_coverage: "Sampling coverage and missingness",
   event_rate: "Confirmed biological event rate",
   identity_scatter: "Reference–model identity scatter",
@@ -76,7 +78,14 @@ export function ResearchReportsPanel({ projectId }: { projectId: string }) {
           label: `${row.snapshot.result.kind === "growth" ? "Reviewed growth" : "Reviewed abundance"} · ${row.snapshot.reviewed_by} · ${row.id.slice(0, 8)}`,
           figures:
             row.snapshot.result.kind === "growth"
-              ? ["trajectory", "group_summary"]
+              ? [
+                  "trajectory",
+                  "group_summary",
+                  "treatment_summary",
+                  ...(row.snapshot.result.planned_sampling_effort?.length
+                    ? (["sample_coverage"] as const)
+                    : []),
+                ]
               : ["sample_coverage"],
         }));
       }

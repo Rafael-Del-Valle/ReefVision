@@ -3,11 +3,13 @@
 from typing import Any
 from uuid import UUID
 
+from pydantic import ValidationError as InvalidConfiguration
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
 from reefvision.db.models import WorkflowArtifact
 from reefvision.domain.errors import ConflictError, ValidationError
+from reefvision.schemas.research_reports import FigureRequest
 from reefvision.schemas.workflow_graphs import (
     WorkflowNodeDefinitionResponse,
     WorkflowPortDefinition,
@@ -34,12 +36,12 @@ def research_report_node() -> WorkflowNodeDefinitionResponse:
                 multiple=True,
             )
         ],
-        required_parameters=["report_id"],
-        optional_parameters={},
+        required_parameters=[],
+        optional_parameters={"report_id": "", "configuration": {}},
         execution_state="executable",
         executable=True,
         implementation_notes=[
-            "Save a figure from reviewed source evidence in the Research reports workspace."
+            "Choose a saved report, or provide its figure configuration in advanced parameters."
         ],
     )
 
@@ -55,11 +57,21 @@ def execute_research_report(
     projects = inputs.get("project", [])
     if len(projects) != 1 or projects[0].payload_json.get("project_id") != project_id:
         raise ValidationError("Research reports require the current project")
+    identifier = parameters.get("report_id")
+    configuration = parameters.get("configuration")
+    if bool(identifier) == bool(configuration):
+        raise ValidationError("Provide exactly one saved report ID or figure configuration")
+    service = ResearchReportService(session)
     try:
-        identifier = str(UUID(str(parameters["report_id"])))
-    except (KeyError, ValueError) as exc:
-        raise ValidationError("Choose a saved research report") from exc
-    report = ResearchReportService(session).get(project_id, identifier)
+        report = (
+            service.get(project_id, str(UUID(str(identifier))))
+            if identifier
+            else service.save(project_id, FigureRequest.model_validate(configuration))
+        )
+    except InvalidConfiguration as exc:
+        raise ValidationError(f"Invalid research figure configuration: {exc}") from exc
+    except ValueError as exc:
+        raise ValidationError("Choose a saved research report UUID") from exc
     if report.stale:
         raise ConflictError("Recalculate the changed source before republishing the figure")
     return [
@@ -68,7 +80,7 @@ def execute_research_report(
             "data_type": "research_report_figure",
             "payload": {
                 "project_id": project_id,
-                "report_id": identifier,
+                "report_id": str(report.id),
                 "content_sha256": report.content_sha256,
                 "source_sha256": report.snapshot.source_sha256,
                 "method": report.snapshot.method,

@@ -126,6 +126,36 @@ test("reviews a study assignment and preserves wholly missing planned visits", a
   await panel.getByRole("button", { name: /^Growth ·/ }).click();
   await expect(effort.getByRole("row", { name: "TANK-1 2 0 2" })).toBeVisible();
 
+  await page.getByRole("button", { name: "Research reports" }).click();
+  const reports = page.getByRole("region", {
+    name: "Publication figures and research reports",
+  });
+  await reports.getByLabel("Saved source").selectOption({ index: 1 });
+  await reports
+    .getByRole("combobox")
+    .filter({
+      has: page.getByRole("option", {
+        name: "Sampling coverage and missingness",
+      }),
+    })
+    .selectOption("sample_coverage");
+  await reports
+    .getByLabel("Figure title")
+    .fill("Synthetic planned visit coverage");
+  await reports.getByRole("button", { name: "Save research figure" }).click();
+  const coverage = reports.getByRole("img", {
+    name: /Synthetic planned visit coverage/,
+  });
+  await expect(coverage).toBeVisible();
+  await expect
+    .poll(() =>
+      coverage.evaluate((image) => (image as HTMLImageElement).naturalWidth),
+    )
+    .toBeGreaterThan(0);
+  await page.screenshot({
+    path: testInfo.outputPath("publication-planned-visit-coverage.png"),
+  });
+
   const registry = await page.request.get(
     `${api}/projects/${id}/ecology/identity-registry`,
   );

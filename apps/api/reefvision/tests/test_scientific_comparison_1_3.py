@@ -291,6 +291,26 @@ def test_held_out_comparison_counts_share_exact_reference_and_preserve_zero_and_
         row for row in run["artifacts"] if row["data_type"] == "scientific_comparison_report"
     )
     assert artifact["payload_json"]["content_sha256"] == report["content_sha256"]
+    calculated = _run(
+        client,
+        project_id,
+        {
+            **graph,
+            "graph_id": "calculate-heldout-comparison",
+            "nodes": [
+                graph["nodes"][0],
+                {
+                    **graph["nodes"][1],
+                    "parameters": {"configuration": report["snapshot"]["options"]},
+                },
+            ],
+        },
+    )
+    assert calculated["run"]["status"] == "succeeded", calculated
+    calculated_artifact = next(
+        row for row in calculated["artifacts"] if row["data_type"] == "scientific_comparison_report"
+    )
+    assert calculated_artifact["payload_json"]["content_sha256"] == report["content_sha256"]
     raw = export_archive(client, test_settings, project_id)
     inspected = client.post("/api/v1/exchange-packages/inspect", files={"file": ("study.zip", raw)})
     assert inspected.json()["compatible"], inspected.text

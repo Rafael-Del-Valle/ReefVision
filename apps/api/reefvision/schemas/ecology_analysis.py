@@ -29,6 +29,7 @@ from reefvision.domain.experimental_unit_policy import (
     require_ecological_unit_id,
     require_ecological_unit_type,
 )
+from reefvision.schemas.ecology_study_assignment import StudyCode
 from reefvision.schemas.longitudinal_monitoring import (
     ExperimentalUnitSummary,
     LongitudinalChange,
@@ -189,6 +190,8 @@ class GrowthObservation(BaseModel):
     measurement_method: Literal["scalar_image_plane", "reference_plane_homography"]
     experimental_unit_type: str | None
     experimental_unit_id: str | None
+    treatment_code: StudyCode | None = None
+    study_tank_code: StudyCode | None = None
     observed_at: AwareDatetime
     value: float = Field(gt=0, allow_inf_nan=False)
     unit: str

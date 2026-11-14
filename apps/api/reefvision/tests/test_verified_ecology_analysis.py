@@ -119,6 +119,25 @@ def test_abundance_pins_reviewed_counts_separates_density_and_detects_staleness(
     partial = with_missing.json()["snapshot"]["result"]["unit_summaries"][0]
     assert partial["excluded_sample_count"] == 1
     assert partial["density_per_m2"] is None
+    absent = {**missing, "observed_at": "2026-11-02T12:00:00Z"}
+    with_absent_date = client.post(
+        endpoint,
+        json={**payload, "selection": {**selection, "sources": [*selected_sources, absent]}},
+    )
+    assert with_absent_date.status_code == 201, with_absent_date.text
+    missing_figure = client.post(
+        reports,
+        json={
+            "source_kind": "ecology",
+            "source_id": with_absent_date.json()["id"],
+            "figure": "sample_coverage",
+            "title": "Coverage with an unsampled follow-up",
+        },
+    )
+    assert missing_figure.status_code == 201, missing_figure.text
+    included, excluded = missing_figure.json()["snapshot"]["series"]
+    assert [(point["y"], point["denominator"]) for point in included["points"]] == [(1, 1), (0, 1)]
+    assert [(point["y"], point["denominator"]) for point in excluded["points"]] == [(0, 1), (1, 1)]
 
     duplicate = client.post(
         endpoint,

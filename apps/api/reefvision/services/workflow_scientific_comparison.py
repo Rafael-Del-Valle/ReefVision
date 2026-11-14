@@ -3,17 +3,18 @@
 from typing import Any
 from uuid import UUID
 
+from pydantic import ValidationError as InvalidConfiguration
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
 from reefvision.db.models import WorkflowArtifact
 from reefvision.domain.errors import ConflictError, ValidationError
-from reefvision.schemas.scientific_comparison import ComparisonRecord
+from reefvision.schemas.scientific_comparison import ComparisonRecord, ComparisonRequest
 from reefvision.schemas.workflow_graphs import (
     WorkflowNodeDefinitionResponse,
     WorkflowPortDefinition,
 )
-from reefvision.services.scientific_comparison import read_comparison
+from reefvision.services.scientific_comparison import create_comparison, read_comparison
 
 
 def comparison_artifact(record: ComparisonRecord) -> dict[str, str]:
@@ -35,16 +36,32 @@ def execute(
     inputs: dict[str, list[WorkflowArtifact]],
 ) -> list[dict[str, Any]]:
     del settings
-    if set(parameters) - {"comparison_id", "__workflow_run_id", "__workflow_node_run_id"}:
+    if set(parameters) - {
+        "comparison_id",
+        "configuration",
+        "__workflow_run_id",
+        "__workflow_node_run_id",
+    }:
         raise ValidationError("Unsupported scientific comparison parameters")
     projects = inputs.get("project", [])
     if len(projects) != 1 or projects[0].payload_json.get("project_id") != project_id:
         raise ValidationError("Scientific comparison requires the current project")
+    identifier = parameters.get("comparison_id")
+    configuration = parameters.get("configuration")
+    if bool(identifier) == bool(configuration):
+        raise ValidationError("Provide exactly one saved comparison ID or comparison configuration")
     try:
-        identifier = str(UUID(str(parameters.get("comparison_id"))))
+        report = (
+            read_comparison(session, project_id, str(UUID(str(identifier))))
+            if identifier
+            else create_comparison(
+                session, project_id, ComparisonRequest.model_validate(configuration)
+            )
+        )
+    except InvalidConfiguration as exc:
+        raise ValidationError(f"Invalid comparison configuration: {exc}") from exc
     except ValueError as exc:
-        raise ValidationError("A saved comparison UUID is required") from exc
-    report = read_comparison(session, project_id, identifier)
+        raise ValidationError("Choose a saved comparison UUID") from exc
     if report.stale:
         raise ConflictError("Source validation evidence changed; save a fresh comparison")
     return [
@@ -80,12 +97,12 @@ def register_scientific_comparison_nodes() -> dict[str, WorkflowNodeDefinitionRe
                     accepted_types=["scientific_comparison_report"],
                 )
             ],
-            required_parameters=["comparison_id"],
-            optional_parameters={},
+            required_parameters=[],
+            optional_parameters={"comparison_id": "", "configuration": {}},
             execution_state="executable",
             executable=True,
             implementation_notes=[
-                "Create the comparison in ReefPose Scientific Validation first.",
+                "Choose a saved comparison, or provide its configuration in advanced parameters.",
                 "Reuses the same immutable analysis and checks source evidence on replay.",
             ],
         )

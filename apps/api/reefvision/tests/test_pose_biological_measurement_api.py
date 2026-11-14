@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import json
 import zipfile
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
@@ -33,7 +33,11 @@ from reefvision.tests.test_pose_identity_tracking_api import (
     _track,
     _video,
 )
-from reefvision.tests.test_scientific_project_exchange import export_archive, import_archive
+from reefvision.tests.test_scientific_project_exchange import (
+    export_archive,
+    import_archive,
+    rewrite,
+)
 from reefvision.tests.test_workflow_connected_branch_preview_1_2 import _run
 
 
@@ -542,7 +546,35 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
     )
     assert artifact["organisms"] == event_report["snapshot"]["organisms"]
     assert artifact["content_sha256"] == event_report["content_sha256"]
-    imported = import_archive(client, export_archive(client, test_settings, project["id"]))
+    graph["nodes"][1]["parameters"] = {"configuration": event_report["snapshot"]["selection"]}
+    recalculated = _run(client, project["id"], graph)
+    assert recalculated["run"]["status"] == "succeeded", recalculated
+    calculated_artifact = next(
+        row["payload_json"]
+        for row in recalculated["artifacts"]
+        if row["data_type"] == "reviewed_ecology_event_summary"
+    )
+    assert calculated_artifact["content_sha256"] == event_report["content_sha256"]
+    original = export_archive(client, test_settings, project["id"])
+
+    def inflate_effort(_manifest: dict[str, Any], sections: dict[str, Any]) -> None:
+        job = next(row for row in sections["jobs"] if row["id"] == event_report["id"])
+        stored = job["result_json"]
+        snapshot = stored["snapshot"]
+        observed = snapshot["sessions"][0]
+        observed["valid_intervals"][0]["end_time_s"] += 0.5
+        for row in [observed, *snapshot["organisms"], *snapshot["units"]]:
+            row["valid_duration_s"] = 1.0
+            row["confirmed_events_per_minute"] = 60.0
+        stored["content_sha256"] = canonical_json_sha256(snapshot)
+
+    rejected = client.post(
+        "/api/v1/exchange-packages/inspect",
+        files={"file": ("forged-effort.zip", rewrite(original, inflate_effort))},
+    ).json()
+    assert not rejected["compatible"], rejected
+    assert any("reviewed measurement effort" in error for error in rejected["errors"]), rejected
+    imported = import_archive(client, original)
     assert imported.status_code == 201, imported.text
     destination = imported.json()["project_id"]
     mapping = imported.json()["package"]["options_json"]["id_map"]

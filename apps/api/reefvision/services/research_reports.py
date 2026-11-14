@@ -2,7 +2,7 @@
 
 from collections import defaultdict
 from datetime import UTC, datetime
-from statistics import stdev
+from statistics import mean, stdev
 from typing import Any
 
 from sqlalchemy import select
@@ -10,9 +10,23 @@ from sqlalchemy.orm import Session
 
 from reefvision import __version__
 from reefvision.db.models import Job, Project
+from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_level
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
-from reefvision.schemas.ecology_analysis import AbundanceResult, GrowthResult
-from reefvision.schemas.longitudinal_monitoring import PopulationUnitSummary
+from reefvision.domain.longitudinal_monitoring import analyze_longitudinal
+from reefvision.schemas.ecology_analysis import (
+    AbundanceResult,
+    AbundanceSelection,
+    GrowthObservation,
+    GrowthResult,
+    GrowthSelection,
+    growth_comparability,
+)
+from reefvision.schemas.longitudinal_monitoring import (
+    ExperimentalUnitSummary,
+    LongitudinalAnalysisRequest,
+    MonitoringObservation,
+    PopulationUnitSummary,
+)
 from reefvision.schemas.research_reports import (
     FigurePoint,
     FigureRecord,
@@ -54,6 +68,127 @@ def _group_point(result: GrowthResult, row: PopulationUnitSummary, index: int) -
         lower=row.mean_unit_absolute_change - spread if spread is not None else None,
         upper=row.mean_unit_absolute_change + spread if spread is not None else None,
     )
+
+
+def _treatment_series(result: GrowthResult, selection: GrowthSelection) -> dict[str, Any]:
+    by_unit: dict[str, list[GrowthObservation]] = defaultdict(list)
+    for observation in result.observations:
+        if observation.experimental_unit_id is not None:
+            by_unit[observation.experimental_unit_id].append(observation)
+    windows: dict[tuple[str, str, str, str, str, str], dict[str, list[ExperimentalUnitSummary]]] = (
+        defaultdict(lambda: defaultdict(list))
+    )
+    exclusions = []
+    eligible_ids = {row.experimental_unit_id for row in result.unit_summaries}
+    if eligible_ids:
+        by_organism: dict[str, list[GrowthObservation]] = defaultdict(list)
+        for unit_id in sorted(eligible_ids):
+            for observation in by_unit[unit_id]:
+                by_organism[observation.organism_key].append(observation)
+        if any(
+            len(rows) < 2 or growth_comparability(rows) is not None for rows in by_organism.values()
+        ):
+            raise ValidationError("Treatment unit summaries include incomparable observations")
+        try:
+            replay = analyze_longitudinal(
+                LongitudinalAnalysisRequest(
+                    observations=[
+                        MonitoringObservation(
+                            organism_id=observation.organism_key,
+                            parent_colony_id=observation.parent_colony_key,
+                            source_record_id=str(observation.calibration_evidence_id),
+                            metric_name=selection.metric,
+                            observed_at=observation.observed_at,
+                            value=observation.value,
+                            unit=observation.unit,
+                            experimental_unit_id=observation.experimental_unit_id,
+                            experimental_unit_type=observation.experimental_unit_type,
+                        )
+                        for rows in by_organism.values()
+                        for observation in rows
+                    ]
+                )
+            ).unit_summaries
+        except ValueError as exc:
+            raise ValidationError("Treatment observations do not replay") from exc
+        if replay != result.unit_summaries:
+            raise ValidationError("Treatment unit summaries do not replay from growth observations")
+    for row in result.unit_summaries:
+        observations = by_unit[row.experimental_unit_id]
+        treatments = {item.treatment_code for item in observations}
+        if len(treatments) != 1 or None in treatments:
+            exclusions.append(f"{row.experimental_unit_id}: incomplete reviewed treatment")
+            continue
+        treatment = next(code for code in treatments if code is not None)
+        methods = {observation.measurement_method for observation in observations}
+        unit_types = {observation.experimental_unit_type for observation in observations}
+        if len(methods) != 1 or len(unit_types) != 1 or None in unit_types:
+            exclusions.append(f"{row.experimental_unit_id}: incomparable unit or calibration")
+            continue
+        unit_type = next(value for value in unit_types if value is not None)
+        tanks = {observation.study_tank_code for observation in observations}
+        if any(tank is not None for tank in tanks) and (
+            classify_ecological_unit_level(unit_type) != "tank"
+            or tanks != {row.experimental_unit_id}
+        ):
+            exclusions.append(
+                f"{row.experimental_unit_id}: tank treatment requires a declared tank unit"
+            )
+            continue
+        window = (
+            row.metric_name,
+            row.unit,
+            next(iter(methods)),
+            unit_type,
+            row.baseline_at.astimezone(UTC).date().isoformat(),
+            row.final_at.astimezone(UTC).date().isoformat(),
+        )
+        windows[window][treatment].append(row)
+    series: dict[str, list[FigurePoint]] = defaultdict(list)
+    compared_units: set[str] = set()
+    index = 0
+    for (metric, unit, method, unit_type, start, end), groups in sorted(windows.items()):
+        if len(groups) < 2:
+            exclusions.extend(
+                f"{row.experimental_unit_id}: no other reviewed treatment in comparable window"
+                for rows in groups.values()
+                for row in rows
+            )
+            continue
+        index += 1
+        for treatment, rows in sorted(groups.items()):
+            values = [row.mean_absolute_change for row in rows]
+            center = mean(values)
+            spread = stdev(values) if len(values) >= 2 else None
+            compared_units.add(unit)
+            series[treatment].append(
+                FigurePoint(
+                    x=index,
+                    y=center,
+                    label=f"{start} to {end} · {unit_type}, {metric}, {method}",
+                    denominator=len(values),
+                    lower=center - spread if spread is not None else None,
+                    upper=center + spread if spread is not None else None,
+                )
+            )
+    if len(compared_units) != 1:
+        raise ValidationError(
+            "Treatment comparison needs two reviewed treatments with a shared unit, "
+            "calibration method and UTC window. Tank treatments require declared tank units"
+        )
+    return {
+        "x_label": "UTC comparison window",
+        "y_label": f"Mean unit change ({compared_units.pop()})",
+        "geometry": "bars",
+        "uncertainty": "Error bars show one sample SD across eligible declared units.",
+        "series": [
+            FigureSeries(label=key, points=points) for key, points in sorted(series.items())
+        ],
+        "exclusions": sorted(exclusions),
+        "limitations": [
+            "Treatment summaries are descriptive. Each eligible unit has equal weight."
+        ],
+    }
 
 
 def _ecology_series(source: Any, options: FigureRequest) -> dict[str, Any]:
@@ -101,10 +236,49 @@ def _ecology_series(source: Any, options: FigureRequest) -> dict[str, Any]:
                 )
             ],
         }
+    elif isinstance(result, GrowthResult) and options.figure == "treatment_summary":
+        selection = source.snapshot.selection
+        if not isinstance(selection, GrowthSelection):
+            raise ValidationError("Treatment comparisons require a reviewed growth selection")
+        output = _treatment_series(result, selection)
+    elif isinstance(result, GrowthResult) and options.figure == "sample_coverage":
+        rows = result.planned_sampling_effort
+        if not rows:
+            raise ValidationError("Select reviewed growth with an explicit sampling plan")
+        output = {
+            "x_label": "Declared experimental unit",
+            "y_label": "Planned organism visits (count)",
+            "geometry": "bars",
+            "series": [
+                FigureSeries(
+                    label=label,
+                    points=[
+                        FigurePoint(
+                            x=index,
+                            y=value,
+                            label=row.experimental_unit_id,
+                            denominator=row.expected_organism_visits,
+                        )
+                        for index, (row, value) in enumerate(zip(rows, values, strict=True), 1)
+                    ],
+                )
+                for label, values in (
+                    ("Comparable measurements", [row.observed_organism_visits for row in rows]),
+                    ("Without usable data", [row.missing_organism_visits for row in rows]),
+                )
+            ],
+        }
     elif isinstance(result, AbundanceResult) and options.figure == "sample_coverage":
-        labels = [
-            f"{row.experimental_unit_id} · {row.observed_on}" for row in result.unit_summaries
-        ]
+        selection = source.snapshot.selection
+        if not isinstance(selection, AbundanceSelection):
+            raise ValidationError("Sampling coverage requires a reviewed survey selection")
+        coverage: dict[tuple[str, str], list[int]] = defaultdict(lambda: [0, 0])
+        for sample in selection.sources:
+            key = (
+                sample.experimental_unit_id,
+                sample.observed_at.astimezone(UTC).date().isoformat(),
+            )
+            coverage[key][sample.exclusion_reason is not None] += 1
         output = {
             "x_label": "Declared unit and UTC visit",
             "y_label": "Survey samples (count)",
@@ -116,21 +290,16 @@ def _ecology_series(source: Any, options: FigureRequest) -> dict[str, Any]:
                         FigurePoint(x=index, y=value, label=label, denominator=total)
                         for index, (label, value, total) in enumerate(
                             (
-                                (
-                                    label,
-                                    getattr(row, attribute),
-                                    row.sample_count + row.excluded_sample_count,
+                                (f"{unit} · {day}", counts[column], sum(counts))
+                                for (unit, day), counts in sorted(
+                                    coverage.items(), key=lambda item: item[0][::-1]
                                 )
-                                for label, row in zip(labels, result.unit_summaries, strict=True)
                             ),
                             1,
                         )
                     ],
                 )
-                for field, attribute in (
-                    ("Included samples", "sample_count"),
-                    ("Excluded samples", "excluded_sample_count"),
-                )
+                for column, field in enumerate(("Included samples", "Excluded samples"))
             ],
         }
     else:
@@ -138,8 +307,11 @@ def _ecology_series(source: Any, options: FigureRequest) -> dict[str, Any]:
     output.update(
         source_method=source.snapshot.method_version,
         source_evidence=source.snapshot.evidence_level,
-        exclusions=[f"{row.source}: {row.reason}" for row in result.exclusions],
-        limitations=source.snapshot.limitations,
+        exclusions=[
+            *output.get("exclusions", []),
+            *(f"{row.source}: {row.reason}" for row in result.exclusions),
+        ],
+        limitations=[*source.snapshot.limitations, *output.get("limitations", [])],
         provenance={
             "reviewed_by": source.snapshot.reviewed_by,
             "review_note": source.snapshot.review_note,

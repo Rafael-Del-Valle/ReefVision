@@ -18,6 +18,7 @@ from reefvision.schemas.ecology_analysis import (
     validate_ecology_analysis_snapshot,
 )
 from reefvision.schemas.ecology_pose_links import PoseLinkSource
+from reefvision.schemas.ecology_study_assignment import EcologyStudyAssignmentRead
 from reefvision.services.annotations import annotation_snapshot, mask_annotation_snapshot
 from reefvision.services.coral_graph_geometry import frozen_skeleton_digest, validate_graph_snapshot
 from reefvision.services.coral_growth import calculate_pinned_growth, validate_branch_correspondence
@@ -202,9 +203,34 @@ def validate_integrated_records(
     observations = by_section.get("ecology_identity_image_evidence", {})
     annotations = by_section.get("ecology_identity_annotation_evidence", {})
     identities = {
-        (row.get("organism_key"), row.get("revision"))
+        (row.get("organism_key"), row.get("revision")): row
         for row in sections.get("ecology_identity_revisions", [])
     }
+    for analysis in sections.get("ecology_analysis_records", []):
+        parsed = validate_ecology_analysis_snapshot(
+            analysis["snapshot_json"], analysis["content_sha256"]
+        )
+        if parsed.result.kind != "growth":
+            continue
+        for point in parsed.result.observations:
+            identity = identities.get((point.organism_key, point.identity_revision))
+            if "treatment_code" not in point.model_fields_set:
+                # Older snapshots did not freeze reviewed study context.
+                continue
+            raw_assignment = identity.get("study_assignment") if identity else None
+            assignment = (
+                EcologyStudyAssignmentRead.model_validate(raw_assignment)
+                if raw_assignment
+                else None
+            )
+            if (
+                identity is None
+                or identity["experimental_unit_id"] != point.experimental_unit_id
+                or identity["experimental_unit_type"] != point.experimental_unit_type
+                or point.treatment_code != (assignment.treatment_code if assignment else None)
+                or point.study_tank_code != (assignment.tank_code if assignment else None)
+            ):
+                raise ValidationError("Ecological treatment does not match its reviewed identity")
     for observation in observations.values():
         image = images.get(observation.get("image_id"))
         if (

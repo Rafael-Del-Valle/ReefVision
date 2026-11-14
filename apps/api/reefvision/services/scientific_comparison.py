@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from math import isclose
 from statistics import fmean
 from typing import Any, cast
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -238,10 +239,32 @@ def paired_model_difference(
 ) -> PairedModelDifference | None:
     if len(models) != 2:
         return None
-    paired = [
-        (left.group_id, abs(right.estimate - right.reference) - abs(left.estimate - left.reference))
-        for left, right in zip(models[0].pairs, models[1].pairs, strict=True)
-    ]
+
+    def key(row: PairedValue) -> tuple[UUID, str, int | float]:
+        coordinate = row.frame if row.frame is not None else row.start_s
+        if coordinate is None:
+            raise ValidationError("Paired held-out evidence requires a frame or window")
+        return row.video_id, row.individual_id, coordinate
+
+    first, second = models
+    right_by_key = {key(row): row for row in second.pairs}
+    if (
+        len(right_by_key) != len(second.pairs)
+        or {key(row) for row in first.pairs} != right_by_key.keys()
+        or len(first.pairs) != len(right_by_key)
+    ):
+        raise ValidationError("Paired models require the same unique held-out evidence")
+    paired = []
+    for left in sorted(first.pairs, key=key):
+        right = right_by_key[key(left)]
+        if (left.group_id, left.reference, left.end_s) != (
+            right.group_id,
+            right.reference,
+            right.end_s,
+        ):
+            raise ValidationError("Paired models disagree on their shared held-out reference")
+        change = abs(right.estimate - right.reference) - abs(left.estimate - left.reference)
+        paired.append((left.group_id, change))
     return PairedModelDifference(
         sample_count=len(paired),
         independent_groups=len({group for group, _ in paired}),
