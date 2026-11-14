@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from itertools import pairwise
+
 from sqlalchemy.orm import Session
 
 from reefvision.db.models.scientific_record import ScientificRecord
@@ -77,7 +79,7 @@ class CurrentFieldService:
         longitudes = sorted({record.location.longitude for record in records if record.location})
         if len(latitudes) < 2 or len(longitudes) < 2:
             raise ValidationError("Current field requires at least a 2 by 2 paired component grid")
-        if any(right - left > 180.0 for left, right in zip(longitudes, longitudes[1:])):
+        if any(right - left > 180.0 for left, right in pairwise(longitudes)):
             raise ValidationError(
                 "Current longitude gap exceeds 180 degrees; "
                 "antimeridian-spanning grids require regridding before integration"
