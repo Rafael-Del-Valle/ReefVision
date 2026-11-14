@@ -334,9 +334,7 @@ def test_surface_trace_source_chord_survives_calibrated_display_rounding() -> No
     trace = measure_mesh_preview(**params)["surface_edge_traces"][0]
     source_chord = 100.00000000000001 - 100.0
     expected_chord_m = source_chord * params["meters_per_unit"]
-    assert trace["vertices_in_source_frame_m"][0] == (
-        trace["vertices_in_source_frame_m"][-1]
-    )
+    assert trace["vertices_in_source_frame_m"][0] == trace["vertices_in_source_frame_m"][-1]
     assert trace["endpoint_chord_length_m"] == pytest.approx(
         expected_chord_m, rel=1e-12, abs=0
     )
@@ -344,9 +342,7 @@ def test_surface_trace_source_chord_survives_calibrated_display_rounding() -> No
     assert trace["geometric_detour_ratio"] == pytest.approx(
         source_route_length / source_chord, rel=1e-12
     )
-    assert "surface_trace_endpoint_chord_display_coordinate_collapse" in (
-        trace["qc_warnings"]
-    )
+    assert "surface_trace_endpoint_chord_display_coordinate_collapse" in trace["qc_warnings"]
     assert "surface_trace_zero_endpoint_chord" not in trace["qc_warnings"]
     assert trace["human_review_verified"] is False
 
