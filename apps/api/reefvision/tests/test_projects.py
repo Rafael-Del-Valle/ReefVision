@@ -2,9 +2,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
@@ -27,6 +29,7 @@ from reefvision.db.models import (
     ReviewQueueItem,
 )
 from reefvision.main import create_app
+from reefvision.services.projects import ProjectService
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.class_fixtures import seed_synthetic_label_classes
 
@@ -1044,3 +1047,119 @@ def test_project_georeference_height_offset_defaults_to_unconfigured(
     project = create_project(client, seed_classes=False)
     assert project["georeference_height_offset_m"] == 0.0
     assert project["georeference_height_evidence"] is None
+
+
+def test_reviewed_class_merge_keeps_writer_lock_through_scientific_mutation(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Another SQLite writer cannot invalidate a reviewed merge after preflight."""
+    project = create_project(client, seed_classes=False)
+    source = create_label_class(
+        client, project["id"], class_index=0, name="Swiftia Open", display_color="#C74343"
+    )
+    target = create_label_class(
+        client, project["id"], class_index=1, name="Swiftia Closed", display_color="#326EA8"
+    )
+    engine = cast(FastAPI, client.app).state.engine
+    with Session(engine) as session:
+        image = ImageAsset(
+            id="merge-lock-image",
+            project_id=project["id"],
+            original_filename="coral.png",
+            managed_path=f"{project['storage_root']}/images/originals/merge-lock-image.png",
+            thumbnail_path=None,
+            sha256="a" * 64,
+            width_px=1600,
+            height_px=1200,
+            file_size_bytes=1024,
+            media_type="image/png",
+            import_source="fixture/coral.png",
+            annotation_status="in_progress",
+            annotation_revision=1,
+            metadata_json={},
+        )
+        annotation = Annotation(
+            id="merge-lock-annotation",
+            image_id=image.id,
+            label_class_id=source["id"],
+            x_min=10,
+            y_min=20,
+            x_max=100,
+            y_max=140,
+        )
+        session.add_all([image, annotation])
+        session.commit()
+
+    usage_response = client.get(f"/api/v1/classes/{source['id']}/usage")
+    assert usage_response.status_code == 200, usage_response.text
+    usage = usage_response.json()
+    counts = {row["key"]: row["count"] for row in usage["counts"]}
+    observed_writer_results: list[str] = []
+    original_snapshot = ProjectService._usage_snapshot
+
+    def probe_writer_lock(service: ProjectService, label_class: LabelClass):
+        # This runs after merge starts, at the former read/write race point.
+        # The independent connection has a short timeout to keep CI bounded.
+        with Session(engine) as competing:
+            competing.connection().exec_driver_sql("PRAGMA busy_timeout=75")
+            try:
+                competing.execute(
+                    update(LabelClass)
+                    .where(LabelClass.id == target["id"])
+                    .values(state_name="unapproved_competing_change")
+                )
+                competing.commit()
+            except OperationalError:
+                observed_writer_results.append("blocked")
+                competing.rollback()
+            else:
+                observed_writer_results.append("committed")
+        return original_snapshot(service, label_class)
+
+    monkeypatch.setattr(ProjectService, "_usage_snapshot", probe_writer_lock)
+    merged = client.post(
+        f"/api/v1/classes/{source['id']}/merge",
+        json={
+            "target_class_id": target["id"],
+            "expected_usage_counts": counts,
+            "expected_usage_fingerprint": usage["reference_fingerprint"],
+            "expected_source_identity": {
+                "name": source["name"],
+                "class_index": source["class_index"],
+                "scientific_name": source["scientific_name"],
+                "state_name": source["state_name"],
+            },
+            "expected_target_identity": {
+                "name": target["name"],
+                "class_index": target["class_index"],
+                "scientific_name": target["scientific_name"],
+                "state_name": target["state_name"],
+            },
+        },
+    )
+    assert merged.status_code == 200, merged.text
+    assert observed_writer_results == ["blocked"]
+    with Session(engine) as verification:
+        archived_source = verification.get(LabelClass, source["id"])
+        unchanged_target = verification.get(LabelClass, target["id"])
+        saved_annotation = verification.get(Annotation, "merge-lock-annotation")
+        events = list(
+            verification.scalars(
+                select(AnnotationEvent).where(
+                    AnnotationEvent.annotation_id == "merge-lock-annotation"
+                )
+            )
+        )
+        assert archived_source is not None and not archived_source.is_active
+        assert unchanged_target is not None and unchanged_target.state_name is None
+        assert saved_annotation is not None and saved_annotation.label_class_id == target["id"]
+        assert [event.event_type for event in events] == ["class_merged"]
+
+    # After the merge commits, another local editor may write again.
+    with Session(engine) as post_commit:
+        post_commit.execute(
+            update(LabelClass)
+            .where(LabelClass.id == target["id"])
+            .values(state_name="post_merge_researcher_edit")
+        )
+        post_commit.commit()
