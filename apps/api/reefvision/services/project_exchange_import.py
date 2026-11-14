@@ -473,7 +473,12 @@ def import_project_exchange(
                 result = imported_run.result_json
                 if not isinstance(result, dict) or "provenance_manifest" not in result:
                     continue
-                lineage = build_workflow_run_provenance(session, run_id=imported_run.id)
+                # The source closeout digest was verified above. ID remapping
+                # invalidates that digest, so establish the imported run's first
+                # closeout before enforcing immutable verification on later reads.
+                lineage = build_workflow_run_provenance(
+                    session, run_id=imported_run.id, verify_saved_closeout=False
+                )
                 imported_run.result_json = {
                     **result,
                     "provenance_manifest": lineage,
