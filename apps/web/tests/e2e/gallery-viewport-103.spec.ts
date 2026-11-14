@@ -26,9 +26,13 @@ test("initial image and gallery scrolling", async ({ page }) => {
 
   const standard = await makeJpeg(1600, 1200);
   const panoramic = await makeJpeg(6000, 400);
+  // The fallback is deliberately lower resolution than the source. A test
+  // that serves the same dimensions for both can miss scientific QC mistakes
+  // where the gallery silently treats preview pixels as source-resolution data.
+  const reducedThumbnail = await makeJpeg(320, 240);
   // A mislabeled PNG can pass image-decoding assertions while hiding JPEG
   // compatibility bugs. Require JPEG SOI/EOI markers for both camera shapes.
-  for (const jpeg of [standard, panoramic]) {
+  for (const jpeg of [standard, panoramic, reducedThumbnail]) {
     expect(jpeg.readUInt16BE(0)).toBe(0xffd8);
     expect(jpeg.readUInt16BE(jpeg.length - 2)).toBe(0xffd9);
   }
@@ -107,7 +111,7 @@ test("initial image and gallery scrolling", async ({ page }) => {
         await route.fulfill({
           status: 200,
           contentType: "image/jpeg",
-          body: standard,
+          body: reducedThumbnail,
         });
         return;
       }
@@ -571,7 +575,9 @@ test("initial image and gallery scrolling", async ({ page }) => {
   await expect(
     workbench.getByText(/Full-resolution image unavailable/),
   ).toBeVisible();
-  await assertDecodedAndContained(1600, 1200);
+  // A thumbnail is not the scientific source image: preserve its native,
+  // reduced pixel dimensions until a fresh full-resolution JPEG is decoded.
+  await assertDecodedAndContained(320, 240);
   await expect(thumbnailFallback).toHaveAttribute("aria-current", "true");
   await workbench
     .getByRole("button", { name: "Retry full-resolution image" })
