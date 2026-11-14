@@ -213,8 +213,13 @@ def list_training_runs(
 def get_training_run(
     run_id: str,
     request: Request,
+    response: Response,
     session: DbSession,
 ) -> TrainingRunResponse:
+    # This endpoint is polled by the read-only PowerShell training observer.
+    # Do not allow a cached epoch/status snapshot to masquerade as live losses
+    # or conceal a completed/failed training job.
+    response.headers["Cache-Control"] = "no-store"
     return service(request, session).get_run(run_id)
 
 
