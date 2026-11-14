@@ -749,17 +749,15 @@ def mesh_surface_edge_traces(
             if earlier_index is None:
                 seen_geometric_segments[geometric_edge] = segment_index
             else:
-                repeated_geometric_segment_index_pairs.append(
-                    [earlier_index, segment_index]
-                )
+                repeated_geometric_segment_index_pairs.append([earlier_index, segment_index])
         # Count only subsequent traversals of an identical source XYZ edge.
         # This is a scale-independent reuse audit, not an inferred correction
         # to the user's trace or a measured coral skeletal branch length.
+        reused_source_lengths = [
+            source_lengths[later] for _, later in repeated_geometric_segment_index_pairs
+        ]
         try:
-            reused_source_length = fsum(
-                source_lengths[later]
-                for _, later in repeated_geometric_segment_index_pairs
-            )
+            reused_source_length = fsum(reused_source_lengths)
         except OverflowError:
             reused_source_length = float("inf")
         reused_source_length_mesh_units = (
