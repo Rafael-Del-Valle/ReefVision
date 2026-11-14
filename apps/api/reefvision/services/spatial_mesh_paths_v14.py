@@ -752,8 +752,32 @@ def mesh_surface_edge_traces(
                 repeated_geometric_segment_index_pairs.append(
                     [earlier_index, segment_index]
                 )
+        # Count only subsequent traversals of an identical source XYZ edge.
+        # This is a scale-independent reuse audit, not an inferred correction
+        # to the user's trace or a measured coral skeletal branch length.
+        try:
+            reused_source_length = fsum(
+                source_lengths[later]
+                for _, later in repeated_geometric_segment_index_pairs
+            )
+        except OverflowError:
+            reused_source_length = float("inf")
+        reused_source_length_mesh_units = (
+            reused_source_length if isfinite(reused_source_length) else None
+        )
+        reused_fraction = (
+            reused_source_length / source_trace_length
+            if reused_source_length_mesh_units is not None
+            and isfinite(source_trace_length)
+            and source_trace_length > 0
+            else None
+        )
+        if reused_fraction is not None and not isfinite(reused_fraction):
+            reused_fraction = None
         if repeated_geometric_segment_index_pairs:
             warnings.append("surface_trace_reused_geometric_segment")
+            if reused_fraction is None:
+                warnings.append("surface_trace_reuse_fraction_unrepresentable")
         if segment_underflow:
             warnings.append("calibrated_surface_trace_segment_underflow")
         # A positive calibrated segment may disappear from cumulative distances
@@ -792,6 +816,8 @@ def mesh_surface_edge_traces(
                 "source_endpoint_chord_mesh_units": source_chord,
                 "display_coordinate_collapsed_segment_indices": collapsed_display_segments,
                 "repeated_geometric_segment_index_pairs": repeated_geometric_segment_index_pairs,
+                "reused_geometric_segment_source_length_mesh_units": reused_source_length_mesh_units,
+                "reused_geometric_segment_fraction_of_trace": reused_fraction,
                 "turn_angles_deg": turn_angles_deg,
                 "maximum_turn_angle_deg": maximum_turn_angle_deg,
                 "total_absolute_geometric_turn_deg": total_absolute_geometric_turn_deg,
