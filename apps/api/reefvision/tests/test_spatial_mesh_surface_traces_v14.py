@@ -48,6 +48,14 @@ INCONSISTENT_WINDING_PARAMS = {
     "faces": [[0, 1, 2], [0, 1, 3]],
     "surface_trace_vertex_paths": [[0, 1]],
 }
+# Each indexed edge has a positive length and no vertex ID repeats, yet
+# waypoints 0 and 2 coincide spatially across distinct indexed faces.
+COINCIDENT_NONADJACENT_PARAMS = {
+    **PARAMS,
+    "vertices": [[0, 0, 0], [1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]],
+    "faces": [[0, 1, 3], [1, 2, 4]],
+    "surface_trace_vertex_paths": [[0, 1, 2]],
+}
 
 
 def test_trace_follows_selected_edges_not_the_shortest_route() -> None:
@@ -189,6 +197,16 @@ def test_selected_trace_flags_inconsistent_winding_without_false_duplicate() -> 
     assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
 
 
+def test_trace_flags_nonadjacent_spatially_coincident_vertices() -> None:
+    trace = measure_mesh_preview(**COINCIDENT_NONADJACENT_PARAMS)["surface_edge_traces"][0]
+    assert trace["vertex_indices"] == [0, 1, 2]
+    assert trace["segment_lengths_m"] == pytest.approx([0.01, 0.01])
+    assert trace["length_m"] == pytest.approx(0.02)
+    assert "nonadjacent_coincident_surface_trace_vertices" in trace["qc_warnings"]
+    assert "zero_length_edge_on_surface_trace" not in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+
+
 def test_trace_flags_positive_segment_lost_in_cumulative_distance() -> None:
     trace = measure_mesh_preview(**RESOLUTION_LIMITED_PARAMS)["surface_edge_traces"][0]
     assert trace["segment_lengths_m"][1] > 0
@@ -219,7 +237,7 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
 
 @pytest.mark.parametrize(
     "case",
-    ["ordinary", "resolution_limited", "inconsistent_winding"],
+    ["ordinary", "resolution_limited", "inconsistent_winding", "coincident_nonadjacent"],
 )
 def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     client: TestClient, case: str
@@ -230,6 +248,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "ordinary": PARAMS,
         "resolution_limited": RESOLUTION_LIMITED_PARAMS,
         "inconsistent_winding": INCONSISTENT_WINDING_PARAMS,
+        "coincident_nonadjacent": COINCIDENT_NONADJACENT_PARAMS,
     }[case]
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 200, standalone.text
@@ -281,6 +300,12 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             in artifact["surface_edge_traces"][0]["qc_warnings"]
         )
     if case == "inconsistent_winding":
-        assert "inconsistent_winding_edge_on_surface_trace" in artifact[
-            "surface_edge_traces"
-        ][0]["qc_warnings"]
+        assert (
+            "inconsistent_winding_edge_on_surface_trace"
+            in artifact["surface_edge_traces"][0]["qc_warnings"]
+        )
+    if case == "coincident_nonadjacent":
+        assert (
+            "nonadjacent_coincident_surface_trace_vertices"
+            in artifact["surface_edge_traces"][0]["qc_warnings"]
+        )
