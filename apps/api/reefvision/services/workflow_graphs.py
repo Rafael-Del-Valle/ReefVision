@@ -189,6 +189,7 @@ _ACTIONS: dict[str, str] = {
         "Compare registered pose models on immutable scientist-verified held-out truth."
     ),
     "project_exchange_export": "Build a Phase 9 checksummed project exchange export inline.",
+    "ecology_coral_skeleton": "Extract coral segments from a project-owned verified mask.",
     "ecology_coral_growth": "Calculate 2D coral growth from reviewed correspondence.",
     "ecology_verified_analysis": "Recalculate a reviewed ecological analysis.",
     "ecology_connected_branch_preview": (

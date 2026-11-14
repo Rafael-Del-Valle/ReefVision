@@ -43,6 +43,7 @@ def validate_workflow_rows(sections: dict[str, list[dict[str, Any]]]) -> None:
     runs = {row["id"]: row for row in sections.get("workflow_runs", [])}
     nodes = {row["id"]: row for row in sections.get("workflow_node_runs", [])}
     artifacts = {row["id"]: row for row in sections.get("workflow_artifacts", [])}
+    skeletons = {row["id"]: row for row in sections.get("skeleton_analysis_revisions", [])}
     scientific_inputs = {
         "ecology_coral_growth": (
             "correspondence_revision_id",
@@ -80,6 +81,28 @@ def validate_workflow_rows(sections: dict[str, list[dict[str, Any]]]) -> None:
             or canonical_json_sha256(artifact_row["payload_json"]) != artifact_row["payload_sha256"]
         ):
             raise ValidationError("Workflow exchange artifact lineage or checksum mismatch")
+        if artifact_row["data_type"] == "coral_skeleton_candidate":
+            proposal = artifact_row["payload_json"]
+            analysis = skeletons.get(proposal.get("analysis_id"))
+            if (
+                analysis is None
+                or any(
+                    proposal.get(field) != analysis.get(source_field)
+                    for field, source_field in (
+                        ("image_id", "image_id"),
+                        ("mask_annotation_id", "mask_annotation_id"),
+                        ("mask_revision", "mask_revision"),
+                        ("analysis_sha256", "result_sha256"),
+                        ("mask_sha256", "input_mask_sha256"),
+                        ("calibration_sha256", "calibration_sha256"),
+                        ("parameters_sha256", "parameters_sha256"),
+                    )
+                )
+                or proposal.get("evidence_level") != "proposal_unverified"
+            ):
+                raise ValidationError(
+                    "Workflow branch candidates disagree with their source analysis"
+                )
     for node in nodes.values():
         for kind in ("input", "output"):
             for artifact_id in node[f"{kind}_artifact_ids_json"]:

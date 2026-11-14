@@ -16,6 +16,81 @@ from reefvision.tests.test_scientific_project_exchange import (
 from reefvision.tests.test_workflow_connected_branch_preview_1_2 import _run
 
 
+def test_saved_workflow_extracts_calibrated_branch_candidates_from_verified_mask(
+    client: TestClient,
+    test_settings: Settings,
+) -> None:
+    image_id, analysis, _ = _save_calibrated_analysis(client)
+    project_id = client.get(f"/api/v1/images/{image_id}").json()["project_id"]
+    graph = {
+        "graph_id": "calibrated-coral-branch-candidates",
+        "name": "Extract verified colony mask branches",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "masks",
+                "node_type": "verified_masks_source",
+                "parameters": {"image_ids": [image_id]},
+            },
+            {"node_id": "branches", "node_type": "ecology_coral_skeleton"},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-masks",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "masks",
+                "target_port_id": "project",
+            },
+            {
+                "edge_id": "masks-branches",
+                "source_node_id": "masks",
+                "source_port_id": "masks",
+                "target_node_id": "branches",
+                "target_port_id": "mask",
+            },
+        ],
+    }
+    first = _run(client, project_id, graph)
+    second = _run(client, project_id, graph)
+    assert first["run"]["status"] == second["run"]["status"] == "succeeded", second
+    candidates = [
+        item["payload_json"]
+        for run in [first, second]
+        for item in run["artifacts"]
+        if item["data_type"] == "coral_skeleton_candidate"
+    ]
+    assert len(candidates) == 2
+    assert candidates[0] == candidates[1]
+    proposal = candidates[0]
+    assert proposal["analysis_id"] == analysis["id"]
+    assert proposal["analysis_sha256"] == analysis["result_sha256"]
+    assert proposal["evidence_level"] == "proposal_unverified"
+    assert proposal["review_gate"] == "scientist_review_required"
+    assert proposal["physical_unit"] == "mm"
+    assert proposal["total_length_physical"] == 9.75
+    assert len(proposal["nodes"]) == 2
+    assert len(proposal["edges"]) == 1
+    review = client.get(f"/api/v1/projects/{project_id}/ecology/coral-graphs")
+    assert review.status_code == 200, review.text
+    assert review.json() == []
+
+    imported = import_archive(client, export_archive(client, test_settings, project_id))
+    assert imported.status_code == 201, imported.text
+    value = imported.json()
+    mapped = value["package"]["options_json"]["id_map"]
+    copied = client.get(f"/api/v1/workflow-runs/{mapped[first['run']['id']]}")
+    assert copied.status_code == 200, copied.text
+    restored = next(
+        item["payload_json"]
+        for item in copied.json()["artifacts"]
+        if item["data_type"] == "coral_skeleton_candidate"
+    )
+    assert restored["analysis_id"] == mapped[analysis["id"]]
+    assert restored["image_id"] == mapped[image_id]
+    assert restored["total_length_physical"] == proposal["total_length_physical"]
+
+
 def test_reviewed_graph_records_keep_rejected_edit_and_stable_edges(client: TestClient) -> None:
     image_id, source, path = _save_calibrated_analysis(client)
     project_id = client.get(f"/api/v1/images/{image_id}").json()["project_id"]
