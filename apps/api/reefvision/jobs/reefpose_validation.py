@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, cast
 
+from pydantic import ValidationError as SchemaError
 from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
@@ -24,13 +25,23 @@ from reefvision.db.models import (
 from reefvision.db.models.reefpose_validation import ReefPoseHeldoutLock
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.schemas.reefpose_validation import ValidationConfiguration, ValidationRequest
-from reefvision.services.reefpose_validation import ReferenceService, frozen_recording
+from reefvision.services.reefpose_validation import (
+    ReferenceService,
+    frozen_recording,
+    heldout_locks,
+)
 from reefvision.services.reefpose_validation_analysis import analyze
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.storage.results_packages import sha256_file
 
 JOB_TYPE = "reefpose_validation"
+_RETRY_EVIDENCE_MESSAGE = (
+    "The saved validation evidence cannot be verified in this project. "
+    "Open the original project or restore its backup with the original recordings, "
+    "reference revision, and prediction sources. Retry there or create a new project "
+    "exchange from the restored project."
+)
 
 
 def completed_report(session: Session, project_id: str, job_id: str) -> dict[str, Any]:
@@ -453,27 +464,7 @@ def _pin_test_protocol(
 ) -> None:
     if manifest["split"] != "test":
         return
-    sources = {item["video_id"]: item for item in manifest["prediction_sources"]}
-    for recording in manifest["scored_reference_manifest"]["recordings"]:
-        source = sources[recording["video_id"]]
-        model = manifest["models"].get(source["model_id"], {})
-        scope = canonical_json_sha256(
-            {
-                "project": project_id,
-                "video": recording["video_sha256"],
-                "checkpoint": model.get("checkpoint_sha256"),
-            }
-        )
-        protocol = canonical_json_sha256(
-            {
-                "development_lock": manifest["development_lock_sha256"],
-                "tracker_protocol": manifest["tracker_protocol"],
-                "reference": manifest["reference_sha256"],
-                "rater": manifest["rater_id"],
-                "bootstrap_seed": manifest["bootstrap_seed"],
-                "observations_sha256": source["observations_sha256"],
-            }
-        )
+    for scope, protocol in heldout_locks(project_id, manifest).items():
         lock = session.get(ReefPoseHeldoutLock, scope)
         if lock is not None:
             if lock.protocol_sha256 != protocol:
@@ -490,6 +481,67 @@ def _pin_test_protocol(
             )
 
 
+def _saved_request(job: Job) -> ValidationRequest:
+    try:
+        return ValidationRequest.model_validate(job.request_json.get("payload"))
+    except SchemaError as exc:
+        raise ConflictError("This validation has no usable saved request") from exc
+
+
+def _verify_retry_manifest(
+    session: Session, project_id: str, job: Job, manifest: dict[str, Any]
+) -> None:
+    saved_digest = job.request_json.get("input_sha256")
+    stored_manifest = job.request_json.get("heldout_input_manifest")
+    compatible = canonical_json_sha256(manifest) == saved_digest and (
+        stored_manifest is None or canonical_json_sha256(stored_manifest) == saved_digest
+    )
+    if manifest["split"] == "test":
+        for scope, protocol in heldout_locks(project_id, manifest).items():
+            lock = session.get(ReefPoseHeldoutLock, scope)
+            compatible &= (
+                lock is not None
+                and lock.project_id == project_id
+                and lock.protocol_sha256 == protocol
+            )
+    if not compatible:
+        raise ConflictError(_RETRY_EVIDENCE_MESSAGE)
+
+
+def recover_legacy_heldout_manifest(
+    session: Session, settings: Settings, job: Job
+) -> dict[str, Any] | None:
+    """Reconstruct a portable manifest only from evidence matching the original locks."""
+    project_id = job.project_id
+    payload = job.request_json.get("payload")
+    if (
+        job.job_type != JOB_TYPE
+        or project_id is None
+        or job.status == "succeeded"
+        or "heldout_input_manifest" in job.request_json
+        or not isinstance(payload, dict)
+        or payload.get("split") != "test"
+    ):
+        return None
+    try:
+        manifest, _, _ = _inputs(session, settings, project_id, _saved_request(job))
+        _verify_retry_manifest(session, project_id, job, manifest)
+    except (ConflictError, NotFoundError, ValidationError):
+        return None
+    return manifest
+
+
+def retry_validation(session: Session, settings: Settings, project_id: str, job_id: str) -> Job:
+    source = session.get(Job, job_id)
+    if source is None or source.project_id != project_id or source.job_type != JOB_TYPE:
+        raise NotFoundError("Scientific validation job was not found")
+    if source.status not in {"cancelled", "failed"}:
+        raise ConflictError("Retry is available for interrupted or failed validations")
+    if source.request_json.get("workflow_run_id"):
+        raise ConflictError("Retry this validation from its Workflow Builder run")
+    return submit_validation(session, settings, project_id, _saved_request(source), retry_of=source)
+
+
 def submit_validation(
     session: Session,
     settings: Settings,
@@ -497,8 +549,16 @@ def submit_validation(
     request: ValidationRequest,
     *,
     workflow_context: dict[str, str] | None = None,
+    retry_of: Job | None = None,
 ) -> Job:
-    manifest, records, configurations = _inputs(session, settings, project_id, request)
+    try:
+        manifest, records, configurations = _inputs(session, settings, project_id, request)
+    except (ConflictError, NotFoundError, ValidationError) as exc:
+        if retry_of is not None:
+            raise ConflictError(f"{exc}. {_RETRY_EVIDENCE_MESSAGE}") from exc
+        raise
+    if retry_of is not None:
+        _verify_retry_manifest(session, project_id, retry_of, manifest)
     _pin_test_protocol(session, project_id, manifest)
     input_hash = canonical_json_sha256(manifest)
     if workflow_context and all(workflow_context.values()):
@@ -529,6 +589,7 @@ def submit_validation(
             "payload": request.model_dump(mode="json"),
             "input_sha256": input_hash,
             **({"heldout_input_manifest": manifest} if request.split == "test" else {}),
+            **({"retried_from_job_id": retry_of.id} if retry_of is not None else {}),
             **(workflow_context or {}),
         },
     )

@@ -20,7 +20,7 @@ from reefvision.domain.errors import ValidationError
 from reefvision.services.pose_evaluation import pose_evaluation_result_sha256
 from reefvision.services.pose_schemas import definition_for_revision
 from reefvision.services.project_exchange_validation_report import validate_reefpose_report
-from reefvision.services.reefpose_validation import frozen_recording
+from reefvision.services.reefpose_validation import frozen_recording, heldout_locks
 from reefvision.storage.datasets import canonical_json_sha256
 
 _JSON_HASHES = {
@@ -261,7 +261,7 @@ def validate_pose_rows(sections: dict[str, list[dict[str, Any]]]) -> None:
             or canonical_json_sha256(pending) != request["input_sha256"]
             or any(
                 locks.get(scope) != digest
-                for scope, digest in _heldout_locks(job["project_id"], pending).items()
+                for scope, digest in heldout_locks(job["project_id"], pending).items()
             )
         ):
             raise ValidationError("Exchange held-out job does not match its pinned protocol")
@@ -438,7 +438,7 @@ def restore_pose_reports(
             old_report = source["result_json"]
             report = remap_manifest(old_report)
             if report["split"] == "test":
-                locks.update(_heldout_locks(source["project_id"], report))
+                locks.update(heldout_locks(source["project_id"], report))
             manifest_keys = (
                 "schema_version",
                 "reference_id",
@@ -474,7 +474,7 @@ def restore_pose_reports(
         if original is None:
             continue
         updated = remap_manifest(original)
-        locks.update(_heldout_locks(source["project_id"], updated))
+        locks.update(heldout_locks(source["project_id"], updated))
         job = session.get(Job, id_map[source["id"]])
         if job is not None:
             job.request_json = {
@@ -614,29 +614,3 @@ def restore_pose_comparisons(session: Session, project_id: str, digests: dict[st
         report["report_sha256"] = digests[old_report_hash] = report_hash
         job.result_json = report
         job.request_json = request
-
-
-def heldout_scope(project_id: str, video_checksum: str, model_checksum: str | None) -> str:
-    return canonical_json_sha256(
-        {"project": project_id, "video": video_checksum, "checkpoint": model_checksum}
-    )
-
-
-def _heldout_locks(project_id: str, manifest: dict[str, Any]) -> dict[str, str]:
-    sources = {entry["video_id"]: entry for entry in manifest["prediction_sources"]}
-    locks = {}
-    for recording in manifest["scored_reference_manifest"]["recordings"]:
-        source = sources[recording["video_id"]]
-        checkpoint = manifest["models"].get(source["model_id"], {}).get("checkpoint_sha256")
-        scope = heldout_scope(project_id, recording["video_sha256"], checkpoint)
-        locks[scope] = canonical_json_sha256(
-            {
-                "development_lock": manifest["development_lock_sha256"],
-                "tracker_protocol": manifest["tracker_protocol"],
-                "reference": manifest["reference_sha256"],
-                "rater": manifest["rater_id"],
-                "bootstrap_seed": manifest["bootstrap_seed"],
-                "observations_sha256": source["observations_sha256"],
-            }
-        )
-    return locks

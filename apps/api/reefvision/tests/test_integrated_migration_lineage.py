@@ -208,6 +208,27 @@ def test_failed_merge_rolls_back_legacy_revision_and_schema_changes(
     assert inspect(engine).get_table_names() == before_tables
 
 
+def test_desktop_rejects_unknown_future_schema_without_changing_database(
+    migration_db: MigrationDatabase,
+) -> None:
+    settings, config, engine = migration_db
+    command.upgrade(config, "head")
+    _create_project(engine)
+    future = "reefvision_future_fixture"
+    with engine.begin() as connection:
+        connection.exec_driver_sql("UPDATE alembic_version SET version_num = ?", (future,))
+    database = settings.resolved_data_dir / "reefvision.db"
+    engine.dispose()
+    before = database.read_bytes()
+
+    assert SystemService(settings, engine).compatibility().compatible_for_read_write is False
+    with pytest.raises(CommandError, match=future):
+        run_pending_migrations(settings)
+
+    assert _read_heads(engine) == (future,)
+    assert database.read_bytes() == before
+
+
 def test_system_preflight_reads_legacy_reefpose_without_relabeling(
     migration_db: MigrationDatabase,
 ) -> None:

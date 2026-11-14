@@ -199,3 +199,29 @@ class ReferenceService:
             raise ConflictError("A newer reference revision already exists") from exc
         self.session.refresh(row)
         return row
+
+
+def heldout_scope(project_id: str, video_checksum: str, model_checksum: str | None) -> str:
+    return canonical_json_sha256(
+        {"project": project_id, "video": video_checksum, "checkpoint": model_checksum}
+    )
+
+
+def heldout_locks(project_id: str, manifest: dict[str, Any]) -> dict[str, str]:
+    sources = {entry["video_id"]: entry for entry in manifest["prediction_sources"]}
+    locks = {}
+    for recording in manifest["scored_reference_manifest"]["recordings"]:
+        source = sources[recording["video_id"]]
+        checkpoint = manifest["models"].get(source["model_id"], {}).get("checkpoint_sha256")
+        scope = heldout_scope(project_id, recording["video_sha256"], checkpoint)
+        locks[scope] = canonical_json_sha256(
+            {
+                "development_lock": manifest["development_lock_sha256"],
+                "tracker_protocol": manifest["tracker_protocol"],
+                "reference": manifest["reference_sha256"],
+                "rater": manifest["rater_id"],
+                "bootstrap_seed": manifest["bootstrap_seed"],
+                "observations_sha256": source["observations_sha256"],
+            }
+        )
+    return locks

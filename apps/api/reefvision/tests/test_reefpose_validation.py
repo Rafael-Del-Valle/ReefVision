@@ -787,7 +787,40 @@ def test_validation_persists_original_machine_comparison_and_development_sensiti
     cancelled = client.post(f"/api/v1/jobs/{interrupted_id}/cancel")
     assert cancelled.status_code == 200, cancelled.text
     assert cancelled.json()["status"] == "cancelled"
+
+    with client.app.state.session_factory() as session:
+        historical = session.get(Job, interrupted_id)
+        assert historical is not None
+        saved_request = dict(historical.request_json)
+        historical.request_json = {
+            key: value for key, value in saved_request.items() if key != "heldout_input_manifest"
+        }
+        session.commit()
+
+    def make_opaque(_manifest, sections):
+        old = next(row for row in sections["jobs"] if row["id"] == interrupted_id)
+        old["request_json"].pop("heldout_input_manifest", None)
+        old["status"] = "failed"
+        old["result_json"] = {"stage": "failed"}
+        old["error_message"] = "Process exited before the report was written"
+
     raw = export_archive(client, test_settings, project_id)
+    assert (
+        "heldout_input_manifest"
+        not in client.get(f"/api/v1/jobs/{interrupted_id}").json()["request_json"]
+    )
+    opaque = import_archive(client, rewrite(raw, make_opaque))
+    assert opaque.status_code == 201, opaque.text
+    opaque_copy = opaque.json()
+    opaque_id = opaque_copy["package"]["options_json"]["id_map"][interrupted_id]
+    failed_retry = client.post(
+        f"/api/v1/projects/{opaque_copy['project_id']}/reefpose-validations/{opaque_id}/retry"
+    )
+    assert failed_retry.status_code == 409, failed_retry.text
+    assert "original project" in failed_retry.text
+    opaque_record = client.get(f"/api/v1/jobs/{opaque_id}").json()
+    assert opaque_record["status"] == "failed"
+    assert opaque_record["result_json"] == {"stage": "failed"}
 
     def alter_lock(_manifest, sections):
         sections["reefpose_heldout_locks"][0]["protocol_sha256"] = "0" * 64
@@ -803,14 +836,25 @@ def test_validation_persists_original_machine_comparison_and_development_sensiti
     imported_interrupted = client.get(f"/api/v1/jobs/{early_mapping[interrupted_id]}").json()
     imported_payload = imported_interrupted["request_json"]["payload"]
     assert imported_interrupted["status"] == "cancelled"
-    early_replay = client.post(early_url, json=imported_payload)
+    assert imported_interrupted["request_json"]["heldout_input_manifest"]["split"] == "test"
+    early_replay = client.post(f"{early_url}/{early_mapping[interrupted_id]}/retry")
     assert early_replay.status_code == 202, early_replay.text
+    assert (
+        early_replay.json()["request_json"]["retried_from_job_id"] == early_mapping[interrupted_id]
+    )
     modified = client.post(early_url, json={**imported_payload, "rater_id": "rater-a"})
     assert modified.status_code == 409, modified.text
     assert process_reefpose_validation_job(
         client.app.state.settings, client.app.state.session_factory, early_replay.json()["id"]
     )
     assert client.get(f"{early_url}/{early_replay.json()['id']}/export").status_code == 200
+
+    rejected_foreign = client.post(f"{early_url}/{interrupted_id}/retry")
+    assert rejected_foreign.status_code == 404
+    original_replay = client.post(f"{validation_url}/{interrupted_id}/retry")
+    assert original_replay.status_code == 202, original_replay.text
+    assert original_replay.json()["request_json"]["input_sha256"] == saved_request["input_sha256"]
+    assert original_replay.json()["request_json"]["retried_from_job_id"] == interrupted_id
 
     heldout_response = client.post(validation_url, json=heldout_request)
     assert heldout_response.status_code == 202, heldout_response.text

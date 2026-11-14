@@ -299,7 +299,19 @@ export function ReefPoseValidationPanel({
     mutationFn: cancelJob,
     onSuccess: () => void jobs.refetch(),
   });
+  const retry = useMutation({
+    mutationFn: (id: string) =>
+      json<JobRecord>(`${base}/reefpose-validations/${id}/retry`, {
+        method: "POST",
+      }),
+    onSuccess: (job) => {
+      setJobId(job.id);
+      void jobs.refetch();
+    },
+  });
   const current = jobs.data?.find((item) => item.id === jobId);
+  const interrupted =
+    current && ["cancelled", "failed"].includes(current.status);
   const exportUrl = `${base}/reefpose-validations/${jobId}/export`;
   const report = useQuery({
     queryKey: ["reefpose-validation-report", projectId, jobId],
@@ -312,6 +324,7 @@ export function ReefPoseValidationPanel({
   const error =
     freeze.error ??
     run.error ??
+    retry.error ??
     cancel.error ??
     references.error ??
     reference.error ??
@@ -483,7 +496,11 @@ export function ReefPoseValidationPanel({
             Validation runs
             <select
               value={jobId}
-              onChange={(event) => setJobId(event.target.value)}
+              disabled={retry.isPending}
+              onChange={(event) => {
+                retry.reset();
+                setJobId(event.target.value);
+              }}
             >
               <option value="">Select a run</option>
               {jobs.data?.map((job) => (
@@ -508,6 +525,20 @@ export function ReefPoseValidationPanel({
               Cancel validation
             </button>
           )}
+          {interrupted &&
+            (current.request_json.workflow_run_id ? (
+              <p>Retry this validation from its Workflow Builder run.</p>
+            ) : (
+              <button
+                type="button"
+                disabled={retry.isPending}
+                onClick={() => retry.mutate(current.id)}
+              >
+                {retry.isPending
+                  ? "Checking saved evidence…"
+                  : "Retry saved validation"}
+              </button>
+            ))}
           {(error || current?.error_message) && (
             <p role="alert">{error?.message ?? current?.error_message}</p>
           )}

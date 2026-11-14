@@ -22,8 +22,9 @@ from reefvision.services.annotations import annotation_snapshot, mask_annotation
 from reefvision.services.coral_graph_geometry import frozen_skeleton_digest, validate_graph_snapshot
 from reefvision.services.coral_growth import calculate_pinned_growth, validate_branch_correspondence
 from reefvision.services.ecology_identity import EcologyIdentityService
-from reefvision.services.project_exchange_pose import heldout_scope, validate_pose_rows
+from reefvision.services.project_exchange_pose import validate_pose_rows
 from reefvision.services.project_exchange_workflows import validate_workflow_rows
+from reefvision.services.reefpose_validation import heldout_scope
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.ecology_pose_links import remap_pose_link_source
 
@@ -138,7 +139,7 @@ def heldout_scope_mappings(
     videos = {row["sha256"] for row in sections.get("videos", [])}
     checkpoints = {None, *(row["sha256"] for row in sections.get("models", []))}
     for row in sections.get("jobs", []):
-        if row["job_type"] == "reefpose_validation" and row.get("result_json"):
+        if row["job_type"] == "reefpose_validation" and row["status"] == "succeeded":
             report = row["result_json"]
             videos.update(
                 item["video_sha256"] for item in report["scored_reference_manifest"]["recordings"]

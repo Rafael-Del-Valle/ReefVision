@@ -1,6 +1,7 @@
 """Independent scientific validation API."""
 
 from typing import Annotated, Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import JSONResponse
@@ -9,7 +10,12 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.db.models import Job
-from reefvision.jobs.reefpose_validation import JOB_TYPE, completed_report, submit_validation
+from reefvision.jobs.reefpose_validation import (
+    JOB_TYPE,
+    completed_report,
+    retry_validation,
+    submit_validation,
+)
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.reefpose_validation import (
     FreezeReferenceRequest,
@@ -76,6 +82,15 @@ def list_validations(
         .offset(offset)
     )
     return [JobResponse.model_validate(row) for row in rows]
+
+
+@router.post("/reefpose-validations/{job_id}/retry", response_model=JobResponse, status_code=202)
+def retry_interrupted_validation(
+    project_id: str, job_id: UUID, request: Request, session: DbSession
+) -> JobResponse:
+    return JobResponse.model_validate(
+        retry_validation(session, request.app.state.settings, project_id, str(job_id))
+    )
 
 
 @router.get("/reefpose-validations/{job_id}/export")
