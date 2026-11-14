@@ -160,17 +160,26 @@ def mesh_edge_paths(
         shortest_counts = {start: 1}
         parent: dict[int, int] = {}
         queue = [(0.0, start)]
+        # A strictly positive edge can become numerically free when added to
+        # a much larger accumulated cost. Such rounded route ties are not
+        # evidence of genuinely equal shortest paths.
+        lost_positive_edge_cost = False
         if not status:
             while queue:
                 length, vertex = heappop(queue)
                 if length != shortest[vertex]:
                     continue
-                if vertex == end:
+                # Continue through all vertices at the destination cost:
+                # stopping on the first destination pop can miss another
+                # rounded alternative with the same representable cost.
+                if end in shortest and length > shortest[end]:
                     break
                 for neighbor, edge_length in sorted(adjacency[vertex].items()):
                     candidate = length + edge_length
                     if not isfinite(candidate):
                         raise ValueError("Accumulated mesh path length overflowed")
+                    if edge_length > 0 and candidate == length:
+                        lost_positive_edge_cost = True
                     prior = shortest.get(neighbor, float("inf"))
                     if candidate < prior:
                         shortest[neighbor] = candidate
@@ -200,6 +209,8 @@ def mesh_edge_paths(
         if status == "connected":
             if zero_edge_in_component[start]:
                 shortest_route_alternatives_status = "unassessable_zero_length_edges"
+            elif lost_positive_edge_cost:
+                shortest_route_alternatives_status = "unassessable_floating_point_cost_resolution"
             elif shortest_counts[end] > 1:
                 shortest_route_alternatives_status = "multiple_exact_equal_cost_routes"
             else:
@@ -295,6 +306,8 @@ def mesh_edge_paths(
             # Route flags are topology evidence, not biological branch validation.
             route_edges = [(min(a, b), max(a, b)) for a, b in pairwise(route)]
             path_qc_warnings = []
+            if shortest_route_alternatives_status == "unassessable_floating_point_cost_resolution":
+                path_qc_warnings.append("positive_mesh_edge_cost_rounded_away")
             if shortest_route_alternatives_status == "multiple_exact_equal_cost_routes":
                 # Turning angles and route shape depend on a deterministic
                 # but scientifically arbitrary choice between tied edge paths.
