@@ -128,9 +128,7 @@ def test_direct_mesh_path_engine_rejects_non_numeric_calibration(
 def test_public_mesh_preview_rejects_boolean_calibration(client: TestClient, field: str) -> None:
     project_id = str(create_project(client, "Strict mesh calibration input")["id"])
     parameters = {**PARAMS, field: True}
-    response = client.post(
-        f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=parameters
-    )
+    response = client.post(f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=parameters)
     assert response.status_code == 422, response.text
 
 
@@ -197,6 +195,30 @@ def test_direct_mesh_path_engine_rejects_invalid_unreferenced_vertices(
                 (1.0, 0.0, 0.0),
                 (0.0, 1.0, 0.0),
                 invalid_point,
+            ],
+            faces=[[0, 1, 2]],
+            pairs=[[0, 1]],
+            scale=0.01,
+            scale_uncertainty=0.1,
+        )
+
+
+@pytest.mark.parametrize("invalid_coordinate", [True, "0.0", None, 10**400])
+def test_direct_mesh_path_engine_rejects_coerced_unreferenced_vertex(
+    invalid_coordinate: object,
+) -> None:
+    # Path arithmetic must reject invalid source geometry even if the
+    # affected vertex is unreferenced by faces and outside the selected path.
+    # The public schema and persisted graphs already reject such coordinates.
+    from reefvision.services.spatial_mesh_paths_v14 import mesh_edge_paths
+
+    with pytest.raises(ValueError, match="three finite coordinates"):
+        mesh_edge_paths(
+            points=[
+                (0.0, 0.0, 0.0),
+                (1.0, 0.0, 0.0),
+                (0.0, 1.0, 0.0),
+                (cast(float, invalid_coordinate), 0.0, 0.0),
             ],
             faces=[[0, 1, 2]],
             pairs=[[0, 1]],
