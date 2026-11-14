@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -616,6 +616,16 @@ class ProjectService:
     def merge_class(
         self, class_id: str, payload: LabelClassMergeRequest
     ) -> LabelClassMergeResponse:
+        # In local SQLite the first write obtains a database writer lock.
+        # Take it BEFORE reading the reviewed biological identities and usage:
+        # a concurrent editor must not change QC/review evidence between the
+        # approval check and the class merge commit. The no-op update leaves
+        # the class revision untouched, and the lock is held until commit.
+        self.session.execute(
+            update(LabelClass)
+            .where(LabelClass.id == class_id)
+            .values(updated_at=LabelClass.updated_at)
+        )
         source_class = self._class(class_id)
         target_class = self._class(payload.target_class_id)
         if source_class.id == target_class.id:
