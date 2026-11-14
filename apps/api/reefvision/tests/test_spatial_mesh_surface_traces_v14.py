@@ -83,6 +83,17 @@ DISPLAY_CHORD_ROUNDING_PARAMS = {
     "surface_trace_vertex_paths": [[0, 1, 2]],
 }
 
+# The first real indexed edge has a positive calibrated length, but separately
+# scaled absolute positions round to the same displayed point. This is a
+# preview-representation defect, distinct from an edge-length underflow.
+DISPLAY_SEGMENT_ROUNDING_PARAMS = {
+    **PARAMS,
+    "vertices": [[100.0, 0, 0], [100.00000000000001, 0, 0], [100.0, 2, 0]],
+    "faces": [[0, 1, 2]],
+    "meters_per_unit": 1e-100,
+    "surface_trace_vertex_paths": [[0, 1, 2]],
+}
+
 
 def test_trace_follows_selected_edges_not_the_shortest_route() -> None:
     result = measure_mesh_preview(**PARAMS)
@@ -335,15 +346,23 @@ def test_surface_trace_source_chord_survives_calibrated_display_rounding() -> No
     source_chord = 100.00000000000001 - 100.0
     expected_chord_m = source_chord * params["meters_per_unit"]
     assert trace["vertices_in_source_frame_m"][0] == trace["vertices_in_source_frame_m"][-1]
-    assert trace["endpoint_chord_length_m"] == pytest.approx(
-        expected_chord_m, rel=1e-12, abs=0
-    )
+    assert trace["endpoint_chord_length_m"] == pytest.approx(expected_chord_m, rel=1e-12, abs=0)
     source_route_length = 1.0 + (101.0 - 100.00000000000001)
     assert trace["geometric_detour_ratio"] == pytest.approx(
         source_route_length / source_chord, rel=1e-12
     )
     assert "surface_trace_endpoint_chord_display_coordinate_collapse" in trace["qc_warnings"]
     assert "surface_trace_zero_endpoint_chord" not in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+
+
+def test_surface_trace_flags_real_segment_erased_from_display_positions() -> None:
+    trace = measure_mesh_preview(**DISPLAY_SEGMENT_ROUNDING_PARAMS)["surface_edge_traces"][0]
+    assert trace["segment_lengths_m"][0] > 0
+    assert trace["vertices_in_source_frame_m"][0] == trace["vertices_in_source_frame_m"][1]
+    assert trace["display_coordinate_collapsed_segment_indices"] == [0]
+    assert "surface_trace_segment_display_coordinate_collapse" in trace["qc_warnings"]
+    assert "calibrated_surface_trace_segment_underflow" not in trace["qc_warnings"]
     assert trace["human_review_verified"] is False
 
 
@@ -415,6 +434,7 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
         "coincident_nonadjacent",
         "reverse_turn",
         "display_chord_rounding",
+        "display_segment_rounding",
         "uncertainty_missing",
         "uncertainty_max",
     ],
@@ -431,6 +451,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "coincident_nonadjacent": COINCIDENT_NONADJACENT_PARAMS,
         "reverse_turn": REVERSE_TURN_PARAMS,
         "display_chord_rounding": DISPLAY_CHORD_ROUNDING_PARAMS,
+        "display_segment_rounding": DISPLAY_SEGMENT_ROUNDING_PARAMS,
         "uncertainty_missing": {**PARAMS, "relative_scale_uncertainty": None},
         "uncertainty_max": {**PARAMS, "relative_scale_uncertainty": 1.0},
     }[case]
@@ -513,9 +534,13 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     if case == "display_chord_rounding":
         assert trace["endpoint_chord_length_m"] > 0
         assert trace["geometric_detour_ratio"] > 1
-        assert "surface_trace_endpoint_chord_display_coordinate_collapse" in (
-            trace["qc_warnings"]
-        )
+        assert "surface_trace_endpoint_chord_display_coordinate_collapse" in (trace["qc_warnings"])
+        assert trace["human_review_verified"] is False
+    if case == "display_segment_rounding":
+        assert trace["segment_lengths_m"][0] > 0
+        assert trace["vertices_in_source_frame_m"][0] == trace["vertices_in_source_frame_m"][1]
+        assert trace["display_coordinate_collapsed_segment_indices"] == [0]
+        assert "surface_trace_segment_display_coordinate_collapse" in trace["qc_warnings"]
         assert trace["human_review_verified"] is False
     if case == "reverse_turn":
         assert trace["maximum_turn_angle_deg"] == pytest.approx(180.0)
