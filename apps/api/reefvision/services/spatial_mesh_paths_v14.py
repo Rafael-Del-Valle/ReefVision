@@ -641,10 +641,10 @@ def mesh_surface_edge_traces(
         total_absolute_geometric_turn_deg = (
             fsum(valid_turn_angles) if len(valid_turn_angles) == len(interior_turn_angles) else None
         )
-        # The endpoint chord is not an anatomical baseline. Report a
-        # scale-invariant geometric detour ratio only when the calibrated
-        # endpoints can be distinguished; never infer infinite tortuosity
-        # from coincident or numerically collapsed endpoint coordinates.
+        # The endpoint chord is not an anatomical baseline. Source-frame
+        # geometry can support a finite scale-invariant detour ratio even if
+        # the calibrated meter chord underflows. Withhold only a genuinely
+        # coincident source chord or an unrepresentable dimensionless ratio.
         # Measure the chord before applying the shared scale. Computing the
         # distance between separately rounded calibrated display coordinates
         # can erase a genuinely nonzero endpoint separation.
@@ -659,6 +659,7 @@ def mesh_surface_edge_traces(
                 endpoint_chord_m * (1 + scale_uncertainty),
             ]
             if scale_uncertainty is not None
+            and (source_chord == 0 or endpoint_chord_m > 0)
             else None
         )
         if chord_interval is not None and any(not isfinite(bound) for bound in chord_interval):
@@ -672,7 +673,7 @@ def mesh_surface_edge_traces(
             source_trace_length = float("inf")
         detour_ratio = (
             source_trace_length / source_chord
-            if endpoint_chord_m > 0 and source_chord > 0 and isfinite(source_trace_length)
+            if source_chord > 0 and isfinite(source_trace_length)
             else None
         )
         if detour_ratio is not None and not isfinite(detour_ratio):
@@ -703,7 +704,7 @@ def mesh_surface_edge_traces(
             warnings.append("calibrated_surface_trace_endpoint_chord_underflow")
         elif display_chord_m == 0:
             warnings.append("surface_trace_endpoint_chord_display_coordinate_collapse")
-        if endpoint_chord_m > 0 and detour_ratio is None:
+        if source_chord > 0 and detour_ratio is None:
             warnings.append("surface_trace_detour_ratio_unrepresentable")
         # Distinct parsed vertex indices can refer to exactly the same XYZ.
         # This makes a selected open-by-index trace return to an earlier
