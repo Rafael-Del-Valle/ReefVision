@@ -19,23 +19,53 @@ export function boundedDenseObjectRows<
   selectedAnnotationIds: readonly string[],
   selectedMaskIds: readonly string[],
 ): DenseObjectListRow<A, M>[] {
+  const total = annotations.length + masks.length;
   const limit = Number.isFinite(requestedLimit)
-    ? Math.max(0, Math.floor(requestedLimit))
+    ? Math.min(total, Math.max(0, Math.floor(requestedLimit)))
     : 0;
-  const selectedAnnotations = new Set(selectedAnnotationIds);
-  const selectedMasks = new Set(selectedMaskIds);
   const rows: DenseObjectListRow<A, M>[] = [];
+  const pendingAnnotationIds = new Set(selectedAnnotationIds);
+  const pendingMaskIds = new Set(selectedMaskIds);
+  const visibleAnnotationCount = Math.min(limit, annotations.length);
+  const visibleMaskCount = limit - visibleAnnotationCount;
 
-  annotations.forEach((item, position) => {
-    if (position < limit || selectedAnnotations.has(item.id)) {
-      rows.push({ kind: "annotation", item, position });
+  // A bounded DOM does not help if every selection rerender traverses the
+  // entire scientific document. Read only the prefix we actually display.
+  for (let index = 0; index < visibleAnnotationCount; index += 1) {
+    const item = annotations[index];
+    rows.push({ kind: "annotation", item, position: index });
+    pendingAnnotationIds.delete(item.id);
+  }
+  for (let index = 0; index < visibleMaskCount; index += 1) {
+    const item = masks[index];
+    rows.push({ kind: "mask", item, position: annotations.length + index });
+    pendingMaskIds.delete(item.id);
+  }
+
+  // Distant selected objects remain available in original positional order.
+  // Only scan the relevant suffix and stop at the final selected match.
+  let annotationIndex = visibleAnnotationCount;
+  while (
+    pendingAnnotationIds.size > 0 &&
+    annotationIndex < annotations.length
+  ) {
+    const item = annotations[annotationIndex];
+    if (pendingAnnotationIds.delete(item.id)) {
+      rows.push({ kind: "annotation", item, position: annotationIndex });
     }
-  });
-  masks.forEach((item, index) => {
-    const position = annotations.length + index;
-    if (position < limit || selectedMasks.has(item.id)) {
-      rows.push({ kind: "mask", item, position });
+    annotationIndex += 1;
+  }
+  let maskIndex = visibleMaskCount;
+  while (pendingMaskIds.size > 0 && maskIndex < masks.length) {
+    const item = masks[maskIndex];
+    if (pendingMaskIds.delete(item.id)) {
+      rows.push({
+        kind: "mask",
+        item,
+        position: annotations.length + maskIndex,
+      });
     }
-  });
+    maskIndex += 1;
+  }
   return rows;
 }

@@ -87,4 +87,68 @@ describe("dense object-browser window", () => {
     expect(annotations).toEqual([{ id: "a" }]);
     expect(masks).toEqual([{ id: "m" }]);
   });
+  it("avoids reading unmounted records when the selection is in the visible window", () => {
+    const source = Array.from({ length: 20_000 }, (_, index) => ({
+      id: `box-${index}`,
+    }));
+    let reads = 0;
+    const annotations = new Proxy(source, {
+      get(target, property, receiver) {
+        if (typeof property === "string" && /^[0-9]+$/.test(property)) {
+          reads += 1;
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    const rows = boundedDenseObjectRows(
+      annotations,
+      [],
+      200,
+      ["box-10"],
+      [],
+    );
+    expect(rows).toHaveLength(200);
+    expect(reads).toBe(200);
+    expect(source).toHaveLength(20_000);
+  });
+
+  it("stops scanning after a distant selection and skips unrelated mask records", () => {
+    const source = Array.from({ length: 20_000 }, (_, index) => ({
+      id: `box-${index}`,
+    }));
+    const maskSource = Array.from({ length: 20_000 }, (_, index) => ({
+      id: `mask-${index}`,
+    }));
+    let annotationReads = 0;
+    let maskReads = 0;
+    const annotations = new Proxy(source, {
+      get(target, property, receiver) {
+        if (typeof property === "string" && /^[0-9]+$/.test(property)) {
+          annotationReads += 1;
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const masks = new Proxy(maskSource, {
+      get(target, property, receiver) {
+        if (typeof property === "string" && /^[0-9]+$/.test(property)) {
+          maskReads += 1;
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const rows = boundedDenseObjectRows(
+      annotations,
+      masks,
+      100,
+      ["box-103", "box-2"],
+      [],
+    );
+    const positions = Array.from({ length: 100 }, (_, index) => index);
+    expect(rows.map((row) => row.position)).toEqual([...positions, 103]);
+    expect(annotationReads).toBe(104);
+    expect(maskReads).toBe(0);
+  });
+
 });

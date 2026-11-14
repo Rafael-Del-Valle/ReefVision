@@ -42,3 +42,15 @@ Chromium rather than relying exclusively on the pure windowing helper.
 No annotation, calibration or saved research record is modified by the
 windowing operation. Exact-head Playwright and installed Windows acceptance
 must still pass before considering the version release-ready.
+
+## Bounded selection lookup
+
+Rendering now reads the first visible prefix directly rather than scanning all
+saved boxes and masks on every selection change. Distant selected records are
+found by scanning only the appropriate suffix, stopping when the last selected
+ID has been found. Original ordering and accessible positions are preserved.
+This is display-only: annotations, mask pixels, measurements, QC and Workflow
+Builder run artifacts remain intact. Proxy-instrumented regressions verify a
+20,000-box document reads only its first 200 entries for an in-window selection,
+and a distant selected box does not trigger unrelated mask traversal. Native
+Windows GUI and full workflow acceptance remain separately required.
