@@ -290,3 +290,31 @@ The interval propagates only caller-supplied scale uncertainty; it does not
 include reconstruction error, endpoint selection error, registration error,
 or independent calibration verification. All release and biological
 validation gates remain open.
+
+## Caller-selected surface-trace turn diagnostics (Track C, 2026-11-14)
+
+Ordered, explicitly scientist-selected mesh-edge traces now expose a source-frame
+`turn_angles_deg` array aligned to the selected vertex indices, plus
+`maximum_turn_angle_deg` and `total_absolute_geometric_turn_deg`.
+The two endpoint turns are undefined (`null`). An interior turn next to
+a zero-length source edge is also `null`: the maximum excludes undefined
+turns, and the cumulative turn is `null` rather than silently treating
+unknown geometry as a straight segment. For a two-vertex trace, cumulative
+turn is zero because no interior turn exists.
+
+Turning angles are calculated with the existing stable three-dimensional
+atan2/cross-product geometry in source coordinates. A common positive
+calibration scale therefore does not change them. They are descriptive
+**geometric polyline diagnostics**, not coral skeletal joint angles,
+verified anatomical centerlines, physiological curvature, growth rates,
+or estimates with a biological confidence interval. A numerical angle
+does not imply human verification.
+
+The standalone project-scoped mesh preview and executable, typed, persisted
+Workflow Builder mesh-preview node share this measurement engine and preserve
+the same provisional result and source/calibration provenance. Synthetic
+regressions cover scale invariance, missing turns on degenerate source edges,
+and saved-workflow versus standalone artifact equality. The numerical
+source geometry, biological interpretation, independently verified
+calibration, representative coral scans, and installed Windows/GPU acceptance
+remain separate scientific and release validation gates.
