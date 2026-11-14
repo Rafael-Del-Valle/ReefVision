@@ -5,7 +5,6 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
-
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import (
@@ -1039,6 +1038,7 @@ def test_class_execution_never_publishes_partial_running_state(
         operation = session.get(ClassOperation, approval["id"])
         annotation = session.get(Annotation, "annotation-active")
         assert operation is not None and operation.status == "completed"
+        assert operation.started_at is not None
         assert annotation is not None and annotation.label_class_id == target["id"]
         assert session.scalar(
             select(AnnotationEvent.id).where(AnnotationEvent.event_type == "class_reassigned")
@@ -1104,8 +1104,73 @@ def test_class_execution_cannot_reuse_preview_claimed_by_other_writer(
         assert annotation is not None and annotation.label_class_id == source["id"]
         assert not list(
             session.scalars(
-                select(AnnotationEvent.id).where(
-                    AnnotationEvent.event_type == "class_reassigned"
-                )
+                select(AnnotationEvent.id).where(AnnotationEvent.event_type == "class_reassigned")
+            )
+        )
+
+@pytest.mark.parametrize("operation_endpoint", ["reassign", "reassign-delete"])
+def test_class_execution_rechecks_intervening_biological_identity_change(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, operation_endpoint: str
+) -> None:
+    """An identity change between the first read and writer claim invalidates approval."""
+    project = create_project(client, name="Concurrent biological approval")
+    source = create_label_class(
+        client, project["id"], class_index=0, name="Swiftia closed", display_color="#E76F51"
+    )
+    target = create_label_class(
+        client, project["id"], class_index=1, name="Swiftia open", display_color="#2A9D8F"
+    )
+    seed_reassignment_records(
+        client,
+        project,
+        source,
+        target,
+        include_deleted_annotation=False,
+        include_historical_prediction=False,
+    )
+    route = f"/api/v1/projects/{project['id']}/classes/{source['id']}/{operation_endpoint}"
+    preview_response = client.post(f"{route}/preview", json={"target_class_id": target["id"]})
+    assert preview_response.status_code == 201, preview_response.text
+    preview = preview_response.json()
+    assert preview["plan"]["blockers"] == []
+
+    original_class = ClassOperationsService._class
+    intervened = False
+
+    def update_target_between_read_and_claim(
+        service: ClassOperationsService, project_id: str, class_id: str
+    ) -> LabelClass:
+        nonlocal intervened
+        label_class = original_class(service, project_id, class_id)
+        if class_id == target["id"] and not intervened:
+            intervened = True
+            with Session(cast(FastAPI, client.app).state.engine) as other:
+                changed_target = other.get(LabelClass, target["id"])
+                assert changed_target is not None
+                changed_target.state_name = "new biological state"
+                other.commit()
+        return label_class
+
+    monkeypatch.setattr(ClassOperationsService, "_class", update_target_between_read_and_claim)
+    execution = client.post(
+        route,
+        json={"operation_id": preview["id"], "preview_checksum": preview["preview_checksum"]},
+    )
+    assert intervened
+    assert execution.status_code == 409, execution.text
+    assert "stale" in execution.json()["detail"].lower()
+
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        operation = session.get(ClassOperation, preview["id"])
+        annotation = session.get(Annotation, "annotation-active")
+        prediction = session.get(PredictionProposal, "proposal-pending")
+        assert operation is not None
+        assert operation.status == "failed" and operation.final_state == "preview_stale"
+        assert operation.started_at is None
+        assert annotation is not None and annotation.label_class_id == source["id"]
+        assert prediction is not None and prediction.label_class_id == source["id"]
+        assert not list(
+            session.scalars(
+                select(AnnotationEvent.id).where(AnnotationEvent.event_type == "class_reassigned")
             )
         )
