@@ -43,11 +43,20 @@ a false exact-tie claim when a small prefix was lost before adding a huge
 edge. It does not reconstruct exact real-valued Euclidean distances, model
 uncertainty, or certify near-tie uniqueness. A near tie may remain undetected.
 
-When a valid finite destination cost is already known, an overflowing
-alternative detour cannot replace that result and is ignored. A route
-without a representable finite destination still fails closed on accumulated
-cost overflow. Calibration uncertainty bounds are checked independently
-after a valid finite route is selected.
+An overflowing positive-weight candidate cannot improve any finite
+route, so the search defers overflow errors until it has explored the
+remaining representable candidates. This matters even **before** a finite
+destination has been discovered: a far-away reverse edge can overflow while
+another valid route is still waiting in the queue. If the endpoints share a
+mesh component but no representable finite accumulated route can be found,
+the engine fails closed rather than misreporting a disconnected surface.
+Truly disconnected endpoints remain disconnected even if an unrelated
+explored component contains an overflowing detour. Direct-engine numerical
+regressions exercise cases near binary64 limits; ordinary API and persisted
+Workflow Builder preview inputs are independently bounded to much smaller
+source coordinates and continue sharing the same path engine and provenance.
+Calibration uncertainty bounds are checked independently after a valid
+finite route is selected.
 
 The project-scoped standalone preview and executable typed persisted
 `mesh_surface_preview` Workflow Builder graph share this implementation.
