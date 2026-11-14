@@ -129,6 +129,8 @@ function reviewedMergeCounts(
     usage.project_id !== projectId ||
     usage.class_id !== classId ||
     !Array.isArray(usage.counts) ||
+    !Array.isArray(usage.delete_blockers) ||
+    !Array.isArray(usage.compatibility_warnings) ||
     usage.counts.length !== Object.keys(REQUIRED_USAGE_CATEGORIES).length
   ) {
     return null;
