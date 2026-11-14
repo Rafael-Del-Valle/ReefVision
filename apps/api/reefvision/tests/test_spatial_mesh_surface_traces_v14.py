@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.services.spatial_mesh_paths_v14 import mesh_surface_edge_traces
 from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
 from reefvision.tests.test_annotations import create_project
 
@@ -47,18 +48,6 @@ INCONSISTENT_WINDING_PARAMS = {
     "faces": [[0, 1, 2], [0, 1, 3]],
     "surface_trace_vertex_paths": [[0, 1]],
 }
-TOPOLOGY_CASES = [
-    (
-        DUPLICATE_FACE_PARAMS,
-        "duplicate_triangle_on_surface_trace",
-        "inconsistent_winding_edge_on_surface_trace",
-    ),
-    (
-        INCONSISTENT_WINDING_PARAMS,
-        "inconsistent_winding_edge_on_surface_trace",
-        "duplicate_triangle_on_surface_trace",
-    ),
-]
 
 
 def test_trace_follows_selected_edges_not_the_shortest_route() -> None:
@@ -120,13 +109,27 @@ def test_selected_trace_requires_real_triangle_edges(client: TestClient) -> None
     assert response.json()["detail"] == "Consecutive surface trace vertices must share a triangle edge"
 
 
-@pytest.mark.parametrize(("params", "warning", "other_warning"), TOPOLOGY_CASES)
-def test_selected_trace_topology_defects_remain_provisional(
-    params: dict[str, object], warning: str, other_warning: str
-) -> None:
-    trace = measure_mesh_preview(**params)["surface_edge_traces"][0]
-    assert warning in trace["qc_warnings"]
-    assert other_warning not in trace["qc_warnings"]
+def test_direct_trace_identifies_duplicate_faces_without_overriding_mesh_rejection() -> None:
+    # The full preview must reject duplicated triangle geometry rather than
+    # saving a misleading measurement. Direct trace QC remains descriptive.
+    trace = mesh_surface_edge_traces(
+        [(0, 0, 0), (1, 0, 0), (0, 1, 0)],
+        [[0, 1, 2], [2, 1, 0]],
+        [[0, 1]],
+        0.01,
+        0.1,
+    )[0]
+    assert "duplicate_triangle_on_surface_trace" in trace["qc_warnings"]
+    assert "inconsistent_winding_edge_on_surface_trace" not in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+    with pytest.raises(ValueError, match="Duplicate triangle geometry"):
+        measure_mesh_preview(**DUPLICATE_FACE_PARAMS)
+
+
+def test_selected_trace_flags_inconsistent_winding_without_false_duplicate() -> None:
+    trace = measure_mesh_preview(**INCONSISTENT_WINDING_PARAMS)["surface_edge_traces"][0]
+    assert "inconsistent_winding_edge_on_surface_trace" in trace["qc_warnings"]
+    assert "duplicate_triangle_on_surface_trace" not in trace["qc_warnings"]
     assert trace["human_review_verified"] is False
     assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
 
@@ -161,7 +164,7 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
 
 @pytest.mark.parametrize(
     "case",
-    ["ordinary", "resolution_limited", "duplicate_face", "inconsistent_winding"],
+    ["ordinary", "resolution_limited", "inconsistent_winding"],
 )
 def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     client: TestClient, case: str
@@ -171,7 +174,6 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     params = {
         "ordinary": PARAMS,
         "resolution_limited": RESOLUTION_LIMITED_PARAMS,
-        "duplicate_face": DUPLICATE_FACE_PARAMS,
         "inconsistent_winding": INCONSISTENT_WINDING_PARAMS,
     }[case]
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
@@ -223,10 +225,6 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             "surface_trace_cumulative_distance_resolution_loss"
             in artifact["surface_edge_traces"][0]["qc_warnings"]
         )
-    if case == "duplicate_face":
-        assert "duplicate_triangle_on_surface_trace" in artifact["surface_edge_traces"][0][
-            "qc_warnings"
-        ]
     if case == "inconsistent_winding":
         assert "inconsistent_winding_edge_on_surface_trace" in artifact[
             "surface_edge_traces"
