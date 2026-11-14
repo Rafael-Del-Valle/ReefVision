@@ -639,10 +639,28 @@ def mesh_surface_edge_traces(
         valid_turn_angles = [angle for angle in interior_turn_angles if angle is not None]
         maximum_turn_angle_deg = max(valid_turn_angles, default=None)
         total_absolute_geometric_turn_deg = (
-            fsum(valid_turn_angles)
-            if len(valid_turn_angles) == len(interior_turn_angles)
+            fsum(valid_turn_angles) if len(valid_turn_angles) == len(interior_turn_angles) else None
+        )
+        # The endpoint chord is not an anatomical baseline. Report a
+        # scale-invariant geometric detour ratio only when the calibrated
+        # endpoints can be distinguished; never infer infinite tortuosity
+        # from coincident or numerically collapsed endpoint coordinates.
+        endpoint_chord_m = dist(calibrated_vertices[0], calibrated_vertices[-1])
+        if not isfinite(endpoint_chord_m):
+            raise ValueError("Surface trace endpoint chord cannot be represented")
+        chord_interval = (
+            [
+                endpoint_chord_m * (1 - scale_uncertainty),
+                endpoint_chord_m * (1 + scale_uncertainty),
+            ]
+            if scale_uncertainty is not None
             else None
         )
+        if chord_interval is not None and any(not isfinite(bound) for bound in chord_interval):
+            raise ValueError("Surface trace endpoint chord interval overflowed")
+        detour_ratio = length_m / endpoint_chord_m if endpoint_chord_m > 0 else None
+        if detour_ratio is not None and not isfinite(detour_ratio):
+            detour_ratio = None
         warnings = ["caller_selected_surface_trace_not_anatomical_centerline"]
         if any(incidence[edge] == 1 for edge in edges):
             warnings.append("open_boundary_edge_on_surface_trace")
@@ -658,6 +676,10 @@ def mesh_surface_edge_traces(
             warnings.append("inconsistent_winding_edge_on_surface_trace")
         if any(length == 0 for length in source_lengths):
             warnings.append("zero_length_edge_on_surface_trace")
+        if endpoint_chord_m == 0:
+            warnings.append("surface_trace_zero_endpoint_chord")
+        if endpoint_chord_m > 0 and detour_ratio is None:
+            warnings.append("surface_trace_detour_ratio_unrepresentable")
         # Distinct parsed vertex indices can refer to exactly the same XYZ.
         # This makes a selected open-by-index trace return to an earlier
         # location without containing a repeated index or a zero-length edge.
@@ -699,6 +721,9 @@ def mesh_surface_edge_traces(
                 "cumulative_length_scale_only_intervals_m": cumulative_intervals,
                 "length_m": length_m,
                 "length_scale_only_interval_m": interval,
+                "endpoint_chord_length_m": endpoint_chord_m,
+                "endpoint_chord_scale_only_interval_m": chord_interval,
+                "geometric_detour_ratio": detour_ratio,
                 "qc_warnings": warnings,
             }
         )
