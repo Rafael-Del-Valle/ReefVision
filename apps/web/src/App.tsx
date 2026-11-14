@@ -1007,6 +1007,10 @@ function ReefVisionMainApp() {
               <EcologyWorkspace
                 key={selectedProject.id}
                 projectId={selectedProject.id}
+                onOpenVideo={(videoId) => {
+                  handleVideoSelect(videoId);
+                  setActiveView("video");
+                }}
               />
             )}
             {activeView === "scientific_heatmaps" && (

@@ -8,6 +8,7 @@ import {
   LoadingState,
 } from "../../components/ui/AsyncState";
 import type { MaskAnnotationRecord } from "../annotation-editor/types";
+import { listMeasurementRuns } from "../video/biologicalMovementApi";
 import {
   ecologyCsv,
   getCandidates,
@@ -126,7 +127,7 @@ function IdentityForm({
         <input name="reason" required minLength={3} maxLength={500} />
       </label>
       <button type="submit" disabled={mutation.isPending}>
-        {mutation.isPending ? "Saving…" : title}
+        {mutation.isPending ? "Savingâ€¦" : title}
       </button>
       {mutation.isError && (
         <p className="form-error" role="alert">
@@ -364,8 +365,8 @@ function EvidenceForm({
               <option value="">Choose a reviewed box or mask</option>
               {options.map((row) => (
                 <option key={row.id} value={row.id}>
-                  {className(row.label_class_id)} · {row.kind} ·{" "}
-                  {row.id.slice(0, 8)} · revision {row.revision}
+                  {className(row.label_class_id)} Â· {row.kind} Â·{" "}
+                  {row.id.slice(0, 8)} Â· revision {row.revision}
                 </option>
               ))}
             </select>
@@ -384,7 +385,7 @@ function EvidenceForm({
               <option value="">Choose an annotation</option>
               {eligibleAnnotations.map((row) => (
                 <option key={row.id} value={row.id}>
-                  {row.annotation_kind} {row.annotation_id.slice(0, 8)} ·
+                  {row.annotation_kind} {row.annotation_id.slice(0, 8)} Â·
                   revision {row.annotation_revision}
                 </option>
               ))}
@@ -401,7 +402,7 @@ function EvidenceForm({
         <input name="reason" required minLength={3} maxLength={500} />
       </label>
       <button type="submit" disabled={mutation.isPending || !available}>
-        {mutation.isPending ? "Linking…" : "Link evidence"}
+        {mutation.isPending ? "Linkingâ€¦" : "Link evidence"}
       </button>
       {mutation.isSuccess && (
         <p role="status">Evidence linked to revision {identity.revision}.</p>
@@ -476,12 +477,12 @@ function LongitudinalCandidates({ projectId }: { projectId: string }) {
               {result.data.projected_endpoint_changes.map((row) => (
                 <li key={`${row.organism_key}-${row.metric}`}>
                   <strong>
-                    {row.organism_key} · {row.metric.replaceAll("_", " ")}
+                    {row.organism_key} Â· {row.metric.replaceAll("_", " ")}
                   </strong>
                   <p>
                     {row.baseline_capture_timestamp_utc} to{" "}
-                    {row.final_capture_timestamp_utc} · {row.baseline_value} to{" "}
-                    {row.final_value} {row.unit} · Change {row.absolute_change}{" "}
+                    {row.final_capture_timestamp_utc} Â· {row.baseline_value} to{" "}
+                    {row.final_value} {row.unit} Â· Change {row.absolute_change}{" "}
                     {row.unit} in {row.elapsed_days} days
                   </p>
                 </li>
@@ -516,9 +517,95 @@ function LongitudinalCandidates({ projectId }: { projectId: string }) {
   );
 }
 
-export function EcologyWorkspace({ projectId }: { projectId: string }) {
+function ProjectPoseMeasurements({
+  projectId,
+  onOpenVideo,
+}: {
+  projectId: string;
+  onOpenVideo?: (videoId: string) => void;
+}) {
+  const runs = useQuery({
+    queryKey: ["pose-measurement-runs", projectId],
+    queryFn: ({ signal }) => listMeasurementRuns(projectId, signal),
+  });
+  if (runs.isPending) return <LoadingState title="Finding pose measurements" />;
+  if (runs.isError) {
+    return (
+      <ErrorState
+        title="Pose measurements unavailable"
+        message={runs.error.message}
+        onRetry={() => void runs.refetch()}
+      />
+    );
+  }
+  const completed = runs.data.filter((run) => run.status === "completed");
+  return (
+    <section className="management-card" aria-label="Pose-derived measurements">
+      <h3>Pose-derived measurements</h3>
+      <p>
+        Review movement events in Video &amp; tracking. Each run retains a video
+        identity revision and uses a pose-derived method. Longitudinal
+        comparisons above use source-image geometry.
+      </p>
+      {completed.length === 0 && (
+        <p>
+          No completed pose measurement runs. Create one in the source video's
+          Biological movement workspace.
+        </p>
+      )}
+      {completed.map((run) => (
+        <article key={run.id} className="panel-card">
+          <h4>
+            {run.definitions_json
+              .map((definition) => definition.name)
+              .join(", ") || "Anatomical measurements"}
+          </h4>
+          <p>
+            {run.verification_state === "scientific"
+              ? "Scientist-reviewed identity inputs"
+              : "Exploratory identity inputs"}{" "}
+            · Identity revision {run.source_identity_run_revision}
+          </p>
+          {onOpenVideo && (
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => onOpenVideo(run.video_id)}
+            >
+              Open source video
+            </button>
+          )}
+          <details>
+            <summary>Run provenance</summary>
+            <p>
+              Run <code>{run.id}</code>
+            </p>
+            <p>
+              Identity run <code>{run.source_identity_run_id}</code>
+            </p>
+            {run.result_sha256 && (
+              <p>
+                Result SHA-256 <code>{run.result_sha256}</code>
+              </p>
+            )}
+          </details>
+        </article>
+      ))}
+    </section>
+  );
+}
+
+export function EcologyWorkspace({
+  projectId,
+  onOpenVideo,
+}: {
+  projectId: string;
+  onOpenVideo?: (videoId: string) => void;
+}) {
   const client = useQueryClient();
-  const [view, setView] = useState<"registry" | "longitudinal">("registry");
+  const [view, setView] = useState<"registry" | "longitudinal" | "pose">(
+    "registry",
+  );
   const [selected, setSelected] = useState("");
   const query = useQuery({
     queryKey: ["ecology-registry", projectId],
@@ -555,9 +642,22 @@ export function EcologyWorkspace({ projectId }: { projectId: string }) {
         >
           Longitudinal candidates
         </button>
+        <button
+          type="button"
+          className="secondary"
+          aria-pressed={view === "pose"}
+          onClick={() => setView("pose")}
+        >
+          Pose measurements
+        </button>
       </div>
       {view === "longitudinal" ? (
         <LongitudinalCandidates projectId={projectId} />
+      ) : view === "pose" ? (
+        <ProjectPoseMeasurements
+          projectId={projectId}
+          onOpenVideo={onOpenVideo}
+        />
       ) : (
         <>
           {query.isPending && (
@@ -610,7 +710,7 @@ export function EcologyWorkspace({ projectId }: { projectId: string }) {
                   <section className="management-card">
                     <h3>{current.organism_key}</h3>
                     <p>
-                      Revision {current.revision} · {current.kind}.{" "}
+                      Revision {current.revision} Â· {current.kind}.{" "}
                       {current.reason}
                     </p>
                     <details>
@@ -622,7 +722,7 @@ export function EcologyWorkspace({ projectId }: { projectId: string }) {
                           )
                           .map((row) => (
                             <li key={row.id}>
-                              Revision {row.revision} · {row.created_at} ·{" "}
+                              Revision {row.revision} Â· {row.created_at} Â·{" "}
                               {row.reason}
                             </li>
                           ))}
@@ -653,8 +753,8 @@ export function EcologyWorkspace({ projectId }: { projectId: string }) {
                           )
                           .map((row) => (
                             <li key={row.id}>
-                              Image {row.image_id} · identity revision{" "}
-                              {row.identity_revision} · {row.reason}
+                              Image {row.image_id} Â· identity revision{" "}
+                              {row.identity_revision} Â· {row.reason}
                               <div>
                                 SHA-256 <code>{row.image_sha256}</code>
                               </div>
@@ -667,7 +767,7 @@ export function EcologyWorkspace({ projectId }: { projectId: string }) {
                                   .map((annotation) => (
                                     <li key={annotation.id}>
                                       {annotation.annotation_kind}{" "}
-                                      {annotation.annotation_id} · revision{" "}
+                                      {annotation.annotation_id} Â· revision{" "}
                                       {annotation.annotation_revision}
                                       {query.data.calibration_evidence_links
                                         .filter(

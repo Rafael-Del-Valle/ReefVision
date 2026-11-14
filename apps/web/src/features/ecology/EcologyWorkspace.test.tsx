@@ -96,3 +96,53 @@ it("registers a project organism and keeps projected results under scientific re
   );
   client.clear();
 });
+
+it("opens the exact video behind a project pose measurement run", async () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = String(input);
+    return Response.json(
+      url.endsWith("/pose-measurement-runs")
+        ? [
+            {
+              id: "pose-run",
+              video_id: "video-7",
+              status: "completed",
+              verification_state: "scientific",
+              source_identity_run_id: "identity-run",
+              source_identity_run_revision: 3,
+              result_sha256: "measurement-digest",
+              definitions_json: [
+                {
+                  id: "gape",
+                  name: "Gape distance",
+                  kind: "distance",
+                  landmark_ids: ["upper", "lower"],
+                },
+              ],
+            },
+          ]
+        : {
+            identities: [],
+            identity_history: [],
+            image_evidence_links: [],
+            annotation_evidence_links: [],
+            calibration_evidence_links: [],
+          },
+    );
+  });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const openVideo = vi.fn();
+  render(
+    <QueryClientProvider client={client}>
+      <EcologyWorkspace projectId="field-project" onOpenVideo={openVideo} />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Pose measurements" }));
+  await screen.findByRole("heading", { name: "Gape distance" });
+  expect(screen.getByText(/Review movement events in Video/)).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Open source video" }));
+  expect(openVideo).toHaveBeenCalledWith("video-7");
+  client.clear();
+});
