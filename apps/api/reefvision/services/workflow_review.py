@@ -35,6 +35,7 @@ from reefvision.services.workflow_auto_label import (
     materialize_consensus_annotations,
 )
 from reefvision.services.workflow_provenance import (
+    verify_succeeded_node_artifacts,
     verify_workflow_artifact,
     verify_workflow_run_node_graph_lineage,
 )
@@ -122,6 +123,13 @@ def _input_artifacts(session: Session, node_run: WorkflowNodeRun) -> list[Workfl
             or producer.execution_order >= node_run.execution_order
         ):
             raise ConflictError("Workflow review input lacks an earlier succeeded producer")
+        # A paused review must not certify a producer whose persisted output
+        # summary or own upstream inputs no longer match the saved execution.
+        verify_succeeded_node_artifacts(
+            session,
+            run_id=node_run.workflow_run_id,
+            node_run=producer,
+        )
         # A hash-valid replacement from the same producer/port is not review
         # evidence unless it was declared by that completed node. Reject
         # ambiguous duplicate outputs rather than approving one arbitrarily.
