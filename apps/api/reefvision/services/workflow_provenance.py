@@ -203,6 +203,20 @@ def verify_succeeded_node_artifacts(
     ):
         raise ConflictError("Succeeded workflow node parameters do not match saved graph")
 
+    # The payload SHA does not cover a saved artifact's declared type. Even
+    # if a corrupted result summary is rewritten to agree with the artifact,
+    # recovery must honor the registered typed output-port contract.
+    from reefvision.services.workflow_graphs import workflow_node_registry
+
+    definition = workflow_node_registry().get(node_run.node_type)
+    if definition is not None:
+        declared_types = {
+            port.port_id: set(port.accepted_types) for port in definition.output_ports
+        }
+        for artifact in outputs:
+            if artifact.data_type not in declared_types.get(artifact.producer_port_id, set()):
+                raise ConflictError("Succeeded workflow node output type does not match registry")
+
     raw_edges = graph.graph_json.get("edges", [])
     if not isinstance(raw_edges, list) or any(
         not isinstance(edge, dict) or not isinstance(edge.get("edge_id"), str) for edge in raw_edges
