@@ -110,6 +110,7 @@ class MeshPreviewRequest(BaseModel):
     )
 
     surface_path_vertex_pairs: list[list[StrictInt]] | None = Field(default=None, max_length=16)
+    surface_trace_vertex_paths: list[list[StrictInt]] | None = Field(default=None, max_length=16)
 
     @model_validator(mode="after")
     def geometry_is_unambiguous(self) -> MeshPreviewRequest:
@@ -137,6 +138,16 @@ class MeshPreviewRequest(BaseModel):
             for pair in self.surface_path_vertex_pairs:
                 if len(pair) != 2 or pair[0] == pair[1] or any(index < 0 for index in pair):
                     raise ValueError("Surface paths require two distinct nonnegative indices")
+        if self.surface_trace_vertex_paths is not None:
+            for vertices in self.surface_trace_vertex_paths:
+                if (
+                    not 2 <= len(vertices) <= 128
+                    or any(index < 0 for index in vertices)
+                    or len(set(vertices)) != len(vertices)
+                ):
+                    raise ValueError(
+                        "Surface traces require 2-128 distinct nonnegative vertex indices"
+                    )
         return self
 
 
