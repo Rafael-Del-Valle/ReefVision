@@ -379,9 +379,10 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         graph_record = session.get(WorkflowGraphRecord, str(saved["id"]))
         consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
         assert graph_record is not None and consumer is not None
-        assert verify_succeeded_node_artifacts(
+        verified = verify_succeeded_node_artifacts(
             session, run_id=str(run["id"]), node_run=consumer
-        )["input_artifact_count"] == 1
+        )
+        assert verified["input_artifact_count"] == 1
         original_graph = graph_record.graph_json
         assert isinstance(original_graph, dict)
         original_edges = original_graph["edges"]
