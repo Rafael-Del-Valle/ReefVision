@@ -6,7 +6,7 @@ from collections import Counter
 from fractions import Fraction
 from heapq import heappop, heappush
 from itertools import accumulate, pairwise
-from math import atan2, degrees, dist, hypot, isfinite
+from math import atan2, degrees, dist, fsum, hypot, isfinite
 from typing import Any
 
 
@@ -486,3 +486,121 @@ def mesh_edge_paths(
             }
         )
     return results
+
+def mesh_surface_edge_traces(
+    points: list[tuple[float, float, float]],
+    faces: list[list[int]],
+    vertex_paths: list[list[int]] | None,
+    scale: float,
+    scale_uncertainty: float | None,
+) -> list[dict[str, Any]] | None:
+    """Measure caller-traced *existing surface edges*, not coral centerlines.
+
+    An ordered trace deliberately differs from a shortest path: every segment
+    must be a real indexed triangle edge. Its length and scale-only interval
+    remain explicitly provisional until anatomy and calibration are reviewed.
+    """
+    if vertex_paths is None:
+        return None
+    if (
+        type(scale) not in (int, float)
+        or not isfinite(scale)
+        or scale <= 0
+        or (
+            scale_uncertainty is not None
+            and (
+                type(scale_uncertainty) not in (int, float)
+                or not isfinite(scale_uncertainty)
+                or not 0 <= scale_uncertainty <= 1
+            )
+        )
+    ):
+        raise ValueError("Surface trace calibration must be finite and within bounds")
+    if len(vertex_paths) > 16:
+        raise ValueError("At most 16 surface edge traces are supported")
+
+    incidence: Counter[tuple[int, int]] = Counter()
+    for face in faces:
+        if (
+            len(face) != 3
+            or any(type(i) is not int or i < 0 or i >= len(points) for i in face)
+            or len(set(face)) != 3
+        ):
+            raise ValueError("Surface trace faces require three distinct existing vertices")
+        for a, b in ((face[0], face[1]), (face[1], face[2]), (face[2], face[0])):
+            incidence[(min(a, b), max(a, b))] += 1
+
+    traces: list[dict[str, Any]] = []
+    for vertices in vertex_paths:
+        if (
+            not isinstance(vertices, list)
+            or not 2 <= len(vertices) <= 128
+            or any(type(i) is not int or i < 0 or i >= len(points) for i in vertices)
+            or len(set(vertices)) != len(vertices)
+        ):
+            raise ValueError("Surface traces require 2-128 distinct existing vertex indices")
+        edges = [(min(a, b), max(a, b)) for a, b in pairwise(vertices)]
+        if any(edge not in incidence for edge in edges):
+            raise ValueError("Consecutive surface trace vertices must share a triangle edge")
+        try:
+            source_lengths = [
+                dist(points[a], points[b]) for a, b in pairwise(vertices)
+            ]
+            segment_lengths = [length * scale for length in source_lengths]
+            length_m = fsum(segment_lengths)
+            cumulative = [
+                0.0,
+                *(fsum(segment_lengths[:i]) for i in range(1, len(segment_lengths) + 1)),
+            ]
+            calibrated_vertices = [
+                [coordinate * scale for coordinate in points[index]] for index in vertices
+            ]
+        except (OverflowError, TypeError, ValueError) as exc:
+            raise ValueError("Surface trace geometry cannot be represented") from exc
+        if any(
+            not isfinite(value)
+            for value in (
+                *source_lengths,
+                *segment_lengths,
+                length_m,
+                *cumulative,
+                *(coordinate for point in calibrated_vertices for coordinate in point),
+            )
+        ):
+            raise ValueError("Surface trace geometry cannot be represented")
+        interval = (
+            [length_m * (1 - scale_uncertainty), length_m * (1 + scale_uncertainty)]
+            if scale_uncertainty is not None
+            else None
+        )
+        if interval is not None and any(not isfinite(bound) for bound in interval):
+            raise ValueError("Surface trace scale-only interval overflowed")
+        warnings = ["caller_selected_surface_trace_not_anatomical_centerline"]
+        if any(incidence[edge] == 1 for edge in edges):
+            warnings.append("open_boundary_edge_on_surface_trace")
+        if any(incidence[edge] > 2 for edge in edges):
+            warnings.append("nonmanifold_edge_on_surface_trace")
+        if any(length == 0 for length in source_lengths):
+            warnings.append("zero_length_edge_on_surface_trace")
+        if any(source > 0 and calibrated == 0 for source, calibrated in zip(
+            source_lengths, segment_lengths, strict=True
+        )):
+            warnings.append("calibrated_surface_trace_segment_underflow")
+        if any(source > 0 for source in source_lengths) and length_m == 0:
+            warnings.append("calibrated_surface_trace_length_underflow")
+        traces.append(
+            {
+                "trace_type": "caller_selected_mesh_surface_edges",
+                "biological_validation_status": "not_verified_anatomical_centerline",
+                "human_review_verified": False,
+                "vertex_indices": list(vertices),
+                "vertices_in_source_frame_m": calibrated_vertices,
+                "edge_count": len(edges),
+                "segment_lengths_m": segment_lengths,
+                "cumulative_lengths_m": cumulative,
+                "length_m": length_m,
+                "length_scale_only_interval_m": interval,
+                "qc_warnings": warnings,
+            }
+        )
+    return traces
