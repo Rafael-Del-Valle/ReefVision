@@ -1537,8 +1537,14 @@ def test_saved_qc_workflow_class_evidence_survives_merge(
     reviewed = client.get(f"/api/v1/review-queues/{queue_id}/items")
     assert reviewed.status_code == 200, reviewed.text
     assert reviewed.json()["items"][0]["id"] == item_id
-    assert reviewed.json()["items"][0]["review_state"] == "completed"
+    assert reviewed.json()["items"][0]["review_state"] == (
+        "completed" if finish_review else "pending"
+    )
     assert reviewed.json()["items"][0]["label_class_ids_json"] == [source["id"]]
+    assert any(
+        "saved workflow review-queue evidence" in warning
+        for warning in merged.json()["warnings"]
+    )
     after = client.get(f"/api/v1/workflow-runs/{run_id}")
     assert after.status_code == 200, after.text
     assert after.json()["run"]["status"] == "succeeded"
