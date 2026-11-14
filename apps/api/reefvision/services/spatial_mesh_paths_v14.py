@@ -749,7 +749,9 @@ def mesh_surface_edge_traces(
             if earlier_index is None:
                 seen_geometric_segments[geometric_edge] = segment_index
             else:
-                repeated_geometric_segment_index_pairs.append([earlier_index, segment_index])
+                repeated_geometric_segment_index_pairs.append(
+                    [earlier_index, segment_index]
+                )
         if repeated_geometric_segment_index_pairs:
             warnings.append("surface_trace_reused_geometric_segment")
         if segment_underflow:
