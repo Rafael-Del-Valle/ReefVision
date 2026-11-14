@@ -74,6 +74,13 @@ def test_trace_follows_selected_edges_not_the_shortest_route() -> None:
     expected = (1 + sqrt(2)) * 0.01
     assert trace["length_m"] == pytest.approx(expected)
     assert trace["cumulative_lengths_m"] == pytest.approx([0.0, 0.01, expected])
+    segment_bounds = trace["segment_length_scale_only_intervals_m"]
+    assert segment_bounds[0] == pytest.approx([0.009, 0.011])
+    assert segment_bounds[1] == pytest.approx([sqrt(2) * 0.009, sqrt(2) * 0.011])
+    cumulative_bounds = trace["cumulative_length_scale_only_intervals_m"]
+    assert cumulative_bounds[0] == [0.0, 0.0]
+    assert cumulative_bounds[1] == pytest.approx([0.009, 0.011])
+    assert cumulative_bounds[2] == pytest.approx([expected * 0.9, expected * 1.1])
     assert trace["length_scale_only_interval_m"] == pytest.approx([expected * 0.9, expected * 1.1])
     assert trace["length_m"] > result["surface_edge_paths"][0]["length_m"]
     assert trace["qc_warnings"] == [
@@ -222,7 +229,7 @@ def test_omitted_trace_does_not_invent_anatomical_centerlines() -> None:
     assert result["surface_edge_traces"] is None
 
 
-@pytest.mark.parametrize("uncertainty", [None, 1.0])
+@pytest.mark.parametrize("uncertainty", [None, 0.0, 1.0])
 def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
     uncertainty: float | None,
 ) -> None:
@@ -232,12 +239,31 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
     assert trace["length_scale_only_interval_m"] == (
         pytest.approx([0.0, 2 * expected]) if uncertainty is not None else None
     )
+    for bound_key, values in (
+        ("segment_length_scale_only_intervals_m", trace["segment_lengths_m"]),
+        ("cumulative_length_scale_only_intervals_m", trace["cumulative_lengths_m"]),
+    ):
+        bounds = trace[bound_key]
+        if uncertainty is None:
+            assert bounds is None
+        else:
+            assert len(bounds) == len(values)
+            for nominal, (lower, upper) in zip(values, bounds, strict=True):
+                assert lower == pytest.approx(nominal * (1 - uncertainty))
+                assert upper == pytest.approx(nominal * (1 + uncertainty))
     assert trace["human_review_verified"] is False
 
 
 @pytest.mark.parametrize(
     "case",
-    ["ordinary", "resolution_limited", "inconsistent_winding", "coincident_nonadjacent"],
+    [
+        "ordinary",
+        "resolution_limited",
+        "inconsistent_winding",
+        "coincident_nonadjacent",
+        "uncertainty_missing",
+        "uncertainty_max",
+    ],
 )
 def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     client: TestClient, case: str
@@ -249,6 +275,8 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "resolution_limited": RESOLUTION_LIMITED_PARAMS,
         "inconsistent_winding": INCONSISTENT_WINDING_PARAMS,
         "coincident_nonadjacent": COINCIDENT_NONADJACENT_PARAMS,
+        "uncertainty_missing": {**PARAMS, "relative_scale_uncertainty": None},
+        "uncertainty_max": {**PARAMS, "relative_scale_uncertainty": 1.0},
     }[case]
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 200, standalone.text
@@ -293,7 +321,20 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert artifact["surface_edge_traces"] == standalone.json()["surface_edge_traces"]
     assert artifact["provenance"] == standalone.json()["provenance"]
     assert artifact["measurement_status"] == "caller_supplied_unverified"
-    assert artifact["surface_edge_traces"][0]["human_review_verified"] is False
+    trace = artifact["surface_edge_traces"][0]
+    assert trace["human_review_verified"] is False
+    if case == "uncertainty_missing":
+        assert trace["segment_length_scale_only_intervals_m"] is None
+        assert trace["cumulative_length_scale_only_intervals_m"] is None
+    else:
+        assert len(trace["segment_length_scale_only_intervals_m"]) == trace["edge_count"]
+        assert len(trace["cumulative_length_scale_only_intervals_m"]) == (
+            trace["edge_count"] + 1
+        )
+    if case == "uncertainty_max":
+        assert trace["cumulative_length_scale_only_intervals_m"][-1] == pytest.approx(
+            [0.0, 2 * trace["length_m"]]
+        )
     if case == "resolution_limited":
         assert (
             "surface_trace_cumulative_distance_resolution_loss"
