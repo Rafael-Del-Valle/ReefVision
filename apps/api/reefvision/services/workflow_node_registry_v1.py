@@ -926,7 +926,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         category="Scientific analysis",
         description=(
             "Preview a connected centerline segment from a saved skeleton revision. "
-            "No physical measurement, accepted edit, or dataset verification is created."
+            "A current calibration can add 2D lengths. Every preview requires review."
         ),
         input_ports=[
             WorkflowPortDefinition(
@@ -953,6 +953,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             "Requires exact pixel attachment; no bridge, snap, or accepted edit is created.",
             "Rejects a source image from another project.",
             "Persists source revision SHA-256, pixel geometry, and scientist review gate.",
+            "When calibrated, preserves the calibration SHA-256 and 2D edge and total lengths.",
             "Cannot enter verified-dataset ports without independent review.",
         ],
     )

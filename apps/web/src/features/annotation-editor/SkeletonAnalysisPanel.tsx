@@ -8,6 +8,7 @@ import {
   exportSkeletonAnalysis,
   getSkeletonReadiness,
   listSkeletonAnalyses,
+  previewConnectedBranch,
   reviewSkeletonAnalysis,
   skeletonExportDownloadUrl,
   type SkeletonAnalysisRevision,
@@ -27,6 +28,42 @@ interface SkeletonAnalysisPanelProps {
 function pixelKey(point: SkeletonPixel): string {
   return point.x + "," + point.y;
 }
+
+// Rasterize the straight segments between user-chosen waypoints in source
+// pixels. The backend validates the exact attachment and connected topology.
+function rasterizeBranch(waypoints: SkeletonPixel[]): SkeletonPixel[] {
+  if (waypoints.length === 0) return [];
+  const pixels = [waypoints[0]];
+  for (let index = 1; index < waypoints.length; index++) {
+    let { x, y } = waypoints[index - 1];
+    const end = waypoints[index];
+    const dx = Math.abs(end.x - x);
+    const dy = -Math.abs(end.y - y);
+    const stepX = Math.sign(end.x - x);
+    const stepY = Math.sign(end.y - y);
+    let error = dx + dy;
+    while (x !== end.x || y !== end.y) {
+      const doubled = 2 * error;
+      if (doubled >= dy) {
+        error += dy;
+        x += stepX;
+      }
+      if (doubled <= dx) {
+        error += dx;
+        y += stepY;
+      }
+      pixels.push({ x, y });
+    }
+  }
+  return pixels;
+}
+
+interface BranchDraft {
+  waypoints: SkeletonPixel[];
+  count: number;
+}
+
+const emptyBranch: BranchDraft = { waypoints: [], count: 0 };
 
 function formatLength(
   pixels: number,
@@ -57,6 +94,7 @@ export function SkeletonAnalysisPanel({
   const [correctionReason, setCorrectionReason] = useState("");
   const [correctionNote, setCorrectionNote] = useState("");
   const [reviewNote, setReviewNote] = useState("");
+  const [branchDraft, setBranchDraft] = useState(emptyBranch);
 
   const readinessQuery = useQuery({
     queryKey: ["skeleton-readiness", maskId],
@@ -84,6 +122,12 @@ export function SkeletonAnalysisPanel({
     const history = historyQuery.data ?? [];
     return history.length > 0 ? history[history.length - 1] : null;
   }, [historyQuery.data]);
+  const branchSource =
+    enabled && latest?.is_latest_revision && !latest.stale ? latest : null;
+  const branchPixels = useMemo(
+    () => rasterizeBranch(branchDraft.waypoints.slice(0, branchDraft.count)),
+    [branchDraft],
+  );
 
   useEffect(() => {
     setAddedPixels([]);
@@ -94,6 +138,11 @@ export function SkeletonAnalysisPanel({
     setCorrectionNote("");
     setReviewNote("");
   }, [maskId]);
+
+  useEffect(() => {
+    setBranchDraft(emptyBranch);
+    setEditMode((mode) => (mode === "branch" ? "view" : mode));
+  }, [branchSource?.id, branchSource?.result_sha256]);
 
   useEffect(() => {
     if (latest) {
@@ -180,9 +229,63 @@ export function SkeletonAnalysisPanel({
     },
   });
 
+  const branchMutation = useMutation({
+    mutationFn: async ({
+      source,
+      points,
+    }: {
+      source: SkeletonAnalysisRevision;
+      points: SkeletonPixel[];
+    }) => {
+      const preview = await previewConnectedBranch(
+        source.id,
+        globalThis.crypto.randomUUID(),
+        points,
+      );
+      if (
+        preview.base_analysis_id !== source.id ||
+        preview.base_result_sha256 !== source.result_sha256 ||
+        preview.mask_annotation_id !== source.mask_annotation_id ||
+        preview.image_id !== source.image_id ||
+        !preview.edges.some((edge) => edge.id === preview.added_edge_id)
+      ) {
+        throw new Error(
+          "The branch preview does not match this skeleton revision.",
+        );
+      }
+      return preview;
+    },
+  });
+  const requestSource = branchMutation.variables?.source;
+  const currentBranchRequest =
+    branchSource !== null &&
+    requestSource?.id === branchSource.id &&
+    requestSource.result_sha256 === branchSource.result_sha256 &&
+    branchMutation.variables?.points === branchPixels;
+  const branchPreview = currentBranchRequest ? branchMutation.data : undefined;
+  const branchCalibration = branchPreview?.calibration;
+  const branchPending = currentBranchRequest && branchMutation.isPending;
+  const drawingBranch = editMode === "branch";
+
+  function drawBranch() {
+    setOverlaySource("final");
+    setEditMode("branch");
+  }
+
   const handlePixelClick = useCallback(
     (point: SkeletonPixel) => {
       if (!latest || editMode === "view") return;
+      if (editMode === "branch") {
+        setBranchDraft((draft) => {
+          const previous = draft.waypoints[draft.count - 1];
+          if (previous?.x === point.x && previous.y === point.y) return draft;
+          return {
+            waypoints: [...draft.waypoints.slice(0, draft.count), point],
+            count: draft.count + 1,
+          };
+        });
+        return;
+      }
       const key = pixelKey(point);
       const base = new Set(latest.result.final_skeleton_pixels.map(pixelKey));
 
@@ -230,16 +333,26 @@ export function SkeletonAnalysisPanel({
           ? latest.result.pruned_graph_nodes
           : latest.result.final_graph_nodes;
     const finalOverlay = overlaySource === "final";
+    const showBranch =
+      finalOverlay && editMode === "branch" && branchSource !== null;
     onOverlayChange({
       pixels,
-      nodes,
-      addedPixels: finalOverlay ? addedPixels : [],
-      removedPixels: finalOverlay ? removedPixels : [],
+      nodes: showBranch && branchPreview ? branchPreview.nodes : nodes,
+      addedPixels: finalOverlay && !showBranch ? addedPixels : [],
+      removedPixels: finalOverlay && !showBranch ? removedPixels : [],
+      branchPixels: showBranch
+        ? (branchPreview?.edges.find(
+            (edge) => edge.id === branchPreview.added_edge_id,
+          )?.pixels ?? branchPixels)
+        : [],
       editMode: finalOverlay ? editMode : "view",
       onPixelClick: handlePixelClick,
     });
   }, [
     addedPixels,
+    branchPixels,
+    branchPreview,
+    branchSource,
     editMode,
     enabled,
     handlePixelClick,
@@ -456,6 +569,148 @@ export function SkeletonAnalysisPanel({
             </p>
           )}
 
+          {branchSource && (
+            <details open>
+              <summary>Connected branch preview</summary>
+              <p className="annotation-helper">
+                Start on an existing skeleton pixel and click along the visible
+                branch to place waypoints. Blue pixels show the draft path.
+              </p>
+              <div className="annotation-editor-inline-actions">
+                <button
+                  type="button"
+                  className={drawingBranch ? "secondary" : ""}
+                  aria-pressed={drawingBranch}
+                  onClick={drawBranch}
+                >
+                  Draw branch
+                </button>
+                <button
+                  type="button"
+                  disabled={branchDraft.count === 0}
+                  onClick={() => {
+                    drawBranch();
+                    setBranchDraft((draft) => ({
+                      ...draft,
+                      count: draft.count - 1,
+                    }));
+                  }}
+                >
+                  Undo waypoint
+                </button>
+                <button
+                  type="button"
+                  disabled={branchDraft.count === branchDraft.waypoints.length}
+                  onClick={() => {
+                    drawBranch();
+                    setBranchDraft((draft) => ({
+                      ...draft,
+                      count: draft.count + 1,
+                    }));
+                  }}
+                >
+                  Redo waypoint
+                </button>
+                <button
+                  type="button"
+                  className="danger-ghost"
+                  disabled={
+                    branchDraft.waypoints.length === 0 && !drawingBranch
+                  }
+                  onClick={() => {
+                    setBranchDraft(emptyBranch);
+                    if (drawingBranch) setEditMode("view");
+                  }}
+                >
+                  Discard branch draft
+                </button>
+              </div>
+              <button
+                type="button"
+                className="secondary"
+                disabled={branchPixels.length < 2 || branchPending}
+                onClick={() => {
+                  drawBranch();
+                  branchMutation.mutate({
+                    source: branchSource,
+                    points: branchPixels,
+                  });
+                }}
+              >
+                {branchPending ? "Checking branch…" : "Preview branch"}
+              </button>
+              {drawingBranch &&
+                currentBranchRequest &&
+                branchMutation.error && (
+                  <p className="form-error" role="alert">
+                    {branchMutation.error.message}
+                  </p>
+                )}
+              {drawingBranch && branchPreview && (
+                <>
+                  <p className="annotation-helper">
+                    <strong>Scientist review required</strong>
+                    {" · Unsaved 2D proposal."}
+                  </p>
+                  {branchCalibration && (
+                    <p className="annotation-helper">
+                      {branchCalibration.method === "reference_plane_homography"
+                        ? "Reference-plane calibration"
+                        : "Image-scale calibration"}{" "}
+                      ({branchCalibration.source})
+                    </p>
+                  )}
+                  <div className="annotation-selection-row">
+                    <strong>Added segment length</strong>
+                    <span>
+                      {formatLength(
+                        branchPreview.added_length_pixels,
+                        branchCalibration?.added_length ?? null,
+                        branchCalibration?.unit ?? null,
+                      )}
+                    </span>
+                  </div>
+                  <div className="annotation-selection-row">
+                    <strong>Proposed total linear extension</strong>
+                    <span>
+                      {formatLength(
+                        branchPreview.proposed_total_length_pixels,
+                        branchCalibration?.proposed_total_length ?? null,
+                        branchCalibration?.unit ?? null,
+                      )}
+                    </span>
+                  </div>
+                  {branchPreview.superseded_edge_ids.length === 1 && (
+                    <p className="annotation-helper">
+                      1 existing segment splits into{" "}
+                      {branchPreview.replacement_edge_ids.length} at the new
+                      junction.
+                    </p>
+                  )}
+                  <details>
+                    <summary>Proposed segment lengths</summary>
+                    {branchPreview.edges.map((edge) => (
+                      <div className="annotation-selection-row" key={edge.id}>
+                        <strong>
+                          {edge.id === branchPreview.added_edge_id
+                            ? "New segment"
+                            : edge.id}
+                        </strong>
+                        <span>
+                          {formatLength(
+                            edge.node_to_node_length_pixels,
+                            edge.length_physical ?? null,
+                            branchCalibration?.unit ?? null,
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </details>
+                </>
+              )}
+            </details>
+          )}
+
           {latest.stale ? (
             <p className="form-error">
               The mask or calibration changed after this revision. Regenerate
@@ -517,6 +772,7 @@ export function SkeletonAnalysisPanel({
                   type="button"
                   className="secondary"
                   disabled={
+                    drawingBranch ||
                     correctionMutation.isPending ||
                     (addedPixels.length === 0 && removedPixels.length === 0)
                   }
@@ -547,6 +803,12 @@ export function SkeletonAnalysisPanel({
           {!latest.stale && (
             <details>
               <summary>Scientific review</summary>
+              {drawingBranch && (
+                <p className="annotation-helper">
+                  Discard the branch draft or switch to View to review the saved
+                  skeleton.
+                </p>
+              )}
               <label>
                 Review note
                 <textarea
@@ -558,7 +820,7 @@ export function SkeletonAnalysisPanel({
                 <button
                   type="button"
                   className="secondary"
-                  disabled={reviewMutation.isPending}
+                  disabled={drawingBranch || reviewMutation.isPending}
                   onClick={() => reviewMutation.mutate("approved")}
                 >
                   Approve
@@ -566,7 +828,7 @@ export function SkeletonAnalysisPanel({
                 <button
                   type="button"
                   className="secondary"
-                  disabled={reviewMutation.isPending}
+                  disabled={drawingBranch || reviewMutation.isPending}
                   onClick={() => reviewMutation.mutate("needs_correction")}
                 >
                   Needs correction
@@ -574,7 +836,7 @@ export function SkeletonAnalysisPanel({
                 <button
                   type="button"
                   className="danger-ghost"
-                  disabled={reviewMutation.isPending}
+                  disabled={drawingBranch || reviewMutation.isPending}
                   onClick={() => reviewMutation.mutate("rejected")}
                 >
                   Reject
@@ -589,6 +851,7 @@ export function SkeletonAnalysisPanel({
               type="button"
               className="secondary"
               disabled={
+                drawingBranch ||
                 latest.stale ||
                 latest.review_status !== "approved" ||
                 exportMutation.isPending
@@ -604,7 +867,7 @@ export function SkeletonAnalysisPanel({
                 Approve the current revision before export.
               </p>
             )}
-            {exportMutation.data && (
+            {!drawingBranch && exportMutation.data && (
               <div>
                 <p className="annotation-helper">
                   Verified package: {exportMutation.data.archive_name}
