@@ -332,10 +332,11 @@ Independent anatomical and calibration acceptance remains mandatory.
 ### Endpoint chord and geometric detour for provisional surface traces
 
 Caller-selected surface-edge traces report `endpoint_chord_length_m`, the
-straight-line Euclidean distance between the calibrated first and last selected
-vertices. `geometric_detour_ratio` is the dimensionless traced edge length
-divided by that chord, *only* when the chord is positive and the ratio is
-numerically representable. On a straight trace the ideal ratio is 1; bends can
+straight-line Euclidean distance between the first and last selected source
+vertices, multiplied once by the meter calibration. `geometric_detour_ratio`
+is the dimensionless source-frame trace length divided by the source-frame
+endpoint separation, *only* when that separation is positive and the ratio
+is numerically representable. On a straight trace the ideal ratio is 1; bends can
 increase it. This is not a coral branch tortuosity estimate or a verified
 anatomical measurement. It does not account for reconstruction, landmark
 selection, viewing geometry, or independent biological replicates.
@@ -360,18 +361,27 @@ calibrated visualization coordinates coincide despite a representable
 positive physical chord produce
 `surface_trace_endpoint_chord_display_coordinate_collapse`. In the last
 case the positive calibrated measurement and dimensionless ratio remain
-available, but visual interpretation needs review. The first two cases
-yield a `null` ratio, not infinity or zero biological curvature. When a
-positive chord leads to an unrepresentable ratio,
+available, but visual interpretation needs review. A **truly coincident
+source chord** always yields a null ratio with an exact [0, 0] scale-only
+interval. A **positive source chord whose calibrated meter value underflows**
+retains a finite source-frame detour ratio when that ratio is representable,
+but the misleading meter-scale [0, 0] interval is withheld (null) even when
+scale uncertainty was supplied. The QC warning remains mandatory because
+the exported meter chord is numerically zero rather than physically zero.
+When a positive source chord produces a nonfinite/unrepresentable ratio,
 `surface_trace_detour_ratio_unrepresentable` is reported and the ratio
-remains `null`. None of these diagnostics is an uncertainty interval or
+remains null. A null ratio is never assigned an artificial zero or infinity. None of these diagnostics is an uncertainty interval or
 biological validation.
 
 The source geometry, human-review status, and full provenance stay unchanged.
 Direct measurement, standalone API, and executed persisted typed Workflow
 Builder graphs share this computation. Regression tests challenge calibrated
-scale changes, selected bends, zero-chord endpoints, missing uncertainty,
-and saved-workflow artifact parity.
+scale changes, selected bends, zero-chord endpoints, subnormal chord
+underflow with both finite and unrepresentable source-frame detours,
+missing uncertainty, and saved-workflow artifact/provenance parity. The
+underflow-with-finite-ratio fixture uses nondegenerate source triangles and
+representable calibrated surface area, so it exercises the standalone API
+and an executed, typed, persisted Workflow Builder graph—not only a helper.
 
 ### Segment and waypoint scale-only uncertainty for selected traces
 
