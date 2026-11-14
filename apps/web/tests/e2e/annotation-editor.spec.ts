@@ -831,7 +831,10 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
   const jumpPosition = page.getByRole("spinbutton", {
     name: "Jump to object position",
   });
-  const jumpButton = page.getByRole("button", { name: "Jump to object", exact: true });
+  const jumpButton = page.getByRole("button", {
+    name: "Jump to object",
+    exact: true,
+  });
   await jumpPosition.fill("1501");
   await expect(jumpButton).toBeDisabled();
   await jumpPosition.fill("1500");
@@ -844,7 +847,9 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
   await expect(objectOptions.last()).toHaveAttribute("aria-setsize", "1500");
   await expect(page.getByRole("heading", { name: "1 selected" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Back to first 200 objects" }).click();
+  await page
+    .getByRole("button", { name: "Back to first 200 objects" })
+    .click();
   await expect(objectOptions).toHaveCount(201);
   await expect(objectOptions.first()).toHaveAttribute("aria-posinset", "1");
   await expect(objectOptions.last()).toHaveAttribute("aria-posinset", "600");
