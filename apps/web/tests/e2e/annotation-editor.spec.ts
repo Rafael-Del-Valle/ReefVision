@@ -825,6 +825,29 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
   await expect(objectOptions.last()).toHaveAttribute("aria-selected", "true");
   await expect(objectOptions.last()).toHaveAttribute("aria-posinset", "600");
   await expect(objectOptions.last()).toHaveAttribute("aria-setsize", "1500");
+
+  // Direct navigation must not materialize the 1,400 skipped rows. The
+  // selected object at position 600 remains pinned before the target window.
+  const jumpPosition = page.getByRole("spinbutton", {
+    name: "Jump to object position",
+  });
+  const jumpButton = page.getByRole("button", { name: "Jump to object", exact: true });
+  await jumpPosition.fill("1501");
+  await expect(jumpButton).toBeDisabled();
+  await jumpPosition.fill("1500");
+  await expect(jumpButton).toBeEnabled();
+  await jumpButton.click();
+  await expect(objectOptions).toHaveCount(101);
+  await expect(objectOptions.first()).toHaveAttribute("aria-posinset", "600");
+  await expect(objectOptions.nth(1)).toHaveAttribute("aria-posinset", "1401");
+  await expect(objectOptions.last()).toHaveAttribute("aria-posinset", "1500");
+  await expect(objectOptions.last()).toHaveAttribute("aria-setsize", "1500");
+  await expect(page.getByRole("heading", { name: "1 selected" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Back to first 200 objects" }).click();
+  await expect(objectOptions).toHaveCount(201);
+  await expect(objectOptions.first()).toHaveAttribute("aria-posinset", "1");
+  await expect(objectOptions.last()).toHaveAttribute("aria-posinset", "600");
 });
 
 test("renders the first opened image after a deliberately delayed display response", async ({
