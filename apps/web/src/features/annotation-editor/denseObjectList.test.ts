@@ -292,5 +292,4 @@ describe("dense object-browser window", () => {
     expect(annotations).toEqual([{ id: "a" }, { id: "b" }]);
     expect(masks).toEqual([{ id: "m" }]);
   });
-
 });
