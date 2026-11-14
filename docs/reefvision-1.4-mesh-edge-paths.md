@@ -307,11 +307,15 @@ centerline, verified anatomical branch length, observed growth, or a
 biologically reviewed annotation. The system does not infer anatomical meaning
 from who submitted the vertices. A trace crossing an open boundary, nonmanifold
 edge, zero-length edge or calibrated underflow carries specific QC. Additionally,
-`duplicate_triangle_on_surface_trace` flags a traversed edge belonging to
-duplicate triangle records (including reversed duplicates), whereas
-`inconsistent_winding_edge_on_surface_trace` flags a shared edge used in the
-same orientation by exactly two triangles. These topology findings are not
-anatomical evidence and must not be mistaken for independent observations. The scale
+`duplicate_triangle_on_surface_trace` identifies a traversed edge
+belonging to repeated triangle records (including reversed duplicates) in
+the direct trace helper. The full standalone preview and saved workflow
+**reject duplicated triangle geometry without producing a measurement artifact**,
+so this warning does not authorize a duplicate-mesh result. By contrast,
+`inconsistent_winding_edge_on_surface_trace` flags a shared edge used
+in the same orientation by exactly two distinct triangles; that QC warning is
+preserved in both standalone and executed saved-workflow outputs. Neither finding
+is anatomical evidence or an independent biological observation. The scale
 interval applies one common positive calibration factor across the complete
 trace. It is neither a sampling-based confidence interval nor an estimate of
 reconstruction, localization, topology or inter-observer uncertainty. A 100%
