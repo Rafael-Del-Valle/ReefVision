@@ -50,6 +50,7 @@ from reefvision.db.models import (
     VideoTrack,
 )
 from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.jobs.reefpose_validation import recover_legacy_heldout_manifest
 from reefvision.schemas.project_exchange import (
     ProjectExchangeCreateRequest,
     ProjectExchangeCreateResponse,
@@ -381,7 +382,7 @@ class ProjectExchangeService:
             with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED) as archive:
                 for section_name, records in sections.items():
                     ordered = sorted(records, key=lambda item: str(getattr(item, "id", "")))
-                    payload = _jsonl_bytes(_row(item) for item in ordered)
+                    payload = _jsonl_bytes(self._export_row(item) for item in ordered)
                     member = f"records/{section_name}.jsonl"
                     archive.writestr(member, payload)
                     section_manifest[section_name] = {
@@ -486,6 +487,17 @@ class ProjectExchangeService:
             package.error_message = str(exc)
             self.session.commit()
             raise
+
+    def _export_row(self, record: Base) -> dict[str, object]:
+        row = _row(record)
+        if isinstance(record, Job):
+            recovered = recover_legacy_heldout_manifest(self.session, self.settings, record)
+            if recovered is not None:
+                row["request_json"] = {
+                    **record.request_json,
+                    "heldout_input_manifest": recovered,
+                }
+        return row
 
     def inspect_upload(self, source: BinaryIO) -> ProjectExchangeInspectionResponse:
         warnings: list[str] = []

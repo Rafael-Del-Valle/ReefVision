@@ -25,9 +25,10 @@ from reefvision.services.ecology_identity import EcologyIdentityService
 from reefvision.services.project_exchange_acquisition import validate_acquisition_exchange
 from reefvision.services.project_exchange_comparison import validate_comparison_exchange
 from reefvision.services.project_exchange_event_summary import validate_event_summary_exchange
-from reefvision.services.project_exchange_pose import heldout_scope, validate_pose_rows
+from reefvision.services.project_exchange_pose import validate_pose_rows
 from reefvision.services.project_exchange_reports import validate_report_exchange
 from reefvision.services.project_exchange_workflows import validate_workflow_rows
+from reefvision.services.reefpose_validation import heldout_scope
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.ecology_pose_links import remap_pose_link_source
 
@@ -142,7 +143,7 @@ def heldout_scope_mappings(
     videos = {row["sha256"] for row in sections.get("videos", [])}
     checkpoints = {None, *(row["sha256"] for row in sections.get("models", []))}
     for row in sections.get("jobs", []):
-        if row["job_type"] == "reefpose_validation" and row.get("result_json"):
+        if row["job_type"] == "reefpose_validation" and row["status"] == "succeeded":
             report = row["result_json"]
             videos.update(
                 item["video_sha256"] for item in report["scored_reference_manifest"]["recordings"]
