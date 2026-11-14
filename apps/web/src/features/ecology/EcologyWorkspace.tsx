@@ -127,7 +127,7 @@ function IdentityForm({
         <input name="reason" required minLength={3} maxLength={500} />
       </label>
       <button type="submit" disabled={mutation.isPending}>
-        {mutation.isPending ? "Savingâ€¦" : title}
+        {mutation.isPending ? "Saving…" : title}
       </button>
       {mutation.isError && (
         <p className="form-error" role="alert">
@@ -365,8 +365,8 @@ function EvidenceForm({
               <option value="">Choose a reviewed box or mask</option>
               {options.map((row) => (
                 <option key={row.id} value={row.id}>
-                  {className(row.label_class_id)} Â· {row.kind} Â·{" "}
-                  {row.id.slice(0, 8)} Â· revision {row.revision}
+                  {className(row.label_class_id)} · {row.kind} ·{" "}
+                  {row.id.slice(0, 8)} · revision {row.revision}
                 </option>
               ))}
             </select>
@@ -385,7 +385,7 @@ function EvidenceForm({
               <option value="">Choose an annotation</option>
               {eligibleAnnotations.map((row) => (
                 <option key={row.id} value={row.id}>
-                  {row.annotation_kind} {row.annotation_id.slice(0, 8)} Â·
+                  {row.annotation_kind} {row.annotation_id.slice(0, 8)} ·
                   revision {row.annotation_revision}
                 </option>
               ))}
@@ -402,7 +402,7 @@ function EvidenceForm({
         <input name="reason" required minLength={3} maxLength={500} />
       </label>
       <button type="submit" disabled={mutation.isPending || !available}>
-        {mutation.isPending ? "Linkingâ€¦" : "Link evidence"}
+        {mutation.isPending ? "Linking…" : "Link evidence"}
       </button>
       {mutation.isSuccess && (
         <p role="status">Evidence linked to revision {identity.revision}.</p>
@@ -477,12 +477,12 @@ function LongitudinalCandidates({ projectId }: { projectId: string }) {
               {result.data.projected_endpoint_changes.map((row) => (
                 <li key={`${row.organism_key}-${row.metric}`}>
                   <strong>
-                    {row.organism_key} Â· {row.metric.replaceAll("_", " ")}
+                    {row.organism_key} · {row.metric.replaceAll("_", " ")}
                   </strong>
                   <p>
                     {row.baseline_capture_timestamp_utc} to{" "}
-                    {row.final_capture_timestamp_utc} Â· {row.baseline_value} to{" "}
-                    {row.final_value} {row.unit} Â· Change {row.absolute_change}{" "}
+                    {row.final_capture_timestamp_utc} · {row.baseline_value} to{" "}
+                    {row.final_value} {row.unit} · Change {row.absolute_change}{" "}
                     {row.unit} in {row.elapsed_days} days
                   </p>
                 </li>
@@ -710,7 +710,7 @@ export function EcologyWorkspace({
                   <section className="management-card">
                     <h3>{current.organism_key}</h3>
                     <p>
-                      Revision {current.revision} Â· {current.kind}.{" "}
+                      Revision {current.revision} · {current.kind}.{" "}
                       {current.reason}
                     </p>
                     <details>
@@ -722,7 +722,7 @@ export function EcologyWorkspace({
                           )
                           .map((row) => (
                             <li key={row.id}>
-                              Revision {row.revision} Â· {row.created_at} Â·{" "}
+                              Revision {row.revision} · {row.created_at} ·{" "}
                               {row.reason}
                             </li>
                           ))}
@@ -753,8 +753,8 @@ export function EcologyWorkspace({
                           )
                           .map((row) => (
                             <li key={row.id}>
-                              Image {row.image_id} Â· identity revision{" "}
-                              {row.identity_revision} Â· {row.reason}
+                              Image {row.image_id} · identity revision{" "}
+                              {row.identity_revision} · {row.reason}
                               <div>
                                 SHA-256 <code>{row.image_sha256}</code>
                               </div>
@@ -767,7 +767,7 @@ export function EcologyWorkspace({
                                   .map((annotation) => (
                                     <li key={annotation.id}>
                                       {annotation.annotation_kind}{" "}
-                                      {annotation.annotation_id} Â· revision{" "}
+                                      {annotation.annotation_id} · revision{" "}
                                       {annotation.annotation_revision}
                                       {query.data.calibration_evidence_links
                                         .filter(
