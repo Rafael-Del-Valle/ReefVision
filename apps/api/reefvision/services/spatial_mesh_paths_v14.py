@@ -487,6 +487,7 @@ def mesh_edge_paths(
         )
     return results
 
+
 def mesh_surface_edge_traces(
     points: list[tuple[float, float, float]],
     faces: list[list[int]],
@@ -543,9 +544,7 @@ def mesh_surface_edge_traces(
         if any(edge not in incidence for edge in edges):
             raise ValueError("Consecutive surface trace vertices must share a triangle edge")
         try:
-            source_lengths = [
-                dist(points[a], points[b]) for a, b in pairwise(vertices)
-            ]
+            source_lengths = [dist(points[a], points[b]) for a, b in pairwise(vertices)]
             segment_lengths = [length * scale for length in source_lengths]
             length_m = fsum(segment_lengths)
             cumulative = [
@@ -582,10 +581,20 @@ def mesh_surface_edge_traces(
             warnings.append("nonmanifold_edge_on_surface_trace")
         if any(length == 0 for length in source_lengths):
             warnings.append("zero_length_edge_on_surface_trace")
-        if any(source > 0 and calibrated == 0 for source, calibrated in zip(
-            source_lengths, segment_lengths, strict=True
-        )):
+        if any(
+            source > 0 and calibrated == 0
+            for source, calibrated in zip(source_lengths, segment_lengths, strict=True)
+        ):
             warnings.append("calibrated_surface_trace_segment_underflow")
+        # A positive calibrated segment may disappear from cumulative distances
+        # when it is smaller than the floating-point resolution of the prefix.
+        # Preserve the segment itself and flag that waypoint positions cannot
+        # be recovered reliably by differencing the cumulative array.
+        if any(
+            segment > 0 and cumulative[index] == cumulative[index + 1]
+            for index, segment in enumerate(segment_lengths)
+        ):
+            warnings.append("surface_trace_cumulative_distance_resolution_loss")
         if any(source > 0 for source in source_lengths) and length_m == 0:
             warnings.append("calibrated_surface_trace_length_underflow")
         traces.append(
