@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib import import_module
 from math import isfinite
 from pathlib import Path
@@ -98,6 +98,7 @@ class TrackObservation:
     pose_uncertainty: dict[str, Any] | None = None
     # Zero or more source-pixel polygons for an instance segmentation result.
     mask_polygons: tuple[tuple[tuple[float, float], ...], ...] | None = None
+    timestamp_seconds: float | None = None
 
 
 @dataclass(frozen=True)
@@ -429,7 +430,9 @@ class ReefPoseVideoTrackingProvider:
         detections_seen = 0
         unique_track_ids: set[int] = set()
         frame_index = 0
+        previous_timestamp = -1.0
         try:
+            has_presentation_times = capture.getBackendName() == "FFMPEG"
             while True:
                 if should_cancel is not None and should_cancel():
                     raise VideoTrackingCancelled(
@@ -439,6 +442,15 @@ class ReefPoseVideoTrackingProvider:
                 if not ok or frame is None:
                     break
 
+                timestamp_seconds = None
+                if has_presentation_times:
+                    # The FFmpeg millisecond clock retains the stream time base for VFR media.
+                    timestamp = float(capture.get(cv2.CAP_PROP_POS_MSEC)) / 1000
+                    has_presentation_times = (
+                        isfinite(timestamp) and timestamp >= 0 and timestamp > previous_timestamp
+                    )
+                    if has_presentation_times:
+                        timestamp_seconds = previous_timestamp = timestamp
                 source = image_module.fromarray(frame[:, :, ::-1].copy(), mode="RGB")
                 try:
                     pose = predictor.predict(source, confidence_threshold=confidence)
@@ -471,6 +483,7 @@ class ReefPoseVideoTrackingProvider:
                                 float(y_max - y_min),
                             ),
                             keypoints=keypoints,
+                            timestamp_seconds=timestamp_seconds,
                             pose_uncertainty=build_pose_uncertainty_evidence(
                                 provider_id=self.provider_id,
                                 provider_version=self.provider_version,
@@ -494,6 +507,9 @@ class ReefPoseVideoTrackingProvider:
 
         if frame_index == 0:
             raise ValidationError("Tracking source video contains no decodable frames")
+        if not has_presentation_times and previous_timestamp >= 0:
+            # A nonmonotonic decoder clock supplies no reliable presentation evidence.
+            return [replace(item, timestamp_seconds=None) for item in observations]
         return observations
 
 

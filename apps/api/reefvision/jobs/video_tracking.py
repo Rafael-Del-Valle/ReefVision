@@ -121,6 +121,8 @@ def _keyframes(
             "bbox": list(item.bbox),
             "confidence": item.confidence,
         }
+        if item.timestamp_seconds is not None:
+            payload["timestamp_seconds"] = item.timestamp_seconds
         if item.pose_uncertainty is not None:
             payload["pose_uncertainty"] = dict(item.pose_uncertainty)
         if item.mask_polygons:

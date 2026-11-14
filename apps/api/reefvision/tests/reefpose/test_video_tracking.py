@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import Any, cast
 
 import cv2
+import imageio_ffmpeg
 import numpy as np
+import pytest
 import torch
 
+from reefvision.jobs.video_tracking import _keyframes
 from reefvision.ml.reefpose.checkpoints import save_checkpoint
 from reefvision.ml.reefpose.model import ReefPoseConfig, ReefPoseS
 from reefvision.ml.reefpose.schema import AnatomySchema, LandmarkDefinition
@@ -90,3 +94,46 @@ def test_registered_reefpose_checkpoint_runs_video_pose_inference(tmp_path: Path
     assert progress[-1].frames_processed == 3
     assert progress[-1].tracked_observations_seen == 3
     assert progress[-1].unique_tracks_seen == 1
+
+
+def test_native_video_keyframes_preserve_variable_presentation_times(tmp_path: Path) -> None:
+    checkpoint = tmp_path / "reefpose.pt"
+    video = tmp_path / "vfr.mp4"
+    _checkpoint(checkpoint)
+    subprocess.run(
+        [
+            imageio_ffmpeg.get_ffmpeg_exe(),
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=80x48:rate=10",
+            "-frames:v",
+            "6",
+            "-vf",
+            "setpts=N*N",
+            "-fps_mode",
+            "vfr",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            str(video),
+        ],
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
+    provider = video_tracking_provider_for_name("reefpose")
+    observations = provider.track(
+        checkpoint,
+        video,
+        tracker="reefpose:single-animal",
+        confidence=0.0,
+        iou=0.5,
+        device="cpu",
+    )
+    keyframes = _keyframes(observations)[:3]
+    assert [row["frame"] for row in keyframes] == [0, 1, 2]
+    assert [row.get("timestamp_seconds") for row in keyframes] == pytest.approx([0.0, 0.1, 0.4])
