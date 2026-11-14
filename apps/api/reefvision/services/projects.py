@@ -21,8 +21,8 @@ from reefvision.db.models import (
     AnnotationEvent,
     DatasetVersion,
     ImageAsset,
-    LabelClass,
     ImageLabel,
+    LabelClass,
     MaskAnnotation,
     MaskAnnotationEvent,
     ModelRegistration,
@@ -94,6 +94,16 @@ USAGE_CATEGORY_META: dict[str, tuple[str, bool, bool]] = {
     "dataset_versions": ("Immutable dataset versions", False, True),
     "model_registrations": ("Registered model class maps", False, True),
 }
+
+# Class merge and reassign-delete currently handle only boxes, predictions and
+# selected QC records. These modalities must not be orphaned or cascade-deleted.
+UNHANDLED_CLASS_REFERENCE_CATEGORIES = (
+    "mask_annotations_active",
+    "mask_annotations_deleted",
+    "mask_annotation_history",
+    "image_labels_active",
+    "image_labels_deleted",
+)
 
 
 @dataclass(slots=True)
@@ -634,14 +644,9 @@ class ProjectService:
         # The legacy merge implementation reassigns boxes, predictions, QC and
         # review queues, but not masks or image-level classification labels.
         # Refuse to archive the source and strand unhandled biological records.
-        unsupported_merge_categories = (
-            "mask_annotations_active",
-            "mask_annotations_deleted",
-            "mask_annotation_history",
-            "image_labels_active",
-            "image_labels_deleted",
-        )
-        if any(source_usage.counts[key] > 0 for key in unsupported_merge_categories):
+        if any(
+            source_usage.counts[key] > 0 for key in UNHANDLED_CLASS_REFERENCE_CATEGORIES
+        ):
             raise ConflictError(
                 "Mask or image-level classification references prevent a safe class merge. "
                 "Review these records before merging; automatic reassignment is not supported."
