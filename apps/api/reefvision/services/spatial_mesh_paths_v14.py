@@ -601,9 +601,18 @@ def mesh_surface_edge_traces(
             )
         ):
             raise ValueError("Surface trace geometry cannot be represented")
+        # A positive source edge can vanish after calibration. A serialized
+        # [0, 0] uncertainty interval would falsely imply a measured zero.
+        # Withhold affected collections as a whole to preserve the published
+        # array-of-pairs shape for readers of saved scientific artifacts.
+        segment_underflow = any(
+            source > 0 and calibrated == 0
+            for source, calibrated in zip(source_lengths, segment_lengths, strict=True)
+        )
+        length_underflow = length_m == 0 and any(source > 0 for source in source_lengths)
         interval = (
             [length_m * (1 - scale_uncertainty), length_m * (1 + scale_uncertainty)]
-            if scale_uncertainty is not None
+            if scale_uncertainty is not None and not length_underflow
             else None
         )
         if interval is not None and any(not isfinite(bound) for bound in interval):
@@ -616,7 +625,7 @@ def mesh_surface_edge_traces(
                 [distance * (1 - scale_uncertainty), distance * (1 + scale_uncertainty)]
                 for distance in segment_lengths
             ]
-            if scale_uncertainty is not None
+            if scale_uncertainty is not None and not segment_underflow
             else None
         )
         cumulative_intervals = (
@@ -624,7 +633,7 @@ def mesh_surface_edge_traces(
                 [distance * (1 - scale_uncertainty), distance * (1 + scale_uncertainty)]
                 for distance in cumulative
             ]
-            if scale_uncertainty is not None
+            if scale_uncertainty is not None and not segment_underflow
             else None
         )
         # Use the same source-frame, scale-independent geometric turning
@@ -723,10 +732,7 @@ def mesh_surface_edge_traces(
             positions[i] == positions[j] for i in range(2, len(positions)) for j in range(i - 1)
         ):
             warnings.append("nonadjacent_coincident_surface_trace_vertices")
-        if any(
-            source > 0 and calibrated == 0
-            for source, calibrated in zip(source_lengths, segment_lengths, strict=True)
-        ):
+        if segment_underflow:
             warnings.append("calibrated_surface_trace_segment_underflow")
         # A positive calibrated segment may disappear from cumulative distances
         # when it is smaller than the floating-point resolution of the prefix.
@@ -748,7 +754,7 @@ def mesh_surface_edge_traces(
         ]
         if collapsed_display_segments:
             warnings.append("surface_trace_segment_display_coordinate_collapse")
-        if any(source > 0 for source in source_lengths) and length_m == 0:
+        if length_underflow:
             warnings.append("calibrated_surface_trace_length_underflow")
         traces.append(
             {
