@@ -33,6 +33,33 @@ RESOLUTION_LIMITED_PARAMS = {
     "surface_trace_vertex_paths": [[0, 1, 2]],
 }
 
+# Repeated triangles with reversed winding and two distinct faces whose shared
+# edge is traversed in the same direction have different scientific defects.
+# Neither defect implies that a selected trace is a biological centerline.
+DUPLICATE_FACE_PARAMS = {
+    **PARAMS,
+    "faces": [[0, 1, 2], [2, 1, 0]],
+    "surface_trace_vertex_paths": [[0, 1]],
+}
+INCONSISTENT_WINDING_PARAMS = {
+    **PARAMS,
+    "vertices": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    "faces": [[0, 1, 2], [0, 1, 3]],
+    "surface_trace_vertex_paths": [[0, 1]],
+}
+TOPOLOGY_CASES = [
+    (
+        DUPLICATE_FACE_PARAMS,
+        "duplicate_triangle_on_surface_trace",
+        "inconsistent_winding_edge_on_surface_trace",
+    ),
+    (
+        INCONSISTENT_WINDING_PARAMS,
+        "inconsistent_winding_edge_on_surface_trace",
+        "duplicate_triangle_on_surface_trace",
+    ),
+]
+
 
 def test_trace_follows_selected_edges_not_the_shortest_route() -> None:
     result = measure_mesh_preview(**PARAMS)
@@ -60,24 +87,25 @@ def test_trace_follows_selected_edges_not_the_shortest_route() -> None:
 
 
 @pytest.mark.parametrize(
-    "paths",
+    ("paths", "expected_status"),
     [
-        [[0]],
-        [[0, 0]],
-        [[0, 1, 0]],
-        [[0, 3]],
-        [[True, 1]],
-        [[-1, 2]],
-        [[0, 1]] * 17,
+        ([[0]], 422),
+        ([[0, 0]], 422),
+        ([[0, 1, 0]], 422),
+        ([[0, 3]], 400),
+        ([[True, 1]], 422),
+        ([[-1, 2]], 422),
+        ([[0, 1]] * 17, 422),
     ],
 )
 def test_trace_schema_or_engine_rejects_invalid_vertex_paths(
-    client: TestClient, paths: list[list[int]]
+    client: TestClient, paths: list[list[int]], expected_status: int
 ) -> None:
     project_id = str(create_project(client, "Bad surface trace")["id"])
     params = {**PARAMS, "surface_trace_vertex_paths": paths}
     response = client.post(f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params)
-    assert response.status_code == 422, response.text
+    # Pydantic shape validation is 422; domain topology validation is 400.
+    assert response.status_code == expected_status, response.text
 
 
 def test_selected_trace_requires_real_triangle_edges(client: TestClient) -> None:
@@ -88,7 +116,19 @@ def test_selected_trace_requires_real_triangle_edges(client: TestClient) -> None
         "surface_trace_vertex_paths": [[0, 3]],
     }
     response = client.post(f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params)
-    assert response.status_code == 422, response.text
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == "Consecutive surface trace vertices must share a triangle edge"
+
+
+@pytest.mark.parametrize(("params", "warning", "other_warning"), TOPOLOGY_CASES)
+def test_selected_trace_topology_defects_remain_provisional(
+    params: dict[str, object], warning: str, other_warning: str
+) -> None:
+    trace = measure_mesh_preview(**params)["surface_edge_traces"][0]
+    assert warning in trace["qc_warnings"]
+    assert other_warning not in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+    assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
 
 
 def test_trace_flags_positive_segment_lost_in_cumulative_distance() -> None:
@@ -119,13 +159,21 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
     assert trace["human_review_verified"] is False
 
 
-@pytest.mark.parametrize("resolution_limited", [False, True])
+@pytest.mark.parametrize(
+    "case",
+    ["ordinary", "resolution_limited", "duplicate_face", "inconsistent_winding"],
+)
 def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
-    client: TestClient, resolution_limited: bool
+    client: TestClient, case: str
 ) -> None:
     project_id = str(create_project(client, "Surface edge trace workflow")["id"])
     base = f"/api/v1/projects/{project_id}"
-    params = RESOLUTION_LIMITED_PARAMS if resolution_limited else PARAMS
+    params = {
+        "ordinary": PARAMS,
+        "resolution_limited": RESOLUTION_LIMITED_PARAMS,
+        "duplicate_face": DUPLICATE_FACE_PARAMS,
+        "inconsistent_winding": INCONSISTENT_WINDING_PARAMS,
+    }[case]
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 200, standalone.text
 
@@ -170,8 +218,16 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert artifact["provenance"] == standalone.json()["provenance"]
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["surface_edge_traces"][0]["human_review_verified"] is False
-    if resolution_limited:
+    if case == "resolution_limited":
         assert (
             "surface_trace_cumulative_distance_resolution_loss"
             in artifact["surface_edge_traces"][0]["qc_warnings"]
         )
+    if case == "duplicate_face":
+        assert "duplicate_triangle_on_surface_trace" in artifact["surface_edge_traces"][0][
+            "qc_warnings"
+        ]
+    if case == "inconsistent_winding":
+        assert "inconsistent_winding_edge_on_surface_trace" in artifact[
+            "surface_edge_traces"
+        ][0]["qc_warnings"]
