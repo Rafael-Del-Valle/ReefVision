@@ -785,9 +785,7 @@ def test_class_operation_preview_rejects_same_id_review_reference_changes(
     assert preview_response.status_code == 201, preview_response.text
     preview = preview_response.json()
     assert preview["plan"]["blockers"] == []
-    groups = {
-        group["key"]: group["record_ids"] for group in preview["plan"]["mutable_records"]
-    }
+    groups = {group["key"]: group["record_ids"] for group in preview["plan"]["mutable_records"]}
     assert groups["quality_control_issues_open"] == ["qc-issue-open"]
     assert groups["review_queue_items_open"] == ["queue-item-pending"]
 
