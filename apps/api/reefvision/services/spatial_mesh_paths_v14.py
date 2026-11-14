@@ -727,6 +727,17 @@ def mesh_surface_edge_traces(
             for index, segment in enumerate(segment_lengths)
         ):
             warnings.append("surface_trace_cumulative_distance_resolution_loss")
+        # A positive source edge can disappear from the interactive preview
+        # when separately scaled absolute XYZ coordinates round to the same
+        # displayed point. This is distinct from segment-length underflow:
+        # the independently measured segment may still have positive length.
+        collapsed_display_segments = [
+            index
+            for index, source_length in enumerate(source_lengths)
+            if source_length > 0 and calibrated_vertices[index] == calibrated_vertices[index + 1]
+        ]
+        if collapsed_display_segments:
+            warnings.append("surface_trace_segment_display_coordinate_collapse")
         if any(source > 0 for source in source_lengths) and length_m == 0:
             warnings.append("calibrated_surface_trace_length_underflow")
         traces.append(
@@ -738,6 +749,7 @@ def mesh_surface_edge_traces(
                 "vertices_in_source_frame_m": calibrated_vertices,
                 "edge_count": len(edges),
                 "segment_lengths_m": segment_lengths,
+                "display_coordinate_collapsed_segment_indices": collapsed_display_segments,
                 "turn_angles_deg": turn_angles_deg,
                 "maximum_turn_angle_deg": maximum_turn_angle_deg,
                 "total_absolute_geometric_turn_deg": total_absolute_geometric_turn_deg,
