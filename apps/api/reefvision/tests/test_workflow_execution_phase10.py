@@ -357,9 +357,10 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.commit()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
     with app.state.session_factory() as session:
-        assert build_workflow_run_provenance(
-            session, run_id=str(run["id"])
-        ) == original_result["provenance_manifest"]
+        assert (
+            build_workflow_run_provenance(session, run_id=str(run["id"]))
+            == original_result["provenance_manifest"]
+        )
 
 
 def test_workflow_graph_revisions_are_deduplicated_and_versioned(

@@ -574,8 +574,6 @@ def build_workflow_run_provenance(
             or canonical_json_sha256(saved_manifest) != saved_sha256
             or canonical_json_sha256(manifest) != saved_sha256
         ):
-            raise ConflictError(
-                "Workflow run saved provenance no longer matches persisted science"
-            )
+            raise ConflictError("Workflow run saved provenance no longer matches persisted science")
 
     return manifest
