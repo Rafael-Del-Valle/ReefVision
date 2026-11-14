@@ -662,6 +662,13 @@ class ClassOperationsService:
             raise ConflictError("The preview checksum does not match the stored operation plan")
         if operation.status != "previewed":
             raise ConflictError("Only previewed class operations can be executed")
+        # The checksum approves the plan, not a transfer of researcher authority.
+        # A changed local identity must produce a fresh reviewed preview.
+        if operation.requested_by_identity != get_local_user_identity(self.settings):
+            raise ConflictError(
+                "Only the local researcher who created this preview can execute it. "
+                "Generate a new preview under the current local identity."
+            )
         if operation.target_class_id is None:
             raise ConflictError("A target class is required")
 

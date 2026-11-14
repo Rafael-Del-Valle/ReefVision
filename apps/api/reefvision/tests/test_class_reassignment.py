@@ -677,3 +677,81 @@ def test_class_operation_preview_expires_after_biological_identity_change(
         assert operation.final_state == "preview_stale"
         assert session.get(LabelClass, source_class["id"]) is not None
         assert session.get(LabelClass, target_class["id"]) is not None
+
+@pytest.mark.parametrize("operation_endpoint", ["reassign", "reassign-delete"])
+def test_class_operation_execute_requires_previewing_local_researcher(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, operation_endpoint: str
+) -> None:
+    """A copied preview ID/checksum cannot authorize a different local identity."""
+    project = create_project(client, name="Researcher ownership")
+    source_class = create_label_class(
+        client, project["id"], class_index=0, name="Source", display_color="#E76F51"
+    )
+    target_class = create_label_class(
+        client, project["id"], class_index=1, name="Target", display_color="#2A9D8F"
+    )
+    seed_reassignment_records(
+        client,
+        project,
+        source_class,
+        target_class,
+        include_deleted_annotation=False,
+        include_historical_prediction=False,
+    )
+    identity_module = "reefvision.services.class_operations.get_local_user_identity"
+    monkeypatch.setattr(identity_module, lambda _settings: "local-user:researcher-a")
+    route = f"/api/v1/projects/{project['id']}/classes/{source_class['id']}/{operation_endpoint}"
+    preview_response = client.post(
+        f"{route}/preview", json={"target_class_id": target_class["id"]}
+    )
+    assert preview_response.status_code == 201, preview_response.text
+    preview = preview_response.json()
+    assert preview["requested_by_identity"] == "local-user:researcher-a"
+    assert preview["plan"]["blockers"] == []
+    approval = {
+        "operation_id": preview["id"],
+        "preview_checksum": preview["preview_checksum"],
+    }
+
+    monkeypatch.setattr(identity_module, lambda _settings: "local-user:researcher-b")
+    refused = client.post(route, json=approval)
+    assert refused.status_code == 409, refused.text
+    assert "researcher" in refused.json()["detail"].lower()
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        operation = session.get(ClassOperation, preview["id"])
+        annotation = session.get(Annotation, "annotation-active")
+        proposal = session.get(PredictionProposal, "proposal-pending")
+        issue = session.get(QualityControlIssue, "qc-issue-open")
+        queue_item = session.get(ReviewQueueItem, "queue-item-pending")
+        events = list(
+            session.scalars(
+                select(AnnotationEvent).where(AnnotationEvent.annotation_id == "annotation-active")
+            )
+        )
+        assert operation is not None and operation.status == "previewed"
+        assert operation.started_at is None and operation.completed_at is None
+        assert annotation is not None and annotation.label_class_id == source_class["id"]
+        assert proposal is not None and proposal.label_class_id == source_class["id"]
+        assert issue is not None and issue.class_ids_json == [source_class["id"]]
+        assert queue_item is not None and queue_item.label_class_ids_json == [source_class["id"]]
+        assert session.get(LabelClass, source_class["id"]) is not None
+        assert not any(event.event_type.startswith("class_reassigned") for event in events)
+
+    # A rejected foreign identity must not consume the legitimate review approval.
+    monkeypatch.setattr(identity_module, lambda _settings: "local-user:researcher-a")
+    accepted = client.post(route, json=approval)
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["status"] == "completed"
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        annotation = session.get(Annotation, "annotation-active")
+        assert annotation is not None and annotation.label_class_id == target_class["id"]
+        events = list(
+            session.scalars(
+                select(AnnotationEvent).where(AnnotationEvent.annotation_id == "annotation-active")
+            )
+        )
+        assert any(
+            event.event_type.startswith("class_reassigned")
+            and event.actor == "local-user:researcher-a"
+            for event in events
+        )
