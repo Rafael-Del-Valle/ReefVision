@@ -1,0 +1,19 @@
+# ReefVision 1.6: destructive class-operation safety across modalities
+
+## Scientific gap
+
+The original eight-category class-usage inventory accounted for bounding-box annotations and their history, predictions, QC records, review queues, dataset versions and model registrations, but omitted **verified mask annotations, mask history and image-level classification labels**. Both `mask_annotations.label_class_id` and `image_labels.label_class_id` have `ON DELETE CASCADE` foreign keys. An apparently empty class could therefore be hard-deleted along with independently verified biological records. The original simple Merge and Reassign and Delete operations only rewrote boxes, predictions and selected QC/review references, potentially stranding or destroying the other modalities.
+
+## Fail-closed contract
+
+- `ProjectService._usage_snapshot` now includes **13** categories: the original eight plus active masks, deleted masks, mask history, active image labels and deleted image labels. Every category contributes stable record IDs to the reviewed SHA-256 reference inventory, total and mutable/immutable reference counts, and deletion blockers. Mask events are project-scoped through their images and checked against before/after class IDs.
+- Deleting a class requires **zero references across all 13 categories**. The backend enforces this even when a caller bypasses the GUI. The Class Manager requires a complete 13-category breakdown before enabling deletion.
+- Simple Merge is **blocked** while any of these five newly accounted-for categories contains references. The GUI explains the block, and the backend independently rejects the operation before modifying annotations or archiving the source.
+- Reassign and Delete preview adds explicit blockers for those same categories; execution recomputes the plan and checks again after mutable-record changes, before the hard delete. Ordinary Reassign is not redefined by this safeguard.
+- This is intentionally conservative: automatic migration of masks, mask revision events, and image-level labels into the target class would require a separate biological consistency, provenance and researcher-review contract. The existing historical record is preserved rather than being silently transformed or cascaded away.
+
+## Evidence and limits
+
+Real-database tests seed active/deleted masks, a mask event and active/deleted image-level classification labels against the same class. They assert all five usage categories, aggregate counts, deletion and Merge rejection, Reassign and Delete preview/execution rejection, and preserved source records. Frontend parameterized tests check every category disables both destructive controls. No new workflow-analysis node or migration is introduced: this is integrity enforcement around human-reviewed metadata operations, not a standalone scientific measurement. Existing typed, persisted QC Workflow Builder nodes and approval gates are unchanged.
+
+The SHA-256 inventory currently binds reference IDs and category membership, not every mutable record field. Race-free cross-process locking, classification-specific reassignment and complete cross-version Alembic/Windows installer acceptance remain future gates. This change is **not** a release readiness claim.
