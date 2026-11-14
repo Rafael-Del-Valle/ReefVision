@@ -503,20 +503,38 @@ def mesh_surface_edge_traces(
     """
     if vertex_paths is None:
         return None
-    if (
-        type(scale) not in (int, float)
-        or not isfinite(scale)
-        or scale <= 0
-        or (
-            scale_uncertainty is not None
-            and (
-                type(scale_uncertainty) not in (int, float)
-                or not isfinite(scale_uncertainty)
-                or not 0 <= scale_uncertainty <= 1
-            )
-        )
+    # This engine can be called without FastAPI/Pydantic. Validate the same
+    # calibration and every imported source vertex, including unused vertices,
+    # so a direct scientific caller cannot bypass the public schema.
+    if type(scale) not in (int, float) or (
+        scale_uncertainty is not None and type(scale_uncertainty) not in (int, float)
     ):
         raise ValueError("Surface trace calibration must be finite and within bounds")
+    try:
+        scale = float(scale)
+        if scale_uncertainty is not None:
+            scale_uncertainty = float(scale_uncertainty)
+    except OverflowError as exc:
+        raise ValueError("Surface trace calibration must be finite and within bounds") from exc
+    if not isfinite(scale) or scale <= 0 or (
+        scale_uncertainty is not None
+        and (not isfinite(scale_uncertainty) or not 0 <= scale_uncertainty <= 1)
+    ):
+        raise ValueError("Surface trace calibration must be finite and within bounds")
+
+    for point in points:
+        if (
+            not isinstance(point, (list, tuple))
+            or len(point) != 3
+            or any(type(coordinate) not in (int, float) for coordinate in point)
+        ):
+            raise ValueError("Surface trace vertices require three finite coordinates")
+        try:
+            if any(not isfinite(coordinate) for coordinate in point):
+                raise ValueError("Surface trace vertices require three finite coordinates")
+        except OverflowError as exc:
+            raise ValueError("Surface trace vertices require three finite coordinates") from exc
+
     if len(vertex_paths) > 16:
         raise ValueError("At most 16 surface edge traces are supported")
 
