@@ -204,4 +204,100 @@ describe("dense object-browser window", () => {
     );
     expect(rows.slice(10).map((row) => row.position)).toEqual([12, 7900, 7999]);
   });
+  it("jumps directly to a distant bounded window without mounting earlier objects", () => {
+    const source = Array.from({ length: 20_000 }, (_, index) => ({
+      id: `box-${index}`,
+    }));
+    let reads = 0;
+    const annotations = new Proxy(source, {
+      get(target, property, receiver) {
+        if (typeof property === "string" && /^[0-9]+$/.test(property)) {
+          reads += 1;
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const rows = boundedDenseObjectRows(
+      annotations,
+      [],
+      200,
+      [],
+      [],
+      18_800,
+    );
+    expect(rows).toHaveLength(200);
+    expect(rows[0].position).toBe(18_800);
+    expect(rows[199].position).toBe(18_999);
+    expect(reads).toBe(200);
+    expect(source).toHaveLength(20_000);
+  });
+
+  it("keeps selected objects on both sides of a jump in scientific source order", () => {
+    const annotations = Array.from({ length: 1_500 }, (_, index) => ({
+      id: `box-${index}`,
+    }));
+    const rows = boundedDenseObjectRows(
+      annotations,
+      [],
+      200,
+      ["box-600", "box-1499"],
+      [],
+      1_000,
+    );
+    expect(rows).toHaveLength(202);
+    expect(rows[0].position).toBe(600);
+    expect(rows[1].position).toBe(1_000);
+    expect(rows[200].position).toBe(1_199);
+    expect(rows[201].position).toBe(1_499);
+    expect(annotations[600].id).toBe("box-600");
+  });
+
+  it("jumps across the annotation-mask boundary with original accessible positions", () => {
+    const annotations = Array.from({ length: 8 }, (_, index) => ({
+      id: `box-${index}`,
+    }));
+    const masks = Array.from({ length: 8 }, (_, index) => ({
+      id: `mask-${index}`,
+    }));
+    const rows = boundedDenseObjectRows(
+      annotations,
+      masks,
+      5,
+      ["box-0"],
+      ["mask-7"],
+      6,
+    );
+    expect(rows.map((row) => [row.kind, row.position])).toEqual([
+      ["annotation", 0],
+      ["annotation", 6],
+      ["annotation", 7],
+      ["mask", 8],
+      ["mask", 9],
+      ["mask", 10],
+      ["mask", 15],
+    ]);
+  });
+
+  it("normalizes nonfinite and out-of-bounds jump offsets without changing inputs", () => {
+    const annotations = [{ id: "a" }, { id: "b" }];
+    const masks = [{ id: "m" }];
+    expect(
+      boundedDenseObjectRows(annotations, masks, 2, [], [], NaN).map(
+        (row) => row.position,
+      ),
+    ).toEqual([0, 1]);
+    expect(
+      boundedDenseObjectRows(annotations, masks, 2, [], [], -50).map(
+        (row) => row.position,
+      ),
+    ).toEqual([0, 1]);
+    expect(
+      boundedDenseObjectRows(annotations, masks, 2, [], [], 999).map(
+        (row) => row.position,
+      ),
+    ).toEqual([2]);
+    expect(annotations).toEqual([{ id: "a" }, { id: "b" }]);
+    expect(masks).toEqual([{ id: "m" }]);
+  });
+
 });
