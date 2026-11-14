@@ -62,6 +62,27 @@ def test_log_tail_rejects_file_swapped_between_validation_and_open(
     assert log.read_bytes() == private_bytes
 
 
+def test_log_tail_rejects_in_root_hardlink_to_unrelated_scientific_file(
+    tmp_path: Path,
+) -> None:
+    """An allowed .log suffix cannot relabel a database or another run's file."""
+    private_file = tmp_path / "unrelated-scientific-records.db"
+    private_bytes = b"private study measurements; not training output\\n"
+    private_file.write_bytes(private_bytes)
+    alias = tmp_path / "training.log"
+    try:
+        os.link(private_file, alias)
+    except (OSError, NotImplementedError) as error:
+        pytest.skip(f"File hard links unavailable on this runner: {error}")
+
+    assert private_file.stat().st_nlink >= 2
+    with pytest.raises(HTTPException) as error:
+        training_routes._training_log_tail("training.log", tmp_path)
+    assert error.value.status_code == 403
+    assert private_file.read_bytes() == private_bytes
+    assert alias.read_bytes() == private_bytes
+
+
 def test_log_tail_discards_truncated_first_metric_line(tmp_path: Path) -> None:
     log = tmp_path / "training.log"
     original = b"train/box_loss=999" + b"x" * 20000 + b"\ntrain/box_loss=0.25\n"
