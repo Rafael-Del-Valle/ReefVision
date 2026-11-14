@@ -997,14 +997,28 @@ class ClassOperationsService:
             self.session.commit()
         except Exception as exc:
             self.session.rollback()
-            operation = self._operation(payload.operation_id)
-            operation.status = "rolled_back"
-            operation.started_at = started_at
-            operation.completed_at = _utc_now()
-            operation.failures_json = [str(exc)]
-            operation.rollback_result_json = {"rolled_back": True}
-            operation.final_state = "rolled_back"
-            self.session.commit()
+            # Rolling back releases the SQLite writer lock. A second local
+            # executor may claim and complete this preview before we publish
+            # the failure. Never overwrite its successful scientific result.
+            rollback_claim = self.session.execute(
+                update(ClassOperation)
+                .where(
+                    ClassOperation.id == payload.operation_id,
+                    ClassOperation.status == "previewed",
+                )
+                .values(
+                    status="rolled_back",
+                    started_at=started_at,
+                    completed_at=_utc_now(),
+                    failures_json=[str(exc)],
+                    rollback_result_json={"rolled_back": True},
+                    final_state="rolled_back",
+                )
+            )
+            if rollback_claim.rowcount == 1:
+                self.session.commit()
+            else:
+                self.session.rollback()
             if isinstance(exc, ConflictError):
                 raise
             raise
