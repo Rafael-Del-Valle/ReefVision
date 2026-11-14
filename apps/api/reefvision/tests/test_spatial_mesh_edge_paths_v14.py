@@ -275,9 +275,7 @@ def test_saved_mesh_edge_paths_match_standalone(client: TestClient) -> None:
         saved.json()["graph_json"]["nodes"][1]["parameters"]["surface_path_vertex_pairs"]
         == PARAMS["surface_path_vertex_pairs"]
     )
-    run = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert process_workflow_run_job(
@@ -1087,9 +1085,7 @@ def test_hundred_percent_scale_uncertainty_is_supported_in_api_and_saved_graph(
     assert connected["length_m"] == pytest.approx(0.01)
     assert connected["length_scale_interval_m"] == pytest.approx([0.0, 0.02])
     assert connected["endpoint_chord_scale_interval_m"] == pytest.approx([0.0, 0.02])
-    assert connected["path_edge_length_scale_intervals_m"][0] == pytest.approx(
-        [0.0, 0.02]
-    )
+    assert connected["path_edge_length_scale_intervals_m"][0] == pytest.approx([0.0, 0.02])
     assert connected["scale_uncertainty_m"] == pytest.approx(0.01)
     assert direct["measurement_status"] == "caller_supplied_unverified"
 
