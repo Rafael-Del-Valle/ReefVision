@@ -230,6 +230,22 @@ def verify_succeeded_node_artifacts(
     if actual_bindings != expected_bindings:
         raise ConflictError("Succeeded workflow node inputs do not match saved graph edges")
 
+    # The artifact digest covers the payload but not its declared data type.
+    # Recovery must honor the consumer's typed input-port contract as well
+    # as the producer's output-port contract before reusing saved science.
+    if definition is not None:
+        accepted_inputs = {
+            port.port_id: set(port.accepted_types) for port in definition.input_ports
+        }
+        incoming_edges = [
+            edge
+            for edge in sorted(raw_edges, key=lambda edge: edge["edge_id"])
+            if edge.get("target_node_id") == node_run.node_id
+        ]
+        for edge, artifact in zip(incoming_edges, inputs, strict=True):
+            if artifact.data_type not in accepted_inputs.get(edge.get("target_port_id"), set()):
+                raise ConflictError("Succeeded workflow node input type does not match registry")
+
     for artifact in outputs:
         if artifact.producer_node_run_id != node_run.id:
             raise ConflictError(
