@@ -520,7 +520,12 @@ def mesh_surface_edge_traces(
     if len(vertex_paths) > 16:
         raise ValueError("At most 16 surface edge traces are supported")
 
+    # Duplicate triangles and inconsistent shared-edge orientation can make
+    # a seemingly contiguous scientist-selected trace topologically unreliable.
+    # Match the topology audit used by shortest mesh-edge paths.
     incidence: Counter[tuple[int, int]] = Counter()
+    edge_orientations: dict[tuple[int, int], list[bool]] = {}
+    duplicate_face_edges: set[tuple[int, int]] = set()
     for face in faces:
         if (
             len(face) != 3
@@ -528,8 +533,17 @@ def mesh_surface_edge_traces(
             or len(set(face)) != 3
         ):
             raise ValueError("Surface trace faces require three distinct existing vertices")
-        for a, b in ((face[0], face[1]), (face[1], face[2]), (face[2], face[0])):
-            incidence[(min(a, b), max(a, b))] += 1
+    face_counts = Counter(tuple(sorted(face)) for face in faces)
+    for face in faces:
+        edges_in_face = ((face[0], face[1]), (face[1], face[2]), (face[2], face[0]))
+        if face_counts[tuple(sorted(face))] > 1:
+            duplicate_face_edges.update(
+                (min(a, b), max(a, b)) for a, b in edges_in_face
+            )
+        for a, b in edges_in_face:
+            edge = (min(a, b), max(a, b))
+            incidence[edge] += 1
+            edge_orientations.setdefault(edge, []).append(a < b)
 
     traces: list[dict[str, Any]] = []
     for vertices in vertex_paths:
@@ -579,6 +593,14 @@ def mesh_surface_edge_traces(
             warnings.append("open_boundary_edge_on_surface_trace")
         if any(incidence[edge] > 2 for edge in edges):
             warnings.append("nonmanifold_edge_on_surface_trace")
+        if any(edge in duplicate_face_edges for edge in edges):
+            warnings.append("duplicate_triangle_on_surface_trace")
+        if any(
+            len(edge_orientations[edge]) == 2
+            and edge_orientations[edge][0] == edge_orientations[edge][1]
+            for edge in edges
+        ):
+            warnings.append("inconsistent_winding_edge_on_surface_trace")
         if any(length == 0 for length in source_lengths):
             warnings.append("zero_length_edge_on_surface_trace")
         if any(
