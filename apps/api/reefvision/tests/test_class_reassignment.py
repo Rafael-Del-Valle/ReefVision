@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from reefvision.config import Settings
 from reefvision.db.models import (
     Annotation,
     AnnotationEvent,
@@ -22,7 +23,6 @@ from reefvision.db.models import (
     ReviewQueue,
     ReviewQueueItem,
 )
-from reefvision.config import Settings
 from reefvision.schemas.class_operations import ClassOperationExecuteRequest
 from reefvision.services import class_operations as class_operations_module
 from reefvision.services.class_operations import ClassOperationsService
@@ -1339,12 +1339,15 @@ def test_class_execution_failed_writer_cannot_overwrite_competing_completion(
         assert prediction is not None and prediction.label_class_id == target["id"]
         assert issue is not None and issue.class_ids_json == [target["id"]]
         assert item is not None and item.label_class_ids_json == [target["id"]]
-        assert len(
-            list(
-                session.scalars(
-                    select(AnnotationEvent.id).where(
-                        AnnotationEvent.event_type == "class_reassigned"
+        assert (
+            len(
+                list(
+                    session.scalars(
+                        select(AnnotationEvent.id).where(
+                            AnnotationEvent.event_type == "class_reassigned"
+                        )
                     )
                 )
             )
-        ) == 1
+            == 1
+        )
