@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from reefvision.ml.reefpose.temporal_data import (
     TemporalFrame,
     TemporalFrameResult,
@@ -104,3 +106,82 @@ def test_anatomical_metric_uses_source_pixel_landmark_pairs_and_shared_support()
     assert result["count"] == 1
     assert result["frame_only_mean_error_px"] == 2
     assert result["refined_mean_error_px"] == 1
+
+
+def _motion_series(
+    truth: list[float],
+    observed: list[float | None],
+    *,
+    breaks: set[int] | None = None,
+    actual_times: list[float] | None = None,
+) -> tuple[TemporalSequence, list[TemporalFrameResult]]:
+    frames = []
+    refined = []
+    for index, (target, observation) in enumerate(zip(truth, observed, strict=True)):
+        time = actual_times[index] if actual_times is not None else index / 10
+        target_points = (_point(0), _point(target))
+        observed_points = (
+            _point(0),
+            _point(observation) if observation is not None else TemporalPoint(),
+        )
+        frames.append(
+            TemporalFrame(index, time, observed_points, target_points, index in (breaks or set()))
+        )
+        refined.append(TemporalFrameResult(index, time, target_points, 0, 0))
+    return TemporalSequence("video", "animal", "session", "schema", 100, 50, tuple(frames)), refined
+
+
+def test_anatomical_hysteresis_scores_only_complete_cycles_on_shared_support() -> None:
+    from reefvision.domain.pose_biological_events import CycleDefinition
+    from reefvision.ml.reefpose.temporal_events import AnatomicalEventConfig
+    from reefvision.ml.reefpose.temporal_metrics import evaluate_temporal_predictions
+
+    sequence, refined = _motion_series(
+        [2, 9, 12, 3, 2, 10, 12, 3, 2, 9, 12, 3],
+        [2, 4, 10, 3, 2, 10, 12, 3, 2, None, 12, 3],
+    )
+    result = evaluate_temporal_predictions(
+        [sequence],
+        {("video", "animal"): refined},
+        anatomical_events=AnatomicalEventConfig(
+            ("lip_upper", "lip_lower"),
+            (0, 1),
+            CycleDefinition(8, 3),
+        ),
+    )["anatomical_events"]
+    assert result["derivation"]["landmark_ids"] == ["lip_upper", "lip_lower"]
+    assert result["support"]["common_frames"] == 11
+    assert result["support"]["frame_only_missing_frames"] == 1
+    assert result["support"]["evaluated_seconds"] == pytest.approx(0.9)
+    assert result["reference"]["complete_events"] == 2
+    assert result["reference"]["partial_candidates"] == 1
+    assert result["frame_only"]["count_error"] == 0
+    assert result["frame_only"]["timing_errors"]["onset_error_s"]["bias"] == pytest.approx(0.05)
+    assert result["refined"]["timing_errors"]["onset_error_s"]["mae"] == 0
+
+
+def test_anatomical_cycles_do_not_bridge_discontinuities_or_time_gaps() -> None:
+    from reefvision.domain.pose_biological_events import CycleDefinition
+    from reefvision.ml.reefpose.temporal_events import AnatomicalEventConfig
+    from reefvision.ml.reefpose.temporal_metrics import evaluate_temporal_predictions
+
+    sequence, refined = _motion_series(
+        [2, 9, 3, 2, 9, 3],
+        [2, 9, 3, 2, 9, 3],
+        breaks={2},
+        actual_times=[0, 0.1, 0.2, 0.3, 0.4, 1.2],
+    )
+    result = evaluate_temporal_predictions(
+        [sequence],
+        {("video", "animal"): refined},
+        anatomical_events=AnatomicalEventConfig(
+            ("lip_upper", "lip_lower"),
+            (0, 1),
+            CycleDefinition(8, 3),
+        ),
+    )["anatomical_events"]
+    assert result["support"]["common_support_segments"] == 3
+    assert result["support"]["evaluated_seconds"] == pytest.approx(0.3)
+    assert result["reference"]["complete_events"] == 0
+    assert result["reference"]["partial_candidates"] == 2
+    assert result["refined"]["timing_errors"]["offset_error_s"]["n"] == 0

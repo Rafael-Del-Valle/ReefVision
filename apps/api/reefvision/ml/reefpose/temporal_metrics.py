@@ -18,6 +18,7 @@ from reefvision.ml.reefpose.temporal_data import (
     validate_max_gap,
     validate_splits,
 )
+from reefvision.ml.reefpose.temporal_events import AnatomicalEventComparison, AnatomicalEventConfig
 
 _XY = tuple[float, float]
 _Interval = tuple[float, float]
@@ -244,6 +245,7 @@ def evaluate_temporal_predictions(
     seed: int = 1337,
     max_gap_seconds: float | None = None,
     skeleton_edges: Sequence[tuple[int, int]] = (),
+    anatomical_events: AnatomicalEventConfig | None = None,
 ) -> dict[str, Any]:
     """Compare the same human references with paired coverage and declared-group resampling."""
     if not math.isfinite(movement_threshold_px_per_second) or movement_threshold_px_per_second <= 0:
@@ -264,6 +266,11 @@ def evaluate_temporal_predictions(
     future_seconds, max_future_seconds, max_future_frames = _Mean(), 0.0, 0
     frames, missing_frame_observations, missing_refined_frames, recovered = 0, 0, 0, 0
     threshold = movement_threshold_px_per_second
+    cycle_comparison = (
+        AnatomicalEventComparison(anatomical_events, max_gap_seconds)
+        if anatomical_events is not None
+        else None
+    )
 
     for sequence in sequences:
         key = sequence.recording_id, sequence.animal_id
@@ -271,6 +278,10 @@ def evaluate_temporal_predictions(
         sequence.validate_landmarks(count)
         if any(not (0 <= a < count and 0 <= b < count and a != b) for a, b in skeleton_edges):
             raise ReefPoseValidationError("Temporal skeleton edge references an invalid landmark")
+        if cycle_comparison is not None and max(cycle_comparison.config.landmark_slots) >= count:
+            raise ReefPoseValidationError(
+                "Anatomical cycle landmarks do not match the anatomy schema"
+            )
         results = iter(refined.get(key, ()))
         prediction = next(results, None)
         previous_frame = None
@@ -330,6 +341,18 @@ def evaluate_temporal_predictions(
                         sequence.group_key,
                     )
 
+            if cycle_comparison is not None:
+                slots = cycle_comparison.config.landmark_slots
+                cycle_comparison.observe(
+                    frame,
+                    sequence.animal_id,
+                    (
+                        _edge_distance(coordinates, slots, 0),
+                        _edge_distance(coordinates, slots, 1),
+                        _edge_distance(coordinates, slots, 2),
+                    ),
+                )
+
             if (
                 previous_points is not None
                 and previous_frame is not None
@@ -366,6 +389,8 @@ def evaluate_temporal_predictions(
         for reference_intervals, frame_intervals, refined_intervals in events:
             frame_events.add(reference_intervals, frame_intervals)
             refined_events.add(reference_intervals, refined_intervals)
+        if cycle_comparison is not None:
+            cycle_comparison.finish_sequence(sequence.recording_id, sequence.animal_id)
 
     return {
         "counts": {
@@ -414,4 +439,9 @@ def evaluate_temporal_predictions(
             "bootstrap_samples": bootstrap_samples,
             "seed": seed,
         },
+        **(
+            {"anatomical_events": cycle_comparison.summary()}
+            if cycle_comparison is not None
+            else {}
+        ),
     }
