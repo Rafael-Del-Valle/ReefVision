@@ -127,6 +127,9 @@ def test_trace_follows_selected_edges_not_the_shortest_route() -> None:
         [0.01, 0.0, 0.0],
     ]
     assert trace["segment_lengths_m"] == pytest.approx([0.01, sqrt(2) * 0.01])
+    assert trace["source_segment_lengths_mesh_units"] == pytest.approx([1.0, sqrt(2)])
+    assert trace["source_trace_length_mesh_units"] == pytest.approx(1 + sqrt(2))
+    assert trace["source_endpoint_chord_mesh_units"] == pytest.approx(1.0)
     expected = (1 + sqrt(2)) * 0.01
     assert trace["length_m"] == pytest.approx(expected)
     assert trace["cumulative_lengths_m"] == pytest.approx([0.0, 0.01, expected])
@@ -159,6 +162,13 @@ def test_selected_trace_turn_angles_are_scale_invariant_and_provisional() -> Non
         assert trace["human_review_verified"] is False
         assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
     assert first["turn_angles_deg"] == rescaled["turn_angles_deg"]
+    assert first["source_segment_lengths_mesh_units"] == rescaled[
+        "source_segment_lengths_mesh_units"
+    ]
+    assert first["source_trace_length_mesh_units"] == rescaled["source_trace_length_mesh_units"]
+    assert first["source_endpoint_chord_mesh_units"] == rescaled[
+        "source_endpoint_chord_mesh_units"
+    ]
 
 
 @pytest.mark.parametrize("scale", [0.01, 0.02])
@@ -386,9 +396,7 @@ def test_surface_trace_flags_real_segment_erased_from_display_positions() -> Non
 
 
 def test_finite_source_detour_survives_calibrated_chord_underflow() -> None:
-    trace = measure_mesh_preview(**FINITE_DETOUR_CHORD_UNDERFLOW_PARAMS)[
-        "surface_edge_traces"
-    ][0]
+    trace = measure_mesh_preview(**FINITE_DETOUR_CHORD_UNDERFLOW_PARAMS)["surface_edge_traces"][0]
     assert trace["length_m"] > 0
     assert trace["endpoint_chord_length_m"] == 0
     # An underflowed positive chord has no trustworthy numerical meter bound.
@@ -398,6 +406,34 @@ def test_finite_source_detour_survives_calibrated_chord_underflow() -> None:
     assert "calibrated_surface_trace_endpoint_chord_underflow" in trace["qc_warnings"]
     assert "surface_trace_detour_ratio_unrepresentable" not in trace["qc_warnings"]
     assert "surface_trace_zero_endpoint_chord" not in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+
+
+def test_source_geometry_survives_positive_segment_calibration_underflow() -> None:
+    # Source geometry stays auditable even when meters-per-unit calibration
+    # cannot represent a positive imported triangle edge in binary64 meters.
+    # The raw mesh coordinates have no independently verified physical unit.
+    trace = mesh_surface_edge_traces(
+        [(0.0, 0.0, 0.0), (1e-200, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        [[0, 1, 2]],
+        [[0, 1]],
+        1e-200,
+        0.1,
+    )[0]
+    assert trace["segment_lengths_m"] == [0.0]
+    assert trace["length_m"] == 0.0
+    assert trace["source_segment_lengths_mesh_units"] == pytest.approx(
+        [1e-200], rel=1e-12, abs=0
+    )
+    assert trace["source_trace_length_mesh_units"] == pytest.approx(
+        1e-200, rel=1e-12, abs=0
+    )
+    assert trace["source_endpoint_chord_mesh_units"] == pytest.approx(
+        1e-200, rel=1e-12, abs=0
+    )
+    assert "calibrated_surface_trace_segment_underflow" in trace["qc_warnings"]
+    assert "calibrated_surface_trace_endpoint_chord_underflow" in trace["qc_warnings"]
+    assert "calibrated_surface_trace_length_underflow" in trace["qc_warnings"]
     assert trace["human_review_verified"] is False
 
 
@@ -541,6 +577,9 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert trace["human_review_verified"] is False
     assert "endpoint_chord_length_m" in trace
     assert "geometric_detour_ratio" in trace
+    assert len(trace["source_segment_lengths_mesh_units"]) == trace["edge_count"]
+    assert "source_endpoint_chord_mesh_units" in trace
+    assert "source_trace_length_mesh_units" in trace
     assert len(trace["turn_angles_deg"]) == len(trace["vertex_indices"])
     assert trace["turn_angles_deg"][0] is None
     assert trace["turn_angles_deg"][-1] is None
@@ -571,6 +610,10 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             in artifact["surface_edge_traces"][0]["qc_warnings"]
         )
     if case == "finite_detour_chord_underflow":
+        assert trace["source_endpoint_chord_mesh_units"] == pytest.approx(
+            1e-250, rel=1e-12, abs=0
+        )
+        assert trace["source_trace_length_mesh_units"] == pytest.approx(2.0)
         assert trace["endpoint_chord_length_m"] == 0
         assert trace["endpoint_chord_scale_only_interval_m"] is None
         assert trace["geometric_detour_ratio"] == pytest.approx(2e250, rel=1e-12)
