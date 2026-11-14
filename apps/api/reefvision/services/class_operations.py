@@ -6,9 +6,10 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
@@ -793,7 +794,7 @@ class ClassOperationsService:
             )
             .values(status="running")
         )
-        if claim.rowcount != 1:
+        if cast(CursorResult[Any], claim).rowcount != 1:
             self.session.rollback()
             raise ConflictError("This class operation was already claimed. Reload its status.")
         # The earlier class reads happened before the write lock. Force fresh
@@ -1015,7 +1016,7 @@ class ClassOperationsService:
                     final_state="rolled_back",
                 )
             )
-            if rollback_claim.rowcount == 1:
+            if cast(CursorResult[Any], rollback_claim).rowcount == 1:
                 self.session.commit()
             else:
                 self.session.rollback()
