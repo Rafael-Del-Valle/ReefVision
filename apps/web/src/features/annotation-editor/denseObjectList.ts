@@ -67,7 +67,11 @@ export function boundedDenseObjectRows<
   // selected before a jumped-to window must still be accessible, and no
   // unrelated mask geometry is read after all pinned IDs have been found.
   const appendPinnedAnnotations = (from: number, to: number) => {
-    for (let index = from; index < to && pinnedAnnotations.size > 0; index += 1) {
+    for (
+      let index = from;
+      index < to && pinnedAnnotations.size > 0;
+      index += 1
+    ) {
       const item = annotations[index];
       if (pinnedAnnotations.delete(item.id)) {
         rows.push({ kind: "annotation", item, position: index });
