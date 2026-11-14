@@ -10,7 +10,35 @@ export interface IdentityFields {
   experimental_unit_id: string | null;
   reason: string;
 }
+export interface EcologyStudyAssignmentFields {
+  tank_code: string | null;
+  site_code: string | null;
+  treatment_code: string | null;
+  sampling_unit_type:
+    | "individual"
+    | "fragment"
+    | "colony"
+    | "quadrat"
+    | "transect"
+    | "sample"
+    | "quadrant"
+    | null;
+  sampling_unit_id: string | null;
+  reviewer: string;
+  notes: string;
+}
+
+export interface EcologyStudyAssignmentInput extends EcologyStudyAssignmentFields {
+  confirm_review: boolean;
+}
+
+export interface EcologyStudyAssignment extends EcologyStudyAssignmentFields {
+  review_status: "reviewed";
+  reviewed_at: string;
+}
+
 export interface Identity extends IdentityFields {
+  study_assignment?: EcologyStudyAssignment | null;
   id: string;
   organism_key: string;
   revision: number;
@@ -104,7 +132,9 @@ export const ecologyCsv = (projectId: string, path: string) =>
 export function saveOrganism(
   projectId: string,
   key: string,
-  fields: IdentityFields,
+  fields: IdentityFields & {
+    study_assignment?: EcologyStudyAssignmentInput | null;
+  },
   existing?: Identity,
 ) {
   return request<Identity>(

@@ -19,7 +19,7 @@ from reefvision.services.system import SystemService
 
 _API_ROOT = Path(__file__).resolve().parents[2]
 _VERSIONS = _API_ROOT / "migrations" / "versions"
-_INTEGRATED_HEAD = "b12_integrated_0002"
+_INTEGRATED_HEAD = "b13_scientific_0001"
 _POSE_MIGRATIONS = (
     "0038_pose_anatomy_definitions.py",
     "0039_pose_evaluation_runs.py",

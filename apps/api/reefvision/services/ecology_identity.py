@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from typing import Any
 
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
@@ -51,6 +52,12 @@ from reefvision.schemas.ecology_identity import (
     EcologyIdentityRow,
     EcologyImageEvidenceCreate,
     EcologyImageEvidenceRow,
+    identity_study_fields,
+)
+from reefvision.schemas.ecology_study_assignment import (
+    EcologyStudyAssignmentRead,
+    save_reviewed_study,
+    validate_study_assignments,
 )
 from reefvision.schemas.measurements import MeasurementCalibrationUpdate
 from reefvision.services.annotations import annotation_snapshot, mask_annotation_snapshot
@@ -191,6 +198,19 @@ class EcologyIdentityService:
         """
         try:
             require_unique_ecological_unit_spellings(latest.values())
+            validate_study_assignments(
+                (
+                    row,
+                    (
+                        EcologyStudyAssignmentRead.model_validate(row.study_assignment)
+                        if row.study_assignment is not None
+                        else None
+                    )
+                    if isinstance(row, EcologyIdentityRevision)
+                    else row.study_assignment,
+                )
+                for row in latest.values()
+            )
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
         single_organism_units: dict[tuple[str, str], str] = {}
@@ -256,6 +276,8 @@ class EcologyIdentityService:
         key: str,
         revision: int,
         payload: EcologyIdentityFields,
+        *,
+        retained_study: dict[str, Any] | None = None,
     ) -> EcologyIdentityRow:
         # Check the proposed revision against the *entire* append-only history,
         # not just current identities. A case-only correction needs explicit
@@ -276,6 +298,11 @@ class EcologyIdentityService:
             experimental_unit_type=payload.experimental_unit_type,
             experimental_unit_id=payload.experimental_unit_id,
             reason=payload.reason,
+            study_assignment=(
+                save_reviewed_study(payload.study_assignment, datetime.now(UTC))
+                if payload.study_assignment is not None
+                else retained_study
+            ),
         )
         self.session.add(record)
         try:
@@ -323,6 +350,26 @@ class EcologyIdentityService:
         ):
             raise ValidationError("Cannot reclassify a parent colony while fragments reference it")
         self._parent_valid(organism_key, payload, latest)
+        if (
+            current.study_assignment is not None
+            and "study_assignment" not in payload.model_fields_set
+        ):
+            # Existing clients can revise metadata without erasing an unknown 1.3 field.
+            proposed = EcologyIdentityRevision(
+                kind=payload.kind,
+                parent_colony_key=payload.parent_colony_key,
+                experimental_unit_type=payload.experimental_unit_type,
+                experimental_unit_id=payload.experimental_unit_id,
+                study_assignment=current.study_assignment,
+            )
+            self._assert_experimental_units({**latest, organism_key: proposed})
+            return self._append(
+                project_id,
+                organism_key,
+                current.revision + 1,
+                payload,
+                retained_study=current.study_assignment,
+            )
         self._assert_experimental_units({**latest, organism_key: payload})
         return self._append(project_id, organism_key, current.revision + 1, payload)
 
@@ -990,8 +1037,9 @@ class EcologyIdentityService:
                 "experimental_unit_id": row.experimental_unit_id,
                 "reason": row.reason,
                 "created_at": row.created_at.isoformat(),
+                **identity_study_fields(row),
             }
-            for row in history
+            for row in identity_history
         ]
         fingerprint_rows = [
             {
@@ -1002,6 +1050,7 @@ class EcologyIdentityService:
                 "parent_colony_key": row.parent_colony_key,
                 "experimental_unit_type": row.experimental_unit_type,
                 "experimental_unit_id": row.experimental_unit_id,
+                **identity_study_fields(row),
             }
             for row in identities
         ]
