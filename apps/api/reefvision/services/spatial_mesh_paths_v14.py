@@ -645,8 +645,13 @@ def mesh_surface_edge_traces(
         # scale-invariant geometric detour ratio only when the calibrated
         # endpoints can be distinguished; never infer infinite tortuosity
         # from coincident or numerically collapsed endpoint coordinates.
-        endpoint_chord_m = dist(calibrated_vertices[0], calibrated_vertices[-1])
-        if not isfinite(endpoint_chord_m):
+        # Measure the chord before applying the shared scale. Computing the
+        # distance between separately rounded calibrated display coordinates
+        # can erase a genuinely nonzero endpoint separation.
+        source_chord = dist(points[vertices[0]], points[vertices[-1]])
+        endpoint_chord_m = source_chord * scale
+        display_chord_m = dist(calibrated_vertices[0], calibrated_vertices[-1])
+        if not isfinite(endpoint_chord_m) or not isfinite(display_chord_m):
             raise ValueError("Surface trace endpoint chord cannot be represented")
         chord_interval = (
             [
@@ -658,7 +663,18 @@ def mesh_surface_edge_traces(
         )
         if chord_interval is not None and any(not isfinite(bound) for bound in chord_interval):
             raise ValueError("Surface trace endpoint chord interval overflowed")
-        detour_ratio = length_m / endpoint_chord_m if endpoint_chord_m > 0 else None
+        # The same calibration factor multiplies every edge and the chord.
+        # Compute this dimensionless diagnostic from source lengths so it
+        # cannot change merely because calibrated display positions round.
+        try:
+            source_trace_length = fsum(source_lengths)
+        except OverflowError:
+            source_trace_length = float("inf")
+        detour_ratio = (
+            source_trace_length / source_chord
+            if endpoint_chord_m > 0 and source_chord > 0 and isfinite(source_trace_length)
+            else None
+        )
         if detour_ratio is not None and not isfinite(detour_ratio):
             detour_ratio = None
         warnings = ["caller_selected_surface_trace_not_anatomical_centerline"]
@@ -681,8 +697,12 @@ def mesh_surface_edge_traces(
         # This is binary64 geometric QC, not proof of exact anatomical overlap.
         if any(angle == 180.0 for angle in interior_turn_angles if angle is not None):
             warnings.append("surface_trace_180_degree_geometric_turn")
-        if endpoint_chord_m == 0:
+        if source_chord == 0:
             warnings.append("surface_trace_zero_endpoint_chord")
+        elif endpoint_chord_m == 0:
+            warnings.append("calibrated_surface_trace_endpoint_chord_underflow")
+        elif display_chord_m == 0:
+            warnings.append("surface_trace_endpoint_chord_display_coordinate_collapse")
         if endpoint_chord_m > 0 and detour_ratio is None:
             warnings.append("surface_trace_detour_ratio_unrepresentable")
         # Distinct parsed vertex indices can refer to exactly the same XYZ.
