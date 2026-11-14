@@ -72,6 +72,18 @@ isolated and ordinary meshes, artifact/provenance equality, and unchanged
 provisional status. Historical artifacts without this field remain valid and
 must not be retroactively relabeled as unique.
 
+Direct scientific-engine callers are now held to the same strict
+calibration-input semantics as the public mesh-preview schema: Boolean values
+cannot stand in for a numeric meter-per-unit scale or a scale uncertainty,
+and unrepresentable Python integers fail closed with a controlled validation
+error. A relative uncertainty **equal to 1.0 (100%) is supported**; values
+above 1.0 are invalid. The supported 100% boundary yields scale-only length
+intervals of [0, 2L], not confidence intervals. Prior stale regression
+expectations for the boundary and for zero-length connected-component QC
+were corrected after inspecting exact-head Actions failures. These changes
+do not validate field calibration, anatomical branch identity, or biological
+measurements.
+
 The `mesh_surface_preview` standalone API and persisted Workflow Builder node
 accept up to 16 `surface_path_vertex_pairs`, each containing two distinct
 zero-based source vertex indices. The engine finds a shortest route **along
