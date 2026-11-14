@@ -563,3 +563,31 @@ positive source chord underflow from truly coincident endpoints. These are
 synthetic numerical tests, **not** held-out biological or installed-GUI
 validation; historical artifacts remain historical evidence and are not
 silently rewritten.
+
+### Scale-invariant geometric segment reuse audit
+
+Selected surface-edge traces expose
+`reused_geometric_segment_source_length_mesh_units` (the sum of second and
+subsequent traversals of identical nonzero source-coordinate edges) and
+`reused_geometric_segment_fraction_of_trace` (that source-length contribution
+divided by the total selected source trace length). The existing
+`repeated_geometric_segment_index_pairs` records the earliest matching segment
+and each later matching segment, independent of index aliases or traversal
+direction. An unrepeated positive trace reports zero reuse and zero fraction;
+a zero-length or numerically unrepresentable source total yields a null
+fraction rather than a fabricated zero. An unrepresentable reused-source
+sum is likewise null, and a repeated trace with an unavailable fraction
+also reports `surface_trace_reuse_fraction_unrepresentable`.
+
+Both outputs are source-coordinate **QC diagnostics**, not an instruction to
+subtract repeated segments from the measured trace or a corrected coral
+branch length. The fraction is dimensionless and is unchanged by one shared
+positive calibration scale; it does not receive a spurious independent
+scale-error interval. Source mesh units remain unspecified until
+calibration is independently reviewed. Existing original total-length,
+uncertainty, geometry fingerprint, model/reviewer provenance and
+`human_review_verified: false` are unchanged. Tests cover forward and
+reversed seam aliases, positive scales, zero reuse, and complete standalone
+versus executed persisted typed Workflow Builder artifact/provenance parity.
+These are synthetic QC checks, not held-out biological or installed-GUI
+validation.
