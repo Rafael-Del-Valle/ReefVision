@@ -559,6 +559,7 @@ def process_workflow_run_job(
             provenance = build_workflow_run_provenance(
                 session,
                 run_id=run_id,
+                verify_saved_closeout=False,
             )
 
             provenance_sha256 = canonical_json_sha256(provenance)

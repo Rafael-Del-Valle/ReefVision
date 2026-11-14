@@ -342,6 +342,13 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
     assert missing_provenance.json() == {
         "detail": "Succeeded workflow run is missing saved provenance"
     }
+    # Direct provenance export must enforce the same frozen closeout as
+    # run-detail retrieval, not regenerate an unfrozen replacement manifest.
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="missing saved provenance"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(run["id"]))
 
     with app.state.session_factory() as session:
         saved_run = session.get(WorkflowRun, str(run["id"]))
@@ -349,6 +356,10 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         saved_run.result_json = original_result
         session.commit()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+    with app.state.session_factory() as session:
+        assert build_workflow_run_provenance(
+            session, run_id=str(run["id"])
+        ) == original_result["provenance_manifest"]
 
 
 def test_workflow_graph_revisions_are_deduplicated_and_versioned(

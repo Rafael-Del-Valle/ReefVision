@@ -361,8 +361,9 @@ def build_workflow_run_provenance(
     session: Session,
     *,
     run_id: str,
+    verify_saved_closeout: bool = True,
 ) -> dict[str, Any]:
-    """Build the canonical inspectable lineage manifest for a workflow run."""
+    """Build scientific lineage; verify the immutable closeout on subsequent reads."""
 
     run = session.get(
         WorkflowRun,
@@ -532,7 +533,7 @@ def build_workflow_run_provenance(
 
     recovery_history = list(raw_history)
 
-    return {
+    manifest = {
         "schema_version": (WORKFLOW_PROVENANCE_SCHEMA_VERSION),
         "workflow_run_id": run.id,
         "project_id": run.project_id,
@@ -557,3 +558,24 @@ def build_workflow_run_provenance(
         "started_at": (run.started_at.isoformat() if run.started_at else None),
         "completed_at": (run.completed_at.isoformat() if run.completed_at else None),
     }
+
+    # Closeout first freezes this manifest in run.result_json. Later direct
+    # provenance exports must not silently regenerate different science from
+    # edited rows (or accept deletion of both saved closeout fields).
+    # The closeout worker explicitly opts out while creating the first digest.
+    if verify_saved_closeout and run.status == "succeeded":
+        if "provenance_manifest" not in result or "provenance_sha256" not in result:
+            raise ConflictError("Succeeded workflow run is missing saved provenance")
+        saved_manifest = result["provenance_manifest"]
+        saved_sha256 = result["provenance_sha256"]
+        if (
+            not isinstance(saved_manifest, dict)
+            or not isinstance(saved_sha256, str)
+            or canonical_json_sha256(saved_manifest) != saved_sha256
+            or canonical_json_sha256(manifest) != saved_sha256
+        ):
+            raise ConflictError(
+                "Workflow run saved provenance no longer matches persisted science"
+            )
+
+    return manifest
