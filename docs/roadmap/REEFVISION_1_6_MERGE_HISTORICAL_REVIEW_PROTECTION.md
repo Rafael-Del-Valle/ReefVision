@@ -19,8 +19,13 @@ findings, and completed reviewer decisions after their original scientific revie
   proposals retain their source class, status, and recorded model evidence.
 - Only `open` or `acknowledged` QC issue class memberships are changed.
   Closed, dismissed, or other nonmutable QC issues remain unchanged.
-- Only `pending` or `in_progress` review queue item class memberships
-  are changed. Completed or otherwise protected review items remain unchanged.
+- Standalone `pending` or `in_progress` review-queue items retain the
+  legacy class-reassignment behavior. **Workflow-owned QC queue items remain
+  unchanged regardless of review state**, because their biological class IDs
+  are immutable input evidence bound to an executable saved graph. Workflow
+  ownership is the locally persisted `workflow:<run>:<node>` creator key,
+  rather than the current review state. Completed or otherwise protected
+  standalone review items also remain unchanged.
 - Response affected counts report **actual changes** instead of counting
   protected items. A warning names which classes of historical scientific
   records remain attached to the archived source class.
@@ -45,13 +50,19 @@ class ID and that the saved run's typed output payload and SHA-256 have not
 changed. This is stronger than validating a fabricated graph JSON fixture.
 
 This change is class-administration behavior, **not a new scientific analysis**;
-adding a duplicate Workflow Builder node would be misleading. The existing
-executable typed saved `project_source -> qc_review_queue` regression,
-its dimensionless priority output, persisted run provenance, review gates,
-and retry/integrity tests remain required for release. This change does **not**
-establish that every mutable QC item can safely be edited when referenced by
-an immutable saved workflow; that relationship needs separate lineage-aware
-regression and, if necessary, an additional fail-closed guard before approval.
+adding a duplicate Workflow Builder node would be misleading. The executable
+typed saved `project_source -> qc_review_queue` regression now also runs
+for an **unreviewed/pending** item, and directly retries the actual persisted
+QC node adapter after merge. Both pending and completed cases require the
+same queue ID, source-class biological reference, dimensionless priority output,
+unchanged saved artifact and a valid replay checksum. The review gate remains
+`requires_researcher_review` until a researcher explicitly confirms it.
+
+This protection does not relabel historical scientific evidence, infer that an
+archived source taxon became a target taxon, or automatically approve research.
+Standalone QC snapshots and the separately implemented Reassign operation
+still need their own provenance-aware integrity acceptance; no migration or
+cross-version branch integration is introduced.
 
 ## Release hold
 
