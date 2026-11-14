@@ -331,7 +331,9 @@ class ClassOperationsService:
         queue_creator_by_id = {
             queue.id: queue.created_by
             for queue in self.session.scalars(
-                select(ReviewQueue).where(ReviewQueue.project_id == source_class.project_id)
+                select(ReviewQueue).where(
+                    ReviewQueue.project_id == source_class.project_id
+                )
             )
         }
         workflow_owned_queue_ids = {
@@ -482,8 +484,8 @@ class ClassOperationsService:
         if operation_type == "reassign_delete":
             if workflow_protected_item_ids:
                 blockers.append(
-                    "Saved Workflow Builder QC queue evidence still references the source "
-                    "class and prevents physical deletion. Preserve the archived class "
+                    "Saved Workflow Builder QC queue evidence still references "
+                    "the source class and prevents physical deletion. Preserve the archived class "
                     "for reproducible scientific review."
                 )
                 blocking_records.append(
@@ -626,7 +628,9 @@ class ClassOperationsService:
                         "id": item.id,
                         "state": item.review_state,
                         "queue_id": item.review_queue_id,
-                        "queue_created_by": queue_creator_by_id.get(item.review_queue_id),
+                        "queue_created_by": queue_creator_by_id.get(
+                            item.review_queue_id
+                        ),
                         "class_ids": list(item.label_class_ids_json),
                     }
                     for item in sorted(review_queue_items, key=lambda item: item.id)

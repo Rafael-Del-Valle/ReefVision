@@ -1581,6 +1581,7 @@ def test_saved_qc_workflow_class_evidence_survives_merge(
         )
         assert retried[0]["payload"] == output["payload_json"]
 
+
 @pytest.mark.parametrize("operation_type", ["reassign", "reassign-delete"])
 def test_class_reassignment_preserves_executable_saved_qc_evidence(
     client: TestClient, operation_type: str
@@ -1588,10 +1589,18 @@ def test_class_reassignment_preserves_executable_saved_qc_evidence(
     """Pending workflow-owned QC evidence must survive either class operation."""
     project = create_project(client, name="Reassignment workflow science")
     source = create_label_class(
-        client, project["id"], class_index=0, name="Thesea closed", display_color="#E76F51"
+        client,
+        project["id"],
+        class_index=0,
+        name="Thesea closed",
+        display_color="#E76F51",
     )
     target = create_label_class(
-        client, project["id"], class_index=1, name="Thesea open", display_color="#2A9D8F"
+        client,
+        project["id"],
+        class_index=1,
+        name="Thesea open",
+        display_color="#2A9D8F",
     )
     seed_reassignment_records(
         client,
@@ -1618,10 +1627,14 @@ def test_class_reassignment_preserves_executable_saved_qc_evidence(
             }
         ],
     }
-    plan = client.post(f"/api/v1/projects/{project['id']}/workflow-graphs/plan", json=graph)
+    plan = client.post(
+        f"/api/v1/projects/{project['id']}/workflow-graphs/plan", json=graph
+    )
     assert plan.status_code == 200, plan.text
     assert plan.json()["valid"] and plan.json()["executable"]
-    saved = client.post(f"/api/v1/projects/{project['id']}/workflow-graphs", json={"graph": graph})
+    saved = client.post(
+        f"/api/v1/projects/{project['id']}/workflow-graphs", json={"graph": graph}
+    )
     assert saved.status_code == 201, saved.text
     launched = client.post(
         f"/api/v1/projects/{project['id']}/workflow-runs",
@@ -1655,12 +1668,8 @@ def test_class_reassignment_preserves_executable_saved_qc_evidence(
     preview = client.post(f"{route}/preview", json={"target_class_id": target["id"]})
     assert preview.status_code == 201, preview.text
     approval = preview.json()
-    protected = {
-        group["key"]: group for group in approval["plan"]["protected_records"]
-    }
-    mutable = {
-        group["key"]: group for group in approval["plan"]["mutable_records"]
-    }
+    protected = {group["key"]: group for group in approval["plan"]["protected_records"]}
+    mutable = {group["key"]: group for group in approval["plan"]["mutable_records"]}
     assert items[0]["id"] in protected["review_queue_items_closed"]["record_ids"]
     assert items[0]["id"] not in mutable.get(
         "review_queue_items_open", {"record_ids": []}
