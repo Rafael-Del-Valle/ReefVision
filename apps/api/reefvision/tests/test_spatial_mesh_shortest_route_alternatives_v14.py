@@ -199,7 +199,6 @@ def test_positive_edge_cost_roundoff_does_not_claim_exact_route_multiplicity() -
         assert route["length_m"] == pytest.approx(2e7)
 
 
-
 def test_subresolution_prefix_is_not_mistaken_for_an_exact_route_tie() -> None:
     # The shortest candidate 2 -> 1 -> 0 adds a huge edge *after*
     # a tiny positive prefix. The prefix vanishes in the rounded total,
