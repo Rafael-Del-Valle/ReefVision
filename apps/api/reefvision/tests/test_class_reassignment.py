@@ -1532,9 +1532,7 @@ def test_saved_qc_workflow_class_evidence_survives_merge(
         saved_item = session.get(ReviewQueueItem, item_id)
         assert saved_item is not None
         reviewed_state = saved_item.review_state
-        saved_item.review_state = (
-            "in_progress" if reviewed_state != "in_progress" else "pending"
-        )
+        saved_item.review_state = "in_progress" if reviewed_state != "in_progress" else "pending"
         session.commit()
     rejected = client.post(
         f"/api/v1/classes/{source['id']}/merge",

@@ -365,9 +365,7 @@ class ProjectService:
             )
             if label_class.id in item.class_ids_json
         ]
-        reference_ids["quality_control_issues"] = [
-            str(item.id) for item in qc_reference_records
-        ]
+        reference_ids["quality_control_issues"] = [str(item.id) for item in qc_reference_records]
 
         review_reference_records = [
             item
@@ -376,9 +374,7 @@ class ProjectService:
             )
             if label_class.id in item.label_class_ids_json
         ]
-        reference_ids["review_queue_items"] = [
-            str(item.id) for item in review_reference_records
-        ]
+        reference_ids["review_queue_items"] = [str(item.id) for item in review_reference_records]
 
         reference_ids["dataset_versions"] = [
             str(item.id)
