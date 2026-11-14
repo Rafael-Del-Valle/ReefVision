@@ -1,5 +1,34 @@
 # ReefVision 1.4 provisional mesh-edge paths
 
+## Reused geometric edges in a scientist-selected trace
+
+Imported OBJ/PLY/GLB meshes can carry distinct indexed vertices at exactly
+the same XYZ positions, for example along a duplicated reconstruction seam.
+An ordered surface trace may therefore revisit a **positive-length geometric
+edge** even when its vertex indices are unique. The trace engine now compares
+the unordered endpoint positions of every source-frame segment and emits
+`repeated_geometric_segment_index_pairs`, a list of
+`[first_segment_index, repeated_segment_index]` pairs using zero-based
+segment offsets, and `surface_trace_reused_geometric_segment` in
+`qc_warnings` when a segment is reused. The audit is insensitive to edge
+direction and to a common calibration scale. It deliberately excludes
+zero-length segments, which retain their separate zero-length QC.
+
+This is an **exact-coordinate** duplication check, not a tolerance-based
+3D intersection finder or a verified anatomical centerline. Near-coincident
+segments and overlapping subsegments with different endpoints may remain
+undetected. The full trace and unadjusted total are preserved for review;
+ReefVision does **not** silently subtract segments or assert a corrected
+biological branch length. Historical artifacts without the field remain
+provisional and should not be treated as proof of geometric uniqueness.
+
+Synthetic fixtures with distinct indexed seam vertices and nonduplicate
+triangular faces exercise same-direction and reverse repeated-edge
+traversals. The project-scoped standalone mesh-preview endpoint and
+executable, typed, persisted Workflow Builder graph assert the same full
+measurement and provenance, including unverified human review. Neither
+synthetic coverage nor a passing CI gate establishes field accuracy.
+
 ## Scale-only intervals when a real trace edge underflows
 
 A real positive source-frame edge can become `0.0` after multiplication by
