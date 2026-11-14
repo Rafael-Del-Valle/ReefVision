@@ -384,12 +384,8 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     with app.state.session_factory() as session:
         node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
         assert node is not None
-        with pytest.raises(
-            ConflictError, match="node parameters do not match saved graph"
-        ):
-            verify_succeeded_node_artifacts(
-                session, run_id=str(queued.json()["id"]), node_run=node
-            )
+        with pytest.raises(ConflictError, match="node parameters do not match saved graph"):
+            verify_succeeded_node_artifacts(session, run_id=str(queued.json()["id"]), node_run=node)
 
     substituted_parameters = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert substituted_parameters.status_code == 409, substituted_parameters.text
@@ -421,12 +417,8 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     with app.state.session_factory() as session:
         node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
         assert node is not None
-        with pytest.raises(
-            ConflictError, match="node parameters do not match saved graph"
-        ):
-            verify_succeeded_node_artifacts(
-                session, run_id=str(queued.json()["id"]), node_run=node
-            )
+        with pytest.raises(ConflictError, match="node parameters do not match saved graph"):
+            verify_succeeded_node_artifacts(session, run_id=str(queued.json()["id"]), node_run=node)
 
     missing_parameters = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert missing_parameters.status_code == 409, missing_parameters.text
