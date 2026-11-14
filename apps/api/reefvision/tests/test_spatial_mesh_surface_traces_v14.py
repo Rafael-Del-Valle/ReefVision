@@ -56,6 +56,15 @@ COINCIDENT_NONADJACENT_PARAMS = {
     "faces": [[0, 1, 3], [1, 2, 4]],
     "surface_trace_vertex_paths": [[0, 1, 2]],
 }
+# A 180-degree turn retraces part of an edge without reusing indices,
+# coincident vertices, or a zero-length segment. The triangles are
+# nondegenerate and indexed differently; this is provisional mesh QC.
+REVERSE_TURN_PARAMS = {
+    **PARAMS,
+    "vertices": [[0, 0, 0], [2, 0, 0], [1, 0, 0], [0, 1, 0], [2, 1, 0]],
+    "faces": [[0, 1, 3], [1, 2, 4]],
+    "surface_trace_vertex_paths": [[0, 1, 2]],
+}
 
 
 def test_trace_follows_selected_edges_not_the_shortest_route() -> None:
@@ -288,6 +297,21 @@ def test_trace_flags_nonadjacent_spatially_coincident_vertices() -> None:
     assert trace["human_review_verified"] is False
 
 
+def test_trace_flags_full_geometric_reversal_without_repeated_vertices() -> None:
+    trace = measure_mesh_preview(**REVERSE_TURN_PARAMS)["surface_edge_traces"][0]
+    assert trace["vertex_indices"] == [0, 1, 2]
+    assert trace["segment_lengths_m"] == pytest.approx([0.02, 0.01])
+    assert trace["length_m"] == pytest.approx(0.03)
+    assert trace["endpoint_chord_length_m"] == pytest.approx(0.01)
+    assert trace["geometric_detour_ratio"] == pytest.approx(3.0)
+    assert trace["turn_angles_deg"] == [None, 180.0, None]
+    assert "surface_trace_180_degree_geometric_turn" in trace["qc_warnings"]
+    assert "nonadjacent_coincident_surface_trace_vertices" not in trace["qc_warnings"]
+    assert "zero_length_edge_on_surface_trace" not in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+    assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
+
+
 def test_trace_flags_positive_segment_lost_in_cumulative_distance() -> None:
     trace = measure_mesh_preview(**RESOLUTION_LIMITED_PARAMS)["surface_edge_traces"][0]
     assert trace["segment_lengths_m"][1] > 0
@@ -337,6 +361,7 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
         "resolution_limited",
         "inconsistent_winding",
         "coincident_nonadjacent",
+        "reverse_turn",
         "uncertainty_missing",
         "uncertainty_max",
     ],
@@ -351,6 +376,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "resolution_limited": RESOLUTION_LIMITED_PARAMS,
         "inconsistent_winding": INCONSISTENT_WINDING_PARAMS,
         "coincident_nonadjacent": COINCIDENT_NONADJACENT_PARAMS,
+        "reverse_turn": REVERSE_TURN_PARAMS,
         "uncertainty_missing": {**PARAMS, "relative_scale_uncertainty": None},
         "uncertainty_max": {**PARAMS, "relative_scale_uncertainty": 1.0},
     }[case]
@@ -430,6 +456,10 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             "inconsistent_winding_edge_on_surface_trace"
             in artifact["surface_edge_traces"][0]["qc_warnings"]
         )
+    if case == "reverse_turn":
+        assert trace["maximum_turn_angle_deg"] == pytest.approx(180.0)
+        assert "surface_trace_180_degree_geometric_turn" in trace["qc_warnings"]
+        assert trace["human_review_verified"] is False
     if case == "coincident_nonadjacent":
         assert trace["geometric_detour_ratio"] is None
         assert "surface_trace_zero_endpoint_chord" in trace["qc_warnings"]
