@@ -29,6 +29,7 @@ from reefvision.db.models import (
     PredictionProposal,
     Project,
     QualityControlIssue,
+    ReviewQueue,
     ReviewQueueItem,
 )
 from reefvision.domain.errors import ConflictError, NotFoundError
