@@ -26,3 +26,19 @@ malformed limits and data preservation. Frontend type, Vitest, Playwright and
 installed Windows GUI with representative large images still require
 independent acceptance on the exact commit; passing unit tests alone is
 not evidence of full release readiness.
+
+## End-to-end acceptance contract
+
+The former 1,500-annotation Playwright scenario assumed all objects were
+simultaneously mounted as sidebar options. That assertion fails with the
+intentional bounded renderer (exact-head CI #43529559660: received 200,
+expected 1,500), and restoring the unbounded DOM would regress usability.
+The scenario now tests the intended observable contract instead: 200 initial
+options with ARIA count 1,500, two explicit 200-object reveals, selection of
+object 600, reset to a 200-row filtered window, selected-object inclusion
+outside that window with correct original filtered position and count, and
+retention when the filter is removed. This exercises the built app in
+Chromium rather than relying exclusively on the pure windowing helper.
+No annotation, calibration or saved research record is modified by the
+windowing operation. Exact-head Playwright and installed Windows acceptance
+must still pass before considering the version release-ready.
