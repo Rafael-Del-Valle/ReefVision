@@ -87,7 +87,8 @@ describe("dense object-browser window", () => {
     expect(annotations).toEqual([{ id: "a" }]);
     expect(masks).toEqual([{ id: "m" }]);
   });
-  it("avoids reading unmounted records when the selection is in the visible window", () => {
+
+  it("reads only mounted rows for an in-window selection", () => {
     const source = Array.from({ length: 20_000 }, (_, index) => ({
       id: `box-${index}`,
     }));
@@ -101,19 +102,13 @@ describe("dense object-browser window", () => {
       },
     });
 
-    const rows = boundedDenseObjectRows(
-      annotations,
-      [],
-      200,
-      ["box-10"],
-      [],
-    );
+    const rows = boundedDenseObjectRows(annotations, [], 200, ["box-10"], []);
     expect(rows).toHaveLength(200);
     expect(reads).toBe(200);
     expect(source).toHaveLength(20_000);
   });
 
-  it("stops scanning after a distant selection and skips unrelated mask records", () => {
+  it("stops after a distant box without scanning masks", () => {
     const source = Array.from({ length: 20_000 }, (_, index) => ({
       id: `box-${index}`,
     }));
@@ -150,5 +145,4 @@ describe("dense object-browser window", () => {
     expect(annotationReads).toBe(104);
     expect(maskReads).toBe(0);
   });
-
 });

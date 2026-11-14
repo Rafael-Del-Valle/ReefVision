@@ -59,11 +59,7 @@ export function boundedDenseObjectRows<
   while (pendingMaskIds.size > 0 && maskIndex < masks.length) {
     const item = masks[maskIndex];
     if (pendingMaskIds.delete(item.id)) {
-      rows.push({
-        kind: "mask",
-        item,
-        position: annotations.length + maskIndex,
-      });
+      rows.push({ kind: "mask", item, position: annotations.length + maskIndex });
     }
     maskIndex += 1;
   }
