@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 from typing import Any, cast
 
+import pytest
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -606,3 +608,72 @@ def test_reassign_delete_deletes_source_after_safe_reassignment(client: TestClie
         assert dataset_version.class_map_json[0]["id"] == source_class["id"]
         assert model.class_map_json["mapping"][source_class["name"]] == source_class["id"]
         assert operation.status == "completed"
+
+@pytest.mark.parametrize("operation_type", ["reassign", "reassign-delete"])
+@pytest.mark.parametrize("changed_role", ["source", "target"])
+@pytest.mark.parametrize("changed_field", ["name", "scientific_name", "state_name"])
+def test_class_operation_preview_expires_after_biological_identity_change(
+    client: TestClient,
+    operation_type: str,
+    changed_role: str,
+    changed_field: str,
+) -> None:
+    """A count-identical class semantic edit must invalidate researcher approval."""
+    project = create_project(client, name="Biological Identity Approval")
+    source_class = create_label_class(
+        client,
+        project["id"],
+        class_index=0,
+        name="Swiftia Closed",
+        display_color="#E76F51",
+    )
+    target_class = create_label_class(
+        client,
+        project["id"],
+        class_index=1,
+        name="Swiftia Open",
+        display_color="#2A9D8F",
+    )
+    seed_reassignment_records(
+        client,
+        project,
+        source_class,
+        target_class,
+        include_deleted_annotation=False,
+        include_historical_prediction=False,
+    )
+    endpoint = f"/api/v1/projects/{project['id']}/classes/{source_class['id']}/{operation_type}"
+    preview = client.post(f"{endpoint}/preview", json={"target_class_id": target_class["id"]})
+    assert preview.status_code == 201, preview.text
+    reviewed = preview.json()
+    assert reviewed["plan"]["blockers"] == []
+
+    changed_id = source_class["id"] if changed_role == "source" else target_class["id"]
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        label_class = session.get(LabelClass, changed_id)
+        assert label_class is not None
+        setattr(label_class, changed_field, f"revised {changed_field}")
+        session.commit()
+
+    execute = client.post(
+        endpoint,
+        json={"operation_id": reviewed["id"], "preview_checksum": reviewed["preview_checksum"]},
+    )
+    assert execute.status_code == 409, execute.text
+    assert "stale" in execute.json()["detail"].lower()
+
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        annotation = session.get(Annotation, "annotation-active")
+        prediction = session.get(PredictionProposal, "proposal-pending")
+        qc_issue = session.get(QualityControlIssue, "qc-issue-open")
+        review_item = session.get(ReviewQueueItem, "queue-item-pending")
+        operation = session.get(ClassOperation, reviewed["id"])
+        assert annotation is not None and annotation.label_class_id == source_class["id"]
+        assert annotation.revision == 1
+        assert prediction is not None and prediction.label_class_id == source_class["id"]
+        assert qc_issue is not None and qc_issue.class_ids_json == [source_class["id"]]
+        assert review_item is not None and review_item.label_class_ids_json == [source_class["id"]]
+        assert operation is not None and operation.status == "failed"
+        assert operation.final_state == "preview_stale"
+        assert session.get(LabelClass, source_class["id"]) is not None
+        assert session.get(LabelClass, target_class["id"]) is not None

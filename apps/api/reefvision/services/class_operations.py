@@ -92,6 +92,19 @@ def _label_class_snapshot(label_class: LabelClass) -> dict[str, Any]:
     }
 
 
+def _class_biological_identity(label_class: LabelClass) -> dict[str, Any]:
+    """Reviewed source/target semantics that must stay stable until execution."""
+    return {
+        "id": label_class.id,
+        "name": label_class.name,
+        "class_index": label_class.class_index,
+        "scientific_name": label_class.scientific_name,
+        "state_name": label_class.state_name,
+        "is_active": label_class.is_active,
+        "archived_at": label_class.archived_at.isoformat() if label_class.archived_at else None,
+    }
+
+
 @dataclass(slots=True)
 class OperationPlan:
     mutable_records: list[ClassOperationRecordGroupResponse]
@@ -487,6 +500,9 @@ class ClassOperationsService:
             "project_id": source_class.project_id,
             "source_class_id": source_class.id,
             "target_class_id": target_class.id,
+            # Counts and reference IDs alone cannot preserve biological meaning.
+            "source_class_biological_identity": _class_biological_identity(source_class),
+            "target_class_biological_identity": _class_biological_identity(target_class),
             "mutable_records": [
                 {"key": item.key, "record_ids": item.record_ids} for item in plan.mutable_records
             ],
