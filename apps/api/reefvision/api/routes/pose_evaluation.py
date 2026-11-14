@@ -82,9 +82,7 @@ def export_pose_evaluation_comparison(
         comparisons.export_csv(job_id),
         media_type="text/csv",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="reefpose-comparison-{job_id}.csv"'
-            )
+            "Content-Disposition": (f'attachment; filename="reefpose-comparison-{job_id}.csv"')
         },
     )
 

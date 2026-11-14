@@ -2,11 +2,14 @@ import { EnvironmentalSubjectInspector } from "../environmental-context/Environm
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { AnnotatedVideoExportPanel } from "./AnnotatedVideoExportPanel";
 import { BehaviorDynamicsPanel } from "./BehaviorDynamicsPanel";
+import { BiologicalMovementPanel } from "./BiologicalMovementPanel";
+import { ReefPoseValidationPanel } from "./ReefPoseValidationPanel";
 import { GeoreferencedMapPanel } from "./GeoreferencedMapPanel";
 import { GeoreferencingSetupPanel } from "./GeoreferencingSetupPanel";
 import { GeographicExportPanel } from "./GeographicExportPanel";
 import { GeographicMovementAnalyticsPanel } from "./GeographicMovementAnalyticsPanel";
 import { PoseActiveLearningPanel } from "./PoseActiveLearningPanel";
+import { PoseIdentityReviewPanel } from "./PoseIdentityReviewPanel";
 import {
   reviewPoseActiveLearningCandidate,
   type PoseActiveLearningCandidate,
@@ -24,11 +27,14 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { cancelJob, retryJob, type Project } from "../../api/client";
 import { PoseAnnotationEditor } from "../pose/PoseAnnotationEditor";
+import { AnatomySkeletonDesigner } from "../pose/AnatomySkeletonDesigner";
+import type { AnatomySchemaRevision } from "../pose/anatomyApi";
 import type { PoseSaveRequest } from "../pose/types";
 import {
   correctedVideoKeyframeFromPoseSave,
   editorSchemaForVideoTrack,
   poseInstanceFromVideoKeyframe,
+  videoSchemaFromAnatomy,
 } from "./poseKeyframeAdapter";
 import {
   benchmarkVideoTracking,
@@ -77,6 +83,62 @@ interface VideoTrackingWorkspaceProps {
 
 function sortedKeyframes(items: VideoTrackKeyframe[]): VideoTrackKeyframe[] {
   return [...items].sort((first, second) => first.frame - second.frame);
+}
+
+function parseMaskPolygons(
+  value: string,
+  sourceWidth: number,
+  sourceHeight: number,
+): [number, number][][] | null {
+  if (!value.trim()) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error("Mask polygons must be valid JSON");
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error("Mask polygons must be an array of polygons");
+  }
+  if (parsed.length === 0) return null;
+  if (parsed.length > 30) {
+    throw new Error("Mask keyframes support at most 30 polygons");
+  }
+
+  return parsed.map((polygon, polygonIndex) => {
+    if (
+      !Array.isArray(polygon) ||
+      polygon.length < 3 ||
+      polygon.length > 20000
+    ) {
+      throw new Error(
+        `Mask polygon ${polygonIndex + 1} must contain 3–20000 points`,
+      );
+    }
+    return polygon.map((point, pointIndex) => {
+      if (
+        !Array.isArray(point) ||
+        point.length !== 2 ||
+        !point.every(
+          (coordinate) =>
+            typeof coordinate === "number" && Number.isFinite(coordinate),
+        )
+      ) {
+        throw new Error(
+          `Mask polygon ${polygonIndex + 1}, point ${pointIndex + 1} must be [x, y]`,
+        );
+      }
+      const [x, y] = point;
+      if (x < 0 || x > sourceWidth || y < 0 || y > sourceHeight) {
+        throw new Error(
+          `Mask polygon ${polygonIndex + 1}, point ${pointIndex + 1} is outside the source image`,
+        );
+      }
+      return [x, y] as [number, number];
+    });
+  });
 }
 
 function trackerLabel(value: string): string {
@@ -141,6 +203,8 @@ export function VideoTrackingWorkspace({
   const [everyNFrames, setEveryNFrames] = useState(1);
   const [frameIndex, setFrameIndex] = useState(0);
   const [selectedTrackId, setSelectedTrackId] = useState("");
+  const [selectedAnatomySchema, setSelectedAnatomySchema] =
+    useState<AnatomySchemaRevision | null>(null);
   const [
     activePoseActiveLearningCandidate,
     setActivePoseActiveLearningCandidate,
@@ -160,6 +224,7 @@ export function VideoTrackingWorkspace({
   );
   const [trackStatus, setTrackStatus] = useState("verified");
   const [keyframes, setKeyframes] = useState<VideoTrackKeyframe[]>([]);
+  const [maskEditError, setMaskEditError] = useState<string | null>(null);
   const [poseInteropImportFile, setPoseInteropImportFile] =
     useState<File | null>(null);
   const [poseInteropImportFormat, setPoseInteropImportFormat] =
@@ -168,6 +233,12 @@ export function VideoTrackingWorkspace({
     useState(false);
 
   const [trackingModelId, setTrackingModelId] = useState("");
+  const [trackingMode, setTrackingMode] = useState<
+    "auto" | "detect" | "segment" | "hybrid"
+  >("auto");
+  const [segmentationTrackingModelId, setSegmentationTrackingModelId] =
+    useState("");
+  const [hybridMatchIou, setHybridMatchIou] = useState(0.5);
   const [trackerName, setTrackerName] = useState("bytetrack.yaml");
   const [trackingConfidence, setTrackingConfidence] = useState(0.25);
   const [trackingIou, setTrackingIou] = useState(0.5);
@@ -234,6 +305,25 @@ export function VideoTrackingWorkspace({
     queryKey: ["video-tracking-models", project.id],
     queryFn: ({ signal }) => getTrackingModels(project.id, signal),
   });
+  const eligibleTrackingModels = useMemo(
+    () =>
+      (modelsQuery.data ?? []).filter((model) => {
+        if (trackingMode === "hybrid" || trackingMode === "detect") {
+          return model.task === "detect";
+        }
+        if (trackingMode === "segment") return model.task === "segment";
+        return true;
+      }),
+    [modelsQuery.data, trackingMode],
+  );
+  const eligibleSegmentationModels = useMemo(
+    () =>
+      (modelsQuery.data ?? []).filter(
+        (model) =>
+          model.task === "segment" && model.provider_name === "ultralytics",
+      ),
+    [modelsQuery.data],
+  );
   const selectedTrackingModel = modelsQuery.data?.find(
     (model) => model.id === trackingModelId,
   );
@@ -264,6 +354,11 @@ export function VideoTrackingWorkspace({
   const selectedTrackPoseSchema = poseLandmarkSchemaFromMetadata(
     selectedTrack?.metadata_json,
   );
+  const activeTrackPoseSchema =
+    selectedTrackPoseSchema ??
+    (selectedAnatomySchema
+      ? videoSchemaFromAnatomy(selectedAnatomySchema)
+      : null);
 
   const videoWorkspaceContext = useMemo<VideoWorkspaceContext>(() => {
     const videos = (videosQuery.data ?? []).map((video) => ({
@@ -465,6 +560,7 @@ export function VideoTrackingWorkspace({
     setPreviewFrameIndex(0);
     setSelectedTrackId("");
     setKeyframes([]);
+    setMaskEditError(null);
     setGroundTruthTrackIds([]);
     setBenchmarkJobIds([]);
     setBenchmarkStartFrame(0);
@@ -479,10 +575,29 @@ export function VideoTrackingWorkspace({
     }
   }, [selectedVideo]);
   useEffect(() => {
-    if (!trackingModelId && modelsQuery.data?.[0]) {
-      setTrackingModelId(modelsQuery.data[0].id);
+    if (
+      eligibleTrackingModels.length > 0 &&
+      !eligibleTrackingModels.some((model) => model.id === trackingModelId)
+    ) {
+      setTrackingModelId(eligibleTrackingModels[0].id);
+    } else if (
+      modelsQuery.data &&
+      eligibleTrackingModels.length === 0 &&
+      trackingModelId
+    ) {
+      setTrackingModelId("");
     }
-  }, [modelsQuery.data, trackingModelId]);
+  }, [eligibleTrackingModels, modelsQuery.data, trackingModelId]);
+  useEffect(() => {
+    if (
+      eligibleSegmentationModels.length > 0 &&
+      !eligibleSegmentationModels.some(
+        (model) => model.id === segmentationTrackingModelId,
+      )
+    ) {
+      setSegmentationTrackingModelId(eligibleSegmentationModels[0].id);
+    }
+  }, [eligibleSegmentationModels, segmentationTrackingModelId]);
   useEffect(() => {
     if (!poseTrackingSelected) {
       setPoseLandmarkGroups([]);
@@ -527,6 +642,7 @@ export function VideoTrackingWorkspace({
     if (!selectedTrack) {
       setKeyframes([]);
       setTrackStatus("verified");
+      setMaskEditError(null);
       return;
     }
     setLabelClassId(selectedTrack.label_class_id);
@@ -535,6 +651,7 @@ export function VideoTrackingWorkspace({
     );
     setTrackStatus(selectedTrack.status);
     setKeyframes(sortedKeyframes(selectedTrack.keyframes_json));
+    setMaskEditError(null);
   }, [selectedTrack]);
 
   const poseInteropImportMutation = useMutation({
@@ -777,8 +894,29 @@ export function VideoTrackingWorkspace({
           "Save a ReefVision landmark schema before running pose inference",
         );
       }
+      if (
+        trackingMode === "hybrid" &&
+        (!segmentationTrackingModelId ||
+          selectedTrackingModel?.provider_name !== "ultralytics")
+      ) {
+        throw new Error(
+          "Hybrid tracking needs an Ultralytics detector and segmenter",
+        );
+      }
+      if (
+        trackingMode === "hybrid" &&
+        (hybridMatchIou <= 0 || hybridMatchIou > 1)
+      ) {
+        throw new Error(
+          "Hybrid overlap IoU must be greater than zero and at most one",
+        );
+      }
       return createVideoTrackingJob(selectedVideoId, {
         model_id: trackingModelId,
+        tracking_mode: trackingMode,
+        segmentation_model_id:
+          trackingMode === "hybrid" ? segmentationTrackingModelId : null,
+        hybrid_match_iou: hybridMatchIou,
         tracker: trackerName,
         confidence: trackingConfidence,
         iou: trackingIou,
@@ -867,23 +1005,41 @@ export function VideoTrackingWorkspace({
     () => keyframes.find((frame) => frame.frame === previewFrameIndex),
     [keyframes, previewFrameIndex],
   );
+  const maskOverlays = useMemo(
+    () =>
+      (tracksQuery.data ?? []).flatMap((track) => {
+        const trackKeyframes =
+          track.id === selectedTrackId ? keyframes : track.keyframes_json;
+        const keyframe = trackKeyframes.find(
+          (candidate) => candidate.frame === previewFrameIndex,
+        );
+        return (keyframe?.mask_polygons ?? []).map((polygon, polygonIndex) => ({
+          key: `${track.id}:${previewFrameIndex}:${polygonIndex}`,
+          polygon,
+          trackId: track.id,
+          trackNumber: track.track_number,
+          polygonIndex,
+        }));
+      }),
+    [keyframes, previewFrameIndex, selectedTrackId, tracksQuery.data],
+  );
   const poseEditorSchema = useMemo(
     () =>
-      selectedTrack && selectedTrackPoseSchema
-        ? editorSchemaForVideoTrack(selectedTrack, selectedTrackPoseSchema)
+      selectedTrack && activeTrackPoseSchema
+        ? editorSchemaForVideoTrack(selectedTrack, activeTrackPoseSchema)
         : null,
-    [selectedTrack, selectedTrackPoseSchema],
+    [activeTrackPoseSchema, selectedTrack],
   );
   const poseEditorPose = useMemo(
     () =>
-      selectedTrack && poseFrame && selectedTrackPoseSchema
+      selectedTrack && poseFrame && activeTrackPoseSchema
         ? poseInstanceFromVideoKeyframe(
             selectedTrack,
             poseFrame,
-            selectedTrackPoseSchema,
+            activeTrackPoseSchema,
           )
         : null,
-    [poseFrame, selectedTrack, selectedTrackPoseSchema],
+    [activeTrackPoseSchema, poseFrame, selectedTrack],
   );
   const extractionStride = Number(
     selectedVideo?.metadata_json.extraction_every_n_frames ?? everyNFrames,
@@ -904,7 +1060,7 @@ export function VideoTrackingWorkspace({
     trackingRunsQuery.error;
 
   async function savePoseFrameReview(request: PoseSaveRequest) {
-    if (!selectedTrack || !selectedTrackPoseSchema || !poseFrame) {
+    if (!selectedTrack || !activeTrackPoseSchema || !poseFrame) {
       throw new Error("Select a persisted pose track keyframe first");
     }
 
@@ -920,7 +1076,7 @@ export function VideoTrackingWorkspace({
 
     const correctedFrame = correctedVideoKeyframeFromPoseSave(
       poseFrame,
-      selectedTrackPoseSchema,
+      activeTrackPoseSchema,
       request,
     );
     const correctedFrames = sortedKeyframes(
@@ -934,6 +1090,15 @@ export function VideoTrackingWorkspace({
       keyframes: correctedFrames,
       interpolation: selectedTrack.interpolation === "hold" ? "hold" : "linear",
       status: selectedTrack.status,
+      ...(selectedAnatomySchema && !selectedTrackPoseSchema
+        ? {
+            pose_schema_binding: {
+              schema_id: selectedAnatomySchema.id,
+              schema_revision: selectedAnatomySchema.revision,
+              content_hash: selectedAnatomySchema.content_hash,
+            },
+          }
+        : {}),
     });
     const persistedFrame = updatedTrack.keyframes_json.find(
       (frame) => frame.frame === poseFrame.frame,
@@ -996,7 +1161,7 @@ export function VideoTrackingWorkspace({
     return poseInstanceFromVideoKeyframe(
       updatedTrack,
       persistedFrame,
-      selectedTrackPoseSchema,
+      activeTrackPoseSchema,
     );
   }
 
@@ -1015,6 +1180,29 @@ export function VideoTrackingWorkspace({
         return { ...keyframe, bbox };
       }),
     );
+  }
+
+  function updateKeyframeMaskPolygons(index: number, value: string) {
+    if (!selectedVideo) return;
+    try {
+      const maskPolygons = parseMaskPolygons(
+        value,
+        selectedVideo.width_px,
+        selectedVideo.height_px,
+      );
+      setKeyframes((current) =>
+        current.map((keyframe, keyframeIndex) =>
+          keyframeIndex === index
+            ? { ...keyframe, mask_polygons: maskPolygons }
+            : keyframe,
+        ),
+      );
+      setMaskEditError(null);
+    } catch (error) {
+      setMaskEditError(
+        error instanceof Error ? error.message : "Invalid mask polygons",
+      );
+    }
   }
 
   async function copyBenchmarkReport(kind: "json" | "csv") {
@@ -1104,6 +1292,14 @@ export function VideoTrackingWorkspace({
     ) {
       return;
     }
+    if (
+      workspaceCommand.type === "select_model" &&
+      !(modelsQuery.data ?? []).some(
+        (model) => model.id === workspaceCommand.modelId,
+      )
+    ) {
+      return;
+    }
 
     lastWorkspaceCommandIdRef.current = workspaceCommand.id;
 
@@ -1128,6 +1324,17 @@ export function VideoTrackingWorkspace({
       }
     }
 
+    if (workspaceCommand.type === "select_model") {
+      if (
+        (modelsQuery.data ?? []).some(
+          (model) => model.id === workspaceCommand.modelId,
+        )
+      ) {
+        setTrackingModelId(workspaceCommand.modelId);
+        setTrackingMode("auto");
+      }
+    }
+
     if (workspaceCommand.type === "seek_frame" && selectedVideo) {
       const clampedFrame = Math.min(
         Math.max(0, Math.round(workspaceCommand.frameIndex)),
@@ -1144,6 +1351,7 @@ export function VideoTrackingWorkspace({
     onWorkspaceCommandHandled?.(workspaceCommand.id);
   }, [
     onWorkspaceCommandHandled,
+    modelsQuery.data,
     selectedVideo,
     tracksQuery.data,
     videosQuery.data,
@@ -1204,6 +1412,10 @@ export function VideoTrackingWorkspace({
           </div>
         </div>
       </section>
+      <AnatomySkeletonDesigner
+        projectId={project.id}
+        onSchemaSelected={setSelectedAnatomySchema}
+      />
       <section className="management-card">
         <p className="eyebrow">Research workflow</p>
         <h3>Managed videos</h3>
@@ -1561,6 +1773,27 @@ export function VideoTrackingWorkspace({
                         vectorEffect="non-scaling-stroke"
                       />
                     )}
+                  {maskOverlays.map((mask) => (
+                    <polygon
+                      key={mask.key}
+                      aria-label={`Segmentation mask ${mask.polygonIndex + 1} for track ${mask.trackNumber}`}
+                      points={mask.polygon
+                        .map(([x, y]) => `${x},${y}`)
+                        .join(" ")}
+                      fill={
+                        mask.trackId === selectedTrackId
+                          ? "rgba(37, 99, 235, 0.24)"
+                          : "rgba(255, 212, 59, 0.18)"
+                      }
+                      stroke={
+                        mask.trackId === selectedTrackId
+                          ? "var(--accent-color, #2563eb)"
+                          : "#ffd43b"
+                      }
+                      strokeWidth={mask.trackId === selectedTrackId ? 4 : 2}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ))}
                   {(poseFrame?.keypoints ?? []).map((point, index) =>
                     point[2] > 0 ? (
                       <circle
@@ -1595,10 +1828,10 @@ export function VideoTrackingWorkspace({
                   Pose landmarks on this frame:{" "}
                   {poseFrame?.keypoints?.length ?? 0}
                 </p>
-                {selectedTrackPoseSchema && (
+                {activeTrackPoseSchema && (
                   <p className="annotation-helper">
                     Landmark schema:{" "}
-                    {selectedTrackPoseSchema.groups
+                    {activeTrackPoseSchema.groups
                       .map((group) => `${group.name} × ${group.count}`)
                       .join(" · ")}
                   </p>
@@ -1619,11 +1852,10 @@ export function VideoTrackingWorkspace({
 
             {selectedVideo.frame_directory_path &&
               selectedTrack &&
-              selectedTrackPoseSchema &&
+              activeTrackPoseSchema &&
               poseEditorSchema &&
               poseEditorPose &&
-              ((poseFrame?.keypoints?.length ?? 0) > 0 ||
-                (poseFrame?.pose_observations?.length ?? 0) > 0) && (
+              poseFrame && (
                 <div className="workspace-guide compact">
                   <div>
                     <strong>Pose review editor</strong>
@@ -1650,7 +1882,7 @@ export function VideoTrackingWorkspace({
                   />
                 </div>
               )}
-            {selectedTrack && selectedTrackPoseSchema && (
+            {selectedTrack && activeTrackPoseSchema && (
               <PoseTemporalReviewPanel
                 trackId={selectedTrack.id}
                 frameIndex={frameIndex}
@@ -1660,7 +1892,7 @@ export function VideoTrackingWorkspace({
                 }}
               />
             )}
-            {selectedTrack && selectedTrackPoseSchema && (
+            {selectedTrack && activeTrackPoseSchema && (
               <PoseVisualizationPanel
                 trackId={selectedTrack.id}
                 frameIndex={previewFrameIndex}
@@ -1718,6 +1950,42 @@ export function VideoTrackingWorkspace({
           </p>
         )}
       </section>
+
+      {selectedVideo &&
+        (tracksQuery.data ?? []).some((track) =>
+          Boolean(poseLandmarkSchemaFromMetadata(track.metadata_json)),
+        ) && (
+          <>
+            <PoseIdentityReviewPanel
+              projectId={project.id}
+              videoId={selectedVideo.id}
+              frameIndex={frameIndex}
+              tracks={tracksQuery.data ?? []}
+              onFrameChange={(nextFrame) => {
+                setFrameIndex(nextFrame);
+                setPreviewFrameIndex(nextFrame);
+              }}
+            />
+            <BiologicalMovementPanel
+              projectId={project.id}
+              videoId={selectedVideo.id}
+              tracks={tracksQuery.data ?? []}
+              onFrameChange={(nextFrame) => {
+                setFrameIndex(nextFrame);
+                setPreviewFrameIndex(nextFrame);
+              }}
+            />
+            <ReefPoseValidationPanel
+              key={project.id}
+              projectId={project.id}
+              videoId={selectedVideo.id}
+              onFrameChange={(nextFrame) => {
+                setFrameIndex(nextFrame);
+                setPreviewFrameIndex(nextFrame);
+              }}
+            />
+          </>
+        )}
 
       {selectedVideo && (
         <section className="management-card">
@@ -1989,6 +2257,7 @@ export function VideoTrackingWorkspace({
                 <th>Y</th>
                 <th>Width</th>
                 <th>Height</th>
+                <th>Mask polygons (source-pixel JSON)</th>
                 <th />
               </tr>
             </thead>
@@ -2019,6 +2288,20 @@ export function VideoTrackingWorkspace({
                     </td>
                   ))}
                   <td>
+                    <textarea
+                      key={`${selectedTrackId}:${keyframe.frame}:${JSON.stringify(keyframe.mask_polygons ?? null)}`}
+                      aria-label={`Mask polygons for frame ${keyframe.frame}`}
+                      defaultValue={JSON.stringify(
+                        keyframe.mask_polygons ?? [],
+                      )}
+                      onBlur={(event) =>
+                        updateKeyframeMaskPolygons(index, event.target.value)
+                      }
+                      rows={3}
+                      style={{ minWidth: 240 }}
+                    />
+                  </td>
+                  <td>
                     <button
                       type="button"
                       className="danger-ghost"
@@ -2038,10 +2321,19 @@ export function VideoTrackingWorkspace({
             </tbody>
           </table>
         </div>
+        {maskEditError && (
+          <p role="alert" className="annotation-helper">
+            {maskEditError}
+          </p>
+        )}
         <div className="annotation-editor-inline-actions">
           <button
             type="button"
-            disabled={saveTrackMutation.isPending || keyframes.length === 0}
+            disabled={
+              saveTrackMutation.isPending ||
+              keyframes.length === 0 ||
+              maskEditError !== null
+            }
             onClick={() => saveTrackMutation.mutate()}
           >
             {saveTrackMutation.isPending ? "Saving..." : "Save track"}
@@ -2079,20 +2371,83 @@ export function VideoTrackingWorkspace({
 
       <section className="management-card">
         <p className="eyebrow">Automated tracking</p>
-        <h3>Detection / pose + tracker</h3>
+        <h3>Detection / segmentation / hybrid video tracking</h3>
         <label>
-          Detection or pose model
+          Tracking mode
+          <select
+            value={trackingMode}
+            onChange={(event) =>
+              setTrackingMode(
+                event.target.value as "auto" | "detect" | "segment" | "hybrid",
+              )
+            }
+          >
+            <option value="auto">
+              Single model (auto: detection, segmentation, or pose)
+            </option>
+            <option value="detect">Detection tracking</option>
+            <option value="segment">Segmentation tracking</option>
+            <option value="hybrid">Hybrid detection + segmentation</option>
+          </select>
+        </label>
+        <label>
+          {trackingMode === "hybrid" ? "Detection model" : "Tracking model"}
           <select
             value={trackingModelId}
             onChange={(event) => setTrackingModelId(event.target.value)}
           >
-            {(modelsQuery.data ?? []).map((model) => (
+            {eligibleTrackingModels.length === 0 && (
+              <option value="">No compatible models registered</option>
+            )}
+            {eligibleTrackingModels.map((model) => (
               <option key={model.id} value={model.id}>
                 {model.display_name} ({model.task})
               </option>
             ))}
           </select>
         </label>
+        {trackingMode === "hybrid" && (
+          <>
+            <label>
+              Segmentation model
+              <select
+                value={segmentationTrackingModelId}
+                onChange={(event) =>
+                  setSegmentationTrackingModelId(event.target.value)
+                }
+              >
+                {eligibleSegmentationModels.length === 0 && (
+                  <option value="">
+                    Register an Ultralytics instance-segmentation model
+                  </option>
+                )}
+                {eligibleSegmentationModels.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.display_name} ({model.task})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Hybrid matching IoU
+              <input
+                type="number"
+                min={0.05}
+                max={1}
+                step={0.05}
+                value={hybridMatchIou}
+                onChange={(event) =>
+                  setHybridMatchIou(Number(event.target.value))
+                }
+              />
+            </label>
+            <p className="annotation-helper">
+              Runs detector and segmenter on the same video and reconciles
+              class-mapped tracks. Segment polygons are retained for matched
+              observations; unmatched objects remain reviewable.
+            </p>
+          </>
+        )}
         {poseTrackingSelected && (
           <div className="workspace-guide compact">
             <div>
@@ -2326,6 +2681,10 @@ export function VideoTrackingWorkspace({
             !selectedVideoId ||
             !trackingModelId ||
             trackingMutation.isPending ||
+            (trackingMode === "hybrid" &&
+              (!segmentationTrackingModelId ||
+                selectedTrackingModel?.provider_name !== "ultralytics" ||
+                !linkDetections)) ||
             (poseTrackingSelected && selectedModelPoseSchema === null)
           }
           onClick={() => trackingMutation.mutate()}
@@ -2335,9 +2694,11 @@ export function VideoTrackingWorkspace({
             : linkDetections
               ? sleapTrackingSelected
                 ? "Run SLEAP-NN pose + instance tracking"
-                : poseTrackingSelected
-                  ? `Run pose + ${trackerLabel(trackerName)}`
-                  : `Run ${trackerLabel(trackerName)}`
+                : trackingMode === "hybrid"
+                  ? `Run hybrid + ${trackerLabel(trackerName)}`
+                  : poseTrackingSelected
+                    ? `Run pose + ${trackerLabel(trackerName)}`
+                    : `Run ${trackerLabel(trackerName)}`
               : poseTrackingSelected
                 ? "Run pose inference"
                 : "Run instance detection"}
@@ -2364,6 +2725,7 @@ export function VideoTrackingWorkspace({
                 <tr>
                   <th>Run</th>
                   <th>Tracker</th>
+                  <th>Mode</th>
                   <th>Status</th>
                   <th>Progress</th>
                   <th>Detections</th>
@@ -2389,6 +2751,7 @@ export function VideoTrackingWorkspace({
                           ? trackerLabel(run.tracker)
                           : "Instances only"}
                       </td>
+                      <td>{run.tracking_mode ?? "auto"}</td>
                       <td>
                         {run.stale ? <strong>Stalled</strong> : run.stage}
                         {run.stale && (

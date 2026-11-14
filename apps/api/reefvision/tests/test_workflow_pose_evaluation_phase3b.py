@@ -150,9 +150,7 @@ def test_workflow_child_cancellation_remains_cancellation(
         "submit",
         lambda *_args, **_kwargs: SimpleNamespace(id="cancelled-child"),
     )
-    with client.app.state.session_factory() as session, pytest.raises(
-        WorkflowExecutionCancelled
-    ):
+    with client.app.state.session_factory() as session, pytest.raises(WorkflowExecutionCancelled):
         create_pose_workflow_evaluation_result(
             session,
             client.app.state.settings,

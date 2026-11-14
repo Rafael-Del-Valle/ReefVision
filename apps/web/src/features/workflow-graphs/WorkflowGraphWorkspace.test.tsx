@@ -124,7 +124,10 @@ describe("pose architecture training workflow", () => {
     client.setQueryData(["video-tracking-models", "project-1"], []);
     render(
       <QueryClientProvider client={client}>
-        <WorkflowGraphWorkspace project={{ id: "project-1" } as Project} />
+        <WorkflowGraphWorkspace
+          project={{ id: "project-1" } as Project}
+          initialPoseArchitecture="reefpose-s"
+        />
       </QueryClientProvider>,
     );
 

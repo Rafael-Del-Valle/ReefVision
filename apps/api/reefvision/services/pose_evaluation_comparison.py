@@ -331,29 +331,21 @@ class PoseEvaluationComparisonService:
                     if isinstance(availability, dict)
                     else value is not None
                 )
-                reason = (
-                    availability.get("reason")
-                    if isinstance(availability, dict)
-                    else None
-                )
+                reason = availability.get("reason") if isinstance(availability, dict) else None
                 writer.writerow(
                     {
                         **common,
                         "row_type": "aggregate",
                         "metric": metric,
                         "value_json": (
-                            json.dumps(value, sort_keys=True)
-                            if value is not None
-                            else ""
+                            json.dumps(value, sort_keys=True) if value is not None else ""
                         ),
                         "denominator_json": json.dumps(denominators, sort_keys=True),
                         "available": available,
                         "reason": reason,
                     }
                 )
-            for landmark_id, values in sorted(
-                dict(metrics.get("per_landmark") or {}).items()
-            ):
+            for landmark_id, values in sorted(dict(metrics.get("per_landmark") or {}).items()):
                 writer.writerow(
                     {
                         **common,

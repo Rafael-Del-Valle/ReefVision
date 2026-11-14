@@ -171,9 +171,7 @@ def test_ultralytics_zero_detection_is_a_valid_all_misses_prediction(
         lambda _path: _FakeUltralyticsModel(instances=[]),
     )
     monkeypatch.setattr(pose_evaluation, "_resolve_ultralytics_device", lambda _device: "cpu")
-    runtime = create_pose_evaluation_runtime(
-        _model("ultralytics"), Path("model.pt"), SCHEMA, "cpu"
-    )
+    runtime = create_pose_evaluation_runtime(_model("ultralytics"), Path("model.pt"), SCHEMA, "cpu")
 
     result = runtime.predict(Image.new("RGB", (12, 10), "black"))
 
@@ -207,9 +205,7 @@ def test_ultralytics_incompatible_output_is_structurally_excluded(
         lambda _path: _FakeUltralyticsModel(instances=instances),
     )
     monkeypatch.setattr(pose_evaluation, "_resolve_ultralytics_device", lambda _device: "cpu")
-    runtime = create_pose_evaluation_runtime(
-        _model("ultralytics"), Path("model.pt"), SCHEMA, "cpu"
-    )
+    runtime = create_pose_evaluation_runtime(_model("ultralytics"), Path("model.pt"), SCHEMA, "cpu")
 
     with pytest.raises(PoseEvaluationProviderExclusion) as error:
         runtime.predict(Image.new("RGB", (12, 10), "black"))
@@ -219,9 +215,7 @@ def test_ultralytics_incompatible_output_is_structurally_excluded(
 
 def test_sleap_runtime_is_explicitly_excluded_without_importing_optional_runtime() -> None:
     with pytest.raises(PoseEvaluationProviderExclusion) as error:
-        create_pose_evaluation_runtime(
-            _model("sleap_nn"), Path("model.zip"), SCHEMA, "cpu"
-        )
+        create_pose_evaluation_runtime(_model("sleap_nn"), Path("model.zip"), SCHEMA, "cpu")
 
     assert error.value.code in {"provider_runtime_unavailable", "still_frame_unsupported"}
     assert "sleap" in str(error.value).lower()

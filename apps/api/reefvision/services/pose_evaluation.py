@@ -224,9 +224,7 @@ class PoseEvaluationService:
         if raw_landmarks is None:
             raw_landmarks = raw_schema.get("landmarks")
         if not isinstance(raw_landmarks, list) or not raw_landmarks:
-            raise ValidationError(
-                "Registered pose model lacks stable landmark identity metadata"
-            )
+            raise ValidationError("Registered pose model lacks stable landmark identity metadata")
         landmarks: list[PoseEvaluationLandmark] = []
         for index, raw in enumerate(raw_landmarks):
             if not isinstance(raw, dict):
@@ -234,21 +232,15 @@ class PoseEvaluationService:
             landmark_id = str(raw.get("id") or raw.get("landmark_id") or "").strip()
             name = str(raw.get("name") or raw.get("semantic_label") or "").strip()
             try:
-                raw_occurrence = raw.get(
-                    "occurrence_index", raw.get("repeat_index", 0)
-                )
+                raw_occurrence = raw.get("occurrence_index", raw.get("repeat_index", 0))
                 occurrence_index = int(raw_occurrence if raw_occurrence is not None else 0)
             except (TypeError, ValueError) as exc:
                 raise ValidationError(
                     f"Registered pose model landmark {index} has an invalid occurrence index"
                 ) from exc
             if not landmark_id or not name or occurrence_index < 0:
-                raise ValidationError(
-                    "Registered pose model landmark metadata is incomplete"
-                )
-            landmarks.append(
-                PoseEvaluationLandmark(landmark_id, name, occurrence_index)
-            )
+                raise ValidationError("Registered pose model landmark metadata is incomplete")
+            landmarks.append(PoseEvaluationLandmark(landmark_id, name, occurrence_index))
         if len({item.landmark_id for item in landmarks}) != len(landmarks):
             raise ValidationError("Registered pose model landmark IDs are not unique")
         return PoseEvaluationSchema(

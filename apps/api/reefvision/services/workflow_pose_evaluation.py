@@ -154,6 +154,4 @@ def execute_pose_model_evaluation_adapter(
 
 def register_pose_evaluation_workflow_adapter() -> None:
     runtime_adapters.RUNTIME_ADAPTER_NODE_TYPES.add("pose_model_evaluation")
-    runtime_adapters._ADAPTERS["pose_model_evaluation"] = (
-        execute_pose_model_evaluation_adapter
-    )
+    runtime_adapters._ADAPTERS["pose_model_evaluation"] = execute_pose_model_evaluation_adapter

@@ -37,9 +37,7 @@ def _report(
         "request_sha256": str(job.request_json.get("request_sha256") or ""),
         "project_id": job.project_id,
         "evaluation_dataset_id": str(job.request_json.get("evaluation_dataset_id") or ""),
-        "dataset_manifest_sha256": str(
-            job.request_json.get("dataset_manifest_sha256") or ""
-        ),
+        "dataset_manifest_sha256": str(job.request_json.get("dataset_manifest_sha256") or ""),
         "configuration": {
             key: value
             for key, value in dict(job.request_json or {}).items()
@@ -76,9 +74,7 @@ def _completed_child_is_reusable(
         "pck_thresholds": request.get("pck_thresholds", [0.05, 0.1, 0.2]),
         "calibration_threshold": request.get("calibration_threshold", 0.1),
         "calibration_bins": request.get("calibration_bins", 10),
-        "confidence_thresholds": request.get(
-            "confidence_thresholds", [0.0, 0.25, 0.5, 0.75, 0.9]
-        ),
+        "confidence_thresholds": request.get("confidence_thresholds", [0.0, 0.25, 0.5, 0.75, 0.9]),
         "oks_sigmas": request.get("oks_sigmas"),
     }
     provenance = dict(run.provenance_json or {})
@@ -255,8 +251,7 @@ def process_pose_evaluation_job(
                     calibration_threshold=float(request.get("calibration_threshold", 0.1)),
                     calibration_bins=int(request.get("calibration_bins", 10)),
                     confidence_thresholds=list(
-                        request.get("confidence_thresholds")
-                        or [0.0, 0.25, 0.5, 0.75, 0.9]
+                        request.get("confidence_thresholds") or [0.0, 0.25, 0.5, 0.75, 0.9]
                     ),
                     oks_sigmas=request.get("oks_sigmas"),
                 )
