@@ -42,23 +42,40 @@ export function boundedDenseObjectRows<
     pendingMaskIds.delete(item.id);
   }
 
-  // Distant selected objects remain available in original positional order.
-  // Only scan the relevant suffix and stop at the final selected match.
+  // A large range selection can contain tens of thousands of IDs. Pinning
+  // every selected row would defeat the 200-row browser window and freeze the
+  // editor. Keep the latest 200 off-window IDs of each type immediately
+  // accessible; earlier selections remain selected and can be reached by
+  // explicitly expanding the ordinary object window.
+  const maxPinnedPerType = 200;
+  const pinnedAnnotations = new Set(
+    selectedAnnotationIds
+      .filter((id) => pendingAnnotationIds.has(id))
+      .slice(-maxPinnedPerType),
+  );
+  const pinnedMasks = new Set(
+    selectedMaskIds
+      .filter((id) => pendingMaskIds.has(id))
+      .slice(-maxPinnedPerType),
+  );
+
+  // Distant pinned objects remain in source order, not selection order.
+  // Avoid reading unrelated scientific geometry after the last match.
   let annotationIndex = visibleAnnotationCount;
   while (
-    pendingAnnotationIds.size > 0 &&
+    pinnedAnnotations.size > 0 &&
     annotationIndex < annotations.length
   ) {
     const item = annotations[annotationIndex];
-    if (pendingAnnotationIds.delete(item.id)) {
+    if (pinnedAnnotations.delete(item.id)) {
       rows.push({ kind: "annotation", item, position: annotationIndex });
     }
     annotationIndex += 1;
   }
   let maskIndex = visibleMaskCount;
-  while (pendingMaskIds.size > 0 && maskIndex < masks.length) {
+  while (pinnedMasks.size > 0 && maskIndex < masks.length) {
     const item = masks[maskIndex];
-    if (pendingMaskIds.delete(item.id)) {
+    if (pinnedMasks.delete(item.id)) {
       rows.push({
         kind: "mask",
         item,
