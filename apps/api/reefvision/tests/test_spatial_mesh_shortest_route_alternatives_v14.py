@@ -95,7 +95,6 @@ def test_zero_length_edges_withhold_route_uniqueness_instead_of_guessing() -> No
     )
 
 
-
 def test_component_zero_edge_qc_is_visible_in_standalone_and_saved_graph(
     client: TestClient,
 ) -> None:
