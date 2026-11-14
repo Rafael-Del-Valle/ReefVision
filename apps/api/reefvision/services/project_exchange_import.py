@@ -87,9 +87,13 @@ from reefvision.services.project_exchange_integrated import (
 )
 from reefvision.services.project_exchange_pose import (
     remap_measurement_digests,
+    remap_phase6_job,
     remap_pose_row,
+    restore_phase6_track_digests,
     restore_pose_comparisons,
+    restore_pose_model_lineage,
     restore_pose_reports,
+    validate_frozen_pose_frames,
 )
 from reefvision.services.project_exchange_scientific import (
     SCIENCE_SECTIONS,
@@ -409,6 +413,7 @@ def import_project_exchange(
         models = {**SECTION_MODELS, **integrated}
         order = [*SECTION_ORDER, *integrated]
         validate_exchange_records(old_project_id, section_rows, models)
+        validate_frozen_pose_frames(section_rows)
         validate_computed_exchange_records(old_project_id, section_rows)
         validate_environmental_analysis_exchange(old_project_id, section_rows)
         _validate_heatmap_artifacts(old_project_id, section_rows)
@@ -511,6 +516,7 @@ def import_project_exchange(
             mapped_ecology: dict[str, list[dict[str, Any]]] = {}
             digests = remap_measurement_digests(section_rows, id_map) if integrated else {}
             source_jobs = {row["id"]: row for row in section_rows.get("jobs", [])}
+            track_digests: dict[str, tuple[str, str]] = {}
             for section_name in order:
                 model = models[section_name]
                 rows = section_rows.get(section_name, [])
@@ -524,11 +530,6 @@ def import_project_exchange(
                     digests.update(ecology_digests)
                 if section_name in integrated:
                     rows = parent_first(rows, model)
-                restored_locks = (
-                    restore_pose_reports(session, section_rows, id_map, digests, _remap_json)
-                    if section_name == "reefpose_heldout_locks"
-                    else {}
-                )
                 created: list[Any] = []
                 for row_index, source_row in enumerate(rows):
                     row = dict(source_row)
@@ -581,14 +582,22 @@ def import_project_exchange(
                         values["id"] = id_map[old_id]
                     if section_name in integrated:
                         remap_pose_row(
-                            session, section_name, row, values, id_map, digests, source_jobs
+                            session,
+                            section_name,
+                            row,
+                            values,
+                            id_map,
+                            digests,
+                            source_jobs,
+                            track_digests,
                         )
                         remap_reviewed_snapshot(
                             section_name, row, values, by_section, id_map, digests
                         )
-                    if section_name == "reefpose_heldout_locks":
-                        values["protocol_sha256"] = restored_locks.get(
-                            row["scope_sha256"], row["protocol_sha256"]
+                    if integrated and section_name == "video_tracks":
+                        track_digests[row["id"]] = (
+                            canonical_json_sha256(row["keyframes_json"]),
+                            canonical_json_sha256(values["keyframes_json"]),
                         )
 
                     if section_name == "images":
@@ -600,6 +609,7 @@ def import_project_exchange(
                         values["group_key"] = row.get("group_key")
 
                     if integrated and section_name == "jobs":
+                        remap_phase6_job(row, values, id_map)
                         # Imported history never starts local work on its own.
                         if values["status"] in {"queued", "running"}:
                             values["status"] = "cancelled"
@@ -711,9 +721,6 @@ def import_project_exchange(
                 session.flush()
                 imported_counts[section_name] = len(created)
 
-            if integrated and not section_rows.get("reefpose_heldout_locks", []):
-                restore_pose_reports(session, section_rows, id_map, digests, _remap_json)
-
             for version, old_parent_id in dataset_parent_links:
                 new_parent_id = id_map.get(old_parent_id)
                 if new_parent_id is not None:
@@ -757,7 +764,17 @@ def import_project_exchange(
             session.flush()
             if finalize is not None:
                 finalize(project, package)
+            if section_rows.get("pose_training_datasets"):
+                restore_pose_model_lineage(session, project.id, section_rows, id_map, digests)
             if integrated:
+                restore_phase6_track_digests(session, project.id, id_map, track_digests)
+                restored_locks = restore_pose_reports(
+                    session, section_rows, id_map, digests, _remap_json
+                )
+                for old_scope, protocol in restored_locks.items():
+                    lock = session.get(models["reefpose_heldout_locks"], id_map[old_scope])
+                    if lock is not None:
+                        lock.protocol_sha256 = protocol
                 restore_pose_comparisons(session, project.id, digests)
                 restore_workflow_provenance(
                     session, project.id, section_rows, id_map, digests, _remap_json

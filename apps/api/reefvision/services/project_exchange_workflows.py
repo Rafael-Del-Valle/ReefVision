@@ -9,7 +9,13 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from reefvision.db.models import Job, WorkflowArtifact, WorkflowNodeRun, WorkflowRun
+from reefvision.db.models import (
+    Job,
+    WorkflowArtifact,
+    WorkflowGraphRecord,
+    WorkflowNodeRun,
+    WorkflowRun,
+)
 from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.services.workflow_provenance import (
     build_workflow_run_provenance,
@@ -105,14 +111,35 @@ def restore_workflow_provenance(
     map_values: Callable[[Any, dict[str, str]], Any],
 ) -> None:
     artifacts = {id_map[row["id"]]: row for row in sections.get("workflow_artifacts", [])}
+    for original in sections.get("workflow_graphs", []):
+        graph = session.get(WorkflowGraphRecord, id_map[original["id"]])
+        if graph is None:
+            raise ValidationError("Imported workflow graph is missing")
+        graph_payload = deepcopy(graph.graph_json)
+        for node in graph_payload["nodes"]:
+            if "parameters" in node:
+                node["parameters"] = _restore_parameters(
+                    node["node_type"], node["parameters"], digest_map
+                )
+        graph.graph_json = graph_payload
+        graph.graph_sha256 = canonical_json_sha256(graph_payload)
+        digest_map[original["graph_sha256"]] = graph.graph_sha256
+
     runs = session.scalars(select(WorkflowRun).where(WorkflowRun.project_id == project_id)).all()
     for run in runs:
+        graph = session.get(WorkflowGraphRecord, run.workflow_graph_record_id)
+        if graph is None:
+            raise ValidationError("Imported workflow run is missing its graph")
+        run.graph_sha256 = graph.graph_sha256
         nodes = session.scalars(
             select(WorkflowNodeRun)
             .where(WorkflowNodeRun.workflow_run_id == run.id)
             .order_by(WorkflowNodeRun.execution_order)
         ).all()
         for node in nodes:
+            node.parameters_json = _restore_parameters(
+                node.node_type, node.parameters_json, digest_map
+            )
             for identifier in node.output_artifact_ids_json or []:
                 artifact = session.get(WorkflowArtifact, identifier)
                 if artifact is None:
@@ -122,7 +149,11 @@ def restore_workflow_provenance(
                     artifact.payload_json = deepcopy(original["payload_json"])
                 else:
                     artifact.payload_json = map_values(artifact.payload_json, digest_map)
-                    if artifact.data_type == "verified_ecology_analysis":
+                    if artifact.data_type == "reefpose_validation_report":
+                        artifact.payload_json = _restore_report_link(
+                            session, project_id, artifact.payload_json
+                        )
+                    elif artifact.data_type == "verified_ecology_analysis":
                         artifact.payload_json["snapshot"] = deepcopy(
                             original["payload_json"]["snapshot"]
                         )
@@ -153,3 +184,38 @@ def restore_workflow_provenance(
             job = session.get(Job, run.job_id)
             if job is not None:
                 job.result_json = map_values(job.result_json or {}, digest_map)
+
+
+def _restore_parameters(
+    node_type: str, parameters: dict[str, Any], digests: dict[str, str]
+) -> dict[str, Any]:
+    previous = parameters.get("manifest_sha256")
+    if (
+        node_type == "reefpose_reference_source"
+        and isinstance(previous, str)
+        and previous in digests
+    ):
+        return {**parameters, "manifest_sha256": digests[previous]}
+    return parameters
+
+
+def _restore_report_link(
+    session: Session, project_id: str, payload: dict[str, Any]
+) -> dict[str, Any]:
+    job_id = payload.get("job_id")
+    job = session.get(Job, job_id) if isinstance(job_id, str) else None
+    if (
+        job is None
+        or job.project_id != project_id
+        or job.job_type != "reefpose_validation"
+        or job.status != "succeeded"
+        or not job.result_json
+        or payload.get("reference_id") != job.result_json.get("reference_id")
+        or payload.get("result_sha256") != job.result_json.get("result_sha256")
+    ):
+        raise ValidationError("Imported workflow artifact disagrees with its ReefPose report")
+    return {
+        **payload,
+        "input_sha256": job.result_json["input_sha256"],
+        "export_path": f"/projects/{project_id}/reefpose-validations/{job_id}/export",
+    }

@@ -12,7 +12,11 @@ from reefvision.db.models import (
     ModelRegistration,
     PoseIdentityAssociationRun,
     PoseIdentityObservation,
+    PoseTrainingDataset,
+    VideoTrack,
 )
+from reefvision.jobs.pose_identity_tracking import process_pose_identity_tracking_job
+from reefvision.jobs.reefpose_validation import process_reefpose_validation_job
 from reefvision.repositories.jobs import JobRepository
 from reefvision.schemas.reefpose_validation import ReferenceRecording, ValidationConfiguration
 from reefvision.services.reefpose_validation_analysis import analyze
@@ -20,7 +24,14 @@ from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_pose_biological_measurement_migration import _config
 from reefvision.tests.test_pose_identity_tracking_api import _first_class, _track, _video
-from reefvision.tests.test_scientific_project_exchange import export_archive, import_archive
+from reefvision.tests.test_pose_training_project_exchange_phase9 import (
+    _archive_with_pose_training_truth,
+)
+from reefvision.tests.test_scientific_project_exchange import (
+    export_archive,
+    import_archive,
+    rewrite,
+)
 
 
 def freeze_fixture(client: TestClient, monkeypatch: pytest.MonkeyPatch):
@@ -101,6 +112,30 @@ def test_reference_rejects_shared_recording_group_across_splits(
     response = client.post(url, json=payload)
     assert response.status_code in (400, 422)
     assert "group" in response.text.lower()
+
+
+def test_exchange_rejects_rehashed_reference_with_conflicting_split(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, test_settings: Settings
+) -> None:
+    url, payload, first = freeze_fixture(client, monkeypatch)
+    successor = client.post(url, json={**payload, "parent_id": first["id"]})
+    assert successor.status_code == 201, successor.text
+    project_id = url.split("/")[-2]
+
+    def conflict(manifest, sections):
+        reference = next(row for row in sections["reefpose_references"] if row["revision"] == 2)
+        reference["manifest"]["recordings"][0]["split"] = "test"
+        reference["manifest_sha256"] = canonical_json_sha256(reference["manifest"])
+
+    forged = rewrite(export_archive(client, test_settings, project_id), conflict)
+    inspection = client.post(
+        "/api/v1/exchange-packages/inspect",
+        files={"file": ("forged.zip", forged, "application/zip")},
+    )
+    assert inspection.status_code == 200
+    assert not inspection.json()["compatible"]
+    assert "another split" in inspection.text
+    assert import_archive(client, forged).status_code == 400
 
 
 def test_reference_cannot_relabel_a_test_video_for_development(
@@ -229,6 +264,7 @@ def test_validation_dispatcher_leaves_workflow_child_for_its_parent(
 def test_complete_zero_detection_job_can_be_scored(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
+    test_settings: Settings,
 ) -> None:
     url, payload, frozen = freeze_fixture(client, monkeypatch)
     project_id = url.split("/")[-2]
@@ -313,6 +349,178 @@ def test_complete_zero_detection_job_can_be_scored(
         job_id,
     )
     assert client.get(f"{jobs}/{job_id}/export").json()["sensitivity"][0]["complete"]["fn"] == 1
+    imported = import_archive(client, export_archive(client, test_settings, project_id))
+    assert imported.status_code == 201, imported.text
+    result = imported.json()
+    mapping = result["package"]["options_json"]["id_map"]
+    saved_job = client.get(f"/api/v1/jobs/{mapping[job_id]}").json()
+    target_url = f"/api/v1/projects/{result['project_id']}/reefpose-validations"
+    replay = client.post(target_url, json=saved_job["request_json"]["payload"])
+    assert replay.status_code == 202, replay.text
+    replay_id = replay.json()["id"]
+    assert process_reefpose_validation_job(
+        test_settings, client.app.state.session_factory, replay_id
+    )
+    expected = client.get(f"{target_url}/{mapping[job_id]}/export").json()
+    assert client.get(f"{target_url}/{replay_id}/export").json() == expected
+
+
+def test_biological_validation_replays_original_tracking_and_training_after_exchange(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, test_settings: Settings
+) -> None:
+    _, project, dataset = _archive_with_pose_training_truth(client, test_settings, monkeypatch)
+    project_id = str(project["id"])
+    video = _video(client, project_id, monkeypatch, "biological-replay-holdout")
+    video_id = str(video["id"])
+    schema = client.post(
+        f"/api/v1/projects/{project_id}/pose-schemas",
+        json={"name": "Fish snout", "landmarks": [{"id": "nose", "name": "Snout"}], "edges": []},
+    )
+    assert schema.status_code == 201, schema.text
+    anatomy = schema.json()
+    track = _track(client, video_id, _first_class(project), offset=10, prefix="biological")
+    track_id = str(track["id"])
+    binding = {
+        "schema_id": anatomy["id"],
+        "schema_revision": 1,
+        "content_hash": anatomy["content_hash"],
+    }
+    with client.app.state.session_factory() as session:
+        model = ModelRegistration(
+            project_id=project_id,
+            display_name="Replay detector",
+            provider_name="reefpose",
+            task="pose",
+            managed_path="checkpoint.pt",
+            sha256="a" * 64,
+            purpose="detector",
+            source_filename="checkpoint.pt",
+            file_size_bytes=1,
+            framework="pytorch",
+            provider_version="fixture",
+            metadata_json={
+                "source_pose_training_dataset_id": dataset["id"],
+                "source_pose_training_dataset_manifest_sha256": dataset["manifest_sha256"],
+            },
+        )
+        session.add(model)
+        session.flush()
+        video_track = session.get(VideoTrack, track_id)
+        assert video_track is not None
+        upstream = Job(
+            project_id=project_id,
+            job_type="video_tracking",
+            status="succeeded",
+            result_json={
+                "video_id": video_id,
+                "model_id": model.id,
+                "pose_input_hashes": {
+                    "model_sha256": model.sha256,
+                    "video_sha256": video["sha256"],
+                },
+                "pose_track_hashes": {track_id: canonical_json_sha256(video_track.keyframes_json)},
+                "pose_inference_protocol": {"tracker": "bytetrack.yaml"},
+            },
+        )
+        session.add(upstream)
+        session.flush()
+        # The recorded provider output is a synthetic fixture. The association,
+        # freeze, scoring and archive paths use the production endpoints.
+        video_track.source_model_id = model.id
+        video_track.source_job_id = upstream.id
+        video_track.metadata_json = {"pose_landmark_schema": binding}
+        session.commit()
+        model_id = model.id
+    association = client.post(
+        f"/api/v1/projects/{project_id}/pose-identity-runs",
+        json={
+            "video_id": video_id,
+            "source_track_ids": [track_id],
+            "pose_schema_id": anatomy["id"],
+            "pose_schema_revision": 1,
+            "pose_schema_content_hash": anatomy["content_hash"],
+        },
+    )
+    assert association.status_code == 202, association.text
+    association_job = association.json()
+    factory = client.app.state.session_factory
+    assert process_pose_identity_tracking_job(test_settings, factory, association_job["id"])
+    frozen = client.post(
+        f"/api/v1/projects/{project_id}/reefpose-references",
+        json={
+            "name": "Synthetic acceptance of biological provenance gates",
+            "data_kind": "biological",
+            "recordings": [
+                {
+                    "video_id": video_id,
+                    "video_sha256": video["sha256"],
+                    "group_id": "independent-survey",
+                    "exhaustive_identity_coverage": True,
+                    "split": "development",
+                    "individuals": [{"id": "fish-a", "species": "test specimen"}],
+                    "schema_id": anatomy["id"],
+                    "schema_revision": 1,
+                    "schema_sha256": anatomy["content_hash"],
+                    "annotations": [
+                        {
+                            "rater_id": rater,
+                            "blinded": True,
+                            "poses": [
+                                {
+                                    "individual_id": "fish-a",
+                                    "frame": 0,
+                                    "bbox": [10, 20, 30, 15],
+                                    "landmarks": [
+                                        {"id": "nose", "visibility": "visible", "x": 15, "y": 25}
+                                    ],
+                                }
+                            ],
+                        }
+                        for rater in ("reviewer", "independent-reviewer")
+                    ],
+                }
+            ],
+        },
+    )
+    assert frozen.status_code == 201, frozen.text
+    source_url = f"/api/v1/projects/{project_id}/reefpose-validations"
+    validation = client.post(
+        source_url,
+        json={
+            "reference_id": frozen.json()["id"],
+            "source_runs": {video_id: association_job["result_json"]["run_id"]},
+            "rater_id": "reviewer",
+            "configurations": [{}],
+        },
+    )
+    assert validation.status_code == 202, validation.text
+    validation_id = validation.json()["id"]
+    assert process_reefpose_validation_job(test_settings, factory, validation_id)
+    assert client.get(f"{source_url}/{validation_id}/export").status_code == 200
+    imported = import_archive(client, export_archive(client, test_settings, project_id))
+    assert imported.status_code == 201, imported.text
+    archive = imported.json()
+    mapping = archive["package"]["options_json"]["id_map"]
+    target_url = f"/api/v1/projects/{archive['project_id']}/reefpose-validations"
+    saved = client.get(f"/api/v1/jobs/{mapping[validation_id]}").json()
+    replay = client.post(target_url, json=saved["request_json"]["payload"])
+    assert replay.status_code == 202, replay.text
+    replay_id = replay.json()["id"]
+    assert process_reefpose_validation_job(test_settings, factory, replay_id)
+    reopened = client.get(f"{target_url}/{replay_id}/export")
+    archived = client.get(f"{target_url}/{mapping[validation_id]}/export")
+    assert reopened.status_code == archived.status_code == 200
+    assert reopened.json()["input_sha256"] == archived.json()["input_sha256"]
+    assert reopened.json()["identity"] == archived.json()["identity"]
+    with factory() as session:
+        imported_model = session.get(ModelRegistration, mapping[model_id])
+        imported_dataset = session.get(PoseTrainingDataset, mapping[dataset["id"]])
+        assert imported_model is not None and imported_dataset is not None
+        assert imported_dataset.manifest_sha256 != dataset["manifest_sha256"]
+        assert (
+            imported_model.metadata_json["source_pose_training_dataset_manifest_sha256"]
+            == imported_dataset.manifest_sha256
+        )
 
 
 def test_reference_migration_round_trip(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -614,6 +822,9 @@ def test_validation_persists_original_machine_comparison_and_development_sensiti
     assert reopened.json()["identity"] == result["identity"]
     assert reopened.json()["reference_id"] == mapping[result["reference_id"]]
     assert copied_test.json()["development_lock_sha256"] == reopened.json()["result_sha256"]
+    exact_replay = client.get(f"/api/v1/jobs/{mapping[heldout_job]}").json()
+    heldout_replay = client.post(target_validation, json=exact_replay["request_json"]["payload"])
+    assert heldout_replay.status_code == 202, heldout_replay.text
     archived_lock = client.post(
         target_validation,
         json={

@@ -369,8 +369,8 @@ class PoseEvaluationService:
                 "source_round_id": dataset.source_round_id,
                 "video": {
                     "video_id": video.id,
-                    "sha256": video.sha256,
-                    "revision": video.revision,
+                    "sha256": item.video_sha256,
+                    "revision": item.video_revision,
                     "original_filename": video.original_filename,
                     "width_px": video.width_px,
                     "height_px": video.height_px,

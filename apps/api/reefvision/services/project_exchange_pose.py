@@ -9,9 +9,18 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from reefvision.db.models import Job, PoseEvaluationRun, PoseTrainingDataset
+from reefvision.db.models import (
+    Job,
+    ModelRegistration,
+    PoseEvaluationRun,
+    PoseLandmarkSchemaRevision,
+    PoseTrainingDataset,
+)
 from reefvision.domain.errors import ValidationError
 from reefvision.services.pose_evaluation import pose_evaluation_result_sha256
+from reefvision.services.pose_schemas import definition_for_revision
+from reefvision.services.project_exchange_validation_report import validate_reefpose_report
+from reefvision.services.reefpose_validation import frozen_recording
 from reefvision.storage.datasets import canonical_json_sha256
 
 _JSON_HASHES = {
@@ -36,11 +45,37 @@ def _remap_reference_manifest(manifest: dict[str, Any], id_map: dict[str, str]) 
         _update_keys(recording, ("video_id", "schema_id"), id_map)
 
 
-def _identity_manifest(manifest: dict[str, Any], mapping: dict[str, str]) -> dict[str, Any]:
+def remap_phase6_job(row: dict[str, Any], values: dict[str, Any], mapping: dict[str, str]) -> None:
+    if row["job_type"] == "video_tracking":
+        result = values.get("result_json")
+        if isinstance(result, dict) and isinstance(result.get("pose_track_hashes"), dict):
+            result["pose_track_hashes"] = {
+                mapping.get(identifier, identifier): digest
+                for identifier, digest in result["pose_track_hashes"].items()
+            }
+    if row["job_type"] == "reefpose_validation":
+        payload = values["request_json"].get("payload")
+        if isinstance(payload, dict):
+            for name in ("source_runs", "zero_detection_jobs"):
+                sources = payload.get(name)
+                if isinstance(sources, dict):
+                    payload[name] = {
+                        mapping.get(identifier, identifier): source
+                        for identifier, source in sources.items()
+                    }
+
+
+def _identity_manifest(
+    manifest: dict[str, Any],
+    mapping: dict[str, str],
+    track_digests: dict[str, tuple[str, str]],
+) -> dict[str, Any]:
     value = deepcopy(manifest)
     _update_keys(value, ("video_id",), mapping)
     _update_keys(value["pose_schema"], ("id",), mapping)
     for track in value["tracks"]:
+        if (pair := track_digests.get(track["id"])) and track["keyframes_sha256"] == pair[0]:
+            track["keyframes_sha256"] = pair[1]
         _update_keys(track, ("id",), mapping)
         _update_keys(track["schema_binding"], ("id", "schema_id"), mapping)
     return value
@@ -143,11 +178,12 @@ def validate_pose_rows(sections: dict[str, list[dict[str, Any]]]) -> None:
             raise ValidationError("Exchange pose evaluation checksum does not match")
 
     schema_revisions = {
-        (row["schema_id"], row["revision"]): row["content_hash"]
+        (row["schema_id"], row["revision"]): row
         for row in sections.get("pose_landmark_schema_revisions", [])
     }
     videos = {row["id"]: row for row in sections.get("videos", [])}
     references = {row["id"]: row for row in sections.get("reefpose_references", [])}
+    partitions: dict[tuple[str, str], str] = {}
     for row in references.values():
         manifest = row["manifest"]
         parent = references.get(row["parent_id"])
@@ -161,18 +197,37 @@ def validate_pose_rows(sections: dict[str, list[dict[str, Any]]]) -> None:
             or manifest["parent_sha256"] != (parent["manifest_sha256"] if parent else None)
         ):
             raise ValidationError("Exchange ReefPose reference ancestry is inconsistent")
+        recording_ids: set[str] = set()
+        recording_hashes: set[str] = set()
+        if not manifest["recordings"]:
+            raise ValidationError("Exchange ReefPose reference does not contain recordings")
         for recording in manifest["recordings"]:
+            frozen_recording(recording)
+            for key in ("video_sha256", "group_id"):
+                identity = (key, recording[key])
+                partition = partitions.setdefault(identity, recording["split"])
+                if partition != recording["split"]:
+                    raise ValidationError(
+                        "Exchange ReefPose reference uses a video or group in another split"
+                    )
             video = videos.get(recording["video_id"])
             annotations = recording["annotations"]
+            schema = schema_revisions.get((recording["schema_id"], recording["schema_revision"]))
             if (
                 video is None
                 or video["sha256"] != recording["video_sha256"]
-                or schema_revisions.get((recording["schema_id"], recording["schema_revision"]))
-                != recording["schema_sha256"]
+                or recording["video_id"] in recording_ids
+                or recording["video_sha256"] in recording_hashes
+                or schema is None
+                or schema["content_hash"] != recording["schema_sha256"]
+                or definition_for_revision(PoseLandmarkSchemaRevision(**schema))
+                != recording["schema"]
                 or recording["annotation_sha256"]
                 != {item["rater_id"]: canonical_json_sha256(item) for item in annotations}
             ):
                 raise ValidationError("Exchange ReefPose reference source or checksum is invalid")
+            recording_ids.add(recording["video_id"])
+            recording_hashes.add(recording["video_sha256"])
 
     for job in sections.get("jobs", []):
         if job["job_type"] == "pose_evaluation" and job.get("result_json"):
@@ -186,6 +241,28 @@ def validate_pose_rows(sections: dict[str, list[dict[str, Any]]]) -> None:
         checksum = report.pop("result_sha256", None)
         if checksum != canonical_json_sha256(report):
             raise ValidationError("Exchange ReefPose validation report checksum does not match")
+        validate_reefpose_report(report, references.get(report["reference_id"]))
+
+
+def validate_frozen_pose_frames(sections: dict[str, list[dict[str, Any]]]) -> None:
+    for row in sections.get("pose_training_dataset_items", []):
+        frame = row.get("canonical_pose_json")
+        if not isinstance(frame, dict):
+            raise ValidationError("Exchange frozen pose training frame is missing")
+        payload = {
+            "schema_version": "pose-active-learning-verified-pose-0001",
+            "video_track_id": row.get("video_track_id"),
+            "track_revision": row.get("verified_track_revision"),
+            "focus_frame": row.get("frame_index"),
+            "pose_schema_id": row.get("pose_schema_id"),
+            "pose_schema_revision": row.get("pose_schema_revision"),
+            "pose_observations": frame.get("pose_observations") or [],
+            "keypoints": frame.get("keypoints") or [],
+        }
+        if frame.get("frame_index") != row.get("frame_index") or canonical_json_sha256(
+            payload
+        ) != row.get("verified_pose_sha256"):
+            raise ValidationError("Exchange frozen pose training frame checksum does not match")
 
 
 def remap_pose_row(
@@ -196,6 +273,7 @@ def remap_pose_row(
     mapping: dict[str, str],
     digests: dict[str, str],
     source_jobs: dict[str, dict[str, Any]],
+    track_digests: dict[str, tuple[str, str]],
 ) -> None:
     """Rehash canonical projections while leaving original evidence in the source archive."""
     for key, json_field in _JSON_HASHES.get(name, {}).items():
@@ -226,7 +304,7 @@ def remap_pose_row(
                 raise ValidationError(
                     "Exchange identity association source manifest is inconsistent"
                 )
-            remapped = _identity_manifest(original, mapping)
+            remapped = _identity_manifest(original, mapping, track_digests)
             target_job = session.get(Job, mapping[job["id"]])
             if target_job is not None:
                 target_job.request_json = {**target_job.request_json, "input_manifest": remapped}
@@ -332,6 +410,7 @@ def restore_pose_reports(
                         _update_keys(observation, ("id", "identity_id", "source_track_id"), id_map)
                     copied.sort(key=lambda row: (row["frame"], row["id"]))
                     entry["observations_sha256"] = canonical_json_sha256(copied)
+            report["prediction_sources"].sort(key=lambda item: item["video_id"])
             if report["split"] == "test":
                 pose_sources = {entry["video_id"]: entry for entry in report["prediction_sources"]}
                 for recording in report["scored_reference_manifest"]["recordings"]:
@@ -370,16 +449,73 @@ def restore_pose_reports(
                     job.result_json = report
                     request = dict(job.request_json)
                     request["input_sha256"] = report["input_sha256"]
-                    if isinstance(request.get("payload"), dict):
-                        payload = dict(request["payload"])
-                        source_runs = payload.get("source_runs", {})
-                        if isinstance(source_runs, dict):
-                            payload["source_runs"] = {
-                                id_map.get(key, key): value for key, value in source_runs.items()
-                            }
-                        request["payload"] = payload
                     job.request_json = request
     return locks
+
+
+def restore_pose_model_lineage(
+    session: Session,
+    project_id: str,
+    sections: dict[str, list[dict[str, Any]]],
+    mapping: dict[str, str],
+    digests: dict[str, str],
+) -> None:
+    source_datasets = {
+        row["id"]: row["manifest_sha256"] for row in sections.get("pose_training_datasets", [])
+    }
+    datasets = {
+        row.id: row.manifest_sha256
+        for row in session.scalars(
+            select(PoseTrainingDataset).where(PoseTrainingDataset.project_id == project_id)
+        )
+    }
+    digests.update(
+        {digest: datasets[mapping[identifier]] for identifier, digest in source_datasets.items()}
+    )
+    for row in sections.get("models", []):
+        source = row.get("metadata_json") or {}
+        model = session.get(ModelRegistration, mapping[row["id"]])
+        if model is None:
+            continue
+        metadata = dict(model.metadata_json or {})
+        for purpose in ("training", "validation"):
+            field = f"source_pose_{purpose}_dataset"
+            original_id = source.get(f"{field}_id")
+            old_digest = source.get(f"{field}_manifest_sha256")
+            if (
+                isinstance(original_id, str)
+                and original_id in source_datasets
+                and old_digest == source_datasets[original_id]
+            ):
+                metadata[f"{field}_manifest_sha256"] = datasets[mapping[original_id]]
+        if metadata != model.metadata_json:
+            model.metadata_json = metadata
+
+
+def restore_phase6_track_digests(
+    session: Session,
+    project_id: str,
+    mapping: dict[str, str],
+    track_digests: dict[str, tuple[str, str]],
+) -> None:
+    if not track_digests:
+        return
+    imported_track_digests = {
+        mapping[identifier]: pair for identifier, pair in track_digests.items()
+    }
+    for job in session.scalars(
+        select(Job).where(Job.project_id == project_id, Job.job_type == "video_tracking")
+    ):
+        result = dict(job.result_json or {})
+        inventory = result.get("pose_track_hashes")
+        if isinstance(inventory, dict):
+            result["pose_track_hashes"] = {
+                identifier: pair[1]
+                if (pair := imported_track_digests.get(identifier)) and digest == pair[0]
+                else digest
+                for identifier, digest in inventory.items()
+            }
+            job.result_json = result
 
 
 def restore_pose_comparisons(session: Session, project_id: str, digests: dict[str, str]) -> None:

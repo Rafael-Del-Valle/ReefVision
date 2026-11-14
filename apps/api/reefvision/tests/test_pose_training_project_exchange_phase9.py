@@ -17,6 +17,7 @@ from reefvision.db.models import (
     PoseLandmarkSchema,
     PoseTrainingDataset,
     PoseTrainingDatasetItem,
+    VideoTrack,
 )
 from reefvision.jobs.project_exchange import (
     process_project_exchange_export_job,
@@ -24,6 +25,7 @@ from reefvision.jobs.project_exchange import (
 from reefvision.services.pose_active_learning import (
     PoseActiveLearningService,
 )
+from reefvision.services.pose_evaluation import PoseEvaluationService
 from reefvision.services.pose_training_datasets import (
     PoseTrainingDatasetService,
 )
@@ -31,6 +33,7 @@ from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_pose_training_datasets_phase9 import (
     _verified_round,
 )
+from reefvision.tests.test_scientific_project_exchange import export_archive, import_archive
 
 
 def _archive_with_pose_training_truth(
@@ -102,6 +105,56 @@ def _archive_with_pose_training_truth(
         project,
         dataset,
     )
+
+
+def test_frozen_pose_training_truth_round_trips_after_current_track_edit(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, project, dataset = _archive_with_pose_training_truth(client, test_settings, monkeypatch)
+    project_id = str(project["id"])
+    with client.app.state.session_factory() as session:
+        item = session.scalar(
+            select(PoseTrainingDatasetItem).where(
+                PoseTrainingDatasetItem.dataset_id == dataset["id"]
+            )
+        )
+        assert item is not None
+        track = session.get(VideoTrack, item.video_track_id)
+        assert track is not None
+        track_id = track.id
+        frame = item.frame_index
+        frozen_pose = item.canonical_pose_json
+        update = {
+            "base_revision": track.revision,
+            "label_class_id": track.label_class_id,
+            "geometry_kind": track.geometry_kind,
+            "interpolation": track.interpolation,
+            "status": track.status,
+            "keyframes": [row for row in track.keyframes_json if row["frame"] != frame],
+        }
+    edited = client.put(f"/api/v1/video-tracks/{track_id}", json=update)
+    assert edited.status_code == 200, edited.text
+    imported = import_archive(client, export_archive(client, test_settings, project_id))
+    assert imported.status_code == 201, imported.text
+    mapping = imported.json()["package"]["options_json"]["id_map"]
+    with client.app.state.session_factory() as session:
+        frozen = session.scalar(
+            select(PoseTrainingDatasetItem).where(
+                PoseTrainingDatasetItem.dataset_id == mapping[dataset["id"]]
+            )
+        )
+        imported_track = session.get(VideoTrack, mapping[track_id])
+        assert frozen is not None and imported_track is not None
+        assert frozen.verified_track_revision < imported_track.revision
+        assert all(row["frame"] != frame for row in imported_track.keyframes_json)
+        assert frozen.canonical_pose_json == frozen_pose
+        target_dataset = session.get(PoseTrainingDataset, frozen.dataset_id)
+        assert target_dataset is not None
+        PoseEvaluationService(session, test_settings)._validate_frozen_dataset(
+            target_dataset, [frozen]
+        )
 
 
 def test_pose_training_truth_round_trips_through_project_exchange(

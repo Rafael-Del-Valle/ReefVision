@@ -71,6 +71,7 @@ from reefvision.services.pose_active_learning import (
 from reefvision.services.pose_training_datasets import (
     ITEM_SCHEMA_VERSION,
     MANIFEST_SCHEMA_VERSION,
+    PoseTrainingDatasetService,
 )
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
@@ -646,6 +647,23 @@ def _refresh_pose_training_exchange_integrity(
         return
 
     round_ids = [item.id for item in rounds]
+    datasets = list(
+        session.scalars(
+            select(PoseTrainingDataset).where(PoseTrainingDataset.project_id == project_id)
+        )
+    )
+    frozen_frames = {
+        (
+            item.candidate_id,
+            item.verified_track_revision,
+            item.verified_pose_sha256,
+        ): item.canonical_pose_json
+        for item in session.scalars(
+            select(PoseTrainingDatasetItem).where(
+                PoseTrainingDatasetItem.dataset_id.in_(dataset.id for dataset in datasets)
+            )
+        )
+    }
 
     candidates = list(
         session.scalars(
@@ -676,8 +694,8 @@ def _refresh_pose_training_exchange_integrity(
             candidate.video_track_id,
         )
 
-        if track is None:
-            raise RuntimeError("Imported verified pose candidate lost its video track")
+        if track is None or candidate.verified_track_revision is None:
+            raise ValidationError("Imported verified pose candidate lacks a track revision")
 
         keyframe = next(
             (
@@ -694,13 +712,29 @@ def _refresh_pose_training_exchange_integrity(
             None,
         )
 
+        if track.revision != candidate.verified_track_revision:
+            keyframe = None
+        if candidate.verified_pose_sha256 is not None:
+            keyframe = (
+                frozen_frames.get(
+                    (
+                        candidate.id,
+                        candidate.verified_track_revision,
+                        candidate.verified_pose_sha256,
+                    )
+                )
+                or keyframe
+            )
         if keyframe is None:
-            raise RuntimeError("Imported verified pose candidate lost its canonical frame")
+            # A verified candidate can become stale before it enters a dataset.
+            # Retain its recorded fingerprint and revision so it cannot become
+            # fresh merely by importing the archive.
+            continue
 
         verified_payload = {
             "schema_version": ("pose-active-learning-verified-pose-0001"),
             "video_track_id": track.id,
-            "track_revision": track.revision,
+            "track_revision": candidate.verified_track_revision,
             "focus_frame": candidate.focus_frame,
             "pose_schema_id": candidate.pose_schema_id,
             "pose_schema_revision": (candidate.pose_schema_revision),
@@ -834,12 +868,6 @@ def _refresh_pose_training_exchange_integrity(
 
     session.flush()
 
-    datasets = list(
-        session.scalars(
-            select(PoseTrainingDataset).where(PoseTrainingDataset.project_id == project_id)
-        )
-    )
-
     for dataset in datasets:
         source_round_record = session.get(
             PoseActiveLearningRound,
@@ -904,12 +932,20 @@ def _refresh_pose_training_exchange_integrity(
             if video is None:
                 raise RuntimeError("Imported frozen pose item lost its video")
 
-            if dataset_candidate.verified_pose_sha256 is None:
-                raise RuntimeError(
-                    "Imported frozen pose item candidate is missing its verified pose checksum"
-                )
-
-            dataset_item.verified_pose_sha256 = dataset_candidate.verified_pose_sha256
+            dataset_item.verified_pose_sha256 = canonical_json_sha256(
+                {
+                    "schema_version": "pose-active-learning-verified-pose-0001",
+                    "video_track_id": dataset_item.video_track_id,
+                    "track_revision": dataset_item.verified_track_revision,
+                    "focus_frame": dataset_item.frame_index,
+                    "pose_schema_id": dataset_item.pose_schema_id,
+                    "pose_schema_revision": dataset_item.pose_schema_revision,
+                    "pose_observations": list(
+                        dataset_item.canonical_pose_json.get("pose_observations") or []
+                    ),
+                    "keypoints": list(dataset_item.canonical_pose_json.get("keypoints") or []),
+                }
+            )
 
             dataset_item.acquisition_provenance_json = dict(dataset_candidate.provenance_json or {})
 
@@ -942,7 +978,7 @@ def _refresh_pose_training_exchange_integrity(
                 dict,
             ):
                 review_after = dict(review_after)
-                review_after["verified_pose_sha256"] = dataset_candidate.verified_pose_sha256
+                review_after["verified_pose_sha256"] = dataset_item.verified_pose_sha256
                 review_after["pose_schema_id"] = dataset_candidate.pose_schema_id
                 review_after["pose_schema_revision"] = dataset_candidate.pose_schema_revision
                 review["after"] = review_after
@@ -968,12 +1004,9 @@ def _refresh_pose_training_exchange_integrity(
                 "video_track_id": track.id,
                 "label_class_id": (dataset_item.label_class_id),
                 "verified_track_revision": (dataset_item.verified_track_revision),
-                "pose_schema": {
-                    "schema_version": ("pose-landmarks-0001"),
-                    "schema_id": (dataset_item.pose_schema_id),
-                    "schema_revision": (dataset_item.pose_schema_revision),
-                    "content_hash": (dataset_item.pose_schema_content_hash),
-                },
+                "pose_schema": PoseTrainingDatasetService(session)._schema_snapshot(
+                    project_id=project_id, candidate=dataset_candidate
+                ),
                 "verified_pose_sha256": (dataset_item.verified_pose_sha256),
                 "canonical_pose": dict(dataset_item.canonical_pose_json or {}),
                 "source_models": list(dataset_item.source_models_json or []),
