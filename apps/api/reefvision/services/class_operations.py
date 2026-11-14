@@ -117,6 +117,8 @@ class OperationPlan:
     # not just to the unchanged IDs of QC and review-queue records.
     review_reference_evidence: dict[str, list[dict[str, Any]]]
     observation_reference_evidence: dict[str, list[dict[str, Any]]]
+    # Immutable dataset and local model compatibility evidence must not drift.
+    compatibility_reference_evidence: dict[str, list[dict[str, Any]]]
 
 
 class ClassOperationsService:
@@ -334,28 +336,36 @@ class ClassOperationsService:
             and item.review_state not in MUTABLE_REVIEW_STATES
         )
 
-        dataset_version_ids = sorted(
-            version.id
-            for version in self.session.scalars(
-                select(DatasetVersion).where(DatasetVersion.project_id == source_class.project_id)
-            )
-            if any(entry.get("id") == source_class.id for entry in version.class_map_json)
-        )
-
-        model_registration_ids = sorted(
-            model.id
-            for model in self.session.scalars(
-                select(ModelRegistration).where(
-                    ModelRegistration.project_id == source_class.project_id
+        dataset_versions = sorted(
+            (
+                version
+                for version in self.session.scalars(
+                    select(DatasetVersion).where(DatasetVersion.project_id == source_class.project_id)
                 )
-            )
-            if source_class.id
-            in {
-                value
-                for value in (model.class_map_json.get("mapping") or {}).values()
-                if isinstance(value, str)
-            }
+                if any(entry.get("id") == source_class.id for entry in version.class_map_json)
+            ),
+            key=lambda version: version.id,
         )
+        dataset_version_ids = [version.id for version in dataset_versions]
+
+        model_registrations = sorted(
+            (
+                model
+                for model in self.session.scalars(
+                    select(ModelRegistration).where(
+                        ModelRegistration.project_id == source_class.project_id
+                    )
+                )
+                if source_class.id
+                in {
+                    value
+                    for value in (model.class_map_json.get("mapping") or {}).values()
+                    if isinstance(value, str)
+                }
+            ),
+            key=lambda model: model.id,
+        )
+        model_registration_ids = [model.id for model in model_registrations]
 
         mutable_records = [
             self._group("annotations_active", "Active annotations", active_annotation_ids),
@@ -537,6 +547,24 @@ class ClassOperationsService:
                     for proposal in sorted(prediction_proposals, key=lambda item: item.id)
                 ],
             },
+            compatibility_reference_evidence={
+                "dataset_versions": [
+                    {
+                        "id": version.id,
+                        "class_map": version.class_map_json,
+                        "manifest_sha256": version.manifest_sha256,
+                    }
+                    for version in dataset_versions
+                ],
+                "model_registrations": [
+                    {
+                        "id": model.id,
+                        "class_map": model.class_map_json,
+                        "weights_sha256": model.sha256,
+                    }
+                    for model in model_registrations
+                ],
+            },
             review_reference_evidence={
                 "quality_control_issues": [
                     {
@@ -596,6 +624,7 @@ class ClassOperationsService:
             "blockers": plan.blockers,
             "review_reference_evidence": plan.review_reference_evidence,
             "observation_reference_evidence": plan.observation_reference_evidence,
+            "compatibility_reference_evidence": plan.compatibility_reference_evidence,
         }
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
