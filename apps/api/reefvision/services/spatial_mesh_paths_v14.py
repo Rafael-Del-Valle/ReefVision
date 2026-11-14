@@ -82,8 +82,20 @@ def mesh_edge_paths(
     # building a graph. Otherwise malformed geometry can escape QC when the
     # selected route never traverses the affected vertex.
     for point in points:
-        if len(point) != 3 or any(not isfinite(coordinate) for coordinate in point):
+        # Direct callers bypass the strict preview schema. Reject implicit
+        # Boolean/string coordinates and huge integers whose conversion to
+        # binary64 would overflow, including vertices outside the selected path.
+        if (
+            not isinstance(point, (list, tuple))
+            or len(point) != 3
+            or any(type(coordinate) not in (int, float) for coordinate in point)
+        ):
             raise ValueError("Mesh path vertices require three finite coordinates")
+        try:
+            if any(not isfinite(coordinate) for coordinate in point):
+                raise ValueError("Mesh path vertices require three finite coordinates")
+        except OverflowError as exc:
+            raise ValueError("Mesh path vertices require three finite coordinates") from exc
     if len(pairs) > 16:
         raise ValueError("A maximum of 16 mesh path pairs is supported")
     # Direct scientific-engine callers must not bypass mesh topology validation.
