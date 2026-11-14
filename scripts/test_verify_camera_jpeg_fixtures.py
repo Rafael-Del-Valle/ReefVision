@@ -936,7 +936,7 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             names = ("camera.JPG.", "other.jpeg ")
             for name in names:
                 try:
-                    (root / name).write_bytes(b"\\xff\\xd8" + name.encode("utf-8") + b"\\xff\\xd9")
+                    (root / name).write_bytes(b"\xff\xd8" + name.encode("utf-8") + b"\xff\xd9")
                 except OSError:
                     self.skipTest("Trailing-dot/space filenames unavailable on this filesystem")
             if {path.name for path in root.iterdir()} != set(names):
@@ -947,7 +947,7 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             for name in names:
                 self.assertIn(f"Windows trailing dot/space path component: {name}", errors)
                 self.assertEqual((root / name).read_bytes(),
-                                 b"\\xff\\xd8" + name.encode("utf-8") + b"\\xff\\xd9")
+                                 b"\xff\xd8" + name.encode("utf-8") + b"\xff\xd9")
             self.assertNotIn("no JPEG-family fixtures found", errors)
 
     def test_empty_fixture_directory_is_not_accepted(self) -> None:
