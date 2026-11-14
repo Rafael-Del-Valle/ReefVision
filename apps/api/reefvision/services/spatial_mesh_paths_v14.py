@@ -608,6 +608,25 @@ def mesh_surface_edge_traces(
         )
         if interval is not None and any(not isfinite(bound) for bound in interval):
             raise ValueError("Surface trace scale-only interval overflowed")
+        # All waypoints and segments share one calibration factor. These
+        # are marginal scale-only bounds, not independent uncertainties to
+        # add in quadrature or anatomical/annotation confidence intervals.
+        segment_intervals = (
+            [
+                [distance * (1 - scale_uncertainty), distance * (1 + scale_uncertainty)]
+                for distance in segment_lengths
+            ]
+            if scale_uncertainty is not None
+            else None
+        )
+        cumulative_intervals = (
+            [
+                [distance * (1 - scale_uncertainty), distance * (1 + scale_uncertainty)]
+                for distance in cumulative
+            ]
+            if scale_uncertainty is not None
+            else None
+        )
         warnings = ["caller_selected_surface_trace_not_anatomical_centerline"]
         if any(incidence[edge] == 1 for edge in edges):
             warnings.append("open_boundary_edge_on_surface_trace")
@@ -628,9 +647,7 @@ def mesh_surface_edge_traces(
         # location without containing a repeated index or a zero-length edge.
         positions = [tuple(points[index]) for index in vertices]
         if any(
-            positions[i] == positions[j]
-            for i in range(2, len(positions))
-            for j in range(i - 1)
+            positions[i] == positions[j] for i in range(2, len(positions)) for j in range(i - 1)
         ):
             warnings.append("nonadjacent_coincident_surface_trace_vertices")
         if any(
@@ -658,7 +675,9 @@ def mesh_surface_edge_traces(
                 "vertices_in_source_frame_m": calibrated_vertices,
                 "edge_count": len(edges),
                 "segment_lengths_m": segment_lengths,
+                "segment_length_scale_only_intervals_m": segment_intervals,
                 "cumulative_lengths_m": cumulative,
+                "cumulative_length_scale_only_intervals_m": cumulative_intervals,
                 "length_m": length_m,
                 "length_scale_only_interval_m": interval,
                 "qc_warnings": warnings,
