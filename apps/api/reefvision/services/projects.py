@@ -604,6 +604,15 @@ class ProjectService:
         return self.archive_class(class_id)
 
     def delete_class(self, class_id: str) -> None:
+        # Recheck scientific references under SQLite's writer lock. Without
+        # the claim a second editor can add observations between usage
+        # inspection and deletion of a supposedly unused biological class.
+        # Preserve its revision for other local Class Manager readers.
+        self.session.execute(
+            update(LabelClass)
+            .where(LabelClass.id == class_id)
+            .values(updated_at=LabelClass.updated_at)
+        )
         label_class = self._class(class_id)
         usage = self._usage_snapshot(label_class)
         if not usage.can_delete:

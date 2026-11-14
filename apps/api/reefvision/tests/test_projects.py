@@ -1049,6 +1049,81 @@ def test_project_georeference_height_offset_defaults_to_unconfigured(
     assert project["georeference_height_evidence"] is None
 
 
+def test_unused_class_delete_locks_scientific_reference_recheck(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A competing local editor cannot add a biological reference mid-delete."""
+    project = create_project(client, seed_classes=False)
+    source = create_label_class(
+        client, project["id"], class_index=0, name="Swiftia Open", display_color="#C74343"
+    )
+    engine = cast(FastAPI, client.app).state.engine
+    with Session(engine) as session:
+        session.add(
+            ImageAsset(
+                id="delete-lock-image",
+                project_id=project["id"],
+                original_filename="coral.png",
+                managed_path=f"{project['storage_root']}/images/originals/delete-lock-image.png",
+                thumbnail_path=None,
+                sha256="b" * 64,
+                width_px=640,
+                height_px=480,
+                file_size_bytes=1024,
+                media_type="image/png",
+                import_source="fixture/coral.png",
+                annotation_status="in_progress",
+                annotation_revision=1,
+                metadata_json={},
+            )
+        )
+        session.commit()
+
+    writer_results: list[str] = []
+    original_snapshot = ProjectService._usage_snapshot
+
+    def probe_reference_race(service: ProjectService, label_class: LabelClass):
+        if label_class.id == source["id"]:
+            # Probe the formerly unprotected interval with another connection.
+            with Session(engine) as competitor:
+                competitor.connection().exec_driver_sql("PRAGMA busy_timeout=75")
+                try:
+                    competitor.add(
+                        Annotation(
+                            id="delete-lock-annotation",
+                            image_id="delete-lock-image",
+                            label_class_id=source["id"],
+                            x_min=10,
+                            y_min=20,
+                            x_max=100,
+                            y_max=140,
+                        )
+                    )
+                    competitor.commit()
+                except OperationalError:
+                    writer_results.append("blocked")
+                    competitor.rollback()
+                else:
+                    writer_results.append("committed")
+        return original_snapshot(service, label_class)
+
+    monkeypatch.setattr(ProjectService, "_usage_snapshot", probe_reference_race)
+    deleted = client.delete(f"/api/v1/classes/{source['id']}")
+    assert deleted.status_code == 204, deleted.text
+    assert writer_results == ["blocked"]
+
+    with Session(engine) as verification:
+        assert verification.get(LabelClass, source["id"]) is None
+        assert verification.get(Annotation, "delete-lock-annotation") is None
+        assert verification.get(ImageAsset, "delete-lock-image") is not None
+
+    # Writer lock is released at commit; unrelated later class edits succeed.
+    replacement = create_label_class(
+        client, project["id"], class_index=1, name="Other coral", display_color="#326EA8"
+    )
+    assert replacement["name"] == "Other coral"
+
+
 def test_reviewed_class_merge_keeps_writer_lock_through_scientific_mutation(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
