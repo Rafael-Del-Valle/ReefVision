@@ -658,8 +658,7 @@ def mesh_surface_edge_traces(
                 endpoint_chord_m * (1 - scale_uncertainty),
                 endpoint_chord_m * (1 + scale_uncertainty),
             ]
-            if scale_uncertainty is not None
-            and (source_chord == 0 or endpoint_chord_m > 0)
+            if scale_uncertainty is not None and (source_chord == 0 or endpoint_chord_m > 0)
             else None
         )
         if chord_interval is not None and any(not isfinite(bound) for bound in chord_interval):
@@ -678,7 +677,17 @@ def mesh_surface_edge_traces(
         )
         if detour_ratio is not None and not isfinite(detour_ratio):
             detour_ratio = None
+        # Preserve unscaled mesh evidence even when a tiny meter-per-unit
+        # calibration underflows in binary64. Imported source units are not
+        # assumed to be meters or independently validated physical units.
+        # An unrepresentably large source total is unknown, never infinity
+        # in a persisted scientific JSON artifact.
+        source_trace_length_mesh_units = (
+            source_trace_length if isfinite(source_trace_length) else None
+        )
         warnings = ["caller_selected_surface_trace_not_anatomical_centerline"]
+        if source_trace_length_mesh_units is None:
+            warnings.append("surface_trace_source_length_unrepresentable")
         if any(incidence[edge] == 1 for edge in edges):
             warnings.append("open_boundary_edge_on_surface_trace")
         if any(incidence[edge] > 2 for edge in edges):
@@ -750,6 +759,9 @@ def mesh_surface_edge_traces(
                 "vertices_in_source_frame_m": calibrated_vertices,
                 "edge_count": len(edges),
                 "segment_lengths_m": segment_lengths,
+                "source_segment_lengths_mesh_units": source_lengths,
+                "source_trace_length_mesh_units": source_trace_length_mesh_units,
+                "source_endpoint_chord_mesh_units": source_chord,
                 "display_coordinate_collapsed_segment_indices": collapsed_display_segments,
                 "turn_angles_deg": turn_angles_deg,
                 "maximum_turn_angle_deg": maximum_turn_angle_deg,
