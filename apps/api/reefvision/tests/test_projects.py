@@ -377,6 +377,43 @@ def test_mask_and_image_label_references_block_unsafe_class_deletion_and_merge(
         "image-level classification" in message.lower()
         for message in operation["plan"]["blockers"]
     )
+    # Exact scientific record identities must be reviewable, not just totals.
+    expected_record_ids = {
+        "mask_annotations_active": ["mask-active"],
+        "mask_annotations_deleted": ["mask-deleted"],
+        "mask_annotation_history": ["mask-event"],
+        "image_labels_active": ["label-active"],
+        "image_labels_deleted": ["label-deleted"],
+    }
+    blocking = {
+        group["key"]: group
+        for group in operation["plan"]["blocking_records"]
+        if group["key"] in expected_record_ids
+    }
+    assert {key: group["record_ids"] for key, group in blocking.items()} == expected_record_ids
+    assert all(group["count"] == 1 for group in blocking.values())
+    protected = {
+        group["key"]: group["record_ids"]
+        for group in operation["plan"]["protected_records"]
+        if group["key"] in expected_record_ids
+    }
+    assert protected == expected_record_ids
+
+    # Ordinary reassignment remains available but explicitly preserves these
+    # five modalities instead of implying that the masks or labels are migrated.
+    reassign_preview = client.post(
+        f"/api/v1/projects/{project['id']}/classes/{source['id']}/reassign/preview",
+        json={"target_class_id": target["id"]},
+    )
+    assert reassign_preview.status_code == 201, reassign_preview.text
+    reassign_plan = reassign_preview.json()["plan"]
+    assert reassign_plan["blockers"] == []
+    assert any("does not migrate" in warning for warning in reassign_plan["warnings"])
+    assert {
+        group["key"]: group["record_ids"]
+        for group in reassign_plan["protected_records"]
+        if group["key"] in expected_record_ids
+    } == expected_record_ids
     execute = client.post(
         f"/api/v1/projects/{project['id']}/classes/{source['id']}/reassign-delete",
         json={

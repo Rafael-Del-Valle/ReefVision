@@ -17,7 +17,10 @@ from reefvision.db.models import (
     AnnotationEvent,
     DatasetVersion,
     ImageAsset,
+    ImageLabel,
     LabelClass,
+    MaskAnnotation,
+    MaskAnnotationEvent,
     ModelRegistration,
     PredictionProposal,
     Project,
@@ -179,6 +182,60 @@ class ClassOperationsService:
             )
         return impacts
 
+    def _unhandled_reference_groups(
+        self, source_class: LabelClass
+    ) -> list[ClassOperationRecordGroupResponse]:
+        """Expose exact mask/classification records that this operation cannot migrate.
+
+        A blocked preview must identify the preserved scientific record IDs, not
+        merely report aggregate counts. This evidence also enters the saved
+        preview checksum and makes changes invalidate researcher approval.
+        """
+        masks = list(
+            self.session.scalars(
+                select(MaskAnnotation).where(
+                    MaskAnnotation.label_class_id == source_class.id
+                )
+            )
+        )
+        mask_events = list(
+            self.session.scalars(
+                select(MaskAnnotationEvent)
+                .join(ImageAsset, ImageAsset.id == MaskAnnotationEvent.image_id)
+                .where(ImageAsset.project_id == source_class.project_id)
+            )
+        )
+        image_labels = list(
+            self.session.scalars(
+                select(ImageLabel).where(ImageLabel.label_class_id == source_class.id)
+            )
+        )
+        record_ids = {
+            "mask_annotations_active": sorted(
+                item.id for item in masks if item.deleted_at is None
+            ),
+            "mask_annotations_deleted": sorted(
+                item.id for item in masks if item.deleted_at is not None
+            ),
+            "mask_annotation_history": sorted(
+                item.id
+                for item in mask_events
+                if _contains_label_class_reference(item.before_json, source_class.id)
+                or _contains_label_class_reference(item.after_json, source_class.id)
+            ),
+            "image_labels_active": sorted(
+                item.id for item in image_labels if item.deleted_at is None
+            ),
+            "image_labels_deleted": sorted(
+                item.id for item in image_labels if item.deleted_at is not None
+            ),
+        }
+        return [
+            self._group(key, USAGE_CATEGORY_META[key][0], record_ids[key])
+            for key in UNHANDLED_CLASS_REFERENCE_CATEGORIES
+            if record_ids[key]
+        ]
+
     def _plan(
         self,
         *,
@@ -331,6 +388,9 @@ class ClassOperationsService:
             ),
         ]
 
+        unsupported_groups = self._unhandled_reference_groups(source_class)
+        protected_records.extend(unsupported_groups)
+
         warnings: list[str] = []
         blockers: list[str] = []
         blocking_records: list[ClassOperationRecordGroupResponse] = []
@@ -357,19 +417,33 @@ class ClassOperationsService:
             )
         if annotation_event_ids:
             warnings.append("Historical annotation events remain unchanged for auditability.")
+        if unsupported_groups:
+            warnings.append(
+                "Mask and image-level classification records remain attached to the "
+                "source class; reassignment does not migrate these modalities."
+            )
 
         if operation_type == "reassign_delete":
             # Physical deletion would cascade through mask and image-label FKs.
             # This workflow cannot reassign those modalities, so fail at preview
             # and again before execution rather than silently destroying them.
             source_usage = self.project_service._usage_snapshot(source_class)
+            unsupported_by_key = {group.key: group for group in unsupported_groups}
             for key in UNHANDLED_CLASS_REFERENCE_CATEGORIES:
                 count = source_usage.counts[key]
-                if count:
+                group = unsupported_by_key.get(key)
+                if count != (group.count if group is not None else 0):
+                    blockers.append(
+                        f"{USAGE_CATEGORY_META[key][0]} changed during preview. "
+                        "Refresh the record inventory before continuing."
+                    )
+                if count or group is not None:
                     blockers.append(
                         f"{USAGE_CATEGORY_META[key][0]} ({count}) block physical class deletion; "
                         "the reassign-delete workflow does not handle these records."
                     )
+                    if group is not None:
+                        blocking_records.append(group)
             if deleted_annotation_ids:
                 blockers.append(
                     "Deleted annotations still reference this class and would be "
