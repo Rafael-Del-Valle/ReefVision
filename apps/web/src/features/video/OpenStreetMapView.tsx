@@ -105,6 +105,17 @@ export function OpenStreetMapView({
       attributionControl: true,
     }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
 
+    // Panels can be resized or hidden independently of the browser window.
+    const resizeObserver =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver(([entry]) => {
+            if (entry?.contentRect.width && entry.contentRect.height) {
+              map.invalidateSize({ pan: false, debounceMoveend: true });
+            }
+          });
+    resizeObserver?.observe(containerRef.current);
+
     const tiles = L.tileLayer(
       "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
       {
@@ -163,6 +174,7 @@ export function OpenStreetMapView({
     return () => {
       overlayRef.current = null;
       mapRef.current = null;
+      resizeObserver?.disconnect();
       map.remove();
     };
   }, [showBasemap]);

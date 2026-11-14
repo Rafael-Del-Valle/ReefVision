@@ -147,7 +147,7 @@ const PROJECT_NAV_GROUPS: Array<{
         id: "environmental_context",
         label: "Environmental Context",
         description:
-          "Import sensor and NOAA observations with units, quality flags, and provenance.",
+          "Browse project measurements, add data, and run environmental analyses.",
       },
       {
         id: "computed_metrics",
@@ -255,6 +255,19 @@ function ReefVisionMainApp() {
     string | null
   >(null);
   const [activeView, setActiveView] = useState<ProjectView>("gallery");
+  const [environmentProjectId, setEnvironmentProjectId] = useState<
+    string | null
+  >(null);
+  useEffect(() => {
+    if (activeView === "environmental_context") {
+      setEnvironmentProjectId(selectedProjectId);
+    } else if (
+      environmentProjectId !== selectedProjectId &&
+      environmentProjectId !== null
+    ) {
+      setEnvironmentProjectId(null);
+    }
+  }, [activeView, selectedProjectId, environmentProjectId]);
   const [projectName, setProjectName] = useState("");
   const [description, setDescription] = useState("");
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -466,8 +479,18 @@ function ReefVisionMainApp() {
     event.preventDefault();
     select(values[targetIndex]);
     const tablist = event.currentTarget.closest('[role="tablist"]');
+    const groupNavigation = event.currentTarget.closest(".rv-project-nav");
+    const group = event.currentTarget.dataset.workspaceGroup;
     requestAnimationFrame(() => {
-      tablist?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
+      if (group) {
+        groupNavigation
+          ?.querySelector<HTMLElement>(
+            "[data-workspace-group][aria-selected='true']",
+          )
+          ?.focus();
+      } else {
+        tablist?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
+      }
     });
   }
 
@@ -802,7 +825,11 @@ function ReefVisionMainApp() {
               setActiveView("system");
             }}
             onArchive={() => {
-              if (window.confirm(`Archive ${selectedProject.name}?`)) {
+              if (
+                window.confirm(
+                  `Archive “${selectedProject.name}”? It will be hidden from the project launcher. Its files and research records will be retained.`,
+                )
+              ) {
                 archiveMutation.mutate(selectedProject.id);
               }
             }}
@@ -853,6 +880,7 @@ function ReefVisionMainApp() {
                         type="button"
                         role="tab"
                         aria-label={group.label}
+                        data-workspace-group={group.id}
                         aria-selected={selected}
                         tabIndex={selected ? 0 : -1}
                         className={selected ? "active" : ""}
@@ -932,11 +960,14 @@ function ReefVisionMainApp() {
             {activeView === "interoperability" && (
               <InteroperabilityWorkspace project={selectedProject} />
             )}
-            {activeView === "environmental_context" && (
-              <EnvironmentalContextPanel
-                key={selectedProject.id}
-                project={selectedProject}
-              />
+            {(activeView === "environmental_context" ||
+              environmentProjectId === selectedProject.id) && (
+              <div hidden={activeView !== "environmental_context"}>
+                <EnvironmentalContextPanel
+                  key={selectedProject.id}
+                  project={selectedProject}
+                />
+              </div>
             )}
             {activeView === "computed_metrics" && (
               <ComputedMetricsPanel

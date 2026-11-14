@@ -229,6 +229,15 @@ test("imports sensor JSON and displays offline NOAA provenance in Environmental 
     page.getByRole("heading", { name: "Environmental Context", level: 2 }),
   ).toBeVisible();
   await expect(page.getByText("No scientific records yet")).toBeVisible();
+  const overviewTab = page.getByRole("tab", { name: "Overview", exact: true });
+  await overviewTab.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("tab", { name: "Data sources" })).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(page.getByRole("tab", { name: "Analyses" })).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(overviewTab).toBeFocused();
+  await page.getByRole("button", { name: "Add environmental data" }).click();
   await page.getByLabel("Sensor JSON file").setInputFiles({
     name: "invalid.json",
     mimeType: "application/json",
@@ -245,12 +254,23 @@ test("imports sensor JSON and displays offline NOAA provenance in Environmental 
   });
   await page.getByRole("button", { name: "Import sensor JSON" }).click();
   await expect(page.getByText("Imported 1 scientific record.")).toBeVisible();
-  await expect(page.getByText("68 degF")).toBeVisible();
-  await expect(page.getByText("20 degC")).toBeVisible();
-  await expect(page.getByText("2026-10-17 12:30:00 UTC")).toBeVisible();
-  await expect(page.getByText("Unknown depth", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /Water temperature/ }).click();
+  const inspector = page.getByRole("region", { name: "Selected record" });
+  await expect(inspector.getByText("68 degF")).toBeVisible();
+  await expect(inspector.getByText("20 degC")).toBeVisible();
+  await expect(inspector.getByText("2026-10-17 12:30:00 UTC")).toBeVisible();
+  await expect(
+    inspector.getByText("Unknown depth", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close record" }).click();
 
+  await page
+    .getByRole("combobox", { name: "Data source", exact: true })
+    .selectOption("noaa");
   await page.getByLabel("NOAA station ID").fill("8724580");
+  await page.getByRole("tab", { name: "Images & annotation" }).click();
+  await page.getByRole("tab", { name: "Environmental Context" }).click();
+  await expect(page.getByLabel("NOAA station ID")).toHaveValue("8724580");
   await page.getByLabel("Observation day (UTC)").fill("2026-10-17");
   await page.getByLabel("Use cached data only (offline)").check();
   await page.getByRole("button", { name: "Import NOAA data" }).click();
@@ -262,6 +282,7 @@ test("imports sensor JSON and displays offline NOAA provenance in Environmental 
     result.getByRole("link", { name: "NOAA source" }),
   ).toHaveAttribute("href", /station=8724580/);
   await expect(page.getByText("NOAA CO-OPS", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /Geographic position/ }).click();
   await page
     .getByRole("button", { name: "Inspect environmental context" })
     .click();
@@ -269,6 +290,8 @@ test("imports sensor JSON and displays offline NOAA provenance in Environmental 
   await expect(
     page.getByText(/Nearby context is not an exact measurement/),
   ).toBeVisible();
+  await page.getByRole("tab", { name: "Analyses" }).click();
+  await page.getByLabel("Analysis task").selectOption("currents");
   await page.getByRole("button", { name: "Open ocean current map" }).click();
   await page.getByLabel("Cached ocean dataset").selectOption("fixture");
   await expect(page.getByText("5.000 m/s", { exact: true })).toBeVisible();

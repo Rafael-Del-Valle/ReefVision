@@ -158,6 +158,23 @@ export function listEnvironmentalAnalysisResults(
   return request(`${analysisPath(projectId, "results")}?limit=100&offset=0`);
 }
 
+export function validateEnvironmentalAnalysis(
+  projectId: string,
+  resultId: string,
+): Promise<{
+  result_id: string;
+  current: boolean;
+  result_sha256: string;
+  reasons: string[];
+}> {
+  return request(
+    analysisPath(
+      projectId,
+      `results/${encodeURIComponent(resultId)}/validation`,
+    ),
+  );
+}
+
 export function environmentalAnalysisCsvUrl(
   projectId: string,
   resultId: string,
