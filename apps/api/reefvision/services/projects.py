@@ -416,7 +416,10 @@ class ProjectService:
             delete_blockers.append("Historical annotation records still reference this class.")
         if counts["mask_annotations_active"] > 0:
             delete_blockers.append("Verified mask annotations still reference this class.")
-        if counts["mask_annotations_deleted"] > 0 or counts["mask_annotation_history"] > 0:
+        if (
+            counts["mask_annotations_deleted"] > 0
+            or counts["mask_annotation_history"] > 0
+        ):
             delete_blockers.append("Historical mask records still reference this class.")
         if counts["image_labels_active"] > 0 or counts["image_labels_deleted"] > 0:
             delete_blockers.append("Image-level classification labels still reference this class.")
@@ -432,7 +435,10 @@ class ProjectService:
             delete_blockers.append("Registered model class maps still reference this class.")
 
         compatibility_warnings: list[str] = []
-        if counts["mask_annotations_deleted"] > 0 or counts["mask_annotation_history"] > 0:
+        if (
+            counts["mask_annotations_deleted"] > 0
+            or counts["mask_annotation_history"] > 0
+        ):
             compatibility_warnings.append(
                 "Historical mask annotations and events remain unchanged for auditability."
             )
