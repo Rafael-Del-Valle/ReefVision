@@ -725,7 +725,7 @@ test("single-image camera gallery cold-start keeps pixels and wheel isolated", a
   // Real input, not a synthetic WheelEvent, catches document scroll-through
   // when the strip has only one item and the first image just loaded.
   const pageScroll = () =>
-    page.evaluate(() => ({ x: scrollX, y: scrollY }));
+    page.evaluate(() => ({ x: window.scrollX, y: window.scrollY }));
   const beforeScroll = await pageScroll();
   await focused.hover();
   const beforeBounds = await focused.boundingBox();
