@@ -401,3 +401,24 @@ graph continue to use the shared helper and already enforce their request
 schemas. This strengthens provisional numeric integrity; it does not validate
 calibration or biological anatomy. Regression tests include malformed direct
 inputs and the separately executed saved-workflow provenance comparisons.
+
+### Selected-trace full-reversal QC (provisional)
+
+A caller-selected route can double back along a physical mesh edge even when
+its vertex indices are all distinct, its coordinates do not repeat, and every
+segment has positive length. When an interior **computed binary64 turning
+angle** is 180 degrees, the shared measurement engine adds
+`surface_trace_180_degree_geometric_turn` to the trace's QC warnings.
+The measured trace, ordered waypoints, segment lengths, endpoint chord and
+calibration provenance remain intact; none is silently shortened or rewritten.
+A source-coordinate reversal is a **geometric warning**, not proof of a
+biological branch doubling back. Floating-point rounding can report 180
+degrees for a nearly reversing direction; this is not an exact intersection
+solver and has no asserted angular tolerance or uncertainty model.
+Other near-reversals may not trigger this warning.
+
+Synthetic regression coverage distinguishes this case from coincident indexed
+vertices and zero-length edges. The project-scoped standalone mesh preview
+and an executed, typed, persisted Workflow Builder graph must return identical
+trace evidence and provenance with `human_review_verified: false`. Historical
+artifacts are not retroactively changed or declared anatomically validated.
