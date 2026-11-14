@@ -6,6 +6,12 @@ from io import StringIO
 from reefvision.schemas.scientific_comparison import ComparisonRecord
 
 
+def _text_cell(value: str) -> str:
+    if value.startswith(("\t", "\r", "\n")) or value.lstrip().startswith(("=", "+", "-", "@")):
+        return "'" + value
+    return value
+
+
 def comparison_csv(report: ComparisonRecord) -> str:
     buffer = StringIO()
     writer = csv.writer(buffer, lineterminator="\n")
@@ -44,8 +50,8 @@ def comparison_csv(report: ComparisonRecord) -> str:
             snapshot.method,
             snapshot.data_kind,
             snapshot.options.metric,
-            snapshot.options.name,
-            snapshot.options.unit or "events",
+            _text_cell(snapshot.options.name),
+            _text_cell(snapshot.options.unit or "events"),
         ]
         for row in model.pairs:
             difference = row.estimate - row.reference
@@ -53,8 +59,8 @@ def comparison_csv(report: ComparisonRecord) -> str:
                 [
                     *base,
                     row.video_id,
-                    row.group_id,
-                    row.individual_id,
+                    _text_cell(row.group_id),
+                    _text_cell(row.individual_id),
                     row.frame,
                     row.start_s,
                     row.end_s,
@@ -73,7 +79,7 @@ def comparison_csv(report: ComparisonRecord) -> str:
                         *base,
                         excluded.video_id,
                         None,
-                        excluded.individual_id,
+                        _text_cell(excluded.individual_id),
                         excluded.frame,
                         excluded.start_s,
                         None,
@@ -82,7 +88,7 @@ def comparison_csv(report: ComparisonRecord) -> str:
                         None,
                         None,
                         None,
-                        excluded.reason,
+                        _text_cell(excluded.reason),
                     ]
                 )
     return buffer.getvalue()

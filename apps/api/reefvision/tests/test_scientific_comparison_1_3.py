@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import csv
 from datetime import UTC, datetime
+from io import StringIO
 from typing import Any
 from uuid import uuid4
 
@@ -30,12 +32,17 @@ def _seed_report(
     manifest: dict[str, Any],
     *,
     count: int,
+    measurement_unit: str = "mm",
+    changed_protocol: bool = False,
 ) -> str:
     recordings = manifest["recordings"]
     events = [ScoredEvent(str(index), 0.1, 0.2) for index in range(count)]
     counts = event_agreement([], events, 0.2, 0.2)
     partial = event_agreement([], [], 0.2, 0.2)
-    configuration = {"definitions": []}
+    configuration = {
+        "definitions": [{"id": "distance", "kind": "distance"}],
+        "onset_tolerance_s": 0.3 if changed_protocol else 0.2,
+    }
     with client.app.state.session_factory() as session:
         model = ModelRegistration(
             project_id=project_id,
@@ -101,7 +108,18 @@ def _seed_report(
                             "excluded": "ambiguous_reference",
                         },
                     ],
-                    "measurements": [],
+                    "measurements": [
+                        {
+                            "individual_id": "animal-a",
+                            "definition_id": "distance",
+                            "unit": measurement_unit,
+                            "matched_frames": [0, 1],
+                            "points": [
+                                {"mean": 1.0, "difference": 2.0},
+                                {"mean": 3.5, "difference": -1.0},
+                            ],
+                        }
+                    ],
                 }
                 for row in recordings
             ],
@@ -161,7 +179,12 @@ def _seed_report(
         return str(job.id)
 
 
-def seed_comparison_fixture(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+def seed_comparison_fixture(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    second_protocol_changed: bool = False,
+) -> tuple[str, str, str]:
     url, payload, _ = freeze_fixture(client, monkeypatch)
     project_id = url.split("/")[-2]
     recording = payload["recordings"][0]
@@ -178,6 +201,22 @@ def seed_comparison_fixture(client: TestClient, monkeypatch: pytest.MonkeyPatch)
     ]
     for rater in recording["annotations"]:
         rater["events"] = []
+        rater["measurements"] = [
+            {
+                "individual_id": "animal-a",
+                "definition_id": "distance",
+                "frame": frame,
+                "unit": "=mm",
+                "value": value,
+                "state": state,
+            }
+            for frame, value, state in (
+                (0, 0, "scored"),
+                (1, 4, "scored"),
+                (2, 5, "scored"),
+                (3, None, "ambiguous"),
+            )
+        ]
     frozen = client.post(url, json=payload)
     assert frozen.status_code == 201, frozen.text
     reference = frozen.json()
@@ -189,6 +228,8 @@ def seed_comparison_fixture(client: TestClient, monkeypatch: pytest.MonkeyPatch)
             reference["manifest_sha256"],
             reference["manifest"],
             count=count,
+            measurement_unit="=mm",
+            changed_protocol=second_protocol_changed and count == 2,
         )
         for count in (1, 2)
     )
@@ -279,6 +320,45 @@ def test_held_out_comparison_counts_share_exact_reference_and_preserve_zero_and_
     graph["nodes"][1]["parameters"]["comparison_id"] = new_id
     rerun = _run(client, new_project, graph)
     assert rerun["run"]["status"] == "succeeded", rerun
+
+
+def test_continuous_comparison_keeps_missing_frames_and_escapes_spreadsheet_formula_labels(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project, first, second = seed_comparison_fixture(
+        client, monkeypatch, second_protocol_changed=True
+    )
+    url = f"/api/v1/projects/{project}/scientific-comparisons"
+    payload = {
+        "source_job_ids": [first],
+        "metric": "measurement",
+        "name": "distance",
+        "unit": "=mm",
+    }
+    response = client.post(url, json=payload)
+    assert response.status_code == 201, response.text
+    result = response.json()
+    snapshot = result["snapshot"]
+    assert snapshot["pairing"] is None
+    assert [(item["reference"], item["estimate"]) for item in snapshot["models"][0]["pairs"]] == [
+        (0, 2),
+        (4, 3),
+    ]
+    statistics = snapshot["models"][0]["statistics"]
+    assert statistics["bias"] == 0.5
+    assert statistics["mean_absolute_error"] == 1.5
+    assert statistics["mean_absolute_percentage_error"] == 25
+    assert [item["reason"] for item in snapshot["exclusions"]] == [
+        "no_matched_prediction",
+        "ambiguous_reference",
+    ]
+    response = client.get(f"{url}/{result['id']}/export?format=csv")
+    rows = list(csv.DictReader(StringIO(response.text)))
+    assert [row["unit"] for row in rows] == ["'=mm"] * 4
+    assert [row["signed_difference"] for row in rows[:2]] == ["2.0", "-1.0"]
+    incompatible = client.post(url, json={**payload, "source_job_ids": [first, second]})
+    assert incompatible.status_code == 400, incompatible.text
+    assert "same frozen reference, rater, and scoring protocol" in incompatible.json()["detail"]
 
 
 def test_agreement_analytic_fixture_icc_and_cluster_assumptions() -> None:
