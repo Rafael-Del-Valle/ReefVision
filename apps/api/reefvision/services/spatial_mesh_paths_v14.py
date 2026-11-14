@@ -61,7 +61,7 @@ def mesh_edge_paths(
     if not isfinite(scale) or scale <= 0:
         raise ValueError("Mesh path scale must be finite and positive")
     if scale_uncertainty is not None and (
-        not isfinite(scale_uncertainty) or not 0 <= scale_uncertainty < 1
+        not isfinite(scale_uncertainty) or not 0 <= scale_uncertainty <= 1
     ):
         raise ValueError("Mesh path relative scale uncertainty must be finite and in [0, 1)")
     # Validate every source vertex, including unreferenced vertices, before
