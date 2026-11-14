@@ -125,9 +125,7 @@ def test_direct_mesh_path_engine_rejects_non_numeric_calibration(
 
 
 @pytest.mark.parametrize("field", ["meters_per_unit", "relative_scale_uncertainty"])
-def test_public_mesh_preview_rejects_boolean_calibration(
-    client: TestClient, field: str
-) -> None:
+def test_public_mesh_preview_rejects_boolean_calibration(client: TestClient, field: str) -> None:
     project_id = str(create_project(client, "Strict mesh calibration input")["id"])
     parameters = {**PARAMS, field: True}
     response = client.post(
