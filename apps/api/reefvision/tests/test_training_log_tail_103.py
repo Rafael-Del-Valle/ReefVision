@@ -67,10 +67,10 @@ def test_log_tail_rejects_path_replaced_after_bounded_read(
 ) -> None:
     """A rotated/supplanted log cannot be reported as the current job's log."""
     log = tmp_path / "training.log"
-    original = b"epoch=2\\ntrain/box_loss=0.25\\n"
+    original = b"epoch=2\ntrain/box_loss=0.25\n"
     log.write_bytes(original)
     replacement = tmp_path / "different-run.log"
-    unrelated = b"epoch=90\\ntrain/box_loss=9.99\\n"
+    unrelated = b"epoch=90\ntrain/box_loss=9.99\n"
     replacement.write_bytes(unrelated)
     real_fstat = os.fstat
     fstat_calls = 0
@@ -99,9 +99,9 @@ def test_log_tail_allows_worker_append_during_read(
 ) -> None:
     """Worker appends must not be mistaken for a rotated training-log inode."""
     log = tmp_path / "training.log"
-    original = b"epoch=2\\ntrain/cls_loss=0.40\\n"
+    original = b"epoch=2\ntrain/cls_loss=0.40\n"
     log.write_bytes(original)
-    appended = b"epoch=3\\ntrain/cls_loss=0.30\\n"
+    appended = b"epoch=3\ntrain/cls_loss=0.30\n"
     real_fstat = os.fstat
     fstat_calls = 0
 
