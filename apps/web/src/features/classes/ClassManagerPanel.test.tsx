@@ -85,6 +85,27 @@ function sourceClassRow() {
   return row as HTMLLIElement;
 }
 
+const usageCategoryDefinitions = [
+  ["annotations_active", true, false],
+  ["annotations_deleted", false, true],
+  ["annotation_history", false, true],
+  ["prediction_proposals", true, false],
+  ["quality_control_issues", true, false],
+  ["review_queue_items", true, false],
+  ["dataset_versions", false, true],
+  ["model_registrations", false, true],
+] as const;
+
+function zeroUsageCounts() {
+  return usageCategoryDefinitions.map(([key, mutable, immutable]) => ({
+    key,
+    label: key,
+    count: 0,
+    mutable,
+    immutable,
+  }));
+}
+
 function classUsage(canDelete: boolean, total = canDelete ? 0 : 1) {
   return {
     class_id: "class-1",
@@ -98,7 +119,7 @@ function classUsage(canDelete: boolean, total = canDelete ? 0 : 1) {
     can_delete: canDelete,
     delete_blockers: [],
     compatibility_warnings: [],
-    counts: [],
+    counts: zeroUsageCounts(),
   };
 }
 
@@ -259,6 +280,53 @@ describe("ClassManagerPanel", () => {
     ["nonempty delete blockers", { delete_blockers: ["Protected evidence"] }],
     ["missing blocker list", { delete_blockers: null }],
     ["missing itemization", { counts: null }],
+    ["empty itemization", { counts: [] }],
+    ["missing category", { counts: zeroUsageCounts().slice(1) }],
+    [
+      "duplicate category",
+      { counts: [...zeroUsageCounts(), zeroUsageCounts()[0]] },
+    ],
+    [
+      "unknown category",
+      {
+        counts: [
+          ...zeroUsageCounts(),
+          {
+            key: "unreviewed_scientific_records",
+            label: "Unreviewed scientific records",
+            count: 0,
+            mutable: false,
+            immutable: true,
+          },
+        ],
+      },
+    ],
+    [
+      "incorrect category mutability",
+      {
+        counts: zeroUsageCounts().map((item) =>
+          item.key === "dataset_versions" ? { ...item, mutable: true } : item,
+        ),
+      },
+    ],
+    [
+      "incorrect category immutability",
+      {
+        counts: zeroUsageCounts().map((item) =>
+          item.key === "annotations_deleted"
+            ? { ...item, immutable: false }
+            : item,
+        ),
+      },
+    ],
+    [
+      "non-numeric category count",
+      {
+        counts: zeroUsageCounts().map((item) =>
+          item.key === "model_registrations" ? { ...item, count: null } : item,
+        ),
+      },
+    ],
   ] as const)(
     "rejects allegedly deletable usage with %s",
     async (_reason, conflictingFields) => {
