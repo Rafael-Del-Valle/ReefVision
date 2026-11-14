@@ -359,6 +359,8 @@ export function AnnotationEditor({
     useState<Record<string, ReviewedPredictionGeometry>>({});
   const [objectFilter, setObjectFilter] = useState("");
   const [objectListLimit, setObjectListLimit] = useState(200);
+  const [objectListStart, setObjectListStart] = useState(0);
+  const [objectJumpPosition, setObjectJumpPosition] = useState("");
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [fullImageRetry, setFullImageRetry] = useState(0);
   const [imagePreload, setImagePreload] = useState<{
@@ -405,6 +407,8 @@ export function AnnotationEditor({
 
   useEffect(() => {
     setObjectListLimit(200);
+    setObjectListStart(0);
+    setObjectJumpPosition("");
   }, [currentImageId, objectFilter, project.id]);
 
   const sessionQuery = useQuery({
@@ -740,6 +744,12 @@ export function AnnotationEditor({
   );
   const filteredObjectCount =
     filteredObjectAnnotations.length + filteredObjectMasks.length;
+  const requestedObjectPosition = Number(objectJumpPosition.trim());
+  const canJumpToObject =
+    /^\d+$/.test(objectJumpPosition.trim()) &&
+    Number.isSafeInteger(requestedObjectPosition) &&
+    requestedObjectPosition >= 1 &&
+    requestedObjectPosition <= filteredObjectCount;
   const denseObjectRows = useMemo(
     () =>
       boundedDenseObjectRows(
@@ -748,11 +758,13 @@ export function AnnotationEditor({
         objectListLimit,
         state.selectedIds,
         state.selectedMaskIds,
+        objectListStart,
       ),
     [
       filteredObjectAnnotations,
       filteredObjectMasks,
       objectListLimit,
+      objectListStart,
       state.selectedIds,
       state.selectedMaskIds,
     ],
@@ -3883,18 +3895,60 @@ export function AnnotationEditor({
               selections remain intact; expand the window to browse earlier
               objects.
             </p>
-            {filteredObjectCount > objectListLimit && (
+            {filteredObjectCount > objectListStart + objectListLimit && (
               <button
                 type="button"
                 className="secondary"
                 onClick={() =>
                   setObjectListLimit((current) =>
-                    Math.min(filteredObjectCount, current + 200),
+                    Math.min(filteredObjectCount - objectListStart, current + 200),
                   )
                 }
               >
                 Show 200 more objects
               </button>
+            )}
+            {filteredObjectCount > 200 && (
+              <div className="annotation-object-navigation">
+                <label>
+                  Jump to object position (1–{filteredObjectCount})
+                  <input
+                    type="number"
+                    aria-label="Jump to object position"
+                    min={1}
+                    max={filteredObjectCount}
+                    step={1}
+                    value={objectJumpPosition}
+                    onChange={(event) => setObjectJumpPosition(event.target.value)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={!canJumpToObject}
+                  onClick={() => {
+                    setObjectListStart(
+                      Math.floor((requestedObjectPosition - 1) / 200) * 200,
+                    );
+                    setObjectListLimit(200);
+                  }}
+                >
+                  Jump to object
+                </button>
+                {objectListStart > 0 && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      setObjectListStart(0);
+                      setObjectListLimit(200);
+                      setObjectJumpPosition("");
+                    }}
+                  >
+                    Back to first 200 objects
+                  </button>
+                )}
+              </div>
             )}
             <div
               className="prediction-inspector-slot"
