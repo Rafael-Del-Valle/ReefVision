@@ -732,6 +732,26 @@ def mesh_surface_edge_traces(
             positions[i] == positions[j] for i in range(2, len(positions)) for j in range(i - 1)
         ):
             warnings.append("nonadjacent_coincident_surface_trace_vertices")
+        # Separate imported vertex IDs may describe the same geometric edge.
+        # Report every positive-length repeated segment (including a reversed
+        # traversal), rather than allowing a seemingly simple indexed path to
+        # conceal double-counted length. Exact source XYZ is used; no arbitrary
+        # proximity tolerance or unverified anatomical identity is inferred.
+        seen_geometric_segments: dict[
+            tuple[tuple[float, float, float], tuple[float, float, float]], int
+        ] = {}
+        repeated_geometric_segment_index_pairs: list[list[int]] = []
+        for segment_index, (start, end) in enumerate(pairwise(positions)):
+            if source_lengths[segment_index] == 0:
+                continue
+            geometric_edge = (start, end) if start <= end else (end, start)
+            earlier_index = seen_geometric_segments.get(geometric_edge)
+            if earlier_index is None:
+                seen_geometric_segments[geometric_edge] = segment_index
+            else:
+                repeated_geometric_segment_index_pairs.append([earlier_index, segment_index])
+        if repeated_geometric_segment_index_pairs:
+            warnings.append("surface_trace_reused_geometric_segment")
         if segment_underflow:
             warnings.append("calibrated_surface_trace_segment_underflow")
         # A positive calibrated segment may disappear from cumulative distances
@@ -769,6 +789,7 @@ def mesh_surface_edge_traces(
                 "source_trace_length_mesh_units": source_trace_length_mesh_units,
                 "source_endpoint_chord_mesh_units": source_chord,
                 "display_coordinate_collapsed_segment_indices": collapsed_display_segments,
+                "repeated_geometric_segment_index_pairs": repeated_geometric_segment_index_pairs,
                 "turn_angles_deg": turn_angles_deg,
                 "maximum_turn_angle_deg": maximum_turn_angle_deg,
                 "total_absolute_geometric_turn_deg": total_absolute_geometric_turn_deg,
