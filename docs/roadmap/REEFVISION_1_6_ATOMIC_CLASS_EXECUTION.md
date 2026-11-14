@@ -24,10 +24,15 @@ checksum validation, mutable-record changes, annotation-history creation and
 the final transaction commit. No intermediate `running` commit is published.
 If a different writer already claimed or completed that preview, the
 conditional write affects zero rows and the attempt returns HTTP 409 without
-rewriting biological records. On stale evidence or blocked delete, the
+rewriting biological records. The conditional claim does **not** record an
+execution start time: an identity change discovered after the first class read
+but before the SQLite writer lock is acquired invalidates the approval under
+the lock, and stale/blocked previews are rejected with a null `started_at`.
+A successful mutation records its start time immediately after all locked
+scientific evidence checks pass. On stale evidence or blocked delete, the
 operation's existing failed-result provenance is committed without applying
 scientific changes; on in-transaction errors, work is rolled back and the
-existing failure/rollback path is retained.
+existing failure/rollback path retains the attempted mutation start time.
 
 The lock and race guarantee here concern **local SQLite writer
 serialization**, not external filesystem changes, model artifacts or a future
@@ -48,6 +53,11 @@ are preserved; class-metadata edits are not a new analytical workflow node.
 2. A competing writer completing the preview between the first request's
    initial read and its claim makes the first request reject with HTTP 409,
    preserving the annotation and avoiding duplicate reassignment history.
+3. For both Reassign and Reassign-and-Delete, an intervening second-connection
+   edit to the target class biological state after the first class read but
+   before its writer claim causes a stale approval (HTTP 409), without
+   reclassifying annotations or predictions. No scientific execution start
+   timestamp is recorded for a rejected preview.
 
 These are deterministic synthetic database tests, not representative
 biological acceptance. All original annotations, masks, image labels,
