@@ -365,6 +365,27 @@ def test_mask_and_image_label_references_block_unsafe_class_deletion_and_merge(
     )
     assert blocked_merge.status_code == 409, blocked_merge.text
     assert "Mask or image-level classification references" in blocked_merge.text
+
+    preview = client.post(
+        f"/api/v1/projects/{project['id']}/classes/{source['id']}/reassign-delete/preview",
+        json={"target_class_id": target["id"]},
+    )
+    assert preview.status_code == 201, preview.text
+    operation = preview.json()
+    assert any("mask" in message.lower() for message in operation["plan"]["blockers"])
+    assert any(
+        "image-level classification" in message.lower()
+        for message in operation["plan"]["blockers"]
+    )
+    execute = client.post(
+        f"/api/v1/projects/{project['id']}/classes/{source['id']}/reassign-delete",
+        json={
+            "operation_id": operation["id"],
+            "preview_checksum": operation["preview_checksum"],
+        },
+    )
+    assert execute.status_code == 409, execute.text
+
     with Session(cast(FastAPI, client.app).state.engine) as session:
         source_record = session.get(LabelClass, source["id"])
         target_record = session.get(LabelClass, target["id"])
