@@ -823,3 +823,85 @@ def test_class_operation_preview_rejects_same_id_review_reference_changes(
         assert issue is not None and source_class["id"] in issue.class_ids_json
         assert item is not None and source_class["id"] in item.label_class_ids_json
         assert session.get(LabelClass, source_class["id"]) is not None
+
+
+@pytest.mark.parametrize("operation_endpoint", ["reassign", "reassign-delete"])
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "annotation_revision",
+        "annotation_geometry",
+        "prediction_confidence",
+        "prediction_model_checksum",
+        "prediction_geometry",
+        "prediction_polygon",
+        "prediction_label",
+    ],
+)
+def test_class_operation_preview_expires_after_observation_content_change(
+    client: TestClient, operation_endpoint: str, mutation: str
+) -> None:
+    """An observation edit with identical record IDs cannot reuse earlier researcher approval."""
+    project = create_project(client, name="Observation content approval")
+    source = create_label_class(
+        client, project["id"], class_index=0, name="Swiftia Closed", display_color="#E76F51"
+    )
+    target = create_label_class(
+        client, project["id"], class_index=1, name="Swiftia Open", display_color="#2A9D8F"
+    )
+    seed_reassignment_records(
+        client,
+        project,
+        source,
+        target,
+        include_deleted_annotation=False,
+        include_historical_prediction=False,
+    )
+    route = f"/api/v1/projects/{project['id']}/classes/{source['id']}/{operation_endpoint}"
+    response = client.post(f"{route}/preview", json={"target_class_id": target["id"]})
+    assert response.status_code == 201, response.text
+    preview = response.json()
+    assert preview["plan"]["blockers"] == []
+
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        annotation = session.get(Annotation, "annotation-active")
+        proposal = session.get(PredictionProposal, "proposal-pending")
+        assert annotation is not None and proposal is not None
+        if mutation == "annotation_revision":
+            annotation.revision += 1
+        elif mutation == "annotation_geometry":
+            annotation.x_min += 2
+        elif mutation == "prediction_confidence":
+            proposal.confidence = 0.45
+        elif mutation == "prediction_model_checksum":
+            proposal.model_checksum = "9" * 64
+        elif mutation == "prediction_geometry":
+            proposal.x_max += 3
+        elif mutation == "prediction_polygon":
+            proposal.polygon_json = [[1.0, 2.0], [5.0, 2.0], [3.0, 6.0]]
+        else:
+            proposal.predicted_label = "revised prediction label"
+        session.commit()
+
+    execute = client.post(
+        route,
+        json={"operation_id": preview["id"], "preview_checksum": preview["preview_checksum"]},
+    )
+    assert execute.status_code == 409, execute.text
+    assert "stale" in execute.json()["detail"].lower()
+
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        annotation = session.get(Annotation, "annotation-active")
+        proposal = session.get(PredictionProposal, "proposal-pending")
+        issue = session.get(QualityControlIssue, "qc-issue-open")
+        item = session.get(ReviewQueueItem, "queue-item-pending")
+        operation = session.get(ClassOperation, preview["id"])
+        assert annotation is not None and annotation.label_class_id == source["id"]
+        assert proposal is not None and proposal.label_class_id == source["id"]
+        assert issue is not None and issue.class_ids_json == [source["id"]]
+        assert item is not None and item.label_class_ids_json == [source["id"]]
+        assert operation is not None and operation.status == "failed"
+        assert operation.final_state == "preview_stale"
+        assert operation.started_at is None
+        assert session.get(LabelClass, source["id"]) is not None
+        assert session.get(LabelClass, target["id"]) is not None
