@@ -395,7 +395,14 @@ def test_calibrated_mesh_edge_underflow_warns_in_standalone_and_saved_graph(
     assert route["length_m"] == 0
     assert route["endpoint_chord_length_m"] == 0
     assert route["geometric_detour_ratio"] is None
+    # Tiny positive edges can also disappear when accumulated along other
+    # candidate routes. Keep the numerical-resolution warning alongside
+    # the independent calibrated-length underflow warnings.
+    assert route["shortest_route_alternatives_status"] == (
+        "unassessable_floating_point_cost_resolution"
+    )
     assert route["path_qc_warnings"] == [
+        "positive_mesh_edge_cost_rounded_away",
         "calibrated_path_length_underflow",
         "calibrated_endpoint_chord_underflow",
         "open_boundary_edge_on_path",
@@ -1062,4 +1069,70 @@ def test_coincident_route_review_warning_survives_saved_workflow(
         == (standalone.json()["provenance"]["geometry_sha256"])
     )
     assert artifact["measurement_status"] == "caller_supplied_unverified"
+    assert artifact["provenance"]["calibration_verified"] is False
+
+
+def test_hundred_percent_scale_uncertainty_is_supported_in_api_and_saved_graph(
+    client: TestClient,
+) -> None:
+    # The public schema explicitly permits a 100% *relative* scale bound.
+    # The mesh-edge engine must not reject that boundary or present the
+    # resulting [0, 2L] range as a confidence interval or verified calibration.
+    parameters = {**PARAMS, "relative_scale_uncertainty": 1.0}
+    direct = measure_mesh_preview(**parameters)
+    connected = direct["surface_edge_paths"][0]
+    assert connected["status"] == "connected"
+    assert connected["length_m"] == pytest.approx(0.01)
+    assert connected["length_scale_interval_m"] == pytest.approx([0.0, 0.02])
+    assert connected["endpoint_chord_scale_interval_m"] == pytest.approx([0.0, 0.02])
+    assert connected["path_edge_length_scale_intervals_m"] == pytest.approx([[0.0, 0.02]])
+    assert connected["scale_uncertainty_m"] == pytest.approx(0.01)
+    assert direct["measurement_status"] == "caller_supplied_unverified"
+
+    project_id = str(create_project(client, "100 percent mesh scale bound")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=parameters)
+    assert standalone.status_code == 200, standalone.text
+    measured = standalone.json()
+    assert measured["surface_edge_paths"] == direct["surface_edge_paths"]
+    assert measured["provenance"]["calibration_verified"] is False
+
+    graph = {
+        "graph_id": "mesh-100-percent-scale-bound-v14",
+        "name": "Mesh edge uncertainty boundary reference",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": parameters},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["surface_edge_paths"] == measured["surface_edge_paths"]
+    assert artifact["provenance"] == measured["provenance"]
     assert artifact["provenance"]["calibration_verified"] is False
