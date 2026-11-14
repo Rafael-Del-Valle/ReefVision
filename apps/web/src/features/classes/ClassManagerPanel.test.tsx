@@ -258,19 +258,21 @@ describe("ClassManagerPanel", () => {
       item.key === key ? { ...item, count: 1 } : item,
     );
     const confirmation = vi.spyOn(window, "confirm").mockReturnValue(true);
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const url = String(input);
-      if (url.endsWith(`/projects/${project.id}/classes/class-1/usage`)) {
-        return jsonResponse({
-          ...classUsage(false, 1),
-          counts,
-          mutable_reference_count: mutable ? 1 : 0,
-          immutable_reference_count: mutable ? 0 : 1,
-          delete_blockers: ["Scientific references still exist"],
-        });
-      }
-      throw new Error(`Unexpected request: GET ${url}`);
-    });
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith(`/projects/${project.id}/classes/class-1/usage`)) {
+          return jsonResponse({
+            ...classUsage(false, 1),
+            counts,
+            mutable_reference_count: mutable ? 1 : 0,
+            immutable_reference_count: mutable ? 0 : 1,
+            delete_blockers: ["Scientific references still exist"],
+          });
+        }
+        throw new Error(`Unexpected request: GET ${url}`);
+      });
 
     renderPanel();
     const row = sourceClassRow();
