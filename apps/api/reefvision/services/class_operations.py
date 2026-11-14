@@ -40,6 +40,7 @@ from reefvision.schemas.class_operations import (
 from reefvision.schemas.projects import LabelClassUsageResponse
 from reefvision.services.annotations import annotation_snapshot
 from reefvision.services.projects import (
+    UNHANDLED_CLASS_REFERENCE_CATEGORIES,
     USAGE_CATEGORY_META,
     ProjectService,
 )
@@ -358,6 +359,17 @@ class ClassOperationsService:
             warnings.append("Historical annotation events remain unchanged for auditability.")
 
         if operation_type == "reassign_delete":
+            # Physical deletion would cascade through mask and image-label FKs.
+            # This workflow cannot reassign those modalities, so fail at preview
+            # and again before execution rather than silently destroying them.
+            source_usage = self.project_service._usage_snapshot(source_class)
+            for key in UNHANDLED_CLASS_REFERENCE_CATEGORIES:
+                count = source_usage.counts[key]
+                if count:
+                    blockers.append(
+                        f"{USAGE_CATEGORY_META[key][0]} ({count}) block physical class deletion; "
+                        "the reassign-delete workflow does not handle these records."
+                    )
             if deleted_annotation_ids:
                 blockers.append(
                     "Deleted annotations still reference this class and would be "
@@ -703,6 +715,17 @@ class ClassOperationsService:
 
             if operation_type == "reassign_delete":
                 self.session.flush()
+                # Check again after mutable reassignment, inside the write
+                # transaction, even when the original preview was approved.
+                remaining_usage = self.project_service._usage_snapshot(source_class)
+                if any(
+                    remaining_usage.counts[key] > 0
+                    for key in UNHANDLED_CLASS_REFERENCE_CATEGORIES
+                ):
+                    raise ConflictError(
+                        "Mask or image-level classification references still prevent "
+                        "physical deletion of the source class."
+                    )
                 remaining_annotations = list(
                     self.session.scalars(
                         select(Annotation).where(Annotation.label_class_id == source_class.id)
