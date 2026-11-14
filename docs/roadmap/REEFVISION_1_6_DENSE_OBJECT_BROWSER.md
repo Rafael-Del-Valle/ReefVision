@@ -54,3 +54,20 @@ Builder run artifacts remain intact. Proxy-instrumented regressions verify a
 20,000-box document reads only its first 200 entries for an in-window selection,
 and a distant selected box does not trigger unrelated mask traversal. Native
 Windows GUI and full workflow acceptance remain separately required.
+
+## Very large multi-object selections
+
+A range selection of 20,000 saved boxes previously bypassed the 200-row
+display window by pinning all 20,000 selected objects into the DOM. The browser
+now pins at most **200 additional selected boxes** and **200 additional selected
+masks** outside the ordinary display window, prioritizing the last IDs of each
+selection type and displaying the pinned results in their original source
+order. The ordinary **Show 200 more objects** control can reveal earlier
+selected entries. Nothing alters the actual selected-ID sets, scientific
+records, serialization, QC review or Workflow Builder provenance. Small
+selections (200 or fewer off-window per type) retain the existing immediate
+access behavior.
+
+Pure regressions cover 20,000 selected boxes, mixed large box/mask selections,
+and sparse distant selections. Browser E2E, exact-head repository CI, and
+installed Windows performance on real dense data remain release gates.
