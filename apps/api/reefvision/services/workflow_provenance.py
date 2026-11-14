@@ -185,6 +185,20 @@ def verify_succeeded_node_artifacts(
     if len(matching_nodes) != 1 or matching_nodes[0].get("node_type") != node_run.node_type:
         raise ConflictError("Succeeded workflow node identity does not match saved graph")
 
+    # Direct interrupted-run recovery must honor frozen scientific inputs,
+    # including the verified pose dataset's pinned manifest checksum.
+    saved_parameters = matching_nodes[0].get("parameters", {})
+    node_parameters = node_run.parameters_json
+    if node_parameters is not None and not isinstance(node_parameters, dict):
+        raise ConflictError("Succeeded workflow node parameters must be a JSON object")
+    if not isinstance(saved_parameters, dict) or any(
+        not isinstance(node_parameters, dict)
+        or key not in node_parameters
+        or node_parameters[key] != value
+        for key, value in saved_parameters.items()
+    ):
+        raise ConflictError("Succeeded workflow node parameters do not match saved graph")
+
     raw_edges = graph.graph_json.get("edges", [])
     if not isinstance(raw_edges, list) or any(
         not isinstance(edge, dict) or not isinstance(edge.get("edge_id"), str) for edge in raw_edges
