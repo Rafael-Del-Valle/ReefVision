@@ -228,9 +228,7 @@ def test_seam_vertex_aliases_cannot_hide_reused_surface_trace_segment(
     assert len(set(trace["vertex_indices"])) == len(vertex_path)
     assert trace["repeated_geometric_segment_index_pairs"] == [[0, 3]]
     assert "surface_trace_reused_geometric_segment" in trace["qc_warnings"]
-    assert trace["segment_lengths_m"][0] == pytest.approx(
-        trace["segment_lengths_m"][3]
-    )
+    assert trace["segment_lengths_m"][0] == pytest.approx(trace["segment_lengths_m"][3])
     assert trace["human_review_verified"] is False
     assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
 
