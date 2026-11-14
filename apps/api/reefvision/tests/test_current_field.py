@@ -133,3 +133,16 @@ def test_polar_limit_is_explicit_and_invalid_seed_rejected():
     assert integrate_streamline(field, 85.0, 0.0).termination == "polar_limit"
     with pytest.raises(ValueError):
         integrate_streamline(field, math.nan, 0.0)
+
+
+@pytest.mark.parametrize("longitudes", [(-179.0, 179.0), (179.0, -179.0)])
+def test_dateline_grid_rejected_before_false_global_interpolation(longitudes):
+    # A local current slice straddling 180 degrees cannot be interpolated
+    # across 358 degrees while longitude unwrapping remains unsupported.
+    with pytest.raises(ValueError, match="longitude gap exceeds 180 degrees"):
+        CurrentField(
+            latitudes=(-1.0, 1.0),
+            longitudes=longitudes,
+            east=((1.0, 1.0), (1.0, 1.0)),
+            north=((0.0, 0.0), (0.0, 0.0)),
+        )

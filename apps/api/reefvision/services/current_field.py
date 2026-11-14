@@ -77,6 +77,11 @@ class CurrentFieldService:
         longitudes = sorted({record.location.longitude for record in records if record.location})
         if len(latitudes) < 2 or len(longitudes) < 2:
             raise ValidationError("Current field requires at least a 2 by 2 paired component grid")
+        if any(right - left > 180.0 for left, right in zip(longitudes, longitudes[1:])):
+            raise ValidationError(
+                "Current longitude gap exceeds 180 degrees; "
+                "antimeridian-spanning grids require regridding before integration"
+            )
         indexed: dict[tuple[float, float, str], ScientificRecordResponse] = {}
         for record in records:
             assert record.location is not None

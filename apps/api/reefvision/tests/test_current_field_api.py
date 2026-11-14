@@ -137,3 +137,45 @@ def test_streamline_preview_rejects_incomplete_component_grid(client) -> None:
     )
     assert response.status_code == 400
     assert "paired" in response.json()["detail"].lower()
+
+
+def test_streamline_preview_rejects_dateline_grid_instead_of_false_interpolation(client) -> None:
+    project = create_project(client, "Dateline current QC")
+    records = [
+        {
+            "variable": variable,
+            "value": value,
+            "unit": "m/s",
+            "observed_at": "2026-01-01T00:00:00Z",
+            "source_kind": "modeled",
+            "location": {"crs": "EPSG:4326", "latitude": latitude, "longitude": longitude},
+            "depth_m": 0,
+            "depth_reference": "sea_surface",
+            "qc": "accepted",
+            "provenance": {
+                "source": "synthetic dateline fixture",
+                "dataset_id": "fixture-v1",
+                "acquired_at": "2026-01-02T00:00:00Z",
+            },
+        }
+        for latitude in (-1.0, 1.0)
+        for longitude in (-179.0, 179.0)
+        for variable, value in (
+            ("current_eastward_velocity", 1.0),
+            ("current_northward_velocity", 0.0),
+        )
+    ]
+    created = client.post(
+        f"/api/v1/projects/{project['id']}/scientific-records", json={"records": records}
+    )
+    assert created.status_code == 201, created.text
+    ids = [item["id"] for item in created.json()["items"]]
+    response = client.post(
+        f"/api/v1/projects/{project['id']}/current-field/streamlines/preview",
+        json={
+            "scientific_record_ids": ids,
+            "seeds": [{"latitude": 0, "longitude": 179.5}],
+        },
+    )
+    assert response.status_code == 400, response.text
+    assert "longitude gap exceeds 180 degrees" in response.json()["detail"]

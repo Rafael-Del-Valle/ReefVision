@@ -47,6 +47,16 @@ class CurrentField:
     def __post_init__(self) -> None:
         lat = _axis(self.latitudes, 90)
         lon = _axis(self.longitudes, 180)
+        # The current kernel does not unwrap longitude across the dateline.
+        # A pair at -179 and +179 degrees represents a two-degree local cell,
+        # not a 358-degree interpolation spanning almost the entire Earth.
+        # Fail closed rather than deriving scientifically misleading tracks.
+        ordered_lon = sorted(lon)
+        if any(right - left > 180.0 for left, right in pairwise(ordered_lon)):
+            raise ValueError(
+                "Current longitude gap exceeds 180 degrees; "
+                "antimeridian-spanning grids require regridding before integration"
+            )
         matrices = []
         for values in (self.east, self.north):
             rows = tuple(tuple(row) for row in values)
