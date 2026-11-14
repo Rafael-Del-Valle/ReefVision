@@ -15,6 +15,7 @@ from reefvision.db.models import (
     DatasetVersion,
     ImageAsset,
     Job,
+    LabelClass,
     ModelRegistration,
     PredictionProposal,
     QualityControlIssue,
@@ -533,9 +534,9 @@ def test_used_class_delete_is_blocked_and_usage_is_reported(client: TestClient) 
         original = session.get(Annotation, "annotation-active")
         assert source is not None and source.is_active
         assert original is not None and original.label_class_id == source_class["id"]
-        assert session.get(QualityControlIssue, "qc-issue-1").class_ids_json == [
-            source_class["id"]
-        ]
+        qc_issue = session.get(QualityControlIssue, "qc-issue-1")
+        assert qc_issue is not None
+        assert qc_issue.class_ids_json == [source_class["id"]]
 
     merged = client.post(
         f"/api/v1/classes/{source_class['id']}/merge",
