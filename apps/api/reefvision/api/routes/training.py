@@ -326,6 +326,25 @@ def _training_log_tail(
             if payload and payload[-1] not in (10, 13) and not finalized:
                 boundary = max(payload.rfind(b"\n"), payload.rfind(b"\r"))
                 payload = payload[: boundary + 1] if boundary >= 0 else b""
+            # The worker may rotate its log or another local process may swap
+            # the path while the tail is being read. Reject that stale snapshot
+            # rather than attributing its metrics to the current run. Ordinary
+            # in-place worker appends retain the same file identity and pass.
+            read_finished = os.fstat(handle.fileno())
+            current_path = path.resolve(strict=True)
+            current_identity = current_path.stat()
+            if (
+                current_path != path
+                or read_finished.st_nlink != 1
+                or current_identity.st_nlink != 1
+                or (read_finished.st_dev, read_finished.st_ino)
+                != (opened_identity.st_dev, opened_identity.st_ino)
+                or (current_identity.st_dev, current_identity.st_ino)
+                != (opened_identity.st_dev, opened_identity.st_ino)
+            ):
+                raise HTTPException(
+                    status_code=403, detail="Training log changed during read"
+                )
     except OSError:
         return empty
     text = _safe_terminal_log_text(payload)
