@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 from fastapi.testclient import TestClient
 
 from reefvision.api.routes import training as training_routes
@@ -184,6 +184,28 @@ def test_training_log_api_preserves_final_loss_only_after_run_ends(
     assert response.headers["cache-control"] == "no-store"
     assert response.json() == {"available": True, "text": expected}
     assert log.read_bytes() == original
+
+
+def test_training_status_get_disables_cached_loss_snapshots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PowerShell polling must see fresh status/loss data, not cached epochs."""
+    observed_ids: list[str] = []
+    snapshot = SimpleNamespace(status="training", metrics={"train/box_loss": 0.25})
+
+    def fake_service(_request: object, _session: object) -> SimpleNamespace:
+        def get_run(run_id: str) -> SimpleNamespace:
+            observed_ids.append(run_id)
+            return snapshot
+
+        return SimpleNamespace(get_run=get_run)
+
+    monkeypatch.setattr(training_routes, "service", fake_service)
+    response = Response()
+    result = training_routes.get_training_run("run-1", object(), response, object())
+    assert result is snapshot
+    assert response.headers["cache-control"] == "no-store"
+    assert observed_ids == ["run-1"]
 
 
 def test_live_log_tail_accepts_carriage_return_progress_records(
