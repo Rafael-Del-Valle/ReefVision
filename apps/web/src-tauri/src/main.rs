@@ -4,7 +4,11 @@ use serde::Serialize;
 #[cfg(test)]
 use std::sync::Arc;
 #[cfg(target_os = "windows")]
-use std::{ffi::OsStr, os::windows::ffi::OsStrExt, ptr::null};
+use std::{
+    ffi::{OsStr, OsString},
+    os::windows::ffi::{OsStrExt, OsStringExt},
+    ptr::null,
+};
 use std::{
     fs,
     io::Write,
@@ -21,7 +25,7 @@ use tauri::{AppHandle, Manager, State, WindowEvent};
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::{
     Foundation::{CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, HANDLE},
-    System::Threading::CreateMutexW,
+    System::{SystemInformation::GetSystemDirectoryW, Threading::CreateMutexW},
     UI::WindowsAndMessaging::{FindWindowW, IsIconic, SetForegroundWindow, ShowWindow, SW_RESTORE},
 };
 
@@ -157,6 +161,43 @@ fn valid_training_run_id(run_id: &str) -> bool {
         && run_id
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+}
+
+#[cfg(target_os = "windows")]
+fn trusted_powershell_executable() -> std::io::Result<PathBuf> {
+    // Resolve Windows PowerShell from the OS system directory, not PATH or
+    // the desktop working directory. An adjacent powershell.exe must never
+    // execute in the scientific training monitor's security context.
+    let mut system_dir = vec![0_u16; 260];
+    let length = loop {
+        let copied =
+            unsafe { GetSystemDirectoryW(system_dir.as_mut_ptr(), system_dir.len() as u32) }
+                as usize;
+        if copied == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        if copied < system_dir.len() {
+            break copied;
+        }
+        if copied > 32768 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Windows system directory exceeds the supported path length",
+            ));
+        }
+        system_dir.resize(copied + 1, 0);
+    };
+    let executable = PathBuf::from(OsString::from_wide(&system_dir[..length]))
+        .join("WindowsPowerShell")
+        .join("v1.0")
+        .join("powershell.exe");
+    if !executable.is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("The Windows system PowerShell executable was not found: {}", executable.display()),
+        ));
+    }
+    Ok(executable)
 }
 
 #[tauri::command]
@@ -331,7 +372,9 @@ while ($true) {
 # idle process; it never cancels or modifies the independent training worker.
 while ($true) { Start-Sleep -Seconds 3600 }
 "#;
-        Command::new("powershell.exe")
+        let powershell = trusted_powershell_executable()
+            .map_err(|error| format!("Could not locate trusted Windows PowerShell: {error}"))?;
+        Command::new(powershell)
             .args(["-NoProfile", "-NonInteractive", "-Command", &script])
             .spawn()
             .map_err(|error| format!("Could not open PowerShell training monitor: {error}"))?;
@@ -781,6 +824,24 @@ mod tests {
         assert!(!valid_training_run_id("foo'; Remove-Item C:"));
         assert!(!valid_training_run_id("../escape"));
         assert!(!valid_training_run_id(&"a".repeat(73)));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn training_console_uses_system_powershell_not_path_search() {
+        let executable = trusted_powershell_executable()
+            .expect("Windows system PowerShell should exist on the acceptance runner");
+        assert!(executable.is_absolute());
+        assert!(executable.is_file());
+        assert_eq!(executable.file_name(), Some(OsStr::new("powershell.exe")));
+        assert_eq!(
+            executable.parent().and_then(Path::file_name),
+            Some(OsStr::new("v1.0"))
+        );
+        assert_eq!(
+            executable.parent().and_then(Path::parent).and_then(Path::file_name),
+            Some(OsStr::new("WindowsPowerShell"))
+        );
     }
 
     #[derive(Clone)]
