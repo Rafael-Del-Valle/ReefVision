@@ -43,6 +43,7 @@ class AnatomicalObservation:
     coordinate_space: str
     association_confidence: float | None
     landmarks: tuple[AnatomicalLandmark, ...]
+    discontinuity: bool = False
 
 
 @dataclass(frozen=True)
@@ -174,6 +175,9 @@ def calculate_measurement_series(
     previous_scalar: float | None = None
     for observation in selected:
         points, confidence, flags = _point_map(observation, definition.landmark_ids)
+        if observation.discontinuity:
+            previous_points = previous_time = previous_scalar = None
+            flags.append("source_discontinuity")
         required = {
             "distance": 2,
             "angle": 3,

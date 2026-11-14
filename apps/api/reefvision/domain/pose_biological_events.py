@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from bisect import bisect_right
 from dataclasses import asdict, dataclass, replace
 from hashlib import sha256
 from itertools import pairwise
@@ -19,6 +20,7 @@ class EventSignalSample:
     confidence: float | None
     valid: bool
     animal_identity_id: str
+    discontinuity: bool = False
 
 
 @dataclass(frozen=True)
@@ -102,6 +104,8 @@ def _smooth(
     result: list[EventSignalSample] = []
     segment: list[EventSignalSample] = []
     for sample in samples:
+        if sample.discontinuity:
+            segment.clear()
         if not sample.valid or sample.value is None:
             segment.clear()
             result.append(sample)
@@ -196,6 +200,26 @@ def detect_biological_events(
     partial_start = False
     closed_observed = False
     for sample in ordered:
+        if sample.discontinuity:
+            if active:
+                assert start is not None and peak is not None
+                events.append(
+                    _candidate(
+                        start,
+                        peak,
+                        None,
+                        baseline,
+                        "partial_gap",
+                        confidences,
+                        definition,
+                        previous_end_time,
+                    )
+                )
+            active = closed_observed = False
+            start = peak = last_valid = None
+            confidences = []
+            last_closed_value = definition.close_threshold
+            previous_end_time = None
         valid = (
             sample.valid
             and sample.value is not None
@@ -294,10 +318,13 @@ def detect_biological_events(
         )
 
     valid_samples = [sample for sample in ordered if sample.valid and sample.value is not None]
+    discontinuities = [sample.time_s for sample in ordered if sample.discontinuity]
     duration = sum(
         current.time_s - previous.time_s
         for previous, current in pairwise(valid_samples)
         if 0 <= current.time_s - previous.time_s <= definition.maximum_gap_s
+        and bisect_right(discontinuities, previous.time_s)
+        == bisect_right(discontinuities, current.time_s)
     )
     accepted = [event for event in events if event.accepted and event.cycle_state == "complete"]
     summary: dict[str, float | int | None] = {

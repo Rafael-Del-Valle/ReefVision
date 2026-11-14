@@ -105,6 +105,11 @@ from reefvision.db.models.scientific_record import (
     ScientificRecord,
 )
 from reefvision.db.models.skeleton_analysis import SkeletonAnalysisRevision
+from reefvision.db.models.temporal_reefpose import (
+    TemporalReefPoseDataset,
+    TemporalReefPoseFrame,
+    TemporalReefPoseRun,
+)
 from reefvision.db.models.training_draft import TrainingDraft
 from reefvision.db.models.training_run import TrainingRun
 from reefvision.db.models.video_asset import VideoAsset
@@ -195,6 +200,9 @@ __all__ = [
     "ReviewQueueItem",
     "ScientificRecord",
     "SkeletonAnalysisRevision",
+    "TemporalReefPoseDataset",
+    "TemporalReefPoseFrame",
+    "TemporalReefPoseRun",
     "TrainingDraft",
     "TrainingRun",
     "VideoAsset",
