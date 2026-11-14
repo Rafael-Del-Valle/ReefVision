@@ -676,6 +676,11 @@ def mesh_surface_edge_traces(
             warnings.append("inconsistent_winding_edge_on_surface_trace")
         if any(length == 0 for length in source_lengths):
             warnings.append("zero_length_edge_on_surface_trace")
+        # A computed 180-degree turn doubles back on the preceding surface
+        # segment, even when all selected indices and positions are distinct.
+        # This is binary64 geometric QC, not proof of exact anatomical overlap.
+        if any(angle == 180.0 for angle in interior_turn_angles if angle is not None):
+            warnings.append("surface_trace_180_degree_geometric_turn")
         if endpoint_chord_m == 0:
             warnings.append("surface_trace_zero_endpoint_chord")
         if endpoint_chord_m > 0 and detour_ratio is None:
