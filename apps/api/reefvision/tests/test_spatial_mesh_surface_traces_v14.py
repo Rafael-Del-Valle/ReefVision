@@ -106,7 +106,62 @@ def test_selected_trace_requires_real_triangle_edges(client: TestClient) -> None
     }
     response = client.post(f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params)
     assert response.status_code == 400, response.text
-    assert response.json()["detail"] == "Consecutive surface trace vertices must share a triangle edge"
+    assert response.json()["detail"] == (
+        "Consecutive surface trace vertices must share a triangle edge"
+    )
+
+
+@pytest.mark.parametrize(
+    "unreferenced_vertex",
+    [
+        (True, 0, 0),
+        ("1", 0, 0),
+        (float("nan"), 0, 0),
+        (float("inf"), 0, 0),
+        (10**400, 0, 0),
+        (0, 0),
+        None,
+    ],
+)
+def test_direct_trace_rejects_invalid_unused_source_vertices(
+    unreferenced_vertex: object,
+) -> None:
+    # Even vertices not used by the selected edge must pass the same numeric
+    # integrity checks as the public preview API; no partial QC bypass.
+    points = cast(
+        list[tuple[float, float, float]],
+        [(0, 0, 0), (1, 0, 0), (0, 1, 0), unreferenced_vertex],
+    )
+    with pytest.raises(ValueError, match="Surface trace vertices require three finite"):
+        mesh_surface_edge_traces(points, [[0, 1, 2]], [[0, 1]], 0.01, 0.1)
+
+
+@pytest.mark.parametrize(
+    ("scale", "uncertainty"),
+    [
+        (True, 0.1),
+        ("1", 0.1),
+        (10**400, None),
+        (0.01, True),
+        (0.01, "0.1"),
+        (0.01, 10**400),
+        (0.01, float("nan")),
+        (0.01, float("inf")),
+    ],
+)
+def test_direct_trace_calibration_rejects_coercion_and_overflow(
+    scale: object, uncertainty: object
+) -> None:
+    # Direct scientific callers cannot interpret booleans as physical units
+    # or propagate OverflowError before the measurement is reviewed.
+    with pytest.raises(ValueError, match="Surface trace calibration must be finite"):
+        mesh_surface_edge_traces(
+            [(0, 0, 0), (1, 0, 0), (0, 1, 0)],
+            [[0, 1, 2]],
+            [[0, 1]],
+            cast(float, scale),
+            cast(float | None, uncertainty),
+        )
 
 
 def test_direct_trace_identifies_duplicate_faces_without_overriding_mesh_rejection() -> None:
