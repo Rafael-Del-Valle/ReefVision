@@ -6,8 +6,6 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from reefvision.services import class_operations as class_operations_module
-from reefvision.services.class_operations import ClassOperationsService
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import (
@@ -25,6 +23,8 @@ from reefvision.db.models import (
     ReviewQueue,
     ReviewQueueItem,
 )
+from reefvision.services import class_operations as class_operations_module
+from reefvision.services.class_operations import ClassOperationsService
 
 
 def create_project(client: TestClient, **overrides: object) -> dict[str, Any]:
