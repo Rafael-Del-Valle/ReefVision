@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { cancelJob, type JobRecord } from "../../api/client";
 import { getApiBaseUrl } from "../../runtime";
 import { listPoseIdentityRuns } from "./poseIdentityTrackingApi";
+import { ScientificComparisonPanel } from "./ScientificComparisonPanel";
 
 type ReferenceSummary = {
   id: string;
@@ -701,6 +702,11 @@ export function ReefPoseValidationPanel({
           )}
         </section>
       )}
+      <ScientificComparisonPanel
+        key={projectId}
+        projectId={projectId}
+        jobs={jobs.data ?? []}
+      />
     </details>
   );
 }

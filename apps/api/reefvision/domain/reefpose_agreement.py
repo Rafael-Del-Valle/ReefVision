@@ -175,8 +175,8 @@ def measurement_agreement(
     }
 
 
-def icc_absolute(rows: list[list[float]]) -> float | None:
-    """Two-way absolute-agreement single-rating ICC(A,1) on a balanced matrix."""
+def icc_absolute(rows: list[list[float]], *, consistency: bool = False) -> float | None:
+    """Two-way single-rating ICC(A,1) or ICC(C,1) on a balanced matrix."""
     n = len(rows)
     if n < 2 or len(rows[0]) < 2:
         return None
@@ -193,10 +193,10 @@ def icc_absolute(rows: list[list[float]]) -> float | None:
         for i, row in enumerate(rows)
         for j, value in enumerate(row)
     ) / ((n - 1) * (k - 1))
-    return rate(
-        subject_ms - residual_ms,
-        (subject_ms + (k - 1) * residual_ms + k * (rater_ms - residual_ms) / n),
-    )
+    denominator = subject_ms + (k - 1) * residual_ms
+    if not consistency:
+        denominator += k * (rater_ms - residual_ms) / n
+    return rate(subject_ms - residual_ms, denominator)
 
 
 def cluster_interval(
