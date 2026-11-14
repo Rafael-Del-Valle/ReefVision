@@ -3,9 +3,11 @@ from __future__ import annotations
 import hashlib
 import io
 import zipfile
+from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
+from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
@@ -728,6 +730,36 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     reused = retry_completed_node()
     assert reused["training_run_id"] == result["training_run_id"]
     assert reused["result_checkpoint_sha256"] == result["result_checkpoint_sha256"]
+
+    # A completed saved Workflow Builder node must have one unambiguous child
+    # training run. A second older completed record must not be silently
+    # ignored simply because its checkpoint was not chosen by the sort order.
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        duplicate_id = str(uuid4())
+        duplicate = TrainingRun(
+            **{
+                column.name: getattr(persisted, column.name)
+                for column in TrainingRun.__table__.columns
+                if column.name not in {"id", "job_id", "created_at"}
+            },
+            id=duplicate_id,
+            job_id=None,
+            created_at=persisted.created_at - timedelta(seconds=1),
+        )
+        session.add(duplicate)
+        session.commit()
+
+    with pytest.raises(ValidationError, match="multiple completed child runs"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        duplicate = session.get(TrainingRun, duplicate_id)
+        assert duplicate is not None
+        session.delete(duplicate)
+        session.commit()
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
 
     # The saved workflow must retain the provider parameter-registry version
     # used to configure this actual scientist-verified training run. Neither
