@@ -295,7 +295,8 @@ def _training_log_tail(
                 or (
                     opened_identity.st_dev,
                     opened_identity.st_ino,
-                ) != (expected_identity.st_dev, expected_identity.st_ino)
+                )
+                != (expected_identity.st_dev, expected_identity.st_ino)
             ):
                 raise HTTPException(status_code=403, detail="Training log changed during open")
             handle.seek(0, 2)
