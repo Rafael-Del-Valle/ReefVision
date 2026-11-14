@@ -199,6 +199,26 @@ def test_positive_edge_cost_roundoff_does_not_claim_exact_route_multiplicity() -
         assert route["length_m"] == pytest.approx(2e7)
 
 
+
+def test_unrelated_overflowing_detour_does_not_discard_finite_route() -> None:
+    # The direct route is representable, but expanding the destination's
+    # reverse edge would produce 1e308 + 1e308 == infinity. That dominated
+    # candidate must not mask the valid route or its scientific QC.
+    routes = mesh_edge_paths(
+        points=[(0.0, 0.0, 0.0), (1e308, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        faces=[[0, 1, 2]],
+        pairs=[[0, 1]],
+        scale=0.1,
+        scale_uncertainty=None,
+    )
+    assert routes is not None
+    assert routes[0]["status"] == "connected"
+    assert routes[0]["length_m"] == pytest.approx(1e307)
+    assert routes[0]["shortest_route_alternatives_status"] == (
+        "unassessable_floating_point_cost_resolution"
+    )
+
+
 def test_subresolution_prefix_is_not_mistaken_for_an_exact_route_tie() -> None:
     # The shortest candidate 2 -> 1 -> 0 adds a huge edge *after*
     # a tiny positive prefix. The prefix vanishes in the rounded total,
