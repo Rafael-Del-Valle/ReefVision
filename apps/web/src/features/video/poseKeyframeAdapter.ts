@@ -9,6 +9,7 @@ import type {
   VideoTrackKeyframe,
   VideoTrackRecord,
 } from "./videoApi";
+import type { AnatomySchemaRevision } from "../pose/anatomyApi";
 
 function occurrenceIndexes(labels: string[]): number[] {
   const counts = new Map<string, number>();
@@ -17,6 +18,23 @@ function occurrenceIndexes(labels: string[]): number[] {
     counts.set(label, index + 1);
     return index;
   });
+}
+
+export function videoSchemaFromAnatomy(
+  schema: AnatomySchemaRevision,
+): VideoPoseLandmarkSchema {
+  return {
+    schema_version: "pose-landmarks-0001",
+    schema_id: schema.id,
+    schema_revision: schema.revision,
+    content_hash: schema.content_hash,
+    groups: schema.groups,
+    expanded_labels: schema.expanded_labels,
+    keypoint_count: schema.keypoint_count,
+    allows_repeated_labels: schema.allows_repeated_labels,
+    landmarks: schema.landmarks,
+    edges: schema.edges,
+  };
 }
 
 export function editorSchemaForVideoTrack(
@@ -30,6 +48,11 @@ export function editorSchemaForVideoTrack(
       name: group.name,
       count: group.count,
     })),
+    landmarks: schema.landmarks?.map((landmark) => ({ ...landmark })),
+    edges: schema.edges?.map((edge) => ({
+      from: edge.from_id,
+      to: edge.to_id,
+    })),
   };
 }
 
@@ -41,12 +64,27 @@ export function poseInstanceFromVideoKeyframe(
   const editorSchema = editorSchemaForVideoTrack(track, schema);
   const persisted = keyframe.pose_observations;
   if (persisted && persisted.length > 0) {
+    const indexes = occurrenceIndexes(schema.expanded_labels);
     return {
       id: `${track.id}:frame:${keyframe.frame}`,
       revision: track.revision,
       schema_id: editorSchema.id,
       schema_revision: editorSchema.revision,
-      observations: persisted.map((observation) => ({ ...observation })),
+      observations: persisted.map((observation) => {
+        if (observation.landmark_id || !schema.landmarks) {
+          return { ...observation };
+        }
+        const schemaIndex = schema.expanded_labels.findIndex(
+          (label, index) =>
+            label === observation.semantic_label &&
+            indexes[index] === observation.occurrence_index,
+        );
+        return {
+          ...observation,
+          landmark_id:
+            schemaIndex >= 0 ? schema.landmarks[schemaIndex]?.id : undefined,
+        };
+      }),
     };
   }
 
@@ -61,6 +99,7 @@ export function poseInstanceFromVideoKeyframe(
     }
     observations.push({
       id: `${track.id}:${keyframe.frame}:${index}`,
+      landmark_id: schema.landmarks?.[index]?.id,
       semantic_label: semanticLabel,
       occurrence_index: indexes[index] ?? 0,
       x: point[0],
@@ -84,11 +123,13 @@ function observationForSlot(
   observations: PoseLandmarkObservation[],
   semanticLabel: string,
   occurrenceIndex: number,
+  landmarkId?: string,
 ): PoseLandmarkObservation | undefined {
-  return observations.find(
-    (observation) =>
-      observation.semantic_label === semanticLabel &&
-      observation.occurrence_index === occurrenceIndex,
+  return observations.find((observation) =>
+    landmarkId && observation.landmark_id
+      ? observation.landmark_id === landmarkId
+      : observation.semantic_label === semanticLabel &&
+        observation.occurrence_index === occurrenceIndex,
   );
 }
 
@@ -103,6 +144,7 @@ export function correctedVideoKeyframeFromPoseSave(
       request.observations,
       semanticLabel,
       indexes[index] ?? 0,
+      schema.landmarks?.[index]?.id,
     );
     if (
       !observation ||

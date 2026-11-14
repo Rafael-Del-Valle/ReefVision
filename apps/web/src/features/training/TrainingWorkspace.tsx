@@ -16,6 +16,7 @@ import {
   getTrainingRuns,
   getTrainingWorkspaceBootstrap,
   registerModelFromRun,
+  retryJob,
   runTrainingPreflight,
   type ModelCatalogEntry,
   type ModelCatalogTask,
@@ -397,12 +398,14 @@ export function TrainingWorkspace({
       ),
     [trainingCatalogEntries],
   );
+  // Keep missing-provider architectures visible so users can diagnose the runtime.
+  // The server still blocks training until provider preflight succeeds.
   const selectableArchitectureEntries = useMemo(
     () =>
-      architectureTrainingEntries.filter(
-        (item) =>
-          item.installation_state === "Ready" ||
-          item.installation_state === "Available",
+      architectureTrainingEntries.filter((item) =>
+        ["Ready", "Available", "Provider Required"].includes(
+          item.installation_state,
+        ),
       ),
     [architectureTrainingEntries],
   );
@@ -668,6 +671,14 @@ export function TrainingWorkspace({
 
   const cancelRunMutation = useMutation({
     mutationFn: (runId: string) => cancelTrainingRun(runId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["training_runs", project.id],
+      });
+    },
+  });
+  const resumeRunMutation = useMutation({
+    mutationFn: (jobId: string) => retryJob(jobId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ["training_runs", project.id],
@@ -1150,7 +1161,7 @@ export function TrainingWorkspace({
                             value={
                               selectedCatalogEntry?.category === "architecture"
                                 ? selectedCatalogEntry.catalog_id
-                                : (presetOptions[0]?.catalog_id ?? "")
+                                : ""
                             }
                             onChange={(event) => {
                               const next = catalogEntryById.get(
@@ -1161,6 +1172,9 @@ export function TrainingWorkspace({
                               }
                             }}
                           >
+                            <option value="" disabled>
+                              Select a model size or preset
+                            </option>
                             {presetOptions.map((entry) => (
                               <option
                                 key={entry.catalog_id}
@@ -1172,13 +1186,29 @@ export function TrainingWorkspace({
                             ))}
                           </select>
                         </label>
+                        {selectableArchitectureEntries.some(
+                          (entry) =>
+                            entry.installation_state === "Provider Required",
+                        ) && (
+                          <p className="form-error">
+                            Architectures labeled Provider Required are visible
+                            for diagnosis, but cannot train until the matching
+                            provider is installed in ReefVision's backend. Check
+                            provider availability in Model Hub or repair the
+                            desktop installation. Scratch training does not
+                            require pretrained weights or model registration.
+                          </p>
+                        )}
                       </>
                     ) : (
-                      <p className="form-error">
-                        No supported training architectures are currently
-                        available. Register a compatible model or check provider
-                        availability.
-                      </p>
+                      !workspaceBootstrap.isPending &&
+                      !workspaceBootstrap.error && (
+                        <p className="form-error">
+                          No training architectures were returned by the model
+                          catalog. Check the catalog and provider diagnostics in
+                          Model Hub.
+                        </p>
+                      )
                     )}
 
                     {selectedCatalogEntry && (
@@ -2099,6 +2129,18 @@ export function TrainingWorkspace({
                           displayName: `${selectedRun.run_name} best`,
                           notes: selectedRun.notes ?? undefined,
                         })
+                      }
+                      resuming={
+                        resumeRunMutation.isPending &&
+                        resumeRunMutation.variables === selectedRun.job_id
+                      }
+                      onResume={
+                        selectedRun.job_id
+                          ? () =>
+                              resumeRunMutation.mutate(
+                                selectedRun.job_id as string,
+                              )
+                          : undefined
                       }
                       onApplyBest={(trial) =>
                         applyTuningMutation.mutate({ run: selectedRun, trial })

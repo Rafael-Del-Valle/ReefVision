@@ -46,6 +46,24 @@ from reefvision.db.models.pose_active_learning import (
     PoseActiveLearningCandidate,
     PoseActiveLearningRound,
 )
+from reefvision.db.models.pose_biological_measurement import (
+    PoseBiologicalEventRevision,
+    PoseEventDetectionRun,
+    PoseMeasurementRun,
+    PoseMeasurementSample,
+    PoseMeasurementSeries,
+)
+from reefvision.db.models.pose_evaluation import PoseEvaluationRun
+from reefvision.db.models.pose_identity_tracking import (
+    PoseAnimalIdentity,
+    PoseIdentityAssociationDecision,
+    PoseIdentityAssociationRun,
+    PoseIdentityCorrection,
+    PoseIdentityEvaluationRun,
+    PoseIdentityObservation,
+    PoseIdentityOcclusion,
+    PoseIdentityTruthDataset,
+)
 from reefvision.db.models.pose_schema import (
     PoseLandmarkSchema,
     PoseLandmarkSchemaRevision,
@@ -71,6 +89,7 @@ from reefvision.db.models.project_class_visibility_default import (
 from reefvision.db.models.project_exchange_package import ProjectExchangePackage
 from reefvision.db.models.quality_control_issue import QualityControlIssue
 from reefvision.db.models.quality_control_run import QualityControlRun
+from reefvision.db.models.reefpose_validation import ReefPoseReference
 from reefvision.db.models.review_queue import ReviewQueue
 from reefvision.db.models.review_queue_item import ReviewQueueItem
 from reefvision.db.models.scientific_record import (
@@ -128,6 +147,17 @@ __all__ = [
     "ModelRegistration",
     "PoseActiveLearningCandidate",
     "PoseActiveLearningRound",
+    "PoseAnimalIdentity",
+    "PoseBiologicalEventRevision",
+    "PoseEvaluationRun",
+    "PoseEventDetectionRun",
+    "PoseIdentityAssociationDecision",
+    "PoseIdentityAssociationRun",
+    "PoseIdentityCorrection",
+    "PoseIdentityEvaluationRun",
+    "PoseIdentityObservation",
+    "PoseIdentityOcclusion",
+    "PoseIdentityTruthDataset",
     "PoseLandmarkAssociationCandidate",
     "PoseLandmarkAssociationDecision",
     "PoseLandmarkCorrection",
@@ -136,6 +166,9 @@ __all__ = [
     "PoseLandmarkSchema",
     "PoseLandmarkSchemaRevision",
     "PoseLandmarkTrack",
+    "PoseMeasurementRun",
+    "PoseMeasurementSample",
+    "PoseMeasurementSeries",
     "PoseModelSchemaBinding",
     "PoseTrainingDataset",
     "PoseTrainingDatasetItem",
@@ -145,6 +178,7 @@ __all__ = [
     "ProjectExchangePackage",
     "QualityControlIssue",
     "QualityControlRun",
+    "ReefPoseReference",
     "ReviewQueue",
     "ReviewQueueItem",
     "ScientificRecord",

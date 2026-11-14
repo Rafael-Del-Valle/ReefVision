@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from contextlib import suppress
 from datetime import UTC, datetime
 from hashlib import sha256
 from math import isfinite
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from PIL import Image, UnidentifiedImageError
@@ -19,8 +20,14 @@ from reefvision.config import Settings
 from reefvision.db.models import ImageAsset, Job, ModelRegistration, PredictionProposal, Project
 from reefvision.domain.errors import ValidationError
 from reefvision.ml.provider_hub import detection_provider_for_name
-from reefvision.ml.providers import DetectionProvider, DetectionSettings
+from reefvision.ml.providers import (
+    DetectionPrediction,
+    DetectionProvider,
+    DetectionSettings,
+    PoseKeypointPrediction,
+)
 from reefvision.ml.segmentation import (
+    SegmentationPrediction,
     SegmentationProvider,
     segmentation_provider_for_name,
 )
@@ -34,6 +41,10 @@ from reefvision.services.annotations import _polygon_area, _polygon_self_interse
 from reefvision.storage.projects import resolve_managed_project_path
 
 
+class _InvalidSegmentationPolygonError(ValidationError):
+    """A recoverable per-prediction contour error from a segmentation provider."""
+
+
 def _validate_model_prediction(
     image: ImageAsset,
     *,
@@ -42,6 +53,7 @@ def _validate_model_prediction(
     confidence: float,
     box: Any,
     polygon: list[list[float]] | None = None,
+    keypoints: tuple[PoseKeypointPrediction, ...] | None = None,
 ) -> None:
     coordinates = (
         float(box.x_min),
@@ -67,30 +79,87 @@ def _validate_model_prediction(
     if not isfinite(numeric_confidence) or not 0.0 <= numeric_confidence <= 1.0:
         raise ValidationError("Model prediction confidence must be finite and between 0 and 1")
 
+    for keypoint in keypoints or ():
+        if not keypoint.landmark_id.strip() or not keypoint.name.strip():
+            raise ValidationError("Pose landmarks must include stable IDs and names")
+        if keypoint.occurrence_index < 0:
+            raise ValidationError("Pose landmark occurrence indices cannot be negative")
+        if keypoint.visibility_state not in {
+            "absent",
+            "occluded",
+            "visible",
+            "uncertain",
+            "out_of_frame",
+        }:
+            raise ValidationError("Pose landmark visibility state is invalid")
+        if not isfinite(keypoint.confidence) or not 0 <= keypoint.confidence <= 1:
+            raise ValidationError("Pose landmark confidence must be finite and between 0 and 1")
+        if not isfinite(keypoint.x) or not isfinite(keypoint.y):
+            raise ValidationError("Pose landmark coordinates must be finite")
+        if keypoint.visibility_state not in {"absent", "out_of_frame"} and not (
+            0 <= keypoint.x <= image.width_px and 0 <= keypoint.y <= image.height_px
+        ):
+            raise ValidationError("Pose landmarks must remain inside the source image")
+
     if polygon is None:
         return
     if len(polygon) < 3:
-        raise ValidationError("Segmentation predictions require at least three polygon points")
+        raise _InvalidSegmentationPolygonError(
+            "Segmentation predictions require at least three polygon points"
+        )
 
     points: list[tuple[float, float]] = []
     for raw_point in polygon:
         if len(raw_point) != 2:
-            raise ValidationError("Every segmentation polygon point must contain x and y")
+            raise _InvalidSegmentationPolygonError(
+                "Every segmentation polygon point must contain x and y"
+            )
         x, y = float(raw_point[0]), float(raw_point[1])
         if not isfinite(x) or not isfinite(y):
-            raise ValidationError("Segmentation prediction polygons contain non-finite coordinates")
+            raise _InvalidSegmentationPolygonError(
+                "Segmentation prediction polygons contain non-finite coordinates"
+            )
         if x < 0 or y < 0 or x > image.width_px or y > image.height_px:
-            raise ValidationError(
+            raise _InvalidSegmentationPolygonError(
                 "Segmentation prediction polygons must remain inside the source image"
             )
         points.append((x, y))
 
     if len(set(points)) < 3:
-        raise ValidationError("Segmentation predictions require at least three unique points")
+        raise _InvalidSegmentationPolygonError(
+            "Segmentation predictions require at least three unique points"
+        )
     if _polygon_self_intersects(points):
-        raise ValidationError("Segmentation prediction polygons may not self-intersect")
+        raise _InvalidSegmentationPolygonError(
+            "Segmentation prediction polygons may not self-intersect"
+        )
     if _polygon_area(points) <= 0:
-        raise ValidationError("Segmentation prediction polygons must have positive area")
+        raise _InvalidSegmentationPolygonError(
+            "Segmentation prediction polygons must have positive area"
+        )
+
+
+def _pose_prediction_provenance(
+    keypoints: tuple[PoseKeypointPrediction, ...] | None,
+    pose_schema: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if not keypoints:
+        return {}
+    return {
+        "pose_landmarks": [
+            {
+                "landmark_id": item.landmark_id,
+                "semantic_label": item.name,
+                "occurrence_index": item.occurrence_index,
+                "x": item.x,
+                "y": item.y,
+                "confidence": item.confidence,
+                "visibility_state": item.visibility_state,
+            }
+            for item in keypoints
+        ],
+        "pose_schema": dict(pose_schema or {}),
+    }
 
 
 def _cleanup_pending_job_proposals(
@@ -298,7 +367,7 @@ def process_inference_job(
     semantic_provider = None
     if model_task == "segment":
         provider = segmentation_provider_for_name(provider_name)
-    elif model_task == "detect":
+    elif model_task in {"detect", "pose"}:
         provider = detection_provider_for_name(provider_name)
     elif model_task == SEMANTIC_SEGMENTATION_TASK:
         semantic_provider = semantic_provider_for_name(provider_name)
@@ -344,6 +413,7 @@ def process_inference_job(
                 if image is None or project is None:
                     raise ValidationError("The inference job references a missing image or project")
                 image_path = resolve_managed_project_path(settings, image.managed_path)
+                invalid_prediction_errors: list[str] = []
 
                 if semantic_provider is not None:
                     indexed_path = semantic_provider.predict(
@@ -374,18 +444,39 @@ def process_inference_job(
                 else:
                     if provider is None:
                         raise RuntimeError("Inference provider is unavailable")
-                    predictions = provider.predict(image_path, inference_settings)
-                    proposals = []
-                    for prediction in predictions:
-                        polygon = getattr(prediction, "polygon", None)
-                        _validate_model_prediction(
-                            image,
-                            label=prediction.label,
-                            class_index=prediction.class_index,
-                            confidence=prediction.confidence,
-                            box=prediction.box,
-                            polygon=polygon,
+                    predictions: Sequence[DetectionPrediction | SegmentationPrediction]
+                    if model_task == "segment":
+                        predictions = cast(SegmentationProvider, provider).predict(
+                            image_path,
+                            inference_settings,
                         )
+                    else:
+                        predictions = cast(DetectionProvider, provider).predict(
+                            image_path,
+                            inference_settings,
+                        )
+                    proposals = []
+                    for prediction_index, raw_prediction in enumerate(predictions):
+                        prediction = cast(
+                            DetectionPrediction | SegmentationPrediction,
+                            raw_prediction,
+                        )
+                        polygon = getattr(prediction, "polygon", None)
+                        try:
+                            _validate_model_prediction(
+                                image,
+                                label=prediction.label,
+                                class_index=prediction.class_index,
+                                confidence=prediction.confidence,
+                                box=prediction.box,
+                                polygon=polygon,
+                                keypoints=getattr(prediction, "keypoints", None),
+                            )
+                        except _InvalidSegmentationPolygonError as exc:
+                            invalid_prediction_errors.append(
+                                f"Image {image.id} prediction {prediction_index}: {exc}"
+                            )
+                            continue
                         geometry_kind = "polygon_mask" if polygon is not None else "bounding_box"
                         proposals.append(
                             PredictionProposal(
@@ -422,12 +513,24 @@ def process_inference_job(
                                     "model_task": model_task,
                                     "proposal_geometry": geometry_kind,
                                     "evaluation_only": evaluation_only,
+                                    **_pose_prediction_provenance(
+                                        getattr(prediction, "keypoints", None),
+                                        getattr(prediction, "pose_schema", None),
+                                    ),
                                 },
                             )
                         )
                 session.add_all(proposals)
                 job.progress_current = index
                 previous = dict(job.result_json or {})
+                invalid_prediction_count = int(previous.get("invalid_prediction_count", 0)) + len(
+                    invalid_prediction_errors
+                )
+                recorded_errors = [
+                    str(item) for item in previous.get("invalid_prediction_errors", [])
+                ]
+                recorded_errors.extend(invalid_prediction_errors)
+                recorded_errors = recorded_errors[:5]
                 job.result_json = {
                     "processed_images": index,
                     "model_task": model_task,
@@ -439,7 +542,18 @@ def process_inference_job(
                         if item.geometry_kind in {"polygon_mask", "raster_mask"}
                     ),
                 }
+                if invalid_prediction_count:
+                    job.result_json["invalid_prediction_count"] = invalid_prediction_count
+                    job.result_json["invalid_prediction_errors"] = recorded_errors
                 if index == len(image_ids):
+                    if (
+                        model_task == "segment"
+                        and job.result_json["proposal_count"] == 0
+                        and invalid_prediction_count > 0
+                    ):
+                        raise ValidationError(
+                            "All segmentation predictions were invalid: " + recorded_errors[0]
+                        )
                     job.status = "succeeded"
                     job.completed_at = _utc_now()
                 session.commit()

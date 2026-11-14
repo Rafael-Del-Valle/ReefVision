@@ -327,6 +327,165 @@ class OutOfBoundsSegmentationProvider(FakeSegmentationProvider):
         ]
 
 
+class MixedValiditySegmentationProvider(FakeSegmentationProvider):
+    def predict(
+        self,
+        image_path: Path,
+        settings: DetectionSettings,
+    ) -> list[SegmentationPrediction]:
+        valid = super().predict(image_path, settings)[0]
+        self_intersecting = SegmentationPrediction(
+            label="soft coral",
+            class_index=0,
+            confidence=0.91,
+            box=PixelBox(x_min=8, y_min=6, x_max=36, y_max=30),
+            polygon=[
+                [8.0, 6.0],
+                [36.0, 30.0],
+                [36.0, 6.0],
+                [8.0, 30.0],
+            ],
+        )
+        return [valid, self_intersecting]
+
+
+class MixedInvalidBoxSegmentationProvider(FakeSegmentationProvider):
+    def predict(
+        self,
+        image_path: Path,
+        settings: DetectionSettings,
+    ) -> list[SegmentationPrediction]:
+        valid = super().predict(image_path, settings)[0]
+        invalid_box = SegmentationPrediction(
+            label="soft coral",
+            class_index=0,
+            confidence=0.91,
+            box=PixelBox(x_min=8, y_min=6, x_max=81, y_max=30),
+            polygon=[
+                [8.0, 6.0],
+                [36.0, 8.0],
+                [33.0, 30.0],
+                [10.0, 28.0],
+            ],
+        )
+        return [valid, invalid_box]
+
+
+class MixedInvalidConfidenceSegmentationProvider(FakeSegmentationProvider):
+    def predict(
+        self,
+        image_path: Path,
+        settings: DetectionSettings,
+    ) -> list[SegmentationPrediction]:
+        valid = super().predict(image_path, settings)[0]
+        invalid_confidence = SegmentationPrediction(
+            label="soft coral",
+            class_index=0,
+            confidence=1.1,
+            box=PixelBox(x_min=8, y_min=6, x_max=36, y_max=30),
+            polygon=[
+                [8.0, 6.0],
+                [36.0, 8.0],
+                [33.0, 30.0],
+                [10.0, 28.0],
+            ],
+        )
+        return [valid, invalid_confidence]
+
+
+def test_segmentation_inference_retains_valid_predictions_when_one_is_invalid(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Partially valid segmentation output")
+    report = import_one(client, project["id"], size=(80, 60))
+    image_id = report["successful"][0]["image_id"]
+    label_class_id = project["label_classes"][0]["id"]
+    model = _seed_segmenter(client, project["id"], label_class_id)
+
+    monkeypatch.setattr(
+        inference_module,
+        "segmentation_provider_for_name",
+        lambda provider_name: MixedValiditySegmentationProvider(),
+    )
+
+    queued = client.post(
+        f"/api/v1/projects/{project['id']}/inference-jobs",
+        json={"model_id": model.id, "image_ids": [image_id], "device": "cpu"},
+    )
+    assert queued.status_code == 200, queued.text
+    job = queued.json()
+
+    app = cast(FastAPI, client.app)
+    assert inference_module.process_inference_job(
+        app.state.settings,
+        app.state.session_factory,
+        job["id"],
+    )
+
+    completed_job = client.get(f"/api/v1/jobs/{job['id']}").json()
+    assert completed_job["status"] == "succeeded"
+    assert completed_job["result_json"]["proposal_count"] == 1
+    assert completed_job["result_json"]["invalid_prediction_count"] == 1
+    assert "self-intersect" in completed_job["result_json"]["invalid_prediction_errors"][0]
+    proposals = client.get(f"/api/v1/images/{image_id}/prediction-proposals").json()["items"]
+    assert len(proposals) == 1
+    assert proposals[0]["confidence"] == pytest.approx(0.94)
+
+
+@pytest.mark.parametrize(
+    ("provider_type", "error_fragments"),
+    [
+        (MixedInvalidBoxSegmentationProvider, ("box", "inside the source image")),
+        (
+            MixedInvalidConfidenceSegmentationProvider,
+            ("confidence", "between 0 and 1"),
+        ),
+    ],
+)
+def test_segmentation_inference_fails_when_mixed_output_has_invalid_common_field(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    provider_type: type[FakeSegmentationProvider],
+    error_fragments: tuple[str, str],
+) -> None:
+    project = create_project(client, "Invalid mixed segmentation field")
+    report = import_one(client, project["id"], size=(80, 60))
+    image_id = report["successful"][0]["image_id"]
+    label_class_id = project["label_classes"][0]["id"]
+    model = _seed_segmenter(client, project["id"], label_class_id)
+
+    monkeypatch.setattr(
+        inference_module,
+        "segmentation_provider_for_name",
+        lambda provider_name: provider_type(),
+    )
+
+    queued = client.post(
+        f"/api/v1/projects/{project['id']}/inference-jobs",
+        json={"model_id": model.id, "image_ids": [image_id], "device": "cpu"},
+    )
+    assert queued.status_code == 200, queued.text
+    job = queued.json()
+
+    app = cast(FastAPI, client.app)
+    assert (
+        inference_module.process_inference_job(
+            app.state.settings,
+            app.state.session_factory,
+            job["id"],
+        )
+        is False
+    )
+
+    failed_job = client.get(f"/api/v1/jobs/{job['id']}").json()
+    assert failed_job["status"] == "failed"
+    assert error_fragments[0] in failed_job["error_message"].lower()
+    assert error_fragments[1] in failed_job["error_message"]
+    proposals = client.get(f"/api/v1/images/{image_id}/prediction-proposals").json()["items"]
+    assert proposals == []
+
+
 def test_invalid_segmentation_output_fails_before_proposal_persistence(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,

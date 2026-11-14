@@ -3,15 +3,19 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import {
   ApiRequestError,
+  createPoseEvaluation,
   deleteModel,
   getModelProviderPreflight,
   getModelHubBootstrap,
   getProjectModelCatalog,
+  getPoseEvaluations,
   getRuntimeProviderStatuses,
   getUltralyticsTrainingRegistrySummary,
   type ModelCatalogEntry,
   type ModelCatalogResponse,
   type ModelProvider,
+  type PoseEvaluationRun,
+  poseEvaluationExportUrl,
   registerModel,
   registerProviderModel,
   type ModelRegistration,
@@ -20,6 +24,12 @@ import {
   type RuntimeProviderStatus,
   type UltralyticsTrainingRegistrySummarySnapshot,
 } from "../../api/client";
+import {
+  getPoseTrainingDatasets,
+  type PoseTrainingDataset,
+} from "../video/poseActiveLearningApi";
+import { PoseEvaluationComparisonPanel } from "./PoseEvaluationComparisonPanel";
+import { ReefPoseValidationPanel } from "../video/ReefPoseValidationPanel";
 
 const optionalModelProviders = [
   { id: "grounding_dino", label: "Grounding DINO", extension: ".zip" },
@@ -36,10 +46,23 @@ const optionalModelProviders = [
 function ModelRow({
   model,
   onDelete,
+  onUsePoseModel,
+  poseDatasets,
+  poseEvaluations,
+  evaluationPending,
+  evaluationError,
+  onEvaluate,
 }: {
   model: ModelRegistration;
   onDelete: (modelId: string) => void;
+  onUsePoseModel?: (modelId: string) => void;
+  poseDatasets: PoseTrainingDataset[];
+  poseEvaluations: PoseEvaluationRun[];
+  evaluationPending: boolean;
+  evaluationError: Error | null;
+  onEvaluate: (modelId: string, datasetId: string) => void;
 }) {
+  const [evaluationDatasetId, setEvaluationDatasetId] = useState("");
   const labelEntries = useMemo(() => {
     const labels = Array.isArray(model.class_map_json.labels)
       ? (model.class_map_json.labels as string[])
@@ -54,6 +77,44 @@ function ModelRow({
       mapped: mapping[label] ?? null,
     }));
   }, [model.class_map_json]);
+  const rawPoseSchema = model.metadata_json.pose_landmark_schema;
+  const poseSchema =
+    rawPoseSchema &&
+    !Array.isArray(rawPoseSchema) &&
+    typeof rawPoseSchema === "object"
+      ? (rawPoseSchema as Record<string, unknown>)
+      : null;
+  const reefpose = model.provider_name === "reefpose" && model.task === "pose";
+  const compatibleEvaluationDatasets = useMemo(() => {
+    if (!reefpose) return [];
+    const metadata = model.metadata_json;
+    const forbiddenIds = new Set(
+      [
+        metadata.source_pose_training_dataset_id,
+        metadata.source_pose_validation_dataset_id,
+      ].filter((value): value is string => typeof value === "string"),
+    );
+    const forbiddenHashes = new Set(
+      [
+        metadata.source_pose_training_dataset_manifest_sha256,
+        metadata.source_pose_validation_dataset_manifest_sha256,
+      ].filter((value): value is string => typeof value === "string"),
+    );
+    return poseDatasets.filter(
+      (dataset) =>
+        dataset.status === "complete" &&
+        dataset.pose_schema_id === metadata.source_pose_schema_id &&
+        dataset.pose_schema_revision === metadata.source_pose_schema_revision &&
+        dataset.pose_schema_content_hash ===
+          metadata.source_pose_schema_content_hash &&
+        !forbiddenIds.has(dataset.id) &&
+        !forbiddenHashes.has(dataset.manifest_sha256),
+    );
+  }, [model.metadata_json, poseDatasets, reefpose]);
+  const modelEvaluations = useMemo(
+    () => poseEvaluations.filter((item) => item.model_id === model.id),
+    [model.id, poseEvaluations],
+  );
 
   return (
     <article className="image-card">
@@ -87,7 +148,184 @@ function ModelRow({
           </div>
         )}
         {model.notes && <p>{model.notes}</p>}
+        {reefpose && poseSchema && (
+          <details>
+            <summary>ReefPose anatomy and provenance</summary>
+            <p>
+              <strong>
+                {String(poseSchema.schema_name ?? poseSchema.schema_id)} ·
+                revision {String(poseSchema.schema_revision)}
+              </strong>
+            </p>
+            <p>{String(poseSchema.keypoint_count)} anatomical keypoints</p>
+            <dl className="training-provenance-list">
+              <div>
+                <dt>Architecture</dt>
+                <dd>
+                  {String(
+                    model.metadata_json.source_architecture ?? "reefpose-s",
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Schema integrity</dt>
+                <dd>{String(poseSchema.content_hash ?? "Unavailable")}</dd>
+              </div>
+              <div>
+                <dt>Training run</dt>
+                <dd>
+                  {String(
+                    model.metadata_json.source_training_run_id ?? "Unavailable",
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Frozen pose dataset</dt>
+                <dd>
+                  {String(
+                    model.metadata_json.source_pose_training_dataset_id ??
+                      "Unavailable",
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Dataset integrity</dt>
+                <dd>
+                  {String(
+                    model.metadata_json
+                      .source_pose_training_dataset_manifest_sha256 ??
+                      "Unavailable",
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Checkpoint integrity</dt>
+                <dd>
+                  {String(
+                    model.metadata_json.source_checkpoint_sha256 ??
+                      model.sha256,
+                  )}{" "}
+                  · {model.file_size_bytes} bytes
+                </dd>
+              </div>
+            </dl>
+            <p>Training configuration</p>
+            <pre className="json-block">
+              {JSON.stringify(
+                model.metadata_json.source_training_config ?? {},
+                null,
+                2,
+              )}
+            </pre>
+            <p>Available metrics</p>
+            <pre className="json-block">
+              {JSON.stringify(
+                model.metadata_json.source_metrics ?? {},
+                null,
+                2,
+              )}
+            </pre>
+          </details>
+        )}
+        {reefpose && (
+          <details>
+            <summary>Scientific held-out evaluation</summary>
+            <p className="annotation-helper">
+              Compare this checkpoint with a distinct immutable,
+              scientist-verified dataset. Synthetic runs are engineering
+              evidence, not biological validation.
+            </p>
+            <label>
+              Held-out evaluation dataset
+              <select
+                value={evaluationDatasetId}
+                onChange={(event) => setEvaluationDatasetId(event.target.value)}
+              >
+                <option value="">Select a compatible dataset</option>
+                {compatibleEvaluationDatasets.map((dataset) => (
+                  <option key={dataset.id} value={dataset.id}>
+                    {dataset.name} · {dataset.item_count} verified poses
+                  </option>
+                ))}
+              </select>
+            </label>
+            {poseDatasets.length > 0 &&
+              compatibleEvaluationDatasets.length === 0 && (
+                <p className="form-error">
+                  No unused dataset has this exact anatomy schema revision and
+                  integrity hash.
+                </p>
+              )}
+            <div className="image-card-actions">
+              <button
+                type="button"
+                onClick={() => onEvaluate(model.id, evaluationDatasetId)}
+                disabled={!evaluationDatasetId || evaluationPending}
+              >
+                {evaluationPending ? "Evaluating…" : "Evaluate ReefPose"}
+              </button>
+            </div>
+            {evaluationError && (
+              <p className="form-error">{evaluationError.message}</p>
+            )}
+            {modelEvaluations.map((run) => {
+              const pck =
+                run.metrics_json.pck &&
+                typeof run.metrics_json.pck === "object" &&
+                !Array.isArray(run.metrics_json.pck)
+                  ? (run.metrics_json.pck as Record<string, number>)
+                  : {};
+              const nme = run.metrics_json.nme;
+              const meanError = run.metrics_json.mean_euclidean_error;
+              const coverage = run.metrics_json.localization_coverage;
+              return (
+                <article key={run.id} className="annotation-selection-row">
+                  <strong>
+                    {new Date(run.created_at).toLocaleString()} · {run.status}
+                  </strong>
+                  <span>
+                    {Object.entries(pck)
+                      .map(
+                        ([threshold, value]) =>
+                          `PCK@${threshold}: ${Number(value).toFixed(3)}`,
+                      )
+                      .join(" · ")}
+                  </span>
+                  <span>
+                    NME: {typeof nme === "number" ? nme.toFixed(3) : "N/A"} ·
+                    mean error:{" "}
+                    {typeof meanError === "number"
+                      ? meanError.toFixed(2)
+                      : "N/A"}{" "}
+                    px · coverage:{" "}
+                    {typeof coverage === "number" ? coverage.toFixed(3) : "N/A"}
+                  </span>
+                  <span>
+                    {run.inference_latency_ms.toFixed(2)} ms/image ·{" "}
+                    {run.images_per_second.toFixed(1)} images/s
+                  </span>
+                  {run.warnings_json.map((warning) => (
+                    <small key={warning}>{warning}</small>
+                  ))}
+                  <span>
+                    <a href={poseEvaluationExportUrl(run.id, "json")}>
+                      Export JSON
+                    </a>{" "}
+                    <a href={poseEvaluationExportUrl(run.id, "csv")}>
+                      Export CSV
+                    </a>
+                  </span>
+                </article>
+              );
+            })}
+          </details>
+        )}
         <div className="image-card-actions">
+          {model.task === "pose" && onUsePoseModel && (
+            <button type="button" onClick={() => onUsePoseModel(model.id)}>
+              Use in Pose Tracking
+            </button>
+          )}
           <button
             type="button"
             className="danger-ghost"
@@ -235,11 +473,13 @@ export function ModelManager({
   onSelectCatalogModel,
   onTrainPoseArchitecture,
   onTrainClassificationArchitecture,
+  onUsePoseModel,
 }: {
   project: Project;
   onSelectCatalogModel?: (catalogId: string) => void;
   onTrainPoseArchitecture?: (architecture: string) => void;
   onTrainClassificationArchitecture?: (architecture: string) => void;
+  onUsePoseModel?: (modelId: string) => void;
 }) {
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
@@ -300,6 +540,17 @@ export function ModelManager({
       previous ?? modelHubBootstrap.data?.training_compatibility ?? undefined,
   });
   const models = modelHubBootstrap.data?.models ?? [];
+  const hasNativeReefPose = models.some((model) => model.task === "pose");
+  const poseDatasetsQuery = useQuery({
+    queryKey: ["pose-training-datasets", project.id, "model-evaluation"],
+    queryFn: ({ signal }) => getPoseTrainingDatasets(project.id, signal),
+    enabled: hasNativeReefPose,
+  });
+  const poseEvaluationsQuery = useQuery({
+    queryKey: ["pose-evaluations", project.id],
+    queryFn: ({ signal }) => getPoseEvaluations(project.id, signal),
+    enabled: hasNativeReefPose,
+  });
   const modelCatalog =
     catalogQuery.data ??
     cachedCatalog ??
@@ -440,7 +691,7 @@ export function ModelManager({
   useEffect(() => {
     if (!catalogQuery.data?.models.length) return;
     setCachedCatalog(catalogQuery.data);
-    window.localStorage.setItem(
+    window.localStorage?.setItem(
       cachedCatalogKey(project.id),
       JSON.stringify(catalogQuery.data),
     );
@@ -525,6 +776,30 @@ export function ModelManager({
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ["model_hub_bootstrap", project.id],
+      });
+    },
+  });
+
+  const poseEvaluationMutation = useMutation({
+    mutationFn: ({
+      modelId,
+      datasetId,
+    }: {
+      modelId: string;
+      datasetId: string;
+    }) =>
+      createPoseEvaluation(project.id, {
+        model_id: modelId,
+        evaluation_dataset_id: datasetId,
+        device: "auto",
+        pck_thresholds: [0.05, 0.1, 0.2],
+        calibration_threshold: 0.1,
+        calibration_bins: 10,
+        confidence_thresholds: [0, 0.25, 0.5, 0.75, 0.9],
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["pose-evaluations", project.id],
       });
     },
   });
@@ -1242,12 +1517,36 @@ export function ModelManager({
           </p>
         </div>
       )}
+      {hasNativeReefPose && (
+        <PoseEvaluationComparisonPanel
+          projectId={project.id}
+          models={models}
+          datasets={poseDatasetsQuery.data ?? []}
+        />
+      )}
+      <ReefPoseValidationPanel key={project.id} projectId={project.id} />
       <div className="image-grid">
         {models.map((model) => (
           <ModelRow
             key={model.id}
             model={model}
+            onUsePoseModel={onUsePoseModel}
             onDelete={(modelId) => deleteMutation.mutate(modelId)}
+            poseDatasets={poseDatasetsQuery.data ?? []}
+            poseEvaluations={poseEvaluationsQuery.data ?? []}
+            evaluationPending={
+              poseEvaluationMutation.isPending &&
+              poseEvaluationMutation.variables?.modelId === model.id
+            }
+            evaluationError={
+              poseEvaluationMutation.error &&
+              poseEvaluationMutation.variables?.modelId === model.id
+                ? poseEvaluationMutation.error
+                : null
+            }
+            onEvaluate={(modelId, datasetId) =>
+              poseEvaluationMutation.mutate({ modelId, datasetId })
+            }
           />
         ))}
       </div>

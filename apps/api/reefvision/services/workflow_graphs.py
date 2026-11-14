@@ -50,9 +50,12 @@ _MODEL_PURPOSES_BY_NODE: dict[str, set[str]] = {
     "video_tracking": {"detector", "segmenter"},
     "pose_inference": {"detector"},
     "pose_model_training": {"detector"},
+    "pose_model_evaluation": {"detector"},
 }
 
 _ACTIONS: dict[str, str] = {
+    "reefpose_reference_source": "Freeze or resolve an independent scientific reference revision.",
+    "reefpose_scientific_validation": "Score original pose outputs and persist a report.",
     "project_source": "Resolve the project selected in the API route.",
     "scientific_records_source": (
         "Load explicit project scientific records and verify their immutable checksums."
@@ -139,6 +142,28 @@ _ACTIONS: dict[str, str] = {
         "and identity-break provenance."
     ),
     "pose_review_gate": ("Pause until temporal pose state has explicit scientist review."),
+    "pose_identity_association": (
+        "Associate pose instances into auditable, persistent animal identities."
+    ),
+    "pose_identity_review_gate": (
+        "Pause until multi-animal identity assignments have explicit scientist review."
+    ),
+    "pose_identity_evaluation": (
+        "Evaluate reviewed animal identities against immutable verified identity truth."
+    ),
+    "pose_identity_export": "Export reviewed identities and scientific evaluation provenance.",
+    "anatomical_measurement": (
+        "Calculate immutable anatomical time series from reviewed animal identities."
+    ),
+    "biological_event_detection": (
+        "Detect complete and partial biological movement candidates with deterministic hysteresis."
+    ),
+    "biological_event_review_gate": (
+        "Pause until every retained biological event candidate has scientist disposition."
+    ),
+    "biological_movement_export": (
+        "Export reviewed measurements, event revisions, and integrity provenance."
+    ),
     "behavior_dynamics": (
         "Calculate deterministic behavior dynamics from scientist-reviewed tracks."
     ),
@@ -151,11 +176,17 @@ _ACTIONS: dict[str, str] = {
     "pose_training_dataset_freeze": (
         "Freeze only verified pose candidates into immutable Phase 9 training truth."
     ),
+    "pose_training_dataset": (
+        "Resolve one existing immutable scientist-verified pose training dataset."
+    ),
     "pose_training_export": (
         "Export the immutable pose dataset through the validated Phase 9 exporters."
     ),
     "pose_model_training": (
-        "Retrain an Ultralytics pose checkpoint from immutable scientist-verified pose truth."
+        "Train a provider-native pose checkpoint from immutable scientist-verified pose truth."
+    ),
+    "pose_model_evaluation": (
+        "Compare registered pose models on immutable scientist-verified held-out truth."
     ),
     "project_exchange_export": "Build a Phase 9 checksummed project exchange export inline.",
     "ecology_connected_branch_preview": (

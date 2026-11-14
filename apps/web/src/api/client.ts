@@ -388,6 +388,52 @@ export interface ModelRegistration {
   updated_at: string;
 }
 
+export interface PoseEvaluationRun {
+  id: string;
+  project_id: string;
+  model_id: string;
+  evaluation_dataset_id: string;
+  schema_version: string;
+  status: string;
+  configuration_json: Record<string, unknown>;
+  metrics_json: Record<string, unknown>;
+  predictions_json: Array<Record<string, unknown>>;
+  provenance_json: Record<string, unknown>;
+  warnings_json: string[];
+  result_sha256: string;
+  inference_latency_ms: number;
+  images_per_second: number;
+  created_at: string;
+}
+
+export interface PoseEvaluationCreatePayload {
+  model_id: string;
+  evaluation_dataset_id: string;
+  device?: string;
+  pck_thresholds?: number[];
+  calibration_threshold?: number;
+  calibration_bins?: number;
+  confidence_thresholds?: number[];
+}
+
+export interface PoseEvaluationComparisonCreatePayload {
+  model_ids: string[];
+  evaluation_dataset_id: string;
+  device?: string;
+  pck_thresholds?: number[];
+  calibration_threshold?: number;
+  calibration_bins?: number;
+  confidence_thresholds?: number[];
+  oks_sigmas?: Record<string, number> | null;
+}
+
+export interface PoseEvaluationComparisonPage {
+  items: JobRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export type ModelCatalogCategory =
   | "architecture"
   | "provider_requirement"
@@ -927,6 +973,8 @@ export interface RuntimeProviderStatus {
   status: string;
   supports_cpu: boolean;
   supports_cuda: boolean;
+  cuda_available: boolean | null;
+  cuda_device_name: string | null;
   notes: string[];
 }
 
@@ -2127,6 +2175,60 @@ export async function getModels(
       signal,
     },
   );
+}
+
+export function getPoseEvaluations(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<PoseEvaluationRun[]> {
+  return request<PoseEvaluationRun[]>(
+    `/projects/${encodeURIComponent(projectId)}/pose-evaluations`,
+    { signal },
+  );
+}
+
+export function createPoseEvaluation(
+  projectId: string,
+  payload: PoseEvaluationCreatePayload,
+): Promise<PoseEvaluationRun> {
+  return request<PoseEvaluationRun>(
+    `/projects/${encodeURIComponent(projectId)}/pose-evaluations`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export function poseEvaluationExportUrl(
+  runId: string,
+  format: "json" | "csv",
+): string {
+  return `${getApiBaseUrl()}/pose-evaluations/${encodeURIComponent(runId)}/export?format=${format}`;
+}
+
+export function getPoseEvaluationComparisons(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<PoseEvaluationComparisonPage> {
+  return request<PoseEvaluationComparisonPage>(
+    `/projects/${encodeURIComponent(projectId)}/pose-evaluation-comparisons?limit=50&offset=0`,
+    { signal },
+  );
+}
+
+export function createPoseEvaluationComparison(
+  projectId: string,
+  payload: PoseEvaluationComparisonCreatePayload,
+): Promise<JobRecord> {
+  return request<JobRecord>(
+    `/projects/${encodeURIComponent(projectId)}/pose-evaluation-comparisons`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export function poseEvaluationComparisonExportUrl(
+  jobId: string,
+  format: "json" | "csv",
+): string {
+  return `${getApiBaseUrl()}/pose-evaluation-comparisons/${encodeURIComponent(jobId)}/export?format=${format}`;
 }
 
 export async function getProjectModelCatalog(

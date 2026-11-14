@@ -15,6 +15,7 @@ import argparse
 import hashlib
 import json
 import math
+import random
 import subprocess
 import time
 from datetime import UTC, datetime
@@ -25,7 +26,7 @@ from uuid import uuid4
 import torch
 import yaml
 from fastapi.testclient import TestClient
-from PIL import Image
+from PIL import Image, ImageDraw
 from sqlalchemy import select
 
 from reefvision.config import Settings
@@ -34,11 +35,21 @@ from reefvision.db.models import MaskAnnotation, PredictionProposal, TrainingRun
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.training_dispatch import process_task_aware_training_job
 from reefvision.main import create_app
+from reefvision.services.annotations import _polygon_self_intersects
 from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
 
 IMAGE_SUFFIXES = {".bmp", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"}
 REEFVISION_SPLITS = {"train": "train", "val": "validation", "test": "test"}
+SYNTHETIC_CLASSES = ("branching coral", "massive coral")
+
+
+def acceptance_dataset_label(dataset_kind: str) -> str:
+    if dataset_kind == "synthetic":
+        return "Synthetic technical"
+    if dataset_kind == "representative":
+        return "Representative coral"
+    raise ValueError(f"Unsupported segmentation acceptance dataset kind: {dataset_kind}")
 
 
 def require(response: Any, status: int) -> dict[str, Any]:
@@ -47,12 +58,165 @@ def require(response: Any, status: int) -> dict[str, Any]:
     return dict(response.json())
 
 
+def require_imported_image_id(report: dict[str, Any], source: Path) -> str:
+    """Return the single imported image ID or preserve the API's diagnostic report."""
+
+    successful = report.get("successful")
+    if isinstance(successful, list) and len(successful) == 1:
+        image_id = successful[0].get("image_id")
+        if isinstance(image_id, str) and image_id:
+            return image_id
+    raise RuntimeError(f"Image import failed for {source}: {json.dumps(report, sort_keys=True)}")
+
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def generate_synthetic_dataset(
+    destination: Path,
+    *,
+    seed: int = 103,
+    image_size: int = 160,
+    split_counts: dict[str, int] | None = None,
+) -> list[dict[str, Any]]:
+    """Create a deterministic varied technical dataset with leak-free splits."""
+
+    if image_size < 96:
+        raise ValueError("Synthetic segmentation images must be at least 96 pixels square")
+    counts = split_counts or {"train": 20, "validation": 5, "test": 5}
+    if set(counts) != {"train", "validation", "test"}:
+        raise ValueError("Synthetic split counts must define train, validation, and test")
+    if any(count <= 0 for count in counts.values()):
+        raise ValueError("Every synthetic split must contain at least one image")
+    if destination.exists():
+        raise FileExistsError(f"Synthetic dataset destination already exists: {destination}")
+
+    rng = random.Random(seed)
+    destination.mkdir(parents=True)
+    records: list[dict[str, Any]] = []
+    sample_index = 0
+    for split, count in counts.items():
+        image_dir = destination / split / "images"
+        label_dir = destination / split / "labels"
+        image_dir.mkdir(parents=True)
+        label_dir.mkdir(parents=True)
+        for split_index in range(count):
+            base = (12 + sample_index % 7, 18 + sample_index % 9, 24 + sample_index % 11)
+            image = Image.new("RGB", (image_size, image_size), base)
+            draw = ImageDraw.Draw(image)
+            for y in range(image_size):
+                drift = (y + sample_index * 3) % 13
+                draw.line(
+                    (0, y, image_size - 1, y),
+                    fill=(base[0] + drift, base[1] + drift, base[2] + drift),
+                )
+
+            margin = max(8, image_size // 14)
+            branch_center = (
+                rng.randint(image_size // 5, image_size // 2 - margin),
+                rng.randint(image_size // 5, image_size * 4 // 5),
+            )
+            massive_center = (
+                rng.randint(image_size // 2 + margin, image_size * 4 // 5),
+                rng.randint(image_size // 5, image_size * 4 // 5),
+            )
+            branch_radius = rng.randint(image_size // 10, image_size // 7)
+            massive_radius = rng.randint(image_size // 10, image_size // 6)
+
+            bx, by = branch_center
+            br = branch_radius
+            branching_polygon = [
+                [bx - br, by - br // 3],
+                [bx - br // 3, by - br // 3],
+                [bx - br // 3, by - br],
+                [bx + br // 3, by - br],
+                [bx + br // 3, by - br // 3],
+                [bx + br, by - br // 3],
+                [bx + br, by + br // 3],
+                [bx + br // 3, by + br // 3],
+                [bx + br // 3, by + br],
+                [bx - br // 3, by + br],
+                [bx - br // 3, by + br // 3],
+                [bx - br, by + br // 3],
+            ]
+            mx, my = massive_center
+            mr = massive_radius
+            massive_polygon = [
+                [mx - mr, my],
+                [mx - mr * 3 // 4, my - mr * 3 // 4],
+                [mx, my - mr],
+                [mx + mr * 3 // 4, my - mr * 3 // 4],
+                [mx + mr, my],
+                [mx + mr * 3 // 4, my + mr * 3 // 4],
+                [mx, my + mr],
+                [mx - mr * 3 // 4, my + mr * 3 // 4],
+            ]
+            objects = [
+                {
+                    "class_index": 0,
+                    "class_name": SYNTHETIC_CLASSES[0],
+                    "polygon": branching_polygon,
+                },
+                {
+                    "class_index": 1,
+                    "class_name": SYNTHETIC_CLASSES[1],
+                    "polygon": massive_polygon,
+                },
+            ]
+            draw.polygon(
+                [tuple(point) for point in branching_polygon],
+                fill=(225, 118 + sample_index % 20, 45),
+            )
+            draw.polygon(
+                [tuple(point) for point in massive_polygon],
+                fill=(38, 175, 178 + sample_index % 20),
+            )
+
+            filename = f"synthetic-{sample_index:03d}.png"
+            image_path = image_dir / filename
+            image.save(image_path, format="PNG")
+            label_lines = []
+            for item in objects:
+                normalized = " ".join(
+                    f"{coordinate / image_size:.8f}"
+                    for point in item["polygon"]
+                    for coordinate in point
+                )
+                label_lines.append(f"{item['class_index']} {normalized}")
+            label_path = label_dir / f"{Path(filename).stem}.txt"
+            label_path.write_text("\n".join(label_lines) + "\n", encoding="utf-8")
+            records.append(
+                {
+                    "sample_index": sample_index,
+                    "split_index": split_index,
+                    "split": split,
+                    "path": str(image_path),
+                    "label_path": str(label_path),
+                    "sha256": sha256(image_path),
+                    "objects": objects,
+                }
+            )
+            sample_index += 1
+
+    (destination / "data.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "path": str(destination.resolve()),
+                "train": "train/images",
+                "val": "validation/images",
+                "test": "test/images",
+                "names": list(SYNTHETIC_CLASSES),
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    return records
 
 
 def _names_from_yaml(payload: dict[str, Any]) -> dict[int, str]:
@@ -93,9 +257,7 @@ def _resolve_image_dir(source: Path, payload: dict[str, Any], key: str) -> Path 
         raise RuntimeError(f"Split {key} must resolve to an image directory path")
     path = Path(raw)
     resolved = (
-        path.resolve()
-        if path.is_absolute()
-        else (_dataset_base(source, payload) / path).resolve()
+        path.resolve() if path.is_absolute() else (_dataset_base(source, payload) / path).resolve()
     )
     if not resolved.is_dir():
         raise RuntimeError(f"Image directory for split {key} does not exist: {resolved}")
@@ -174,20 +336,55 @@ def inspect_yolo_segmentation_dataset(
         resolved[key] = pairs
     if "test" not in resolved:
         raise RuntimeError("Real segmentation acceptance requires an explicit held-out test split")
+    split_by_hash: dict[str, str] = {}
+    for split, pairs in resolved.items():
+        for image_path, _label_path in pairs:
+            digest = sha256(image_path)
+            previous_split = split_by_hash.get(digest)
+            if previous_split is not None and previous_split != split:
+                raise RuntimeError(
+                    "Segmentation split leakage: identical image bytes appear in "
+                    f"{previous_split} and {split}: {image_path}"
+                )
+            split_by_hash[digest] = split
     return payload, names, resolved
 
 
-def _polygon_is_valid(proposal: PredictionProposal) -> bool:
+def _polygon_is_valid(
+    proposal: PredictionProposal,
+    *,
+    width: int,
+    height: int,
+    allowed_class_ids: set[str],
+) -> bool:
     polygon = proposal.polygon_json
+    if not isinstance(polygon, list) or len(polygon) < 3:
+        return False
+    try:
+        points = [(float(point[0]), float(point[1])) for point in polygon]
+    except (IndexError, TypeError, ValueError):
+        return False
+    if any(not math.isfinite(coordinate) for point in points for coordinate in point):
+        return False
+    area = abs(
+        sum(
+            points[index][0] * points[(index + 1) % len(points)][1]
+            - points[(index + 1) % len(points)][0] * points[index][1]
+            for index in range(len(points))
+        )
+        / 2
+    )
     return (
         proposal.geometry_kind == "polygon_mask"
-        and isinstance(polygon, list)
-        and len(polygon) >= 3
-        and len({(float(point[0]), float(point[1])) for point in polygon}) >= 3
-        and proposal.x_min < proposal.x_max
-        and proposal.y_min < proposal.y_max
+        and len(set(points)) >= 3
+        and area > 0
+        and not _polygon_self_intersects(points)
+        and all(0 <= x < width and 0 <= y < height for x, y in points)
+        and 0 <= proposal.x_min < proposal.x_max <= width
+        and 0 <= proposal.y_min < proposal.y_max <= height
         and 0 <= proposal.confidence <= 1
         and proposal.review_status == "pending"
+        and proposal.label_class_id in allowed_class_ids
     )
 
 
@@ -197,6 +394,11 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--state", type=Path)
     parser.add_argument("--biological-context", required=True)
+    parser.add_argument(
+        "--dataset-kind",
+        choices=("representative", "synthetic"),
+        default="representative",
+    )
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--imgsz", type=int, default=640)
     parser.add_argument("--batch", type=int, default=2)
@@ -204,6 +406,7 @@ def main() -> int:
     parser.add_argument("--architecture", default="yolo11n-seg.yaml")
     parser.add_argument("--confidence", type=float, default=0.001)
     args = parser.parse_args()
+    dataset_label = acceptance_dataset_label(args.dataset_kind)
 
     source = args.dataset.resolve()
     output = args.output.resolve()
@@ -227,9 +430,8 @@ def main() -> int:
     source_records: list[dict[str, Any]] = []
     image_counts: dict[str, int] = {}
     polygon_counts: dict[str, int] = {}
-    image_ids: dict[str, list[str]] = {
-        value: [] for value in REEFVISION_SPLITS.values()
-    }
+    image_ids: dict[str, list[str]] = {value: [] for value in REEFVISION_SPLITS.values()}
+    image_dimensions: dict[str, tuple[int, int]] = {}
 
     project: dict[str, Any]
     version: dict[str, Any]
@@ -245,7 +447,7 @@ def main() -> int:
         project = require(
             client.post(
                 "/api/v1/projects",
-                json={"name": "Real coral segmentation acceptance", "template": "blank"},
+                json={"name": f"{dataset_label} segmentation acceptance", "template": "blank"},
             ),
             201,
         )
@@ -259,7 +461,8 @@ def main() -> int:
                         "display_order": class_index,
                         "name": name,
                         "description": (
-                            "Imported from real YOLO polygon segmentation acceptance dataset"
+                            f"Imported from {dataset_label.lower()} YOLO polygon "
+                            "segmentation acceptance dataset"
                         ),
                         "display_color": "#4C9A8A",
                     },
@@ -295,10 +498,7 @@ def main() -> int:
                             "id": str(uuid4()),
                             "label_class_id": class_ids[class_index],
                             "geometry_kind": "polygon",
-                            "points": [
-                                {"x": x * width, "y": y * height}
-                                for x, y in normalized
-                            ],
+                            "points": [{"x": x * width, "y": y * height} for x, y in normalized],
                         }
                     )
                 polygon_counts[reef_split] += len(masks)
@@ -320,8 +520,9 @@ def main() -> int:
                     ),
                     200,
                 )
-                image_id = imported["successful"][0]["image_id"]
+                image_id = require_imported_image_id(imported, image_path)
                 image_ids[reef_split].append(image_id)
+                image_dimensions[image_id] = (width, height)
                 updated = require(
                     client.patch(
                         f"/api/v1/images/{image_id}",
@@ -370,7 +571,7 @@ def main() -> int:
             client.post(
                 f"/api/v1/projects/{project['id']}/dataset-versions",
                 json={
-                    "name": "Real coral polygon acceptance snapshot",
+                    "name": f"{dataset_label} polygon acceptance snapshot",
                     "notes": f"Read-only source lineage: {source}",
                     "creator": "ReefVision release acceptance",
                     "eligible_annotation_statuses": ["reviewed"],
@@ -384,8 +585,8 @@ def main() -> int:
             client.post(
                 f"/api/v1/projects/{project['id']}/training-drafts",
                 json={
-                    "name": "Real coral segmentation acceptance",
-                    "run_name": "real-coral-segment-acceptance",
+                    "name": f"{dataset_label} segmentation acceptance",
+                    "run_name": f"{args.dataset_kind}-segment-acceptance",
                     "dataset_version_id": version["id"],
                     "task": "segment",
                     "provider_id": "ultralytics",
@@ -444,15 +645,14 @@ def main() -> int:
                 f"/api/v1/projects/{project['id']}/models/register-from-run",
                 json={
                     "training_run_id": run["id"],
-                    "display_name": "Real coral YOLO segmentation acceptance",
+                    "display_name": f"{dataset_label} YOLO segmentation acceptance",
                 },
             ),
             200,
         )
         if registered.get("purpose") != "segmenter":
             raise RuntimeError(
-                "Segmentation run registered unexpected model purpose: "
-                f"{registered.get('purpose')}"
+                f"Segmentation run registered unexpected model purpose: {registered.get('purpose')}"
             )
 
         inference_started = time.perf_counter()
@@ -490,7 +690,17 @@ def main() -> int:
             metrics = dict(trained.metrics_json)
             mask_metrics = dict(trained.artifact_manifest_json).get("mask_metrics", {})
 
-        valid_polygons = bool(proposals) and all(_polygon_is_valid(item) for item in proposals)
+        allowed_class_ids = set(class_ids.values())
+        valid_polygons = bool(proposals) and all(
+            item.image_id in image_dimensions
+            and _polygon_is_valid(
+                item,
+                width=image_dimensions[item.image_id][0],
+                height=image_dimensions[item.image_id][1],
+                allowed_class_ids=allowed_class_ids,
+            )
+            for item in proposals
+        )
         if not valid_polygons:
             raise RuntimeError(
                 "Held-out segmentation inference produced no valid pending polygon-mask proposals"
@@ -534,9 +744,7 @@ def main() -> int:
         restart_ok = process_inference_job(
             settings, restart_app.state.session_factory, restart_job["id"]
         )
-        restart_payload = require(
-            restart_client.get(f"/api/v1/jobs/{restart_job['id']}"), 200
-        )
+        restart_payload = require(restart_client.get(f"/api/v1/jobs/{restart_job['id']}"), 200)
         with restart_app.state.session_factory() as session:
             restart_proposals = list(
                 session.scalars(
@@ -554,13 +762,23 @@ def main() -> int:
     restart_app.state.engine.dispose()
 
     restart_geometry_valid = bool(restart_proposals) and all(
-        _polygon_is_valid(item) for item in restart_proposals
+        item.image_id in image_dimensions
+        and _polygon_is_valid(
+            item,
+            width=image_dimensions[item.image_id][0],
+            height=image_dimensions[item.image_id][1],
+            allowed_class_ids=allowed_class_ids,
+        )
+        for item in restart_proposals
     )
     review_persisted = (
         persisted_mask_after_restart is not None
         and persisted_mask_after_restart.source_type == "accepted_prediction"
     )
     checkpoint_hash, checkpoint_size = hash_model_file(checkpoint)
+    source_bytes_unchanged = all(
+        sha256(Path(record["source_path"])) == record["source_sha256"] for record in source_records
+    )
 
     acceptance = (
         "PASS"
@@ -573,20 +791,32 @@ def main() -> int:
                 valid_polygons,
                 restart_geometry_valid,
                 review_persisted,
+                source_bytes_unchanged,
             )
         )
         else "FAIL"
     )
     report = {
         "acceptance": acceptance,
-        "commit_sha": subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], text=True
-        ).strip(),
+        "commit_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
         "created_at": datetime.now(UTC).isoformat(),
         "scope": (
-            "Real biological instance-segmentation software execution acceptance; "
-            "not a claim of satisfactory scientific segmentation accuracy"
+            "Synthetic technical instance-segmentation software execution acceptance; "
+            "not representative scientific validation"
+            if args.dataset_kind == "synthetic"
+            else "Representative biological instance-segmentation software execution acceptance"
         ),
+        "results": {
+            "training_lifecycle": "PASS" if training_ok else "FAIL",
+            "checkpoint_registration": "PASS" if checkpoint_size > 0 else "FAIL",
+            "held_out_polygon_generation": "PASS" if valid_polygons else "FAIL",
+            "dataset_representativeness": (
+                "UNVERIFIED" if args.dataset_kind == "synthetic" else "PASS"
+            ),
+            "scientific_segmentation_acceptance": (
+                "UNVERIFIED" if args.dataset_kind == "synthetic" else acceptance
+            ),
+        },
         "dataset": {
             "source": str(source),
             "biological_context": args.biological_context,
@@ -597,6 +827,7 @@ def main() -> int:
             "reefvision_dataset_version_id": version["id"],
             "manifest_sha256": version["manifest_sha256"],
             "source_lineage": source_records,
+            "source_bytes_unchanged": source_bytes_unchanged,
         },
         "training": {
             "run_id": run["id"],
@@ -632,9 +863,7 @@ def main() -> int:
         "inference": {
             "held_out_image_count": len(image_ids["test"]),
             "prediction_count": len(proposals),
-            "polygon_mask_count": sum(
-                item.geometry_kind == "polygon_mask" for item in proposals
-            ),
+            "polygon_mask_count": sum(item.geometry_kind == "polygon_mask" for item in proposals),
             "confidence_threshold": args.confidence,
             "duration_seconds": inference_duration,
             "mean_seconds_per_image": inference_duration / len(image_ids["test"]),

@@ -48,6 +48,12 @@ from reefvision.api.routes.model_agreement import router as model_agreement_rout
 from reefvision.api.routes.model_catalog import router as model_catalog_router
 from reefvision.api.routes.models import router as models_router
 from reefvision.api.routes.pose_active_learning import router as pose_active_learning_router
+from reefvision.api.routes.pose_biological_measurement import (
+    router as pose_biological_measurement_router,
+)
+from reefvision.api.routes.pose_evaluation import router as pose_evaluation_router
+from reefvision.api.routes.pose_identity_tracking import router as pose_identity_tracking_router
+from reefvision.api.routes.pose_schemas import router as pose_schemas_router
 from reefvision.api.routes.pose_training_datasets import (
     router as pose_training_datasets_router,
 )
@@ -57,6 +63,7 @@ from reefvision.api.routes.project_learning import router as project_learning_ro
 from reefvision.api.routes.projects import router as projects_router
 from reefvision.api.routes.quality_control import router as quality_control_router
 from reefvision.api.routes.raster_edits import router as raster_edits_router
+from reefvision.api.routes.reefpose_validation import router as reefpose_validation_router
 from reefvision.api.routes.review_queues import router as review_queues_router
 from reefvision.api.routes.sam2_models import router as sam2_models_router
 from reefvision.api.routes.sam_image_proposals import router as sam_image_proposals_router
@@ -127,6 +134,11 @@ api_router.include_router(quality_control_router)
 api_router.include_router(review_queues_router)
 api_router.include_router(active_learning_router)
 api_router.include_router(pose_active_learning_router)
+api_router.include_router(pose_evaluation_router)
+api_router.include_router(reefpose_validation_router)
+api_router.include_router(pose_identity_tracking_router)
+api_router.include_router(pose_biological_measurement_router)
+api_router.include_router(pose_schemas_router)
 api_router.include_router(pose_training_datasets_router)
 api_router.include_router(advanced_providers_router)
 api_router.include_router(advanced_provider_execution_router)

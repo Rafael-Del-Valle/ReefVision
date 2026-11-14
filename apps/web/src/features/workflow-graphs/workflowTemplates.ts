@@ -79,7 +79,7 @@ const environmentalAnalysisTemplates: WorkflowTemplate[] = [
     id: "environmental-current-streamlines",
     name: "Persisted current streamlines",
     description:
-      "Explicit paired current records and seeds → deterministic frozen-field streamlines with immutable provenance.",
+      "Explicit paired current records and seeds â†’ deterministic frozen-field streamlines with immutable provenance.",
     graph: environmentalAnalysisGraph(
       "persisted-current-streamlines",
       "Persisted current streamlines",
@@ -99,7 +99,7 @@ const environmentalAnalysisTemplates: WorkflowTemplate[] = [
     id: "environmental-lunar-context",
     name: "Persisted lunar context",
     description:
-      "Explicit UTC timestamps → deterministic offline lunar calculation → immutable evidence.",
+      "Explicit UTC timestamps â†’ deterministic offline lunar calculation â†’ immutable evidence.",
     graph: environmentalAnalysisGraph(
       "persisted-lunar-context",
       "Persisted lunar context",
@@ -114,7 +114,7 @@ const environmentalAnalysisTemplates: WorkflowTemplate[] = [
     id: "environmental-tidal-context",
     name: "Bounded NOAA tidal context",
     description:
-      "Explicit station, datum, UTC time, and distance bounds → separate observed and predicted tidal evidence.",
+      "Explicit station, datum, UTC time, and distance bounds â†’ separate observed and predicted tidal evidence.",
     graph: environmentalAnalysisGraph(
       "bounded-noaa-tidal-context",
       "Bounded NOAA tidal context",
@@ -134,7 +134,7 @@ const environmentalAnalysisTemplates: WorkflowTemplate[] = [
     id: "environmental-event-windows",
     name: "Environmental event windows",
     description:
-      "Saved threshold samples → explicit bounded windows with deterministic overlap merging.",
+      "Saved threshold samples â†’ explicit bounded windows with deterministic overlap merging.",
     graph: environmentalAnalysisGraph(
       "environmental-event-windows",
       "Environmental event windows",
@@ -150,15 +150,15 @@ const environmentalAnalysisTemplates: WorkflowTemplate[] = [
   },
   {
     id: "environmental-observation-join",
-    name: "Observation–environment join",
+    name: "Observationâ€“environment join",
     description:
-      "Explicit biological records → bounded time, location, and optional depth matching.",
+      "Explicit biological records â†’ bounded time, location, and optional depth matching.",
     graph: environmentalAnalysisGraph(
       "observation-environment-join",
-      "Observation–environment join",
+      "Observationâ€“environment join",
       "observation_environment_join",
       {
-        name: "Observation–environment join",
+        name: "Observationâ€“environment join",
         observation_record_ids: ["replace-with-observation-record-id"],
         environmental_variable: "water_temperature",
         max_time_delta_s: 3600,
@@ -172,7 +172,7 @@ const environmentalAnalysisTemplates: WorkflowTemplate[] = [
     id: "environmental-lagged-comparison",
     name: "Descriptive lagged comparison",
     description:
-      "Saved observation join → explicit lags with sample-reuse and pseudoreplication diagnostics.",
+      "Saved observation join â†’ explicit lags with sample-reuse and pseudoreplication diagnostics.",
     graph: environmentalAnalysisGraph(
       "descriptive-lagged-comparison",
       "Descriptive lagged comparison",
@@ -583,7 +583,7 @@ const detectionTraining = {
 
 const reviewRetrain = {
   graph_id: "review-dataset-retrain",
-  name: "Review → Dataset v2 → Retrain",
+  name: "Review â†’ Dataset v2 â†’ Retrain",
   schema_version: "workflow-graph-0001",
   nodes: [
     {
@@ -810,7 +810,7 @@ const classificationTraining = {
 
 const samMeasurements = {
   graph_id: "reviewed-boxes-to-measurements",
-  name: "Detection → SAM/SAM2 → Measurements",
+  name: "Detection â†’ SAM/SAM2 â†’ Measurements",
   schema_version: "workflow-graph-0001",
   nodes: [
     {
@@ -944,7 +944,7 @@ const samMeasurements = {
 
 const poseActiveLearningRetrain = {
   graph_id: "pose-active-learning-retrain",
-  name: "Pose Active Learning → retrain",
+  name: "Pose Active Learning â†’ retrain",
   schema_version: "workflow-graph-0001",
   metadata: {
     workflow_kind: "scientist_active_learning_loop",
@@ -952,7 +952,7 @@ const poseActiveLearningRetrain = {
     feedback_loop: {
       from_node_id: "register",
       to_node_id: "pose",
-      label: "Next iteration: trained model → inference",
+      label: "Next iteration: trained model â†’ inference",
       description:
         "Use the newly registered pose model as the seed model for the next saved workflow revision. This visual cue is not an executable cyclic edge.",
     },
@@ -1163,6 +1163,7 @@ const poseActiveLearningRetrain = {
 export function createPoseArchitectureWorkflow(
   architecture = "yolo11n-pose.yaml",
 ) {
+  const nativeReefPose = architecture === "reefpose-s";
   return {
     graph_id: "pose-architecture-training",
     name: "Pose architecture training",
@@ -1180,11 +1181,22 @@ export function createPoseArchitectureWorkflow(
         node_type: "pose_model_training",
         parameters: {
           run_name: "pose-from-scratch",
+          provider_id: nativeReefPose ? "reefpose" : "ultralytics",
           initialization_mode: "random",
           architecture,
           device: "auto",
-          precision: "fp32",
-          training_config: { epochs: 50, batch: 8, imgsz: 640, workers: 2 },
+          precision: nativeReefPose ? "amp" : "fp32",
+          training_config: nativeReefPose
+            ? {
+                epochs: 50,
+                batch: 8,
+                input_height: 256,
+                input_width: 256,
+                learning_rate: 0.0003,
+                weight_decay: 0.0001,
+                workers: 2,
+              }
+            : { epochs: 50, batch: 8, imgsz: 640, workers: 2 },
         },
         position: { x: 360, y: 80 },
       },
@@ -1227,42 +1239,346 @@ export function createPoseArchitectureWorkflow(
   };
 }
 
+export function createPoseComparisonWorkflow() {
+  return {
+    graph_id: "pose-model-comparison",
+    name: "Pose model comparison",
+    schema_version: "workflow-graph-0001",
+    metadata: { truth_policy: "scientist_verified_only" },
+    nodes: [
+      {
+        node_id: "dataset",
+        node_type: "pose_training_dataset",
+        parameters: { dataset_id: "" },
+        position: { x: 40, y: 180 },
+      },
+      ...["a", "b"].map((suffix, index) => ({
+        node_id: `model_${suffix}`,
+        node_type: "registered_model_source",
+        parameters: { model_id: `replace-with-pose-model-${suffix}-id` },
+        position: { x: 40, y: 360 + index * 180 },
+      })),
+      {
+        node_id: "evaluate",
+        node_type: "pose_model_evaluation",
+        parameters: {
+          device: "auto",
+          pck_thresholds: [0.05, 0.1, 0.2],
+          calibration_threshold: 0.1,
+          calibration_bins: 10,
+          confidence_thresholds: [0, 0.25, 0.5, 0.75, 0.9],
+        },
+        position: { x: 420, y: 260 },
+      },
+    ],
+    edges: [
+      {
+        edge_id: "dataset-evaluate",
+        source_node_id: "dataset",
+        source_port_id: "dataset",
+        target_node_id: "evaluate",
+        target_port_id: "dataset",
+      },
+      ...["a", "b"].map((suffix) => ({
+        edge_id: `model-${suffix}-evaluate`,
+        source_node_id: `model_${suffix}`,
+        source_port_id: "model",
+        target_node_id: "evaluate",
+        target_port_id: "models",
+      })),
+    ],
+  };
+}
+
+export function createPoseIdentityEvaluationWorkflow() {
+  return {
+    graph_id: "pose-identity-evaluation",
+    name: "Multi-animal pose identity evaluation",
+    schema_version: "workflow-graph-0001",
+    metadata: {
+      truth_policy: "scientist_verified_only",
+      synthetic_data_warning:
+        "Synthetic fixtures validate engineering behavior, not biological accuracy.",
+    },
+    nodes: [
+      {
+        node_id: "project",
+        node_type: "project_source",
+        parameters: {},
+        position: { x: 40, y: 100 },
+      },
+      {
+        node_id: "video",
+        node_type: "project_video_source",
+        parameters: { video_id: "" },
+        position: { x: 300, y: 40 },
+      },
+      {
+        node_id: "model",
+        node_type: "registered_model_source",
+        parameters: { model_id: "" },
+        position: { x: 300, y: 180 },
+      },
+      {
+        node_id: "pose",
+        node_type: "pose_inference",
+        parameters: { device: "auto" },
+        position: { x: 580, y: 100 },
+      },
+      {
+        node_id: "associate",
+        node_type: "pose_identity_association",
+        parameters: {
+          max_gap_frames: 5,
+          max_normalized_distance: 1.5,
+          acceptance_threshold: 0.75,
+          low_confidence_threshold: 0.6,
+        },
+        position: { x: 860, y: 100 },
+      },
+      {
+        node_id: "review",
+        node_type: "pose_identity_review_gate",
+        parameters: {},
+        position: { x: 1140, y: 100 },
+      },
+      {
+        node_id: "evaluate",
+        node_type: "pose_identity_evaluation",
+        parameters: { truth_dataset_id: "", spatial_iou_threshold: 0.5 },
+        position: { x: 1420, y: 100 },
+      },
+      {
+        node_id: "export",
+        node_type: "pose_identity_export",
+        parameters: { format: "json" },
+        position: { x: 1700, y: 100 },
+      },
+    ],
+    edges: [
+      {
+        edge_id: "project-video",
+        source_node_id: "project",
+        source_port_id: "project",
+        target_node_id: "video",
+        target_port_id: "project",
+      },
+      {
+        edge_id: "project-model",
+        source_node_id: "project",
+        source_port_id: "project",
+        target_node_id: "model",
+        target_port_id: "project",
+      },
+      {
+        edge_id: "video-pose",
+        source_node_id: "video",
+        source_port_id: "video",
+        target_node_id: "pose",
+        target_port_id: "video",
+      },
+      {
+        edge_id: "model-pose",
+        source_node_id: "model",
+        source_port_id: "model",
+        target_node_id: "pose",
+        target_port_id: "model",
+      },
+      {
+        edge_id: "pose-associate",
+        source_node_id: "pose",
+        source_port_id: "poses",
+        target_node_id: "associate",
+        target_port_id: "poses",
+      },
+      {
+        edge_id: "associate-review",
+        source_node_id: "associate",
+        source_port_id: "tracks",
+        target_node_id: "review",
+        target_port_id: "tracks",
+      },
+      {
+        edge_id: "review-evaluate",
+        source_node_id: "review",
+        source_port_id: "tracks",
+        target_node_id: "evaluate",
+        target_port_id: "tracks",
+      },
+      {
+        edge_id: "evaluate-export",
+        source_node_id: "evaluate",
+        source_port_id: "evaluation",
+        target_node_id: "export",
+        target_port_id: "evaluation",
+      },
+    ],
+  };
+}
+
+export function createBiologicalMovementWorkflow() {
+  const nodes = [
+    ["project", "project_source", {}, 40],
+    ["video", "project_video_source", { video_id: "" }, 300],
+    ["model", "registered_model_source", { model_id: "" }, 300],
+    ["pose", "pose_inference", { device: "auto" }, 560],
+    ["associate", "pose_identity_association", {}, 820],
+    ["identity_review", "pose_identity_review_gate", {}, 1080],
+    [
+      "measure",
+      "anatomical_measurement",
+      {
+        definitions: [
+          {
+            id: "gape",
+            name: "Gape distance",
+            kind: "distance",
+            landmark_ids: ["upper_jaw", "lower_jaw"],
+          },
+        ],
+        maximum_gap_s: 0.25,
+      },
+      1340,
+    ],
+    [
+      "detect",
+      "biological_event_detection",
+      {
+        cycles: [
+          {
+            measurement_definition_id: "gape",
+            open_threshold: 6,
+            close_threshold: 3,
+            minimum_amplitude: 4,
+            minimum_duration_s: 0.1,
+            maximum_gap_s: 0.25,
+          },
+        ],
+      },
+      1600,
+    ],
+    ["event_review", "biological_event_review_gate", {}, 1860],
+    ["export", "biological_movement_export", { format: "json" }, 2120],
+  ].map(([node_id, node_type, parameters, x]) => ({
+    node_id,
+    node_type,
+    parameters,
+    position: { x, y: 100 },
+  }));
+  const link = (
+    edge_id: string,
+    source_node_id: string,
+    source_port_id: string,
+    target_node_id: string,
+    target_port_id: string,
+  ) => ({
+    edge_id,
+    source_node_id,
+    source_port_id,
+    target_node_id,
+    target_port_id,
+  });
+  return {
+    graph_id: "reefpose-biological-movement",
+    name: "ReefPose biological movement analysis",
+    schema_version: "workflow-graph-0001",
+    metadata: {
+      truth_policy: "scientist_reviewed_events_only",
+      synthetic_data_warning:
+        "Synthetic fixtures validate engineering behavior, not biological accuracy.",
+    },
+    nodes,
+    edges: [
+      link("project-video", "project", "project", "video", "project"),
+      link("project-model", "project", "project", "model", "project"),
+      link("video-pose", "video", "video", "pose", "video"),
+      link("model-pose", "model", "model", "pose", "model"),
+      link("pose-associate", "pose", "poses", "associate", "poses"),
+      link(
+        "associate-review",
+        "associate",
+        "tracks",
+        "identity_review",
+        "tracks",
+      ),
+      link("review-measure", "identity_review", "tracks", "measure", "tracks"),
+      link(
+        "measure-detect",
+        "measure",
+        "measurements",
+        "detect",
+        "measurements",
+      ),
+      link("detect-review", "detect", "events", "event_review", "events"),
+      link("review-export", "event_review", "events", "export", "events"),
+    ],
+  };
+}
+
 export const workflowTemplates: WorkflowTemplate[] = [
   ...environmentalAnalysisTemplates,
   {
     id: "verified-mask-coverage",
     name: "Verified mask area and coverage",
     description:
-      "Explicit reviewed images → overlap-safe mask union and coverage → immutable result.",
+      "Explicit reviewed images â†’ overlap-safe mask union and coverage â†’ immutable result.",
     graph: verifiedMaskCoverage,
   },
   {
     id: "reviewed-annotation-aggregate",
     name: "Reviewed annotation aggregate",
     description:
-      "Explicit reviewed images → replicate-aware verified annotation count → immutable result.",
+      "Explicit reviewed images â†’ replicate-aware verified annotation count â†’ immutable result.",
     graph: reviewedAnnotationAggregate,
   },
   {
+    id: "pose-model-comparison",
+    name: "Pose models â†’ scientific comparison",
+    description:
+      "Evaluate multiple registered pose models on one frozen scientist-verified dataset and preserve a reproducible comparison report.",
+    graph: createPoseComparisonWorkflow(),
+  },
+  {
+    id: "reefpose-biological-movement",
+    name: "ReefPose biological movement",
+    description:
+      "Pose inference â†’ identity review â†’ anatomical measurements â†’ event detection â†’ scientist review â†’ reproducible export.",
+    graph: createBiologicalMovementWorkflow(),
+  },
+  {
     id: "pose-architecture-training",
-    name: "Pose architecture → train from scratch",
+    name: "Pose architecture â†’ train from scratch",
     description:
       "Choose a frozen scientist-verified pose dataset and a YOLO11 pose architecture. Train from random initialization, then register the output with its landmark schema and provenance.",
     graph: createPoseArchitectureWorkflow(),
   },
   {
-    id: "pose-active-learning-retrain",
-    name: "Pose Active Learning → retrain",
+    id: "reefpose-native-training",
+    name: "Native ReefPose training",
     description:
-      "Pose inference → temporal identity → scientist review → Active Learning → verified dataset → retrain → register → Results Package, with a visual next-iteration cue.",
+      "Train ReefPose-S from random initialization on an immutable verified pose dataset and register the completed checkpoint.",
+    graph: createPoseArchitectureWorkflow("reefpose-s"),
+  },
+  {
+    id: "pose-active-learning-retrain",
+    name: "Pose Active Learning â†’ retrain",
+    description:
+      "Pose inference â†’ temporal identity â†’ scientist review â†’ Active Learning â†’ verified dataset â†’ retrain â†’ register â†’ Results Package, with a visual next-iteration cue.",
     graph: poseActiveLearningRetrain,
   },
   {
     id: "computed-scientific-metric",
     name: "Computed scientific metric",
     description:
-      "Explicit scientific records → safe unit-aware definition → immutable result.",
+      "Explicit scientific records â†’ safe unit-aware definition â†’ immutable result.",
     graph: computedScientificMetric,
+  },
+  {
+    id: "pose-identity-evaluation",
+    name: "Multi-animal pose identity evaluation",
+    description:
+      "Pose inference â†’ deterministic individual association â†’ scientist identity review â†’ IDF1 evaluation â†’ provenance-preserving export.",
+    graph: createPoseIdentityEvaluationWorkflow(),
   },
   {
     id: "project-images",
@@ -1286,12 +1602,12 @@ export const workflowTemplates: WorkflowTemplate[] = [
   {
     id: "detection-training",
     name: "Detection training",
-    description: "Immutable dataset → train → register → inference.",
+    description: "Immutable dataset â†’ train â†’ register â†’ inference.",
     graph: detectionTraining,
   },
   {
     id: "review-retrain",
-    name: "Review → Dataset v2 → Retrain",
+    name: "Review â†’ Dataset v2 â†’ Retrain",
     description:
       "Review predictions, freeze a child dataset version, and retrain from the prior detector.",
     graph: reviewRetrain,
@@ -1300,14 +1616,14 @@ export const workflowTemplates: WorkflowTemplate[] = [
     id: "classification-training",
     name: "Classification training",
     description:
-      "Dataset version → classification materialization → train → inference.",
+      "Dataset version â†’ classification materialization â†’ train â†’ inference.",
     graph: classificationTraining,
   },
   {
     id: "sam-measurements",
     name: "SAM/SAM2 measurements",
     description:
-      "Detection review → Prompt Assist masks → mask review → coral measurements.",
+      "Detection review â†’ Prompt Assist masks â†’ mask review â†’ coral measurements.",
     graph: samMeasurements,
   },
 ];

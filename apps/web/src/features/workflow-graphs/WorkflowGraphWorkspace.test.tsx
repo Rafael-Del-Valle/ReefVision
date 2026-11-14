@@ -79,4 +79,63 @@ describe("pose architecture training workflow", () => {
     ).toBe(false);
     client.clear();
   });
+
+  it("invalidates Model Hub data when a workflow registers its completed model", async () => {
+    let modelHubRequests = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      let payload: unknown = [];
+      let status = 200;
+
+      if (url.endsWith("/model-hub/bootstrap")) {
+        modelHubRequests += 1;
+      } else if (url.endsWith("/plan") && method === "POST") {
+        payload = { valid: true, executable: true, issues: [] };
+      } else if (url.endsWith("/workflow-graphs") && method === "POST") {
+        payload = { id: "graph-1" };
+        status = 201;
+      } else if (url.endsWith("/workflow-runs") && method === "POST") {
+        payload = { id: "run-1" };
+        status = 202;
+      } else if (url.endsWith("/workflow-runs/run-1")) {
+        payload = {
+          run: {
+            id: "run-1",
+            status: "succeeded",
+            result_json: {},
+          },
+          nodes: [],
+          artifacts: [],
+        };
+      }
+
+      return new Response(JSON.stringify(payload), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData(["model_hub_bootstrap", "project-1"], {
+      models: [],
+    });
+    client.setQueryData(["video-tracking-models", "project-1"], []);
+    render(
+      <QueryClientProvider client={client}>
+        <WorkflowGraphWorkspace project={{ id: "project-1" } as Project} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save & run" }));
+
+    await screen.findByText("Status:");
+    await waitFor(() => expect(modelHubRequests).toBeGreaterThanOrEqual(2));
+    expect(
+      client.getQueryState(["video-tracking-models", "project-1"])
+        ?.isInvalidated,
+    ).toBe(true);
+    client.clear();
+  });
 });

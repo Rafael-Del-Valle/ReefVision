@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   createPoseArchitectureWorkflow,
+  createPoseComparisonWorkflow,
+  createPoseIdentityEvaluationWorkflow,
+  createBiologicalMovementWorkflow,
   workflowTemplates,
 } from "./workflowTemplates";
 
@@ -113,6 +116,65 @@ describe("workflowTemplates", () => {
     ).toBe(true);
   });
 
+  it("provides an executable scientist-reviewed biological movement workflow", () => {
+    const graph = createBiologicalMovementWorkflow();
+    expect(graph.nodes.map((node) => node.node_type)).toEqual([
+      "project_source",
+      "project_video_source",
+      "registered_model_source",
+      "pose_inference",
+      "pose_identity_association",
+      "pose_identity_review_gate",
+      "anatomical_measurement",
+      "biological_event_detection",
+      "biological_event_review_gate",
+      "biological_movement_export",
+    ]);
+    expect(graph.edges.at(-1)).toMatchObject({
+      source_port_id: "events",
+      target_port_id: "events",
+    });
+  });
+  it("connects a frozen dataset and multiple registered models to pose comparison", () => {
+    const graph = createPoseComparisonWorkflow();
+    const evaluation = graph.nodes.find(
+      (node) => node.node_type === "pose_model_evaluation",
+    );
+    expect(evaluation?.parameters).toMatchObject({
+      device: "auto",
+      pck_thresholds: [0.05, 0.1, 0.2],
+      calibration_bins: 10,
+    });
+    expect(
+      graph.edges.filter((edge) => edge.target_port_id === "models"),
+    ).toHaveLength(2);
+    expect(graph.edges.some((edge) => edge.target_port_id === "dataset")).toBe(
+      true,
+    );
+  });
+
+  it("provides an executable scientist-gated multi-animal identity workflow", () => {
+    const graph = createPoseIdentityEvaluationWorkflow();
+    expect(graph.nodes.map((node) => node.node_type)).toEqual([
+      "project_source",
+      "project_video_source",
+      "registered_model_source",
+      "pose_inference",
+      "pose_identity_association",
+      "pose_identity_review_gate",
+      "pose_identity_evaluation",
+      "pose_identity_export",
+    ]);
+    expect(
+      graph.nodes.find((node) => node.node_type === "pose_identity_evaluation")
+        ?.parameters,
+    ).toEqual({ truth_dataset_id: "", spatial_iou_threshold: 0.5 });
+    expect(graph.edges.at(-1)).toMatchObject({
+      source_port_id: "evaluation",
+      target_port_id: "evaluation",
+    });
+  });
+
   it("builds seed-free pose architecture training from an immutable dataset", () => {
     const graph = createPoseArchitectureWorkflow("yolo11m-pose.yaml");
     expect(
@@ -132,6 +194,33 @@ describe("workflowTemplates", () => {
     expect(graph.edges.some((edge) => edge.target_node_id === "register")).toBe(
       true,
     );
+  });
+
+  it("includes a native ReefPose random-initialization template", () => {
+    const template = workflowTemplates.find(
+      (item) => item.id === "reefpose-native-training",
+    );
+    const nodes = template?.graph.nodes as
+      | Array<{ node_type: string; parameters?: Record<string, unknown> }>
+      | undefined;
+    const train = nodes?.find(
+      (node) => node.node_type === "pose_model_training",
+    );
+
+    expect(train?.parameters).toMatchObject({
+      provider_id: "reefpose",
+      architecture: "reefpose-s",
+      initialization_mode: "random",
+      device: "auto",
+      precision: "amp",
+      training_config: expect.objectContaining({
+        epochs: 50,
+        batch: 8,
+        input_height: 256,
+        input_width: 256,
+        learning_rate: 0.0003,
+      }),
+    });
   });
 
   it("explicitly continues the researcher registered model in the pose retraining template", () => {

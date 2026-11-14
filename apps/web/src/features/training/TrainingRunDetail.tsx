@@ -28,11 +28,13 @@ function metricLabel(key: string): string {
 function preferredMetric(run: TrainingRun): [string, number[]] | null {
   const entries = Object.entries(history(run));
   const preferences =
-    run.task === "classify"
-      ? ["metrics/accuracy_top1", "metrics/accuracy_top5", "val/accuracy"]
-      : run.task === "segment"
-        ? ["metrics/mAP50-95(M)", "metrics/mAP50(M)", "metrics/mAP50-95(B)"]
-        : ["metrics/mAP50-95(B)", "metrics/mAP50(B)", "metrics/precision(B)"];
+    run.task === "pose"
+      ? ["selection_loss", "validation_loss", "val/loss", "train_loss"]
+      : run.task === "classify"
+        ? ["metrics/accuracy_top1", "metrics/accuracy_top5", "val/accuracy"]
+        : run.task === "segment"
+          ? ["metrics/mAP50-95(M)", "metrics/mAP50(M)", "metrics/mAP50-95(B)"]
+          : ["metrics/mAP50-95(B)", "metrics/mAP50(B)", "metrics/precision(B)"];
   return (
     preferences
       .map((key) => entries.find(([candidate]) => candidate === key))
@@ -49,7 +51,12 @@ function bestEpoch(
   if (!metric || metric[1].length === 0) return null;
   let bestIndex = 0;
   metric[1].forEach((value, index) => {
-    if (value > metric[1][bestIndex]) bestIndex = index;
+    const minimizes = /loss/i.test(metric[0]);
+    if (
+      (minimizes && value < metric[1][bestIndex]) ||
+      (!minimizes && value > metric[1][bestIndex])
+    )
+      bestIndex = index;
   });
   const epochs = history(run).epoch;
   return {
@@ -93,6 +100,8 @@ export function TrainingRunDetail({
   registering,
   onCancel,
   onRegister,
+  onResume,
+  resuming = false,
   onApplyBest,
 }: {
   run: TrainingRun;
@@ -100,6 +109,8 @@ export function TrainingRunDetail({
   registering: boolean;
   onCancel: () => void;
   onRegister: () => void;
+  onResume?: () => void;
+  resuming?: boolean;
   onApplyBest?: (trial: TuningTrial) => void;
 }) {
   const [exportOpen, setExportOpen] = useState(false);
@@ -132,6 +143,11 @@ export function TrainingRunDetail({
     : [];
   const bestCheckpoint = artifacts.find((item) => item.name === "best.pt");
   const lastCheckpoint = artifacts.find((item) => item.name === "last.pt");
+  const resumable =
+    run.provider_id === "reefpose" &&
+    ["failed", "cancelled"].includes(run.status) &&
+    Boolean(run.job_id) &&
+    typeof run.artifact_manifest.resume_checkpoint_path === "string";
   const active = [
     "queued",
     "preflight",
@@ -203,6 +219,13 @@ export function TrainingRunDetail({
             {run.resolved_model_checksum?.slice(0, 12) ??
               "No checkpoint checksum"}
           </small>
+        </div>
+        <div>
+          <span>Device / precision</span>
+          <strong>
+            {run.device} / {run.precision}
+          </strong>
+          <small>{run.provider_id}</small>
         </div>
       </div>
       <div className="training-chart-grid">
@@ -362,6 +385,11 @@ export function TrainingRunDetail({
             Cancel training
           </button>
         )}
+        {resumable && onResume && (
+          <button type="button" disabled={resuming} onClick={onResume}>
+            {resuming ? "Resuming…" : "Resume from checkpoint"}
+          </button>
+        )}
         {run.status === "completed" &&
           (registeredName ? (
             <span>Best model registered as {registeredName}</span>
@@ -373,7 +401,7 @@ export function TrainingRunDetail({
             >
               {registering
                 ? "Registering…"
-                : `Register best ${run.task === "segment" ? "segmenter" : "detector"}`}
+                : `Register best ${run.task === "segment" ? "segmenter" : run.task === "pose" ? "pose model" : "detector"}`}
             </button>
           ))}
       </div>

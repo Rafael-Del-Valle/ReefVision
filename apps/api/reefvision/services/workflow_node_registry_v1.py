@@ -14,9 +14,13 @@ from reefvision.services.workflow_node_registry import (
     workflow_node_registry as base_workflow_node_registry,
 )
 from reefvision.services.workflow_pose import register_pose_workflow_adapters
+from reefvision.services.workflow_pose_evaluation import (
+    register_pose_evaluation_workflow_adapter,
+)
 from reefvision.services.workflow_pose_training import (
     register_pose_training_workflow_adapter,
 )
+from reefvision.services.workflow_reefpose_validation import register_reefpose_validation_nodes
 from reefvision.services.workflow_results_packages import (
     register_results_package_workflow_adapter,
 )
@@ -24,14 +28,17 @@ from reefvision.services.workflow_results_packages import (
 register_video_depth_3d_adapter()
 register_video_metric_depth_3d_adapter()
 register_pose_workflow_adapters()
+register_pose_evaluation_workflow_adapter()
 register_pose_training_workflow_adapter()
 register_results_package_workflow_adapter()
+_REEFPOSE_VALIDATION_NODES = register_reefpose_validation_nodes()
 
 
 def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
     """Return the M10 registry plus ReefVision 1.0 completion nodes."""
 
     registry = dict(base_workflow_node_registry())
+    registry.update(_REEFPOSE_VALIDATION_NODES)
     registry["video_depth_3d_analytics"] = WorkflowNodeDefinitionResponse(
         node_type="video_depth_3d_analytics",
         display_name="Metric Depth 3D Trajectories",
@@ -181,6 +188,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 optional_parameters={
                     "device": "auto",
                     "confidence": 0.25,
+                    "allow_zero_detections": False,
                 },
                 execution_state="executable_pose_workflow",
                 executable=True,
@@ -237,6 +245,241 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                         "corrections remain canonical persisted state."
                     ),
                 ],
+            ),
+            "pose_identity_association": WorkflowNodeDefinitionResponse(
+                node_type="pose_identity_association",
+                display_name="Associate Individuals",
+                category="Pose",
+                description=(
+                    "Link pose instances into stable animal identities with deterministic, "
+                    "auditable association scores."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="poses",
+                        display_name="Pose tracks",
+                        accepted_types=["pose_tracks"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="tracks",
+                        display_name="Identity tracks",
+                        accepted_types=["pose_identity_tracks"],
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={
+                    "max_gap_frames": 5,
+                    "max_normalized_distance": 1.5,
+                    "acceptance_threshold": 0.75,
+                    "low_confidence_threshold": 0.6,
+                },
+                execution_state="executable_pose_workflow",
+                executable=True,
+                implementation_notes=[
+                    "Uses canonical pose VideoTrack detections without rewriting provider output.",
+                    "Persists every candidate score, threshold, and selected decision.",
+                ],
+            ),
+            "pose_identity_review_gate": WorkflowNodeDefinitionResponse(
+                node_type="pose_identity_review_gate",
+                display_name="Review Animal Identities",
+                category="Human review",
+                description=(
+                    "Pause until current animal identity observations have explicit scientist "
+                    "acceptance, rejection, or correction."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="tracks",
+                        display_name="Identity tracks",
+                        accepted_types=["pose_identity_tracks"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="tracks",
+                        display_name="Reviewed identity tracks",
+                        accepted_types=["reviewed_pose_identity_tracks"],
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={},
+                execution_state="pausable_review_gate",
+                executable=True,
+                implementation_notes=[
+                    "Model identity is never promoted to verified truth without human review."
+                ],
+            ),
+            "pose_identity_evaluation": WorkflowNodeDefinitionResponse(
+                node_type="pose_identity_evaluation",
+                display_name="Evaluate Identity Tracking",
+                category="Scientific analysis",
+                description=(
+                    "Compute IDF1, identity precision/recall, switches, fragmentation, and "
+                    "coverage against immutable verified identity truth."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="tracks",
+                        display_name="Reviewed identity tracks",
+                        accepted_types=["reviewed_pose_identity_tracks"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="evaluation",
+                        display_name="Identity evaluation",
+                        accepted_types=["pose_identity_evaluation"],
+                    )
+                ],
+                required_parameters=["truth_dataset_id"],
+                optional_parameters={"spatial_iou_threshold": 0.5},
+                execution_state="executable_pose_workflow",
+                executable=True,
+                implementation_notes=[
+                    "Identity metrics remain separate from landmark-localization metrics."
+                ],
+            ),
+            "pose_identity_export": WorkflowNodeDefinitionResponse(
+                node_type="pose_identity_export",
+                display_name="Export Identity Results",
+                category="Export",
+                description=(
+                    "Export corrected identity observations and evaluation provenance as a "
+                    "managed JSON or CSV artifact."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="evaluation",
+                        display_name="Identity evaluation",
+                        accepted_types=["pose_identity_evaluation"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="package",
+                        display_name="Identity package",
+                        accepted_types=["pose_identity_package"],
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={"format": "json"},
+                execution_state="executable_pose_workflow",
+                executable=True,
+                implementation_notes=[
+                    "Export provenance retains run revision, truth hash, and workflow identity."
+                ],
+            ),
+            "anatomical_measurement": WorkflowNodeDefinitionResponse(
+                node_type="anatomical_measurement",
+                display_name="Measure Anatomy",
+                category="Scientific analysis",
+                description=(
+                    "Calculate reproducible anatomical time series for reviewed animal identities."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="tracks",
+                        display_name="Reviewed identity tracks",
+                        accepted_types=["reviewed_pose_identity_tracks"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="measurements",
+                        display_name="Anatomical measurements",
+                        accepted_types=["pose_measurement_series"],
+                    )
+                ],
+                required_parameters=["definitions"],
+                optional_parameters={"maximum_gap_s": 0.25},
+                execution_state="executable_pose_workflow",
+                executable=True,
+                implementation_notes=[
+                    "Executes the canonical asynchronous Phase 5 measurement job.",
+                    "Retains identity revision, schema, calibration, and video provenance.",
+                ],
+            ),
+            "biological_event_detection": WorkflowNodeDefinitionResponse(
+                node_type="biological_event_detection",
+                display_name="Detect Biological Events",
+                category="Scientific analysis",
+                description="Detect deterministic hysteresis cycles in anatomical time series.",
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="measurements",
+                        display_name="Anatomical measurements",
+                        accepted_types=["pose_measurement_series"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="events",
+                        display_name="Event candidates",
+                        accepted_types=["pose_event_candidates"],
+                    )
+                ],
+                required_parameters=["cycles"],
+                optional_parameters={},
+                execution_state="executable_pose_workflow",
+                executable=True,
+                implementation_notes=[
+                    "Partial, rejected, and unreviewed candidates remain diagnostic only."
+                ],
+            ),
+            "biological_event_review_gate": WorkflowNodeDefinitionResponse(
+                node_type="biological_event_review_gate",
+                display_name="Review Biological Events",
+                category="Human review",
+                description="Pause until every retained event candidate has scientist disposition.",
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="events",
+                        display_name="Event candidates",
+                        accepted_types=["pose_event_candidates"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="events",
+                        display_name="Reviewed biological events",
+                        accepted_types=["reviewed_pose_events"],
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={},
+                execution_state="pausable_review_gate",
+                executable=True,
+                implementation_notes=[
+                    "Approval never promotes partial, rejected, or removed cycles to confirmed."
+                ],
+            ),
+            "biological_movement_export": WorkflowNodeDefinitionResponse(
+                node_type="biological_movement_export",
+                display_name="Export Biological Movement",
+                category="Export",
+                description="Export scientist-reviewed measurement and event provenance.",
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="events",
+                        display_name="Reviewed biological events",
+                        accepted_types=["reviewed_pose_events"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="package",
+                        display_name="Biological movement package",
+                        accepted_types=["biological_movement_package"],
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={"format": "json"},
+                execution_state="executable_pose_workflow",
+                executable=True,
+                implementation_notes=["Reviewed exports reject stale upstream provenance."],
             ),
             "pose_review_gate": WorkflowNodeDefinitionResponse(
                 node_type="pose_review_gate",
@@ -506,8 +749,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         display_name="Train Pose Model",
         category="Training",
         description=(
-            "Train a YOLO11 pose architecture or continue a registered model from an immutable, "
-            "scientist-verified ReefVision pose dataset."
+            "Train native ReefPose-S or YOLO11 pose, or continue a provider-matched registered "
+            "model from an immutable, scientist-verified ReefVision pose dataset."
         ),
         input_ports=[
             WorkflowPortDefinition(
@@ -539,6 +782,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         ],
         required_parameters=[],
         optional_parameters={
+            "provider_id": "ultralytics",
             "initialization_mode": None,
             "architecture": "yolo11n-pose.yaml",
             "run_name": "workflow-pose-retrain",
@@ -581,6 +825,51 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 "Execution produces the normal ReefVision training_result "
                 "artifact so Results Package integration remains shared."
             ),
+        ],
+    )
+
+    registry["pose_model_evaluation"] = WorkflowNodeDefinitionResponse(
+        node_type="pose_model_evaluation",
+        display_name="Evaluate Pose Models",
+        category="Scientific analysis",
+        description=(
+            "Compare registered pose models on one immutable scientist-verified pose dataset."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="dataset",
+                display_name="Frozen verified pose dataset",
+                accepted_types=["pose_training_dataset"],
+            ),
+            WorkflowPortDefinition(
+                port_id="models",
+                display_name="Registered pose models",
+                accepted_types=["model_reference"],
+                multiple=True,
+            ),
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="comparison",
+                display_name="Pose evaluation comparison",
+                accepted_types=["pose_evaluation_comparison"],
+                required=False,
+            )
+        ],
+        required_parameters=[],
+        optional_parameters={
+            "device": "auto",
+            "pck_thresholds": [0.05, 0.1, 0.2],
+            "calibration_threshold": 0.1,
+            "calibration_bins": 10,
+            "confidence_thresholds": [0.0, 0.25, 0.5, 0.75, 0.9],
+            "oks_sigmas": None,
+        },
+        execution_state="executable_pose_evaluation",
+        executable=True,
+        implementation_notes=[
+            "Executes the production asynchronous comparison worker and preserves its report hash.",
+            "Provider exclusions and unavailable metrics remain explicit in the output artifact.",
         ],
     )
 

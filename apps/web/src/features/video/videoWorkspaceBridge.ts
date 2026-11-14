@@ -70,4 +70,9 @@ export type VideoWorkspaceCommand =
       id: number;
       type: "select_track";
       trackId: string;
+    }
+  | {
+      id: number;
+      type: "select_model";
+      modelId: string;
     };

@@ -4,13 +4,12 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 
 
-def test_mask_migrations_form_one_linear_head() -> None:
+def test_mask_migrations_retain_the_common_lineage() -> None:
     api_root = Path(__file__).resolve().parents[2]
     config = Config(str(api_root / "alembic.ini"))
     scripts = ScriptDirectory.from_config(config)
 
-    # Track B adds one branch-local descendant; do not introduce a second head.
-    assert scripts.get_heads() == ["b12_identity_0005"]
+    assert scripts.get_heads() == ["b12_integrated_0001"]
     frozen_image_metadata = scripts.get_revision("b12_identity_0005")
     assert frozen_image_metadata is not None
     assert frozen_image_metadata.down_revision == "b12_identity_0004"

@@ -1,3 +1,4 @@
+import builtins
 import os
 import subprocess
 import sys
@@ -215,6 +216,8 @@ def test_runtime_provider_status_route_serializes_runtime_backends(
                     status="ready",
                     supports_cpu=True,
                     supports_cuda=True,
+                    cuda_available=True,
+                    cuda_device_name="NVIDIA RTX 3090",
                     notes=("Reference runtime.",),
                 )
             ]
@@ -227,4 +230,44 @@ def test_runtime_provider_status_route_serializes_runtime_backends(
     payload = response.json()
     assert payload[0]["runtime_id"] == "pytorch"
     assert payload[0]["available"] is True
+    assert payload[0]["cuda_available"] is True
+    assert payload[0]["cuda_device_name"] == "NVIDIA RTX 3090"
     assert payload[0]["notes"] == ["Reference runtime."]
+
+
+def test_pytorch_runtime_status_reports_live_cuda_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        provider_hub_module,
+        "_package_version",
+        lambda name: "2.11.0+cu128" if name == "torch" else None,
+    )
+    monkeypatch.setattr(
+        provider_hub_module,
+        "_torch_cuda_status",
+        lambda: (True, "NVIDIA RTX 3090"),
+    )
+
+    statuses = provider_hub_module._runtime_provider_statuses_uncached()
+    pytorch = next(item for item in statuses if item.runtime_id == "pytorch")
+
+    assert pytorch.supports_cuda is True
+    assert pytorch.cuda_available is True
+    assert pytorch.cuda_device_name == "NVIDIA RTX 3090"
+    assert "Live CUDA device: NVIDIA RTX 3090." in pytorch.notes
+
+
+def test_pytorch_cuda_probe_treats_dll_load_failure_as_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_import = builtins.__import__
+
+    def failing_import(name: str, *args: object, **kwargs: object) -> object:
+        if name == "torch":
+            raise OSError("A required PyTorch DLL could not be loaded")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", failing_import)
+
+    assert provider_hub_module._torch_cuda_status() == (False, None)

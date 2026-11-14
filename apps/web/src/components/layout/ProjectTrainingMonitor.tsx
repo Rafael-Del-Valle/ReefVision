@@ -5,6 +5,7 @@ import { getRuntimeContext, openDesktopTrainingConsole } from "../../runtime";
 import {
   cancelTrainingRun,
   getTrainingRuns,
+  retryJob,
   type TrainingRun,
 } from "../../api/client";
 import {
@@ -47,6 +48,10 @@ function metricEntries(run: TrainingRun): Array<[string, number]> {
   }
 
   const preferred = [
+    "train_loss",
+    "validation_loss",
+    "selection_loss",
+    "learning_rate",
     "train/box_loss",
     "train/cls_loss",
     "train/dfl_loss",
@@ -120,6 +125,11 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
       );
     },
   });
+  const resumeMutation = useMutation({
+    mutationFn: (jobId: string) => retryJob(jobId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["training_runs", projectId] }),
+  });
 
   const runs = useMemo(
     () =>
@@ -164,7 +174,7 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
       </p>
 
       {runsQuery.isPending && (
-        <p className="annotation-helper">Loading training runs…</p>
+        <p className="annotation-helper">Loading training runsâ€¦</p>
       )}
 
       {runsQuery.error && (
@@ -188,6 +198,11 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
           {visibleRuns.map((run) => {
             const active = trainingRunIsActive(run);
             const canCancel = active && run.status !== "cancel_requested";
+            const canResume =
+              run.provider_id === "reefpose" &&
+              ["failed", "cancelled"].includes(run.status) &&
+              Boolean(run.job_id) &&
+              typeof run.artifact_manifest.resume_checkpoint_path === "string";
             const metrics = metricEntries(run);
 
             return (
@@ -200,7 +215,7 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
                   <div>
                     <strong>{run.run_name}</strong>
                     <small>
-                      {run.provider_id} · {run.architecture}
+                      {run.provider_id} Â· {run.architecture}
                     </small>
                   </div>
 
@@ -272,7 +287,7 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
                     onClick={() => void openConsole(run.id)}
                   >
                     {openingRunId === run.id
-                      ? "Opening Console…"
+                      ? "Opening Consoleâ€¦"
                       : "Open Training Console"}
                   </button>
                 )}
@@ -297,8 +312,24 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
                   >
                     {cancelMutation.isPending &&
                     cancelMutation.variables === run.id
-                      ? "Cancelling…"
+                      ? "Cancellingâ€¦"
                       : "Cancel run"}
+                  </button>
+                )}
+                {canResume && run.job_id && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={
+                      resumeMutation.isPending &&
+                      resumeMutation.variables === run.job_id
+                    }
+                    onClick={() => resumeMutation.mutate(run.job_id as string)}
+                  >
+                    {resumeMutation.isPending &&
+                    resumeMutation.variables === run.job_id
+                      ? "Resumingâ€¦"
+                      : "Resume run"}
                   </button>
                 )}
               </article>
@@ -318,6 +349,11 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
           {cancelMutation.error.message}
         </p>
       )}
+      {resumeMutation.error && (
+        <p className="form-error" role="alert">
+          {resumeMutation.error.message}
+        </p>
+      )}
 
       <button
         type="button"
@@ -325,7 +361,7 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
         disabled={runsQuery.isFetching}
         onClick={() => void runsQuery.refetch()}
       >
-        {runsQuery.isFetching ? "Refreshing…" : "Refresh runs"}
+        {runsQuery.isFetching ? "Refreshingâ€¦" : "Refresh runs"}
       </button>
 
       <div className="rv-inference-boundary">

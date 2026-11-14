@@ -36,6 +36,17 @@ export interface PoseLandmarkSchema {
   expanded_labels: string[];
   keypoint_count: number;
   allows_repeated_labels: boolean;
+  landmarks?: Array<{
+    id: string;
+    name: string;
+    description?: string | null;
+    group?: string | null;
+    repeat_group?: string | null;
+    repeat_index?: number | null;
+    symmetric_with?: string | null;
+    required?: boolean;
+  }>;
+  edges?: Array<{ from_id: string; to_id: string }>;
 }
 
 export function poseLandmarkSchemaFromMetadata(
@@ -88,6 +99,29 @@ export function poseLandmarkSchemaFromMetadata(
       : undefined;
   const contentHash =
     typeof schema.content_hash === "string" ? schema.content_hash : undefined;
+  const landmarks = Array.isArray(schema.landmarks)
+    ? schema.landmarks.filter(
+        (item): item is NonNullable<PoseLandmarkSchema["landmarks"]>[number] =>
+          Boolean(
+            item &&
+            typeof item === "object" &&
+            !Array.isArray(item) &&
+            typeof (item as { id?: unknown }).id === "string" &&
+            typeof (item as { name?: unknown }).name === "string",
+          ),
+      )
+    : undefined;
+  const edges = Array.isArray(schema.edges)
+    ? schema.edges.filter((item): item is { from_id: string; to_id: string } =>
+        Boolean(
+          item &&
+          typeof item === "object" &&
+          !Array.isArray(item) &&
+          typeof (item as { from_id?: unknown }).from_id === "string" &&
+          typeof (item as { to_id?: unknown }).to_id === "string",
+        ),
+      )
+    : undefined;
 
   return {
     schema_version: "pose-landmarks-0001",
@@ -100,6 +134,8 @@ export function poseLandmarkSchemaFromMetadata(
     allows_repeated_labels:
       schema.allows_repeated_labels === true ||
       groups.some((group) => group.count > 1),
+    landmarks,
+    edges,
   };
 }
 
@@ -230,6 +266,7 @@ export type VideoPoseKeypoint = [number, number, number];
 
 export interface VideoPoseObservation {
   id: string;
+  landmark_id?: string;
   semantic_label: string;
   occurrence_index: number;
   x: number;
@@ -263,6 +300,7 @@ export interface VideoTrackKeyframe {
   keypoints?: VideoPoseKeypoint[] | null;
   pose_observations?: VideoPoseObservation[] | null;
   pose_uncertainty?: PoseProviderUncertaintyEvidence | null;
+  mask_polygons?: [number, number][][] | null;
 }
 
 export interface VideoTrackRecord {
@@ -345,6 +383,8 @@ export interface VideoTrackingRun {
   stage: string;
   tracker: string;
   model_id: string;
+  tracking_mode?: "auto" | "detect" | "segment" | "hybrid";
+  segmentation_model_id?: string | null;
   link_detections: boolean;
   confidence: number;
   iou: number;
@@ -648,6 +688,11 @@ export function createVideoTrack(
     keyframes: VideoTrackKeyframe[];
     interpolation: "linear" | "hold";
     status: string;
+    pose_schema_binding?: {
+      schema_id: string;
+      schema_revision: number;
+      content_hash: string;
+    };
   },
 ): Promise<VideoTrackRecord> {
   return request<VideoTrackRecord>(
@@ -664,6 +709,11 @@ export function updateVideoTrack(
     keyframes: VideoTrackKeyframe[];
     interpolation: "linear" | "hold";
     status: string;
+    pose_schema_binding?: {
+      schema_id: string;
+      schema_revision: number;
+      content_hash: string;
+    };
   },
 ): Promise<VideoTrackRecord> {
   return request<VideoTrackRecord>(
@@ -777,6 +827,9 @@ export function createVideoTrackingJob(
   videoId: string,
   payload: {
     model_id: string;
+    tracking_mode?: "auto" | "detect" | "segment" | "hybrid";
+    segmentation_model_id?: string | null;
+    hybrid_match_iou?: number;
     tracker: string;
     confidence: number;
     iou: number;

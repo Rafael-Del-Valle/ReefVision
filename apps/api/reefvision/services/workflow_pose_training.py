@@ -1,4 +1,4 @@
-"""Workflow-native Ultralytics pose retraining."""
+"""Workflow-native provider-neutral pose training."""
 
 from __future__ import annotations
 
@@ -25,6 +25,7 @@ from reefvision.jobs.pose_training import (
     process_pose_training_job,
 )
 from reefvision.ml.dependencies import provider_spec
+from reefvision.ml.reefpose.constants import REEFPOSE_PROVIDER_VERSION
 from reefvision.ml.ultralytics_registry import (
     validate_ultralytics_training_configuration,
 )
@@ -64,6 +65,65 @@ DEFAULT_POSE_TRAINING_CONFIG: dict[str, Any] = {
     "cache": False,
     "plots": True,
 }
+
+DEFAULT_REEFPOSE_TRAINING_CONFIG: dict[str, Any] = {
+    "epochs": 50,
+    "batch": 8,
+    "input_height": 256,
+    "input_width": 256,
+    "base_channels": 32,
+    "fpn_channels": None,
+    "learning_rate": 3e-4,
+    "weight_decay": 1e-4,
+    "heatmap_sigma": 2.0,
+    "workers": 0,
+    "gradient_clip_norm": 5.0,
+    "deterministic": True,
+}
+
+SUPPORTED_POSE_TRAINING_PROVIDERS = frozenset({"reefpose", "ultralytics"})
+
+
+def _validate_reefpose_training_configuration(configuration: dict[str, Any]) -> None:
+    unknown = sorted(set(configuration) - set(DEFAULT_REEFPOSE_TRAINING_CONFIG))
+    if unknown:
+        raise ValidationError("Unsupported ReefPose training configuration: " + ", ".join(unknown))
+    integer_fields = ("epochs", "batch", "input_height", "input_width", "base_channels", "workers")
+    for name in integer_fields:
+        value = configuration[name]
+        minimum = 0 if name == "workers" else 1
+        if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+            raise ValidationError(f"ReefPose training field {name} must be an integer >= {minimum}")
+    for name in ("input_height", "input_width"):
+        if int(configuration[name]) % 32:
+            raise ValidationError(f"ReefPose training field {name} must be divisible by 32")
+    fpn_channels = configuration["fpn_channels"]
+    if fpn_channels is not None and (
+        isinstance(fpn_channels, bool) or not isinstance(fpn_channels, int) or fpn_channels < 4
+    ):
+        raise ValidationError(
+            "ReefPose training field fpn_channels must be null or an integer >= 4"
+        )
+    for name in ("learning_rate", "heatmap_sigma"):
+        value = configuration[name]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or float(value) <= 0:
+            raise ValidationError(f"ReefPose training field {name} must be positive")
+    weight_decay = configuration["weight_decay"]
+    if (
+        isinstance(weight_decay, bool)
+        or not isinstance(weight_decay, (int, float))
+        or float(weight_decay) < 0
+    ):
+        raise ValidationError("ReefPose training field weight_decay cannot be negative")
+    gradient_clip_norm = configuration["gradient_clip_norm"]
+    if gradient_clip_norm is not None and (
+        isinstance(gradient_clip_norm, bool)
+        or not isinstance(gradient_clip_norm, (int, float))
+        or float(gradient_clip_norm) <= 0
+    ):
+        raise ValidationError("ReefPose training field gradient_clip_norm must be null or positive")
+    if not isinstance(configuration["deterministic"], bool):
+        raise ValidationError("ReefPose training field deterministic must be a boolean")
 
 
 def _single_payload(
@@ -152,6 +212,7 @@ def _seed_pose_model(
     project_id: str,
     payload: dict[str, Any],
     dataset: PoseTrainingDataset,
+    provider_id: str = "ultralytics",
 ) -> ModelRegistration:
     model_id = str(payload.get("model_id") or "")
 
@@ -166,8 +227,8 @@ def _seed_pose_model(
     if model is None or model.project_id != project_id:
         raise ValidationError("Pose retraining seed does not belong to this project")
 
-    if model.purpose != "detector" or model.task != "pose" or model.provider_name != "ultralytics":
-        raise ValidationError("Pose retraining seed must be a registered Ultralytics pose model")
+    if model.purpose != "detector" or model.task != "pose" or model.provider_name != provider_id:
+        raise ValidationError(f"Pose retraining seed must be a registered {provider_id} pose model")
 
     binding = session.get(
         PoseModelSchemaBinding,
@@ -223,6 +284,7 @@ def _completed_workflow_pose_training_run(
     precision: str,
     random_seed: int | None,
     training_config: dict[str, Any],
+    provider_id: str,
 ) -> TrainingRun | None:
     """Find completed child science created by this exact workflow node."""
 
@@ -262,6 +324,9 @@ def _completed_workflow_pose_training_run(
 
         if candidate.split_manifest_sha256 != split_manifest_sha256:
             raise ValidationError("Recovered pose-training node split manifest changed")
+
+        if candidate.provider_id != provider_id:
+            raise ValidationError("Recovered pose-training node provider changed")
 
         if candidate.initial_checkpoint_model_id != (
             seed_model.id if seed_model else None
@@ -382,7 +447,7 @@ def create_pose_workflow_training_result(
     workflow_node_run_id: str | None = None,
     processor: PoseTrainingProcessor = process_pose_training_job,
 ) -> dict[str, Any]:
-    """Execute real Ultralytics pose retraining from immutable verified truth."""
+    """Execute real provider-native pose training from immutable verified truth."""
 
     project = session.get(
         Project,
@@ -433,6 +498,10 @@ def create_pose_workflow_training_result(
             "This pose retraining configuration requires a separate frozen validation dataset"
         )
 
+    provider_id = str(parameters.get("provider_id") or "ultralytics").strip().casefold()
+    if provider_id not in SUPPORTED_POSE_TRAINING_PROVIDERS:
+        raise ValidationError("Pose training provider_id must be reefpose or ultralytics")
+
     initialization_mode = str(
         parameters.get("initialization_mode")
         or ("registered_model" if initial_model_payload else "random")
@@ -448,6 +517,7 @@ def create_pose_workflow_training_result(
             project_id=project_id,
             payload=initial_model_payload or {},
             dataset=dataset,
+            provider_id=provider_id,
         )
         if initialization_mode == "registered_model"
         else None
@@ -480,22 +550,27 @@ def create_pose_workflow_training_result(
     ):
         raise ValidationError("Pose training_config must be an object")
 
-    training_config = {
-        **DEFAULT_POSE_TRAINING_CONFIG,
-        **dict(supplied_config),
-    }
-
-    # ReefVision controls this from the explicit validation input.
-    training_config["val"] = validation_dataset is not None
-
-    validate_ultralytics_training_configuration(
-        task="pose",
-        mode="train",
-        parameters=training_config,
-        search_space=[],
-        expected_ultralytics_version=(provider_spec("ultralytics").provider_version),
-        settings=settings,
-    )
+    if provider_id == "ultralytics":
+        training_config = {
+            **DEFAULT_POSE_TRAINING_CONFIG,
+            **dict(supplied_config),
+        }
+        # ReefVision controls this from the explicit validation input.
+        training_config["val"] = validation_dataset is not None
+        validate_ultralytics_training_configuration(
+            task="pose",
+            mode="train",
+            parameters=training_config,
+            search_space=[],
+            expected_ultralytics_version=(provider_spec("ultralytics").provider_version),
+            settings=settings,
+        )
+    else:
+        training_config = {
+            **DEFAULT_REEFPOSE_TRAINING_CONFIG,
+            **dict(supplied_config),
+        }
+        _validate_reefpose_training_configuration(training_config)
 
     epochs = int(
         training_config.get(
@@ -529,13 +604,20 @@ def create_pose_workflow_training_result(
 
     metadata = dict(seed_model.metadata_json or {}) if seed_model else {}
 
+    default_architecture = "reefpose-s" if provider_id == "reefpose" else "yolo11n-pose.yaml"
     architecture = str(
         parameters.get("architecture")
         or metadata.get("source_architecture")
-        or (seed_model.source_filename if seed_model else "yolo11n-pose.yaml")
+        or (seed_model.source_filename if seed_model else default_architecture)
     ).strip()
 
-    if seed_model is None and architecture not in {f"yolo11{scale}-pose.yaml" for scale in "nslmx"}:
+    if provider_id == "reefpose" and architecture != "reefpose-s":
+        raise ValidationError("ReefPose training requires architecture reefpose-s")
+    if (
+        provider_id == "ultralytics"
+        and seed_model is None
+        and architecture not in {f"yolo11{scale}-pose.yaml" for scale in "nslmx"}
+    ):
         raise ValidationError("Random pose training requires a YOLO11 n/s/m/l/x pose architecture")
 
     run_name = str(parameters.get("run_name") or "workflow-pose-retrain").strip()
@@ -577,6 +659,7 @@ def create_pose_workflow_training_result(
         precision=precision,
         random_seed=random_seed,
         training_config=(training_config),
+        provider_id=provider_id,
     )
 
     if existing_completed_run is not None:
@@ -598,7 +681,7 @@ def create_pose_workflow_training_result(
         split_manifest_sha256=(split_manifest_sha256),
         task="pose",
         catalog_model_id=None,
-        provider_id="ultralytics",
+        provider_id=provider_id,
         architecture=architecture,
         initial_checkpoint_source=("registered_model" if seed_model else "scratch"),
         initial_checkpoint_model_id=(seed_model.id if seed_model else None),
@@ -608,7 +691,11 @@ def create_pose_workflow_training_result(
             else f"builtin_architecture:{architecture}"
         ),
         resolved_model_checksum=(seed_model.sha256 if seed_model else None),
-        parameter_registry_version=(provider_spec("ultralytics").provider_version),
+        parameter_registry_version=(
+            REEFPOSE_PROVIDER_VERSION
+            if provider_id == "reefpose"
+            else provider_spec(provider_id).provider_version
+        ),
         selected_preset=None,
         installation_state="ready",
         device=device,
@@ -625,7 +712,7 @@ def create_pose_workflow_training_result(
             "status": "ready_with_warnings" if warning_list else "ready",
             "warnings": warning_list,
             "task": "pose",
-            "provider_id": "ultralytics",
+            "provider_id": provider_id,
             "truth_policy": ("scientist_verified_only"),
             "validation_mode": (split_manifest["validation_mode"]),
         },
@@ -722,7 +809,7 @@ def create_pose_workflow_training_result(
         run.id,
     )
 
-    if not processed or refreshed_job is None or refreshed_run is None:
+    if refreshed_job is None or refreshed_run is None:
         raise ValidationError("Pose training child job did not complete")
 
     job = refreshed_job
@@ -732,6 +819,9 @@ def create_pose_workflow_training_result(
         detail = run.error_message or job.error_message or (f"job={job.status}, run={run.status}")
 
         raise ValidationError("Pose training child job failed: " + detail)
+
+    if not processed:
+        raise ValidationError("Pose training child processor did not report completion")
 
     if not run.result_checkpoint_path:
         raise ValidationError("Completed pose training did not produce a checkpoint")

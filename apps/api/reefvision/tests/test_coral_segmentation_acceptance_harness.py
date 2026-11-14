@@ -53,7 +53,7 @@ def test_dataset_inspection_requires_explicit_train_val_test_polygon_layout(
         label_dir = tmp_path / split / "labels"
         image_dir.mkdir(parents=True)
         label_dir.mkdir(parents=True)
-        (image_dir / f"{split}.png").write_bytes(b"fixture")
+        (image_dir / f"{split}.png").write_bytes(f"fixture-{split}".encode())
         (label_dir / f"{split}.txt").write_text(
             "0 0.1 0.1 0.8 0.1 0.8 0.8 0.1 0.8\n", encoding="utf-8"
         )

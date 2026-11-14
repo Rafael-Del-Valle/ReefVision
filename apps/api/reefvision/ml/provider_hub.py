@@ -20,6 +20,7 @@ from reefvision.ml.providers import (
     SegmentAnythingAssistProvider,
     UltralyticsDetectionProvider,
 )
+from reefvision.ml.reefpose.constants import REEFPOSE_PROVIDER_ID, REEFPOSE_PROVIDER_VERSION
 from reefvision.ml.sleap_nn_provider import (
     SLEAP_IO_SUPPORTED_VERSION,
     SLEAP_NN_SUPPORTED_VERSION,
@@ -108,6 +109,8 @@ class RuntimeProviderStatus:
     supports_cpu: bool
     supports_cuda: bool
     notes: tuple[str, ...]
+    cuda_available: bool | None = None
+    cuda_device_name: str | None = None
 
 
 def _package_version(distribution_name: str) -> str | None:
@@ -115,6 +118,19 @@ def _package_version(distribution_name: str) -> str | None:
         return version(distribution_name)
     except PackageNotFoundError:
         return None
+
+
+def _torch_cuda_status() -> tuple[bool, str | None]:
+    """Return live CUDA availability without making torch a hard dependency."""
+
+    try:
+        import torch
+
+        if not bool(torch.cuda.is_available()):
+            return False, None
+        return True, str(torch.cuda.get_device_name(0))
+    except (ImportError, OSError, RuntimeError, AssertionError):
+        return False, None
 
 
 def _packages_from_preflight(
@@ -366,6 +382,80 @@ def _sleap_nn_descriptor() -> ModelProviderDescriptor:
     )
 
 
+def _reefpose_descriptor() -> ModelProviderDescriptor:
+    torch_version = _package_version("torch")
+    pillow_version = _package_version("pillow")
+    ready = torch_version is not None and pillow_version is not None
+    missing = [
+        name
+        for name, installed in (("torch", torch_version), ("pillow", pillow_version))
+        if installed is None
+    ]
+    return ModelProviderDescriptor(
+        provider_id=REEFPOSE_PROVIDER_ID,
+        display_name="ReefPose-S",
+        provider_version=REEFPOSE_PROVIDER_VERSION,
+        package_version=torch_version,
+        supported_model_families=("Native ReefPose-S heatmap checkpoints",),
+        supported_tasks=("pose",),
+        supported_input_types=("image", "video"),
+        supported_output_types=(
+            "prediction_proposals",
+            "keypoints",
+            "visibility",
+            "instance_tracks",
+        ),
+        cpu_support=True,
+        cuda_support=True,
+        supported_precision_modes=("fp32", "amp"),
+        video_support=True,
+        training_support=True,
+        tiling_support=False,
+        supported_execution_runtimes=("pytorch",),
+        required_packages=(
+            ProviderPackageDescriptor(
+                distribution_name="torch",
+                required_version=">=2.5",
+                installed_version=torch_version,
+                status="ok" if torch_version is not None else "missing",
+            ),
+            ProviderPackageDescriptor(
+                distribution_name="pillow",
+                required_version=">=11,<14",
+                installed_version=pillow_version,
+                status="ok" if pillow_version is not None else "missing",
+            ),
+        ),
+        required_model_files=(".pt", ".pth"),
+        code_license="AGPL-3.0-only as part of ReefVision.",
+        weight_license="User-trained ReefPose checkpoints; redistribution terms follow the data/model owner.",
+        memory_recommendations=(
+            "CPU is supported for validation and low-volume inference.",
+            "CUDA AMP is recommended for training and throughput benchmarking.",
+        ),
+        known_limitations=(
+            "Phase 1 is single-animal and does not detect multiple instances.",
+            "Still-image review stores full keypoints in proposal provenance while the current editor displays the derived bounding box.",
+            "Video inference is single-animal and emits one stable provider track identity.",
+            "No pretrained checkpoints are downloaded automatically.",
+        ),
+        desktop_packaging_state="source_provider_not_yet_bundled",
+        clean_machine_verification_state=("runtime_ready" if ready else "dependency_not_ready"),
+        availability_status="ready" if ready else "dependency_missing",
+        availability_reason=None if ready else "Missing " + ", ".join(missing),
+        default_registration_purpose="detector",
+        registerable=True,
+        capabilities=ProviderCapabilityMatrix(
+            image_detection=True,
+            training=True,
+            validation=True,
+            cpu_inference=True,
+            cuda_inference=True,
+            fp16=True,
+        ),
+    )
+
+
 def _implemented_segment_anything_descriptor(
     report: ProviderPreflightReport,
 ) -> ModelProviderDescriptor:
@@ -512,6 +602,7 @@ def _list_model_providers_uncached(
     reports = _implemented_report_map(settings, refresh=refresh).value
     providers = [
         _implemented_ultralytics_descriptor(reports["ultralytics"]),
+        _reefpose_descriptor(),
         _implemented_segment_anything_descriptor(reports["segment_anything"]),
         _sleap_nn_descriptor(),
         _blocked_descriptor(
@@ -931,6 +1022,12 @@ def _runtime_provider_statuses_uncached() -> list[RuntimeProviderStatus]:
 
     torch_version = _package_version("torch")
     torch_available = torch_version is not None
+    cuda_available, cuda_device_name = _torch_cuda_status() if torch_available else (False, None)
+    pytorch_cuda_note = (
+        f"Live CUDA device: {cuda_device_name}."
+        if cuda_available and cuda_device_name
+        else "Live CUDA is unavailable in this process."
+    )
     statuses.append(
         RuntimeProviderStatus(
             runtime_id="pytorch",
@@ -941,9 +1038,11 @@ def _runtime_provider_statuses_uncached() -> list[RuntimeProviderStatus]:
             status="ready" if torch_available else "missing",
             supports_cpu=True,
             supports_cuda=torch_available,
+            cuda_available=cuda_available,
+            cuda_device_name=cuda_device_name,
             notes=(
                 "Reference runtime for the implemented ReefVision providers.",
-                "Live CUDA verification is deferred until launch-time preflight.",
+                pytorch_cuda_note,
             ),
         )
     )
@@ -958,6 +1057,8 @@ def _runtime_provider_statuses_uncached() -> list[RuntimeProviderStatus]:
             status="ready" if torch_available else "missing",
             supports_cpu=True,
             supports_cuda=torch_available,
+            cuda_available=cuda_available,
+            cuda_device_name=cuda_device_name,
             notes=(
                 "Runtime metadata is surfaced for future validated exports; arbitrary TorchScript files are not yet registered in ReefVision.",
             ),
@@ -1030,6 +1131,15 @@ def provider_for_registration(
             if not descriptor.registerable:
                 raise ValidationError("SLEAP-NN registration is not available")
             return SleapNNPoseRegistrationProvider()
+        if normalized == REEFPOSE_PROVIDER_ID:
+            descriptor = get_model_provider(REEFPOSE_PROVIDER_ID, settings)
+            if not descriptor.registerable:
+                raise ValidationError("ReefPose registration is not available")
+            try:
+                from reefvision.ml.reefpose.provider import ReefPoseRegistrationProvider
+            except Exception as exc:
+                raise ValidationError(f"ReefPose runtime is unavailable: {exc}") from exc
+            return ReefPoseRegistrationProvider()
         raise ValidationError(f"Unsupported detector provider: {provider_name}")
     if purpose == "assist":
         if normalized in {"", "segment_anything"}:
@@ -1051,6 +1161,12 @@ def detection_provider_for_name(provider_name: str) -> DetectionProvider:
         return UltralyticsDetectionProvider()
     if normalized == "sleap_nn":
         return SleapNNPoseRegistrationProvider()
+    if normalized == REEFPOSE_PROVIDER_ID:
+        try:
+            from reefvision.ml.reefpose.provider import ReefPoseRegistrationProvider
+        except Exception as exc:
+            raise ValidationError(f"ReefPose runtime is unavailable: {exc}") from exc
+        return ReefPoseRegistrationProvider()
     raise ValidationError(f"Unsupported detection provider: {provider_name}")
 
 

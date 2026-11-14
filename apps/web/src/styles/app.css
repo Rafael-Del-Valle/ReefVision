@@ -2319,3 +2319,47 @@ summary:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+.pose-comparison-panel {
+  margin-block: 1.25rem;
+}
+
+.pose-comparison-result {
+  border-top: 1px solid var(--border-color, #d7dde5);
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+
+.pose-comparison-metrics {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  margin-block: 0.75rem;
+}
+
+.pose-comparison-metrics .metric-card,
+.job-progress-card {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.job-progress-card {
+  margin-top: 0.75rem;
+}
+
+.job-progress-card progress {
+  inline-size: 100%;
+}
+
+.pose-distribution-chart {
+  align-items: end;
+  block-size: 4rem;
+  display: flex;
+  gap: 0.2rem;
+}
+
+.pose-distribution-chart span {
+  background: var(--accent, #2f7d73);
+  border-radius: 0.15rem 0.15rem 0 0;
+  flex: 1;
+  min-inline-size: 0.35rem;
+}

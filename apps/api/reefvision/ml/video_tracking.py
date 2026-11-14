@@ -96,6 +96,8 @@ class TrackObservation:
     bbox: tuple[float, float, float, float]
     keypoints: tuple[tuple[float, float, float], ...] | None = None
     pose_uncertainty: dict[str, Any] | None = None
+    # Zero or more source-pixel polygons for an instance segmentation result.
+    mask_polygons: tuple[tuple[tuple[float, float], ...], ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -258,6 +260,20 @@ class UltralyticsVideoTrackingProvider:
                 coordinates = boxes.xywh.cpu().tolist()
                 names = dict(getattr(result, "names", {}))
                 keypoints = getattr(result, "keypoints", None)
+                raw_masks = getattr(getattr(result, "masks", None), "xy", None)
+                mask_rows: list[tuple[tuple[tuple[float, float], ...], ...] | None] = []
+                for polygon in list(raw_masks or [])[: len(classes)]:
+                    mask_points = tuple(
+                        (float(point[0]), float(point[1]))
+                        for point in polygon
+                        if len(point) >= 2
+                        and isfinite(float(point[0]))
+                        and isfinite(float(point[1]))
+                        and float(point[0]) >= 0
+                        and float(point[1]) >= 0
+                    )
+                    mask_rows.append((mask_points,) if len(mask_points) >= 3 else None)
+                mask_rows.extend([None] * max(0, len(classes) - len(mask_rows)))
                 keypoint_data = getattr(keypoints, "data", None)
                 if keypoint_data is None:
                     keypoint_rows: list[list[list[float]] | None] = [None] * len(classes)
@@ -276,30 +292,34 @@ class UltralyticsVideoTrackingProvider:
                 tracked_observations_seen += len(ids)
                 unique_track_ids.update(int(track_id) for track_id in ids)
 
-                for track_id, class_index, score, xywh, raw_keypoints in zip(
-                    ids,
-                    classes,
-                    confidences,
-                    coordinates,
-                    keypoint_rows,
-                    strict=False,
+                # Ultralytics may return no track IDs on early frames; masks
+                # must align to detection rows rather than shortened IDs.
+                for row_index, (track_id, class_index, score, xywh, raw_keypoints) in enumerate(
+                    zip(
+                        ids,
+                        classes,
+                        confidences,
+                        coordinates,
+                        keypoint_rows,
+                        strict=False,
+                    )
                 ):
                     center_x, center_y, width, height = (float(value) for value in xywh)
                     normalized_keypoints: tuple[tuple[float, float, float], ...] | None = None
                     if raw_keypoints is not None:
-                        points: list[tuple[float, float, float]] = []
+                        pose_points: list[tuple[float, float, float]] = []
                         for point in raw_keypoints:
                             if len(point) < 2:
                                 continue
                             point_confidence = float(point[2]) if len(point) >= 3 else 1.0
-                            points.append(
+                            pose_points.append(
                                 (
                                     float(point[0]),
                                     float(point[1]),
                                     point_confidence,
                                 )
                             )
-                        normalized_keypoints = tuple(points)
+                        normalized_keypoints = tuple(pose_points)
 
                     observations.append(
                         TrackObservation(
@@ -314,6 +334,7 @@ class UltralyticsVideoTrackingProvider:
                                 height,
                             ),
                             keypoints=normalized_keypoints,
+                            mask_polygons=mask_rows[row_index],
                             pose_uncertainty=(
                                 build_pose_uncertainty_evidence(
                                     provider_id=self.provider_id,
@@ -336,6 +357,143 @@ class UltralyticsVideoTrackingProvider:
                     )
                 )
 
+        return observations
+
+
+class ReefPoseVideoTrackingProvider:
+    """Stream a native single-animal ReefPose checkpoint over a video."""
+
+    provider_id = "reefpose"
+
+    @property
+    def provider_version(self) -> str:
+        from reefvision.ml.reefpose.constants import REEFPOSE_PROVIDER_VERSION
+
+        return REEFPOSE_PROVIDER_VERSION
+
+    def resolve_tracker_name(
+        self,
+        requested: str,
+        *,
+        link_detections: bool,
+    ) -> str:
+        del requested
+        return "reefpose:single-animal" if link_detections else "instances-only"
+
+    def track(
+        self,
+        checkpoint_path: Path,
+        video_path: Path,
+        *,
+        tracker: str,
+        confidence: float,
+        iou: float,
+        device: str,
+        link_detections: bool = True,
+        on_progress: VideoTrackingProgressCallback | None = None,
+        should_cancel: VideoTrackingCancellationCheck | None = None,
+    ) -> list[TrackObservation]:
+        del tracker, iou
+        if not checkpoint_path.is_file():
+            raise ValidationError("ReefPose tracking checkpoint is missing")
+        if not video_path.is_file():
+            raise ValidationError("Tracking source video is missing")
+        if should_cancel is not None and should_cancel():
+            raise VideoTrackingCancelled("Video tracking cancelled before inference")
+
+        try:
+            cv2 = cast(Any, import_module("cv2"))
+            image_module = import_module("PIL.Image")
+            from reefvision.ml.reefpose.checkpoints import load_checkpoint
+            from reefvision.ml.reefpose.errors import ReefPoseError
+            from reefvision.ml.reefpose.inference import ReefPosePredictor
+        except ImportError as exc:
+            raise ValidationError("ReefPose video inference dependencies are unavailable") from exc
+
+        if on_progress is not None:
+            on_progress(VideoTrackingProgress(0, 0, 0, 0, stage="loading_model"))
+
+        try:
+            checkpoint = load_checkpoint(checkpoint_path, device="cpu")
+            predictor = ReefPosePredictor(checkpoint.model, checkpoint.schema, device=device)
+        except ReefPoseError as exc:
+            raise ValidationError(f"ReefPose checkpoint is invalid: {exc}") from exc
+
+        class_name = str(checkpoint.training_config.get("class_label") or "animal").strip()
+        capture = cv2.VideoCapture(str(video_path))
+        if not capture.isOpened():
+            capture.release()
+            raise ValidationError("Tracking source video could not be opened")
+
+        observations: list[TrackObservation] = []
+        detections_seen = 0
+        unique_track_ids: set[int] = set()
+        frame_index = 0
+        try:
+            while True:
+                if should_cancel is not None and should_cancel():
+                    raise VideoTrackingCancelled(
+                        f"Video tracking cancelled before frame {frame_index}"
+                    )
+                ok, frame = capture.read()
+                if not ok or frame is None:
+                    break
+
+                source = image_module.fromarray(frame[:, :, ::-1].copy(), mode="RGB")
+                try:
+                    pose = predictor.predict(source, confidence_threshold=confidence)
+                except ReefPoseError as exc:
+                    raise ValidationError(f"ReefPose video inference failed: {exc}") from exc
+
+                if pose.bbox is not None:
+                    x_min, y_min, x_max, y_max = pose.bbox
+                    provider_track_id = 1 if link_detections else frame_index + 1
+                    keypoints = tuple(
+                        (
+                            float(item.x),
+                            float(item.y),
+                            float(item.confidence) if item.visibility_state == "visible" else 0.0,
+                        )
+                        for item in pose.landmarks
+                    )
+                    detections_seen += 1
+                    unique_track_ids.add(provider_track_id)
+                    observations.append(
+                        TrackObservation(
+                            frame=frame_index,
+                            provider_track_id=provider_track_id,
+                            class_name=class_name,
+                            confidence=float(pose.confidence),
+                            bbox=(
+                                float(x_min),
+                                float(y_min),
+                                float(x_max - x_min),
+                                float(y_max - y_min),
+                            ),
+                            keypoints=keypoints,
+                            pose_uncertainty=build_pose_uncertainty_evidence(
+                                provider_id=self.provider_id,
+                                provider_version=self.provider_version,
+                                keypoints=keypoints,
+                            ),
+                        )
+                    )
+
+                frame_index += 1
+                if on_progress is not None:
+                    on_progress(
+                        VideoTrackingProgress(
+                            frames_processed=frame_index,
+                            detections_seen=detections_seen,
+                            tracked_observations_seen=len(observations),
+                            unique_tracks_seen=len(unique_track_ids),
+                        )
+                    )
+        finally:
+            capture.release()
+
+        if frame_index == 0:
+            raise ValidationError("Tracking source video contains no decodable frames")
         return observations
 
 
@@ -553,4 +711,6 @@ def video_tracking_provider_for_name(provider_id: str) -> VideoTrackingProvider:
         return UltralyticsVideoTrackingProvider()
     if normalized == "sleap_nn":
         return SleapNNVideoTrackingProvider()
+    if normalized == "reefpose":
+        return ReefPoseVideoTrackingProvider()
     raise ValidationError(f"Unsupported video tracking provider: {provider_id}")
