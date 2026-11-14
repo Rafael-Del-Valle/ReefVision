@@ -76,7 +76,12 @@ Direct scientific-engine callers are now held to the same strict
 calibration-input semantics as the public mesh-preview schema: Boolean values
 cannot stand in for a numeric meter-per-unit scale or a scale uncertainty,
 and unrepresentable Python integers fail closed with a controlled validation
-error. A relative uncertainty **equal to 1.0 (100%) is supported**; values
+error. Direct path geometry also rejects Boolean, string, null and
+unrepresentably large integer vertex coordinates with a controlled error,
+including vertices not referenced by any face. This closes an input-integrity
+gap for callers that bypass the public schema without altering valid integer
+or floating-point geometry, API/workflow provenance, or the provisional
+measurement/review status. A relative uncertainty **equal to 1.0 (100%) is supported**; values
 above 1.0 are invalid. The supported 100% boundary yields scale-only length
 intervals of [0, 2L], not confidence intervals. Prior stale regression
 expectations for the boundary and for zero-length connected-component QC
