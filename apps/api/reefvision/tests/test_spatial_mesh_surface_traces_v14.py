@@ -90,6 +90,39 @@ def test_trace_follows_selected_edges_not_the_shortest_route() -> None:
     assert result["measurement_status"] == "caller_supplied_unverified"
 
 
+def test_selected_trace_turn_angles_are_scale_invariant_and_provisional() -> None:
+    first = measure_mesh_preview(**PARAMS)["surface_edge_traces"][0]
+    rescaled = measure_mesh_preview(
+        **{**PARAMS, "meters_per_unit": 0.02}
+    )["surface_edge_traces"][0]
+    for trace in (first, rescaled):
+        assert trace["turn_angles_deg"][0] is None
+        assert trace["turn_angles_deg"][1] == pytest.approx(135.0)
+        assert trace["turn_angles_deg"][2] is None
+        assert trace["maximum_turn_angle_deg"] == pytest.approx(135.0)
+        assert trace["total_absolute_geometric_turn_deg"] == pytest.approx(135.0)
+        assert trace["human_review_verified"] is False
+        assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
+    assert first["turn_angles_deg"] == rescaled["turn_angles_deg"]
+
+
+def test_direct_trace_zero_edge_has_unknown_turn_not_a_fabricated_zero() -> None:
+    # Direct diagnostic callers can inspect degenerate imported geometry,
+    # although the full preview separately rejects invalid triangle area.
+    trace = mesh_surface_edge_traces(
+        [(0, 0, 0), (0, 0, 0), (1, 0, 0)],
+        [[0, 1, 2]],
+        [[0, 1, 2]],
+        0.01,
+        None,
+    )[0]
+    assert trace["turn_angles_deg"] == [None, None, None]
+    assert trace["maximum_turn_angle_deg"] is None
+    assert trace["total_absolute_geometric_turn_deg"] is None
+    assert "zero_length_edge_on_surface_trace" in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+
+
 @pytest.mark.parametrize(
     ("paths", "expected_status"),
     [
@@ -325,14 +358,18 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     trace = artifact["surface_edge_traces"][0]
     assert trace["human_review_verified"] is False
+    assert len(trace["turn_angles_deg"]) == len(trace["vertex_indices"])
+    assert trace["turn_angles_deg"][0] is None
+    assert trace["turn_angles_deg"][-1] is None
+    if case == "ordinary":
+        assert trace["maximum_turn_angle_deg"] == pytest.approx(135.0)
+        assert trace["total_absolute_geometric_turn_deg"] == pytest.approx(135.0)
     if case == "uncertainty_missing":
         assert trace["segment_length_scale_only_intervals_m"] is None
         assert trace["cumulative_length_scale_only_intervals_m"] is None
     else:
         assert len(trace["segment_length_scale_only_intervals_m"]) == trace["edge_count"]
-        assert len(trace["cumulative_length_scale_only_intervals_m"]) == (
-            trace["edge_count"] + 1
-        )
+        assert len(trace["cumulative_length_scale_only_intervals_m"]) == (trace["edge_count"] + 1)
     if case == "uncertainty_max":
         assert trace["cumulative_length_scale_only_intervals_m"][-1] == pytest.approx(
             [0.0, 2 * trace["length_m"]]
