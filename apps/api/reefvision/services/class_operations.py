@@ -113,6 +113,9 @@ class OperationPlan:
     compatibility_impacts: list[ClassOperationCompatibilityImpactResponse]
     warnings: list[str]
     blockers: list[str]
+    # Bind approval to the actual class memberships and mutable review state,
+    # not just to the unchanged IDs of QC and review-queue records.
+    review_reference_evidence: dict[str, list[dict[str, Any]]]
 
 
 class ClassOperationsService:
@@ -485,6 +488,26 @@ class ClassOperationsService:
             compatibility_impacts=compatibility_impacts,
             warnings=warnings,
             blockers=blockers,
+            review_reference_evidence={
+                "quality_control_issues": [
+                    {
+                        "id": issue.id,
+                        "status": issue.status,
+                        "class_ids": list(issue.class_ids_json),
+                    }
+                    for issue in sorted(quality_control_issues, key=lambda item: item.id)
+                    if source_class.id in issue.class_ids_json
+                ],
+                "review_queue_items": [
+                    {
+                        "id": item.id,
+                        "state": item.review_state,
+                        "class_ids": list(item.label_class_ids_json),
+                    }
+                    for item in sorted(review_queue_items, key=lambda item: item.id)
+                    if source_class.id in item.label_class_ids_json
+                ],
+            },
         )
 
     def _plan_checksum(
@@ -522,6 +545,7 @@ class ClassOperationsService:
             ],
             "warnings": plan.warnings,
             "blockers": plan.blockers,
+            "review_reference_evidence": plan.review_reference_evidence,
         }
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()

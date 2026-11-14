@@ -754,3 +754,74 @@ def test_class_operation_execute_requires_previewing_local_researcher(
             and event.actor == "local-user:researcher-a"
             for event in events
         )
+
+
+@pytest.mark.parametrize("operation_endpoint", ["reassign", "reassign-delete"])
+@pytest.mark.parametrize(
+    "mutation",
+    ["qc_class_membership", "review_class_membership", "qc_state", "review_state"],
+)
+def test_class_operation_preview_rejects_same_id_review_reference_changes(
+    client: TestClient, operation_endpoint: str, mutation: str
+) -> None:
+    """A reviewed class inventory must not silently accept repurposed QC records."""
+    project = create_project(client, name="Reviewed reference membership")
+    source_class = create_label_class(
+        client, project["id"], class_index=0, name="Source", display_color="#E76F51"
+    )
+    target_class = create_label_class(
+        client, project["id"], class_index=1, name="Target", display_color="#2A9D8F"
+    )
+    seed_reassignment_records(
+        client,
+        project,
+        source_class,
+        target_class,
+        include_deleted_annotation=False,
+        include_historical_prediction=False,
+    )
+    route = f"/api/v1/projects/{project['id']}/classes/{source_class['id']}/{operation_endpoint}"
+    preview_response = client.post(f"{route}/preview", json={"target_class_id": target_class["id"]})
+    assert preview_response.status_code == 201, preview_response.text
+    preview = preview_response.json()
+    assert preview["plan"]["blockers"] == []
+    groups = {
+        group["key"]: group["record_ids"] for group in preview["plan"]["mutable_records"]
+    }
+    assert groups["quality_control_issues_open"] == ["qc-issue-open"]
+    assert groups["review_queue_items_open"] == ["queue-item-pending"]
+
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        issue = session.get(QualityControlIssue, "qc-issue-open")
+        item = session.get(ReviewQueueItem, "queue-item-pending")
+        assert issue is not None and item is not None
+        if mutation == "qc_class_membership":
+            issue.class_ids_json = [source_class["id"], target_class["id"]]
+        elif mutation == "review_class_membership":
+            item.label_class_ids_json = [source_class["id"], target_class["id"]]
+        elif mutation == "qc_state":
+            issue.status = "acknowledged"
+        else:
+            item.review_state = "in_progress"
+        session.commit()
+
+    refused = client.post(
+        route,
+        json={"operation_id": preview["id"], "preview_checksum": preview["preview_checksum"]},
+    )
+    assert refused.status_code == 409, refused.text
+    assert "stale" in refused.json()["detail"].lower()
+
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        operation = session.get(ClassOperation, preview["id"])
+        annotation = session.get(Annotation, "annotation-active")
+        proposal = session.get(PredictionProposal, "proposal-pending")
+        issue = session.get(QualityControlIssue, "qc-issue-open")
+        item = session.get(ReviewQueueItem, "queue-item-pending")
+        assert operation is not None and operation.final_state == "preview_stale"
+        assert operation.status == "failed" and operation.started_at is None
+        assert annotation is not None and annotation.label_class_id == source_class["id"]
+        assert proposal is not None and proposal.label_class_id == source_class["id"]
+        assert issue is not None and source_class["id"] in issue.class_ids_json
+        assert item is not None and source_class["id"] in item.label_class_ids_json
+        assert session.get(LabelClass, source_class["id"]) is not None
