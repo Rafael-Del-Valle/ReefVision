@@ -237,7 +237,7 @@ def materialize_pose_training_exports(
     }
 
 
-def process_pose_training_job(
+def _process_ultralytics_pose_training_job(
     settings: Settings,
     factory: sessionmaker[Session],
     job_id: str,
@@ -781,3 +781,26 @@ def process_pose_training_job(
             session.commit()
 
         return False
+
+
+def process_pose_training_job(
+    settings: Settings,
+    factory: sessionmaker[Session],
+    job_id: str,
+) -> bool:
+    """Dispatch one pose-training job to its persisted provider."""
+
+    with factory() as session:
+        job = session.get(Job, job_id)
+        if job is None or job.job_type != "training" or job.status != "queued":
+            return False
+        run_id = str(job.request_json.get("training_run_id") or "")
+        run = session.get(TrainingRun, run_id)
+        if run is None:
+            return _process_ultralytics_pose_training_job(settings, factory, job_id)
+        provider_id = run.provider_id
+    if provider_id == "reefpose":
+        from reefvision.jobs.reefpose_training import process_reefpose_training_job
+
+        return process_reefpose_training_job(settings, factory, job_id)
+    return _process_ultralytics_pose_training_job(settings, factory, job_id)

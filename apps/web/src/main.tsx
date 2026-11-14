@@ -4,7 +4,6 @@ import { App } from "./App";
 import { AppProviders } from "./app/providers";
 import { SegmentationInferenceLauncher } from "./features/annotation-editor/SegmentationInferenceLauncher";
 import { SegmentationProposalOverlay } from "./features/annotation-editor/SegmentationProposalOverlay";
-import { SegmentationExportLauncher } from "./features/dataset-versions/SegmentationExportLauncher";
 import { initializeRuntime } from "./runtime";
 import { renderStartupError } from "./startup";
 import "./styles/clarity-overhaul.css";
@@ -23,7 +22,6 @@ async function bootstrap() {
     <StrictMode>
       <AppProviders>
         <App />
-        <SegmentationExportLauncher />
         <SegmentationProposalOverlay />
         <SegmentationInferenceLauncher />
       </AppProviders>

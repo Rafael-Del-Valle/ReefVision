@@ -1,7 +1,10 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from reefvision.schemas.training import TrainingProviderArchitectureResponse
+from reefvision.services.segmentation_training import SegmentationTrainingService
 from reefvision.services.training import TrainingService, _ultralytics_architecture_available
+from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_training_workspace import (
     _patch_training_foundation,
     _seed_training_dataset,
@@ -23,6 +26,41 @@ def test_exact_ultralytics_architecture_name_still_matches() -> None:
     assert _ultralytics_architecture_available(
         "yolo11.yaml",
         {"yolo11.yaml"},
+    )
+
+
+def test_segmentation_preflight_accepts_scaled_catalog_architecture_from_base_yaml(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = create_project(client, "Scaled segmentation architecture")
+    monkeypatch.setattr(
+        SegmentationTrainingService,
+        "_cached_ultralytics_segment_architectures",
+        lambda self: [
+            TrainingProviderArchitectureResponse(
+                architecture_id="yolo11-seg.yaml",
+                display_name="yolo11-seg",
+                task="segment",
+                source="11/yolo11-seg.yaml",
+            )
+        ],
+    )
+
+    response = client.post(
+        f"/api/v1/projects/{project['id']}/training-preflight",
+        json={
+            "name": "YOLO11 nano segmentation",
+            "task": "segment",
+            "provider_id": "ultralytics",
+            "architecture": "yolo11n-seg.yaml",
+            "initial_checkpoint_source": "scratch",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert not any(
+        "segmentation architecture is not available" in blocker
+        for blocker in response.json()["blockers"]
     )
 
 

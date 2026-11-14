@@ -469,7 +469,9 @@ export function SystemPanel({
                 <article key={backup.id} className="system-record-card">
                   <div className="section-heading">
                     <div>
-                      <strong>{backup.id}</strong>
+                      <strong>
+                        {preview ? "Backup snapshot" : "Backup record"}
+                      </strong>
                       <p className="system-subtle">
                         Created {formatTimestamp(backup.created_at)}
                       </p>
@@ -485,7 +487,12 @@ export function SystemPanel({
                   )}
                   <details className="advanced-disclosure">
                     <summary>Technical storage details</summary>
-                    <code>{backup.destination_path}</code>
+                    <p>
+                      Backup ID <code>{backup.id}</code>
+                    </p>
+                    <p>
+                      Location <code>{backup.destination_path}</code>
+                    </p>
                   </details>
                   <div className="system-inline-form">
                     <button

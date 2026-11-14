@@ -18,6 +18,7 @@ from reefvision.ml.providers import (
     DetectionModelMetadata,
     DetectionPrediction,
     PixelBox,
+    PoseKeypointPrediction,
 )
 from reefvision.services.models import ModelService
 from reefvision.tests.test_annotations import create_project, import_one
@@ -75,6 +76,59 @@ class FakeDetectorWorkerProvider:
 
     def unload_model(self) -> None:
         return None
+
+
+class FakePoseRegistrationProvider(FakeDetectorRegistrationProvider):
+    provider_name = "reefpose"
+
+    def inspect_model(self, model_path: Any) -> DetectionModelMetadata:
+        metadata = super().inspect_model(model_path)
+        return DetectionModelMetadata(
+            framework="reefpose",
+            task="pose",
+            provider_name=self.provider_name,
+            provider_version=self.provider_version,
+            class_labels=metadata.class_labels,
+            input_size=metadata.input_size,
+            metadata={
+                "reefpose_anatomy_schema": {
+                    "schema_id": "schema-1",
+                    "schema_revision": 1,
+                    "integrity_hash": "a" * 64,
+                }
+            },
+        )
+
+
+class FakePoseWorkerProvider(FakeDetectorWorkerProvider):
+    provider_name = "reefpose"
+
+    def predict(self, image_path: Any, settings: Any) -> list[DetectionPrediction]:
+        assert image_path.exists()
+        return [
+            DetectionPrediction(
+                label="soft coral",
+                class_index=0,
+                confidence=0.91,
+                box=PixelBox(x_min=5, y_min=4, x_max=32, y_max=28),
+                keypoints=(
+                    PoseKeypointPrediction(
+                        landmark_id="bell",
+                        name="bell_center",
+                        occurrence_index=0,
+                        x=18.0,
+                        y=14.0,
+                        confidence=0.88,
+                        visibility_state="visible",
+                    ),
+                ),
+                pose_schema={
+                    "schema_id": "schema-1",
+                    "schema_revision": 1,
+                    "integrity_hash": "a" * 64,
+                },
+            )
+        ]
 
 
 class FakeAssistRegistrationProvider:
@@ -172,6 +226,49 @@ def test_register_model_and_create_inference_job(
     assert payload["job_type"] == "inference"
     assert payload["status"] == "queued"
     assert payload["progress_total"] == 1
+
+
+def test_reefpose_registration_job_execution_persists_landmark_provenance(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        ModelService,
+        "_provider_for_purpose",
+        lambda self, purpose: FakePoseRegistrationProvider(),
+    )
+    monkeypatch.setattr(
+        inference_module,
+        "detection_provider_for_name",
+        lambda provider_name: FakePoseWorkerProvider(),
+    )
+    project = create_project(client)
+    report = import_one(client, project["id"])
+    image_id = report["successful"][0]["image_id"]
+    model = register_model(
+        client,
+        project["id"],
+        purpose="detector",
+        filename="reefpose.pt",
+        display_name="ReefPose Fixture",
+    )
+
+    response = client.post(
+        f"/api/v1/projects/{project['id']}/inference-jobs",
+        json={"model_id": model["id"], "image_ids": [image_id], "device": "cpu"},
+    )
+
+    assert response.status_code == 200, response.text
+    app = cast(FastAPI, client.app)
+    processed = process_inference_job(
+        app.state.settings, app.state.session_factory, response.json()["id"]
+    )
+    assert processed, client.get(f"/api/v1/jobs/{response.json()['id']}").text
+    proposals = client.get(f"/api/v1/images/{image_id}/prediction-proposals").json()["items"]
+    assert len(proposals) == 1
+    provenance = proposals[0]["provenance_json"]
+    assert provenance["pose_landmarks"][0]["landmark_id"] == "bell"
+    assert provenance["pose_landmarks"][0]["confidence"] == 0.88
+    assert provenance["pose_schema"]["schema_id"] == "schema-1"
 
 
 def test_inference_job_creates_pending_proposal_and_acceptance_records_provenance(

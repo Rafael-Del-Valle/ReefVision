@@ -81,14 +81,19 @@ def polygon_to_runs(
     Coordinates use source-image pixels; the output's row intervals are
     half-open. Polygons and raster masks are not treated as bounding boxes.
     """
-    _dimensions(width, height)
-    _validate_polygon(vertices, width=width, height=height)
+    validate_source_polygon(vertices, width=width, height=height)
     points = [(float(x), float(y)) for x, y in vertices]
     if len(points) > 3 and points[0] == points[-1]:
         points.pop()
     raster = Image.new("L", (width, height), 0)
     ImageDraw.Draw(raster).polygon(points, fill=255)
     return binary_mask_to_runs(raster, width=width, height=height)
+
+
+def validate_source_polygon(vertices: list[list[float]], *, width: int, height: int) -> None:
+    """Check geometry and raster size before persisting a source-image polygon."""
+    _dimensions(width, height)
+    _validate_polygon(vertices, width=width, height=height)
 
 
 def make_scored_mask(

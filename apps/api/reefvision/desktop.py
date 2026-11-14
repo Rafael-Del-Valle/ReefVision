@@ -246,7 +246,7 @@ def run_pending_migrations(settings: Settings) -> None:
     config = Config(str(alembic_ini))
     config.attributes["configure_logger"] = False
     config.set_main_option("script_location", str(migrations_dir))
-    config.set_main_option("sqlalchemy.url", settings.resolved_database_url)
+    config.set_main_option("sqlalchemy.url", settings.resolved_database_url.replace("%", "%%"))
 
     from reefvision.db.session import create_database_engine
 
@@ -256,11 +256,11 @@ def run_pending_migrations(settings: Settings) -> None:
     engine = create_database_engine(settings)
     try:
         with engine.connect() as connection:
-            current_revision = MigrationContext.configure(connection).get_current_revision()
+            current_heads = MigrationContext.configure(connection).get_current_heads()
     finally:
         engine.dispose()
 
-    if expected_revision is not None and current_revision == expected_revision:
+    if expected_revision is not None and current_heads == (expected_revision,):
         LOGGER.info(
             "Database schema already at Alembic head %s; skipping upgrade",
             expected_revision,

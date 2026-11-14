@@ -337,8 +337,20 @@ it("shows fill failures and leaves the annotation history unchanged", async () =
     new Error("Fill contains holes"),
   );
   await mount();
-  fireEvent.click(screen.getByTestId("activate-polygon-fill-tool"));
+  // The toolbar renders before the asynchronous annotation session restores
+  // its active class. A click on its initially disabled Fill button is a no-op.
+  // Wait for the real editing precondition instead of racing session loading.
+  const fillButton = screen.getByTestId("activate-polygon-fill-tool");
+  await waitFor(() => expect(fillButton).toBeEnabled());
+  fireEvent.click(fillButton);
+  await waitFor(() =>
+    expect(screen.getByTestId("mask-workspace")).toHaveAttribute(
+      "data-active-tool",
+      "fill",
+    ),
+  );
   seed();
+  await waitFor(() => expect(generatePolygonFill).toHaveBeenCalledTimes(1));
   await screen.findByText("Fill contains holes");
   expect(screen.getByText("0 masks")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();

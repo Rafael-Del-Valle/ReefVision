@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 import shutil
 import zipfile
-from datetime import datetime
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from typing import Any, BinaryIO
 from uuid import uuid4
 
 from sqlalchemy import DateTime
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
@@ -19,8 +21,14 @@ from reefvision.db.models import (
     Annotation,
     ClassificationDataset,
     ClassificationPrediction,
+    ComputedMetricDefinition,
+    ComputedMetricResult,
     DatasetVersion,
     DatasetVersionItem,
+    EnvironmentalAnalysisDefinition,
+    EnvironmentalAnalysisResult,
+    EnvironmentalCacheEntry,
+    EnvironmentalEventDefinition,
     ExperimentRecord,
     ImageAsset,
     ImageLabel,
@@ -29,11 +37,13 @@ from reefvision.db.models import (
     MaskAnnotation,
     ModelRegistration,
     PredictionProposal,
+    Project,
     ProjectExchangePackage,
     QualityControlIssue,
     QualityControlRun,
     ReviewQueue,
     ReviewQueueItem,
+    ScientificRecord,
     TrainingRun,
     VideoAsset,
     VideoTrack,
@@ -48,15 +58,63 @@ from reefvision.schemas.project_exchange import (
     ProjectExchangePackageResponse,
 )
 from reefvision.schemas.projects import ProjectCreate
+from reefvision.schemas.scientific_heatmaps import ScientificHeatmapResponse
+from reefvision.services.project_exchange_computed import (
+    COMPUTED_SECTIONS,
+    remap_computed_sections,
+    validate_computed_exchange_records,
+)
+from reefvision.services.project_exchange_environmental_analysis import (
+    ANALYSIS_SECTIONS,
+    remap_environmental_analysis_sections,
+    remap_study_assignments,
+    validate_environmental_analysis_exchange,
+)
 from reefvision.services.project_exchange_inspection import (
     MANIFEST_NAME,
     inspect_project_exchange,
 )
+from reefvision.services.project_exchange_integrated import (
+    FORMAT_VERSION as INTEGRATED_FORMAT_VERSION,
+)
+from reefvision.services.project_exchange_integrated import (
+    heldout_scope_mappings,
+    integrated_models,
+    map_origin_ids,
+    parent_first,
+    remap_ecology_evidence,
+    remap_reviewed_snapshot,
+)
+from reefvision.services.project_exchange_pose import (
+    remap_measurement_digests,
+    remap_phase6_job,
+    remap_pose_row,
+    restore_phase6_track_digests,
+    restore_pose_comparisons,
+    restore_pose_model_lineage,
+    restore_pose_reports,
+    validate_frozen_pose_frames,
+)
+from reefvision.services.project_exchange_scientific import (
+    SCIENCE_SECTIONS,
+    remap_scientific_sections,
+    validate_exchange_records,
+)
+from reefvision.services.project_exchange_workflows import restore_workflow_provenance
 from reefvision.services.projects import ProjectService
+from reefvision.services.scientific_data import content_hash
+from reefvision.services.scientific_heatmaps import scientific_heatmap_content_hash
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
 SECTION_MODELS: dict[str, type[Any]] = {
+    "scientific_records": ScientificRecord,
+    "environmental_cache_entries": EnvironmentalCacheEntry,
+    "computed_metric_definitions": ComputedMetricDefinition,
+    "computed_metric_results": ComputedMetricResult,
+    "environmental_event_definitions": EnvironmentalEventDefinition,
+    "environmental_analysis_definitions": EnvironmentalAnalysisDefinition,
+    "environmental_analysis_results": EnvironmentalAnalysisResult,
     "label_classes": LabelClass,
     "images": ImageAsset,
     "videos": VideoAsset,
@@ -112,6 +170,13 @@ SECTION_ORDER = [
     "workflow_runs",
     "workflow_node_runs",
     "workflow_artifacts",
+    "scientific_records",
+    "environmental_cache_entries",
+    "computed_metric_definitions",
+    "computed_metric_results",
+    "environmental_event_definitions",
+    "environmental_analysis_definitions",
+    "environmental_analysis_results",
 ]
 
 MEDIA_KIND_BY_SECTION = {
@@ -148,7 +213,14 @@ def _remap_json(value: Any, id_map: dict[str, str]) -> Any:
     if isinstance(value, list):
         return [_remap_json(item, id_map) for item in value]
     if isinstance(value, dict):
-        return {key: _remap_json(item, id_map) for key, item in value.items()}
+        return {
+            key: (
+                remap_study_assignments(item, id_map)
+                if key == "study_assignments"
+                else _remap_json(item, id_map)
+            )
+            for key, item in value.items()
+        }
     return value
 
 
@@ -195,6 +267,42 @@ def _refresh_json_checksum(model: type[Any], values: dict[str, Any]) -> None:
         values[hash_field] = canonical_json_sha256(payload)
 
 
+def _validate_heatmap_artifacts(project_id: str, sections: dict[str, list[dict[str, Any]]]) -> None:
+    images = {row["id"]: row for row in sections.get("images", [])}
+    labels = {row["id"]: row for row in sections.get("label_classes", [])}
+    for artifact in sections.get("workflow_artifacts", []):
+        if artifact.get("data_type") != "scientific_heatmap":
+            continue
+        payload = artifact.get("payload_json")
+        if not isinstance(payload, dict):
+            raise ValidationError("Invalid scientific heatmap artifact")
+        try:
+            parsed = ScientificHeatmapResponse.model_validate(payload)
+        except ValueError as exc:
+            raise ValidationError("Invalid scientific heatmap artifact") from exc
+        image = images.get(str(parsed.image_id))
+        label = labels.get(str(parsed.label_class_id))
+        source = parsed.source_snapshot or {}
+        if (
+            str(parsed.project_id) != project_id
+            or image is None
+            or image.get("project_id") != project_id
+            or parsed.image_sha256 != image.get("sha256")
+            or (
+                parsed.label_class_id is not None
+                and (label is None or label.get("project_id") != project_id)
+            )
+            or parsed.content_sha256 != scientific_heatmap_content_hash(payload)
+            or parsed.source_snapshot is None
+            or source.get("image_sha256") != parsed.image_sha256
+            or source.get("algorithm") != parsed.algorithm
+            or source.get("annotation_revision") != parsed.annotation_revision
+            or parsed.source_sha256 != content_hash(parsed.source_snapshot)
+            or canonical_json_sha256(payload) != artifact.get("payload_sha256")
+        ):
+            raise ValidationError("Scientific heatmap artifact provenance or checksum mismatch")
+
+
 def _media_inventory(manifest: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
     result: dict[tuple[str, str], dict[str, Any]] = {}
     raw = manifest.get("media", [])
@@ -237,6 +345,7 @@ def import_project_exchange(
     settings: Settings,
     *,
     project_name: str | None = None,
+    finalize: Callable[[Project, ProjectExchangePackage], None] | None = None,
 ) -> ProjectExchangeImportResponse:
     """Import a compatible archive into a newly created project.
 
@@ -290,28 +399,6 @@ def import_project_exchange(
             str(raw_height_evidence).strip() if raw_height_evidence is not None else None
         ) or None
 
-        project = ProjectService(session, settings).create_project(
-            ProjectCreate(
-                name=requested_name,
-                description=(
-                    str(source_project["description"])
-                    if source_project.get("description") is not None
-                    else None
-                ),
-                template="blank",
-            )
-        )
-        # Preserve legacy numeric offsets even when older packages have no datum evidence.
-        # Such projects remain intentionally unavailable for production georeferencing
-        # until evidence is supplied.
-        project.georeference_height_offset_m = georeference_height_offset_m
-        project.georeference_height_evidence = georeference_height_evidence
-        project.default_annotation_type = str(
-            source_project.get("default_annotation_type") or project.default_annotation_type
-        )
-        session.commit()
-        session.refresh(project)
-
         section_rows: dict[str, list[dict[str, Any]]] = {}
         for section_name, descriptor_value in sections_descriptor.items():
             if section_name == "project" or not isinstance(descriptor_value, dict):
@@ -320,49 +407,169 @@ def import_project_exchange(
             if isinstance(member, str):
                 section_rows[section_name] = _read_jsonl(archive, member)
 
-        id_map: dict[str, str] = {old_project_id: project.id}
-        for section_name, rows in section_rows.items():
-            if section_name not in SECTION_MODELS:
-                continue
-            for row in rows:
-                old_id = row.get("id")
-                if isinstance(old_id, str) and old_id:
-                    id_map[old_id] = str(uuid4())
+        integrated = (
+            integrated_models() if inspection.format_version == INTEGRATED_FORMAT_VERSION else {}
+        )
+        models = {**SECTION_MODELS, **integrated}
+        order = [*SECTION_ORDER, *integrated]
+        validate_exchange_records(old_project_id, section_rows, models)
+        validate_frozen_pose_frames(section_rows)
+        validate_computed_exchange_records(old_project_id, section_rows)
+        validate_environmental_analysis_exchange(old_project_id, section_rows)
+        _validate_heatmap_artifacts(old_project_id, section_rows)
 
-        # Immutable revision-series identifiers are not primary keys, but they
-        # still must be remapped when a package is imported more than once.
-        # This keeps every imported project scientifically independent.
-        for rows in section_rows.values():
-            for row in rows:
-                for field in (
-                    "ethogram_series_id",
-                    "bout_series_id",
-                    "observation_series_id",
-                    "analysis_series_id",
-                ):
-                    value = row.get(field)
-                    if isinstance(value, str) and value:
-                        id_map.setdefault(value, str(uuid4()))
-
-        media = _media_inventory(manifest)
-        warnings = list(inspection.warnings)
-        imported_counts: dict[str, int] = {}
-        copied_media_count = 0
-        dataset_parent_links: list[tuple[DatasetVersion, str]] = []
-        imported_graphs: dict[str, WorkflowGraphRecord] = {}
-
+        project: Project | None = None
         try:
-            for section_name in SECTION_ORDER:
-                model = SECTION_MODELS[section_name]
+            project = ProjectService(session, settings).create_project(
+                ProjectCreate(
+                    name=requested_name,
+                    description=(
+                        str(source_project["description"])
+                        if source_project.get("description") is not None
+                        else None
+                    ),
+                    template="blank",
+                ),
+                commit=False,
+            )
+            # Preserve legacy numeric offsets even when older packages have no datum evidence.
+            # Such projects remain intentionally unavailable for production georeferencing
+            # until evidence is supplied.
+            project.georeference_height_offset_m = georeference_height_offset_m
+            project.georeference_height_evidence = georeference_height_evidence
+            project.default_annotation_type = str(
+                source_project.get("default_annotation_type") or project.default_annotation_type
+            )
+            session.flush()
+            session.refresh(project)
+
+            id_map: dict[str, str] = {old_project_id: project.id}
+            for section_name, rows in section_rows.items():
+                if section_name not in models:
+                    continue
+                for row in rows:
+                    old_id = row.get("id")
+                    if isinstance(old_id, str) and old_id:
+                        id_map[old_id] = str(uuid4())
+            id_map.update(heldout_scope_mappings(old_project_id, project.id, section_rows))
+
+            # Immutable revision-series identifiers are not primary keys, but they
+            # still must be remapped when a package is imported more than once.
+            # This keeps every imported project scientifically independent.
+            for rows in section_rows.values():
+                for row in rows:
+                    for field in (
+                        "ethogram_series_id",
+                        "bout_series_id",
+                        "observation_series_id",
+                        "analysis_series_id",
+                        "event_series_id",
+                        "link_id",
+                        "graph_id",
+                        "correspondence_id",
+                    ):
+                        value = row.get(field)
+                        if isinstance(value, str) and value:
+                            id_map.setdefault(value, str(uuid4()))
+
+            scientific_rows = remap_scientific_sections(section_rows, id_map)
+            mask_paths: dict[str, str] = {}
+            for mask in section_rows.get("mask_annotations", []):
+                path = mask.get("mask_path")
+                if isinstance(path, str):
+                    source_prefix = source_storage_root.rstrip("/") + "/"
+                    if path.startswith(source_prefix):
+                        mask_values: dict[str, Any] = {"mask_path": path}
+                        _rewrite_project_paths(
+                            mask_values, MaskAnnotation, source_storage_root, project.storage_root
+                        )
+                        mask_paths[path] = mask_values["mask_path"]
+            computed_rows = remap_computed_sections(
+                section_rows, id_map, scientific_rows, mask_paths=mask_paths
+            )
+            environmental_analysis_rows = remap_environmental_analysis_sections(
+                section_rows, id_map
+            )
+            analysis_results = {
+                row["id"]: row
+                for row in environmental_analysis_rows["environmental_analysis_results"]
+            }
+            analysis_definitions = {
+                row["id"]: row
+                for row in environmental_analysis_rows["environmental_analysis_definitions"]
+            }
+            coverage_results = {
+                id_map[row["id"]]: row
+                for row in computed_rows["computed_metric_results"]
+                if row["result_kind"] == "mask_coverage"
+            }
+            media = _media_inventory(manifest)
+            warnings = list(inspection.warnings)
+            imported_counts: dict[str, int] = {}
+            copied_media_count = 0
+            dataset_parent_links: list[tuple[DatasetVersion, str]] = []
+            imported_graphs: dict[str, WorkflowGraphRecord] = {}
+
+            by_section = {
+                name: {row.get("id"): row for row in rows} for name, rows in section_rows.items()
+            }
+            mapped_ecology: dict[str, list[dict[str, Any]]] = {}
+            digests = remap_measurement_digests(section_rows, id_map) if integrated else {}
+            source_jobs = {row["id"]: row for row in section_rows.get("jobs", [])}
+            track_digests: dict[str, tuple[str, str]] = {}
+            for section_name in order:
+                model = models[section_name]
                 rows = section_rows.get(section_name, [])
                 if not rows:
                     imported_counts[section_name] = 0
                     continue
+                if section_name == "ecology_identity_revisions":
+                    mapped_ecology, ecology_digests = remap_ecology_evidence(
+                        session, section_rows, id_map
+                    )
+                    digests.update(ecology_digests)
+                if section_name in integrated:
+                    rows = parent_first(rows, model)
                 created: list[Any] = []
-                for source_row in rows:
+                for row_index, source_row in enumerate(rows):
                     row = dict(source_row)
                     old_id = row.get("id")
-                    values = _coerce_row(model, row, id_map)
+                    if section_name in SCIENCE_SECTIONS:
+                        mapped = scientific_rows[section_name][row_index]
+                        # Preserve JSON evidence; only scalar foreign keys use the shared mapper.
+                        values = _coerce_row(model, {**mapped, "payload_json": {}}, id_map)
+                        values["payload_json"] = mapped["payload_json"]
+                    elif section_name in COMPUTED_SECTIONS:
+                        mapped = computed_rows[section_name][row_index]
+                        if section_name == "computed_metric_results":
+                            values = _coerce_row(model, {**mapped, "payload_json": {}}, id_map)
+                            values["payload_json"] = mapped["payload_json"]
+                        else:
+                            values = _coerce_row(model, mapped, id_map)
+                    elif section_name in ANALYSIS_SECTIONS:
+                        mapped = environmental_analysis_rows[section_name][row_index]
+                        # Scientific IDs and literal study labels are already separated.
+                        values = _coerce_row(model, mapped, {})
+                    elif section_name in mapped_ecology:
+                        values = _coerce_row(model, mapped_ecology[section_name][row_index], {})
+                    else:
+                        values = _coerce_row(model, row, id_map)
+                    if integrated and section_name in integrated:
+                        # Literal text may happen to equal a UUID. Physical
+                        # lineage keys remap independently of investigator text.
+                        for literal in (
+                            "actor",
+                            "reviewer",
+                            "reason",
+                            "name",
+                            "display_name",
+                            "organism_key",
+                            "parent_colony_key",
+                            "experimental_unit_id",
+                            "verified_by",
+                        ):
+                            if literal in row:
+                                values[literal] = row[literal]
                     _rewrite_project_paths(
                         values,
                         model,
@@ -373,11 +580,41 @@ def import_project_exchange(
                         values["project_id"] = project.id
                     if isinstance(old_id, str) and "id" in model.__table__.columns:
                         values["id"] = id_map[old_id]
+                    if section_name in integrated:
+                        remap_pose_row(
+                            session,
+                            section_name,
+                            row,
+                            values,
+                            id_map,
+                            digests,
+                            source_jobs,
+                            track_digests,
+                        )
+                        remap_reviewed_snapshot(
+                            section_name, row, values, by_section, id_map, digests
+                        )
+                    if integrated and section_name == "video_tracks":
+                        track_digests[row["id"]] = (
+                            canonical_json_sha256(row["keyframes_json"]),
+                            canonical_json_sha256(values["keyframes_json"]),
+                        )
 
                     if section_name == "images":
                         # Thumbnails are generated artifacts, not original media. Never
                         # leave an imported image pointing into the source project tree.
                         values["thumbnail_path"] = None
+                        # group_key is researcher-authored replicate metadata, not an ID link.
+                        # A UUID-looking group value must remain literal across exchange.
+                        values["group_key"] = row.get("group_key")
+
+                    if integrated and section_name == "jobs":
+                        remap_phase6_job(row, values, id_map)
+                        # Imported history never starts local work on its own.
+                        if values["status"] in {"queued", "running"}:
+                            values["status"] = "cancelled"
+                            values["error_message"] = "Interrupted by project exchange"
+                        values["deduplication_key"] = None
 
                     if section_name == "dataset_versions":
                         old_parent = row.get("parent_version_id")
@@ -385,11 +622,56 @@ def import_project_exchange(
                             values["parent_version_id"] = None
 
                     if section_name == "workflow_runs":
+                        if integrated and values["status"] in {"queued", "running"}:
+                            values["status"] = "cancelled"
+                            values["error_message"] = "Interrupted by project exchange"
                         graph_id = values.get("workflow_graph_record_id")
                         if isinstance(graph_id, str):
                             graph = imported_graphs.get(graph_id)
                             if graph is not None:
                                 values["graph_sha256"] = graph.graph_sha256
+
+                    if (
+                        integrated
+                        and section_name == "workflow_node_runs"
+                        and values["status"] == "running"
+                    ):
+                        values["status"] = "cancelled"
+                        values["error_message"] = "Interrupted by project exchange"
+
+                    if section_name == "workflow_artifacts":
+                        payload = values["payload_json"]
+                        result_id = payload.get("result_id")
+                        if values["data_type"] == "scientific_heatmap":
+                            payload["source_snapshot"] = row["payload_json"]["source_snapshot"]
+                            payload["content_sha256"] = scientific_heatmap_content_hash(payload)
+                        if (
+                            values["data_type"] == "environmental_analysis_result"
+                            and (analysis := analysis_results.get(result_id)) is not None
+                        ):
+                            payload.update(
+                                {
+                                    "payload": analysis["payload_json"],
+                                    "input_snapshot": analysis["input_snapshot_json"],
+                                    "definition_sha256": analysis_definitions[
+                                        analysis["definition_id"]
+                                    ]["definition_sha256"],
+                                    "content_sha256": analysis["content_sha256"],
+                                }
+                            )
+                        if (
+                            values["data_type"] == "computed_metric_result"
+                            and (coverage := coverage_results.get(result_id)) is not None
+                        ):
+                            payload.update(
+                                {
+                                    "definition_sha256": coverage["payload_json"][
+                                        "definition_sha256"
+                                    ],
+                                    "evidence_sha256": coverage["payload_json"]["evidence_sha256"],
+                                    "content_sha256": coverage["content_sha256"],
+                                }
+                            )
 
                     media_kind = MEDIA_KIND_BY_SECTION.get(section_name)
                     if media_kind is not None and isinstance(old_id, str):
@@ -457,6 +739,8 @@ def import_project_exchange(
                 shutil.copyfileobj(source, target)
 
             manifest_sha256 = canonical_json_sha256(manifest)
+            origin = (manifest.get("origin") or {}) if integrated else {}
+            origin_ids = map_origin_ids(origin, id_map)
             package = ProjectExchangePackage(
                 id=package_id,
                 project_id=project.id,
@@ -470,24 +754,42 @@ def import_project_exchange(
                     "source_project_id": old_project_id,
                     "source_project_name": source_project.get("name"),
                     "id_remapped": True,
+                    "id_map": id_map,
+                    **({"digest_map": digests, "origin_id_map": origin_ids} if integrated else {}),
                     "copied_media_count": copied_media_count,
                 },
-                completed_at=datetime.now().astimezone(),
+                completed_at=datetime.now(UTC),
             )
             session.add(package)
+            session.flush()
+            if finalize is not None:
+                finalize(project, package)
+            if section_rows.get("pose_training_datasets"):
+                restore_pose_model_lineage(session, project.id, section_rows, id_map, digests)
+            if integrated:
+                restore_phase6_track_digests(session, project.id, id_map, track_digests)
+                restored_locks = restore_pose_reports(
+                    session, section_rows, id_map, digests, _remap_json
+                )
+                for old_scope, protocol in restored_locks.items():
+                    lock = session.get(models["reefpose_heldout_locks"], id_map[old_scope])
+                    if lock is not None:
+                        lock.protocol_sha256 = protocol
+                restore_pose_comparisons(session, project.id, digests)
+                restore_workflow_provenance(
+                    session, project.id, section_rows, id_map, digests, _remap_json
+                )
+                package.options_json = {**package.options_json, "digest_map": digests}
             session.commit()
             session.refresh(project)
             session.refresh(package)
-        except Exception:
+        except Exception as exc:
             session.rollback()
-            try:
-                doomed = session.get(type(project), project.id)
-                if doomed is not None:
-                    session.delete(doomed)
-                    session.commit()
-            finally:
+            if project is not None:
                 project_root = resolve_managed_project_path(settings, project.storage_root)
                 shutil.rmtree(project_root, ignore_errors=True)
+            if isinstance(exc, (IntegrityError, KeyError, TypeError, ValueError)):
+                raise ValidationError("Exchange project data is invalid or inconsistent") from exc
             raise
 
     return ProjectExchangeImportResponse(
@@ -497,6 +799,10 @@ def import_project_exchange(
         source_manifest_sha256=manifest_sha256,
         imported_counts=imported_counts,
         copied_media_count=copied_media_count,
+        unavailable_assets=[
+            asset.model_copy(update={"imported_record_id": id_map[asset.record_id]})
+            for asset in inspection.unavailable_assets
+        ],
         warnings=list(dict.fromkeys(warnings)),
         package=ProjectExchangePackageResponse.model_validate(package),
     )

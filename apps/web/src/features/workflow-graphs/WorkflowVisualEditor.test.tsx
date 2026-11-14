@@ -7,6 +7,52 @@ import type {
 } from "./workflowGraphApi";
 import { WorkflowVisualEditor } from "./WorkflowVisualEditor";
 
+const poseDataset = {
+  id: "dataset-1",
+  project_id: "project-1",
+  source_round_id: "round-1",
+  name: "Verified fish pose",
+  status: "complete",
+  schema_version: "pose-training-dataset-0001",
+  pose_schema_id: "schema-1",
+  pose_schema_revision: 3,
+  pose_schema_content_hash: "a".repeat(64),
+  source_selection_sha256: "b".repeat(64),
+  source_retraining_manifest_sha256: "c".repeat(64),
+  manifest_json: {},
+  manifest_sha256: "d".repeat(64),
+  item_count: 24,
+  created_by: "scientist",
+  created_at: "2026-11-07T00:00:00Z",
+};
+
+const compatibleModel = {
+  id: "model-compatible",
+  project_id: "project-1",
+  purpose: "detector" as const,
+  display_name: "Compatible ReefPose",
+  source_filename: "best.pt",
+  managed_path: "projects/project-1/models/best.pt",
+  sha256: "e".repeat(64),
+  file_size_bytes: 1024,
+  framework: "pytorch",
+  task: "pose",
+  provider_name: "reefpose",
+  provider_version: "1",
+  class_map_json: {},
+  input_size_json: null,
+  metadata_json: {
+    pose_landmark_schema: {
+      schema_id: "schema-1",
+      schema_revision: 3,
+      content_hash: "a".repeat(64),
+    },
+  },
+  notes: null,
+  created_at: "2026-11-07T00:00:00Z",
+  updated_at: "2026-11-07T00:00:00Z",
+};
+
 const registry: WorkflowNodeDefinition[] = [
   {
     node_type: "pose_inference",
@@ -174,6 +220,126 @@ const runDetail = {
 } as unknown as WorkflowRunDetail;
 
 describe("WorkflowVisualEditor", () => {
+  it("configures native ReefPose with live CUDA and exact-schema checkpoints", () => {
+    const onChange = vi.fn();
+    const poseGraph = {
+      ...graph,
+      nodes: [
+        {
+          node_id: "dataset",
+          node_type: "pose_training_dataset",
+          parameters: { dataset_id: "dataset-1" },
+        },
+        {
+          node_id: "seed",
+          node_type: "registered_model_source",
+          parameters: { model_id: "" },
+        },
+        {
+          node_id: "train",
+          node_type: "pose_model_training",
+          parameters: {
+            provider_id: "reefpose",
+            initialization_mode: "registered_model",
+            architecture: "reefpose-s",
+            device: "cuda",
+            precision: "amp",
+            training_config: {
+              epochs: 10,
+              batch: 4,
+              input_height: 256,
+              input_width: 256,
+              learning_rate: 0.0003,
+              workers: 2,
+            },
+          },
+        },
+      ],
+      edges: [
+        {
+          edge_id: "dataset-train",
+          source_node_id: "dataset",
+          source_port_id: "dataset",
+          target_node_id: "train",
+          target_port_id: "dataset",
+        },
+        {
+          edge_id: "seed-train",
+          source_node_id: "seed",
+          source_port_id: "model",
+          target_node_id: "train",
+          target_port_id: "initial_model",
+        },
+      ],
+    };
+
+    render(
+      <WorkflowVisualEditor
+        graph={poseGraph}
+        registry={registry}
+        poseDatasets={[poseDataset]}
+        registeredModels={[
+          compatibleModel,
+          {
+            ...compatibleModel,
+            id: "model-wrong-schema",
+            display_name: "Wrong schema",
+            metadata_json: {
+              pose_landmark_schema: {
+                schema_id: "schema-other",
+                schema_revision: 1,
+                content_hash: "f".repeat(64),
+              },
+            },
+          },
+        ]}
+        runtimeStatuses={[
+          {
+            runtime_id: "pytorch",
+            display_name: "PyTorch",
+            package_name: "torch",
+            package_version: "2.11.0+cu128",
+            available: true,
+            status: "ready",
+            supports_cpu: true,
+            supports_cuda: true,
+            cuda_available: true,
+            cuda_device_name: "NVIDIA RTX 3090",
+            notes: [],
+          },
+        ]}
+        onChange={onChange}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Configure" })[2]);
+    expect(screen.getByLabelText("Training provider")).toHaveValue("reefpose");
+    expect(screen.getByText(/NVIDIA RTX 3090/)).toBeInTheDocument();
+    expect(screen.getByText(/schema revision 3/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Epochs")).toHaveValue(10);
+    expect(screen.getByLabelText("Compatible checkpoint")).toHaveTextContent(
+      "Compatible ReefPose",
+    );
+    expect(
+      screen.getByLabelText("Compatible checkpoint"),
+    ).not.toHaveTextContent("Wrong schema");
+    fireEvent.change(screen.getByLabelText("Epochs"), {
+      target: { value: "12" },
+    });
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({
+            node_id: "train",
+            parameters: expect.objectContaining({
+              training_config: expect.objectContaining({ epochs: 12 }),
+            }),
+          }),
+        ]),
+      }),
+    );
+  });
+
   it("exposes explicit pose initialization and all five weight-free YOLO11 pose sizes", () => {
     const onChange = vi.fn();
     const poseGraph = {

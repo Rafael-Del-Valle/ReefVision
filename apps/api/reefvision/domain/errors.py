@@ -17,6 +17,10 @@ class ValidationError(ReefVisionError):
     """Requested operation violates a domain rule."""
 
 
+class WorkflowExecutionCancelled(ReefVisionError):
+    """A workflow child operation was cancelled by the user."""
+
+
 class CatalogResourceError(ReefVisionError):
     """Bundled catalog resource could not be loaded or validated."""
 

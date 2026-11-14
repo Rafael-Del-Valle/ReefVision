@@ -172,6 +172,11 @@ class PoseTrainingExportService:
                 "keypoint_count": revision.keypoint_count,
                 "allows_repeated_labels": (revision.allows_repeated_labels),
                 "content_hash": revision.content_hash,
+                **(
+                    {"definition": dict(revision.definition_json)}
+                    if revision.definition_json is not None
+                    else {}
+                ),
             },
         )
 

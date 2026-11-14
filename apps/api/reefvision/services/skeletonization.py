@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 from heapq import heappop, heappush
 from itertools import pairwise
-from math import acos, degrees, hypot
+from math import acos, degrees, hypot, isfinite
 from pathlib import Path
 from uuid import uuid4
 
@@ -110,7 +110,7 @@ def _binary_mask_sha256(mask: BinaryMask) -> str:
     return digest.hexdigest()
 
 
-def _calibration_sha256(image: ImageAsset) -> str | None:
+def skeleton_calibration_sha256(image: ImageAsset) -> str | None:
     raw = dict(image.metadata_json or {}).get(MEASUREMENT_CALIBRATION_KEY)
     if raw is None:
         return None
@@ -135,7 +135,7 @@ def _analysis_parameters_sha256(
     )
 
 
-def _calibration_payload(image: ImageAsset) -> MeasurementCalibrationUpdate | None:
+def skeleton_calibration_payload(image: ImageAsset) -> MeasurementCalibrationUpdate | None:
     raw = dict(image.metadata_json or {}).get(MEASUREMENT_CALIBRATION_KEY)
     if raw is None:
         return None
@@ -165,10 +165,12 @@ def _edge_polyline(
     return deduplicated
 
 
-def _edge_physical_lengths(
+def skeleton_edge_physical_lengths(
     nodes: list[SkeletonGraphNode] | tuple[SkeletonGraphNode, ...],
     edges: list[SkeletonGraphEdge] | tuple[SkeletonGraphEdge, ...],
     calibration: MeasurementCalibrationUpdate | None,
+    *,
+    reject_projective_horizon: bool = False,
 ) -> dict[str, float]:
     if calibration is None:
         return {}
@@ -180,12 +182,17 @@ def _edge_physical_lengths(
         }
 
     node_by_id = {node.id: node for node in nodes}
+    matrix = calibration.perspective_homography
     physical: dict[str, float] = {}
     for edge in edges:
-        transformed = [
-            transform_point(calibration.perspective_homography, point)
-            for point in _edge_polyline(edge, node_by_id)
-        ]
+        points = _edge_polyline(edge, node_by_id)
+        if reject_projective_horizon:
+            denominators = [matrix[2][0] * x + matrix[2][1] * y + matrix[2][2] for x, y in points]
+            if not all(isfinite(value) for value in denominators) or (
+                min(denominators) <= 0 <= max(denominators)
+            ):
+                raise ValidationError("Branch geometry intersects the projective horizon")
+        transformed = [transform_point(matrix, point) for point in points]
         physical[edge.id] = sum(
             hypot(second[0] - first[0], second[1] - first[1])
             for first, second in pairwise(transformed)
@@ -558,13 +565,13 @@ class SkeletonizationService:
         pruned_data, _, _ = pruning.mask
         pruned_pixel_count = sum(value > 0 for value in pruned_data)
 
-        calibration = _calibration_payload(image)
-        raw_physical_lengths = _edge_physical_lengths(
+        calibration = skeleton_calibration_payload(image)
+        raw_physical_lengths = skeleton_edge_physical_lengths(
             graph_nodes,
             graph_edges,
             calibration,
         )
-        pruned_physical_lengths = _edge_physical_lengths(
+        pruned_physical_lengths = skeleton_edge_physical_lengths(
             pruning.graph_nodes,
             pruning.graph_edges,
             calibration,
@@ -795,7 +802,7 @@ class SkeletonizationService:
     ) -> SkeletonAnalysisRevisionResponse:
         mask = self._mask(record.mask_annotation_id)
         image = self._image(record.image_id)
-        current_calibration_sha256 = _calibration_sha256(image)
+        current_calibration_sha256 = skeleton_calibration_sha256(image)
         current_input_mask_sha256 = _binary_mask_sha256(self._binary_mask(mask, image))
         stale_mask = current_input_mask_sha256 != record.input_mask_sha256
         stale_calibration = current_calibration_sha256 != record.calibration_sha256
@@ -841,7 +848,7 @@ class SkeletonizationService:
         image = self._image(mask.image_id)
         binary = self._binary_mask(mask, image)
         input_mask_sha256 = _binary_mask_sha256(binary)
-        calibration_sha256 = _calibration_sha256(image)
+        calibration_sha256 = skeleton_calibration_sha256(image)
         parameters_sha256 = _analysis_parameters_sha256(payload.terminal_spur_max_length_pixels)
         result = self.analysis(
             mask.id,
@@ -1000,8 +1007,8 @@ class SkeletonizationService:
         features = classify_skeleton_pixels(corrected_mask)
         clusters = consolidate_junction_clusters(features)
         nodes, edges = build_initial_branch_graph(features, clusters)
-        calibration = _calibration_payload(image)
-        physical_lengths = _edge_physical_lengths(
+        calibration = skeleton_calibration_payload(image)
+        physical_lengths = skeleton_edge_physical_lengths(
             nodes,
             edges,
             calibration,

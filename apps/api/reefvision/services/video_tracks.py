@@ -13,6 +13,8 @@ from sqlalchemy.orm import Session
 from reefvision.db.models import (
     GeoReferencedObservation,
     LabelClass,
+    PoseLandmarkSchema,
+    PoseLandmarkSchemaRevision,
     VideoAsset,
     VideoTrack,
 )
@@ -31,6 +33,7 @@ from reefvision.schemas.videos import (
     VideoTrackUpdate,
 )
 from reefvision.services.georeferenced_observations import GeoReferencedObservationService
+from reefvision.services.pose_schemas import definition_for_revision
 from reefvision.services.video_observation_location import (
     select_video_observation_image_location,
 )
@@ -49,11 +52,18 @@ def _keyframe_payload(item: VideoTrackKeyframe) -> dict[str, object]:
         "bbox": list(item.bbox),
         "confidence": item.confidence,
     }
+    if item.timestamp_seconds is not None:
+        payload["timestamp_seconds"] = item.timestamp_seconds
     if item.keypoints is not None:
         payload["keypoints"] = [list(point) for point in item.keypoints]
+    if item.mask_polygons is not None:
+        payload["mask_polygons"] = [
+            [list(point) for point in polygon] for polygon in item.mask_polygons
+        ]
     if item.pose_observations is not None:
         payload["pose_observations"] = [
-            observation.model_dump(mode="json") for observation in item.pose_observations
+            observation.model_dump(mode="json", exclude_none=True)
+            for observation in item.pose_observations
         ]
     return payload
 
@@ -84,6 +94,13 @@ class VideoTrackService:
         for keyframe in keyframes:
             if keyframe.frame >= video.frame_count:
                 raise ValidationError("Track keyframes cannot exceed the video frame range")
+            if (
+                keyframe.timestamp_seconds is not None
+                and keyframe.timestamp_seconds > video.duration_seconds
+            ):
+                raise ValidationError(
+                    "Keyframe presentation timestamps cannot exceed the video duration"
+                )
             x, y, width, height = keyframe.bbox
             if x + width > video.width_px or y + height > video.height_px:
                 raise ValidationError("Track boxes cannot extend outside the source video bounds")
@@ -92,6 +109,12 @@ class VideoTrackService:
                     raise ValidationError(
                         "Pose keypoints cannot extend outside the source video bounds"
                     )
+            for polygon in keyframe.mask_polygons or []:
+                for point_x, point_y in polygon:
+                    if point_x > video.width_px or point_y > video.height_px:
+                        raise ValidationError(
+                            "Segmentation polygons cannot extend outside the source video bounds"
+                        )
             for observation in keyframe.pose_observations or []:
                 if observation.x > video.width_px or observation.y > video.height_px:
                     raise ValidationError(
@@ -160,7 +183,52 @@ class VideoTrackService:
         track.keyframes_json = [_keyframe_payload(item) for item in payload.keyframes]
         track.interpolation = payload.interpolation
         track.status = payload.status
-        track.metadata_json = {**dict(track.metadata_json or {}), "last_editor": "local_user"}
+        metadata = {**dict(track.metadata_json or {}), "last_editor": "local_user"}
+        if payload.pose_schema_binding is not None:
+            binding = payload.pose_schema_binding
+            revision = self.session.scalar(
+                select(PoseLandmarkSchemaRevision)
+                .join(
+                    PoseLandmarkSchema,
+                    PoseLandmarkSchema.id == PoseLandmarkSchemaRevision.schema_id,
+                )
+                .where(
+                    PoseLandmarkSchemaRevision.schema_id == binding.schema_id,
+                    PoseLandmarkSchemaRevision.revision == binding.schema_revision,
+                    PoseLandmarkSchema.project_id == video.project_id,
+                )
+            )
+            if revision is None:
+                raise ValidationError(
+                    "Pose anatomy schema revision does not belong to this project"
+                )
+            if revision.content_hash != binding.content_hash:
+                raise ValidationError("Pose anatomy schema content hash does not match")
+            definition = definition_for_revision(revision)
+            known_ids = {
+                str(item.get("id"))
+                for item in definition.get("landmarks", [])
+                if isinstance(item, dict) and item.get("id")
+            }
+            for keyframe in payload.keyframes:
+                for observation in keyframe.pose_observations or []:
+                    if observation.landmark_id and observation.landmark_id not in known_ids:
+                        raise ValidationError(
+                            "Pose observation landmark ID is not present in the bound anatomy"
+                        )
+            metadata["pose_landmark_schema"] = {
+                "schema_version": "pose-landmarks-0001",
+                "schema_id": revision.schema_id,
+                "schema_revision": revision.revision,
+                "content_hash": revision.content_hash,
+                "groups": list(revision.groups_json),
+                "expanded_labels": list(revision.expanded_labels_json),
+                "keypoint_count": revision.keypoint_count,
+                "allows_repeated_labels": revision.allows_repeated_labels,
+                "landmarks": list(definition.get("landmarks", [])),
+                "edges": list(definition.get("edges", [])),
+            }
+        track.metadata_json = metadata
         track.revision += 1
         video.revision += 1
         self.session.commit()
@@ -389,8 +457,19 @@ class VideoTrackService:
         frames: list[InterpolatedTrackFrame] = []
         for first, second in pairwise(keyframes):
             span = second.frame - first.frame
+            first_time = (
+                float(first.timestamp_seconds)
+                if first.timestamp_seconds is not None
+                else first.frame / video.fps
+            )
+            second_time = (
+                float(second.timestamp_seconds)
+                if second.timestamp_seconds is not None
+                else second.frame / video.fps
+            )
             for frame in range(first.frame, second.frame):
                 ratio = 0.0 if track.interpolation == "hold" else (frame - first.frame) / span
+                time_ratio = (frame - first.frame) / span
                 bbox = (
                     first.bbox[0] + (second.bbox[0] - first.bbox[0]) * ratio,
                     first.bbox[1] + (second.bbox[1] - first.bbox[1]) * ratio,
@@ -405,7 +484,7 @@ class VideoTrackService:
                 frames.append(
                     InterpolatedTrackFrame(
                         frame=frame,
-                        timestamp_seconds=frame / video.fps,
+                        timestamp_seconds=first_time + (second_time - first_time) * time_ratio,
                         bbox=bbox,
                         center_x=location.pixel_x,
                         center_y=location.pixel_y,
@@ -421,7 +500,11 @@ class VideoTrackService:
         frames.append(
             InterpolatedTrackFrame(
                 frame=last.frame,
-                timestamp_seconds=last.frame / video.fps,
+                timestamp_seconds=(
+                    float(last.timestamp_seconds)
+                    if last.timestamp_seconds is not None
+                    else last.frame / video.fps
+                ),
                 bbox=last.bbox,
                 center_x=location.pixel_x,
                 center_y=location.pixel_y,
@@ -445,8 +528,12 @@ class VideoTrackService:
             hypot(second[0] - first[0], second[1] - first[1]) for first, second in pairwise(centers)
         ]
         path_length = sum(distances)
-        duration = max(0.0, (frames[-1].frame - frames[0].frame) / video.fps)
-        speeds = [distance * video.fps for distance in distances]
+        duration = max(0.0, frames[-1].timestamp_seconds - frames[0].timestamp_seconds)
+        speeds = [
+            distance / (second.timestamp_seconds - first.timestamp_seconds)
+            for distance, (first, second) in zip(distances, pairwise(frames), strict=True)
+            if second.timestamp_seconds > first.timestamp_seconds
+        ]
         displacement = hypot(
             centers[-1][0] - centers[0][0],
             centers[-1][1] - centers[0][1],

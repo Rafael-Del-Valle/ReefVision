@@ -1,6 +1,8 @@
 """Tolerant DJI SRT text parser. No file I/O or inference dependencies."""
 
 import re
+from contextlib import suppress
+from datetime import datetime
 from html import unescape
 from math import isfinite
 from typing import Literal
@@ -11,6 +13,7 @@ from reefvision.geospatial.models import TelemetrySample
 _NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
 _TIME = r"\d{2,}:[0-5]\d:[0-5]\d[,.]\d{3}"
 _CUE = re.compile(rf"^\s*(\d+)\s*\n\s*({_TIME})\s*-->\s*({_TIME})[^\n]*\n", re.M)
+_WALL_CLOCK = re.compile(r"(?m)^\s*(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d{1,6})?)\s*$")
 _BLOCK_START = re.compile(r"^[ \t]*\d+[ \t]*\n", re.M)
 _VALUE = re.compile(rf"^({_NUMBER})(?:\s*/\s*({_NUMBER}))?\s*([a-zA-Z/°]*)$")
 _FIELD = re.compile(r"(?<![\w.])([a-zA-Z][\w.]*)\s*[:=]\s*([^\]\[\n,]+)")
@@ -96,6 +99,10 @@ def _fields(body: str, gps_order: Literal["lon_lat", "lat_lon"]) -> dict[str, ob
     body = re.sub(r"\s+(?=[a-zA-Z][\w.]*\s*\()", "][", body)
     raw = {match[1].casefold(): match[2].strip() for match in _FIELD.finditer(body)}
     values: dict[str, object] = {}
+    wall_clock = _WALL_CLOCK.search(body)
+    if wall_clock is not None:
+        with suppress(ValueError):
+            values["wall_clock"] = datetime.fromisoformat(wall_clock[1].replace(",", "."))
     for field, aliases in _ALIASES.items():
         for alias in aliases:
             if alias in raw:

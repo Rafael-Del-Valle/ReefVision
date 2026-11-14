@@ -33,6 +33,7 @@ from reefvision.schemas.models import (
     PoseLandmarkSchemaUpdateRequest,
     RegisterModelFromRunRequest,
 )
+from reefvision.services.pose_schemas import definition_for_revision
 from reefvision.services.segmentation_models import SegmentationModelService
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import copy_model_file, hash_model_file
@@ -86,10 +87,9 @@ class SemanticModelService(SegmentationModelService):
                 "Only completed pose-training runs with a finalized checkpoint can be registered"
             )
 
-        if run.provider_id != "ultralytics":
+        if run.provider_id not in {"reefpose", "ultralytics"}:
             raise ValidationError(
-                "Phase 10B trained-pose registration currently supports "
-                "Ultralytics pose checkpoints only"
+                "Trained-pose registration supports ReefPose and Ultralytics checkpoints only"
             )
 
         artifact_manifest = dict(run.artifact_manifest_json or {})
@@ -192,6 +192,10 @@ class SemanticModelService(SegmentationModelService):
         if revision.content_hash != schema_hash:
             raise ValidationError("Frozen pose landmark-schema content hash changed")
 
+        schema = self.session.get(PoseLandmarkSchema, schema_id)
+        if schema is None or schema.project_id != project_id:
+            raise ValidationError("Frozen pose landmark schema no longer belongs to this project")
+
         validation_dataset_id = (
             str(
                 artifact_manifest.get("pose_validation_dataset_id")
@@ -243,6 +247,11 @@ class SemanticModelService(SegmentationModelService):
         if not source_path.is_file():
             raise ValidationError("Trained pose checkpoint is missing")
 
+        actual_checkpoint_sha256, actual_checkpoint_size = hash_model_file(source_path)
+        expected_checkpoint_sha256 = str(artifact_manifest.get("best_checkpoint_sha256") or "")
+        if expected_checkpoint_sha256 and actual_checkpoint_sha256 != expected_checkpoint_sha256:
+            raise ValidationError("Trained pose checkpoint checksum changed after completion")
+
         # Inspect before registration so a malformed or incompatible
         # checkpoint cannot leave behind a partially registered model.
         provider = self._provider_for_registration(
@@ -281,6 +290,21 @@ class SemanticModelService(SegmentationModelService):
                 f"schema defines {revision.keypoint_count}"
             )
 
+        if run.provider_id == "reefpose":
+            checkpoint_labels = inspected.metadata.get("pose_landmark_labels")
+            if checkpoint_labels != list(revision.expanded_labels_json):
+                raise ValidationError(
+                    "ReefPose checkpoint landmark labels do not match the frozen schema"
+                )
+            anatomy = inspected.metadata.get("reefpose_anatomy_schema")
+            if not isinstance(anatomy, dict) or (
+                anatomy.get("schema_id") != revision.schema_id
+                or anatomy.get("revision") != revision.revision
+            ):
+                raise ValidationError(
+                    "ReefPose checkpoint anatomy identity does not match the frozen schema"
+                )
+
         experiment = self.session.scalar(
             select(ExperimentRecord).where(ExperimentRecord.training_run_id == run.id)
         )
@@ -288,12 +312,22 @@ class SemanticModelService(SegmentationModelService):
         schema_snapshot = {
             "schema_version": revision.schema_version,
             "schema_id": revision.schema_id,
+            "schema_name": schema.name,
             "schema_revision": revision.revision,
             "groups": list(revision.groups_json),
             "expanded_labels": list(revision.expanded_labels_json),
             "keypoint_count": (revision.keypoint_count),
             "allows_repeated_labels": (revision.allows_repeated_labels),
             "content_hash": (revision.content_hash),
+            **(
+                {
+                    "definition": dict(revision.definition_json),
+                    "landmarks": list(revision.definition_json.get("landmarks", [])),
+                    "edges": list(revision.definition_json.get("edges", [])),
+                }
+                if revision.definition_json is not None
+                else {}
+            ),
         }
 
         metadata_overrides: dict[
@@ -307,6 +341,11 @@ class SemanticModelService(SegmentationModelService):
             "source_split_manifest_sha256": (run.split_manifest_sha256),
             "source_result_checkpoint_path": (run.result_checkpoint_path),
             "source_metrics": dict(run.metrics_json or {}),
+            "source_training_config": dict(run.training_config_json or {}),
+            "source_device": run.device,
+            "source_precision": run.precision,
+            "source_checkpoint_sha256": actual_checkpoint_sha256,
+            "source_checkpoint_size_bytes": actual_checkpoint_size,
             "source_experiment_id": (experiment.id if experiment is not None else None),
             "source_pose_training_dataset_id": (training_dataset.id),
             "source_pose_training_dataset_manifest_sha256": (training_dataset.manifest_sha256),
@@ -322,7 +361,12 @@ class SemanticModelService(SegmentationModelService):
             "pose_landmark_schema": (schema_snapshot),
         }
 
-        display_name = payload.display_name or f"{run.run_name} pose"
+        default_display_name = (
+            f"{run.run_name} pose {run.id[:8]}"
+            if run.provider_id == "reefpose"
+            else f"{run.run_name} pose"
+        )
+        display_name = payload.display_name or default_display_name
 
         registered = self._register_model_path(
             project_id,
@@ -337,8 +381,10 @@ class SemanticModelService(SegmentationModelService):
 
         model = self._model(registered.id)
 
-        if model.task != "pose" or model.provider_name != "ultralytics":
-            raise ValidationError("Registered trained model is not an Ultralytics pose model")
+        if model.task != "pose" or model.provider_name != run.provider_id:
+            raise ValidationError(
+                "Registered trained model provider/task differs from the completed pose run"
+            )
 
         binding = self.session.get(
             PoseModelSchemaBinding,
@@ -518,6 +564,24 @@ class SemanticModelService(SegmentationModelService):
             ).encode("utf-8")
         ).hexdigest()
 
+        if model.provider_name == "reefpose":
+            checkpoint_labels = metadata.get("pose_landmark_labels")
+            if (
+                isinstance(checkpoint_labels, list)
+                and [str(item) for item in checkpoint_labels] != expanded_labels
+            ):
+                raise ValidationError(
+                    "ReefPose landmark order cannot differ from the checkpoint anatomy"
+                )
+            current_schema = metadata.get("pose_landmark_schema")
+            immutable_hash = metadata.get("source_pose_schema_content_hash")
+            if immutable_hash is None and isinstance(current_schema, dict):
+                immutable_hash = current_schema.get("content_hash")
+            if isinstance(immutable_hash, str) and immutable_hash != content_hash:
+                raise ValidationError(
+                    "ReefPose landmark schema cannot differ from the checkpoint anatomy"
+                )
+
         binding = self.session.get(PoseModelSchemaBinding, model.id)
         if binding is None:
             schema = PoseLandmarkSchema(
@@ -538,6 +602,7 @@ class SemanticModelService(SegmentationModelService):
             )
             self.session.add(schema_revision)
             self.session.flush()
+            bound_revision = schema_revision
             binding = PoseModelSchemaBinding(
                 model_id=model.id,
                 schema_id=schema.id,
@@ -576,12 +641,16 @@ class SemanticModelService(SegmentationModelService):
                 self.session.add(existing_revision)
                 self.session.flush()
             binding.schema_revision = existing_revision.revision
+            bound_revision = existing_revision
 
+        definition = definition_for_revision(bound_revision)
         metadata["pose_landmark_schema"] = {
             **schema_payload,
             "schema_id": binding.schema_id,
             "schema_revision": binding.schema_revision,
             "content_hash": content_hash,
+            "landmarks": list(definition.get("landmarks", [])),
+            "edges": list(definition.get("edges", [])),
         }
         model.metadata_json = metadata
         self.session.commit()
@@ -596,7 +665,7 @@ class SemanticModelService(SegmentationModelService):
         project = self._project(project_id)
         model = self._model(payload.model_id)
         compatible = model.project_id == project.id and (
-            (model.purpose == "detector" and model.task == "detect")
+            (model.purpose == "detector" and model.task in {"detect", "pose"})
             or (model.purpose == "segmenter" and model.task == "segment")
             or (
                 model.purpose == SEMANTIC_MODEL_PURPOSE and model.task == SEMANTIC_SEGMENTATION_TASK
@@ -604,8 +673,8 @@ class SemanticModelService(SegmentationModelService):
         )
         if not compatible:
             raise ValidationError(
-                "Inference jobs require a compatible detector, instance segmenter, or "
-                "semantic segmenter from the same project"
+                "Inference jobs require a compatible detector, pose model, instance segmenter, "
+                "or semantic segmenter from the same project"
             )
         images = self.images.list_by_ids(payload.image_ids)
         if len(images) != len(payload.image_ids):

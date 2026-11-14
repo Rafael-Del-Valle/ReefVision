@@ -1,11 +1,20 @@
 """Job status and retry services."""
 
 from datetime import datetime
+from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from reefvision.db.models import Job, WorkflowNodeRun, WorkflowRun
+from reefvision.db.models import (
+    Job,
+    PoseEventDetectionRun,
+    PoseIdentityAssociationRun,
+    PoseMeasurementRun,
+    TrainingRun,
+    WorkflowNodeRun,
+    WorkflowRun,
+)
 from reefvision.db.models.project import utc_now
 from reefvision.domain.errors import ConflictError, NotFoundError
 from reefvision.repositories.backups import BackupRepository
@@ -26,6 +35,11 @@ RUNNING_CANCELLABLE_JOB_TYPES = frozenset(
         "video_annotated_export",
         "video_metric_depth_3d",
         "workflow_run",
+        "pose_evaluation",
+        "reefpose_validation",
+        "pose_identity_tracking",
+        "pose_biological_measurement",
+        "pose_biological_event_detection",
     }
 )
 
@@ -64,6 +78,43 @@ class JobService:
             if str((child.request_json or {}).get("workflow_run_id") or "") == run.id
         ]
 
+    def _cancel_queued_pose_identity_run(self, job: Job, *, now: datetime) -> None:
+        if job.job_type != "pose_identity_tracking":
+            return
+        run_id = str((job.request_json or {}).get("run_id") or "")
+        run = self.session.get(PoseIdentityAssociationRun, run_id)
+        if run is None or run.status not in {"queued", "running"}:
+            return
+        run.status = "cancelled"
+        run.progress_json = {
+            "stage": "cancelled",
+            "current": job.progress_current,
+            "total": job.progress_total,
+        }
+        run.completed_at = now
+
+    def _cancel_queued_pose_analysis_run(self, job: Job, *, now: datetime) -> None:
+        model = {
+            "pose_biological_measurement": PoseMeasurementRun,
+            "pose_biological_event_detection": PoseEventDetectionRun,
+        }.get(job.job_type)
+        if model is None:
+            return
+        run_id = str((job.request_json or {}).get("run_id") or "")
+        run = cast(
+            PoseMeasurementRun | PoseEventDetectionRun | None,
+            self.session.get(model, run_id),
+        )
+        if run is None or run.status not in {"queued", "running"}:
+            return
+        run.status = "cancelled"
+        run.progress_json = {
+            "stage": "cancelled",
+            "current": job.progress_current,
+            "total": job.progress_total,
+        }
+        run.completed_at = now
+
     def _cancel_workflow_children(
         self,
         run: WorkflowRun,
@@ -77,6 +128,8 @@ class JobService:
                 child.status = "cancelled"
                 child.completed_at = now
                 child.error_message = "Parent workflow was cancelled before child execution"
+                self._cancel_queued_pose_identity_run(child, now=now)
+                self._cancel_queued_pose_analysis_run(child, now=now)
                 counts["cancelled"] += 1
             elif child.status == "running":
                 child.status = "cancel_requested"
@@ -85,7 +138,21 @@ class JobService:
 
     def retry(self, job_id: str) -> Job:
         job = self.get(job_id)
-        if job.status != "failed" or job.job_type not in {
+        if job.job_type == "reefpose_validation" and job.request_json.get("workflow_run_id"):
+            raise ConflictError("Retry scientific validation through its parent workflow")
+        training_run = (
+            self.session.scalar(select(TrainingRun).where(TrainingRun.job_id == job.id))
+            if job.job_type == "training"
+            else None
+        )
+        native_training_retry = (
+            job.status in {"failed", "cancelled"}
+            and training_run is not None
+            and training_run.provider_id == "reefpose"
+            and bool(dict(training_run.artifact_manifest_json or {}).get("resume_checkpoint_path"))
+        )
+        ordinary_retry = job.status == "failed" and job.job_type in {
+            "reefpose_validation",
             "thumbnail",
             "inference",
             "sam_image_proposals",
@@ -96,7 +163,8 @@ class JobService:
             "model_install",
             "workflow_run",
             "video_tracking",
-        }:
+        }
+        if not ordinary_retry and not native_training_retry:
             raise ConflictError("Only supported failed background jobs can be retried")
         job.status = "queued"
         job.progress_current = 0
@@ -104,6 +172,21 @@ class JobService:
         job.started_at = None
         job.completed_at = None
         job.result_json = None
+        if native_training_retry and training_run is not None:
+            training_run.status = "queued"
+            training_run.stage = "queued"
+            training_run.error_message = None
+            training_run.started_at = None
+            training_run.completed_at = None
+            training_run.result_checkpoint_path = None
+            job.progress_current = training_run.progress_epoch
+            job.progress_total = training_run.progress_total_epochs
+            job.result_json = {
+                "stage": "queued",
+                "task": "pose",
+                "provider_id": "reefpose",
+                "resume": True,
+            }
         backup = self.backups.get_by_job_id(job.id) if job.job_type == "backup" else None
         if backup is not None:
             backup.status = "queued"
@@ -167,6 +250,14 @@ class JobService:
         if job.status in {"queued", "waiting_for_review"}:
             job.status = "cancelled"
             job.completed_at = now
+            self._cancel_queued_pose_identity_run(job, now=now)
+            self._cancel_queued_pose_analysis_run(job, now=now)
+            if job.job_type == "pose_evaluation":
+                job.deduplication_key = None
+                job.result_json = {
+                    **dict(job.result_json or {}),
+                    "stage": "cancelled",
+                }
             if quality_control_run is not None:
                 quality_control_run.status = "cancelled"
                 quality_control_run.cancelled_at = now

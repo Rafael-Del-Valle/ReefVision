@@ -5,13 +5,14 @@ from pathlib import Path
 from time import monotonic, sleep
 from typing import Any, cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from PIL import Image
+from PIL import ExifTags, Image
 
 from reefvision.config import Settings
 from reefvision.db.base import Base
-from reefvision.db.models import Job, MaskAnnotation
+from reefvision.db.models import ImageAsset, Job, MaskAnnotation
 from reefvision.jobs.worker import process_thumbnail_job, recover_interrupted_jobs
 from reefvision.main import create_app
 from reefvision.tests.class_fixtures import seed_synthetic_label_classes
@@ -258,22 +259,244 @@ def test_supported_image_formats_import(client: TestClient) -> None:
     project = create_project(client, "Format coverage")
     expected = {
         "sample.jpg": ("JPEG", "image/jpeg"),
+        "sample.jpeg": ("JPEG", "image/jpeg"),
+        "sample.JPG": ("JPEG", "image/jpeg"),
+        "sample.JPEG": ("JPEG", "image/jpeg"),
+        "sample.jpe": ("JPEG", "image/jpeg"),
+        "sample.JPE": ("JPEG", "image/jpeg"),
+        "sample.JFIF": ("JPEG", "image/jpeg"),
+        "sample.jfif": ("JPEG", "image/jpeg"),
+        "sample.jfi": ("JPEG", "image/jpeg"),
+        "sample.JFI": ("JPEG", "image/jpeg"),
+        "sample.jif": ("JPEG", "image/jpeg"),
+        "sample.JIF": ("JPEG", "image/jpeg"),
         "sample.png": ("PNG", "image/png"),
+        "sample.tif": ("TIFF", "image/tiff"),
         "sample.tiff": ("TIFF", "image/tiff"),
+        "sample.TIFF": ("TIFF", "image/tiff"),
         "sample.webp": ("WEBP", "image/webp"),
+        "sample.bmp": ("BMP", "image/bmp"),
+        "sample.DIB": ("BMP", "image/bmp"),
+        "sample.gif": ("GIF", "image/gif"),
     }
     for index, (filename, (format_name, media_type)) in enumerate(expected.items()):
         stream = BytesIO()
-        Image.new("RGB", (30 + index, 20), (index * 20, 80, 120)).save(stream, format=format_name)
+        Image.new("RGB", (30 + index, 20), ((index * 17) % 256, 80, 120)).save(
+            stream, format=format_name
+        )
+        original_bytes = stream.getvalue()
         report = import_one(
             client,
             project["id"],
             filename=filename,
-            content=stream.getvalue(),
+            content=original_bytes,
             relative_path=f"formats/{filename}",
         )
         image_id = report["successful"][0]["image_id"]
-        assert client.get(f"/api/v1/images/{image_id}").json()["media_type"] == media_type
+        record = client.get(f"/api/v1/images/{image_id}").json()
+        assert record["media_type"] == media_type
+        assert (record["width_px"], record["height_px"]) == (30 + index, 20)
+        assert record["original_filename"] == filename
+        assert client.get(f"/api/v1/images/{image_id}/content").content == original_bytes
+
+
+def test_malformed_camera_exif_does_not_discard_decodable_jpeg(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A corrupt acquisition IFD must not erase valid pixels or invent a timestamp."""
+    project = create_project(client, "Camera JPEG with damaged EXIF")
+    camera_exif = Image.Exif()
+    camera_exif[274] = 6
+    # A top-level DateTime is not proof of exposure time if the nested
+    # DateTimeOriginal/OffsetTimeOriginal IFD is unreadable.
+    camera_exif[306] = "2026:10:25 14:15:16"
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG", exif=camera_exif)
+    original = stream.getvalue()
+
+    original_get_ifd = Image.Exif.get_ifd
+
+    def broken_nested_ifd(self: Image.Exif, ifd: int) -> dict[int, Any]:
+        if ifd == ExifTags.IFD.Exif:
+            raise ValueError("camera nested EXIF pointer is invalid")
+        return original_get_ifd(self, ifd)
+
+    monkeypatch.setattr(Image.Exif, "get_ifd", broken_nested_ifd)
+    report = import_one(
+        client, project["id"], filename="camera-corrupt-exif.JPEG", content=original
+    )
+    assert len(report["successful"]) == 1, report
+    assert not report["failed"]
+    image_id = report["successful"][0]["image_id"]
+    record = client.get(f"/api/v1/images/{image_id}").json()
+    assert (record["width_px"], record["height_px"]) == (64, 48)
+    assert record["capture_timestamp"] is None
+    assert "Nested EXIF" in record["metadata_json"]["exif_warning"]
+    assert record["metadata_json"]["exif"]["Orientation"] == 6
+    assert client.get(f"/api/v1/images/{image_id}/content").content == original
+
+    display = client.get(f"/api/v1/images/{image_id}/display")
+    assert display.status_code == 200
+    with Image.open(BytesIO(display.content)) as rendition:
+        assert rendition.size == (64, 48)
+        assert rendition.getexif().get(274) in (None, 1)
+
+    # Damaged acquisition metadata must not break the gallery thumbnail.
+    # Preserve the source-pixel axes even when camera orientation is present.
+    thumbnail = client.get(f"/api/v1/images/{image_id}/thumbnail")
+    assert thumbnail.status_code == 200
+    assert thumbnail.headers["content-type"].startswith("image/jpeg")
+    with Image.open(BytesIO(thumbnail.content)) as rendition:
+        assert rendition.size == (64, 48)
+        assert rendition.getexif().get(274) in (None, 1)
+
+
+def test_unreadable_camera_exif_forces_raw_pixel_display_and_thumbnail(
+    client: TestClient,
+) -> None:
+    """Missing orientation metadata must not allow WebView2 to rotate camera pixels."""
+    project = create_project(client, "Camera EXIF decode failure")
+    camera_exif = Image.Exif()
+    camera_exif[274] = 6
+    source = Image.new("RGB", (64, 48), (240, 20, 20))
+    source.paste((20, 20, 240), (32, 0, 64, 48))
+    stream = BytesIO()
+    source.save(stream, format="JPEG", quality=100, subsampling=0, exif=camera_exif)
+    original = stream.getvalue()
+
+    report = import_one(
+        client, project["id"], filename="unreadable-camera-exif.JPG", content=original
+    )
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+
+    # Simulate a decoder that recovered image pixels but could not recover
+    # EXIF orientation. The original file still contains its rotation tag.
+    factory = cast(FastAPI, client.app).state.session_factory
+    with factory() as session:
+        record = session.get(ImageAsset, image_id)
+        assert record is not None
+        record.metadata_json = {
+            **(record.metadata_json or {}),
+            "exif": {},
+            "exif_warning": "EXIF metadata could not be decoded; capture time is unavailable",
+        }
+        session.commit()
+
+    display = client.get(f"/api/v1/images/{image_id}/display")
+    assert display.status_code == 200
+    assert display.headers["content-type"].startswith("image/png")
+    with Image.open(BytesIO(display.content)) as rendition:
+        assert rendition.size == (64, 48)
+        assert rendition.getexif().get(274) in (None, 1)
+        assert rendition.convert("RGB").getpixel((16, 12))[0] > 200
+        assert rendition.convert("RGB").getpixel((48, 12))[2] > 200
+
+    thumbnail = client.get(f"/api/v1/images/{image_id}/thumbnail")
+    assert thumbnail.status_code == 200
+    assert thumbnail.headers["content-type"].startswith("image/jpeg")
+    with Image.open(BytesIO(thumbnail.content)) as rendition:
+        assert rendition.size == (64, 48)
+        assert rendition.getexif().get(274) in (None, 1)
+        assert rendition.convert("RGB").getpixel((16, 12))[0] > 200
+        assert rendition.convert("RGB").getpixel((48, 12))[2] > 200
+
+    assert client.get(f"/api/v1/images/{image_id}/content").content == original
+
+
+@pytest.mark.parametrize("orientation", range(2, 9))
+def test_exif_oriented_jpeg_display_preserves_raw_pixel_geometry(
+    client: TestClient, orientation: int
+) -> None:
+    """WebView2 and thumbnails must preserve original camera axes for every EXIF rotation."""
+    project = create_project(client, f"EXIF orientation {orientation} geometry")
+    original_image = Image.new("RGB", (64, 48))
+    colors = [(240, 20, 20), (20, 240, 20), (20, 20, 240), (240, 240, 20)]
+    for (x, y), color in zip([(0, 0), (32, 0), (0, 24), (32, 24)], colors, strict=True):
+        original_image.paste(color, (x, y, x + 32, y + 24))
+    exif = Image.Exif()
+    exif[274] = orientation
+    stream = BytesIO()
+    original_image.save(stream, format="JPEG", quality=100, subsampling=0, exif=exif)
+    original = stream.getvalue()
+
+    report = import_one(
+        client,
+        project["id"],
+        filename="camera-orientation.JPG",
+        content=original,
+    )
+    image_id = report["successful"][0]["image_id"]
+    record = client.get(f"/api/v1/images/{image_id}").json()
+    assert (record["width_px"], record["height_px"]) == (64, 48)
+    assert record["metadata_json"]["exif"]["Orientation"] == orientation
+
+    content = client.get(f"/api/v1/images/{image_id}/content")
+    assert content.content == original
+    for route, expected_type in (("display", "image/png"), ("thumbnail", "image/jpeg")):
+        response = client.get(f"/api/v1/images/{image_id}/{route}")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith(expected_type)
+        with Image.open(BytesIO(response.content)) as rendition:
+            assert rendition.width * 48 == rendition.height * 64
+            assert rendition.getexif().get(274) in (None, 1)
+            rgb = rendition.convert("RGB")
+            for (fx, fy), expected in zip(
+                [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)],
+                colors,
+                strict=True,
+            ):
+                actual = rgb.getpixel((int(rgb.width * fx), int(rgb.height * fy)))
+                assert all(
+                    abs(channel - reference) < 45
+                    for channel, reference in zip(actual, expected, strict=True)
+                )
+    assert client.get(f"/api/v1/images/{image_id}/content").content == original
+
+
+def test_cmyk_jpeg_import_has_browser_safe_display(client: TestClient) -> None:
+    project = create_project(client, "CMYK JPEG")
+    stream = BytesIO()
+    Image.new("CMYK", (64, 48), (80, 20, 30, 10)).save(stream, format="JPEG")
+    report = import_one(
+        client,
+        project["id"],
+        filename="lab-export.JPEG",
+        content=stream.getvalue(),
+    )
+    image_id = report["successful"][0]["image_id"]
+    original = client.get(f"/api/v1/images/{image_id}/content")
+    assert original.status_code == 200
+    assert original.headers["content-type"].startswith("image/jpeg")
+    display = client.get(f"/api/v1/images/{image_id}/display")
+    assert display.status_code == 200
+    assert display.headers["content-type"].startswith("image/png")
+    with Image.open(BytesIO(display.content)) as decoded:
+        assert decoded.size == (64, 48)
+
+
+def test_animated_gif_is_rejected_instead_of_silently_losing_frames(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Animated image validation")
+    stream = BytesIO()
+    Image.new("RGB", (32, 24), "red").save(
+        stream,
+        format="GIF",
+        save_all=True,
+        append_images=[Image.new("RGB", (32, 24), "blue")],
+        duration=100,
+        loop=0,
+    )
+    report = import_one(
+        client,
+        project["id"],
+        filename="sequence.gif",
+        content=stream.getvalue(),
+    )
+    assert len(report["successful"]) == 0
+    assert len(report["unsupported"]) == 1
+    assert "Animated GIFs" in report["unsupported"][0]["detail"]
 
 
 def test_imports_16_bit_grayscale_tiff(client: TestClient, test_settings: Settings) -> None:
@@ -314,6 +537,105 @@ def test_imports_16_bit_grayscale_tiff(client: TestClient, test_settings: Settin
     with Image.open(BytesIO(thumbnail.content)) as thumbnail_image:
         extrema = thumbnail_image.getextrema()
         assert extrema != ((255, 255), (255, 255), (255, 255))
+
+
+def test_big_endian_16_bit_tiff_renditions_preserve_original_pixel_values(
+    client: TestClient, test_settings: Settings
+) -> None:
+    """A big-endian TIFF stays 16-bit in display and yields a readable JPEG thumbnail."""
+    project = create_project(client, "Big-endian TIFF camera import")
+    stream = BytesIO()
+    Image.new("I;16B", (64, 48), 2048).save(stream, format="TIFF")
+    original = stream.getvalue()
+    report = import_one(
+        client,
+        project["id"],
+        filename="camera-big-endian.TIF",
+        content=original,
+    )
+    assert len(report["successful"]) == 1, report
+    image_id = report["successful"][0]["image_id"]
+    record = client.get(f"/api/v1/images/{image_id}").json()
+    assert record["metadata_json"]["mode"] == "I;16B"
+    assert (record["width_px"], record["height_px"]) == (64, 48)
+
+    response = client.get(f"/api/v1/images/{image_id}/display")
+    assert response.status_code == 200
+    with Image.open(BytesIO(response.content)) as display:
+        assert display.mode == "I;16"
+        assert display.size == (64, 48)
+        assert display.getpixel((0, 0)) == 2048
+
+    app = cast(FastAPI, client.app)
+    factory = app.state.session_factory
+    assert process_thumbnail_job(
+        test_settings, factory, report["successful"][0]["thumbnail_job_id"]
+    )
+    thumbnail = client.get(f"/api/v1/images/{image_id}/thumbnail")
+    assert thumbnail.status_code == 200
+    with Image.open(BytesIO(thumbnail.content)) as preview:
+        assert preview.mode == "RGB"
+        assert all(2 <= channel <= 20 for channel in preview.getpixel((0, 0)))
+
+    # Neither browser-safe rendition modifies the original camera bytes.
+    assert client.get(f"/api/v1/images/{image_id}/content").content == original
+
+
+@pytest.mark.parametrize("mode", ["I;16B", "I;16L"])
+def test_endian_16_bit_tiff_preserves_source_and_raw_pixel_display(
+    client: TestClient, test_settings: Settings, mode: str
+) -> None:
+    """Scientific TIFF import must not silently downsample 16-bit source pixels."""
+    project = create_project(client, f"Endian TIFF {mode}")
+    stream = BytesIO()
+    Image.new(mode, (64, 48), 4096).save(stream, format="TIFF")
+    original = stream.getvalue()
+
+    report = import_one(
+        client,
+        project["id"],
+        filename=f"depth-{mode.replace(';', '-')}.tiff",
+        content=original,
+    )
+    assert len(report["successful"]) == 1
+    assert not report["failed"]
+    item = report["successful"][0]
+    image_id = item["image_id"]
+    assert client.get(f"/api/v1/images/{image_id}/content").content == original
+
+    display = client.get(f"/api/v1/images/{image_id}/display")
+    assert display.status_code == 200
+    assert display.headers["content-type"].startswith("image/png")
+    with Image.open(BytesIO(display.content)) as rendition:
+        assert rendition.size == (64, 48)
+        assert rendition.getpixel((32, 24)) == 4096
+
+    app = cast(FastAPI, client.app)
+    assert process_thumbnail_job(test_settings, app.state.session_factory, item["thumbnail_job_id"])
+    thumbnail = client.get(f"/api/v1/images/{image_id}/thumbnail")
+    assert thumbnail.status_code == 200
+    with Image.open(BytesIO(thumbnail.content)) as rendition:
+        assert rendition.size == (64, 48)
+        pixel = rendition.convert("RGB").getpixel((32, 24))
+        assert all(10 <= channel <= 20 for channel in pixel)
+    assert client.get(f"/api/v1/images/{image_id}/content").content == original
+
+
+def test_truncated_camera_jpeg_is_rejected_without_persisting_an_image(
+    client: TestClient,
+) -> None:
+    """A valid JPEG header is not proof that all scientific pixels decode."""
+    project = create_project(client, "Truncated camera JPEG")
+    stream = BytesIO()
+    Image.new("RGB", (128, 96), (20, 90, 120)).save(stream, format="JPEG")
+    truncated = stream.getvalue()[:-32]
+    report = import_one(client, project["id"], filename="camera-capture.JPEG", content=truncated)
+
+    assert not report["successful"]
+    assert len(report["failed"]) == 1
+    assert report["failed"][0]["status"] == "failed"
+    page = client.get(f"/api/v1/projects/{project['id']}/images").json()
+    assert page["total"] == 0
 
 
 def test_batch_imports_ten_images(client: TestClient) -> None:

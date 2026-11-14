@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import {
   datasetExportDownloadUrl,
@@ -42,7 +43,11 @@ const exportOptions: Array<{
   },
 ];
 
-export function SegmentationExportLauncher() {
+export function SegmentationExportLauncher({
+  editorOpen,
+}: {
+  editorOpen: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [projectId, setProjectId] = useState("");
   const [versionId, setVersionId] = useState("");
@@ -50,7 +55,8 @@ export function SegmentationExportLauncher() {
     useState<DatasetExportFormat>("yolo_segmentation");
   const [jobId, setJobId] = useState<string | null>(null);
   const [exportId, setExportId] = useState<string | null>(null);
-  const [editorOpen, setEditorOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
 
   const projects = useQuery({
     queryKey: ["project_summaries", "export_launcher"],
@@ -75,24 +81,9 @@ export function SegmentationExportLauncher() {
   });
 
   useEffect(() => {
-    const updateEditorState = () => {
-      const nextEditorOpen = Boolean(
-        document.querySelector(".annotation-editor-shell"),
-      );
-      setEditorOpen(nextEditorOpen);
-      if (nextEditorOpen) {
-        setOpen(false);
-      }
-    };
-
-    updateEditorState();
-    const observer = new MutationObserver(updateEditorState);
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-    });
-    return () => observer.disconnect();
-  }, []);
+    if (editorOpen) setOpen(false);
+    else if (open) closeButton.current?.focus();
+  }, [editorOpen, open]);
 
   useEffect(() => {
     if (!projectId && projects.data?.length) {
@@ -126,12 +117,19 @@ export function SegmentationExportLauncher() {
     },
   });
 
+  function close() {
+    setOpen(false);
+    trigger.current?.focus();
+  }
+
   return (
     <>
       {!editorOpen && (
         <button
+          ref={trigger}
           type="button"
-          className="secondary rv-dataset-export-launcher"
+          className="secondary"
+          aria-haspopup="dialog"
           data-testid="open-dataset-export-launcher"
           onClick={() => setOpen(true)}
         >
@@ -139,159 +137,161 @@ export function SegmentationExportLauncher() {
         </button>
       )}
 
-      {open && !editorOpen && (
-        <div
-          className="modal-backdrop rv-dataset-export-backdrop"
-          role="presentation"
-        >
-          <section
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="dataset-export-launcher-title"
-          >
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Immutable dataset delivery</p>
-                <h2 id="dataset-export-launcher-title">Dataset export</h2>
-              </div>
-              <button
-                type="button"
-                className="icon-button"
-                onClick={() => setOpen(false)}
-              >
-                Close
-              </button>
-            </div>
-
-            <label>
-              Project
-              <select
-                value={projectId}
-                onChange={(event) => {
-                  setProjectId(event.target.value);
-                  setVersionId("");
-                  setJobId(null);
-                  setExportId(null);
-                }}
-              >
-                <option value="">Choose a project</option>
-                {projects.data?.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label>
-              Immutable version
-              <select
-                value={versionId}
-                onChange={(event) => {
-                  setVersionId(event.target.value);
-                  setJobId(null);
-                  setExportId(null);
-                }}
-              >
-                <option value="">Choose a version</option>
-                {versions.data?.map((version) => (
-                  <option key={version.id} value={version.id}>
-                    v{version.version_number} - {version.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label>
-              Export format
-              <select
-                value={format}
-                onChange={(event) => {
-                  setFormat(event.target.value as DatasetExportFormat);
-                  setJobId(null);
-                  setExportId(null);
-                }}
-              >
-                {exportOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <p className="annotation-helper">{selectedOption.description}</p>
-
-            {selectedVersion && (
-              <div className="version-preview-metrics">
-                <span>{selectedVersion.image_count} images</span>
-                <span>{selectedVersion.annotation_count} boxes</span>
-                <span>{selectedVersion.mask_annotation_count ?? 0} masks</span>
-                <span>Schema {selectedVersion.schema_version}</span>
-              </div>
-            )}
-
-            {needsMasks && selectedVersion && !hasMasks && (
-              <p className="form-error">
-                This immutable version has no mask annotations. Create a new
-                dataset version after saving masks.
-              </p>
-            )}
-            {(projects.error || versions.error || queueExport.error) && (
-              <p className="form-error">
-                {
-                  (projects.error ?? versions.error ?? queueExport.error)
-                    ?.message
+      {open &&
+        !editorOpen &&
+        createPortal(
+          <div className="modal-backdrop" role="presentation">
+            <section
+              className="modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="dataset-export-launcher-title"
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.stopPropagation();
+                  close();
                 }
-              </p>
-            )}
+              }}
+            >
+              <div className="section-heading">
+                <div>
+                  <p className="eyebrow">Immutable dataset delivery</p>
+                  <h2 id="dataset-export-launcher-title">Dataset export</h2>
+                </div>
+                <button
+                  ref={closeButton}
+                  type="button"
+                  className="icon-button"
+                  onClick={close}
+                >
+                  Close
+                </button>
+              </div>
 
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => setOpen(false)}
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                disabled={
-                  !versionId ||
-                  queueExport.isPending ||
-                  selectedVersion?.status !== "complete" ||
-                  (needsMasks && !hasMasks)
-                }
-                onClick={() => queueExport.mutate()}
-              >
-                {queueExport.isPending
-                  ? "Queueing..."
-                  : `Export ${selectedOption.label}`}
-              </button>
-            </div>
+              <label>
+                Project
+                <select
+                  value={projectId}
+                  onChange={(event) => {
+                    setProjectId(event.target.value);
+                    setVersionId("");
+                    setJobId(null);
+                    setExportId(null);
+                  }}
+                >
+                  <option value="">Choose a project</option>
+                  {projects.data?.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            {job.data && (
-              <div className="version-detail-card">
-                <strong>Export job: {job.data.status}</strong>
-                <p className="annotation-helper">
-                  {job.data.error_message ??
-                    `${job.data.progress_current} of ${job.data.progress_total} items processed.`}
+              <label>
+                Immutable version
+                <select
+                  value={versionId}
+                  onChange={(event) => {
+                    setVersionId(event.target.value);
+                    setJobId(null);
+                    setExportId(null);
+                  }}
+                >
+                  <option value="">Choose a version</option>
+                  {versions.data?.map((version) => (
+                    <option key={version.id} value={version.id}>
+                      v{version.version_number} - {version.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Export format
+                <select
+                  value={format}
+                  onChange={(event) => {
+                    setFormat(event.target.value as DatasetExportFormat);
+                    setJobId(null);
+                    setExportId(null);
+                  }}
+                >
+                  {exportOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="annotation-helper">{selectedOption.description}</p>
+
+              {selectedVersion && (
+                <div className="version-preview-metrics">
+                  <span>{selectedVersion.image_count} images</span>
+                  <span>{selectedVersion.annotation_count} boxes</span>
+                  <span>
+                    {selectedVersion.mask_annotation_count ?? 0} masks
+                  </span>
+                  <span>Schema {selectedVersion.schema_version}</span>
+                </div>
+              )}
+
+              {needsMasks && selectedVersion && !hasMasks && (
+                <p className="form-error">
+                  This immutable version has no mask annotations. Create a new
+                  dataset version after saving masks.
                 </p>
-                {job.data.status === "succeeded" && exportId && (
-                  <div className="annotation-editor-inline-actions">
-                    <a href={datasetExportDownloadUrl(exportId)}>
-                      Download ZIP
-                    </a>
-                    <a href={datasetExportManifestUrl(exportId)}>
-                      Download manifest
-                    </a>
-                  </div>
-                )}
+              )}
+              {(projects.error || versions.error || queueExport.error) && (
+                <p className="form-error">
+                  {
+                    (projects.error ?? versions.error ?? queueExport.error)
+                      ?.message
+                  }
+                </p>
+              )}
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  disabled={
+                    !versionId ||
+                    queueExport.isPending ||
+                    selectedVersion?.status !== "complete" ||
+                    (needsMasks && !hasMasks)
+                  }
+                  onClick={() => queueExport.mutate()}
+                >
+                  {queueExport.isPending
+                    ? "Queueing..."
+                    : `Export ${selectedOption.label}`}
+                </button>
               </div>
-            )}
-          </section>
-        </div>
-      )}
+
+              {job.data && (
+                <div className="version-detail-card">
+                  <strong>Export job: {job.data.status}</strong>
+                  <p className="annotation-helper">
+                    {job.data.error_message ??
+                      `${job.data.progress_current} of ${job.data.progress_total} items processed.`}
+                  </p>
+                  {job.data.status === "succeeded" && exportId && (
+                    <div className="annotation-editor-inline-actions">
+                      <a href={datasetExportDownloadUrl(exportId)}>
+                        Download ZIP
+                      </a>
+                      <a href={datasetExportManifestUrl(exportId)}>
+                        Download manifest
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+          </div>,
+          document.body,
+        )}
     </>
   );
 }

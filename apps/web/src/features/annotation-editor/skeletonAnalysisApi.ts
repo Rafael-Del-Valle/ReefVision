@@ -142,6 +142,42 @@ export interface SkeletonAnalysisRevision {
   stale: boolean;
 }
 
+export interface ConnectedBranchPreview {
+  schema_version: "connected-branch-preview-0001";
+  base_analysis_id: string;
+  base_result_sha256: string;
+  image_id: string;
+  mask_annotation_id: string;
+  attached_node_id: string | null;
+  added_edge_id: string;
+  superseded_edge_ids: string[];
+  replacement_edge_ids: string[];
+  original_total_length_pixels: number;
+  proposed_total_length_pixels: number;
+  added_length_pixels: number;
+  nodes: (Omit<SkeletonGraphNode, "source_pixel_count"> & {
+    source_pixels: SkeletonPixel[];
+  })[];
+  edges: (Omit<SkeletonGraphEdge, "path_pixel_count" | "length_physical"> & {
+    pixels: SkeletonPixel[];
+    length_physical?: number | null;
+  })[];
+  evidence_level: "proposal_unverified";
+  review_gate: "scientist_review_required";
+  persistent_change_applied: false;
+  physical_length_computed: boolean;
+  calibration?: {
+    calibration_sha256: string;
+    method: "scalar_distance_per_pixel" | "reference_plane_homography";
+    source: string;
+    unit: string;
+    original_total_length: number;
+    proposed_total_length: number;
+    added_length: number;
+  } | null;
+  geometry_space: "source_image_pixels_2d";
+}
+
 export interface SkeletonExport {
   analysis_id: string;
   analysis_revision: number;
@@ -240,6 +276,20 @@ export function correctSkeletonAnalysis(
     {
       method: "POST",
       body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function previewConnectedBranch(
+  analysisId: string,
+  editId: string,
+  points: SkeletonPixel[],
+): Promise<ConnectedBranchPreview> {
+  return request<ConnectedBranchPreview>(
+    `/skeleton-analyses/${encodeURIComponent(analysisId)}/branch-edits/preview`,
+    {
+      method: "POST",
+      body: JSON.stringify({ edit_id: editId, points }),
     },
   );
 }

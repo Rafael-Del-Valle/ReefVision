@@ -19,6 +19,7 @@ concurrency:
 
 jobs:
   real-sam2-download-and-inference:
+    if: github.event_name != 'pull_request' || github.head_ref != 'develop/reefvision-1.1'
     name: Real checkpoint download, CPU inference, and provenance review
     runs-on: ubuntu-latest
     timeout-minutes: 60

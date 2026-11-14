@@ -206,6 +206,55 @@ test("supports keyboard skip navigation and the minimum desktop viewport without
     expect(stageBox.x + stageBox.width <= inspectorBox.x + 1).toBe(true);
   }
 
+  const dataGroup = page.getByRole("tab", {
+    name: "Data & annotation",
+    exact: true,
+  });
+  await dataGroup.focus();
+  await page.keyboard.press("ArrowDown");
+  const modelsGroup = page.getByRole("tab", {
+    name: "Models & AI",
+    exact: true,
+  });
+  await expect(modelsGroup).toBeFocused();
+  await expect(modelsGroup).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Home");
+  await expect(dataGroup).toBeFocused();
+
+  const help = page.getByRole("button", { name: "Help", exact: true });
+  await help.click();
+  const guide = page.getByRole("dialog", { name: /Welcome to ReefVision/ });
+  await expect(guide.getByRole("button", { name: "Close" })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(
+    guide.getByRole("button", { name: "Don't show on startup" }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(guide).toBeHidden();
+  await expect(help).toBeFocused();
+
+  await page.setViewportSize({ width: 910, height: 512 });
+  const toolbar = page.locator(".rv-global-actions");
+  const exports = toolbar.getByRole("button", { name: "Dataset exports" });
+  await exports.focus();
+  await page.keyboard.press("Enter");
+  const exportDialog = page.getByRole("dialog", { name: /dataset export/i });
+  await expect(exportDialog).toBeVisible();
+  await expect(
+    exportDialog.getByRole("button", { name: "Close" }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(exportDialog).toBeHidden();
+  await expect(exports).toBeFocused();
+  const assistant = toolbar.getByRole("button", { name: "Ask ReefVision" });
+  await assistant.focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("region", { name: "ReefVision Assistant" }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(assistant).toBeFocused();
+
   expect(await hasHorizontalOverflow(page)).toBe(false);
 });
 

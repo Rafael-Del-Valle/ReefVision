@@ -73,6 +73,29 @@ describe("ProjectLauncher", () => {
     );
   });
 
+  it("finds projects outside the twelve most recent entries", async () => {
+    const newer = Array.from({ length: 12 }, (_, index) => ({
+      ...project,
+      id: `new-project-${index}`,
+      name: `New study ${index}`,
+      updated_at: "2026-10-06T00:00:00Z",
+    }));
+    const handlers = renderLauncher([project, ...newer]);
+
+    expect(
+      screen.queryByRole("button", { name: `Open ${project.name}` }),
+    ).toBeNull();
+    const search = screen.getByRole("searchbox", { name: "Find projects" });
+    await userEvent.type(search, "no matching project");
+    expect(screen.getByText("No projects match your search.")).toBeVisible();
+    await userEvent.clear(search);
+    await userEvent.type(search, "mesophotic");
+    await userEvent.click(
+      screen.getByRole("button", { name: `Open ${project.name}` }),
+    );
+    expect(handlers.onOpenProject).toHaveBeenCalledWith(project.id);
+  });
+
   it("offers only blank scientific quick-start paths", async () => {
     const handlers = renderLauncher();
 

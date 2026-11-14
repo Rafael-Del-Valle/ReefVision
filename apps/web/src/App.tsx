@@ -25,11 +25,15 @@ import {
 import { ActiveLearningWorkspace } from "./features/active-learning/ActiveLearningWorkspace";
 import { AdvancedProviderWorkspace } from "./features/advanced-providers/AdvancedProviderWorkspace";
 import { ReefVisionAssistant } from "./features/assistant/ReefVisionAssistant";
+import { SegmentationExportLauncher } from "./features/dataset-versions/SegmentationExportLauncher";
 import { EnhancedAnnotationEditor } from "./features/annotation-editor/EnhancedAnnotationEditor";
 import { ClassManagerPanel } from "./features/classes/ClassManagerPanel";
 import { ClassificationWorkspace } from "./features/classification/ClassificationWorkspace";
+import { ComputedMetricsPanel } from "./features/computed-metrics/ComputedMetricsPanel";
 import { DatasetVersionsPanel } from "./features/dataset-versions/DatasetVersionsPanel";
+import { EnvironmentalContextPanel } from "./features/environmental-context/EnvironmentalContextPanel";
 import { Gallery } from "./features/gallery/Gallery";
+import { ScientificHeatmapsPanel } from "./features/scientific-heatmaps/ScientificHeatmapsPanel";
 import { InteroperabilityWorkspace } from "./features/interoperability/InteroperabilityWorkspace";
 import { ModelManager } from "./features/models/ModelManager";
 import { OnboardingModal } from "./features/onboarding/OnboardingModal";
@@ -68,6 +72,8 @@ import {
   type WorkspacePresetId,
 } from "./components/layout/workspacePresets";
 import "./styles/design-system.css";
+import { EcologyWorkspace } from "./features/ecology/EcologyWorkspace";
+
 import "./styles/app.css";
 import "./styles/phase12-workspace.css";
 
@@ -85,6 +91,10 @@ type ProjectView =
   | "gallery"
   | "versions"
   | "interoperability"
+  | "environmental_context"
+  | "computed_metrics"
+  | "scientific_heatmaps"
+  | "ecology"
   | "models"
   | "training"
   | "classification"
@@ -97,7 +107,7 @@ type ProjectView =
   | "workflows"
   | "system";
 
-const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.0.2";
+const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.2.0";
 
 type ProjectTab = Exclude<ProjectView, "system">;
 
@@ -136,6 +146,30 @@ const PROJECT_NAV_GROUPS: Array<{
         label: "Classes",
         description:
           "Manage project labels, display colors, order, and activity.",
+      },
+      {
+        id: "environmental_context",
+        label: "Environmental Context",
+        description:
+          "Browse project measurements, add data, and run environmental analyses.",
+      },
+      {
+        id: "computed_metrics",
+        label: "Computed Metrics",
+        description:
+          "Define unit-aware formulas and calculate immutable results from scientific records.",
+      },
+      {
+        id: "ecology",
+        label: "Organisms & ecology",
+        description:
+          "Link identity revisions to documented observations and compare calibrated timepoints.",
+      },
+      {
+        id: "scientific_heatmaps",
+        label: "Scientific Heatmaps",
+        description:
+          "Explore reviewed objects, verified masks, and predictions in independent spatial layers.",
       },
     ],
   },
@@ -231,6 +265,19 @@ function ReefVisionMainApp() {
     string | null
   >(null);
   const [activeView, setActiveView] = useState<ProjectView>("gallery");
+  const [environmentProjectId, setEnvironmentProjectId] = useState<
+    string | null
+  >(null);
+  useEffect(() => {
+    if (activeView === "environmental_context") {
+      setEnvironmentProjectId(selectedProjectId);
+    } else if (
+      environmentProjectId !== selectedProjectId &&
+      environmentProjectId !== null
+    ) {
+      setEnvironmentProjectId(null);
+    }
+  }, [activeView, selectedProjectId, environmentProjectId]);
   const [projectName, setProjectName] = useState("");
   const [description, setDescription] = useState("");
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -252,6 +299,10 @@ function ReefVisionMainApp() {
   const [videoWorkspaceCommand, setVideoWorkspaceCommand] =
     useState<VideoWorkspaceCommand | null>(null);
   const videoWorkspaceCommandSequenceRef = useRef(0);
+  const [poseOrganismOrigin, setPoseOrganismOrigin] = useState<{
+    projectId: string;
+    organismKey: string;
+  } | null>(null);
   const detachedInspectorSnapshotRef = useRef<DetachedInspectorSnapshot | null>(
     null,
   );
@@ -388,6 +439,16 @@ function ReefVisionMainApp() {
     });
   }, []);
 
+  const handlePoseModelSelect = useCallback((modelId: string) => {
+    videoWorkspaceCommandSequenceRef.current += 1;
+    setVideoWorkspaceCommand({
+      id: videoWorkspaceCommandSequenceRef.current,
+      type: "select_model",
+      modelId,
+    });
+    setActiveView("video");
+  }, []);
+
   const handleVideoWorkspaceCommandHandled = useCallback(
     (commandId: number) => {
       setVideoWorkspaceCommand((current) =>
@@ -442,8 +503,18 @@ function ReefVisionMainApp() {
     event.preventDefault();
     select(values[targetIndex]);
     const tablist = event.currentTarget.closest('[role="tablist"]');
+    const groupNavigation = event.currentTarget.closest(".rv-project-nav");
+    const group = event.currentTarget.dataset.workspaceGroup;
     requestAnimationFrame(() => {
-      tablist?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
+      if (group) {
+        groupNavigation
+          ?.querySelector<HTMLElement>(
+            "[data-workspace-group][aria-selected='true']",
+          )
+          ?.focus();
+      } else {
+        tablist?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
+      }
     });
   }
 
@@ -664,6 +735,14 @@ function ReefVisionMainApp() {
           >
             System status
           </button>
+          <SegmentationExportLauncher editorOpen={editorLaunch !== null} />
+          {selectedProject && !editorLaunch && (
+            <ReefVisionAssistant
+              project={selectedProject}
+              activeView={activeView}
+              onNavigate={(view) => setActiveView(view as ProjectView)}
+            />
+          )}
           <div className="api-status" aria-live="polite">
             <StatusBadge
               status={
@@ -778,7 +857,11 @@ function ReefVisionMainApp() {
               setActiveView("system");
             }}
             onArchive={() => {
-              if (window.confirm(`Archive ${selectedProject.name}?`)) {
+              if (
+                window.confirm(
+                  `Archive “${selectedProject.name}”? It will be hidden from the project launcher. Its files and research records will be retained.`,
+                )
+              ) {
                 archiveMutation.mutate(selectedProject.id);
               }
             }}
@@ -829,6 +912,7 @@ function ReefVisionMainApp() {
                         type="button"
                         role="tab"
                         aria-label={group.label}
+                        data-workspace-group={group.id}
                         aria-selected={selected}
                         tabIndex={selected ? 0 : -1}
                         className={selected ? "active" : ""}
@@ -908,6 +992,56 @@ function ReefVisionMainApp() {
             {activeView === "interoperability" && (
               <InteroperabilityWorkspace project={selectedProject} />
             )}
+            {(activeView === "environmental_context" ||
+              environmentProjectId === selectedProject.id) && (
+              <div hidden={activeView !== "environmental_context"}>
+                <EnvironmentalContextPanel
+                  key={selectedProject.id}
+                  project={selectedProject}
+                />
+              </div>
+            )}
+            {activeView === "computed_metrics" && (
+              <ComputedMetricsPanel
+                key={selectedProject.id}
+                project={selectedProject}
+              />
+            )}
+            {activeView === "ecology" && (
+              <EcologyWorkspace
+                key={selectedProject.id}
+                projectId={selectedProject.id}
+                classes={selectedProject.label_classes}
+                initialPoseOrganism={
+                  poseOrganismOrigin?.projectId === selectedProject.id
+                    ? poseOrganismOrigin.organismKey
+                    : undefined
+                }
+                onOpenPoseEvidence={(evidence, organismKey) => {
+                  setPoseOrganismOrigin({
+                    projectId: selectedProject.id,
+                    organismKey,
+                  });
+                  videoWorkspaceCommandSequenceRef.current += 1;
+                  setVideoWorkspaceCommand({
+                    id: videoWorkspaceCommandSequenceRef.current,
+                    type: "open_pose_evidence",
+                    ...evidence,
+                  });
+                  setActiveView("video");
+                }}
+                onOpenVideo={(videoId) => {
+                  handleVideoSelect(videoId);
+                  setActiveView("video");
+                }}
+              />
+            )}
+            {activeView === "scientific_heatmaps" && (
+              <ScientificHeatmapsPanel
+                key={selectedProject.id}
+                project={selectedProject}
+              />
+            )}
             {activeView === "classification" && (
               <ClassificationWorkspace
                 project={selectedProject}
@@ -925,6 +1059,15 @@ function ReefVisionMainApp() {
             )}
             {activeView === "video" && (
               <>
+                {poseOrganismOrigin?.projectId === selectedProject.id && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => setActiveView("ecology")}
+                  >
+                    Back to organism {poseOrganismOrigin.organismKey}
+                  </button>
+                )}
                 <VideoTrackingWorkspace
                   project={selectedProject}
                   onWorkspaceContextChange={handleVideoWorkspaceContextChange}
@@ -955,6 +1098,7 @@ function ReefVisionMainApp() {
                   setTrainingCatalogModelId(catalogId);
                   setActiveView("training");
                 }}
+                onUsePoseModel={handlePoseModelSelect}
               />
             )}
             {activeView === "training" && (
@@ -995,13 +1139,6 @@ function ReefVisionMainApp() {
         )}
       </section>
 
-      {selectedProject && !editorLaunch && (
-        <ReefVisionAssistant
-          project={selectedProject}
-          activeView={activeView}
-          onNavigate={(view) => setActiveView(view as ProjectView)}
-        />
-      )}
       {showCreate && (
         <div className="modal-backdrop" role="presentation">
           <section

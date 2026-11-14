@@ -2,25 +2,46 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any, cast
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import (
     Job,
     ModelRegistration,
+    PoseEventDetectionRun,
+    PoseIdentityAssociationRun,
+    PoseIdentityEvaluationRun,
+    PoseMeasurementRun,
+    PoseMeasurementSeries,
     Project,
     VideoAsset,
     VideoTrack,
     WorkflowArtifact,
 )
 from reefvision.domain.errors import ValidationError
+from reefvision.jobs.pose_biological_measurement import process_pose_biological_measurement_job
+from reefvision.jobs.pose_identity_tracking import process_pose_identity_tracking_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.schemas.behavior_dynamics import BehaviorDynamicsRequest
 from reefvision.schemas.pose_active_learning import (
     PoseActiveLearningRoundCreateRequest,
+)
+from reefvision.schemas.pose_biological_measurement import (
+    CycleDefinition,
+    EventDetectionCreateRequest,
+    MeasurementDefinition,
+    PoseMeasurementRunCreateRequest,
+)
+from reefvision.schemas.pose_identity_tracking import (
+    PoseIdentityAssociationCreateRequest,
+    PoseIdentityAssociationParameters,
+    PoseIdentityEvaluationRequest,
+    PoseIdentityEvaluationResponse,
 )
 from reefvision.schemas.pose_tracking import (
     PoseTemporalAssociationBuildRequest,
@@ -32,6 +53,8 @@ from reefvision.schemas.pose_training_datasets import (
 from reefvision.services import workflow_runtime_adapters as runtime_adapters
 from reefvision.services.behavior_dynamics import BehaviorDynamicsService
 from reefvision.services.pose_active_learning import PoseActiveLearningService
+from reefvision.services.pose_biological_measurement import PoseBiologicalMeasurementService
+from reefvision.services.pose_identity_tracking import PoseIdentityTrackingService
 from reefvision.services.pose_temporal_tracking import (
     PoseTemporalTrackingService,
 )
@@ -43,7 +66,9 @@ from reefvision.services.pose_training_exports import (
 )
 from reefvision.services.workflow_review import (
     WorkflowReviewRequired,
+    biological_event_review_status,
     pose_active_learning_review_status,
+    pose_identity_review_status,
     pose_temporal_review_status,
 )
 from reefvision.storage.projects import resolve_managed_project_path
@@ -57,6 +82,14 @@ POSE_WORKFLOW_RUNTIME_NODE_TYPES = {
     "pose_active_learning_review_gate",
     "pose_training_dataset_freeze",
     "pose_training_export",
+    "pose_identity_association",
+    "pose_identity_review_gate",
+    "pose_identity_evaluation",
+    "pose_identity_export",
+    "anatomical_measurement",
+    "biological_event_detection",
+    "biological_event_review_gate",
+    "biological_movement_export",
 }
 
 _EXTERNAL_POSE_EXPORT_FORMATS = {
@@ -330,7 +363,10 @@ def execute_pose_inference_adapter(
         )
     )
 
-    if not tracks:
+    if not tracks and not (
+        parameters.get("allow_zero_detections")
+        and (child_job.result_json or {}).get("detection_count") == 0
+    ):
         raise ValidationError("Pose Inference produced no retained pose tracks")
 
     return [
@@ -1015,6 +1051,577 @@ def execute_pose_active_learning_review_gate_adapter(
     ]
 
 
+def _identity_schema_binding(
+    tracks: list[VideoTrack], pose_payload: dict[str, Any]
+) -> tuple[str, int, str]:
+    raw_schema = pose_payload.get("pose_schema")
+    schema = dict(raw_schema) if isinstance(raw_schema, dict) else {}
+    if not schema and tracks:
+        schema = dict((tracks[0].metadata_json or {}).get("pose_landmark_schema") or {})
+    schema_id = str(schema.get("schema_id") or schema.get("id") or "")
+    revision = int(schema.get("schema_revision") or schema.get("revision") or 0)
+    content_hash = str(schema.get("content_hash") or schema.get("content_sha256") or "")
+    if not schema_id or revision < 1 or len(content_hash) != 64:
+        raise ValidationError(
+            "Identity association requires pose schema ID, revision, and content hash"
+        )
+    return schema_id, revision, content_hash
+
+
+def execute_pose_identity_association_adapter(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    pose_payload = _single_payload(inputs, "poses")
+    if pose_payload.get("project_id") not in {None, project_id}:
+        raise ValidationError("Identity association received pose tracks from another project")
+    track_ids = _track_ids(pose_payload)
+    tracks, video = _scoped_tracks(session, project_id=project_id, track_ids=track_ids)
+    schema_id, schema_revision, schema_hash = _identity_schema_binding(tracks, pose_payload)
+    association_parameters = PoseIdentityAssociationParameters(
+        max_gap_frames=int(parameters.get("max_gap_frames", 5)),
+        max_normalized_distance=float(parameters.get("max_normalized_distance", 1.5)),
+        minimum_iou=float(parameters.get("minimum_iou", 0.0)),
+        minimum_landmark_similarity=float(parameters.get("minimum_landmark_similarity", 0.0)),
+        minimum_detection_confidence=float(parameters.get("minimum_detection_confidence", 0.05)),
+        acceptance_threshold=float(parameters.get("acceptance_threshold", 0.75)),
+        low_confidence_threshold=float(parameters.get("low_confidence_threshold", 0.6)),
+        proximity_weight=float(parameters.get("proximity_weight", 0.35)),
+        overlap_weight=float(parameters.get("overlap_weight", 0.2)),
+        landmark_weight=float(parameters.get("landmark_weight", 0.25)),
+        motion_weight=float(parameters.get("motion_weight", 0.2)),
+        confidence_weight=float(parameters.get("confidence_weight", 0.1)),
+    )
+    service = PoseIdentityTrackingService(session)
+    child = service.submit(
+        project_id,
+        PoseIdentityAssociationCreateRequest(
+            video_id=video.id,
+            source_track_ids=track_ids,
+            pose_schema_id=schema_id,
+            pose_schema_revision=schema_revision,
+            pose_schema_content_hash=schema_hash,
+            parameters=association_parameters,
+            device=str(parameters.get("device", "auto")),
+        ),
+    )
+    child_record = session.get(Job, child.id)
+    if child_record is None:
+        raise ValidationError("Identity association child job disappeared before execution")
+    child_record.request_json = {
+        **dict(child_record.request_json or {}),
+        "workflow_run_id": str(parameters.get("__workflow_run_id") or ""),
+        "workflow_node_run_id": str(parameters.get("__workflow_node_run_id") or ""),
+    }
+    session.commit()
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+    process_pose_identity_tracking_job(settings, factory, child.id)
+    session.expire_all()
+    child_record = session.get(Job, child.id)
+    if child_record is None or child_record.status != "completed":
+        message = child_record.error_message if child_record is not None else "job disappeared"
+        raise ValidationError(f"Identity association failed: {message}")
+    run_id = str((child_record.result_json or {}).get("run_id") or "")
+    run = service.get(run_id)
+    return [
+        {
+            "port_id": "tracks",
+            "data_type": "pose_identity_tracks",
+            "payload": {
+                "schema_version": "pose-identity-workflow-0001",
+                "project_id": project_id,
+                "video_id": video.id,
+                "video_sha256": video.sha256,
+                "run_id": run.id,
+                "run_revision": run.revision,
+                "association_job_id": child.id,
+                "track_ids": track_ids,
+                "pose_schema_id": run.pose_schema_id,
+                "pose_schema_revision": run.pose_schema_revision,
+                "pose_schema_content_hash": run.pose_schema_content_hash,
+                "parameters": run.parameters_json,
+                "parameters_sha256": run.parameters_sha256,
+                "input_manifest_sha256": run.input_manifest_sha256,
+                "coordinate_space": run.source_coordinate_space,
+                "truth_status": "model_generated_unreviewed",
+            },
+        }
+    ]
+
+
+def execute_pose_identity_review_gate_adapter(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    del settings, parameters
+    source = runtime_adapters._single_artifact(inputs, "tracks")
+    payload = dict(source.payload_json or {})
+    node_run = runtime_adapters._current_review_node(session, source, "pose_identity_review_gate")
+    readiness = pose_identity_review_status(session, source, project_id=project_id)
+    approval = dict((node_run.result_json or {}).get("review_approval") or {})
+    if not approval:
+        raise WorkflowReviewRequired(
+            f"{node_run.node_id} is waiting for scientist identity review",
+            details={
+                "node_run_id": node_run.id,
+                "node_id": node_run.node_id,
+                "node_type": node_run.node_type,
+                "source_artifact_id": source.id,
+                "review_workspace": "video_tracking_identity_review",
+                "run_id": readiness["run_id"],
+                "review_readiness": readiness,
+            },
+        )
+    if not readiness["ready"]:
+        raise ValidationError(
+            "Identity Review approval is stale or current observations remain unreviewed"
+        )
+    return [
+        {
+            "port_id": "tracks",
+            "data_type": "reviewed_pose_identity_tracks",
+            "payload": {
+                **payload,
+                "schema_version": "reviewed-pose-identity-workflow-0001",
+                "run_revision": readiness["current_run_revision"],
+                "source_identity_artifact_id": source.id,
+                "source_identity_artifact_sha256": source.payload_sha256,
+                "review_approval": approval,
+                "review_readiness": readiness,
+                "truth_status": "scientist_reviewed",
+            },
+        }
+    ]
+
+
+def execute_pose_identity_evaluation_adapter(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    del settings
+    reviewed = _single_payload(inputs, "tracks")
+    if reviewed.get("project_id") not in {None, project_id}:
+        raise ValidationError("Identity evaluation received tracks from another project")
+    run_id = str(reviewed.get("run_id") or "")
+    run = session.get(PoseIdentityAssociationRun, run_id)
+    if run is None:
+        raise ValidationError("Identity evaluation association run was not found")
+    if int(reviewed.get("run_revision") or 0) != run.revision:
+        raise ValidationError(
+            "Identity review artifact is stale; review the latest association revision"
+        )
+    evaluation = PoseIdentityTrackingService(session).evaluate(
+        run_id,
+        PoseIdentityEvaluationRequest(
+            truth_dataset_id=str(parameters.get("truth_dataset_id") or ""),
+            spatial_iou_threshold=float(parameters.get("spatial_iou_threshold", 0.5)),
+        ),
+    )
+    return [
+        {
+            "port_id": "evaluation",
+            "data_type": "pose_identity_evaluation",
+            "payload": {
+                "schema_version": "pose-identity-evaluation-workflow-0001",
+                "project_id": project_id,
+                "video_id": reviewed.get("video_id"),
+                "run_id": run_id,
+                "run_revision": evaluation.association_run_revision,
+                "evaluation_id": evaluation.id,
+                "truth_dataset_id": evaluation.truth_dataset_id,
+                "result_sha256": evaluation.result_sha256,
+                "metrics": evaluation.metrics_json,
+                "warnings": evaluation.warnings_json,
+                "provenance": evaluation.provenance_json,
+            },
+        }
+    ]
+
+
+def execute_pose_identity_export_adapter(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    evaluation = _single_payload(inputs, "evaluation")
+    if evaluation.get("project_id") not in {None, project_id}:
+        raise ValidationError("Identity export received an evaluation from another project")
+    run_id = str(evaluation.get("run_id") or "")
+    evaluation_id = str(evaluation.get("evaluation_id") or "")
+    evaluation_record = session.get(PoseIdentityEvaluationRun, evaluation_id)
+    if evaluation_record is None or evaluation_record.association_run_id != run_id:
+        raise ValidationError("Identity evaluation artifact does not reference a valid report")
+    if evaluation_record.result_sha256 != str(evaluation.get("result_sha256") or ""):
+        raise ValidationError("Identity evaluation artifact integrity hash does not match")
+    run = session.get(PoseIdentityAssociationRun, run_id)
+    if run is None:
+        raise ValidationError("Identity export association run was not found")
+    if (
+        evaluation_record.association_run_revision != int(evaluation.get("run_revision") or 0)
+        or run.revision != evaluation_record.association_run_revision
+    ):
+        raise ValidationError(
+            "Identity evaluation is stale; evaluate the latest association revision before export"
+        )
+    evaluation_report = PoseIdentityEvaluationResponse.model_validate(evaluation_record).model_dump(
+        mode="json"
+    )
+    export_format = str(parameters.get("format", "json"))
+    service = PoseIdentityTrackingService(session)
+    if export_format == "json":
+        content = json.dumps(
+            {
+                "schema_version": "pose-identity-evaluated-export-0001",
+                "identity_results": service.export_json(run_id),
+                "evaluation": evaluation_report,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        extension = "json"
+        media_type = "application/json"
+    elif export_format == "csv":
+        content = service.export_csv(run_id).encode("utf-8")
+        extension = "csv"
+        media_type = "text/csv"
+    else:
+        raise ValidationError("Identity export format must be json or csv")
+    project = session.get(Project, project_id)
+    if project is None:
+        raise ValidationError("Identity export project was not found")
+    workflow_run_id = str(parameters.get("__workflow_run_id") or "unscoped")
+    node_run_id = str(parameters.get("__workflow_node_run_id") or "unscoped")
+    relative_path = (
+        f"{project.storage_root}/derived/workflows/{workflow_run_id}/"
+        f"identity-{node_run_id[:8]}.{extension}"
+    )
+    destination = resolve_managed_project_path(settings, relative_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(content)
+    return [
+        {
+            "port_id": "package",
+            "data_type": "pose_identity_package",
+            "payload": {
+                "schema_version": "pose-identity-package-workflow-0001",
+                "project_id": project_id,
+                "run_id": run_id,
+                "run_revision": evaluation.get("run_revision"),
+                "evaluation_id": evaluation.get("evaluation_id"),
+                "evaluation_result_sha256": evaluation.get("result_sha256"),
+                "evaluation_metrics": evaluation_report["metrics_json"],
+                "evaluation_warnings": evaluation_report["warnings_json"],
+                "evaluation_provenance": evaluation_report["provenance_json"],
+                "format": export_format,
+                "media_type": media_type,
+                "managed_path": relative_path,
+                "size_bytes": len(content),
+                "content_sha256": hashlib.sha256(content).hexdigest(),
+                "workflow_run_id": workflow_run_id,
+                "workflow_node_run_id": node_run_id,
+            },
+        }
+    ]
+
+
+def execute_anatomical_measurement_adapter(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    reviewed = _single_payload(inputs, "tracks")
+    run_id = str(reviewed.get("run_id") or "")
+    identity_run = session.get(PoseIdentityAssociationRun, run_id)
+    if identity_run is None or identity_run.project_id != project_id:
+        raise ValidationError("Anatomical measurement identity run was not found")
+    if identity_run.revision != int(reviewed.get("run_revision") or 0):
+        raise ValidationError("Reviewed identity artifact is stale")
+    raw_definitions = parameters.get("definitions")
+    if not isinstance(raw_definitions, list) or not raw_definitions:
+        raise ValidationError("Anatomical measurement requires at least one definition")
+    definitions = [MeasurementDefinition.model_validate(item) for item in raw_definitions]
+    service = PoseBiologicalMeasurementService(session)
+    child = service.submit_measurements(
+        project_id,
+        PoseMeasurementRunCreateRequest(
+            video_id=identity_run.video_id,
+            source_identity_run_id=identity_run.id,
+            source_identity_run_revision=identity_run.revision,
+            definitions=definitions,
+            maximum_gap_s=float(parameters.get("maximum_gap_s", 0.25)),
+            verification_mode="scientific",
+        ),
+    )
+    child_record = session.get(Job, child.id)
+    if child_record is None:
+        raise ValidationError("Measurement child job disappeared before execution")
+    child_record.request_json = {
+        **dict(child_record.request_json or {}),
+        "workflow_run_id": str(parameters.get("__workflow_run_id") or ""),
+        "workflow_node_run_id": str(parameters.get("__workflow_node_run_id") or ""),
+    }
+    session.commit()
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+    process_pose_biological_measurement_job(settings, factory, child.id)
+    session.expire_all()
+    child_record = session.get(Job, child.id)
+    if child_record is None or child_record.status != "completed":
+        message = child_record.error_message if child_record is not None else "job disappeared"
+        raise ValidationError(f"Anatomical measurement failed: {message}")
+    measurement_run_id = str((child_record.result_json or {}).get("run_id") or "")
+    run = session.get(PoseMeasurementRun, measurement_run_id)
+    if run is None:
+        raise ValidationError("Completed measurement run disappeared")
+    series = service.series(run.id)
+    return [
+        {
+            "port_id": "measurements",
+            "data_type": "pose_measurement_series",
+            "payload": {
+                "schema_version": "pose-measurement-workflow-0001",
+                "project_id": project_id,
+                "video_id": run.video_id,
+                "measurement_run_id": run.id,
+                "measurement_job_id": child.id,
+                "source_identity_run_id": run.source_identity_run_id,
+                "source_identity_run_revision": run.source_identity_run_revision,
+                "input_manifest_sha256": run.input_manifest_sha256,
+                "result_sha256": run.result_sha256,
+                "series": [
+                    {
+                        "id": item.id,
+                        "identity_id": item.animal_identity_id,
+                        "definition_id": item.definition_id,
+                        "series_sha256": item.series_sha256,
+                    }
+                    for item in series
+                ],
+                "truth_status": "derived_from_scientist_reviewed_identities",
+            },
+        }
+    ]
+
+
+def execute_biological_event_detection_adapter(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    measurement = _single_payload(inputs, "measurements")
+    run_id = str(measurement.get("measurement_run_id") or "")
+    run = session.get(PoseMeasurementRun, run_id)
+    if run is None or run.project_id != project_id:
+        raise ValidationError("Event detection measurement run was not found")
+    if run.result_sha256 != str(measurement.get("result_sha256") or ""):
+        raise ValidationError("Measurement workflow artifact integrity hash does not match")
+    raw_cycles = parameters.get("cycles")
+    if not isinstance(raw_cycles, list) or not raw_cycles:
+        raise ValidationError("Biological event detection requires cycle definitions")
+    available = list(
+        session.scalars(
+            select(PoseMeasurementSeries).where(PoseMeasurementSeries.measurement_run_id == run.id)
+        )
+    )
+    cycles: list[CycleDefinition] = []
+    for raw in raw_cycles:
+        item = dict(raw)
+        series_id = str(item.pop("measurement_series_id", ""))
+        definition_id = str(item.pop("measurement_definition_id", ""))
+        identity_id = str(item.pop("identity_id", ""))
+        matches = [
+            series
+            for series in available
+            if (series_id and series.id == series_id)
+            or (
+                not series_id
+                and series.definition_id == definition_id
+                and (not identity_id or series.animal_identity_id == identity_id)
+            )
+        ]
+        if not matches:
+            raise ValidationError("Cycle definition did not match a measurement series")
+        cycles.extend(
+            CycleDefinition(measurement_series_id=series.id, **item) for series in matches
+        )
+    service = PoseBiologicalMeasurementService(session)
+    child = service.submit_events(
+        project_id,
+        EventDetectionCreateRequest(measurement_run_id=run.id, cycles=cycles),
+    )
+    child_record = session.get(Job, child.id)
+    if child_record is None:
+        raise ValidationError("Event-detection child job disappeared before execution")
+    child_record.request_json = {
+        **dict(child_record.request_json or {}),
+        "workflow_run_id": str(parameters.get("__workflow_run_id") or ""),
+        "workflow_node_run_id": str(parameters.get("__workflow_node_run_id") or ""),
+    }
+    session.commit()
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+    process_pose_biological_measurement_job(settings, factory, child.id)
+    session.expire_all()
+    child_record = session.get(Job, child.id)
+    if child_record is None or child_record.status != "completed":
+        message = child_record.error_message if child_record is not None else "job disappeared"
+        raise ValidationError(f"Biological event detection failed: {message}")
+    event_run_id = str((child_record.result_json or {}).get("run_id") or "")
+    event_run = session.get(PoseEventDetectionRun, event_run_id)
+    if event_run is None:
+        raise ValidationError("Completed event-detection run disappeared")
+    return [
+        {
+            "port_id": "events",
+            "data_type": "pose_event_candidates",
+            "payload": {
+                "schema_version": "pose-biological-events-workflow-0001",
+                "project_id": project_id,
+                "video_id": run.video_id,
+                "measurement_run_id": run.id,
+                "measurement_result_sha256": run.result_sha256,
+                "event_run_id": event_run.id,
+                "event_job_id": child.id,
+                "configuration_sha256": event_run.configuration_sha256,
+                "result_sha256": event_run.result_sha256,
+                "truth_status": "automated_unreviewed_candidates",
+            },
+        }
+    ]
+
+
+def execute_biological_event_review_gate_adapter(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    del settings, parameters
+    source = runtime_adapters._single_artifact(inputs, "events")
+    payload = dict(source.payload_json or {})
+    node_run = runtime_adapters._current_review_node(
+        session, source, "biological_event_review_gate"
+    )
+    readiness = biological_event_review_status(session, source, project_id=project_id)
+    approval = dict((node_run.result_json or {}).get("review_approval") or {})
+    if not approval:
+        raise WorkflowReviewRequired(
+            f"{node_run.node_id} is waiting for scientist event review",
+            details={
+                "node_run_id": node_run.id,
+                "node_id": node_run.node_id,
+                "node_type": node_run.node_type,
+                "source_artifact_id": source.id,
+                "review_workspace": "biological_movement_review",
+                "event_run_id": readiness["event_run_id"],
+                "review_readiness": readiness,
+            },
+        )
+    approved_review_hash = str(
+        dict(approval.get("biological_event_review_status") or {}).get("review_state_sha256") or ""
+    )
+    if not approved_review_hash or readiness["review_state_sha256"] != approved_review_hash:
+        raise ValidationError("Biological event revisions changed since scientist approval")
+    if not readiness["ready"]:
+        raise ValidationError("Biological event review is incomplete or stale")
+    return [
+        {
+            "port_id": "events",
+            "data_type": "reviewed_pose_events",
+            "payload": {
+                **payload,
+                "schema_version": "reviewed-pose-biological-events-workflow-0001",
+                "source_event_artifact_id": source.id,
+                "source_event_artifact_sha256": source.payload_sha256,
+                "review_approval": approval,
+                "review_readiness": readiness,
+                "truth_status": "scientist_reviewed",
+            },
+        }
+    ]
+
+
+def execute_biological_movement_export_adapter(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    reviewed = _single_payload(inputs, "events")
+    if reviewed.get("project_id") not in {None, project_id}:
+        raise ValidationError("Biological movement export received another project's artifact")
+    event_run_id = str(reviewed.get("event_run_id") or "")
+    service = PoseBiologicalMeasurementService(session)
+    approved_review_hash = str(
+        dict(reviewed.get("review_readiness") or {}).get("review_state_sha256") or ""
+    )
+    if (
+        not approved_review_hash
+        or service.review_state_sha256(event_run_id) != approved_review_hash
+    ):
+        raise ValidationError("Biological event revisions changed since scientist approval")
+    export_format = str(parameters.get("format", "json"))
+    if export_format == "json":
+        content = json.dumps(
+            service.export_json(event_run_id, reviewed_only=True),
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        extension, media_type = "json", "application/json"
+    elif export_format == "csv":
+        content = service.export_csv(event_run_id, reviewed_only=True)
+        extension, media_type = "zip", "application/zip"
+    else:
+        raise ValidationError("Biological movement export format must be json or csv")
+    project = session.get(Project, project_id)
+    if project is None:
+        raise ValidationError("Biological movement export project was not found")
+    workflow_run_id = str(parameters.get("__workflow_run_id") or "unscoped")
+    node_run_id = str(parameters.get("__workflow_node_run_id") or "unscoped")
+    relative_path = (
+        f"{project.storage_root}/derived/workflows/{workflow_run_id}/"
+        f"biological-movement-{node_run_id[:8]}.{extension}"
+    )
+    destination = resolve_managed_project_path(settings, relative_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(content)
+    return [
+        {
+            "port_id": "package",
+            "data_type": "biological_movement_package",
+            "payload": {
+                "schema_version": "biological-movement-package-workflow-0001",
+                "project_id": project_id,
+                "event_run_id": event_run_id,
+                "measurement_run_id": reviewed.get("measurement_run_id"),
+                "format": export_format,
+                "media_type": media_type,
+                "managed_path": relative_path,
+                "size_bytes": len(content),
+                "content_sha256": hashlib.sha256(content).hexdigest(),
+                "workflow_run_id": workflow_run_id,
+                "workflow_node_run_id": node_run_id,
+                "truth_status": "scientist_reviewed",
+            },
+        }
+    ]
+
+
 _POSE_ADAPTERS = {
     "pose_inference": (execute_pose_inference_adapter),
     "pose_temporal_association": (execute_pose_temporal_association_adapter),
@@ -1024,6 +1631,14 @@ _POSE_ADAPTERS = {
     "pose_active_learning_review_gate": (execute_pose_active_learning_review_gate_adapter),
     "pose_training_dataset_freeze": (execute_pose_training_dataset_freeze_adapter),
     "pose_training_export": (execute_pose_training_export_adapter),
+    "pose_identity_association": (execute_pose_identity_association_adapter),
+    "pose_identity_review_gate": (execute_pose_identity_review_gate_adapter),
+    "pose_identity_evaluation": (execute_pose_identity_evaluation_adapter),
+    "pose_identity_export": (execute_pose_identity_export_adapter),
+    "anatomical_measurement": (execute_anatomical_measurement_adapter),
+    "biological_event_detection": (execute_biological_event_detection_adapter),
+    "biological_event_review_gate": (execute_biological_event_review_gate_adapter),
+    "biological_movement_export": (execute_biological_movement_export_adapter),
 }
 
 

@@ -249,6 +249,7 @@ export function ProjectWorkbenchShell({
               className="rv-home-button"
               onClick={onHome}
               aria-label="Back to ReefVision home"
+              title="Back to ReefVision home"
             >
               <span aria-hidden="true">RV</span>
             </button>
@@ -275,6 +276,7 @@ export function ProjectWorkbenchShell({
                 className="rv-home-button"
                 onClick={onHome}
                 aria-label="Back to ReefVision home"
+                title="Back to ReefVision home"
               >
                 <span aria-hidden="true">RV</span>
               </button>
@@ -282,7 +284,7 @@ export function ProjectWorkbenchShell({
               <div>
                 <p className="eyebrow">Open project</p>
                 <h2 title={project.name}>{project.name}</h2>
-                <p>{project.description || "No project description."}</p>
+                {project.description && <p>{project.description}</p>}
               </div>
             </div>
 
@@ -359,15 +361,6 @@ export function ProjectWorkbenchShell({
             className="rv-workbench-toolbar-meta"
             aria-label="Workspace context"
           >
-            <span>{preset.shortLabel}</span>
-            <span>Local project</span>
-
-            <span>
-              {activePreset === "review"
-                ? "Human verification boundary"
-                : "Scientist review enabled"}
-            </span>
-
             {inspector && (
               <div
                 className="rv-panel-layout-actions"

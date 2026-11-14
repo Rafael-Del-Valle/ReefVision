@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from math import ceil
 from pathlib import Path
 from typing import BinaryIO
@@ -37,6 +38,20 @@ from reefvision.storage.images import (
     stream_to_staging,
 )
 from reefvision.storage.projects import resolve_managed_project_path
+
+LOGGER = logging.getLogger(__name__)
+
+
+def _cleanup_import_path(path: Path) -> None:
+    """Remove an uncommitted import artifact without aborting the batch."""
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        # Windows scanners, WebView2, and removable media can temporarily
+        # retain a handle. The artifact is unreferenced and can be cleaned up
+        # later; preserving the per-file report is more important than
+        # replacing the original import outcome with a request-level error.
+        LOGGER.warning("Could not clean up import artifact %s", path, exc_info=True)
 
 
 class ImageService:
@@ -74,13 +89,16 @@ class ImageService:
             relative_path = paths[index] if index < len(paths) and paths[index] else None
             staging = directories["staging"] / f"{uuid4()}.part"
             managed_destination: Path | None = None
+            staging_owned = False
+            uncommitted_original = False
             try:
                 ensure_supported_extension(filename)
                 sha256, size = stream_to_staging(source, staging)
+                staging_owned = True
                 inspected = inspect_staged_image(staging, sha256, size)
                 duplicate = self.images.find_duplicate(project_id, sha256)
                 if duplicate is not None:
-                    staging.unlink(missing_ok=True)
+                    _cleanup_import_path(staging)
                     report["duplicates"].append(
                         ImportItemResponse(
                             filename=filename,
@@ -99,6 +117,8 @@ class ImageService:
                 relative_thumbnail = f"{project.storage_root}/images/thumbnails/{image_id}.jpg"
                 managed_destination = resolve_managed_project_path(self.settings, relative_managed)
                 commit_staged_image(staging, managed_destination)
+                staging_owned = False
+                uncommitted_original = True
                 image = ImageAsset(
                     id=image_id,
                     project_id=project_id,
@@ -127,6 +147,9 @@ class ImageService:
                 self.images.add(image)
                 self.jobs.add(job)
                 self.session.commit()
+                # A successful database commit makes the managed original
+                # durable, even if a subsequent response refresh fails.
+                uncommitted_original = False
                 self.session.refresh(image)
                 self.session.refresh(job)
                 report["successful"].append(
@@ -140,7 +163,8 @@ class ImageService:
                 )
             except UnsupportedImageError as exc:
                 self.session.rollback()
-                staging.unlink(missing_ok=True)
+                if staging_owned:
+                    _cleanup_import_path(staging)
                 report["unsupported"].append(
                     ImportItemResponse(
                         filename=filename,
@@ -151,9 +175,12 @@ class ImageService:
                 )
             except (InvalidImageError, OSError, IntegrityError, ValidationError) as exc:
                 self.session.rollback()
-                staging.unlink(missing_ok=True)
-                if managed_destination is not None:
-                    managed_destination.unlink(missing_ok=True)
+                if staging_owned:
+                    _cleanup_import_path(staging)
+                # Do not delete an existing original when exclusive placement
+                # failed, or a committed original after a response error.
+                if uncommitted_original and managed_destination is not None:
+                    _cleanup_import_path(managed_destination)
                 report["failed"].append(
                     ImportItemResponse(
                         filename=filename,
@@ -164,9 +191,12 @@ class ImageService:
                 )
             except Exception as exc:
                 self.session.rollback()
-                staging.unlink(missing_ok=True)
-                if managed_destination is not None:
-                    managed_destination.unlink(missing_ok=True)
+                if staging_owned:
+                    _cleanup_import_path(staging)
+                # Do not delete an existing original when exclusive placement
+                # failed, or a committed original after a response error.
+                if uncommitted_original and managed_destination is not None:
+                    _cleanup_import_path(managed_destination)
                 report["failed"].append(
                     ImportItemResponse(
                         filename=filename,
@@ -253,19 +283,50 @@ class ImageService:
 
     def display_path_for_image(self, image: ImageAsset) -> tuple[Path, str]:
         source = self.content_path_for_image(image)
-        if image.media_type != "image/tiff":
+        # Browser/WebView rendering of TIFF, BMP, GIF and CMYK JPEG is not
+        # consistently supported. Keep original source and source-pixel geometry;
+        # a separate PNG rendition is used for the display only.
+        metadata = image.metadata_json or {}
+        source_mode = str(metadata.get("mode", ""))
+        exif = metadata.get("exif")
+        orientation = exif.get("Orientation") if isinstance(exif, dict) else None
+        # WebView2 can auto-rotate an EXIF-oriented JPEG even though persisted
+        # masks, dimensions and calibration are in the camera's raw pixel frame.
+        # Serve a PNG with unrotated pixels and no orientation tag instead.
+        needs_png = (
+            image.media_type in {"image/tiff", "image/bmp", "image/gif"}
+            or (image.media_type == "image/jpeg" and source_mode not in {"RGB", "L"})
+            or orientation not in (None, 1)
+            # Unreadable EXIF may hide camera orientation from the metadata.
+            # Force a raw-pixel PNG so WebView2 cannot silently rotate it.
+            or (image.media_type == "image/jpeg" and bool(metadata.get("exif_warning")))
+        )
+        if not needs_png:
             return source, image.media_type
 
-        display_path = source.parent.parent / "display" / f"{image.id}.png"
+        # Version the derived cache: older PNGs were EXIF-transposed and must
+        # not be reused against raw-pixel scientific annotations.
+        display_path = source.parent.parent / "display-v2" / f"{image.id}.png"
         if not display_path.is_file():
             create_browser_display(source, display_path)
         return display_path, "image/png"
 
     def thumbnail_path_for_image(self, image: ImageAsset) -> Path:
-        mode = str((image.metadata_json or {}).get("mode", ""))
-        if image.media_type == "image/tiff" and mode in {"I;16", "I;16L", "I;16B"}:
+        metadata = image.metadata_json or {}
+        mode = str(metadata.get("mode", ""))
+        exif = metadata.get("exif")
+        orientation = exif.get("Orientation") if isinstance(exif, dict) else None
+        # Earlier thumbnails used EXIF presentation orientation, which can
+        # disagree with stored source-pixel masks. Regenerate those JPEGs in a
+        # new cache namespace rather than reusing misaligned legacy thumbnails.
+        needs_raw_thumbnail = (
+            (image.media_type == "image/tiff" and mode in {"I;16", "I;16L", "I;16B"})
+            or orientation not in (None, 1)
+            or (image.media_type == "image/jpeg" and bool(metadata.get("exif_warning")))
+        )
+        if needs_raw_thumbnail:
             source = self.content_path_for_image(image)
-            corrected = source.parent.parent / "thumbnails-v2" / f"{image.id}.jpg"
+            corrected = source.parent.parent / "thumbnails-v3" / f"{image.id}.jpg"
             if not corrected.is_file():
                 create_thumbnail(
                     source,

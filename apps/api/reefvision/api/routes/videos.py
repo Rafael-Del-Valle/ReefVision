@@ -104,6 +104,8 @@ def import_video(
     airdata_file: Annotated[UploadFile | None, File()] = None,
     airdata_time_offset_s: Annotated[float, Form()] = 0.0,
     airdata_time_offset_evidence: Annotated[str | None, Form()] = None,
+    telemetry_utc_offset_minutes: Annotated[int | None, Form()] = None,
+    telemetry_utc_offset_evidence: Annotated[str | None, Form()] = None,
 ) -> VideoAssetResponse:
     return asset_service(request, session).import_video(
         project_id,
@@ -116,6 +118,8 @@ def import_video(
         airdata_stream=airdata_file.file if airdata_file is not None else None,
         airdata_time_offset_s=airdata_time_offset_s,
         airdata_time_offset_evidence=airdata_time_offset_evidence,
+        telemetry_utc_offset_minutes=telemetry_utc_offset_minutes,
+        telemetry_utc_offset_evidence=telemetry_utc_offset_evidence,
     )
 
 
@@ -819,6 +823,45 @@ def create_tracking_job(
         "pose",
     }:
         raise ValidationError("Video tracking requires a detection, instance, or pose model")
+    if payload.tracking_mode in {"detect", "hybrid"} and model.task != "detect":
+        raise ValidationError("Detection and hybrid tracking require a detection model")
+    if payload.tracking_mode == "segment" and model.task != "segment":
+        raise ValidationError("Segmentation tracking requires an instance-segmentation model")
+    if payload.tracking_mode == "hybrid":
+        secondary = session.get(ModelRegistration, payload.segmentation_model_id)
+        if (
+            secondary is None
+            or secondary.project_id != video.project_id
+            or secondary.task != "segment"
+            or secondary.purpose != "segmenter"
+            or secondary.provider_name != "ultralytics"
+            or model.provider_name != "ultralytics"
+        ):
+            raise ValidationError(
+                "Hybrid tracking requires an Ultralytics detector and segmentation model "
+                "registered in the same project"
+            )
+
+        def mapped_classes(registration: ModelRegistration) -> set[str]:
+            raw = dict(registration.class_map_json or {})
+            mapping = raw.get("mapping")
+            if isinstance(mapping, dict):
+                return {str(value) for value in mapping.values() if value}
+            provider_classes = raw.get("provider_classes")
+            if isinstance(provider_classes, dict):
+                return {
+                    str(metadata["label_class_id"])
+                    for metadata in provider_classes.values()
+                    if isinstance(metadata, dict) and metadata.get("label_class_id")
+                }
+            return set()
+
+        detector_classes = mapped_classes(model)
+        segmenter_classes = mapped_classes(secondary)
+        if not detector_classes.intersection(segmenter_classes):
+            raise ValidationError(
+                "Hybrid tracking models must map at least one class to the same project label"
+            )
     job = Job(
         project_id=video.project_id,
         job_type="video_tracking",
@@ -897,6 +940,11 @@ def georeference_existing_video_tracks(
                 observation = service.georeference_detection(
                     video_id,
                     frame_index=frame,
+                    frame_time_s=(
+                        float(raw["timestamp_seconds"])
+                        if raw.get("timestamp_seconds") is not None
+                        else None
+                    ),
                     bbox=BoundingBoxPixels(
                         x_min=x,
                         y_min=y,

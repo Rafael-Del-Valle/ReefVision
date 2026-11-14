@@ -6,13 +6,14 @@ import {
 
 import type { SkeletonGraphNode, SkeletonPixel } from "./skeletonAnalysisApi";
 
-export type SkeletonEditMode = "view" | "add" | "remove";
+export type SkeletonEditMode = "view" | "add" | "remove" | "branch";
 
 export interface SkeletonOverlayModel {
   pixels: SkeletonPixel[];
-  nodes: SkeletonGraphNode[];
+  nodes: Pick<SkeletonGraphNode, "kind" | "x" | "y">[];
   addedPixels: SkeletonPixel[];
   removedPixels: SkeletonPixel[];
+  branchPixels?: SkeletonPixel[];
   editMode: SkeletonEditMode;
   onPixelClick: (point: SkeletonPixel) => void;
 }
@@ -33,6 +34,7 @@ export function SkeletonOverlayLayer({
   nodes,
   addedPixels,
   removedPixels,
+  branchPixels,
   editMode,
   onPixelClick,
 }: SkeletonOverlayLayerProps) {
@@ -65,6 +67,11 @@ export function SkeletonOverlayLayer({
       context.fillRect(point.x, point.y, 1, 1);
     }
 
+    context.fillStyle = "rgba(96, 165, 250, 0.98)";
+    for (const point of branchPixels ?? []) {
+      context.fillRect(point.x, point.y, 1, 1);
+    }
+
     for (const node of nodes) {
       if (node.kind !== "endpoint" && node.kind !== "junction") continue;
       context.fillStyle =
@@ -73,10 +80,10 @@ export function SkeletonOverlayLayer({
           : "rgba(250, 204, 21, 0.98)";
       context.fillRect(Math.round(node.x) - 1, Math.round(node.y) - 1, 3, 3);
     }
-  }, [addedPixels, height, nodes, pixels, removedPixels, width]);
+  }, [addedPixels, branchPixels, height, nodes, pixels, removedPixels, width]);
 
   function handlePointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
-    if (editMode === "view") return;
+    if (editMode === "view" || event.button !== 0 || event.altKey) return;
     const rectangle = event.currentTarget.getBoundingClientRect();
     if (rectangle.width <= 0 || rectangle.height <= 0) return;
     const x = Math.max(
@@ -115,11 +122,11 @@ export function SkeletonOverlayLayer({
         height: "100%",
         pointerEvents: editMode === "view" ? "none" : "auto",
         cursor:
-          editMode === "add"
-            ? "crosshair"
-            : editMode === "remove"
-              ? "not-allowed"
-              : "default",
+          editMode === "remove"
+            ? "not-allowed"
+            : editMode === "view"
+              ? "default"
+              : "crosshair",
         imageRendering: "pixelated",
       }}
     />

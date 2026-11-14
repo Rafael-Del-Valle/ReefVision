@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import Job
@@ -22,7 +22,15 @@ class JobRepository:
 
     def next_queued(self) -> Job | None:
         statement = (
-            select(Job).where(Job.status == "queued").order_by(Job.created_at, Job.id).limit(1)
+            select(Job)
+            .where(
+                Job.status == "queued",
+                # The executing workflow owns its scientific validation child.
+                (Job.job_type != "reefpose_validation")
+                | (func.coalesce(Job.request_json["workflow_run_id"].as_string(), "") == ""),
+            )
+            .order_by(Job.created_at, Job.id)
+            .limit(1)
         )
         return self.session.scalar(statement)
 
@@ -48,6 +56,8 @@ class JobRepository:
                 job.status = "cancelled"
                 job.completed_at = now
                 job.error_message = "Cancellation finalized after ReefVision restart"
+                if job.job_type == "pose_evaluation":
+                    job.deduplication_key = None
                 result.update(
                     {
                         "stage": "cancelled",

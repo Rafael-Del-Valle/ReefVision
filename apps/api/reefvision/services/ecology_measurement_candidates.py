@@ -1068,8 +1068,10 @@ class EcologyMeasurementCandidateService:
                 time_status = "missing"
                 captured_utc = None
             elif captured.tzinfo is None or captured.utcoffset() is None:
-                time_status = "timezone_missing"
-                captured_utc = None
+                captured_utc = EcologyIdentityService.frozen_explicit_capture_time(
+                    image, image_link.source_metadata_sha256
+                )
+                time_status = "timezone_aware" if captured_utc is not None else "timezone_missing"
             else:
                 time_status = "timezone_aware"
                 captured_utc = captured.astimezone(UTC)

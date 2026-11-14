@@ -27,6 +27,7 @@ from reefvision.services.georeferencing_invalidation import (
 )
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.storage.telemetry import (
+    MAX_SRT_BYTES,
     find_paired_airdata,
     find_paired_srt,
     load_airdata_csv,
@@ -138,12 +139,19 @@ class VideoAssetService:
         airdata_stream: BinaryIO | None = None,
         airdata_time_offset_s: float = 0.0,
         airdata_time_offset_evidence: str | None = None,
+        telemetry_utc_offset_minutes: int | None = None,
+        telemetry_utc_offset_evidence: str | None = None,
         source_path: Path | None = None,
     ) -> VideoAssetResponse:
         project = self._project(project_id)
         safe_name = _safe_video_name(filename)
         telemetry, telemetry_data = self._prepare_telemetry(
-            safe_name, source_path, telemetry_filename, telemetry_stream
+            safe_name,
+            source_path,
+            telemetry_filename,
+            telemetry_stream,
+            utc_offset_minutes=telemetry_utc_offset_minutes,
+            utc_offset_evidence=telemetry_utc_offset_evidence,
         )
         airdata, airdata_data, airdata_alignment = self._prepare_airdata(
             airdata_filename,
@@ -181,6 +189,27 @@ class VideoAssetService:
                     )
                     current_metadata["telemetry"] = telemetry.model_dump(mode="json")
                     changed = True
+                elif (
+                    telemetry.found
+                    and existing_srt.available
+                    and telemetry.utc_offset_minutes is not None
+                ):
+                    actual_sha256 = self.telemetry_content_sha256(duplicate.id)
+                    if actual_sha256 != telemetry.content_sha256:
+                        raise ValidationError(
+                            "Timezone evidence can only enrich the identical imported DJI SRT"
+                        )
+                    enriched_srt = existing_srt.model_copy(
+                        update={
+                            "wall_clock_sample_count": telemetry.wall_clock_sample_count,
+                            "utc_offset_minutes": telemetry.utc_offset_minutes,
+                            "utc_offset_evidence": telemetry.utc_offset_evidence,
+                            "content_sha256": telemetry.content_sha256,
+                        }
+                    )
+                    if enriched_srt != existing_srt:
+                        current_metadata["telemetry"] = enriched_srt.model_dump(mode="json")
+                        changed = True
                 if airdata.found and not existing_airdata.available:
                     airdata_path = self._store_airdata(project, duplicate.id, airdata, airdata_data)
                     current_metadata["airdata_telemetry"] = airdata.model_dump(mode="json")
@@ -247,19 +276,40 @@ class VideoAssetService:
         source_path: Path | None,
         telemetry_filename: str | None,
         telemetry_stream: BinaryIO | None,
+        *,
+        utc_offset_minutes: int | None,
+        utc_offset_evidence: str | None,
     ) -> tuple[TelemetryMetadata, bytes | None]:
+        evidence = (utc_offset_evidence or "").strip() or None
+        if (utc_offset_minutes is None) != (evidence is None):
+            raise ValidationError(
+                "Telemetry UTC offset and independent timezone evidence must be supplied together"
+            )
+        if utc_offset_minutes is not None and not -840 <= utc_offset_minutes <= 840:
+            raise ValidationError("Telemetry UTC offset must be between -840 and 840 minutes")
+        if (utc_offset_minutes is not None or evidence is not None) and telemetry_stream is None:
+            raise ValidationError("Telemetry UTC alignment requires an uploaded DJI SRT")
         if telemetry_stream is not None:
             if not matching_srt_name(video_name, telemetry_filename or ""):
                 raise ValidationError(
                     "Telemetry must be an SRT with the same filename stem as the video"
                 )
             data, source = read_srt_stream(telemetry_stream)
+            wall_clock_count = sum(sample.wall_clock is not None for sample in source.samples)
+            if utc_offset_minutes is not None and wall_clock_count == 0:
+                raise ValidationError(
+                    "Telemetry UTC alignment requires wall-clock timestamps in the DJI SRT"
+                )
             return TelemetryMetadata(
                 found=True,
                 available=True,
                 source_type="dji_srt",
                 path_kind="managed",
                 sample_count=len(source.samples),
+                wall_clock_sample_count=wall_clock_count,
+                utc_offset_minutes=utc_offset_minutes,
+                utc_offset_evidence=evidence,
+                content_sha256=hashlib.sha256(data).hexdigest(),
             ), data
         metadata = TelemetryMetadata()
         if source_path is not None:
@@ -272,9 +322,21 @@ class VideoAssetService:
                         source_path=str(paired.resolve()),
                         path_kind="external",
                     )
-                    metadata.sample_count = len(load_dji_srt(paired).samples)
-                    metadata.available = True
-            except ValidationError as exc:
+                    source = load_dji_srt(paired)
+                    data = paired.read_bytes()
+                    metadata = TelemetryMetadata(
+                        found=True,
+                        available=True,
+                        source_type="dji_srt",
+                        source_path=str(paired.resolve()),
+                        path_kind="external",
+                        sample_count=len(source.samples),
+                        wall_clock_sample_count=sum(
+                            sample.wall_clock is not None for sample in source.samples
+                        ),
+                        content_sha256=hashlib.sha256(data).hexdigest(),
+                    )
+            except (OSError, ValidationError) as exc:
                 metadata.error = str(exc)
                 LOGGER.warning("Optional video telemetry unavailable: %s", exc)
         return metadata, None
@@ -401,6 +463,12 @@ class VideoAssetService:
         srt_path = self._telemetry_path(video.telemetry)
         if srt_path is not None:
             try:
+                actual_sha256 = self.telemetry_content_sha256(video_id)
+                if (
+                    video.telemetry.content_sha256 is not None
+                    and actual_sha256 != video.telemetry.content_sha256
+                ):
+                    raise ValidationError("DJI SRT checksum no longer matches its import evidence")
                 srt_source = load_dji_srt(srt_path)
             except ValidationError as exc:
                 LOGGER.warning("Video %s SRT telemetry unavailable: %s", video_id, exc)
@@ -424,6 +492,27 @@ class VideoAssetService:
         except ValidationError as exc:
             LOGGER.warning("Video %s AirData alignment unavailable: %s", video_id, exc)
             return srt_source
+
+    def telemetry_content_sha256(self, video_id: str) -> str | None:
+        """Hash the current SRT bytes when an import checksum is available."""
+        video = self.get(video_id)
+        if video.telemetry.content_sha256 is None:
+            return None
+        path = self._telemetry_path(video.telemetry)
+        if path is None:
+            raise ValidationError("DJI SRT source is unavailable for checksum validation")
+        digest = hashlib.sha256()
+        size = 0
+        try:
+            with path.open("rb") as stream:
+                while chunk := stream.read(1024 * 1024):
+                    size += len(chunk)
+                    if size > MAX_SRT_BYTES:
+                        raise ValidationError("DJI SRT exceeds the 32 MiB limit")
+                    digest.update(chunk)
+        except OSError as exc:
+            raise ValidationError("DJI SRT source is missing or unreadable") from exc
+        return digest.hexdigest()
 
     def content_path(self, video_id: str) -> Path:
         video = self.get_record(video_id)

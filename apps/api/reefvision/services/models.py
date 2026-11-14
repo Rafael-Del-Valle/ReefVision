@@ -16,6 +16,7 @@ from reefvision.db.models import (
     Job,
     LabelClass,
     ModelRegistration,
+    PoseEvaluationRun,
     Project,
     TrainingRun,
 )
@@ -349,6 +350,13 @@ class ModelService:
 
     def delete_model(self, model_id: str) -> None:
         model = self._model(model_id)
+        evaluation_id = self.session.scalar(
+            select(PoseEvaluationRun.id).where(PoseEvaluationRun.model_id == model.id).limit(1)
+        )
+        if evaluation_id is not None:
+            raise ConflictError(
+                "Models referenced by scientific pose evaluations cannot be removed"
+            )
         if self.predictions.has_any_for_model(model.id) or self.annotations.count_for_model(
             model.id
         ):

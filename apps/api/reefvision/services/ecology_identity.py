@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
-from datetime import UTC
+from datetime import UTC, datetime
 
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
@@ -60,6 +60,7 @@ from reefvision.services.ecology_identity_design_audit import (
     derive_historical_cross_unit_parent_details,
 )
 from reefvision.storage.datasets import canonical_json_sha256
+from reefvision.storage.images import recover_explicit_exif_capture_time
 
 
 class EcologyIdentityService:
@@ -371,6 +372,32 @@ class EcologyIdentityService:
             }
         )
 
+    @classmethod
+    def _explicit_capture_fingerprint(cls, image: ImageAsset) -> tuple[datetime, str] | None:
+        stored = image.capture_timestamp
+        if stored is None or stored.tzinfo is not None:
+            return None
+        capture = recover_explicit_exif_capture_time(stored, image.metadata_json)
+        if capture is None:
+            return None
+        return capture, canonical_json_sha256(
+            {
+                "algorithm_version": "ecology-image-source-metadata-0002",
+                "legacy_fingerprint": cls._source_metadata_fingerprint(image),
+                "explicit_capture_timestamp_utc": capture.isoformat(),
+            }
+        )
+
+    @classmethod
+    def frozen_explicit_capture_time(
+        cls, image: ImageAsset, fingerprint: str | None
+    ) -> datetime | None:
+        """Use the recovered offset only after it was pinned in the identity link."""
+        if fingerprint is None:
+            return None
+        explicit = cls._explicit_capture_fingerprint(image)
+        return explicit[0] if explicit is not None and explicit[1] == fingerprint else None
+
     def link_image(
         self,
         project_id: str,
@@ -400,13 +427,18 @@ class EcologyIdentityService:
         )
         if existing is not None:
             raise ConflictError("Image already linked to this organism")
+        explicit_capture = self._explicit_capture_fingerprint(image)
         link = EcologyIdentityImageEvidence(
             project_id=project_id,
             organism_key=organism_key,
             identity_revision=current.revision,
             image_id=image.id,
             image_sha256=image.sha256,
-            source_metadata_sha256=self._source_metadata_fingerprint(image),
+            source_metadata_sha256=(
+                explicit_capture[1]
+                if explicit_capture
+                else self._source_metadata_fingerprint(image)
+            ),
             reason=payload.reason,
         )
         self.session.add(link)
@@ -867,6 +899,7 @@ class EcologyIdentityService:
             if (
                 link.source_metadata_sha256 is not None
                 and link.source_metadata_sha256 != self._source_metadata_fingerprint(image)
+                and self.frozen_explicit_capture_time(image, link.source_metadata_sha256) is None
             ):
                 raise ValidationError("Ecological source image metadata changed after linking")
         return links

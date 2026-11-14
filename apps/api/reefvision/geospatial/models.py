@@ -1,8 +1,11 @@
 """Normalized telemetry values and video-level persistence metadata."""
 
+from __future__ import annotations
+
+from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, FiniteFloat
+from pydantic import BaseModel, Field, FiniteFloat, field_validator, model_validator
 
 
 class TelemetrySample(BaseModel):
@@ -17,6 +20,7 @@ class TelemetrySample(BaseModel):
 
     sample_index: int = Field(ge=0)
     time_s: FiniteFloat = Field(ge=0)
+    wall_clock: datetime | None = None
     frame_number: int | None = Field(default=None, ge=0)
     latitude: FiniteFloat | None = Field(default=None, ge=-90, le=90)
     longitude: FiniteFloat | None = Field(default=None, ge=-180, le=180)
@@ -36,6 +40,13 @@ class TelemetrySample(BaseModel):
     focal_length_raw: str | None = None
     digital_zoom_ratio: FiniteFloat | None = Field(default=None, gt=0)
 
+    @field_validator("wall_clock")
+    @classmethod
+    def wall_clock_has_no_inferred_zone(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.tzinfo is not None and value.utcoffset() is not None:
+            raise ValueError("DJI SRT wall-clock timestamps must be timezone-naive")
+        return value
+
 
 TelemetryFieldSource = Literal["airdata", "dji_srt"]
 
@@ -47,7 +58,21 @@ class TelemetryMetadata(BaseModel):
     source_path: str | None = None
     path_kind: Literal["managed", "external"] | None = None
     sample_count: int = Field(default=0, ge=0)
+    wall_clock_sample_count: int = Field(default=0, ge=0)
+    utc_offset_minutes: int | None = Field(default=None, ge=-840, le=840)
+    utc_offset_evidence: str | None = None
+    content_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     error: str | None = None
+
+    @model_validator(mode="after")
+    def valid_absolute_time_evidence(self) -> TelemetryMetadata:
+        evidence = (self.utc_offset_evidence or "").strip() or None
+        if (self.utc_offset_minutes is None) != (evidence is None):
+            raise ValueError("Telemetry UTC offset and evidence must be supplied together")
+        if self.utc_offset_minutes is not None and self.wall_clock_sample_count == 0:
+            raise ValueError("Telemetry UTC alignment requires SRT wall-clock samples")
+        self.utc_offset_evidence = evidence
+        return self
 
 
 class TelemetryProvenance(BaseModel):

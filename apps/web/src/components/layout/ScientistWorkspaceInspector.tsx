@@ -81,47 +81,10 @@ export function ScientistWorkspaceInspector({
         <strong>{definition.title}</strong>
         <p>{definition.summary}</p>
 
-        <div className="rv-inspector-policy">
-          <span>Record policy</span>
+        <details className="rv-inspector-policy">
+          <summary>Evidence and review policy</summary>
           <p>{definition.recordPolicy}</p>
-        </div>
-      </section>
-
-      <section
-        className="rv-inspector-card rv-inspector-truth"
-        aria-label="Scientific truth boundary"
-      >
-        <div className="rv-inspector-card-heading">
-          <strong>Scientific truth boundary</strong>
-          <span
-            className={reviewMode ? "review-required" : ""}
-            data-review-mode={reviewMode ? "true" : "false"}
-          >
-            {reviewMode
-              ? "Human verification required"
-              : "Human verification available"}
-          </span>
-        </div>
-
-        <div className="rv-inspector-truth-grid">
-          <div>
-            <span>Machine output</span>
-            <strong>Provisional</strong>
-            <small>
-              Predictions, scores, tracks, provider results, and automated
-              measurements remain reviewable evidence.
-            </small>
-          </div>
-
-          <div>
-            <span>Scientist truth</span>
-            <strong>Explicitly verified</strong>
-            <small>
-              Accepted project truth changes only through the canonical workflow
-              and an explicit scientist action.
-            </small>
-          </div>
-        </div>
+        </details>
       </section>
 
       {activeView === "gallery" &&
@@ -171,23 +134,52 @@ export function ScientistWorkspaceInspector({
         )}
 
       <section
+        className="rv-inspector-card rv-inspector-truth"
+        aria-label="Scientific truth boundary"
+      >
+        <div className="rv-inspector-card-heading">
+          <strong>Scientific truth boundary</strong>
+          <span
+            className={reviewMode ? "review-required" : ""}
+            data-review-mode={reviewMode ? "true" : "false"}
+          >
+            {reviewMode
+              ? "Human verification required"
+              : "Human verification available"}
+          </span>
+        </div>
+
+        <div className="rv-inspector-truth-grid">
+          <div>
+            <span>Machine output</span>
+            <strong>Provisional</strong>
+            <small>
+              Predictions, scores, tracks, provider results, and automated
+              measurements remain reviewable evidence.
+            </small>
+          </div>
+
+          <div>
+            <span>Scientist truth</span>
+            <strong>Explicitly verified</strong>
+            <small>
+              Accepted project truth changes only through the canonical workflow
+              and an explicit scientist action.
+            </small>
+          </div>
+        </div>
+      </section>
+
+      <details
         className="rv-inspector-card"
         aria-label="Workspace preset guidance"
       >
-        <span className="rv-inspector-kicker">{preset.label}</span>
-        <strong>{guidance.title}</strong>
+        <summary>{guidance.title}</summary>
         <p>{guidance.description}</p>
-      </section>
+      </details>
 
-      <section
-        className="rv-inspector-card"
-        aria-label="Related canonical tools"
-      >
-        <strong>Related canonical tools</strong>
-        <p>
-          These shortcuts only change the visible workspace. Scientific state
-          remains owned by the destination tool.
-        </p>
+      <section className="rv-inspector-card" aria-label="Related workspaces">
+        <strong>Related workspaces</strong>
 
         <div className="rv-inspector-actions">
           {definition.actions.map((action) => (
@@ -204,11 +196,11 @@ export function ScientistWorkspaceInspector({
         </div>
       </section>
 
-      <section
+      <details
         className="rv-inspector-card"
         aria-label="Project inspector context"
       >
-        <strong>Project context</strong>
+        <summary>Project context</summary>
 
         <dl>
           <div>
@@ -223,17 +215,8 @@ export function ScientistWorkspaceInspector({
             <dt>Preset</dt>
             <dd>{preset.label}</dd>
           </div>
-          <div>
-            <dt>State owner</dt>
-            <dd>Canonical workspace</dd>
-          </div>
         </dl>
-
-        <p>
-          Inspector content is contextual UI only. It does not create a second
-          source of scientific state.
-        </p>
-      </section>
+      </details>
     </div>
   );
 }

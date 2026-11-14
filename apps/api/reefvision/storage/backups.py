@@ -22,6 +22,7 @@ from reefvision.storage.projects import resolve_managed_project_path
 BACKUP_FORMAT_VERSION = "1.0"
 BACKUP_MANIFEST_FILENAME = "backup-manifest.json"
 BACKUP_COMPLETION_MARKER_FILENAME = "backup-complete.json"
+BACKUP_DIRECTORY = "bk"
 
 
 @dataclass(frozen=True)
@@ -65,8 +66,8 @@ def default_backup_paths(
     database_filename: str,
 ) -> tuple[str, str, str, str]:
     _ = created_at_label
-    root = f"bk/{backup_id[:8]}"
-    staging = f"bk/.t/{backup_id[:8]}"
+    root = f"{BACKUP_DIRECTORY}/{backup_id[:8]}"
+    staging = f"{BACKUP_DIRECTORY}/.t/{backup_id[:8]}"
     manifest = f"{root}/{BACKUP_MANIFEST_FILENAME}"
     completion = f"{root}/{BACKUP_COMPLETION_MARKER_FILENAME}"
     _ = database_filename
@@ -379,7 +380,7 @@ def _should_exclude(
     parts = relative_path.parts
     if not parts:
         return False
-    if parts[0] == "backups":
+    if parts[0] in {BACKUP_DIRECTORY, "backups"}:
         return True
     if parts[0] == "logs" and not include_logs:
         return True

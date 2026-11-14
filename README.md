@@ -117,4 +117,18 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidance and the [develo
 
 For research using ReefVision, record the application version, model and checkpoint used, dataset version, and how model outputs were reviewed. A formal software citation has not yet been published.
 
-The repository is public, but it does not currently contain a software license. Please do not assume that public access grants permission to redistribute or reuse the code until a license is added.
+### Open-source software license
+
+**ReefVision is licensed under the [GNU Affero General Public License, version 3 only (AGPL-3.0-only)](LICENSE).**
+
+Copyright (C) 2026 Rafael Del Valle.
+
+The AGPL-3.0 allows academic, nonprofit, personal, and commercial use. It also permits copying, modifying, and redistributing covered software under its conditions. When distributing a covered version, distributors must satisfy applicable source-code, copyright-notice, and license obligations; section 13 also addresses modified versions used to provide remote network access. ReefVision remains an independently maintained project, and licensing the code does not transfer its copyright.
+
+**Software versus scientific data:** This license applies to ReefVision code and original project documentation where ReefVision's copyright holder has the rights to grant it. It does **not** automatically license independently owned coral or wildlife photographs and videos, research datasets, annotations, model checkpoints or weights, or third-party materials. Their owners' terms and permissions still apply.
+
+**Third-party components:** Ultralytics, SLEAP-related software, and all other external dependencies retain their own licenses and copyright notices. The ReefVision license does not override those licenses. Redistribution of bundled application installers must meet all applicable third-party requirements; check the exact versions and dependency notices before a new release.
+
+**Previously licensed copies:** ReefVision versions or code copies previously provided under MIT retain the rights granted under that license. This change does not retroactively revoke those permissions.
+
+For contributions, see [CONTRIBUTING.md](CONTRIBUTING.md).

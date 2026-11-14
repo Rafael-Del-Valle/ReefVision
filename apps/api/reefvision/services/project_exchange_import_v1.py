@@ -22,7 +22,12 @@ from reefvision.db.models import (
     BehaviorStateDefinition,
     ClassOperation,
     ClassVisibilityPreference,
+    ComputedMetricDefinition,
+    ComputedMetricResult,
     DatasetVersion,
+    EnvironmentalAnalysisDefinition,
+    EnvironmentalAnalysisResult,
+    EnvironmentalEventDefinition,
     ExportRecord,
     GeoReferencedObservation,
     MaskAnnotationEvent,
@@ -57,6 +62,7 @@ from reefvision.db.models.pose_training_dataset import (
     PoseTrainingDataset,
     PoseTrainingDatasetItem,
 )
+from reefvision.domain.errors import ValidationError
 from reefvision.schemas.project_exchange import ProjectExchangeImportResponse
 from reefvision.services import project_exchange_import as base_import
 from reefvision.services.pose_active_learning import (
@@ -65,6 +71,7 @@ from reefvision.services.pose_active_learning import (
 from reefvision.services.pose_training_datasets import (
     ITEM_SCHEMA_VERSION,
     MANIFEST_SCHEMA_VERSION,
+    PoseTrainingDatasetService,
 )
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
@@ -77,7 +84,7 @@ def _insert_after(section_name: str, after: str) -> None:
     base_import.SECTION_ORDER.insert(index + 1, section_name)
 
 
-def _register_v1_sections() -> None:
+def register_v1_sections() -> None:
     base_import.SECTION_MODELS.update(
         {
             "training_drafts": TrainingDraft,
@@ -640,6 +647,23 @@ def _refresh_pose_training_exchange_integrity(
         return
 
     round_ids = [item.id for item in rounds]
+    datasets = list(
+        session.scalars(
+            select(PoseTrainingDataset).where(PoseTrainingDataset.project_id == project_id)
+        )
+    )
+    frozen_frames = {
+        (
+            item.candidate_id,
+            item.verified_track_revision,
+            item.verified_pose_sha256,
+        ): item.canonical_pose_json
+        for item in session.scalars(
+            select(PoseTrainingDatasetItem).where(
+                PoseTrainingDatasetItem.dataset_id.in_(dataset.id for dataset in datasets)
+            )
+        )
+    }
 
     candidates = list(
         session.scalars(
@@ -670,8 +694,8 @@ def _refresh_pose_training_exchange_integrity(
             candidate.video_track_id,
         )
 
-        if track is None:
-            raise RuntimeError("Imported verified pose candidate lost its video track")
+        if track is None or candidate.verified_track_revision is None:
+            raise ValidationError("Imported verified pose candidate lacks a track revision")
 
         keyframe = next(
             (
@@ -688,13 +712,29 @@ def _refresh_pose_training_exchange_integrity(
             None,
         )
 
+        if track.revision != candidate.verified_track_revision:
+            keyframe = None
+        if candidate.verified_pose_sha256 is not None:
+            keyframe = (
+                frozen_frames.get(
+                    (
+                        candidate.id,
+                        candidate.verified_track_revision,
+                        candidate.verified_pose_sha256,
+                    )
+                )
+                or keyframe
+            )
         if keyframe is None:
-            raise RuntimeError("Imported verified pose candidate lost its canonical frame")
+            # A verified candidate can become stale before it enters a dataset.
+            # Retain its recorded fingerprint and revision so it cannot become
+            # fresh merely by importing the archive.
+            continue
 
         verified_payload = {
             "schema_version": ("pose-active-learning-verified-pose-0001"),
             "video_track_id": track.id,
-            "track_revision": track.revision,
+            "track_revision": candidate.verified_track_revision,
             "focus_frame": candidate.focus_frame,
             "pose_schema_id": candidate.pose_schema_id,
             "pose_schema_revision": (candidate.pose_schema_revision),
@@ -828,12 +868,6 @@ def _refresh_pose_training_exchange_integrity(
 
     session.flush()
 
-    datasets = list(
-        session.scalars(
-            select(PoseTrainingDataset).where(PoseTrainingDataset.project_id == project_id)
-        )
-    )
-
     for dataset in datasets:
         source_round_record = session.get(
             PoseActiveLearningRound,
@@ -898,12 +932,20 @@ def _refresh_pose_training_exchange_integrity(
             if video is None:
                 raise RuntimeError("Imported frozen pose item lost its video")
 
-            if dataset_candidate.verified_pose_sha256 is None:
-                raise RuntimeError(
-                    "Imported frozen pose item candidate is missing its verified pose checksum"
-                )
-
-            dataset_item.verified_pose_sha256 = dataset_candidate.verified_pose_sha256
+            dataset_item.verified_pose_sha256 = canonical_json_sha256(
+                {
+                    "schema_version": "pose-active-learning-verified-pose-0001",
+                    "video_track_id": dataset_item.video_track_id,
+                    "track_revision": dataset_item.verified_track_revision,
+                    "focus_frame": dataset_item.frame_index,
+                    "pose_schema_id": dataset_item.pose_schema_id,
+                    "pose_schema_revision": dataset_item.pose_schema_revision,
+                    "pose_observations": list(
+                        dataset_item.canonical_pose_json.get("pose_observations") or []
+                    ),
+                    "keypoints": list(dataset_item.canonical_pose_json.get("keypoints") or []),
+                }
+            )
 
             dataset_item.acquisition_provenance_json = dict(dataset_candidate.provenance_json or {})
 
@@ -936,7 +978,7 @@ def _refresh_pose_training_exchange_integrity(
                 dict,
             ):
                 review_after = dict(review_after)
-                review_after["verified_pose_sha256"] = dataset_candidate.verified_pose_sha256
+                review_after["verified_pose_sha256"] = dataset_item.verified_pose_sha256
                 review_after["pose_schema_id"] = dataset_candidate.pose_schema_id
                 review_after["pose_schema_revision"] = dataset_candidate.pose_schema_revision
                 review["after"] = review_after
@@ -962,12 +1004,9 @@ def _refresh_pose_training_exchange_integrity(
                 "video_track_id": track.id,
                 "label_class_id": (dataset_item.label_class_id),
                 "verified_track_revision": (dataset_item.verified_track_revision),
-                "pose_schema": {
-                    "schema_version": ("pose-landmarks-0001"),
-                    "schema_id": (dataset_item.pose_schema_id),
-                    "schema_revision": (dataset_item.pose_schema_revision),
-                    "content_hash": (dataset_item.pose_schema_content_hash),
-                },
+                "pose_schema": PoseTrainingDatasetService(session)._schema_snapshot(
+                    project_id=project_id, candidate=dataset_candidate
+                ),
                 "verified_pose_sha256": (dataset_item.verified_pose_sha256),
                 "canonical_pose": dict(dataset_item.canonical_pose_json or {}),
                 "source_models": list(dataset_item.source_models_json or []),
@@ -1031,59 +1070,121 @@ def import_project_exchange_v1(
 ) -> ProjectExchangeImportResponse:
     """Import the complete 1.0 portable record inventory into a new project."""
 
-    _register_v1_sections()
-    result = base_import.import_project_exchange(
-        source,
-        session,
-        settings,
-        project_name=project_name,
-    )
-    project = session.get(Project, result.project_id)
-    if project is None:
-        raise RuntimeError("Imported project disappeared before artifact restoration")
+    register_v1_sections()
+    copied_generated = 0
 
-    try:
+    def finalize(project: Project, package: ProjectExchangePackage) -> None:
+        nonlocal copied_generated
         _mark_imported_georeferencing_stale(session, project.id)
         _refresh_class_operation_checksums(session, project.id)
         _refresh_review_queue_checksums(session, project.id)
         _refresh_active_learning_checksums(session, project.id)
-        _refresh_pose_training_exchange_integrity(
-            session,
-            project.id,
+        _refresh_pose_training_exchange_integrity(session, project.id)
+        # Validate canonical ownership/run lineage after remapping, before commit.
+        from reefvision.db.models import ScientificRecord
+        from reefvision.schemas.scientific_data import ScientificRecordCreate
+        from reefvision.services.scientific_data import ScientificDataService
+
+        science = ScientificDataService(session)
+        for scientific_row in session.scalars(
+            select(ScientificRecord).where(ScientificRecord.project_id == project.id)
+        ):
+            item = ScientificRecordCreate.model_validate(
+                {
+                    key: value
+                    for key, value in scientific_row.payload_json.items()
+                    if key in ScientificRecordCreate.model_fields
+                }
+            )
+            science.validate_subject(project.id, item.subject, item.pixel)
+            science.response(scientific_row)
+        from reefvision.services.computed_aggregate_metrics import (
+            ComputedAggregateMetricService,
         )
-        copied_telemetry_sidecars = _restore_telemetry_sidecars(
+        from reefvision.services.computed_mask_coverage import ComputedMaskCoverageService
+        from reefvision.services.computed_metrics import ComputedMetricService
+        from reefvision.services.environmental_analysis import EnvironmentalAnalysisService
+        from reefvision.services.environmental_context import EnvironmentalContextService
+
+        computed = ComputedMetricService(session)
+        aggregates = ComputedAggregateMetricService(session)
+        mask_coverage = ComputedMaskCoverageService(session, settings)
+        # Raster coverage replay reads the restored mask bytes before commit.
+        copied_generated = _restore_generated_artifacts(
+            source, project=project, settings=settings, manifest=dict(package.manifest_json)
+        )
+        for definition_row in session.scalars(
+            select(ComputedMetricDefinition).where(
+                ComputedMetricDefinition.project_id == project.id
+            )
+        ):
+            if definition_row.definition_kind == "annotation_aggregate":
+                aggregates.definition_response(definition_row)
+            elif definition_row.definition_kind == "mask_coverage":
+                mask_coverage.definition_response(definition_row)
+            elif definition_row.definition_kind in {
+                "annotation_comparison",
+                "geographic_pairwise",
+            }:
+                continue
+            else:
+                computed.definition_response(definition_row)
+        for result_row in session.scalars(
+            select(ComputedMetricResult).where(ComputedMetricResult.project_id == project.id)
+        ):
+            if result_row.result_kind == "annotation_aggregate":
+                aggregates.result_response(result_row)
+                aggregate_validation = aggregates.validate_result(project.id, result_row.id)
+                if not aggregate_validation.current:
+                    raise ValidationError(
+                        "Imported computed aggregate evidence is stale after remapping: "
+                        + ", ".join(aggregate_validation.reasons)
+                    )
+            elif result_row.result_kind == "mask_coverage":
+                mask_coverage.validate_historical_result(result_row)
+            elif result_row.result_kind in {
+                "annotation_comparison",
+                "geographic_pairwise",
+            }:
+                continue
+            else:
+                computed.result_response(result_row)
+        environment = EnvironmentalContextService(session)
+        for event_row in session.scalars(
+            select(EnvironmentalEventDefinition).where(
+                EnvironmentalEventDefinition.project_id == project.id
+            )
+        ):
+            environment.event_definition_response(event_row)
+        analyses = EnvironmentalAnalysisService(session)
+        for analysis_definition_row in session.scalars(
+            select(EnvironmentalAnalysisDefinition).where(
+                EnvironmentalAnalysisDefinition.project_id == project.id
+            )
+        ):
+            analyses.definition_response(analysis_definition_row)
+        for analysis_result_row in session.scalars(
+            select(EnvironmentalAnalysisResult).where(
+                EnvironmentalAnalysisResult.project_id == project.id
+            )
+        ):
+            analyses.result_response(analysis_result_row)
+            analyses.validate_historical_result(analysis_result_row)
+        copied_telemetry = _restore_telemetry_sidecars(
             source,
             project=project,
             session=session,
             settings=settings,
-            manifest=dict(result.package.manifest_json),
+            manifest=dict(package.manifest_json),
         )
-
-        copied_generated = _restore_generated_artifacts(
-            source,
-            project=project,
-            settings=settings,
-            manifest=dict(result.package.manifest_json),
-        )
-        package = session.get(ProjectExchangePackage, result.package.id)
-        if package is None:
-            raise RuntimeError("Imported exchange provenance record disappeared")
         package.options_json = {
             **dict(package.options_json or {}),
             "copied_generated_artifact_count": copied_generated,
-            "copied_telemetry_sidecar_count": copied_telemetry_sidecars,
+            "copied_telemetry_sidecar_count": copied_telemetry,
         }
-        session.commit()
-        session.refresh(package)
-        result.copied_generated_artifact_count = copied_generated
-        result.package = type(result.package).model_validate(package)
-        return result
-    except Exception:
-        session.rollback()
-        project_root = resolve_managed_project_path(settings, project.storage_root)
-        doomed = session.get(Project, result.project_id)
-        if doomed is not None:
-            session.delete(doomed)
-            session.commit()
-        shutil.rmtree(project_root, ignore_errors=True)
-        raise
+
+    result = base_import.import_project_exchange(
+        source, session, settings, project_name=project_name, finalize=finalize
+    )
+    result.copied_generated_artifact_count = copied_generated
+    return result

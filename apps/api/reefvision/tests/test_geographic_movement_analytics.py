@@ -24,6 +24,8 @@ def observation(
     track_id: str | None = "track-1",
     video_asset_id: str = "video-1",
     crs: str = "EPSG:4326",
+    horizontal_sigma_m: float | None = None,
+    uncertainty_group: str | None = None,
 ) -> GeographicMovementObservation:
     return GeographicMovementObservation(
         observation_id=observation_id,
@@ -34,7 +36,69 @@ def observation(
         latitude_deg=latitude_deg,
         longitude_deg=longitude_deg,
         crs=crs,
+        horizontal_sigma_m=horizontal_sigma_m,
+        uncertainty_method=("propagated_1sigma" if horizontal_sigma_m is not None else None),
+        uncertainty_correlation_group_id=uncertainty_group,
     )
+
+
+def test_segment_propagates_only_explicit_independent_one_sigma_uncertainty() -> None:
+    start = observation(
+        "start",
+        frame_index=0,
+        frame_time_s=0,
+        latitude_deg=0,
+        longitude_deg=0,
+        horizontal_sigma_m=3,
+        uncertainty_group="gps-fix-a",
+    )
+    end = observation(
+        "end",
+        frame_index=10,
+        frame_time_s=10,
+        latitude_deg=0,
+        longitude_deg=0.001,
+        horizontal_sigma_m=4,
+        uncertainty_group="gps-fix-b",
+    )
+
+    segment = calculate_movement_segment(start, end)
+
+    assert segment.distance_standard_uncertainty_m == 5
+    assert segment.speed_standard_uncertainty_m_s == 0.5
+    assert segment.bearing_standard_uncertainty_deg == pytest.approx(
+        5 / segment.distance_m * 180 / 3.141592653589793
+    )
+    assert segment.uncertainty_method == "independent_isotropic_first_order"
+    assert segment.uncertainty_unavailable_reason is None
+
+
+def test_segment_does_not_assume_independence_for_shared_or_unknown_sources() -> None:
+    start = observation(
+        "start",
+        frame_index=0,
+        frame_time_s=0,
+        latitude_deg=0,
+        longitude_deg=0,
+        horizontal_sigma_m=2,
+        uncertainty_group="shared-flight-solution",
+    )
+    end = observation(
+        "end",
+        frame_index=1,
+        frame_time_s=1,
+        latitude_deg=0,
+        longitude_deg=0.001,
+        horizontal_sigma_m=2,
+        uncertainty_group="shared-flight-solution",
+    )
+
+    segment = calculate_movement_segment(start, end)
+
+    assert segment.distance_standard_uncertainty_m is None
+    assert segment.bearing_standard_uncertainty_deg is None
+    assert segment.uncertainty_method is None
+    assert segment.uncertainty_unavailable_reason == "unknown_or_shared_endpoint_correlation"
 
 
 def test_wgs84_distance_is_zero_for_identical_coordinates() -> None:
@@ -89,6 +153,28 @@ def test_wgs84_distance_matches_known_diagonal_pair() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("end_latitude_deg", "expected_distance_m"),
+    [
+        pytest.param(0.0, 20_003_931.458625443, id="antipodal"),
+        pytest.param(1e-8, 20_003_931.4575197, id="near-antipodal"),
+    ],
+)
+def test_wgs84_distance_matches_independent_meridian_integral_near_antipodes(
+    end_latitude_deg: float,
+    expected_distance_m: float,
+) -> None:
+    # Independent WGS84 meridian-arc quadrature, rather than an inverse-geodesic
+    # calculation: M(phi) = a(1-e^2)/(1-e^2 sin(phi)^2)^(3/2), with
+    # a=6378137 m, f=1/298.257223563 and e^2=f(2-f). The shortest path is
+    # 2*integral(M, 0, pi/2) - integral(M, 0, radians(end_latitude_deg)).
+    assert geographic_distance_m(0.0, 0.0, end_latitude_deg, 180.0) == pytest.approx(
+        expected_distance_m,
+        abs=1e-5,
+        rel=0,
+    )
+
+
 def test_segment_preserves_identity_and_calculates_speed() -> None:
     start = observation(
         "observation-1",
@@ -133,6 +219,65 @@ def test_segment_preserves_identity_and_calculates_speed() -> None:
 
     assert segment.speed_valid is True
     assert segment.invalid_reason is None
+
+
+@pytest.mark.parametrize(
+    ("start_lat", "start_lon", "end_lat", "end_lon", "expected_bearing"),
+    [
+        (0.0, 0.0, 1.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0, 1.0, 90.0),
+        (0.0, 0.0, 0.0, -1.0, 270.0),
+        (0.0, 179.9, 0.0, -179.9, 90.0),
+        (0.0, -179.9, 0.0, 179.9, 270.0),
+        (0.0, 0.0, 1.0, 1.0, 45.18804022935887),
+    ],
+    ids=["north", "east", "west", "dateline-east", "dateline-west", "wgs84-diagonal"],
+)
+def test_segment_initial_bearing_is_clockwise_from_true_north(
+    start_lat: float,
+    start_lon: float,
+    end_lat: float,
+    end_lon: float,
+    expected_bearing: float,
+) -> None:
+    start = observation(
+        "start",
+        frame_index=0,
+        frame_time_s=0.0,
+        latitude_deg=start_lat,
+        longitude_deg=start_lon,
+    )
+    end = observation(
+        "end",
+        frame_index=1,
+        frame_time_s=1.0,
+        latitude_deg=end_lat,
+        longitude_deg=end_lon,
+    )
+
+    segment = calculate_movement_segment(start, end)
+
+    assert segment.model_dump()["initial_bearing_deg"] == pytest.approx(
+        expected_bearing,
+        abs=1e-9,
+    )
+
+
+def test_stationary_segment_has_no_initial_bearing() -> None:
+    start = observation(
+        "start",
+        frame_index=0,
+        frame_time_s=0.0,
+        latitude_deg=32.75,
+        longitude_deg=-79.93,
+    )
+    end = start.model_copy(update={"observation_id": "end", "frame_index": 1, "frame_time_s": 1.0})
+
+    segment = calculate_movement_segment(start, end)
+
+    assert segment.distance_m == 0.0
+    assert segment.speed_m_s == 0.0
+    assert segment.model_dump()["initial_bearing_deg"] is None
 
 
 @pytest.mark.parametrize(
