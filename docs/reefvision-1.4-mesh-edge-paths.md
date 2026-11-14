@@ -19,8 +19,13 @@ reports `shortest_route_alternatives_status` on every requested route:
 - `unassessable_zero_length_edges`: the route's **connected mesh component**
   contains at least one zero-length edge. This guard applies even when that
   edge is outside the selected route, because zero-weight cycles invalidate
-  simple positive-weight path counting. Zero-length edges in **disconnected**
-  components cannot affect this route and do not suppress its diagnostic.
+  simple positive-weight path counting. Connected routes now also emit
+  `zero_length_mesh_edge_in_connected_component` in `path_qc_warnings`,
+  even when the selected path avoids the zero-length edge. This is a
+  component-level uniqueness caution, distinct from
+  `zero_length_edge_on_path`, which records traversal of an actual zero-length
+  edge. Zero-length edges in **disconnected** components cannot affect this
+  route and do not suppress its diagnostic.
 - `unassessable_floating_point_cost_resolution`: the bounded search
   encounters a positive edge whose cost disappears in binary64 addition,
   **or** encounters competing rounded-equal route costs whose exact sums
@@ -61,9 +66,10 @@ finite route is selected.
 The project-scoped standalone preview and executable typed persisted
 `mesh_surface_preview` Workflow Builder graph share this implementation.
 Regression checks cover tied and untied routes, unresolved zero-length edges,
-disconnected zero-edge component isolation, workflow planning, saved execution
-of both isolated and ordinary meshes, artifact/provenance equality, and
-unchanged provisional status. Historical artifacts without this field remain valid and
+component-wide zero-edge warnings on clean selected routes, disconnected
+zero-edge component isolation, workflow planning, saved execution of both
+isolated and ordinary meshes, artifact/provenance equality, and unchanged
+provisional status. Historical artifacts without this field remain valid and
 must not be retroactively relabeled as unique.
 
 The `mesh_surface_preview` standalone API and persisted Workflow Builder node
