@@ -1860,7 +1860,10 @@ export async function deleteLabelClass(classId: string): Promise<void> {
 
 export async function mergeLabelClass(
   classId: string,
-  payload: { target_class_id: string },
+  payload: {
+    target_class_id: string;
+    expected_usage_counts?: Record<string, number>;
+  },
 ): Promise<LabelClassMergeResponse> {
   return request<LabelClassMergeResponse>(`/classes/${classId}/merge`, {
     method: "POST",

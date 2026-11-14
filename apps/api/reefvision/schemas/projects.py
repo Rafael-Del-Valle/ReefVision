@@ -174,6 +174,9 @@ class LabelClassUsageResponse(BaseModel):
 
 class LabelClassMergeRequest(BaseModel):
     target_class_id: str = Field(min_length=1, max_length=36)
+    # Optional for legacy local clients. The 1.6 GUI supplies all eight
+    # reviewed counts so an intervening data change rejects the merge.
+    expected_usage_counts: dict[str, int] | None = None
 
 
 class LabelClassMergeCountResponse(BaseModel):

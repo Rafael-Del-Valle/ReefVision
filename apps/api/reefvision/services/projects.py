@@ -495,6 +495,14 @@ class ProjectService:
             raise ConflictError("Restore the target class before merging into it")
 
         source_usage = self._usage_snapshot(source_class)
+        if (
+            payload.expected_usage_counts is not None
+            and payload.expected_usage_counts != source_usage.counts
+        ):
+            raise ConflictError(
+                "Class references changed since the usage review. "
+                "Refresh usage and confirm the merge again."
+            )
         affected_counts: dict[str, int] = defaultdict(int)
 
         annotations = list(

@@ -29,6 +29,11 @@ type BoundClassPreview = {
   selectionKey: string;
 };
 
+type MergeClassApproval = {
+  targetClassId: string;
+  expectedUsageCounts: Record<string, number>;
+};
+
 // A preview is not permission to execute while any safety evidence is blocked
 // or absent. The backend also validates the immutable preview checksum.
 function previewHasNoBlockingEvidence(
@@ -108,6 +113,55 @@ function usageConfirmsEmptyClass(
     Array.isArray(usage.delete_blockers) &&
     usage.delete_blockers.length === 0
   );
+}
+
+/** Fail closed if a merge approval is not bound to a complete, coherent
+ * project-scoped usage count vector. Mutable and immutable totals must
+ * reconcile with the eight actual backend scientific reference categories.
+ */
+function reviewedMergeCounts(
+  usage: Awaited<ReturnType<typeof getProjectLabelClassUsage>> | undefined,
+  projectId: string,
+  classId: string,
+): Record<string, number> | null {
+  if (
+    !usage ||
+    usage.project_id !== projectId ||
+    usage.class_id !== classId ||
+    !Array.isArray(usage.counts) ||
+    usage.counts.length !== Object.keys(REQUIRED_USAGE_CATEGORIES).length
+  ) {
+    return null;
+  }
+
+  const counts: Record<string, number> = {};
+  let mutable = 0;
+  let immutable = 0;
+  for (const item of usage.counts) {
+    const expected = item && REQUIRED_USAGE_CATEGORIES[item.key];
+    if (
+      !expected ||
+      counts[item.key] !== undefined ||
+      !Number.isSafeInteger(item.count) ||
+      item.count < 0 ||
+      item.mutable !== expected.mutable ||
+      item.immutable !== expected.immutable
+    ) {
+      return null;
+    }
+    counts[item.key] = item.count;
+    if (item.mutable) mutable += item.count;
+    if (item.immutable) immutable += item.count;
+  }
+  if (
+    mutable !== usage.mutable_reference_count ||
+    immutable !== usage.immutable_reference_count ||
+    mutable + immutable !== usage.total_references ||
+    usage.can_delete !== (mutable + immutable === 0)
+  ) {
+    return null;
+  }
+  return counts;
 }
 
 function OperationSummary({
@@ -306,8 +360,11 @@ function ClassRow({
     onSuccess: refresh,
   });
   const merge = useMutation({
-    mutationFn: () =>
-      mergeLabelClass(labelClass.id, { target_class_id: mergeTargetId }),
+    mutationFn: (approved: MergeClassApproval) =>
+      mergeLabelClass(labelClass.id, {
+        target_class_id: approved.targetClassId,
+        expected_usage_counts: approved.expectedUsageCounts,
+      }),
     onSuccess: refresh,
   });
   const previewReassign = useMutation({
@@ -405,6 +462,18 @@ function ClassRow({
   );
   const canDelete =
     showUsage && usage.isSuccess && !usage.isFetching && usageIsVerifiedEmpty;
+  const mergeUsageCounts = reviewedMergeCounts(
+    usage.data,
+    project.id,
+    labelClass.id,
+  );
+  const canMerge =
+    showUsage &&
+    usage.isSuccess &&
+    !usage.isFetching &&
+    mergeUsageCounts !== null &&
+    !!mergeTargetId &&
+    !merge.isPending;
 
   return (
     <li className={`class-row ${labelClass.is_active ? "" : "inactive"}`}>
@@ -552,19 +621,34 @@ function ClassRow({
         <button
           type="button"
           className="secondary"
-          disabled={!mergeTargetId || merge.isPending}
+          disabled={!canMerge}
           onClick={() => {
             if (
+              mergeUsageCounts !== null &&
               window.confirm(
-                `Merge "${labelClass.name}" into the selected class? Mutable references will be reassigned and this class will be archived.`,
+                `Merge "${labelClass.name}" into the selected class? ${usage.data?.total_references ?? 0} reviewed class references include ${usage.data?.immutable_reference_count ?? 0} immutable references. Mutable references will be reassigned, historical records kept, and the source archived. Confirm only after inspecting Usage.`,
               )
             ) {
-              merge.mutate();
+              merge.mutate({
+                targetClassId: mergeTargetId,
+                expectedUsageCounts: { ...mergeUsageCounts },
+              });
             }
           }}
         >
-          Merge class
+          {merge.isPending ? "Merging..." : "Merge class"}
         </button>
+        {!showUsage && (
+          <p className="annotation-helper">
+            Open Usage and review scientific references before merging classes.
+          </p>
+        )}
+        {showUsage && usage.isSuccess && !usage.isFetching && !canMerge && (
+          <p className="form-error" role="status">
+            A complete, internally consistent class usage report is required
+            before merging. Refresh Usage and review again.
+          </p>
+        )}
       </div>
 
       <div className="class-merge-panel">

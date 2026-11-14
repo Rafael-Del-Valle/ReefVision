@@ -129,6 +129,148 @@ afterEach(() => {
 });
 
 describe("ClassManagerPanel", () => {
+  it("requires a reviewed usage vector and binds it to class merge approval", async () => {
+    const confirmation = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith(`/projects/${project.id}/classes/class-1/usage`)) {
+          return jsonResponse(classUsage(true));
+        }
+        if (url.endsWith("/classes/class-1/merge") && init?.method === "POST") {
+          return jsonResponse({
+            source_class: { ...project.label_classes[0], is_active: false },
+            target_class: project.label_classes[1],
+            affected_counts: [],
+            immutable_reference_counts: [],
+            warnings: [],
+          });
+        }
+        throw new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`);
+      });
+
+    renderPanel();
+    const row = sourceClassRow();
+    const mergeButton = within(row).getByRole("button", {
+      name: "Merge class",
+    });
+    expect(mergeButton).toBeDisabled();
+    await userEvent.click(within(row).getByRole("button", { name: "Usage" }));
+    await waitFor(() => expect(mergeButton).toBeEnabled());
+    await userEvent.click(mergeButton);
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) =>
+            String(input).endsWith("/classes/class-1/merge") &&
+            init?.method === "POST",
+        ),
+      ).toBe(true),
+    );
+
+    const merged = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input).endsWith("/classes/class-1/merge") &&
+        init?.method === "POST",
+    );
+    expect(JSON.parse(String(merged?.[1]?.body))).toEqual({
+      target_class_id: "class-2",
+      expected_usage_counts: Object.fromEntries(
+        zeroUsageCounts().map((item) => [item.key, 0]),
+      ),
+    });
+    expect(confirmation.mock.calls[0]?.[0]).toContain("0 immutable references");
+  });
+
+  it("rejects partial or contradictory scientific evidence before merging", async () => {
+    const confirmation = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith(`/projects/${project.id}/classes/class-1/usage`)) {
+          return jsonResponse({
+            ...classUsage(false, 2),
+            counts: zeroUsageCounts().slice(1),
+          });
+        }
+        throw new Error(`Unexpected request: GET ${url}`);
+      });
+    renderPanel();
+    const row = sourceClassRow();
+    const mergeButton = within(row).getByRole("button", {
+      name: "Merge class",
+    });
+    await userEvent.click(within(row).getByRole("button", { name: "Usage" }));
+    expect(
+      await within(row).findByText(/complete, internally consistent class usage/),
+    ).toBeInTheDocument();
+    expect(mergeButton).toBeDisabled();
+    await userEvent.click(mergeButton);
+    expect(confirmation).not.toHaveBeenCalled();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith("/classes/class-1/merge"),
+      ),
+    ).toBe(false);
+  });
+
+  it("preserves nonzero immutable science counts in the approved merge request", async () => {
+    const counts = zeroUsageCounts().map((item) => {
+      if (item.key === "annotations_active") return { ...item, count: 2 };
+      if (item.key === "dataset_versions") return { ...item, count: 1 };
+      return item;
+    });
+    const confirmation = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith(`/projects/${project.id}/classes/class-1/usage`)) {
+          return jsonResponse({
+            ...classUsage(false, 3),
+            mutable_reference_count: 2,
+            immutable_reference_count: 1,
+            counts,
+          });
+        }
+        if (url.endsWith("/classes/class-1/merge") && init?.method === "POST") {
+          return jsonResponse({
+            source_class: project.label_classes[0],
+            target_class: project.label_classes[1],
+            affected_counts: [],
+            immutable_reference_counts: [],
+            warnings: [],
+          });
+        }
+        throw new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`);
+      });
+    renderPanel();
+    const row = sourceClassRow();
+    const mergeButton = within(row).getByRole("button", { name: "Merge class" });
+    await userEvent.click(within(row).getByRole("button", { name: "Usage" }));
+    await waitFor(() => expect(mergeButton).toBeEnabled());
+    await userEvent.click(mergeButton);
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input, init]) =>
+          String(input).endsWith("/classes/class-1/merge") &&
+          init?.method === "POST",
+        ),
+      ).toBe(true),
+    );
+    const merged = fetchMock.mock.calls.find(([input]) =>
+      String(input).endsWith("/classes/class-1/merge"),
+    );
+    const body = JSON.parse(String(merged?.[1]?.body)) as {
+      expected_usage_counts: Record<string, number>;
+    };
+    expect(body.expected_usage_counts.annotations_active).toBe(2);
+    expect(body.expected_usage_counts.dataset_versions).toBe(1);
+    expect(confirmation.mock.calls[0]?.[0]).toContain("1 immutable references");
+  });
+
   it("requires a completed usage review before enabling deletion", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     let resolveUsage: ((response: Response) => void) | undefined;

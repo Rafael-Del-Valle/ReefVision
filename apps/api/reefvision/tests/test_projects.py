@@ -516,9 +516,33 @@ def test_used_class_delete_is_blocked_and_usage_is_reported(client: TestClient) 
     deleted = client.delete(f"/api/v1/classes/{source_class['id']}")
     assert deleted.status_code == 409
 
+    # The reviewed source-count vector is part of the merge's approval.
+    # A stale vector must reject the operation before any scientific writes.
+    stale_counts = {**counts, "annotations_active": 0}
+    stale_merge = client.post(
+        f"/api/v1/classes/{source_class['id']}/merge",
+        json={
+            "target_class_id": target_class["id"],
+            "expected_usage_counts": stale_counts,
+        },
+    )
+    assert stale_merge.status_code == 409
+    assert "Class references changed" in stale_merge.text
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        source = session.get(LabelClass, source_class["id"])
+        original = session.get(Annotation, "annotation-active")
+        assert source is not None and source.is_active
+        assert original is not None and original.label_class_id == source_class["id"]
+        assert session.get(QualityControlIssue, "qc-issue-1").class_ids_json == [
+            source_class["id"]
+        ]
+
     merged = client.post(
         f"/api/v1/classes/{source_class['id']}/merge",
-        json={"target_class_id": target_class["id"]},
+        json={
+            "target_class_id": target_class["id"],
+            "expected_usage_counts": counts,
+        },
     )
     assert merged.status_code == 200, merged.text
     merge_payload = merged.json()
@@ -563,6 +587,25 @@ def test_used_class_delete_is_blocked_and_usage_is_reported(client: TestClient) 
         assert queue_item.label_class_ids_json == [target_class["id"]]
         assert any(event.event_type == "class_merged" for event in events)
         assert source_model.class_map_json["mapping"]["Muricea Closed"] == source_class["id"]
+
+
+def test_legacy_class_merge_without_review_counts_is_still_supported(
+    client: TestClient,
+) -> None:
+    """Older local API scripts retain their previously accepted merge contract."""
+    project = create_project(client, seed_classes=False)
+    source = create_label_class(
+        client, project["id"], class_index=0, name="Old", display_color="#E76F51"
+    )
+    target = create_label_class(
+        client, project["id"], class_index=1, name="New", display_color="#2A9D8F"
+    )
+    response = client.post(
+        f"/api/v1/classes/{source['id']}/merge",
+        json={"target_class_id": target["id"]},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["source_class"]["is_active"] is False
 
 
 def test_storage_path_cannot_escape_data_root(test_settings: Settings) -> None:
