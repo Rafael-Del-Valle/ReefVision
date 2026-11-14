@@ -170,7 +170,8 @@ fn trusted_powershell_executable() -> std::io::Result<PathBuf> {
     // execute in the scientific training monitor's security context.
     let mut system_dir = vec![0_u16; 260];
     let length = loop {
-        let copied = unsafe { GetSystemDirectoryW(system_dir.as_mut_ptr(), system_dir.len() as u32) };
+        let copied =
+            unsafe { GetSystemDirectoryW(system_dir.as_mut_ptr(), system_dir.len() as u32) };
         let copied = copied as usize;
         if copied == 0 {
             return Err(std::io::Error::last_os_error());
@@ -825,6 +826,10 @@ mod tests {
         assert!(!valid_training_run_id("not a run"));
         assert!(!valid_training_run_id("foo'; Remove-Item C:"));
         assert!(!valid_training_run_id("../escape"));
+        assert!(!valid_training_run_id("run%2Fescape"));
+        assert!(!valid_training_run_id("run\nnext"));
+        assert!(!valid_training_run_id("rún-1"));
+        assert!(valid_training_run_id(&"a".repeat(72)));
         assert!(!valid_training_run_id(&"a".repeat(73)));
     }
 
@@ -841,7 +846,10 @@ mod tests {
             Some(OsStr::new("v1.0"))
         );
         assert_eq!(
-            executable.parent().and_then(Path::parent).and_then(Path::file_name),
+            executable
+                .parent()
+                .and_then(Path::parent)
+                .and_then(Path::file_name),
             Some(OsStr::new("WindowsPowerShell"))
         );
     }
