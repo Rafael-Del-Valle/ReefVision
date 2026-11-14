@@ -94,9 +94,22 @@ def test_projected_box_candidates_are_typed_unverified_and_saved(
     assert artifacts[0]["payload_json"] == payload
 
 
-@pytest.mark.parametrize("offset", ["-04:00", "\x00", None])
+@pytest.mark.parametrize(
+    ("capture_tag", "offset_tag", "offset", "known_capture_time"),
+    [
+        (36867, 36881, "-04:00", True),
+        (36867, 36881, "\x00", False),
+        (36867, 36881, None, False),
+        (36868, 36882, "-04:00", False),
+        (306, 36880, "-04:00", False),
+    ],
+)
 def test_imported_exif_captures_explicit_offset_through_sqlite(
-    client: TestClient, offset: str | None
+    client: TestClient,
+    capture_tag: int,
+    offset_tag: int,
+    offset: str | None,
+    known_capture_time: bool,
 ) -> None:
     from reefvision.tests.test_annotations import create_project
     from reefvision.tests.test_ecology_annotation_evidence_1_2 import _annotation_link, _box
@@ -106,9 +119,9 @@ def test_imported_exif_captures_explicit_offset_through_sqlite(
     project_id = project["id"]
     _register(client, project_id, "colony-a")
     exif = Image.Exif()
-    exif[36867] = "2025:10:01 12:00:00"
+    exif[capture_tag] = "2025:10:01 12:00:00"
     if offset is not None:
-        exif[36881] = offset
+        exif[offset_tag] = offset
     output = BytesIO()
     Image.new("RGB", (80, 60)).save(output, format="JPEG", exif=exif)
     imported = client.post(
@@ -126,7 +139,7 @@ def test_imported_exif_captures_explicit_offset_through_sqlite(
     assert _link_calibration(client, project_id, annotation.json()).status_code == 201
     candidates = _get(client, project_id).json()["candidates"]
     assert len(candidates) == 2
-    if offset != "-04:00":
+    if not known_capture_time:
         assert all(row["capture_time_status"] == "timezone_missing" for row in candidates)
         assert all(row["capture_timestamp_utc"] is None for row in candidates)
     else:
