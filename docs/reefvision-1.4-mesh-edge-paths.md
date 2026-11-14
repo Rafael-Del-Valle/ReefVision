@@ -406,6 +406,21 @@ anatomical branch or provide an uncertainty estimate. Regression coverage
 includes standalone preview and saved, executed Workflow Builder artifacts,
 with matching trace QC and full unverified provenance.
 
+An additional preview-coordinate integrity check preserves the distinction
+between an indexed edge's **source-frame measured length** and its plotted
+waypoints. When two consecutive, distinct source positions have positive
+source edge length but independently calibrated display XYZ round to the
+**same** coordinates, the trace records their zero-based positions in
+`display_coordinate_collapsed_segment_indices` and adds
+`surface_trace_segment_display_coordinate_collapse` to `qc_warnings`.
+The original positive `segment_lengths_m` is preserved; it must not be
+silently changed to zero to match the drawn polyline. This is not identical
+to physical segment underflow or a cumulative-distance precision warning.
+The direct measurement and project-scoped API use the same helper as saved,
+executed typed Workflow Builder runs, with a synthetic regression requiring
+identical artifacts, provenance and explicitly unverified human review. This
+is **numerical representation QC**, not proof of anatomical branch length.
+
 Direct scientific calls to the surface-trace measurement helper now perform
 strict numeric checks even without FastAPI/Pydantic: Boolean or textual scale
 values, invalid scale uncertainty, huge integers that overflow binary64, and
