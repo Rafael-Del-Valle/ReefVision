@@ -284,10 +284,19 @@ def _training_log_tail(
             opened_identity = os.fstat(handle.fileno())
             # Recheck after opening: a substituted symlink or a replaced file
             # must never be read, even when its name still ends in .log.
-            if path.resolve(strict=True) != path or (
-                opened_identity.st_dev,
-                opened_identity.st_ino,
-            ) != (expected_identity.st_dev, expected_identity.st_ino):
+            # In-root hard links can disguise unrelated scientific data as a
+            # .log file: extension and containment alone do not authenticate
+            # the underlying inode. Reject multiply linked files before any
+            # bytes are read, including a link added between stat and open.
+            if (
+                expected_identity.st_nlink != 1
+                or opened_identity.st_nlink != 1
+                or path.resolve(strict=True) != path
+                or (
+                    opened_identity.st_dev,
+                    opened_identity.st_ino,
+                ) != (expected_identity.st_dev, expected_identity.st_ino)
+            ):
                 raise HTTPException(status_code=403, detail="Training log changed during open")
             handle.seek(0, 2)
             size = handle.tell()
