@@ -228,9 +228,25 @@ def test_seam_vertex_aliases_cannot_hide_reused_surface_trace_segment(
     assert len(set(trace["vertex_indices"])) == len(vertex_path)
     assert trace["repeated_geometric_segment_index_pairs"] == [[0, 3]]
     assert "surface_trace_reused_geometric_segment" in trace["qc_warnings"]
+    assert trace["reused_geometric_segment_source_length_mesh_units"] == pytest.approx(1.0)
+    assert trace["reused_geometric_segment_fraction_of_trace"] == pytest.approx(
+        1.0 / sum(trace["source_segment_lengths_mesh_units"])
+    )
     assert trace["segment_lengths_m"][0] == pytest.approx(trace["segment_lengths_m"][3])
     assert trace["human_review_verified"] is False
     assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
+
+
+@pytest.mark.parametrize("scale", [0.0001, 0.01, 2.0])
+def test_reused_geometric_segment_fraction_is_calibration_invariant(scale: float) -> None:
+    trace = measure_mesh_preview(
+        **{**REUSED_GEOMETRIC_SEGMENT_PARAMS, "meters_per_unit": scale}
+    )["surface_edge_traces"][0]
+    assert trace["reused_geometric_segment_source_length_mesh_units"] == pytest.approx(1.0)
+    assert trace["reused_geometric_segment_fraction_of_trace"] == pytest.approx(
+        1.0 / (3 + sqrt(2))
+    )
+    assert trace["human_review_verified"] is False
 
 
 def test_coincident_trace_endpoints_have_unknown_detour_not_infinity() -> None:
@@ -667,6 +683,8 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert trace["turn_angles_deg"][0] is None
     assert trace["turn_angles_deg"][-1] is None
     if case == "ordinary":
+        assert trace["reused_geometric_segment_source_length_mesh_units"] == 0.0
+        assert trace["reused_geometric_segment_fraction_of_trace"] == 0.0
         assert trace["repeated_geometric_segment_index_pairs"] == []
         assert "surface_trace_reused_geometric_segment" not in trace["qc_warnings"]
         assert trace["geometric_detour_ratio"] == pytest.approx(1 + sqrt(2))
@@ -722,6 +740,10 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert trace["human_review_verified"] is False
     if case == "reused_geometric_segment":
         assert trace["repeated_geometric_segment_index_pairs"] == [[0, 3]]
+        assert trace["reused_geometric_segment_source_length_mesh_units"] == pytest.approx(1.0)
+        assert trace["reused_geometric_segment_fraction_of_trace"] == pytest.approx(
+            1.0 / (3 + sqrt(2))
+        )
         assert "surface_trace_reused_geometric_segment" in trace["qc_warnings"]
         assert trace["human_review_verified"] is False
     if case == "reverse_turn":
