@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 import reefvision.jobs.video_tracking as tracking_job_module
 from reefvision.db.models import Job, WorkflowArtifact, WorkflowNodeRun, WorkflowRun
@@ -18,6 +19,33 @@ from reefvision.tests.test_pose_provider_backends import (
     _import_pose_video,
     _pose_model,
 )
+
+
+def _resign_artifact_with_producer_summary(
+    session: Session,
+    artifact: WorkflowArtifact,
+    payload: dict[str, Any],
+) -> None:
+    """Preserve producer provenance so malformed pose data reaches review validators."""
+    checksum = canonical_json_sha256(payload)
+    artifact.payload_json = payload
+    artifact.payload_sha256 = checksum
+    producer = session.get(WorkflowNodeRun, artifact.producer_node_run_id)
+    assert producer is not None
+    summary = dict(producer.result_json or {})
+    outputs = summary.get("outputs")
+    assert isinstance(outputs, list)
+    assert all(isinstance(output, dict) for output in outputs)
+    assert sum(output.get("artifact_id") == artifact.id for output in outputs) == 1
+    producer.result_json = {
+        **summary,
+        "outputs": [
+            {**output, "payload_sha256": checksum}
+            if output["artifact_id"] == artifact.id
+            else output
+            for output in outputs
+        ],
+    }
 
 
 def _tracking_job_count(
@@ -306,8 +334,7 @@ def test_phase10_pose_review_pauses_and_resumes_without_rerunning_pose(
                 for build in original_payload["builds"]
             ],
         }
-        stored.payload_json = unpinned_payload
-        stored.payload_sha256 = canonical_json_sha256(unpinned_payload)
+        _resign_artifact_with_producer_summary(session, stored, unpinned_payload)
         session.commit()
 
     rejected = client.post(
@@ -325,8 +352,7 @@ def test_phase10_pose_review_pauses_and_resumes_without_rerunning_pose(
         assert paused_job is not None and paused_job.status == "waiting_for_review"
         stored = session.get(WorkflowArtifact, str(temporal_artifact["id"]))
         assert stored is not None
-        stored.payload_json = original_payload
-        stored.payload_sha256 = canonical_json_sha256(original_payload)
+        _resign_artifact_with_producer_summary(session, stored, original_payload)
         session.commit()
 
     # Even with a recomputed artifact checksum, a saved temporal review
@@ -344,8 +370,7 @@ def test_phase10_pose_review_pauses_and_resumes_without_rerunning_pose(
             stored = session.get(WorkflowArtifact, str(temporal_artifact["id"]))
             assert stored is not None
             corrupted_payload = {**original_payload, "track_ids": corrupt_ids}
-            stored.payload_json = corrupted_payload
-            stored.payload_sha256 = canonical_json_sha256(corrupted_payload)
+            _resign_artifact_with_producer_summary(session, stored, corrupted_payload)
             session.commit()
 
         rejected = client.post(
@@ -364,8 +389,7 @@ def test_phase10_pose_review_pauses_and_resumes_without_rerunning_pose(
             assert paused_job is not None and paused_job.status == "waiting_for_review"
             stored = session.get(WorkflowArtifact, str(temporal_artifact["id"]))
             assert stored is not None
-            stored.payload_json = original_payload
-            stored.payload_sha256 = canonical_json_sha256(original_payload)
+            _resign_artifact_with_producer_summary(session, stored, original_payload)
             session.commit()
 
     resumed = client.post(
@@ -661,8 +685,7 @@ def test_phase10_active_learning_review_resume_freezes_verified_truth(
             assert artifact is not None
             original_payload = dict(artifact.payload_json)
             changed_payload = {**original_payload, **changed_fields}
-            artifact.payload_json = changed_payload
-            artifact.payload_sha256 = canonical_json_sha256(changed_payload)
+            _resign_artifact_with_producer_summary(session, artifact, changed_payload)
             session.commit()
 
         rejected = client.post(
@@ -681,8 +704,7 @@ def test_phase10_active_learning_review_resume_freezes_verified_truth(
             assert paused_node is not None and paused_node.status == "waiting_for_review"
             artifact = session.get(WorkflowArtifact, round_artifact_id)
             assert artifact is not None
-            artifact.payload_json = original_payload
-            artifact.payload_sha256 = canonical_json_sha256(original_payload)
+            _resign_artifact_with_producer_summary(session, artifact, original_payload)
             session.commit()
 
     resumed = client.post(
