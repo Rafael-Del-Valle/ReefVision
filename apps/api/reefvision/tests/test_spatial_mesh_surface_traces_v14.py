@@ -256,16 +256,22 @@ def test_reuse_fraction_withholds_overflowed_source_total() -> None:
     points = [
         (0.0, 0.0, 0.0),
         (1e308, 0.0, 0.0),
+        (0.0, 1e308, 0.0),
         (0.0, 0.0, 0.0),
         (1e308, 0.0, 0.0),
         (0.0, 1.0, 0.0),
         (1e308, 1.0, 0.0),
+        (0.0, 1e308, 1.0),
         (0.0, -1.0, 0.0),
     ]
     trace = mesh_surface_edge_traces(
-        points, [[0, 1, 4], [1, 2, 5], [2, 3, 6]], [[0, 1, 2, 3]], 1e-308, 0.1
+        points,
+        [[0, 1, 5], [1, 2, 6], [2, 3, 7], [3, 4, 8]],
+        [[0, 1, 2, 3, 4]],
+        1e-308,
+        0.1,
     )[0]
-    assert trace["length_m"] == pytest.approx(3.0)
+    assert trace["length_m"] == pytest.approx(3 + sqrt(2))
     assert trace["source_trace_length_mesh_units"] is None
     assert trace["reused_geometric_segment_source_length_mesh_units"] == pytest.approx(
         1e308
