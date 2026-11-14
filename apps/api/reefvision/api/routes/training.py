@@ -342,9 +342,7 @@ def _training_log_tail(
                 or (current_identity.st_dev, current_identity.st_ino)
                 != (opened_identity.st_dev, opened_identity.st_ino)
             ):
-                raise HTTPException(
-                    status_code=403, detail="Training log changed during read"
-                )
+                raise HTTPException(status_code=403, detail="Training log changed during read")
     except OSError:
         return empty
     text = _safe_terminal_log_text(payload)
