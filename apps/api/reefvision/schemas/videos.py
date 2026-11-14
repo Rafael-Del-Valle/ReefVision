@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from itertools import pairwise
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, FiniteFloat, field_validator, model_validator
@@ -72,6 +73,7 @@ class VideoPoseObservation(BaseModel):
 
 class VideoTrackKeyframe(BaseModel):
     frame: int = Field(ge=0)
+    timestamp_seconds: FiniteFloat | None = Field(default=None, ge=0)
     bbox: tuple[float, float, float, float]
     confidence: float | None = Field(default=None, ge=0, le=1)
     keypoints: list[tuple[FiniteFloat, FiniteFloat, FiniteFloat]] | None = Field(
@@ -123,6 +125,15 @@ class VideoTrackCreate(BaseModel):
         frames = [item.frame for item in self.keyframes]
         if frames != sorted(frames) or len(frames) != len(set(frames)):
             raise ValueError("Track keyframes must use unique frames in ascending order")
+        timestamps = [item.timestamp_seconds for item in self.keyframes]
+        if any(value is not None for value in timestamps):
+            if any(value is None for value in timestamps):
+                raise ValueError(
+                    "Variable-frame-rate tracks require a presentation timestamp for every keyframe"
+                )
+            resolved = [float(value) for value in timestamps if value is not None]
+            if any(second <= first for first, second in pairwise(resolved)):
+                raise ValueError("Keyframe presentation timestamps must be strictly increasing")
         return self
 
 
@@ -138,6 +149,15 @@ class VideoTrackUpdate(BaseModel):
         frames = [item.frame for item in self.keyframes]
         if frames != sorted(frames) or len(frames) != len(set(frames)):
             raise ValueError("Track keyframes must use unique frames in ascending order")
+        timestamps = [item.timestamp_seconds for item in self.keyframes]
+        if any(value is not None for value in timestamps):
+            if any(value is None for value in timestamps):
+                raise ValueError(
+                    "Variable-frame-rate tracks require a presentation timestamp for every keyframe"
+                )
+            resolved = [float(value) for value in timestamps if value is not None]
+            if any(second <= first for first, second in pairwise(resolved)):
+                raise ValueError("Keyframe presentation timestamps must be strictly increasing")
         return self
 
 

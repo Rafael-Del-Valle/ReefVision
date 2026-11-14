@@ -296,6 +296,27 @@ def geographic_movement_observation_from_persisted(
         field_name="crs",
     )
 
+    payload = _read_optional_value(persisted, "payload_json")
+    uncertainty = _read_optional_value(payload, "uncertainty") if payload is not None else None
+    horizontal_sigma_raw = (
+        _read_optional_value(uncertainty, "horizontal_sigma_m") if uncertainty is not None else None
+    )
+    horizontal_sigma_m = (
+        _required_float(horizontal_sigma_raw, field_name="horizontal_sigma_m")
+        if horizontal_sigma_raw is not None
+        else None
+    )
+    uncertainty_method = (
+        _optional_string(_read_optional_value(uncertainty, "method"))
+        if uncertainty is not None
+        else None
+    )
+    correlation_group_id = (
+        _optional_string(_read_optional_value(uncertainty, "correlation_group_id"))
+        if uncertainty is not None
+        else None
+    )
+
     return GeographicMovementObservation(
         observation_id=observation_id,
         track_id=track_id,
@@ -305,17 +326,25 @@ def geographic_movement_observation_from_persisted(
         latitude_deg=latitude_deg,
         longitude_deg=longitude_deg,
         crs=crs,
+        horizontal_sigma_m=horizontal_sigma_m,
+        uncertainty_method=uncertainty_method,
+        uncertainty_correlation_group_id=correlation_group_id,
     )
 
 
 def geographic_movement_observations_from_persisted(
     persisted_observations: Iterable[object],
 ) -> list[GeographicMovementObservation]:
-    """Map persisted rows without changing ordering or scientific values."""
+    """Map only explicitly fresh rows, preserving their ordering and values.
+
+    Stale results and records with unknown lifecycle state cannot contribute
+    geographic distance, speed, or bearing to a current analysis.
+    """
 
     return [
         geographic_movement_observation_from_persisted(persisted)
         for persisted in persisted_observations
+        if _read_optional_value(persisted, "is_stale") is False
     ]
 
 

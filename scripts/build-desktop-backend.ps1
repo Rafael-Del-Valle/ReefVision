@@ -44,11 +44,11 @@ $BundledRuntimeLibraries = foreach ($library in $RequiredRuntimeLibraries) {
     }
 }
 
-$OutputRoot = Join-Path $Root ".desktop\release-1.0.2\pyinstaller\$TargetTriple"
+$OutputRoot = Join-Path $Root ".desktop\release-1.1.0\pyinstaller\$TargetTriple"
 $DistPath = Join-Path $OutputRoot "dist"
 $WorkPath = Join-Path $OutputRoot "work"
 $SpecPath = Join-Path $OutputRoot "spec"
-$BinariesPath = Join-Path $Root ".desktop\release-1.0.2\backend"
+$BinariesPath = Join-Path $Root ".desktop\release-1.1.0\backend"
 $PackagedBackendPath = Join-Path $BinariesPath "reefvision-api"
 $ProviderRuntimePath = Join-Path $Root ".desktop\provider-runtime"
 $VdaRuntimeRoot = Join-Path $ProviderRuntimePath "video-depth-anything"
@@ -57,6 +57,10 @@ $VdaManifestPath = Join-Path $VdaRuntimeRoot "source-manifest.json"
 $ExpectedVdaCommit = "4f5ae23172ba60fd7bc11ef671cca678842c7072"
 $ApiRoot = Join-Path $Root "apps\api"
 $DesktopEntrypoint = Join-Path $ApiRoot "reefvision\desktop.py"
+$CopernicusWorkerPath = Join-Path $ApiRoot "reefvision\services\copernicus_worker.py"
+if (-not (Test-Path -LiteralPath $CopernicusWorkerPath -PathType Leaf)) {
+    throw "Required Copernicus worker source is missing: $CopernicusWorkerPath"
+}
 $AlembicIni = Join-Path $ApiRoot "alembic.ini"
 $MigrationsDir = Join-Path $ApiRoot "migrations"
 $ConfigRoot = Join-Path $Root "config"
@@ -386,6 +390,8 @@ $Arguments = @(
     "${VdaRuntimeRoot};provider-runtime/video-depth-anything",
     "--add-data",
     "${Mavic3TCalibrationPath};reefvision/data/camera_calibrations",
+    "--add-data",
+    "${CopernicusWorkerPath};reefvision/services",
     $DesktopEntrypoint
 )
 
@@ -542,11 +548,11 @@ if (Test-Path $TorchLibPath -PathType Container) {
 
 if (Test-Path $PackagedBackendPath) {
     $ResolvedBackendPath = [System.IO.Path]::GetFullPath($PackagedBackendPath)
-    $ExpectedBackendPath = [System.IO.Path]::GetFullPath((Join-Path $Root ".desktop\release-1.0.2\backend\reefvision-api"))
+    $ExpectedBackendPath = [System.IO.Path]::GetFullPath((Join-Path $Root ".desktop\release-1.1.0\backend\reefvision-api"))
     if ($ResolvedBackendPath -ne $ExpectedBackendPath) { throw "Unsafe backend staging path: $ResolvedBackendPath" }
     # Preserve prior staged files rather than deleting a possible researcher model.
     # Keep preserved builds outside the Tauri resource directory.
-    $ArchiveRoot = Join-Path $Root ".desktop\release-1.0.2\previous-backends"
+    $ArchiveRoot = Join-Path $Root ".desktop\release-1.1.0\previous-backends"
     New-Item -ItemType Directory -Path $ArchiveRoot -Force | Out-Null
     $ArchiveDestination = Join-Path $ArchiveRoot ([Guid]::NewGuid().ToString('N'))
     $ResolvedArchive = [System.IO.Path]::GetFullPath($ArchiveDestination)

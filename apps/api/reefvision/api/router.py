@@ -7,6 +7,8 @@ from reefvision.api.routes.advanced_provider_execution import (
     router as advanced_provider_execution_router,
 )
 from reefvision.api.routes.advanced_providers import router as advanced_providers_router
+from reefvision.api.routes.annotation_aggregates import router as annotation_aggregates_router
+from reefvision.api.routes.annotation_comparison import router as annotation_comparison_router
 from reefvision.api.routes.annotation_imports import router as annotation_imports_router
 from reefvision.api.routes.annotations import router as annotations_router
 from reefvision.api.routes.assist import router as assist_router
@@ -16,12 +18,21 @@ from reefvision.api.routes.capabilities import router as capabilities_router
 from reefvision.api.routes.class_operations import router as class_operations_router
 from reefvision.api.routes.class_visibility import router as class_visibility_router
 from reefvision.api.routes.classification import router as classification_router
+from reefvision.api.routes.computed_aggregate_metrics import (
+    router as computed_aggregate_metrics_router,
+)
+from reefvision.api.routes.computed_mask_coverage import router as computed_mask_coverage_router
+from reefvision.api.routes.computed_metrics import router as computed_metrics_router
 from reefvision.api.routes.coral_structure import router as coral_structure_router
+from reefvision.api.routes.current_field import router as current_field_router
 from reefvision.api.routes.dataset_versions import router as dataset_versions_router
 from reefvision.api.routes.ecology_identity import router as ecology_identity_router
+from reefvision.api.routes.environmental_analysis import router as environmental_analysis_router
+from reefvision.api.routes.environmental_context import router as environmental_context_router
 from reefvision.api.routes.geographic_movement_analytics import (
     router as geographic_movement_analytics_router,
 )
+from reefvision.api.routes.geographic_pairwise import router as geographic_pairwise_router
 from reefvision.api.routes.georeferenced_observations import (
     router as georeferenced_observations_router,
 )
@@ -30,6 +41,7 @@ from reefvision.api.routes.images import router as images_router
 from reefvision.api.routes.jobs import router as jobs_router
 from reefvision.api.routes.learning_evaluation import router as learning_evaluation_router
 from reefvision.api.routes.longitudinal_monitoring import router as longitudinal_monitoring_router
+from reefvision.api.routes.lunar_context import router as lunar_context_router
 from reefvision.api.routes.mask_refinements import router as mask_refinements_router
 from reefvision.api.routes.measurements import router as measurements_router
 from reefvision.api.routes.model_agreement import router as model_agreement_router
@@ -49,6 +61,8 @@ from reefvision.api.routes.review_queues import router as review_queues_router
 from reefvision.api.routes.sam2_models import router as sam2_models_router
 from reefvision.api.routes.sam_image_proposals import router as sam_image_proposals_router
 from reefvision.api.routes.scale_label_ocr import router as scale_label_ocr_router
+from reefvision.api.routes.scientific_data import router as scientific_data_router
+from reefvision.api.routes.scientific_heatmaps import router as scientific_heatmaps_router
 from reefvision.api.routes.segmentation_deployment import router as segmentation_deployment_router
 from reefvision.api.routes.segmentation_evaluation_queue import (
     router as segmentation_evaluation_queue_router,
@@ -67,7 +81,18 @@ from reefvision.services.workflow_v1_install import install_workflow_v1_extensio
 install_workflow_v1_extensions()
 
 api_router = APIRouter(prefix="/api/v1")
+api_router.include_router(environmental_analysis_router)
+api_router.include_router(environmental_context_router)
+api_router.include_router(lunar_context_router)
+api_router.include_router(scientific_data_router)
+api_router.include_router(scientific_heatmaps_router)
+api_router.include_router(annotation_comparison_router)
+api_router.include_router(current_field_router)
+api_router.include_router(computed_aggregate_metrics_router)
+api_router.include_router(computed_mask_coverage_router)
+api_router.include_router(computed_metrics_router)
 api_router.include_router(geographic_movement_analytics_router)
+api_router.include_router(geographic_pairwise_router)
 api_router.include_router(health_router)
 api_router.include_router(capabilities_router)
 api_router.include_router(system_router)
@@ -87,6 +112,7 @@ api_router.include_router(class_visibility_router)
 api_router.include_router(images_router)
 api_router.include_router(annotation_imports_router)
 api_router.include_router(annotations_router)
+api_router.include_router(annotation_aggregates_router)
 api_router.include_router(raster_edits_router)
 api_router.include_router(measurements_router)
 api_router.include_router(scale_label_ocr_router)

@@ -1074,6 +1074,9 @@ function mockApi({
       if (url.includes(`/projects/${project.id}/quality-control-runs`)) {
         return jsonResponse(qcRuns);
       }
+      if (url.includes(`/projects/${project.id}/scientific-records`)) {
+        return jsonResponse({ items: [], total: 0 });
+      }
       if (url.includes(`/projects/${project.id}/review-queues`)) {
         return jsonResponse(reviewQueues);
       }
@@ -1094,7 +1097,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-  window.localStorage.setItem("reefvision.onboarding.dismissed.1.0.2", "true");
+  window.localStorage.setItem("reefvision.onboarding.dismissed.1.1.0", "true");
 });
 
 function renderApp() {
@@ -1203,7 +1206,7 @@ describe("App", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: /Welcome to ReefVision 1.0.2/,
+        name: /Welcome to ReefVision 1.1.0/,
       }),
     ).toBeInTheDocument();
 
@@ -1213,7 +1216,7 @@ describe("App", () => {
 
     await waitFor(() =>
       expect(
-        screen.queryByRole("heading", { name: /Welcome to ReefVision 1.0.2/ }),
+        screen.queryByRole("heading", { name: /Welcome to ReefVision 1.1.0/ }),
       ).not.toBeInTheDocument(),
     );
   });
@@ -1289,6 +1292,31 @@ describe("App", () => {
     expect(screen.getByText("Create exchange package")).toBeInTheDocument();
     expect(
       screen.getByText("Inspect or import exchange package"),
+    ).toBeInTheDocument();
+  });
+
+  it("opens Environmental Context with project scientific records", async () => {
+    mockApi({ projects: [project] });
+    renderApp();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /CPT Coral Study/ }),
+    );
+    await userEvent.click(
+      screen.getByRole("tab", { name: "Environmental Context" }),
+    );
+
+    expect(
+      screen.getByRole("tab", { name: "Environmental Context" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      await screen.findByRole("heading", {
+        name: "Environmental Context",
+        level: 2,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("No scientific records yet"),
     ).toBeInTheDocument();
   });
 

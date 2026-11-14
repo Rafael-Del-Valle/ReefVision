@@ -25,11 +25,15 @@ import {
 import { ActiveLearningWorkspace } from "./features/active-learning/ActiveLearningWorkspace";
 import { AdvancedProviderWorkspace } from "./features/advanced-providers/AdvancedProviderWorkspace";
 import { ReefVisionAssistant } from "./features/assistant/ReefVisionAssistant";
+import { SegmentationExportLauncher } from "./features/dataset-versions/SegmentationExportLauncher";
 import { EnhancedAnnotationEditor } from "./features/annotation-editor/EnhancedAnnotationEditor";
 import { ClassManagerPanel } from "./features/classes/ClassManagerPanel";
 import { ClassificationWorkspace } from "./features/classification/ClassificationWorkspace";
+import { ComputedMetricsPanel } from "./features/computed-metrics/ComputedMetricsPanel";
 import { DatasetVersionsPanel } from "./features/dataset-versions/DatasetVersionsPanel";
+import { EnvironmentalContextPanel } from "./features/environmental-context/EnvironmentalContextPanel";
 import { Gallery } from "./features/gallery/Gallery";
+import { ScientificHeatmapsPanel } from "./features/scientific-heatmaps/ScientificHeatmapsPanel";
 import { InteroperabilityWorkspace } from "./features/interoperability/InteroperabilityWorkspace";
 import { ModelManager } from "./features/models/ModelManager";
 import { OnboardingModal } from "./features/onboarding/OnboardingModal";
@@ -85,6 +89,9 @@ type ProjectView =
   | "gallery"
   | "versions"
   | "interoperability"
+  | "environmental_context"
+  | "computed_metrics"
+  | "scientific_heatmaps"
   | "models"
   | "training"
   | "classification"
@@ -97,7 +104,7 @@ type ProjectView =
   | "workflows"
   | "system";
 
-const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.0.2";
+const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.1.0";
 
 type ProjectTab = Exclude<ProjectView, "system">;
 
@@ -136,6 +143,24 @@ const PROJECT_NAV_GROUPS: Array<{
         label: "Classes",
         description:
           "Manage project labels, display colors, order, and activity.",
+      },
+      {
+        id: "environmental_context",
+        label: "Environmental Context",
+        description:
+          "Browse project measurements, add data, and run environmental analyses.",
+      },
+      {
+        id: "computed_metrics",
+        label: "Computed Metrics",
+        description:
+          "Define unit-aware formulas and calculate immutable results from scientific records.",
+      },
+      {
+        id: "scientific_heatmaps",
+        label: "Scientific Heatmaps",
+        description:
+          "Explore reviewed objects, verified masks, and predictions in independent spatial layers.",
       },
     ],
   },
@@ -231,6 +256,19 @@ function ReefVisionMainApp() {
     string | null
   >(null);
   const [activeView, setActiveView] = useState<ProjectView>("gallery");
+  const [environmentProjectId, setEnvironmentProjectId] = useState<
+    string | null
+  >(null);
+  useEffect(() => {
+    if (activeView === "environmental_context") {
+      setEnvironmentProjectId(selectedProjectId);
+    } else if (
+      environmentProjectId !== selectedProjectId &&
+      environmentProjectId !== null
+    ) {
+      setEnvironmentProjectId(null);
+    }
+  }, [activeView, selectedProjectId, environmentProjectId]);
   const [projectName, setProjectName] = useState("");
   const [description, setDescription] = useState("");
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -442,8 +480,18 @@ function ReefVisionMainApp() {
     event.preventDefault();
     select(values[targetIndex]);
     const tablist = event.currentTarget.closest('[role="tablist"]');
+    const groupNavigation = event.currentTarget.closest(".rv-project-nav");
+    const group = event.currentTarget.dataset.workspaceGroup;
     requestAnimationFrame(() => {
-      tablist?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
+      if (group) {
+        groupNavigation
+          ?.querySelector<HTMLElement>(
+            "[data-workspace-group][aria-selected='true']",
+          )
+          ?.focus();
+      } else {
+        tablist?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
+      }
     });
   }
 
@@ -664,6 +712,14 @@ function ReefVisionMainApp() {
           >
             System status
           </button>
+          <SegmentationExportLauncher editorOpen={editorLaunch !== null} />
+          {selectedProject && !editorLaunch && (
+            <ReefVisionAssistant
+              project={selectedProject}
+              activeView={activeView}
+              onNavigate={(view) => setActiveView(view as ProjectView)}
+            />
+          )}
           <div className="api-status" aria-live="polite">
             <StatusBadge
               status={
@@ -778,7 +834,11 @@ function ReefVisionMainApp() {
               setActiveView("system");
             }}
             onArchive={() => {
-              if (window.confirm(`Archive ${selectedProject.name}?`)) {
+              if (
+                window.confirm(
+                  `Archive “${selectedProject.name}”? It will be hidden from the project launcher. Its files and research records will be retained.`,
+                )
+              ) {
                 archiveMutation.mutate(selectedProject.id);
               }
             }}
@@ -829,6 +889,7 @@ function ReefVisionMainApp() {
                         type="button"
                         role="tab"
                         aria-label={group.label}
+                        data-workspace-group={group.id}
                         aria-selected={selected}
                         tabIndex={selected ? 0 : -1}
                         className={selected ? "active" : ""}
@@ -907,6 +968,27 @@ function ReefVisionMainApp() {
             )}
             {activeView === "interoperability" && (
               <InteroperabilityWorkspace project={selectedProject} />
+            )}
+            {(activeView === "environmental_context" ||
+              environmentProjectId === selectedProject.id) && (
+              <div hidden={activeView !== "environmental_context"}>
+                <EnvironmentalContextPanel
+                  key={selectedProject.id}
+                  project={selectedProject}
+                />
+              </div>
+            )}
+            {activeView === "computed_metrics" && (
+              <ComputedMetricsPanel
+                key={selectedProject.id}
+                project={selectedProject}
+              />
+            )}
+            {activeView === "scientific_heatmaps" && (
+              <ScientificHeatmapsPanel
+                key={selectedProject.id}
+                project={selectedProject}
+              />
             )}
             {activeView === "classification" && (
               <ClassificationWorkspace
@@ -995,13 +1077,6 @@ function ReefVisionMainApp() {
         )}
       </section>
 
-      {selectedProject && !editorLaunch && (
-        <ReefVisionAssistant
-          project={selectedProject}
-          activeView={activeView}
-          onNavigate={(view) => setActiveView(view as ProjectView)}
-        />
-      )}
       {showCreate && (
         <div className="modal-backdrop" role="presentation">
           <section

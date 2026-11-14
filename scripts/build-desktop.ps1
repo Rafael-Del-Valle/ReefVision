@@ -94,10 +94,10 @@ function Build-ReefVisionSplitCabinetMsi {
 
 $TauriConfigPath = Join-Path $Root "apps\web\src-tauri\tauri.conf.json"
 $TauriConfig = Get-Content -LiteralPath $TauriConfigPath -Raw | ConvertFrom-Json
-if ($TauriConfig.bundle.resources.'../../../.desktop/release-1.0.2/backend/' -ne 'backend/') {
+if ($TauriConfig.bundle.resources.'../../../.desktop/release-1.1.0/backend/' -ne 'backend/') {
     throw "Tauri must map the complete weight-free release backend directory to backend/."
 }
-if ($TauriConfig.bundle.resources.'../../../.desktop/release-1.0.2/bundled-models/' -ne 'bundled-models/') {
+if ($TauriConfig.bundle.resources.'../../../.desktop/release-1.1.0/bundled-models/' -ne 'bundled-models/') {
     throw "Tauri must package the weight-free manifest as bundled-models/."
 }
 
@@ -108,11 +108,11 @@ if (-not (Test-Path ".venv" -PathType Container)) {
 $VenvPython = Join-Path $Root ".venv\Scripts\python.exe"
 $BundleScript = Join-Path $PSScriptRoot "stage-bundled-models.py"
 $ModelCatalog = Join-Path $Root "config\model_catalog.json"
-$BundledModels = Join-Path $Root ".desktop\release-1.0.2\bundled-models"
+$BundledModels = Join-Path $Root ".desktop\release-1.1.0\bundled-models"
 
 $ModelAuditScript = Join-Path $PSScriptRoot "audit-model-downloadability.py"
 
-Write-ReefVisionStep "Checking ReefVision 1.0.2 public versions"
+Write-ReefVisionStep "Checking ReefVision 1.1.0 public versions"
 & $VenvPython (Join-Path $PSScriptRoot "check-release-version.py")
 if ($LASTEXITCODE -ne 0) { throw "Release version consistency check failed." }
 
@@ -129,7 +129,7 @@ if ($LASTEXITCODE -ne 0) { throw "Staged model resource audit failed." }
 
 & (Join-Path $PSScriptRoot "build-desktop-backend.ps1") -TargetTriple $TargetTriple
 
-$ReleaseBackend = Join-Path $Root ".desktop\release-1.0.2\backend"
+$ReleaseBackend = Join-Path $Root ".desktop\release-1.1.0\backend"
 & $VenvPython $ModelAuditScript --catalog $ModelCatalog --bundle-root $BundledModels --runtime-root $ReleaseBackend
 if ($LASTEXITCODE -ne 0) { throw "Release backend contains prohibited model assets." }
 
@@ -215,7 +215,7 @@ foreach ($GeneratedCab in $GeneratedCabFiles) {
     Write-Host "External cabinet output: $DestinationCab" -ForegroundColor Green
 }
 
-$StagedCatalog = Join-Path $Root ".desktop\release-1.0.2\backend\reefvision-api\_internal\config\model_catalog.json"
+$StagedCatalog = Join-Path $Root ".desktop\release-1.1.0\backend\reefvision-api\_internal\config\model_catalog.json"
 if (-not (Test-Path $StagedCatalog -PathType Leaf)) {
     throw "Desktop packaging lost the required Model Hub catalog: $StagedCatalog"
 }
@@ -229,48 +229,9 @@ if ($Installers.Count -ne 1) {
     throw "Expected exactly one MSI in $InstallerDirectory but found $($Installers.Count)."
 }
 
-$InstallerCom = New-Object -ComObject WindowsInstaller.Installer
-$MsiDatabase = $InstallerCom.OpenDatabase($Installers[0].FullName, 0)
-$MediaView = $MsiDatabase.OpenView(
-    "SELECT ``DiskId``, ``Cabinet`` FROM ``Media`` ORDER BY ``DiskId``"
-)
-$MediaView.Execute()
-
-$MissingExternalCabinets = @()
-
-while ($true) {
-    $MediaRecord = $MediaView.Fetch()
-
-    if ($null -eq $MediaRecord) {
-        break
-    }
-
-    $Cabinet = [string]$MediaRecord.StringData(2)
-
-    if (
-        [string]::IsNullOrWhiteSpace($Cabinet) -or
-        $Cabinet.StartsWith("#")
-    ) {
-        continue
-    }
-
-    $ExpectedCabinet = Join-Path $InstallerDirectory $Cabinet
-
-    if (-not (Test-Path -LiteralPath $ExpectedCabinet -PathType Leaf)) {
-        $MissingExternalCabinets += $Cabinet
-    }
-}
-
-$MediaView.Close()
-
-if ($MissingExternalCabinets.Count -gt 0) {
-    throw (
-        "MSI references missing external cabinets: " +
-        ($MissingExternalCabinets -join ", ")
-    )
-}
-
-Write-Host "MSI external cabinet dependency check passed." -ForegroundColor Green
+$InstallerPayload = & (Join-Path $PSScriptRoot "verify-windows-installer-payload.ps1") `
+    -InstallerDirectory $InstallerDirectory `
+    -Version $TauriConfig.version
 
 if (-not $SkipMsiVerification) {
     Write-ReefVisionStep "Verifying the Windows MSI and packaged backend"
@@ -288,39 +249,30 @@ else {
 if ((git rev-parse HEAD) -ne $BuildCommit -or -not (Test-ReefVisionSourceTreeClean)) {
     throw 'Source tree changed while packaging; do not release these artifacts.'
 }
-# Hash installer payloads with the framework SHA256 implementation.
-# Some Windows PowerShell build agents do not expose Get-FileHash inside
-# the pipeline scriptblock at this stage of the packaging process.
-function Get-ReefVisionArtifactSha256 {
-    param([Parameter(Mandatory = $true)][string]$Path)
-    $Stream = [System.IO.File]::OpenRead($Path)
-    try {
-        $Sha256 = [System.Security.Cryptography.SHA256]::Create()
-        try {
-            return ([System.BitConverter]::ToString($Sha256.ComputeHash($Stream))).Replace('-', '').ToLowerInvariant()
-        }
-        finally {
-            $Sha256.Dispose()
-        }
-    }
-    finally {
-        $Stream.Dispose()
-    }
-}
-$BuildArtifactRecords = @(
-    Get-ChildItem -LiteralPath $InstallerDirectory -File |
-        Where-Object { $_.Extension -in @('.msi', '.cab') } |
-        ForEach-Object {
-            [ordered]@{
-                name = $_.Name
-                sha256 = Get-ReefVisionArtifactSha256 -Path $_.FullName
-            }
-        }
-)
 [ordered]@{
     version = $TauriConfig.version
     source_commit = $BuildCommit
     source_tree_clean = $true
     msi_verified = (-not [bool]$SkipMsiVerification)
-    files = $BuildArtifactRecords
-} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $InstallerDirectory 'build-provenance.json') -Encoding UTF8
+    build_environment = [ordered]@{
+        os = [Environment]::OSVersion.VersionString
+        target = $TargetTriple
+        rustc = (& $RustTools.Rustc --version)
+        cargo = (& $RustTools.Cargo --version)
+        node = (& $NodeTools.Node --version)
+        python = (& $VenvPython --version)
+        pyinstaller = (& $VenvPython -m PyInstaller --version)
+    }
+    runtime = [ordered]@{
+        backend = 'Bundled PyInstaller runtime; Python installation is not required'
+        webview2_install_mode = $TauriConfig.bundle.windows.webviewInstallMode.type
+        gpu = 'Compatible NVIDIA driver for CUDA inference; CPU supported'
+        copernicus = 'Optional local Python worker with Copernicus Marine and configured credentials'
+        checkpoints = 'User-registered local checkpoints; no bundled weights'
+    }
+    msi = [ordered]@{
+        identity = $InstallerPayload.identity
+        media = $InstallerPayload.media
+    }
+    files = $InstallerPayload.files
+} | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $InstallerDirectory 'build-provenance.json') -Encoding UTF8

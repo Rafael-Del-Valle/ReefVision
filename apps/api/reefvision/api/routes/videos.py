@@ -104,6 +104,8 @@ def import_video(
     airdata_file: Annotated[UploadFile | None, File()] = None,
     airdata_time_offset_s: Annotated[float, Form()] = 0.0,
     airdata_time_offset_evidence: Annotated[str | None, Form()] = None,
+    telemetry_utc_offset_minutes: Annotated[int | None, Form()] = None,
+    telemetry_utc_offset_evidence: Annotated[str | None, Form()] = None,
 ) -> VideoAssetResponse:
     return asset_service(request, session).import_video(
         project_id,
@@ -116,6 +118,8 @@ def import_video(
         airdata_stream=airdata_file.file if airdata_file is not None else None,
         airdata_time_offset_s=airdata_time_offset_s,
         airdata_time_offset_evidence=airdata_time_offset_evidence,
+        telemetry_utc_offset_minutes=telemetry_utc_offset_minutes,
+        telemetry_utc_offset_evidence=telemetry_utc_offset_evidence,
     )
 
 
@@ -897,6 +901,11 @@ def georeference_existing_video_tracks(
                 observation = service.georeference_detection(
                     video_id,
                     frame_index=frame,
+                    frame_time_s=(
+                        float(raw["timestamp_seconds"])
+                        if raw.get("timestamp_seconds") is not None
+                        else None
+                    ),
                     bbox=BoundingBoxPixels(
                         x_min=x,
                         y_min=y,

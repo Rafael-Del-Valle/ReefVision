@@ -341,6 +341,15 @@ describe("VideoTrackingWorkspace", () => {
       target: { files: [srt] },
     });
     fireEvent.change(
+      await screen.findByLabelText(
+        "SRT wall-clock UTC offset (minutes, optional)",
+      ),
+      { target: { value: "-300" } },
+    );
+    fireEvent.change(screen.getByLabelText("SRT timezone evidence"), {
+      target: { value: "field log confirms EST" },
+    });
+    fireEvent.change(
       screen.getByLabelText("AirData CSV telemetry (optional)"),
       {
         target: { files: [airdata] },
@@ -361,6 +370,8 @@ describe("VideoTrackingWorkspace", () => {
     await waitFor(() =>
       expect(api.importVideo).toHaveBeenCalledWith(project.id, video, {
         telemetryFile: srt,
+        telemetryUtcOffsetMinutes: -300,
+        telemetryUtcOffsetEvidence: "field log confirms EST",
         airdataFile: airdata,
         airdataTimeOffsetSeconds: 6.19,
         airdataTimeOffsetEvidence: "source-only SRT/AirData alignment",
@@ -690,6 +701,34 @@ describe("VideoTrackingWorkspace", () => {
     expect(screen.getByText("Frame mapping confirmed.")).toBeInTheDocument();
   });
 
+  it("clears a pose file and frame confirmation when changing video", async () => {
+    const videos = await api.getVideos(project.id);
+    vi.mocked(api.getVideos).mockResolvedValue([
+      ...videos,
+      { ...videos[0], id: "video-2", original_filename: "second-video.mp4" },
+    ]);
+    renderWorkspace();
+    const video = await screen.findByRole("combobox", { name: "Video" });
+    await waitFor(() => expect(video).toHaveValue("video-1"));
+    const file = screen.getByLabelText("Pose interoperability import file");
+    const confirmation = screen.getByRole("checkbox", {
+      name: /I confirm external frame indices/,
+    });
+    fireEvent.change(file, {
+      target: { files: [new File(["pose"], "unsubmitted.slp")] },
+    });
+    fireEvent.click(confirmation);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Import pose" })).toBeEnabled(),
+    );
+    fireEvent.change(video, { target: { value: "video-2" } });
+    expect(screen.getByLabelText("Pose interoperability import file")).not.toBe(
+      file,
+    );
+    expect(confirmation).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Import pose" })).toBeDisabled();
+  });
+
   it("connects geographic segment seeking to video and map without refetching analytics", async () => {
     vi.mocked(api.getVideoTracks).mockResolvedValue([
       {
@@ -751,6 +790,7 @@ describe("VideoTrackingWorkspace", () => {
           end_location: location,
           distance_m: 5,
           speed_m_s: 5,
+          initial_bearing_deg: null,
           cumulative_distance_m: 5,
           speed_valid: true,
           invalid_reason: null,

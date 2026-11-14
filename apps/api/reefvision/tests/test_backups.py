@@ -86,6 +86,26 @@ def test_backup_verification_rejects_missing_completion_marker(
     assert any("completion marker" in message.lower() for message in verification["errors"])
 
 
+def test_subsequent_backup_excludes_managed_backup_directories(
+    client: TestClient, test_settings: Settings
+) -> None:
+    _, first = create_completed_backup(client, test_settings)
+    assert first["status"] == "completed"
+    response = client.post("/api/v1/backups", json={})
+    assert response.status_code == 201, response.text
+    created = response.json()
+    app = cast(FastAPI, client.app)
+    assert process_backup_job(test_settings, app.state.session_factory, created["job"]["id"])
+    second = client.get(f"/api/v1/backups/{created['backup']['id']}").json()
+    assert second["status"] == "completed"
+    manifest_path = test_settings.resolved_data_dir / Path(second["manifest_path"])
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert all(not item["path"].startswith("data/bk/") for item in manifest["file_inventory"])
+    verification = client.post(f"/api/v1/backups/{second['id']}/verify")
+    assert verification.status_code == 200, verification.text
+    assert verification.json()["status"] == "valid"
+
+
 def test_backup_verification_rejects_checksum_change(
     client: TestClient, test_settings: Settings
 ) -> None:

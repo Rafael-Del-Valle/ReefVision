@@ -1,3 +1,4 @@
+import hashlib
 import io
 from pathlib import Path
 from typing import cast
@@ -22,13 +23,14 @@ def _upload(
     *,
     srt_name: str = "fish.SRT",
     srt: bytes | None = None,
+    data: dict[str, str] | None = None,
 ) -> Response:
     files = {"file": ("fish.mp4", io.BytesIO(b"fake-video"), "video/mp4")}
     if srt is not None:
         files["telemetry_file"] = (srt_name, io.BytesIO(srt), "application/x-subrip")
     return cast(
         Response,
-        client.post(f"/api/v1/projects/{project_id}/imports/videos", files=files),
+        client.post(f"/api/v1/projects/{project_id}/imports/videos", files=files, data=data or {}),
     )
 
 
@@ -56,6 +58,77 @@ def test_uploaded_sidecar_survives_new_session_and_frame_extraction(
     queued = client.post(f"/api/v1/videos/{video['id']}/extract", json={"every_n_frames": 5})
     assert queued.status_code == 200
     assert client.get(f"/api/v1/videos/{video['id']}").json()["telemetry"] == metadata
+
+
+def test_uploaded_sidecar_requires_timezone_evidence_before_exposing_absolute_time(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
+    project = create_project(client, "Telemetry UTC")
+    srt = (FIXTURES / "modern.SRT").read_bytes()
+
+    response = _upload(
+        client,
+        project["id"],
+        srt=srt,
+        data={
+            "telemetry_utc_offset_minutes": "-300",
+            "telemetry_utc_offset_evidence": "Field log confirms America/New_York EST",
+        },
+    )
+    assert response.status_code == 201, response.text
+    metadata = response.json()["telemetry"]
+    assert metadata["wall_clock_sample_count"] == 1
+    assert metadata["utc_offset_minutes"] == -300
+    assert metadata["utc_offset_evidence"] == "Field log confirms America/New_York EST"
+    assert metadata["content_sha256"] == hashlib.sha256(srt).hexdigest()
+
+
+def test_modified_srt_fails_checksum_validation(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
+    project = create_project(client, "Modified telemetry")
+    response = _upload(
+        client,
+        project["id"],
+        srt=(FIXTURES / "modern.SRT").read_bytes(),
+    )
+    assert response.status_code == 201, response.text
+    video = response.json()
+    settings = cast(FastAPI, client.app).state.settings
+    path = resolve_managed_project_path(settings, video["telemetry"]["source_path"])
+    path.write_bytes(path.read_bytes() + b"\nmodified")
+    with cast(FastAPI, client.app).state.session_factory() as session:
+        service = VideoAssetService(session, settings)
+        assert service.telemetry_content_sha256(video["id"]) != video["telemetry"]["content_sha256"]
+        assert service.telemetry_source(video["id"]) is None
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"telemetry_utc_offset_minutes": "0"},
+        {"telemetry_utc_offset_evidence": "Unpaired evidence"},
+        {
+            "telemetry_utc_offset_minutes": "900",
+            "telemetry_utc_offset_evidence": "Invalid offset",
+        },
+    ],
+)
+def test_telemetry_timezone_configuration_fails_closed(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, data: dict[str, str]
+) -> None:
+    monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
+    project = create_project(client, "Invalid telemetry UTC")
+    response = _upload(
+        client,
+        project["id"],
+        srt=(FIXTURES / "modern.SRT").read_bytes(),
+        data=data,
+    )
+    assert response.status_code == 400, response.text
+    assert client.get(f"/api/v1/projects/{project['id']}/videos").json() == []
 
 
 def test_ordinary_and_old_videos_have_no_telemetry(
@@ -156,6 +229,30 @@ def test_duplicate_import_can_attach_previously_missing_telemetry(
     assert second.json()["id"] == original["id"]
     assert second.json()["telemetry"]["sample_count"] == 3
     assert len(client.get(f"/api/v1/projects/{project['id']}/videos").json()) == 1
+
+
+def test_duplicate_import_can_add_timezone_evidence_to_identical_srt(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(video_assets_module, "_inspect_video", _fake_metadata)
+    project = create_project(client, "Duplicate UTC evidence")
+    srt = (FIXTURES / "modern.SRT").read_bytes()
+    original = _upload(client, project["id"], srt=srt).json()
+    assert original["telemetry"]["utc_offset_minutes"] is None
+
+    enriched = _upload(
+        client,
+        project["id"],
+        srt=srt,
+        data={
+            "telemetry_utc_offset_minutes": "-300",
+            "telemetry_utc_offset_evidence": "Field log confirms EST",
+        },
+    )
+    assert enriched.status_code == 201, enriched.text
+    assert enriched.json()["id"] == original["id"]
+    assert enriched.json()["telemetry"]["utc_offset_minutes"] == -300
+    assert enriched.json()["telemetry"]["utc_offset_evidence"] == "Field log confirms EST"
 
 
 def test_failed_video_import_does_not_leave_sidecar(

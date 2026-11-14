@@ -6,6 +6,7 @@ import { ScientistWorkspaceInspector } from "./ScientistWorkspaceInspector";
 import {
   WORKSPACE_INSPECTOR_VIEWS,
   workspaceInspectorDefinition,
+  workspacePresetInspectorGuidance,
 } from "./workspaceInspector";
 
 function renderInspector({
@@ -34,7 +35,10 @@ function renderInspector({
 
 describe("ScientistWorkspaceInspector", () => {
   it("defines context for every current project workspace", () => {
-    expect(WORKSPACE_INSPECTOR_VIEWS).toHaveLength(13);
+    expect(WORKSPACE_INSPECTOR_VIEWS).toHaveLength(16);
+    expect(WORKSPACE_INSPECTOR_VIEWS).toContain("environmental_context");
+    expect(WORKSPACE_INSPECTOR_VIEWS).toContain("computed_metrics");
+    expect(WORKSPACE_INSPECTOR_VIEWS).toContain("scientific_heatmaps");
 
     for (const view of WORKSPACE_INSPECTOR_VIEWS) {
       const definition = workspaceInspectorDefinition(view);
@@ -49,6 +53,18 @@ describe("ScientistWorkspaceInspector", () => {
     }
   });
 
+  it("preserves scientific truth boundaries for spatial heatmaps", () => {
+    renderInspector({ activeView: "scientific_heatmaps" });
+
+    const definition = workspaceInspectorDefinition("scientific_heatmaps");
+
+    expect(definition.boundary).toBe("mixed");
+    expect(definition.recordPolicy).toContain(
+      "Pending predictions are never counted as verified annotations.",
+    );
+    expect(screen.getByText("Scientific spatial heatmaps")).toBeInTheDocument();
+    expect(screen.getByText("Reviewable evidence")).toBeInTheDocument();
+  });
   it("shows the explicit machine-output versus scientist-truth boundary", () => {
     renderInspector();
 
@@ -76,7 +92,6 @@ describe("ScientistWorkspaceInspector", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("6")).toBeInTheDocument();
     expect(screen.getByText("bbox")).toBeInTheDocument();
-    expect(screen.getByText("Canonical workspace")).toBeInTheDocument();
   });
 
   it("navigates to related canonical tools instead of implementing duplicate tool logic", async () => {
@@ -100,7 +115,9 @@ describe("ScientistWorkspaceInspector", () => {
     });
 
     expect(screen.getByText("Human verification required")).toBeInTheDocument();
-    expect(screen.getByText("Review / QA preset")).toBeInTheDocument();
+    expect(
+      screen.getByText(workspacePresetInspectorGuidance("review").title),
+    ).toBeVisible();
     expect(
       screen.getByText(/Acceptance, correction, or rejection remains/),
     ).toBeInTheDocument();

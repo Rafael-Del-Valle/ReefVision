@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from itertools import pairwise
-from math import hypot, isfinite
+from math import fsum, hypot, isfinite
 
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.measurements import MeasurementPoint
@@ -30,6 +30,25 @@ def transform_point(matrix: Homography, point: Point) -> Point:
 
 def transform_points(matrix: Homography, points: list[Point]) -> list[Point]:
     return [transform_point(matrix, point) for point in points]
+
+
+def projected_rectangle_area(
+    matrix: Homography, left: int, top: int, right: int, bottom: int
+) -> float:
+    """Map a source-pixel rectangle to its quadrilateral on the reference plane."""
+    corners: list[Point] = [(left, top), (right, top), (right, bottom), (left, bottom)]
+    denominators = [matrix[2][0] * x + matrix[2][1] * y + matrix[2][2] for x, y in corners]
+    if min(denominators) <= 0 <= max(denominators):
+        raise ValidationError("Reference plane intersects the projective horizon")
+    (x0, y0), (x1, y1), (x2, y2), (x3, y3) = transform_points(matrix, corners)
+    x1, y1, x2, y2, x3, y3 = x1 - x0, y1 - y0, x2 - x0, y2 - y0, x3 - x0, y3 - y0
+    try:
+        area = abs(fsum((x1 * y2, -y1 * x2, x2 * y3, -y2 * x3))) / 2
+    except (OverflowError, ValueError) as exc:
+        raise ValidationError("Reference-plane rectangle area is numerically invalid") from exc
+    if not isfinite(area) or area <= 0:
+        raise ValidationError("Reference-plane rectangle area is numerically invalid")
+    return area
 
 
 def polygon_measurements_float(points: list[Point]) -> tuple[float, float, float, float]:

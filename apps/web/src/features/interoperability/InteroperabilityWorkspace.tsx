@@ -131,15 +131,23 @@ export function InteroperabilityWorkspace({
 
         <div className="panel-card">
           <h4>Inspect or import exchange package</h4>
-          <input
-            type="file"
-            accept=".zip,.reefvision.zip,application/zip"
-            onChange={(event) => {
-              setInspectionFile(event.target.files?.[0] ?? null);
-              inspectMutation.reset();
-              importMutation.reset();
-            }}
-          />
+          <label>
+            Project exchange ZIP
+            <input
+              type="file"
+              accept=".zip,.reefvision.zip,application/zip"
+              onChange={(event) => {
+                setInspectionFile(event.target.files?.[0] ?? null);
+                inspectMutation.reset();
+                importMutation.reset();
+              }}
+            />
+          </label>
+          {!inspectionFile && (
+            <p className="secondary-text">
+              Choose a project exchange ZIP to enable inspection.
+            </p>
+          )}
           <button
             type="button"
             onClick={() => inspectMutation.mutate()}

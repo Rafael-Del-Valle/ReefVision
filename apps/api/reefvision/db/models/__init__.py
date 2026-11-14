@@ -17,6 +17,7 @@ from reefvision.db.models.class_operation import ClassOperation
 from reefvision.db.models.class_visibility_preference import ClassVisibilityPreference
 from reefvision.db.models.classification_dataset import ClassificationDataset
 from reefvision.db.models.classification_prediction import ClassificationPrediction
+from reefvision.db.models.computed_metric import ComputedMetricDefinition, ComputedMetricResult
 from reefvision.db.models.dataset_version import DatasetVersion
 from reefvision.db.models.dataset_version_item import DatasetVersionItem
 from reefvision.db.models.ecology_identity_annotation_evidence import (
@@ -27,6 +28,10 @@ from reefvision.db.models.ecology_identity_calibration_evidence import (
 )
 from reefvision.db.models.ecology_identity_image_evidence import EcologyIdentityImageEvidence
 from reefvision.db.models.ecology_identity_revision import EcologyIdentityRevision
+from reefvision.db.models.environmental_analysis import (
+    EnvironmentalAnalysisDefinition,
+    EnvironmentalAnalysisResult,
+)
 from reefvision.db.models.experiment_record import ExperimentRecord
 from reefvision.db.models.export_record import ExportRecord
 from reefvision.db.models.geo_referenced_observation import GeoReferencedObservation
@@ -68,6 +73,11 @@ from reefvision.db.models.quality_control_issue import QualityControlIssue
 from reefvision.db.models.quality_control_run import QualityControlRun
 from reefvision.db.models.review_queue import ReviewQueue
 from reefvision.db.models.review_queue_item import ReviewQueueItem
+from reefvision.db.models.scientific_record import (
+    EnvironmentalCacheEntry,
+    EnvironmentalEventDefinition,
+    ScientificRecord,
+)
 from reefvision.db.models.skeleton_analysis import SkeletonAnalysisRevision
 from reefvision.db.models.training_draft import TrainingDraft
 from reefvision.db.models.training_run import TrainingRun
@@ -94,12 +104,18 @@ __all__ = [
     "ClassVisibilityPreference",
     "ClassificationDataset",
     "ClassificationPrediction",
+    "ComputedMetricDefinition",
+    "ComputedMetricResult",
     "DatasetVersion",
     "DatasetVersionItem",
     "EcologyIdentityAnnotationEvidence",
     "EcologyIdentityCalibrationEvidence",
     "EcologyIdentityImageEvidence",
     "EcologyIdentityRevision",
+    "EnvironmentalAnalysisDefinition",
+    "EnvironmentalAnalysisResult",
+    "EnvironmentalCacheEntry",
+    "EnvironmentalEventDefinition",
     "ExperimentRecord",
     "ExportRecord",
     "GeoReferencedObservation",
@@ -131,6 +147,7 @@ __all__ = [
     "QualityControlRun",
     "ReviewQueue",
     "ReviewQueueItem",
+    "ScientificRecord",
     "SkeletonAnalysisRevision",
     "TrainingDraft",
     "TrainingRun",

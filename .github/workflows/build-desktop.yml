@@ -1,7 +1,9 @@
-name: Build Windows Desktop
+name: Build Windows Desktop Release Candidate
 
 on:
   workflow_dispatch:
+  push:
+    branches: [develop/reefvision-1.1]
   pull_request:
     paths:
       - "apps/api/**"
@@ -13,8 +15,10 @@ on:
       - "package.json"
       - "README.md"
       - "CHANGELOG.md"
-      - "docs/RELEASE_1.0.2.md"
       - ".github/workflows/build-desktop.yml"
+
+permissions:
+  contents: read
 
 concurrency:
   group: desktop-build-${{ github.event.pull_request.number || github.ref }}
@@ -26,11 +30,17 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       # Fast safety checks run before bootstrap / the multi-GB MSI build.
       - name: Validate Windows clean-install harness safeguards
         shell: pwsh
-        run: ./scripts/test-windows-clean-install-harness.ps1
+        run: |
+          ./scripts/test-windows-clean-install-harness.ps1
+          ./scripts/test-windows-installer-payload.ps1
+          ./scripts/test-training-console-sanitizer.ps1
+          ./scripts/test-training-console-readonly.ps1
 
       - uses: actions/setup-python@v5
         with:
@@ -45,12 +55,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
-
-      - name: Restore verified model bundle cache
-        uses: actions/cache@v4
-        with:
-          path: .desktop/bundled-models
-          key: ${{ runner.os }}-catalog-models-${{ hashFiles('config/model_catalog.json') }}
 
       - name: Bootstrap build environment
         shell: pwsh
@@ -68,7 +72,15 @@ jobs:
           apps/api/reefvision/tests/test_model_install.py
           apps/api/reefvision/tests/test_bundled_models.py
 
-      - name: Build MSI desktop installer with bundled checkpoints
+      - name: Verify Rust desktop tests
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .desktop/release-1.1.0/backend, .desktop/release-1.1.0/bundled-models | Out-Null
+          npm --prefix apps/web run ui:build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked --manifest-path apps/web/src-tauri/Cargo.toml
+
+      - name: Build weight-free 1.1.0 desktop installer
         shell: pwsh
         run: |
           $LogPath = Join-Path $PWD ".desktop\windows-installer-build.log"
@@ -93,92 +105,101 @@ jobs:
           include-hidden-files: true
           retention-days: 7
 
-      - name: Upload complete Windows installer (MSI and external CABs)
-        uses: actions/upload-artifact@v4
+      # Bound each upload below 2 GiB and publish every MSI-declared cabinet.
+      - name: Partition verified installer for artifact transport
+        id: payload
+        shell: pwsh
+        env:
+          SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          $folder = 'apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi'
+          $payload = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $folder -Version '1.1.0' -ExpectedFilename 'ReefVision_1.1.0_x64_en-US.msi' -SourceCommit $env:SOURCE_COMMIT -RequireProvenance
+          $parts = [System.Collections.Generic.List[object]]::new()
+          $parts.Add([System.Collections.Generic.List[string]]::new())
+          $parts[0].Add((Join-Path $folder 'build-provenance.json'))
+          [long]$partBytes = (Get-Item -LiteralPath $parts[0][0]).Length
+          foreach ($entry in $payload.files) {
+            if ($entry.size_bytes -ge 2GB) { throw "Artifact file exceeds transport limit: $($entry.name)" }
+            if ($partBytes + $entry.size_bytes -ge 2GB) {
+              $parts.Add([System.Collections.Generic.List[string]]::new())
+              $partBytes = 0
+            }
+            $parts[$parts.Count - 1].Add((Join-Path $folder $entry.name))
+            $partBytes += $entry.size_bytes
+          }
+          if ($parts.Count -gt 4) { throw 'Installer needs more than four artifact parts.' }
+          for ($i = 0; $i -lt $parts.Count; $i++) {
+            "part$($i + 1)<<EOF" >> $env:GITHUB_OUTPUT
+            $parts[$i] | ForEach-Object { $_ >> $env:GITHUB_OUTPUT }
+            'EOF' >> $env:GITHUB_OUTPUT
+          }
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: ReefVision-Windows-Installer
-          path: |
-            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
-            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.cab
-            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/build-provenance.json
+          name: ReefVision-1.1.0-RC-Installer-Part-1
+          path: ${{ steps.payload.outputs.part1 }}
           if-no-files-found: error
           retention-days: 14
+          compression-level: 0
 
-  # Separate, disposable Windows runner: do not validate an MSI only on its build machine.
+      - uses: actions/upload-artifact@v4
+        if: steps.payload.outputs.part2 != ''
+        with:
+          name: ReefVision-1.1.0-RC-Installer-Part-2
+          path: ${{ steps.payload.outputs.part2 }}
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - uses: actions/upload-artifact@v4
+        if: steps.payload.outputs.part3 != ''
+        with:
+          name: ReefVision-1.1.0-RC-Installer-Part-3
+          path: ${{ steps.payload.outputs.part3 }}
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - uses: actions/upload-artifact@v4
+        if: steps.payload.outputs.part4 != ''
+        with:
+          name: ReefVision-1.1.0-RC-Installer-Part-4
+          path: ${{ steps.payload.outputs.part4 }}
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
   windows-clean-install-acceptance:
-    name: Install, launch, persist and uninstall 1.0.2 on fresh Windows
+    name: Fresh install, launch, persist and uninstall 1.1.0 on disposable Windows
     runs-on: windows-latest
     needs: build-windows-installer
     timeout-minutes: 75
+    env:
+      SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - name: Retrieve exact MSI and its external CABs
+      - name: Retrieve exact MSI and every external CAB
         uses: actions/download-artifact@v4
         with:
-          name: ReefVision-Windows-Installer
-          path: ${{ runner.temp }}/reefvision-1-0-2-installer
+          pattern: ReefVision-1.1.0-RC-Installer-Part-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/reefvision-1-1-0-installer
 
-      - name: Verify MSI-declared cabinet payload before any install
+      - name: Verify version, source, MSI Media and payload digests
         shell: pwsh
         run: |
-          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-2-installer'
-          $msi = @(Get-ChildItem -LiteralPath $folder -Filter '*.msi' -File)
-          $cabs = @(Get-ChildItem -LiteralPath $folder -Filter '*.cab' -File)
-          if ($msi.Count -ne 1 -or $msi[0].Name -ne 'ReefVision_1.0.2_x64_en-US.msi') {
-            throw 'Expected exactly the ReefVision 1.0.2 MSI.'
-          }
-
-          # Windows Installer Media is authoritative; cabinet count depends on
-          # actual payload. '#name.cab' means embedded, not an external file.
-          $installer = New-Object -ComObject WindowsInstaller.Installer
-          $database = $installer.OpenDatabase($msi[0].FullName, 0)
-          $versionView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')
-          $versionView.Execute()
-          $versionRecord = $versionView.Fetch()
-          if ($null -eq $versionRecord -or $versionRecord.StringData(1) -ne '1.0.2') {
-            throw 'MSI ProductVersion must be 1.0.2.'
-          }
-          $versionView.Close()
-
-          $mediaView = $database.OpenView('SELECT `Cabinet` FROM `Media`')
-          $mediaView.Execute()
-          $requiredCabs = @()
-          while ($record = $mediaView.Fetch()) {
-            $cabinetName = [string]$record.StringData(1)
-            if (-not $cabinetName -or $cabinetName.StartsWith('#')) { continue }
-            if ($cabinetName -notmatch '^[^\\/:]+\.cab$') {
-              throw "Unsafe or unsupported MSI external cabinet name: $cabinetName"
-            }
-            $requiredCabs += $cabinetName
-          }
-          $mediaView.Close()
-          $requiredCabs = @($requiredCabs | Sort-Object -Unique)
-          if ($requiredCabs.Count -eq 0) {
-            throw 'MSI Media table does not declare any external CAB files.'
-          }
-
-          $actualCabs = @($cabs | ForEach-Object { $_.Name })
-          $missing = @($requiredCabs | Where-Object { $_ -notin $actualCabs })
-          $unexpected = @($actualCabs | Where-Object { $_ -notin $requiredCabs })
-          if ($missing.Count -gt 0 -or $unexpected.Count -gt 0 -or $actualCabs.Count -ne $requiredCabs.Count) {
-            throw "MSI/CAB mismatch. MSI expects: $($requiredCabs -join ', '); artifact contains: $($actualCabs -join ', '); missing: $($missing -join ', '); unexpected: $($unexpected -join ', ')."
-          }
-          Write-Host "MSI references $($requiredCabs.Count) external CAB files, all present."
-
-          foreach ($item in @($msi) + $cabs) {
-            if ($item.Length -le 0) { throw "Empty installer file: $($item.Name)" }
-            $hash = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash
-            Write-Host "$($item.Name) SHA256=$hash"
-          }
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-1-0-installer'
+          $payload = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $folder -Version '1.1.0' -ExpectedFilename 'ReefVision_1.1.0_x64_en-US.msi' -SourceCommit $env:SOURCE_COMMIT -RequireProvenance
+          $payload | ConvertTo-Json -Depth 8
 
       - name: Test isolated MSI installation without developer runtimes on PATH
         shell: pwsh
         run: |
-          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-2-installer'
-          $msi = Join-Path $folder 'ReefVision_1.0.2_x64_en-US.msi'
-          # The runner may contain development tools, but the installed desktop
-          # must function without any Python, Node.js, or Rust executable on PATH.
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-1-0-installer'
+          $msi = Join-Path $folder 'ReefVision_1.1.0_x64_en-US.msi'
           $env:PATH = @(
             (Join-Path $env:SystemRoot 'System32'),
             $env:SystemRoot,
@@ -193,14 +214,91 @@ jobs:
           }
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
-            -AcceptanceRoot 'C:\reefvision-1-0-2-disposable-acceptance' `
-            -SkipUpgrade -DisposableTest -KeepArtifacts -LiveSam2Acceptance
+            -ExpectedVersion '1.1.0' -ExpectedSchemaRevision '0042' `
+            -AcceptanceRoot 'C:\reefvision-1-1-0-disposable-acceptance' `
+            -SkipUpgrade -DisposableTest -KeepArtifacts
 
       - name: Upload isolated Windows acceptance report and MSI logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ReefVision-1.0.2-Windows-Clean-Install-Evidence
+          name: ReefVision-1.1.0-RC-Windows-Clean-Install-Evidence
+          path: |
+            .artifacts/windows-clean-acceptance-*/report.json
+            .artifacts/windows-clean-acceptance-*/*.log
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 14
+
+  windows-upgrade-acceptance:
+    name: Upgrade 1.0.3 to 1.1.0 and preserve the project on disposable Windows
+    runs-on: windows-latest
+    needs: build-windows-installer
+    timeout-minutes: 90
+    env:
+      SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ReefVision-1.1.0-RC-Installer-Part-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/reefvision-1-1-0-installer
+
+      - name: Verify candidate and published 1.0.3 upgrade baseline
+        shell: pwsh
+        run: |
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-1-0-installer'
+          $null = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $folder -Version '1.1.0' -ExpectedFilename 'ReefVision_1.1.0_x64_en-US.msi' -SourceCommit $env:SOURCE_COMMIT -RequireProvenance
+          $previous = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-3-installer'
+          New-Item -ItemType Directory -Path $previous -Force | Out-Null
+          gh release download v1.0.3 --repo Rafael-Del-Valle/ReefVision --pattern build-provenance.json --dir $previous
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download the published 1.0.3 manifest.' }
+          $manifestPath = Join-Path $previous 'build-provenance.json'
+          $digest = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash
+          if ($digest -ine 'fc5dfd8ce3fd8e4d1ea9d3040d139aff1304c472b42d671262ef0077c119505d') {
+            throw 'Published 1.0.3 manifest does not match the pinned SHA-256.'
+          }
+          $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+          if ($manifest.version -ne '1.0.3' -or $manifest.source_commit -ne 'e94dad6a3bece7b776bf45776bc5d06cfbc2c0dc' -or
+              $manifest.source_tree_clean -ne $true -or $manifest.msi_verified -ne $true) {
+            throw 'Published manifest does not identify the audited 1.0.3 release.'
+          }
+          gh release download v1.0.3 --repo Rafael-Del-Valle/ReefVision --pattern 'ReefVision_1.0.3_x64_en-US.msi' --pattern 'rv*.cab' --dir $previous
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download the published 1.0.3 upgrade baseline.' }
+          $payload = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $previous -Version '1.0.3' -ExpectedFilename 'ReefVision_1.0.3_x64_en-US.msi'
+          $expected = @($manifest.files | ForEach-Object { "$($_.name) $($_.sha256)" } | Sort-Object)
+          $actual = @($payload.files | ForEach-Object { "$($_.name) $($_.sha256)" } | Sort-Object)
+          if (Compare-Object $expected $actual) { throw 'Published 1.0.3 package digests differ from its manifest.' }
+
+      - name: Exercise previous-release upgrade without developer runtimes on PATH
+        shell: pwsh
+        run: |
+          $msi = Join-Path $env:RUNNER_TEMP 'reefvision-1-1-0-installer\ReefVision_1.1.0_x64_en-US.msi'
+          $previousMsi = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-3-installer\ReefVision_1.0.3_x64_en-US.msi'
+          $env:PATH = @(
+            (Join-Path $env:SystemRoot 'System32'),
+            $env:SystemRoot,
+            (Join-Path $env:SystemRoot 'System32\Wbem'),
+            (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0'),
+            (Join-Path $env:ProgramFiles 'PowerShell\7')
+          ) -join ';'
+          & ./scripts/acceptance-windows-clean-install.ps1 `
+            -InstallerPath $msi `
+            -PreviousInstallerPath $previousMsi -PreviousInstallerSupportsIsolatedAcceptance `
+            -ExpectedVersion '1.1.0' -ExpectedSchemaRevision '0042' `
+            -AcceptanceRoot 'C:\reefvision-1-1-0-upgrade-acceptance' `
+            -DisposableTest -KeepArtifacts
+
+      - name: Upload isolated Windows upgrade report and MSI logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReefVision-1.1.0-RC-Windows-Upgrade-Evidence
           path: |
             .artifacts/windows-clean-acceptance-*/report.json
             .artifacts/windows-clean-acceptance-*/*.log

@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reefvision"
-version = "1.0.2"
+version = "1.1.0"
 description = "Local-first scientific image annotation and computer vision platform"
 readme = "README.md"
 requires-python = ">=3.11"
-license = "MIT"
+license = "AGPL-3.0-only"
 authors = [{ name = "Rafael Del Valle" }]
 dependencies = [
   "alembic>=1.14,<2",
@@ -27,7 +27,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+environmental = ["copernicusmarine>=2.5,<3"]
 dev = [
+  "xarray>=2024.1,<2027",
   "build>=1.2,<2",
   "mypy>=1.14,<2",
   "networkx>=3.2,<4",
