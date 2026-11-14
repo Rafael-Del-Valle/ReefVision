@@ -631,9 +631,7 @@ def mesh_surface_edge_traces(
         # calculation as shortest mesh-edge routes. A zero-length neighbor
         # leaves that interior turn unknown; never replace it with zero.
         trace_adjacency: dict[int, dict[int, float]] = {index: {} for index in vertices}
-        for (first, second), source_length in zip(
-            pairwise(vertices), source_lengths, strict=True
-        ):
+        for (first, second), source_length in zip(pairwise(vertices), source_lengths, strict=True):
             trace_adjacency[first][second] = source_length
             trace_adjacency[second][first] = source_length
         turn_angles_deg = _route_turn_angles(points, vertices, trace_adjacency)
