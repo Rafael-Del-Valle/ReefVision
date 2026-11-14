@@ -312,3 +312,14 @@ trace. It is neither a sampling-based confidence interval nor an estimate of
 reconstruction, localization, topology or inter-observer uncertainty. A 100%
 relative scale uncertainty yields [0, 2L] for representable nominal length L.
 Independent anatomical and calibration acceptance remains mandatory.
+
+Numerical precision QC: a positive calibrated segment can be too small to
+increment an already large cumulative floating-point distance. In that case
+`surface_trace_cumulative_distance_resolution_loss` flags the unresolved
+waypoint increment. The individual positive `segment_lengths_m` value is
+retained; subtracting adjacent `cumulative_lengths_m` values would lose this
+segment. This warning is distinct from calibrated segment underflow (a positive
+source edge becoming exactly zero after scaling), and does not certify an
+anatomical branch or provide an uncertainty estimate. Regression coverage
+includes standalone preview and saved, executed Workflow Builder artifacts,
+with matching trace QC and full unverified provenance.
