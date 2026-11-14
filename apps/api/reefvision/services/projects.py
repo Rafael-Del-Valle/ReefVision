@@ -715,6 +715,19 @@ class ProjectService:
             )
             affected_counts["quality_control_issues"] += 1
 
+        # A saved Workflow Builder QC queue is an immutable scientific evidence
+        # snapshot, even while its human-review decision is still pending.
+        # Relabeling such an item makes the persisted evidence checksum fail on
+        # replay; preserve the original class while allowing standalone queues
+        # to retain the legacy mutable-review behavior.
+        workflow_owned_queue_ids = set(
+            self.session.scalars(
+                select(ReviewQueue.id).where(
+                    ReviewQueue.project_id == source_class.project_id,
+                    ReviewQueue.created_by.like("workflow:%"),
+                )
+            )
+        )
         review_queue_items = list(
             self.session.scalars(
                 select(ReviewQueueItem).where(ReviewQueueItem.project_id == source_class.project_id)
@@ -722,6 +735,9 @@ class ProjectService:
         )
         for item in review_queue_items:
             if source_class.id not in item.label_class_ids_json:
+                continue
+            if item.review_queue_id in workflow_owned_queue_ids:
+                retained_review_kinds.add("saved workflow review-queue evidence")
                 continue
             if item.review_state not in {"pending", "in_progress"}:
                 retained_review_kinds.add("completed review-queue items")
