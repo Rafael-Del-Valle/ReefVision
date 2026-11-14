@@ -22,7 +22,11 @@ from reefvision.services.annotations import annotation_snapshot, mask_annotation
 from reefvision.services.coral_graph_geometry import frozen_skeleton_digest, validate_graph_snapshot
 from reefvision.services.coral_growth import calculate_pinned_growth, validate_branch_correspondence
 from reefvision.services.ecology_identity import EcologyIdentityService
+from reefvision.services.project_exchange_acquisition import validate_acquisition_exchange
+from reefvision.services.project_exchange_comparison import validate_comparison_exchange
+from reefvision.services.project_exchange_event_summary import validate_event_summary_exchange
 from reefvision.services.project_exchange_pose import heldout_scope, validate_pose_rows
+from reefvision.services.project_exchange_reports import validate_report_exchange
 from reefvision.services.project_exchange_workflows import validate_workflow_rows
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.ecology_pose_links import remap_pose_link_source
@@ -245,6 +249,10 @@ def validate_integrated_records(
         if name in inventory:
             parent_first(rows, models[name])
     validate_pose_rows(sections)
+    validate_event_summary_exchange(sections)
+    validate_report_exchange(sections)
+    validate_acquisition_exchange(sections)
+    validate_comparison_exchange(sections)
     validate_workflow_rows(sections)
     heldout_scope_mappings(project_id, project_id, sections)
     ids = {key for rows in by_section.values() for key in rows if key is not None}

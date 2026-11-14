@@ -59,6 +59,8 @@ from reefvision.schemas.project_exchange import (
 )
 from reefvision.schemas.projects import ProjectCreate
 from reefvision.schemas.scientific_heatmaps import ScientificHeatmapResponse
+from reefvision.services.project_exchange_acquisition import validate_acquisition_exchange
+from reefvision.services.project_exchange_comparison import restore_comparison_jobs
 from reefvision.services.project_exchange_computed import (
     COMPUTED_SECTIONS,
     remap_computed_sections,
@@ -70,6 +72,7 @@ from reefvision.services.project_exchange_environmental_analysis import (
     remap_study_assignments,
     validate_environmental_analysis_exchange,
 )
+from reefvision.services.project_exchange_event_summary import remap_event_summary_archive_job
 from reefvision.services.project_exchange_inspection import (
     MANIFEST_NAME,
     inspect_project_exchange,
@@ -95,6 +98,7 @@ from reefvision.services.project_exchange_pose import (
     restore_pose_reports,
     validate_frozen_pose_frames,
 )
+from reefvision.services.project_exchange_reports import remap_report_archive_job
 from reefvision.services.project_exchange_scientific import (
     SCIENCE_SECTIONS,
     remap_scientific_sections,
@@ -414,6 +418,7 @@ def import_project_exchange(
         order = [*SECTION_ORDER, *integrated]
         validate_exchange_records(old_project_id, section_rows, models)
         validate_frozen_pose_frames(section_rows)
+        validate_acquisition_exchange(section_rows)
         validate_computed_exchange_records(old_project_id, section_rows)
         validate_environmental_analysis_exchange(old_project_id, section_rows)
         _validate_heatmap_artifacts(old_project_id, section_rows)
@@ -610,6 +615,8 @@ def import_project_exchange(
 
                     if integrated and section_name == "jobs":
                         remap_phase6_job(row, values, id_map)
+                        remap_event_summary_archive_job(row, values, id_map)
+                        remap_report_archive_job(row, values, id_map)
                         # Imported history never starts local work on its own.
                         if values["status"] in {"queued", "running"}:
                             values["status"] = "cancelled"
@@ -776,6 +783,7 @@ def import_project_exchange(
                     if lock is not None:
                         lock.protocol_sha256 = protocol
                 restore_pose_comparisons(session, project.id, digests)
+                restore_comparison_jobs(session, project.id, section_rows, id_map, digests)
                 restore_workflow_provenance(
                     session, project.id, section_rows, id_map, digests, _remap_json
                 )

@@ -10,10 +10,17 @@ import {
 import type { MaskAnnotationRecord } from "../annotation-editor/types";
 import { CoralGrowthPanel } from "./CoralGrowthPanel";
 import { EcologyAnalysisPanel } from "./EcologyAnalysisPanel";
+import { EventSummaryPanel } from "./EventSummaryPanel";
+import { ResearchReportsPanel } from "./ResearchReportsPanel";
 import {
   PoseOrganismLinksPanel,
   type PoseEvidenceNavigation,
 } from "./PoseOrganismLinksPanel";
+import {
+  StudyAssignmentFields,
+  StudyAssignmentSummary,
+  studyAssignmentFromForm,
+} from "./StudyAssignmentFields";
 import { listMeasurementRuns } from "../video/biologicalMovementApi";
 import {
   ecologyCsv,
@@ -38,6 +45,7 @@ function IdentityForm({
   onSaved: () => Promise<void>;
 }) {
   const [kind, setKind] = useState<OrganismKind>(identity?.kind ?? "colony");
+  const [studyMode, setStudyMode] = useState("keep");
   const mutation = useMutation({
     mutationFn: (values: FormData) => {
       const value = (name: string) => String(values.get(name) ?? "").trim();
@@ -51,6 +59,7 @@ function IdentityForm({
             kind === "fragment" ? value("parent") || null : null,
           experimental_unit_type: value("unitType") || null,
           experimental_unit_id: value("unitId") || null,
+          study_assignment: studyAssignmentFromForm(values),
         },
         identity,
       );
@@ -117,6 +126,7 @@ function IdentityForm({
             name="unitType"
             maxLength={100}
             defaultValue={identity?.experimental_unit_type ?? ""}
+            required={studyMode === "review"}
           />
         </label>
         <label>
@@ -125,9 +135,15 @@ function IdentityForm({
             name="unitId"
             maxLength={150}
             defaultValue={identity?.experimental_unit_id ?? ""}
+            required={studyMode === "review"}
           />
         </label>
       </details>
+      <StudyAssignmentFields
+        assignment={identity?.study_assignment}
+        mode={studyMode}
+        onMode={setStudyMode}
+      />
       <label>
         {identity ? "Revision reason" : "Registration reason"}
         <input name="reason" required minLength={3} maxLength={500} />
@@ -619,7 +635,13 @@ export function EcologyWorkspace({
 }) {
   const client = useQueryClient();
   const [view, setView] = useState<
-    "registry" | "longitudinal" | "pose" | "coral" | "analyses"
+    | "registry"
+    | "longitudinal"
+    | "pose"
+    | "coral"
+    | "analyses"
+    | "events"
+    | "reports"
   >(initialPoseOrganism ? "pose" : "registry");
   const [selected, setSelected] = useState(initialPoseOrganism ?? "");
   const query = useQuery({
@@ -698,8 +720,32 @@ export function EcologyWorkspace({
         >
           Reviewed analyses
         </button>
+        <button
+          type="button"
+          className="secondary"
+          aria-pressed={view === "events"}
+          onClick={() => setView("events")}
+        >
+          Event summaries
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          aria-pressed={view === "reports"}
+          onClick={() => setView("reports")}
+        >
+          Research reports
+        </button>
       </div>
-      {view === "coral" ? (
+      {view === "reports" ? (
+        <ResearchReportsPanel key={projectId} projectId={projectId} />
+      ) : view === "events" ? (
+        <EventSummaryPanel
+          key={projectId}
+          projectId={projectId}
+          onOpenPoseEvidence={onOpenPoseEvidence}
+        />
+      ) : view === "coral" ? (
         <CoralGrowthPanel key={projectId} projectId={projectId} />
       ) : view === "analyses" ? (
         <>
@@ -804,6 +850,11 @@ export function EcologyWorkspace({
                       Revision {current.revision} · {current.kind}.{" "}
                       {current.reason}
                     </p>
+                    {current.study_assignment && (
+                      <StudyAssignmentSummary
+                        assignment={current.study_assignment}
+                      />
+                    )}
                     <details>
                       <summary>Identity history and revisions</summary>
                       <ul>
@@ -815,6 +866,14 @@ export function EcologyWorkspace({
                             <li key={row.id}>
                               Revision {row.revision} · {row.created_at} ·{" "}
                               {row.reason}
+                              {row.study_assignment && (
+                                <details>
+                                  <summary>Reviewed study details</summary>
+                                  <StudyAssignmentSummary
+                                    assignment={row.study_assignment}
+                                  />
+                                </details>
+                              )}
                             </li>
                           ))}
                       </ul>
