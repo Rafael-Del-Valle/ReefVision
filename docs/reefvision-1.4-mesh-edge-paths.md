@@ -332,3 +332,15 @@ source edge becoming exactly zero after scaling), and does not certify an
 anatomical branch or provide an uncertainty estimate. Regression coverage
 includes standalone preview and saved, executed Workflow Builder artifacts,
 with matching trace QC and full unverified provenance.
+
+Direct scientific calls to the surface-trace measurement helper now perform
+strict numeric checks even without FastAPI/Pydantic: Boolean or textual scale
+values, invalid scale uncertainty, huge integers that overflow binary64, and
+non-finite or implicitly coerced vertex coordinates are rejected with
+controlled validation errors. **All** imported vertices are checked,
+including unused vertices outside the selected trace, so results cannot
+silently bypass source-geometry QC. The API and saved typed Workflow Builder
+graph continue to use the shared helper and already enforce their request
+schemas. This strengthens provisional numeric integrity; it does not validate
+calibration or biological anatomy. Regression tests include malformed direct
+inputs and the separately executed saved-workflow provenance comparisons.
