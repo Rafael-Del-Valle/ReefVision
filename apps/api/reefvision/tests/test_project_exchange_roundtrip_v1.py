@@ -393,13 +393,18 @@ def test_project_exchange_round_trip_preserves_restart_safe_metric_3d_science(
         session.flush()
         node_run.output_artifact_ids_json = [artifact.id]
         session.flush()
-        source_lineage = build_workflow_run_provenance(session, run_id=run.id)
+        # This fixture creates its completed run directly, so freeze its first
+        # closeout explicitly; subsequent reads must verify the saved digest.
+        source_lineage = build_workflow_run_provenance(
+            session, run_id=run.id, verify_saved_closeout=False
+        )
         run.result_json = {
             **run.result_json,
             "provenance_manifest": source_lineage,
             "provenance_sha256": canonical_json_sha256(source_lineage),
         }
         session.commit()
+        assert build_workflow_run_provenance(session, run_id=run.id) == source_lineage
         source_graph_id = graph.id
         source_run_id = run.id
         source_artifact_id = artifact.id
