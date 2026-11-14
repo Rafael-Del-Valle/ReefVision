@@ -111,8 +111,7 @@ def test_streamline_preview_uses_one_compatible_scientific_record_slice(
     assert imported_validation.json()["current"] is True
 
 
-
-@pytest.mark.parametrize(
+@pytest.mark.parametrize
     ("altered_field", "replacement", "diagnostic"),
     [
         ("observed_at", "2026-01-01T01:00:00Z", "share UTC"),
@@ -175,6 +174,7 @@ def test_streamline_preview_rejects_mixed_scientific_identity_or_qc(
     )
     assert response.status_code == 400, response.text
     assert diagnostic.lower() in response.json()["detail"].lower()
+
 
 def test_streamline_preview_rejects_incomplete_component_grid(client) -> None:
     project = create_project(client, "Incomplete current")
