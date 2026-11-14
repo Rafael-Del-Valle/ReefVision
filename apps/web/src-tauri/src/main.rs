@@ -163,6 +163,27 @@ fn valid_training_run_id(run_id: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
 }
 
+// Only the desktop-managed, ephemeral loopback API may supply the training
+// monitor's status and logs. Exact spelling is deliberate: do not admit remote
+// hosts, HTTP userinfo, alternate paths, or shell metacharacters into a script
+// that is passed to PowerShell. Desktop startup generates this canonical URL.
+fn validated_training_console_url(api_base_url: &str, run_id: &str) -> Result<String, String> {
+    if !valid_training_run_id(run_id) {
+        return Err("Invalid training run ID".to_string());
+    }
+    let port_string = api_base_url
+        .strip_prefix("http://127.0.0.1:")
+        .and_then(|value| value.strip_suffix("/api/v1"))
+        .ok_or_else(|| "Training monitor requires the local desktop API".to_string())?;
+    let port = port_string
+        .parse::<u16>()
+        .map_err(|_| "Training monitor requires a valid loopback API port".to_string())?;
+    if port == 0 || port.to_string() != port_string {
+        return Err("Training monitor requires a valid loopback API port".to_string());
+    }
+    Ok(format!("{api_base_url}/training-runs/{run_id}"))
+}
+
 #[cfg(target_os = "windows")]
 fn trusted_powershell_executable() -> std::io::Result<PathBuf> {
     // Resolve Windows PowerShell from the OS system directory, not PATH or
@@ -205,15 +226,12 @@ fn trusted_powershell_executable() -> std::io::Result<PathBuf> {
 
 #[tauri::command]
 fn open_training_console(state: State<'_, DesktopState>, run_id: String) -> Result<(), String> {
-    if !valid_training_run_id(&run_id) {
-        return Err("Invalid training run ID".to_string());
-    }
+    let url = validated_training_console_url(&state.context.api_base_url, &run_id)?;
 
     #[cfg(target_os = "windows")]
     {
-        // The source is the trusted loopback URL from desktop startup, not
+        // The source is the validated loopback URL from desktop startup, not
         // frontend input. PowerShell performs read-only status queries.
-        let url = format!("{}/training-runs/{}", state.context.api_base_url, run_id);
         let script = format!("$url = '{}'; ", url)
             + r#"
 $ErrorActionPreference = 'Stop'
@@ -386,7 +404,7 @@ while ($true) { Start-Sleep -Seconds 3600 }
 
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = state;
+        let _ = (state, url);
         Err("The external PowerShell training monitor is available on Windows only".to_string())
     }
 }
@@ -831,6 +849,37 @@ mod tests {
         assert!(!valid_training_run_id("rún-1"));
         assert!(valid_training_run_id(&"a".repeat(72)));
         assert!(!valid_training_run_id(&"a".repeat(73)));
+    }
+
+    #[test]
+    fn training_console_accepts_only_canonical_loopback_api_and_opaque_ids() {
+        assert_eq!(
+            validated_training_console_url("http://127.0.0.1:48765/api/v1", "run-1")
+                .expect("local desktop training URL"),
+            "http://127.0.0.1:48765/api/v1/training-runs/run-1"
+        );
+        for bad_base in [
+            "https://127.0.0.1:48765/api/v1",
+            "http://localhost:48765/api/v1",
+            "http://192.168.1.2:48765/api/v1",
+            "http://example.invalid:48765/api/v1",
+            "http://127.0.0.1:48765@remote.invalid/api/v1",
+            "http://127.0.0.1:48765/api/v1/extra",
+            "http://127.0.0.1:48765/api/v1'; Write-Host stolen; '",
+            "http://127.0.0.1:0/api/v1",
+            "http://127.0.0.1:65536/api/v1",
+            "http://127.0.0.1:048765/api/v1",
+            "http://127.0.0.1:48765/api/v1?redirect=1",
+        ] {
+            assert!(
+                validated_training_console_url(bad_base, "run-1").is_err(),
+                "untrusted training console endpoint accepted: {bad_base}"
+            );
+        }
+        assert!(
+            validated_training_console_url("http://127.0.0.1:48765/api/v1", "run/../other")
+                .is_err()
+        );
     }
 
     #[cfg(target_os = "windows")]
