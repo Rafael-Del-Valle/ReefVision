@@ -1580,3 +1580,202 @@ def test_saved_qc_workflow_class_evidence_survives_merge(
             inputs={"project": [source_artifact]},
         )
         assert retried[0]["payload"] == output["payload_json"]
+
+@pytest.mark.parametrize("operation_type", ["reassign", "reassign-delete"])
+def test_class_reassignment_preserves_executable_saved_qc_evidence(
+    client: TestClient, operation_type: str
+) -> None:
+    """Pending workflow-owned QC evidence must survive either class operation."""
+    project = create_project(client, name="Reassignment workflow science")
+    source = create_label_class(
+        client, project["id"], class_index=0, name="Thesea closed", display_color="#E76F51"
+    )
+    target = create_label_class(
+        client, project["id"], class_index=1, name="Thesea open", display_color="#2A9D8F"
+    )
+    seed_reassignment_records(
+        client,
+        project,
+        source,
+        target,
+        include_deleted_annotation=False,
+        include_historical_prediction=False,
+    )
+    graph = {
+        "graph_id": "reassign-saved-qc",
+        "name": "Researcher-gated QC",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "qc", "node_type": "qc_review_queue"},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-qc",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "qc",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"/api/v1/projects/{project['id']}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["valid"] and plan.json()["executable"]
+    saved = client.post(f"/api/v1/projects/{project['id']}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    launched = client.post(
+        f"/api/v1/projects/{project['id']}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert launched.status_code == 202, launched.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(launched.json()["job_id"])
+    )
+    run_id = launched.json()["id"]
+    before = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert before.status_code == 200, before.text
+    assert before.json()["run"]["status"] == "succeeded"
+    output = next(
+        artifact
+        for artifact in before.json()["artifacts"]
+        if artifact["data_type"] == "review_queue_reference"
+    )
+    assert output["payload_json"]["priority_score_unit"] == "dimensionless"
+    assert output["payload_json"]["review_status"] == "requires_researcher_review"
+    queue_id = output["payload_json"]["queue_id"]
+    queue_items = client.get(f"/api/v1/review-queues/{queue_id}/items")
+    assert queue_items.status_code == 200, queue_items.text
+    items = queue_items.json()["items"]
+    assert len(items) == 1
+    assert items[0]["review_state"] == "pending"
+    assert items[0]["label_class_ids_json"] == [source["id"]]
+
+    route = f"/api/v1/projects/{project['id']}/classes/{source['id']}/{operation_type}"
+    preview = client.post(f"{route}/preview", json={"target_class_id": target["id"]})
+    assert preview.status_code == 201, preview.text
+    approval = preview.json()
+    protected = {
+        group["key"]: group for group in approval["plan"]["protected_records"]
+    }
+    mutable = {
+        group["key"]: group for group in approval["plan"]["mutable_records"]
+    }
+    assert items[0]["id"] in protected["review_queue_items_closed"]["record_ids"]
+    assert items[0]["id"] not in mutable.get(
+        "review_queue_items_open", {"record_ids": []}
+    )["record_ids"]
+    assert any(
+        "Saved Workflow Builder QC queue class evidence" in warning
+        for warning in approval["plan"]["warnings"]
+    )
+    if operation_type == "reassign-delete":
+        assert any(
+            "Saved Workflow Builder QC queue evidence" in blocker
+            for blocker in approval["plan"]["blockers"]
+        )
+        assert any(
+            group["key"] == "review_queue_items_workflow"
+            for group in approval["plan"]["blocking_records"]
+        )
+    else:
+        assert approval["plan"]["blockers"] == []
+
+    executed = client.post(
+        route,
+        json={
+            "operation_id": approval["id"],
+            "preview_checksum": approval["preview_checksum"],
+        },
+    )
+    assert executed.status_code == (200 if operation_type == "reassign" else 409)
+    with Session(app.state.engine) as session:
+        source_record = session.get(LabelClass, source["id"])
+        annotation = session.get(Annotation, "annotation-active")
+        assert source_record is not None
+        assert annotation is not None
+        assert annotation.label_class_id == (
+            target["id"] if operation_type == "reassign" else source["id"]
+        )
+
+    after_items = client.get(f"/api/v1/review-queues/{queue_id}/items")
+    assert after_items.status_code == 200, after_items.text
+    assert after_items.json()["items"][0]["label_class_ids_json"] == [source["id"]]
+    after = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert after.status_code == 200, after.text
+    assert after.json()["run"]["status"] == "succeeded"
+    saved_output = next(
+        artifact
+        for artifact in after.json()["artifacts"]
+        if artifact["data_type"] == "review_queue_reference"
+    )
+    assert saved_output["payload_json"] == output["payload_json"]
+    assert saved_output["payload_sha256"] == output["payload_sha256"]
+    qc_node = next(node for node in after.json()["nodes"] if node["node_id"] == "qc")
+    with app.state.session_factory() as session:
+        source_artifact = session.scalar(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.workflow_run_id == run_id,
+                WorkflowArtifact.data_type == "project_reference",
+            )
+        )
+        saved_node = session.get(WorkflowNodeRun, qc_node["id"])
+        assert source_artifact is not None and saved_node is not None
+        retried = execute_runtime_adapter(
+            "qc_review_queue",
+            session=session,
+            settings=app.state.settings,
+            project_id=project["id"],
+            parameters={
+                **dict(saved_node.parameters_json or {}),
+                "__workflow_run_id": run_id,
+                "__workflow_node_run_id": saved_node.id,
+            },
+            inputs={"project": [source_artifact]},
+        )
+        assert retried[0]["payload"] == output["payload_json"]
+
+
+def test_reassignment_preview_rejects_review_queue_ownership_drift(
+    client: TestClient,
+) -> None:
+    """Replacing a standalone queue's creator invalidates the scientific approval."""
+    project = create_project(client, name="Queue ownership approval")
+    source = create_label_class(
+        client, project["id"], class_index=0, name="Closed", display_color="#E76F51"
+    )
+    target = create_label_class(
+        client, project["id"], class_index=1, name="Open", display_color="#2A9D8F"
+    )
+    seed_reassignment_records(
+        client,
+        project,
+        source,
+        target,
+        include_deleted_annotation=False,
+        include_historical_prediction=False,
+    )
+    route = f"/api/v1/projects/{project['id']}/classes/{source['id']}/reassign"
+    preview = client.post(f"{route}/preview", json={"target_class_id": target["id"]})
+    assert preview.status_code == 201, preview.text
+    approval = preview.json()
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        queue = session.get(ReviewQueue, "queue-1")
+        assert queue is not None and queue.created_by == "local_user"
+        queue.created_by = "workflow:external-run:node"
+        session.commit()
+    attempted = client.post(
+        route,
+        json={
+            "operation_id": approval["id"],
+            "preview_checksum": approval["preview_checksum"],
+        },
+    )
+    assert attempted.status_code == 409, attempted.text
+    assert "stale" in attempted.json()["detail"].lower()
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        annotation = session.get(Annotation, "annotation-active")
+        pending = session.get(ReviewQueueItem, "queue-item-pending")
+        assert annotation is not None and annotation.label_class_id == source["id"]
+        assert pending is not None and pending.label_class_ids_json == [source["id"]]
+

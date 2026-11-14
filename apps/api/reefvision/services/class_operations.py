@@ -26,6 +26,7 @@ from reefvision.db.models import (
     PredictionProposal,
     Project,
     QualityControlIssue,
+    ReviewQueue,
     ReviewQueueItem,
 )
 from reefvision.db.models.class_operation import ClassOperation
@@ -324,17 +325,41 @@ class ClassOperationsService:
                 select(ReviewQueueItem).where(ReviewQueueItem.project_id == source_class.project_id)
             )
         )
+        # The saved Workflow Builder snapshot is scientific input evidence,
+        # including items that are still pending researcher review. Ownership
+        # must be checked by persisted queue creator, not by mutable item state.
+        queue_creator_by_id = {
+            queue.id: queue.created_by
+            for queue in self.session.scalars(
+                select(ReviewQueue).where(ReviewQueue.project_id == source_class.project_id)
+            )
+        }
+        workflow_owned_queue_ids = {
+            queue_id
+            for queue_id, creator in queue_creator_by_id.items()
+            if isinstance(creator, str) and creator.startswith("workflow:")
+        }
+        workflow_protected_item_ids = sorted(
+            item.id
+            for item in review_queue_items
+            if source_class.id in item.label_class_ids_json
+            and item.review_queue_id in workflow_owned_queue_ids
+        )
         mutable_review_queue_ids = sorted(
             item.id
             for item in review_queue_items
             if source_class.id in item.label_class_ids_json
             and item.review_state in MUTABLE_REVIEW_STATES
+            and item.review_queue_id not in workflow_owned_queue_ids
         )
         protected_review_queue_ids = sorted(
             item.id
             for item in review_queue_items
             if source_class.id in item.label_class_ids_json
-            and item.review_state not in MUTABLE_REVIEW_STATES
+            and (
+                item.review_state not in MUTABLE_REVIEW_STATES
+                or item.review_queue_id in workflow_owned_queue_ids
+            )
         )
 
         dataset_versions = sorted(
@@ -443,6 +468,11 @@ class ClassOperationsService:
             )
         if annotation_event_ids:
             warnings.append("Historical annotation events remain unchanged for auditability.")
+        if workflow_protected_item_ids:
+            warnings.append(
+                "Saved Workflow Builder QC queue class evidence remains immutable, "
+                "including pending or in-progress researcher reviews."
+            )
         if unsupported_groups:
             warnings.append(
                 "Mask and image-level classification records remain attached to the "
@@ -450,6 +480,19 @@ class ClassOperationsService:
             )
 
         if operation_type == "reassign_delete":
+            if workflow_protected_item_ids:
+                blockers.append(
+                    "Saved Workflow Builder QC queue evidence still references the source "
+                    "class and prevents physical deletion. Preserve the archived class "
+                    "for reproducible scientific review."
+                )
+                blocking_records.append(
+                    self._group(
+                        "review_queue_items_workflow",
+                        "Saved workflow QC evidence blocks physical deletion",
+                        workflow_protected_item_ids,
+                    )
+                )
             # Physical deletion would cascade through mask and image-label FKs.
             # This workflow cannot reassign those modalities, so fail at preview
             # and again before execution rather than silently destroying them.
@@ -582,6 +625,8 @@ class ClassOperationsService:
                     {
                         "id": item.id,
                         "state": item.review_state,
+                        "queue_id": item.review_queue_id,
+                        "queue_created_by": queue_creator_by_id.get(item.review_queue_id),
                         "class_ids": list(item.label_class_ids_json),
                     }
                     for item in sorted(review_queue_items, key=lambda item: item.id)
@@ -919,10 +964,20 @@ class ClassOperationsService:
                     affected_counts.get("quality_control_issues_open", 0) + 1
                 )
 
+            # Use only record IDs approved by the fresh, locked plan. In
+            # particular, never mutate a pending saved-workflow QC snapshot:
+            # doing so breaks its persisted biological evidence checksum.
+            approved_review_ids = {
+                record_id
+                for group in current_plan.mutable_records
+                if group.key == "review_queue_items_open"
+                for record_id in group.record_ids
+            }
             mutable_review_queue_items = list(
                 self.session.scalars(
                     select(ReviewQueueItem).where(
                         ReviewQueueItem.project_id == source_class.project_id,
+                        ReviewQueueItem.id.in_(approved_review_ids),
                         ReviewQueueItem.review_state.in_(tuple(MUTABLE_REVIEW_STATES)),
                     )
                 )
