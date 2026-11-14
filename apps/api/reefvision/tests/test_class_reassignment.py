@@ -29,6 +29,7 @@ from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.class_operations import ClassOperationExecuteRequest
 from reefvision.services import class_operations as class_operations_module
 from reefvision.services.class_operations import ClassOperationsService
+from reefvision.services.workflow_runtime_adapters import execute_runtime_adapter
 
 
 def create_project(client: TestClient, **overrides: object) -> dict[str, Any]:
