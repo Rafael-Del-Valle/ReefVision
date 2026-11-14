@@ -1556,3 +1556,29 @@ def test_saved_qc_workflow_class_evidence_survives_merge(
     assert len(updated_outputs) == 1
     assert updated_outputs[0]["payload_json"] == output["payload_json"]
     assert updated_outputs[0]["payload_sha256"] == output["payload_sha256"]
+
+    # Re-execute the actual saved QC node adapter, not a fabricated graph:
+    # the queue's immutable biological evidence digest must still validate.
+    qc_node = next(node for node in after.json()["nodes"] if node["node_id"] == "qc")
+    with app.state.session_factory() as session:
+        source_artifact = session.scalar(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.workflow_run_id == run_id,
+                WorkflowArtifact.data_type == "project_reference",
+            )
+        )
+        saved_node = session.get(WorkflowNodeRun, qc_node["id"])
+        assert source_artifact is not None and saved_node is not None
+        retried = execute_runtime_adapter(
+            "qc_review_queue",
+            session=session,
+            settings=app.state.settings,
+            project_id=project["id"],
+            parameters={
+                **dict(saved_node.parameters_json or {}),
+                "__workflow_run_id": run_id,
+                "__workflow_node_run_id": saved_node.id,
+            },
+            inputs={"project": [source_artifact]},
+        )
+        assert retried[0]["payload"] == output["payload_json"]
