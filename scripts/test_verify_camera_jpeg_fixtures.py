@@ -740,6 +740,60 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual(photo.read_bytes(), approved_bytes)
             self.assertEqual(private.read_bytes(), private_bytes)
 
+    def test_pixel_decode_rejects_same_size_rewrite_with_unchanged_windows_fingerprint(self) -> None:
+        """Pixel metadata must not be attached to bytes replaced after manifest hashing."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; byte-identity decode guard unverified")
+        import os
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            photo = root / "approved.JPG"
+            replacement = root / "replacement.png"
+            Image.new("RGB", (12, 8), (0, 0, 0)).save(photo, format="JPEG")
+            Image.new("RGB", (12, 8), (255, 255, 255)).save(replacement, format="JPEG")
+            original_bytes = photo.read_bytes()
+            replacement_bytes = replacement.read_bytes()
+            self.assertNotEqual(original_bytes, replacement_bytes)
+            self.assertEqual(len(original_bytes), len(replacement_bytes))
+            original_stat = photo.stat()
+            real_image_open = Image.open
+            modified = False
+
+            def rewrite_before_decode(stream, *args, **kwargs):
+                nonlocal modified
+                if not modified:
+                    modified = True
+                    # Synthetic temporary fixture only: emulate a same-size
+                    # in-place rewrite with an unchanged Windows stat tuple.
+                    with photo.open("r+b") as writer:
+                        writer.write(replacement_bytes)
+                    os.utime(
+                        photo,
+                        ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns),
+                    )
+                return real_image_open(stream, *args, **kwargs)
+
+            def windows_fingerprint(stat):
+                return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns
+
+            with (
+                mock.patch.object(MODULE, "_file_fingerprint", windows_fingerprint),
+                mock.patch.object(Image, "open", rewrite_before_decode),
+            ):
+                records, errors = MODULE.inventory(root, verify_decode=True)
+            self.assertTrue(modified)
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0]["path"], "approved.JPG")
+            self.assertFalse(records[0]["jpeg_decodable"])
+            self.assertNotIn("jpeg_display_width", records[0])
+            self.assertEqual(
+                errors, ["JPEG decode failed: approved.JPG: ValueError"]
+            )
+            self.assertEqual(photo.read_bytes(), replacement_bytes)
+
     def test_direct_inventory_rejects_linked_root_and_parent_read_only(self) -> None:
         """Library callers must not bypass the CLI's approved fixture boundary."""
         with tempfile.TemporaryDirectory() as directory:
