@@ -512,6 +512,23 @@ class ProjectService:
             raise ConflictError("Classes can only be merged within the same project")
         if not target_class.is_active:
             raise ConflictError("Restore the target class before merging into it")
+        if payload.expected_source_identity is not None:
+            expected_source = payload.expected_source_identity
+            if (
+                source_class.name,
+                source_class.class_index,
+                source_class.scientific_name,
+                source_class.state_name,
+            ) != (
+                expected_source.name,
+                expected_source.class_index,
+                expected_source.scientific_name,
+                expected_source.state_name,
+            ):
+                raise ConflictError(
+                    "Source class identity changed since merge approval. "
+                    "Refresh project classes and confirm the merge again."
+                )
         if payload.expected_target_identity is not None:
             expected = payload.expected_target_identity
             if (

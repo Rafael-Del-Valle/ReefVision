@@ -174,7 +174,7 @@ class LabelClassUsageResponse(BaseModel):
 
 
 class LabelClassMergeTargetIdentity(BaseModel):
-    """Reviewed biological identity of the target class, not display styling."""
+    """Reviewed biological identity for class merge approval, excluding cosmetic styling."""
 
     name: str
     class_index: int
@@ -191,6 +191,8 @@ class LabelClassMergeRequest(BaseModel):
     expected_usage_fingerprint: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     # Optional for legacy clients; the GUI binds approval to target semantics.
     expected_target_identity: LabelClassMergeTargetIdentity | None = None
+    # Optional for legacy clients; GUI approval also binds source semantics.
+    expected_source_identity: LabelClassMergeTargetIdentity | None = None
 
 
 class LabelClassMergeCountResponse(BaseModel):

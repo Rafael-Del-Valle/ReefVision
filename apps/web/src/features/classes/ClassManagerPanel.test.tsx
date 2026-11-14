@@ -187,8 +187,15 @@ describe("ClassManagerPanel", () => {
         scientific_name: null,
         state_name: null,
       },
+      expected_source_identity: {
+        name: "Muricea Closed",
+        class_index: 0,
+        scientific_name: null,
+        state_name: null,
+      },
     });
-    expect(confirmation.mock.calls[0]?.[0]).toContain('"Muricea Open"');
+    expect(confirmation.mock.calls[0]?.[0]).toContain('source "Muricea Closed"');
+    expect(confirmation.mock.calls[0]?.[0]).toContain('target "Muricea Open"');
     expect(confirmation.mock.calls[0]?.[0]).toContain("0 immutable references");
   });
 

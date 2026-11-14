@@ -635,6 +635,44 @@ def test_used_class_delete_is_blocked_and_usage_is_reported(client: TestClient) 
         json={"state_name": None},
     )
     assert restored_target.status_code == 200, restored_target.text
+    # Source biological meaning may drift without a reference-count or ID change.
+    # Recheck the reviewed source identity before mutating observations or QC.
+    source_identity = {
+        "name": source_class["name"],
+        "class_index": source_class["class_index"],
+        "scientific_name": source_class["scientific_name"],
+        "state_name": source_class["state_name"],
+    }
+    changed_source = client.patch(
+        f"/api/v1/classes/{source_class['id']}",
+        json={"state_name": "Expanding polyps"},
+    )
+    assert changed_source.status_code == 200, changed_source.text
+    stale_source_merge = client.post(
+        f"/api/v1/classes/{source_class['id']}/merge",
+        json={
+            "target_class_id": target_class["id"],
+            "expected_usage_counts": counts,
+            "expected_usage_fingerprint": reviewed_fingerprint,
+            "expected_target_identity": target_identity,
+            "expected_source_identity": source_identity,
+        },
+    )
+    assert stale_source_merge.status_code == 409, stale_source_merge.text
+    assert "Source class identity changed" in stale_source_merge.text
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        source = session.get(LabelClass, source_class["id"])
+        annotation = session.get(Annotation, "annotation-active")
+        issue = session.get(QualityControlIssue, "qc-issue-1")
+        assert source is not None and source.is_active
+        assert annotation is not None and annotation.label_class_id == source_class["id"]
+        assert issue is not None and issue.class_ids_json == [source_class["id"]]
+    restored_source = client.patch(
+        f"/api/v1/classes/{source_class['id']}",
+        json={"state_name": None},
+    )
+    assert restored_source.status_code == 200, restored_source.text
+
     merged = client.post(
         f"/api/v1/classes/{source_class['id']}/merge",
         json={
@@ -642,6 +680,7 @@ def test_used_class_delete_is_blocked_and_usage_is_reported(client: TestClient) 
             "expected_usage_counts": counts,
             "expected_usage_fingerprint": reviewed_fingerprint,
             "expected_target_identity": target_identity,
+            "expected_source_identity": source_identity,
         },
     )
     assert merged.status_code == 200, merged.text

@@ -41,6 +41,7 @@ type MergeClassApproval = {
   expectedUsageCounts: Record<string, number>;
   expectedUsageFingerprint: string;
   expectedTargetIdentity: MergeTargetIdentity;
+  expectedSourceIdentity: MergeTargetIdentity;
 };
 
 // A preview is not permission to execute while any safety evidence is blocked
@@ -380,6 +381,7 @@ function ClassRow({
         expected_usage_counts: approved.expectedUsageCounts,
         expected_usage_fingerprint: approved.expectedUsageFingerprint,
         expected_target_identity: approved.expectedTargetIdentity,
+        expected_source_identity: approved.expectedSourceIdentity,
       }),
     onSuccess: refresh,
   });
@@ -648,7 +650,7 @@ function ClassRow({
               typeof mergeUsageFingerprint === "string" &&
               /^[0-9a-f]{64}$/.test(mergeUsageFingerprint) &&
               window.confirm(
-                `Merge "${labelClass.name}" into "${selectedMergeTarget.name}" (class ${selectedMergeTarget.class_index}; scientific name ${selectedMergeTarget.scientific_name ?? "unspecified"}; state ${selectedMergeTarget.state_name ?? "unspecified"})? ${usage.data?.total_references ?? 0} reviewed class references include ${usage.data?.immutable_reference_count ?? 0} immutable references. Mutable references will be reassigned, historical records kept, and the source archived. Confirm only after inspecting Usage and the target identity.`,
+                `Merge source "${labelClass.name}" (class ${labelClass.class_index}; scientific name ${labelClass.scientific_name ?? "unspecified"}; state ${labelClass.state_name ?? "unspecified"}) into target "${selectedMergeTarget.name}" (class ${selectedMergeTarget.class_index}; scientific name ${selectedMergeTarget.scientific_name ?? "unspecified"}; state ${selectedMergeTarget.state_name ?? "unspecified"})? ${usage.data?.total_references ?? 0} reviewed class references include ${usage.data?.immutable_reference_count ?? 0} immutable references. Mutable references will be reassigned, historical records kept, and the source archived. Confirm only after inspecting Usage and the target identity.`,
               )
             ) {
               merge.mutate({
@@ -660,6 +662,12 @@ function ClassRow({
                   class_index: selectedMergeTarget.class_index,
                   scientific_name: selectedMergeTarget.scientific_name,
                   state_name: selectedMergeTarget.state_name,
+                },
+                expectedSourceIdentity: {
+                  name: labelClass.name,
+                  class_index: labelClass.class_index,
+                  scientific_name: labelClass.scientific_name,
+                  state_name: labelClass.state_name,
                 },
               });
             }
