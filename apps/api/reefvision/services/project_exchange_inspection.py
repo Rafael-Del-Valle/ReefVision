@@ -121,6 +121,15 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
             if version not in {"1.0", "1.1"}:
                 errors.append("Unsupported exchange format version")
 
+            excluded = manifest.get("excluded_record_groups", [])
+            if isinstance(excluded, list) and all(isinstance(group, str) for group in excluded):
+                warnings.extend(
+                    f"Package excludes {group}. Use a backup for a full-fidelity copy."
+                    for group in excluded
+                )
+            else:
+                errors.append("Manifest excluded-record groups are invalid")
+
             sections = manifest.get("sections", {})
             if not isinstance(sections, dict):
                 errors.append("Manifest sections are invalid")

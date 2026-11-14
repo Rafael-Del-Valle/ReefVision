@@ -26,13 +26,18 @@ from reefvision.db.models import (
     BehaviorStateDefinition,
     ClassOperation,
     ClassVisibilityPreference,
+    EcologyIdentityRevision,
     ExportRecord,
     GeoReferencedObservation,
     ImageAsset,
     Job,
     MaskAnnotationEvent,
+    PoseEvaluationRun,
+    PoseIdentityAssociationRun,
+    PoseMeasurementRun,
     Project,
     ProjectClassVisibilityDefault,
+    ReefPoseReference,
     SkeletonAnalysisRevision,
     TrainingDraft,
     VideoAsset,
@@ -659,6 +664,19 @@ class ProjectExchangeV1Service(ProjectExchangeService):
         )
         manifest["telemetry_sidecars"] = [descriptor for descriptor, _ in telemetry_sidecars]
         manifest["generated_artifacts"] = [descriptor for descriptor, _ in generated]
+        unsupported = [
+            label
+            for label, model in (
+                ("ecological identity and linked observation history", EcologyIdentityRevision),
+                ("ReefPose model evaluation runs", PoseEvaluationRun),
+                ("ReefPose individual identity and correction history", PoseIdentityAssociationRun),
+                ("ReefPose measurements and reviewed movement events", PoseMeasurementRun),
+                ("ReefPose independent references and held-out locks", ReefPoseReference),
+            )
+            if self.session.scalar(select(model.id).where(model.project_id == project.id).limit(1))
+        ]
+        if unsupported:
+            manifest["excluded_record_groups"] = unsupported
         manifest["import_policy"] = {
             "mode": "import_as_new_project",
             "id_remapping_required": True,

@@ -117,6 +117,11 @@ export function InteroperabilityWorkspace({
             larger than their metadata alone. Model weights may also have
             separate redistribution licenses.
           </p>
+          <p className="annotation-helper">
+            Use a backup to preserve ecological identity history, ReefPose
+            references, and reviewed movement records. Inspect a ZIP to see
+            which record groups it excludes.
+          </p>
           <button
             type="button"
             onClick={() => exportMutation.mutate()}
@@ -267,12 +272,12 @@ export function InteroperabilityWorkspace({
             <ul className="record-list">
               {packagesQuery.data.map((item) => (
                 <li key={item.id}>
-                  <strong>{item.status}</strong> · format {item.format_version}
+                  <strong>{item.status}</strong> Â· format {item.format_version}
                   <br />
                   <code>{item.manifest_sha256.slice(0, 12) || "pending"}</code>
                   {item.status === "complete" && (
                     <>
-                      {" · "}
+                      {" Â· "}
                       <a href={projectExchangeDownloadUrl(item.id)}>
                         Download ZIP
                       </a>
