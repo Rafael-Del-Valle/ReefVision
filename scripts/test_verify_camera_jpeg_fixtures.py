@@ -929,6 +929,27 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             )
             self.assertEqual(fixture.read_bytes(), original)
 
+    def test_windows_trailing_dot_or_space_jpegs_are_not_silently_skipped(self) -> None:
+        """A POSIX camera export with Win32-normalized JPEG names must fail QC."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            names = ("camera.JPG.", "other.jpeg ")
+            for name in names:
+                try:
+                    (root / name).write_bytes(b"\\xff\\xd8" + name.encode("utf-8") + b"\\xff\\xd9")
+                except OSError:
+                    self.skipTest("Trailing-dot/space filenames unavailable on this filesystem")
+            if {path.name for path in root.iterdir()} != set(names):
+                self.skipTest("Filesystem normalized trailing-dot/space filenames")
+            records, errors = MODULE.inventory(root)
+            self.assertEqual({record["path"] for record in records}, set(names))
+            self.assertEqual({record["extension"] for record in records}, {".jpg", ".jpeg"})
+            for name in names:
+                self.assertIn(f"Windows trailing dot/space path component: {name}", errors)
+                self.assertEqual((root / name).read_bytes(),
+                                 b"\\xff\\xd8" + name.encode("utf-8") + b"\\xff\\xd9")
+            self.assertNotIn("no JPEG-family fixtures found", errors)
+
     def test_empty_fixture_directory_is_not_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             records, errors = MODULE.inventory(Path(directory))

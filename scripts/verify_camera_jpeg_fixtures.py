@@ -91,8 +91,13 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
             elif _is_windows_junction(child):
                 errors.append(f"junction directory not inspected: {child.relative_to(root)}")
         dirnames[:] = sorted(name for name in dirnames if not _is_linked_path(parent / name))
-        jpeg_paths.extend(parent / name for name in filenames
-                          if Path(name).suffix.lower() in JPEG_SUFFIXES)
+        # Win32 ignores trailing spaces/dots in filenames. A POSIX export
+        # containing frame.JPG. or frame.jpeg<space> must be inventoried and
+        # flagged below, not silently omitted from camera acceptance.
+        jpeg_paths.extend(
+            parent / name for name in filenames
+            if Path(name.rstrip(" .")).suffix.lower() in JPEG_SUFFIXES
+        )
     for path in sorted(jpeg_paths):
         relative = path.relative_to(root).as_posix()
         # An apparent JPEG may be a FIFO, socket, device or NTFS reparse
@@ -279,7 +284,7 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                 errors.append(f"JPEG decode failed: {relative}: {type(exc).__name__}")
         record: dict[str, object] = {
             "path": relative,
-            "extension": path.suffix.lower(),
+            "extension": Path(path.name.rstrip(" .")).suffix.lower(),
             "bytes": size,
             "sha256": checksum,
             "jpeg_boundary_markers": signature_ok,
