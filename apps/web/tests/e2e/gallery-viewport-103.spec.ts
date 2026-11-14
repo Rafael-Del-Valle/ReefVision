@@ -586,3 +586,153 @@ test("initial image and gallery scrolling", async ({ page }) => {
   expect(displayRequests).toContain("image-1");
   expect(displayRequests).toContain("image-12");
 });
+
+
+// A real one-image project does not take the same path as the twelve-image
+// project with its other thumbnails merely hidden by CSS. Exercise the actual
+// one-item API response and the first display request before any navigation.
+test("single-image camera gallery cold-start keeps pixels and wheel isolated", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 820 });
+  const jpegBase64 = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1600;
+    canvas.height = 1200;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Canvas context unavailable");
+    context.fillStyle = "#407e8c";
+    context.fillRect(0, 0, 1600, 1200);
+    return canvas.toDataURL("image/jpeg", 0.9).split(",")[1];
+  });
+  const jpeg = Buffer.from(jpegBase64, "base64");
+  expect(jpeg.readUInt16BE(0)).toBe(0xffd8);
+  expect(jpeg.readUInt16BE(jpeg.length - 2)).toBe(0xffd9);
+
+  const project = {
+    id: "single-camera-project",
+    name: "Single Frame Camera Survey",
+    slug: "single-frame-camera-survey",
+    description: "One-image first-open regression",
+    storage_root: "projects/single-camera-project",
+    default_annotation_type: "bbox",
+    label_classes: [],
+    created_at: "2026-07-08T00:00:00Z",
+    updated_at: "2026-07-08T00:00:00Z",
+    archived_at: null,
+  };
+  const image = {
+    id: "single-camera-image",
+    project_id: project.id,
+    original_filename: "single-frame.JfIf",
+    managed_path: "projects/single-camera-project/images/originals/single-frame.jfif",
+    thumbnail_path: null,
+    sha256: "b".repeat(64),
+    width_px: 1600,
+    height_px: 1200,
+    file_size_bytes: jpeg.length,
+    media_type: "image/jpeg",
+    import_source: "camera",
+    capture_timestamp: null,
+    group_key: null,
+    metadata_json: {},
+    annotation_status: "unannotated",
+    annotation_revision: 0,
+    annotation_count: 0,
+    created_at: "2026-07-08T00:00:00Z",
+    updated_at: "2026-07-08T00:00:00Z",
+  };
+  const displayRequests: string[] = [];
+  await page.route("**/api/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/health")) {
+      await route.fulfill({ json: { status: "ok", version: "1.0.3" } });
+    } else if (url.pathname.endsWith("/project-summaries")) {
+      await route.fulfill({
+        json: [{ ...project, label_class_count: 0, active_label_class_count: 0 }],
+      });
+    } else if (url.pathname.endsWith("/projects/" + project.id)) {
+      await route.fulfill({ json: project });
+    } else if (url.pathname.endsWith("/projects/" + project.id + "/images")) {
+      await route.fulfill({
+        json: { items: [image], total: 1, page: 1, page_size: 24, pages: 1 },
+      });
+    } else if (url.pathname.endsWith("/images/" + image.id + "/display")) {
+      displayRequests.push(image.id);
+      await route.fulfill({
+        status: 200,
+        contentType: "image/jpeg",
+        body: jpeg,
+      });
+    } else {
+      await route.abort();
+    }
+  });
+
+  const assetDirectory = path.resolve("dist/assets");
+  const assets = await readdir(assetDirectory);
+  const scriptName = assets.find((name) => name.startsWith("index-") && name.endsWith(".js"));
+  const styleName = assets.find((name) => name.endsWith(".css"));
+  if (!scriptName || !styleName) throw new Error("Built Vite assets are missing");
+  const [script, style] = await Promise.all([
+    readFile(path.join(assetDirectory, scriptName), "utf8"),
+    readFile(path.join(assetDirectory, styleName), "utf8"),
+  ]);
+  await page.route("http://127.0.0.1:8000/", (route) =>
+    route.fulfill({ contentType: "text/html", body: '<main id="root"></main>' }),
+  );
+  await page.goto("http://127.0.0.1:8000/");
+  const packageJson = await readFile(path.resolve("package.json"), "utf8");
+  const pkg: { version: string } = JSON.parse(packageJson);
+  await page.evaluate((version) => {
+    window.localStorage.setItem("reefvision.onboarding.dismissed." + version, "true");
+  }, pkg.version);
+  await page.addStyleTag({ content: style });
+  await page.addScriptTag({ content: script, type: "module" });
+  await page.getByRole("button", { name: /Single Frame Camera Survey/ }).click();
+
+  const workbench = page.getByRole("region", { name: "Image workbench" });
+  const focused = workbench.locator(".rv-media-canvas img");
+  const filmstrip = workbench.locator(".rv-media-filmstrip");
+  await expect(focused).toBeVisible();
+  await expect.poll(() => focused.evaluate((img: HTMLImageElement) => ({
+    complete: img.complete,
+    width: img.naturalWidth,
+    height: img.naturalHeight,
+  }))).toEqual({ complete: true, width: 1600, height: 1200 });
+  await expect(
+    workbench.getByRole("listitem", { name: "Focus single-frame.JfIf" }),
+  ).toHaveAttribute("aria-current", "true");
+  await expect(filmstrip.locator('[aria-current="true"]')).toHaveCount(1);
+  expect(displayRequests).toContain(image.id);
+
+  // Real input, not a synthetic WheelEvent, catches document scroll-through
+  // when the strip has only one item and the first image just loaded.
+  const pageScroll = () => page.evaluate(() => ({ x: scrollX, y: scrollY }));
+  const beforeScroll = await pageScroll();
+  await focused.hover();
+  const beforeBounds = await focused.boundingBox();
+  await page.mouse.wheel(0, 320);
+  await page.mouse.wheel(200, 0);
+  await expect.poll(pageScroll).toEqual(beforeScroll);
+  expect(await focused.boundingBox()).toEqual(beforeBounds);
+
+  await filmstrip.hover();
+  const beforeStrip = await filmstrip.evaluate((element) => element.scrollLeft);
+  await page.mouse.wheel(0, 320);
+  await expect.poll(pageScroll).toEqual(beforeScroll);
+  expect(await filmstrip.evaluate((element) => element.scrollLeft).toBe(beforeStrip);
+
+  // A first-open window resize and keyboard navigation cannot change image
+  // identity or move the page in a one-item gallery.
+  await page.setViewportSize({ width: 960, height: 720 });
+  await workbench.focus();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("End");
+  await expect(
+    workbench.getByRole("listitem", { name: "Focus single-frame.JfIf" }),
+  ).toHaveAttribute("aria-current", "true");
+  await expect.poll(pageScroll).toEqual(beforeScroll);
+  await expect(focused).toBeVisible();
+  expect(await focused.evaluate((img: HTMLImageElement) =>
+    [img.naturalWidth, img.naturalHeight],
+  )).toEqual([1600, 1200]);
+});
