@@ -199,6 +199,27 @@ def test_positive_edge_cost_roundoff_does_not_claim_exact_route_multiplicity() -
         assert route["length_m"] == pytest.approx(2e7)
 
 
+
+def test_subresolution_prefix_is_not_mistaken_for_an_exact_route_tie() -> None:
+    # The shortest candidate 2 -> 1 -> 0 adds a huge edge *after*
+    # a tiny positive prefix. The prefix vanishes in the rounded total,
+    # even though no positive edge was rounded away at the moment it was
+    # added. The direct route is shorter in exact stored-edge arithmetic.
+    paths = mesh_edge_paths(
+        points=[tuple(point) for point in ROUNDING_GEOMETRY["vertices"]],
+        faces=ROUNDING_GEOMETRY["faces"],
+        pairs=[[2, 0]],
+        scale=0.02,
+        scale_uncertainty=0.1,
+    )
+    assert paths is not None
+    assert paths[0]["shortest_route_alternatives_status"] == (
+        "unassessable_floating_point_cost_resolution"
+    )
+    assert "positive_mesh_edge_cost_rounded_away" in paths[0]["path_qc_warnings"]
+    assert "multiple_equal_cost_mesh_routes" not in paths[0]["path_qc_warnings"]
+
+
 def test_route_roundoff_qc_roundtrips_standalone_and_saved_workflow(
     client: TestClient,
 ) -> None:
