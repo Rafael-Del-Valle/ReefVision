@@ -5,6 +5,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+
+from reefvision.services import class_operations as class_operations_module
+from reefvision.services.class_operations import ClassOperationsService
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import (
@@ -983,3 +986,125 @@ def test_class_operation_preview_expires_after_compatibility_provenance_change(
         assert operation.final_state == "preview_stale" and operation.started_at is None
         assert session.get(LabelClass, source["id"]) is not None
         assert session.get(LabelClass, target["id"]) is not None
+
+def test_class_execution_never_publishes_partial_running_state(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Other readers see approved preview until the biological mutation commits."""
+    project = create_project(client, name="Atomic class change")
+    source = create_label_class(
+        client, project["id"], class_index=0, name="Swiftia closed", display_color="#E76F51"
+    )
+    target = create_label_class(
+        client, project["id"], class_index=1, name="Swiftia open", display_color="#2A9D8F"
+    )
+    seed_reassignment_records(
+        client,
+        project,
+        source,
+        target,
+        include_deleted_annotation=False,
+        include_historical_prediction=False,
+    )
+    preview = client.post(
+        f"/api/v1/projects/{project['id']}/classes/{source['id']}/reassign/preview",
+        json={"target_class_id": target["id"]},
+    )
+    assert preview.status_code == 201, preview.text
+    approval = preview.json()
+    observed: list[tuple[str, str]] = []
+    original_snapshot = class_operations_module.annotation_snapshot
+
+    def observe_other_connection(annotation: Annotation) -> dict[str, Any]:
+        # Called during the live biological mutation, before its final commit.
+        # Read through a second SQLite connection, not the writing session.
+        with Session(cast(FastAPI, client.app).state.engine) as other:
+            operation = other.get(ClassOperation, approval["id"])
+            existing = other.get(Annotation, "annotation-active")
+            assert operation is not None
+            assert existing is not None
+            observed.append((operation.status, existing.label_class_id))
+        return original_snapshot(annotation)
+
+    monkeypatch.setattr(class_operations_module, "annotation_snapshot", observe_other_connection)
+    response = client.post(
+        f"/api/v1/projects/{project['id']}/classes/{source['id']}/reassign",
+        json={"operation_id": approval["id"], "preview_checksum": approval["preview_checksum"]},
+    )
+    assert response.status_code == 200, response.text
+    assert len(observed) >= 2
+    assert all(state == ("previewed", source["id"]) for state in observed)
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        operation = session.get(ClassOperation, approval["id"])
+        annotation = session.get(Annotation, "annotation-active")
+        assert operation is not None and operation.status == "completed"
+        assert annotation is not None and annotation.label_class_id == target["id"]
+        assert session.scalar(
+            select(AnnotationEvent.id).where(AnnotationEvent.event_type == "class_reassigned")
+        )
+
+
+def test_class_execution_cannot_reuse_preview_claimed_by_other_writer(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A concurrent completion between the initial read and claim cannot rerun science edits."""
+    project = create_project(client, name="Competing class execution")
+    source = create_label_class(
+        client, project["id"], class_index=0, name="Thesea closed", display_color="#E76F51"
+    )
+    target = create_label_class(
+        client, project["id"], class_index=1, name="Thesea open", display_color="#2A9D8F"
+    )
+    seed_reassignment_records(
+        client,
+        project,
+        source,
+        target,
+        include_deleted_annotation=False,
+        include_historical_prediction=False,
+    )
+    preview = client.post(
+        f"/api/v1/projects/{project['id']}/classes/{source['id']}/reassign/preview",
+        json={"target_class_id": target["id"]},
+    )
+    assert preview.status_code == 201, preview.text
+    approval = preview.json()
+    original_class = ClassOperationsService._class
+    intercepted = False
+
+    def other_writer_wins(
+        service: ClassOperationsService, project_id: str, class_id: str
+    ) -> LabelClass:
+        nonlocal intercepted
+        label_class = original_class(service, project_id, class_id)
+        if class_id == target["id"] and not intercepted:
+            intercepted = True
+            with Session(cast(FastAPI, client.app).state.engine) as other:
+                claimed = other.get(ClassOperation, approval["id"])
+                assert claimed is not None
+                claimed.status = "completed"
+                claimed.final_state = "reassigned"
+                claimed.completed_at = datetime.now(UTC)
+                other.commit()
+        return label_class
+
+    monkeypatch.setattr(ClassOperationsService, "_class", other_writer_wins)
+    response = client.post(
+        f"/api/v1/projects/{project['id']}/classes/{source['id']}/reassign",
+        json={"operation_id": approval["id"], "preview_checksum": approval["preview_checksum"]},
+    )
+    assert intercepted is True
+    assert response.status_code == 409, response.text
+    assert "already claimed" in response.json()["detail"]
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        operation = session.get(ClassOperation, approval["id"])
+        annotation = session.get(Annotation, "annotation-active")
+        assert operation is not None and operation.status == "completed"
+        assert annotation is not None and annotation.label_class_id == source["id"]
+        assert not list(
+            session.scalars(
+                select(AnnotationEvent.id).where(
+                    AnnotationEvent.event_type == "class_reassigned"
+                )
+            )
+        )
