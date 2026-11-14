@@ -7,6 +7,7 @@ export type WorkspaceInspectorView =
   | "environmental_context"
   | "computed_metrics"
   | "scientific_heatmaps"
+  | "ecology"
   | "models"
   | "training"
   | "classification"
@@ -47,6 +48,7 @@ export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "environmental_context",
   "computed_metrics",
   "scientific_heatmaps",
+  "ecology",
   "models",
   "training",
   "classification",
@@ -63,6 +65,27 @@ const WORKSPACE_INSPECTORS: Record<
   WorkspaceInspectorView,
   WorkspaceInspectorDefinition
 > = {
+  ecology: {
+    title: "Organisms & ecology",
+    summary:
+      "Record organism identity and inspect repeated calibrated observations.",
+    boundary: "review",
+    recordPolicy:
+      "Identity and source links preserve evidence for scientific review. Projected changes use two-dimensional geometry.",
+    actions: [
+      {
+        label: "Images & annotation",
+        target: "gallery",
+        description: "Review and calibrate an observation's source image.",
+      },
+      {
+        label: "Workflow Builder",
+        target: "workflows",
+        description:
+          "Use the ecological identity and measurement source nodes.",
+      },
+    ],
+  },
   gallery: {
     title: "Image annotation & inference",
     summary:

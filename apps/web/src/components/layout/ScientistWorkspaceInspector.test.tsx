@@ -35,9 +35,10 @@ function renderInspector({
 
 describe("ScientistWorkspaceInspector", () => {
   it("defines context for every current project workspace", () => {
-    expect(WORKSPACE_INSPECTOR_VIEWS).toHaveLength(16);
+    expect(WORKSPACE_INSPECTOR_VIEWS).toHaveLength(17);
     expect(WORKSPACE_INSPECTOR_VIEWS).toContain("environmental_context");
     expect(WORKSPACE_INSPECTOR_VIEWS).toContain("computed_metrics");
+    expect(WORKSPACE_INSPECTOR_VIEWS).toContain("ecology");
     expect(WORKSPACE_INSPECTOR_VIEWS).toContain("scientific_heatmaps");
 
     for (const view of WORKSPACE_INSPECTOR_VIEWS) {

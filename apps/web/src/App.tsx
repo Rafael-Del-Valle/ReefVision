@@ -72,6 +72,8 @@ import {
   type WorkspacePresetId,
 } from "./components/layout/workspacePresets";
 import "./styles/design-system.css";
+import { EcologyWorkspace } from "./features/ecology/EcologyWorkspace";
+
 import "./styles/app.css";
 import "./styles/phase12-workspace.css";
 
@@ -92,6 +94,7 @@ type ProjectView =
   | "environmental_context"
   | "computed_metrics"
   | "scientific_heatmaps"
+  | "ecology"
   | "models"
   | "training"
   | "classification"
@@ -104,7 +107,7 @@ type ProjectView =
   | "workflows"
   | "system";
 
-const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.1.0";
+const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.2.0";
 
 type ProjectTab = Exclude<ProjectView, "system">;
 
@@ -155,6 +158,12 @@ const PROJECT_NAV_GROUPS: Array<{
         label: "Computed Metrics",
         description:
           "Define unit-aware formulas and calculate immutable results from scientific records.",
+      },
+      {
+        id: "ecology",
+        label: "Organisms & ecology",
+        description:
+          "Link identity revisions to documented observations and compare calibrated timepoints.",
       },
       {
         id: "scientific_heatmaps",
@@ -424,6 +433,16 @@ function ReefVisionMainApp() {
       type: "select_track",
       trackId,
     });
+  }, []);
+
+  const handlePoseModelSelect = useCallback((modelId: string) => {
+    videoWorkspaceCommandSequenceRef.current += 1;
+    setVideoWorkspaceCommand({
+      id: videoWorkspaceCommandSequenceRef.current,
+      type: "select_model",
+      modelId,
+    });
+    setActiveView("video");
   }, []);
 
   const handleVideoWorkspaceCommandHandled = useCallback(
@@ -984,6 +1003,12 @@ function ReefVisionMainApp() {
                 project={selectedProject}
               />
             )}
+            {activeView === "ecology" && (
+              <EcologyWorkspace
+                key={selectedProject.id}
+                projectId={selectedProject.id}
+              />
+            )}
             {activeView === "scientific_heatmaps" && (
               <ScientificHeatmapsPanel
                 key={selectedProject.id}
@@ -1037,6 +1062,7 @@ function ReefVisionMainApp() {
                   setTrainingCatalogModelId(catalogId);
                   setActiveView("training");
                 }}
+                onUsePoseModel={handlePoseModelSelect}
               />
             )}
             {activeView === "training" && (

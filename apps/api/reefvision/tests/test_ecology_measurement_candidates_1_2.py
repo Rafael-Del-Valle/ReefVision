@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta, timezone
+from io import BytesIO
 from typing import cast
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from reefvision.db.models import ImageAsset
 from reefvision.domain.errors import ValidationError
@@ -90,6 +92,46 @@ def test_projected_box_candidates_are_typed_unverified_and_saved(
     ]
     assert len(artifacts) == 1
     assert artifacts[0]["payload_json"] == payload
+
+
+@pytest.mark.parametrize("offset", ["-04:00", None])
+def test_imported_exif_captures_explicit_offset_through_sqlite(
+    client: TestClient, offset: str | None
+) -> None:
+    from reefvision.tests.test_annotations import create_project
+    from reefvision.tests.test_ecology_annotation_evidence_1_2 import _annotation_link, _box
+    from reefvision.tests.test_ecology_image_evidence_1_2 import _link, _register
+
+    project = create_project(client, "Observed EXIF collection")
+    project_id = project["id"]
+    _register(client, project_id, "colony-a")
+    exif = Image.Exif()
+    exif[36867] = "2025:10:01 12:00:00"
+    if offset is not None:
+        exif[36881] = offset
+    output = BytesIO()
+    Image.new("RGB", (80, 60)).save(output, format="JPEG", exif=exif)
+    imported = client.post(
+        f"/api/v1/projects/{project_id}/imports/images",
+        files={"files": ("observed.jpg", output.getvalue(), "image/jpeg")},
+    )
+    assert imported.status_code == 200, imported.text
+    image_id = imported.json()["successful"][0]["image_id"]
+    image_link = _link(client, project_id, "colony-a", image_id)
+    assert image_link.status_code == 201, image_link.text
+    annotation_id = _box(client, image_id, project["label_classes"][0]["id"])
+    annotation = _annotation_link(client, project_id, image_link.json()["id"], "box", annotation_id)
+    assert annotation.status_code == 201, annotation.text
+    _save_calibration(client, image_id)
+    assert _link_calibration(client, project_id, annotation.json()).status_code == 201
+    candidates = _get(client, project_id).json()["candidates"]
+    assert len(candidates) == 2
+    if offset is None:
+        assert all(row["capture_time_status"] == "timezone_missing" for row in candidates)
+        assert all(row["capture_timestamp_utc"] is None for row in candidates)
+    else:
+        assert all(row["capture_time_status"] == "timezone_aware" for row in candidates)
+        assert all(row["capture_timestamp_utc"] == "2025-10-01T16:00:00Z" for row in candidates)
 
 
 def test_source_change_revokes_candidate_api_and_saved_workflow(

@@ -185,6 +185,40 @@ def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
     return None
 
 
+def recover_explicit_exif_capture_time(
+    stored: datetime, metadata: dict[str, Any]
+) -> datetime | None:
+    """Recover UTC after SQLite strips the importer's known offset.
+
+    Only the matching acquisition tag's explicit offset can establish time.
+    The derived instant must agree with the stored UTC wall clock.
+    """
+    exif = metadata.get("exif")
+    if not isinstance(exif, dict) or metadata.get("exif_warning"):
+        return None
+    fields = (
+        ("DateTimeOriginal", "OffsetTimeOriginal", "SubsecTimeOriginal", 36867, 36881, 37521),
+        ("DateTimeDigitized", "OffsetTimeDigitized", "SubsecTimeDigitized", 36868, 36882, 37522),
+        ("DateTime", "OffsetTime", "SubsecTime", 306, 36880, 37520),
+    )
+    for date_name, offset_name, fraction_name, date_tag, offset_tag, fraction_tag in fields:
+        if date_name not in exif:
+            continue
+        if not exif.get(offset_name):
+            return None
+        recovered = _capture_timestamp(
+            {
+                date_tag: exif[date_name],
+                offset_tag: exif[offset_name],
+                fraction_tag: exif.get(fraction_name),
+            }
+        )
+        if recovered is not None and recovered.replace(tzinfo=None) == stored:
+            return recovered
+        return None
+    return None
+
+
 def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> InspectedImage:
     try:
         with Image.open(path) as image:

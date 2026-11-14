@@ -9,6 +9,30 @@ import {
 } from "./workflowTemplates";
 
 describe("workflowTemplates", () => {
+  it("connects source-linked ecology candidates to the existing CSV adapter", () => {
+    const template = workflowTemplates.find(
+      (item) => item.id === "project-ecology",
+    );
+    expect(template?.graph.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          node_type: "ecology_identity_registry_source",
+        }),
+        expect.objectContaining({
+          node_type: "ecology_measurement_csv_export",
+        }),
+      ]),
+    );
+    expect(template?.graph.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source_port_id: "measurement_candidates",
+          target_port_id: "candidates",
+        }),
+      ]),
+    );
+  });
+
   it("includes executable templates for every environmental-analysis node", () => {
     const expected = new Set([
       "current_streamline_analysis",

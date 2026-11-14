@@ -79,7 +79,7 @@ const environmentalAnalysisTemplates: WorkflowTemplate[] = [
     id: "environmental-current-streamlines",
     name: "Persisted current streamlines",
     description:
-      "Explicit paired current records and seeds â†’ deterministic frozen-field streamlines with immutable provenance.",
+      "Explicit paired current records and seeds Ã¢â€ â€™ deterministic frozen-field streamlines with immutable provenance.",
     graph: environmentalAnalysisGraph(
       "persisted-current-streamlines",
       "Persisted current streamlines",
@@ -99,7 +99,7 @@ const environmentalAnalysisTemplates: WorkflowTemplate[] = [
     id: "environmental-lunar-context",
     name: "Persisted lunar context",
     description:
-      "Explicit UTC timestamps â†’ deterministic offline lunar calculation â†’ immutable evidence.",
+      "Explicit UTC timestamps Ã¢â€ â€™ deterministic offline lunar calculation Ã¢â€ â€™ immutable evidence.",
     graph: environmentalAnalysisGraph(
       "persisted-lunar-context",
       "Persisted lunar context",
@@ -114,7 +114,7 @@ const environmentalAnalysisTemplates: WorkflowTemplate[] = [
     id: "environmental-tidal-context",
     name: "Bounded NOAA tidal context",
     description:
-      "Explicit station, datum, UTC time, and distance bounds â†’ separate observed and predicted tidal evidence.",
+      "Explicit station, datum, UTC time, and distance bounds Ã¢â€ â€™ separate observed and predicted tidal evidence.",
     graph: environmentalAnalysisGraph(
       "bounded-noaa-tidal-context",
       "Bounded NOAA tidal context",
@@ -134,7 +134,7 @@ const environmentalAnalysisTemplates: WorkflowTemplate[] = [
     id: "environmental-event-windows",
     name: "Environmental event windows",
     description:
-      "Saved threshold samples â†’ explicit bounded windows with deterministic overlap merging.",
+      "Saved threshold samples Ã¢â€ â€™ explicit bounded windows with deterministic overlap merging.",
     graph: environmentalAnalysisGraph(
       "environmental-event-windows",
       "Environmental event windows",
@@ -150,15 +150,15 @@ const environmentalAnalysisTemplates: WorkflowTemplate[] = [
   },
   {
     id: "environmental-observation-join",
-    name: "Observationâ€“environment join",
+    name: "ObservationÃ¢â‚¬â€œenvironment join",
     description:
-      "Explicit biological records â†’ bounded time, location, and optional depth matching.",
+      "Explicit biological records Ã¢â€ â€™ bounded time, location, and optional depth matching.",
     graph: environmentalAnalysisGraph(
       "observation-environment-join",
-      "Observationâ€“environment join",
+      "ObservationÃ¢â‚¬â€œenvironment join",
       "observation_environment_join",
       {
-        name: "Observationâ€“environment join",
+        name: "ObservationÃ¢â‚¬â€œenvironment join",
         observation_record_ids: ["replace-with-observation-record-id"],
         environmental_variable: "water_temperature",
         max_time_delta_s: 3600,
@@ -172,7 +172,7 @@ const environmentalAnalysisTemplates: WorkflowTemplate[] = [
     id: "environmental-lagged-comparison",
     name: "Descriptive lagged comparison",
     description:
-      "Saved observation join â†’ explicit lags with sample-reuse and pseudoreplication diagnostics.",
+      "Saved observation join Ã¢â€ â€™ explicit lags with sample-reuse and pseudoreplication diagnostics.",
     graph: environmentalAnalysisGraph(
       "descriptive-lagged-comparison",
       "Descriptive lagged comparison",
@@ -583,7 +583,7 @@ const detectionTraining = {
 
 const reviewRetrain = {
   graph_id: "review-dataset-retrain",
-  name: "Review â†’ Dataset v2 â†’ Retrain",
+  name: "Review Ã¢â€ â€™ Dataset v2 Ã¢â€ â€™ Retrain",
   schema_version: "workflow-graph-0001",
   nodes: [
     {
@@ -810,7 +810,7 @@ const classificationTraining = {
 
 const samMeasurements = {
   graph_id: "reviewed-boxes-to-measurements",
-  name: "Detection â†’ SAM/SAM2 â†’ Measurements",
+  name: "Detection Ã¢â€ â€™ SAM/SAM2 Ã¢â€ â€™ Measurements",
   schema_version: "workflow-graph-0001",
   nodes: [
     {
@@ -944,7 +944,7 @@ const samMeasurements = {
 
 const poseActiveLearningRetrain = {
   graph_id: "pose-active-learning-retrain",
-  name: "Pose Active Learning â†’ retrain",
+  name: "Pose Active Learning Ã¢â€ â€™ retrain",
   schema_version: "workflow-graph-0001",
   metadata: {
     workflow_kind: "scientist_active_learning_loop",
@@ -952,7 +952,7 @@ const poseActiveLearningRetrain = {
     feedback_loop: {
       from_node_id: "register",
       to_node_id: "pose",
-      label: "Next iteration: trained model â†’ inference",
+      label: "Next iteration: trained model Ã¢â€ â€™ inference",
       description:
         "Use the newly registered pose model as the seed model for the next saved workflow revision. This visual cue is not an executable cyclic edge.",
     },
@@ -1515,25 +1515,73 @@ export function createBiologicalMovementWorkflow() {
   };
 }
 
+const projectEcology = {
+  graph_id: "project-ecology",
+  name: "Ecology observations and calibrated candidates",
+  schema_version: "workflow-graph-0001",
+  nodes: [
+    {
+      node_id: "project",
+      node_type: "project_source",
+      parameters: {},
+      position: { x: 40, y: 90 },
+    },
+    {
+      node_id: "observations",
+      node_type: "ecology_identity_registry_source",
+      parameters: {},
+      position: { x: 320, y: 90 },
+    },
+    {
+      node_id: "measurements",
+      node_type: "ecology_measurement_csv_export",
+      parameters: {},
+      position: { x: 670, y: 50 },
+    },
+    {
+      node_id: "population",
+      node_type: "ecology_population_csv_export",
+      parameters: {},
+      position: { x: 670, y: 210 },
+    },
+  ],
+  edges: [
+    {
+      edge_id: "project-observations",
+      source_node_id: "project",
+      source_port_id: "project",
+      target_node_id: "observations",
+      target_port_id: "project",
+    },
+    ...["measurements", "population"].map((node) => ({
+      edge_id: `observations-${node}`,
+      source_node_id: "observations",
+      source_port_id: "measurement_candidates",
+      target_node_id: node,
+      target_port_id: "candidates",
+    })),
+  ],
+};
+
 export const workflowTemplates: WorkflowTemplate[] = [
   ...environmentalAnalysisTemplates,
   {
     id: "verified-mask-coverage",
     name: "Verified mask area and coverage",
     description:
-      "Explicit reviewed images â†’ overlap-safe mask union and coverage â†’ immutable result.",
+      "Explicit reviewed images Ã¢â€ â€™ overlap-safe mask union and coverage Ã¢â€ â€™ immutable result.",
     graph: verifiedMaskCoverage,
   },
   {
     id: "reviewed-annotation-aggregate",
     name: "Reviewed annotation aggregate",
     description:
-      "Explicit reviewed images â†’ replicate-aware verified annotation count â†’ immutable result.",
+      "Explicit reviewed images Ã¢â€ â€™ replicate-aware verified annotation count Ã¢â€ â€™ immutable result.",
     graph: reviewedAnnotationAggregate,
   },
   {
     id: "pose-model-comparison",
-    name: "Pose models â†’ scientific comparison",
+    name: "Pose models Ã¢â€ â€™ scientific comparison",
     description:
       "Evaluate multiple registered pose models on one frozen scientist-verified dataset and preserve a reproducible comparison report.",
     graph: createPoseComparisonWorkflow(),
@@ -1542,12 +1590,12 @@ export const workflowTemplates: WorkflowTemplate[] = [
     id: "reefpose-biological-movement",
     name: "ReefPose biological movement",
     description:
-      "Pose inference â†’ identity review â†’ anatomical measurements â†’ event detection â†’ scientist review â†’ reproducible export.",
+      "Pose inference Ã¢â€ â€™ identity review Ã¢â€ â€™ anatomical measurements Ã¢â€ â€™ event detection Ã¢â€ â€™ scientist review Ã¢â€ â€™ reproducible export.",
     graph: createBiologicalMovementWorkflow(),
   },
   {
     id: "pose-architecture-training",
-    name: "Pose architecture â†’ train from scratch",
+    name: "Pose architecture Ã¢â€ â€™ train from scratch",
     description:
       "Choose a frozen scientist-verified pose dataset and a YOLO11 pose architecture. Train from random initialization, then register the output with its landmark schema and provenance.",
     graph: createPoseArchitectureWorkflow(),
@@ -1561,24 +1609,31 @@ export const workflowTemplates: WorkflowTemplate[] = [
   },
   {
     id: "pose-active-learning-retrain",
-    name: "Pose Active Learning â†’ retrain",
+    name: "Pose Active Learning Ã¢â€ â€™ retrain",
     description:
-      "Pose inference â†’ temporal identity â†’ scientist review â†’ Active Learning â†’ verified dataset â†’ retrain â†’ register â†’ Results Package, with a visual next-iteration cue.",
+      "Pose inference Ã¢â€ â€™ temporal identity Ã¢â€ â€™ scientist review Ã¢â€ â€™ Active Learning Ã¢â€ â€™ verified dataset Ã¢â€ â€™ retrain Ã¢â€ â€™ register Ã¢â€ â€™ Results Package, with a visual next-iteration cue.",
     graph: poseActiveLearningRetrain,
   },
   {
     id: "computed-scientific-metric",
     name: "Computed scientific metric",
     description:
-      "Explicit scientific records â†’ safe unit-aware definition â†’ immutable result.",
+      "Explicit scientific records Ã¢â€ â€™ safe unit-aware definition Ã¢â€ â€™ immutable result.",
     graph: computedScientificMetric,
   },
   {
     id: "pose-identity-evaluation",
     name: "Multi-animal pose identity evaluation",
     description:
-      "Pose inference â†’ deterministic individual association â†’ scientist identity review â†’ IDF1 evaluation â†’ provenance-preserving export.",
+      "Pose inference Ã¢â€ â€™ deterministic individual association Ã¢â€ â€™ scientist identity review Ã¢â€ â€™ IDF1 evaluation Ã¢â€ â€™ provenance-preserving export.",
     graph: createPoseIdentityEvaluationWorkflow(),
+  },
+  {
+    id: "project-ecology",
+    name: "Ecology observations and calibrated candidates",
+    description:
+      "Read linked observations and export projected measurements and declared-unit summaries for review.",
+    graph: projectEcology,
   },
   {
     id: "project-images",
@@ -1602,12 +1657,13 @@ export const workflowTemplates: WorkflowTemplate[] = [
   {
     id: "detection-training",
     name: "Detection training",
-    description: "Immutable dataset â†’ train â†’ register â†’ inference.",
+    description:
+      "Immutable dataset Ã¢â€ â€™ train Ã¢â€ â€™ register Ã¢â€ â€™ inference.",
     graph: detectionTraining,
   },
   {
     id: "review-retrain",
-    name: "Review â†’ Dataset v2 â†’ Retrain",
+    name: "Review Ã¢â€ â€™ Dataset v2 Ã¢â€ â€™ Retrain",
     description:
       "Review predictions, freeze a child dataset version, and retrain from the prior detector.",
     graph: reviewRetrain,
@@ -1616,14 +1672,14 @@ export const workflowTemplates: WorkflowTemplate[] = [
     id: "classification-training",
     name: "Classification training",
     description:
-      "Dataset version â†’ classification materialization â†’ train â†’ inference.",
+      "Dataset version Ã¢â€ â€™ classification materialization Ã¢â€ â€™ train Ã¢â€ â€™ inference.",
     graph: classificationTraining,
   },
   {
     id: "sam-measurements",
     name: "SAM/SAM2 measurements",
     description:
-      "Detection review â†’ Prompt Assist masks â†’ mask review â†’ coral measurements.",
+      "Detection review Ã¢â€ â€™ Prompt Assist masks Ã¢â€ â€™ mask review Ã¢â€ â€™ coral measurements.",
     graph: samMeasurements,
   },
 ];
