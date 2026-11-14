@@ -655,6 +655,10 @@ describe("VideoTrackingWorkspace", () => {
 
     renderWorkspace();
 
+    // Finish initial video selection before supplying input that resets on video changes.
+    await waitFor(() =>
+      expect(screen.getByLabelText("Video")).toHaveValue("video-1"),
+    );
     expect(
       await screen.findByRole("heading", { name: "Pose interoperability" }),
     ).toBeInTheDocument();
@@ -673,7 +677,10 @@ describe("VideoTrackingWorkspace", () => {
         name: /I confirm external frame indices correspond to this video/,
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Import pose" }));
+    // Wait for the asynchronous video selection before submitting the import.
+    const importButton = screen.getByRole("button", { name: "Import pose" });
+    await waitFor(() => expect(importButton).toBeEnabled());
+    fireEvent.click(importButton);
 
     await waitFor(() =>
       expect(poseInteropApi.importPoseInteroperability).toHaveBeenCalledWith(

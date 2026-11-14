@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -15,6 +16,7 @@ from reefvision.db.models import (
     WorkflowNodeRun,
     WorkflowRun,
 )
+from reefvision.domain.errors import ConflictError
 from reefvision.schemas.workflow_graphs import WorkflowGraphRequest, WorkflowPlanInputBinding
 from reefvision.services.workflow_execution import WorkflowExecutionService
 from reefvision.services.workflow_graphs import WorkflowGraphService
@@ -22,6 +24,7 @@ from reefvision.services.workflow_provenance import (
     build_workflow_run_provenance,
     verify_succeeded_node_artifacts,
     verify_workflow_artifact,
+    verify_workflow_run_node_graph_lineage,
 )
 from reefvision.services.workflow_review import WorkflowReviewRequired
 from reefvision.storage.datasets import canonical_json_sha256
@@ -71,6 +74,12 @@ def _set_waiting_for_review(
         details = dict(review.details)
         requested_node_id = str(details.get("node_run_id") or "")
         node_run = session.get(WorkflowNodeRun, requested_node_id) if requested_node_id else None
+        # A review adapter may supply a persisted node ID. Never let a stale
+        # or incorrect ID pause another run or overwrite completed science.
+        if requested_node_id and (
+            node_run is None or node_run.workflow_run_id != run_id or node_run.status != "running"
+        ):
+            raise RuntimeError("Workflow review pause requires an active node in this run")
         if node_run is None:
             node_run = session.scalar(
                 select(WorkflowNodeRun)
@@ -169,17 +178,37 @@ def _input_artifacts(
         )
         if producer is None or producer.status != "succeeded":
             raise RuntimeError(f"Node {step_node_id} requires unfinished producer {source_node_id}")
-        artifact = session.scalar(
-            select(WorkflowArtifact).where(
-                WorkflowArtifact.workflow_run_id == run_id,
-                WorkflowArtifact.producer_node_run_id == producer.id,
-                WorkflowArtifact.producer_port_id == source_port_id,
-                WorkflowArtifact.data_type == expected_type,
+        matches = list(
+            session.scalars(
+                select(WorkflowArtifact).where(
+                    WorkflowArtifact.workflow_run_id == run_id,
+                    WorkflowArtifact.producer_node_run_id == producer.id,
+                    WorkflowArtifact.producer_port_id == source_port_id,
+                )
             )
         )
-        if artifact is None:
+        if not matches:
             raise RuntimeError(
                 f"Node {step_node_id} is missing artifact {source_node_id}.{source_port_id}"
+            )
+        # A retry must consume the output ID actually declared by the
+        # completed producer, not an arbitrary duplicate in the same port.
+        # The artifact table has no uniqueness constraint for producer/port.
+        if len(matches) != 1:
+            raise RuntimeError(
+                f"Node {step_node_id} has ambiguous saved output {source_node_id}.{source_port_id}"
+            )
+        artifact = matches[0]
+        if artifact.data_type != expected_type:
+            raise RuntimeError(
+                f"Node {step_node_id} has mismatched saved output type "
+                f"{source_node_id}.{source_port_id}"
+            )
+        declared_ids = producer.output_artifact_ids_json
+        if not isinstance(declared_ids, list) or artifact.id not in declared_ids:
+            raise RuntimeError(
+                f"Node {step_node_id} cannot consume undeclared output "
+                f"{source_node_id}.{source_port_id}"
             )
 
         verify_workflow_artifact(
@@ -212,6 +241,27 @@ def process_workflow_run_job(
             job.completed_at = _now()
             session.commit()
             return False
+        # A stale queued job must not reopen completed, failed, or cancelled
+        # scientific work. Check terminal state before validating job ownership:
+        # even a corrupted cross-project job must not rewrite frozen science.
+        if run.status in {"succeeded", "failed", "cancelled"}:
+            job.status = "failed"
+            job.error_message = "Workflow run is already terminal; refusing queued job replay"
+            job.completed_at = _now()
+            session.commit()
+            return False
+        # A queued job and its run must remain in the same project. A stale
+        # or corrupted job ownership field must not execute another project's
+        # saved scientific workflow under the wrong job identity.
+        if job.project_id != run.project_id:
+            job.status = "failed"
+            job.error_message = "Workflow job project ownership no longer matches run"
+            job.completed_at = _now()
+            run.status = "failed"
+            run.error_message = job.error_message
+            run.completed_at = job.completed_at
+            session.commit()
+            return False
         graph_record = session.get(WorkflowGraphRecord, run.workflow_graph_record_id)
         if graph_record is None:
             job.status = "failed"
@@ -222,7 +272,20 @@ def process_workflow_run_job(
             run.completed_at = job.completed_at
             session.commit()
             return False
-        graph = WorkflowGraphRequest.model_validate(graph_record.graph_json)
+        # A persisted graph can become malformed after queueing (for example,
+        # through an interrupted migration). Fail the queued job explicitly
+        # instead of leaving it queued after an uncaught Pydantic exception.
+        try:
+            graph = WorkflowGraphRequest.model_validate(graph_record.graph_json)
+        except PydanticValidationError:
+            job.status = "failed"
+            job.error_message = "Saved workflow graph revision is invalid"
+            job.completed_at = _now()
+            run.status = "failed"
+            run.error_message = job.error_message
+            run.completed_at = job.completed_at
+            session.commit()
+            return False
         if canonical_json_sha256(graph.model_dump(mode="json")) != run.graph_sha256:
             job.status = "failed"
             job.error_message = "Workflow graph checksum no longer matches the queued run"
@@ -232,16 +295,63 @@ def process_workflow_run_job(
             run.completed_at = job.completed_at
             session.commit()
             return False
-        plan = WorkflowGraphService(session).plan(run.project_id, graph)
-        if not plan.valid:
+        # A parseable graph can still lose its saved revision or project lineage
+        # after queueing. Verify the raw stored JSON as well as the pinned run
+        # digest: Pydantic may discard unknown keys during model validation.
+        if (
+            graph_record.project_id != run.project_id
+            or graph_record.graph_key != graph.graph_id
+            or graph_record.schema_version != graph.schema_version
+            or graph_record.graph_sha256 != run.graph_sha256
+            or canonical_json_sha256(graph_record.graph_json) != graph_record.graph_sha256
+        ):
             job.status = "failed"
-            job.error_message = "Workflow graph no longer validates"
+            job.error_message = "Workflow graph provenance checksum failed"
             job.completed_at = _now()
             run.status = "failed"
             run.error_message = job.error_message
             run.completed_at = job.completed_at
             session.commit()
             return False
+        plan = WorkflowGraphService(session).plan(run.project_id, graph)
+        if not plan.valid:
+            job.status = "failed"
+            first_error = next((issue for issue in plan.issues if issue.severity == "error"), None)
+            job.error_message = (
+                "Workflow graph no longer validates"
+                if first_error is None
+                else (
+                    f"Workflow graph no longer validates ({first_error.code}): "
+                    f"{first_error.message}"
+                )
+            )
+            job.completed_at = _now()
+            run.status = "failed"
+            run.error_message = job.error_message
+            run.completed_at = job.completed_at
+            session.commit()
+            return False
+        # A persisted execution plan must still own exactly the planned
+        # node identities, parameters, and topological order before any node
+        # (including costly offline training) is allowed to execute.
+        # Run-detail validation alone is too late for a corrupted queued job.
+        saved_nodes = list(
+            session.scalars(
+                select(WorkflowNodeRun).where(WorkflowNodeRun.workflow_run_id == run.id)
+            )
+        )
+        try:
+            verify_workflow_run_node_graph_lineage(graph_record, saved_nodes)
+        except ConflictError as exc:
+            job.status = "failed"
+            job.error_message = f"Queued workflow node lineage failed: {exc}"
+            job.completed_at = _now()
+            run.status = "failed"
+            run.error_message = job.error_message
+            run.completed_at = job.completed_at
+            session.commit()
+            return False
+
         now = _now()
         job.status = "running"
         job.started_at = job.started_at or now
@@ -291,6 +401,17 @@ def process_workflow_run_job(
                     raise RuntimeError(f"Workflow node-run record is missing: {step.node_id}")
                 if node_run.status == "succeeded":
                     try:
+                        # A completed node's artifacts cannot be replayed under
+                        # different parameters, node type, or execution order.
+                        # The plan is rebuilt from the checksum-pinned graph.
+                        if (
+                            node_run.node_type != step.node_type
+                            or node_run.execution_order != step.order
+                            or node_run.parameters_json != dict(step.parameters)
+                        ):
+                            raise RuntimeError(
+                                "Recovered succeeded-node plan identity or parameters changed"
+                            )
                         verify_succeeded_node_artifacts(
                             session,
                             run_id=run_id,
@@ -430,10 +551,15 @@ def process_workflow_run_job(
                 job.completed_at = now
 
             session.flush()
+            # SQLite can discard timezone information when persisting a UTC
+            # datetime. Reload the stored value before freezing its ISO form,
+            # so a later provenance read hashes the same completed_at value.
+            session.refresh(run, attribute_names=["completed_at"])
 
             provenance = build_workflow_run_provenance(
                 session,
                 run_id=run_id,
+                verify_saved_closeout=False,
             )
 
             provenance_sha256 = canonical_json_sha256(provenance)
@@ -464,13 +590,34 @@ def process_workflow_run_job(
             session.commit()
         return True
     except WorkflowReviewRequired as exc:
-        _set_waiting_for_review(
-            factory,
-            job_id,
-            run_id,
-            completed_nodes=completed_nodes,
-            review=exc,
-        )
+        try:
+            _set_waiting_for_review(
+                factory,
+                job_id,
+                run_id,
+                completed_nodes=completed_nodes,
+                review=exc,
+            )
+        except Exception as pause_error:
+            # A stale or cross-run review-node ID must fail the persisted
+            # execution, not strand its job and node in the running state.
+            error = f"Workflow review pause failed: {pause_error}"
+            with factory() as session:
+                failed_node = session.scalar(
+                    select(WorkflowNodeRun)
+                    .where(
+                        WorkflowNodeRun.workflow_run_id == run_id,
+                        WorkflowNodeRun.status == "running",
+                    )
+                    .order_by(WorkflowNodeRun.execution_order)
+                )
+                if failed_node is not None:
+                    failed_node.status = "failed"
+                    failed_node.error_message = error
+                    failed_node.completed_at = _now()
+                session.commit()
+            _set_terminal(factory, job_id, run_id, status="failed", error=error)
+            return False
         return True
     except Exception as exc:
         with factory() as session:

@@ -24,8 +24,10 @@ from reefvision.db.models import (
     WorkflowNodeRun,
     WorkflowRun,
 )
+from reefvision.domain.errors import ConflictError
 from reefvision.jobs import worker
 from reefvision.jobs.workflow import (
+    _set_waiting_for_review,
     process_workflow_run_job,
 )
 from reefvision.ml.providers import DetectionModelMetadata
@@ -44,6 +46,8 @@ from reefvision.services.workflow_pose import (
 from reefvision.services.workflow_pose_training import (
     create_pose_workflow_training_result,
 )
+from reefvision.services.workflow_provenance import build_workflow_run_provenance
+from reefvision.services.workflow_review import WorkflowReviewRequired
 from reefvision.services.workflow_training import (
     register_workflow_trained_model,
 )
@@ -283,6 +287,32 @@ def test_interrupted_workflow_reuses_succeeded_artifacts_and_reopens_with_proven
         assert history
         assert history[-1]["action"] == "requeued_on_startup"
 
+    # A recovered, still-pending node must not expose malformed scientific
+    # audit results through run detail or provenance export. Restore the
+    # actual saved record before continuing the same recovery execution.
+    with app.state.session_factory() as session:
+        pending_node = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "images",
+            )
+        )
+        assert pending_node is not None
+        pending_node_id = pending_node.id
+        original_result = pending_node.result_json
+        pending_node.result_json = cast(Any, [["phase", "pending"]])
+        session.commit()
+
+    assert client.get(f"/api/v1/workflow-runs/{run_id}").status_code == 409
+
+    with app.state.session_factory() as session:
+        with pytest.raises(ConflictError, match="Workflow node result must be a JSON object"):
+            build_workflow_run_provenance(session, run_id=run_id)
+        pending_node = session.get(WorkflowNodeRun, pending_node_id)
+        assert pending_node is not None
+        pending_node.result_json = original_result
+        session.commit()
+
     assert process_workflow_run_job(
         app.state.settings,
         app.state.session_factory,
@@ -320,8 +350,165 @@ def test_interrupted_workflow_reuses_succeeded_artifacts_and_reopens_with_proven
     assert reopened_result["provenance_sha256"] == result["provenance_sha256"]
 
 
+def test_recovered_completed_node_rejects_modified_scientific_parameters(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Phase 10C frozen recovered parameters")
+    run_id, job_id, artifact_id = _prime_interrupted_run(client, str(project["id"]))
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        completed = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "project",
+            )
+        )
+        assert completed is not None
+        completed.parameters_json = {
+            **dict(completed.parameters_json or {}),
+            "unreviewed_parameter_change": True,
+        }
+        session.commit()
+
+    assert worker.recover_interrupted_jobs(app.state.session_factory, app.state.settings) >= 1
+    assert not process_workflow_run_job(app.state.settings, app.state.session_factory, job_id)
+
+    with app.state.session_factory() as session:
+        run = session.get(WorkflowRun, run_id)
+        completed = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "project",
+            )
+        )
+        pending = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "images",
+            )
+        )
+        artifact = session.get(WorkflowArtifact, artifact_id)
+        assert run is not None
+        assert completed is not None
+        assert pending is not None
+        assert artifact is not None
+        assert run.status == "failed"
+        assert "Recovered succeeded-node plan identity or parameters changed" in (
+            run.error_message or ""
+        )
+        assert completed.status == "succeeded"
+        assert completed.output_artifact_ids_json == [artifact_id]
+        assert canonical_json_sha256(artifact.payload_json) == artifact.payload_sha256
+        assert pending.output_artifact_ids_json == []
+
+
+@pytest.mark.parametrize("duplicate_data_type", ["project_reference", "forged_reference"])
+def test_recovered_workflow_refuses_ambiguous_saved_producer_output(
+    client: TestClient,
+    duplicate_data_type: str,
+) -> None:
+    project = create_project(client, "Phase 10C ambiguous persisted producer")
+    run_id, job_id, original_id = _prime_interrupted_run(client, str(project["id"]))
+    app = cast(FastAPI, client.app)
+
+    # A legacy import or corrupted database can contain two checksum-valid
+    # artifacts for the same saved producer port. Exercise the persisted run
+    # and recovery worker, rather than bypassing its input binding logic.
+    with app.state.session_factory() as session:
+        original = session.get(WorkflowArtifact, original_id)
+        assert original is not None
+        duplicate = WorkflowArtifact(
+            workflow_run_id=run_id,
+            producer_node_run_id=original.producer_node_run_id,
+            producer_port_id=original.producer_port_id,
+            data_type=duplicate_data_type,
+            payload_json=dict(original.payload_json),
+            payload_sha256=original.payload_sha256,
+        )
+        session.add(duplicate)
+        session.commit()
+        duplicate_id = duplicate.id
+
+    assert worker.recover_interrupted_jobs(app.state.session_factory, app.state.settings) >= 1
+    assert not process_workflow_run_job(app.state.settings, app.state.session_factory, job_id)
+
+    with app.state.session_factory() as session:
+        run = session.get(WorkflowRun, run_id)
+        producer = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "project",
+            )
+        )
+        consumer = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "images",
+            )
+        )
+        original = session.get(WorkflowArtifact, original_id)
+        assert run is not None and producer is not None and consumer is not None
+        assert original is not None
+        assert run.status == "failed"
+        assert "ambiguous saved output" in (run.error_message or "")
+        assert producer.status == "succeeded"
+        assert producer.output_artifact_ids_json == [original_id]
+        assert consumer.status == "pending"
+        assert consumer.output_artifact_ids_json == []
+        assert canonical_json_sha256(original.payload_json) == original.payload_sha256
+        assert session.get(WorkflowArtifact, duplicate_id) is not None
+
+
+def test_review_pause_rejects_foreign_and_completed_nodes_without_mutating_science(
+    client: TestClient,
+) -> None:
+    first_project = create_project(client, "Phase 10C review owner")
+    other_project = create_project(client, "Phase 10C foreign review owner")
+    run_id, job_id, _ = _prime_interrupted_run(client, str(first_project["id"]))
+    foreign_run_id, _, _ = _prime_interrupted_run(client, str(other_project["id"]))
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        foreign_node = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == foreign_run_id,
+                WorkflowNodeRun.node_id == "images",
+            )
+        )
+        completed_node = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "project",
+            )
+        )
+        assert foreign_node is not None and foreign_node.status == "running"
+        assert completed_node is not None and completed_node.status == "succeeded"
+        invalid_ids = (foreign_node.id, completed_node.id, "missing-node-run-id")
+
+    for invalid_id in invalid_ids:
+        with pytest.raises(RuntimeError, match="requires an active node in this run"):
+            _set_waiting_for_review(
+                app.state.session_factory,
+                job_id,
+                run_id,
+                completed_nodes=1,
+                review=WorkflowReviewRequired(
+                    "Review required", details={"node_run_id": invalid_id}
+                ),
+            )
+
+    with app.state.session_factory() as session:
+        assert session.get(WorkflowRun, run_id).status == "running"
+        assert session.get(Job, job_id).status == "running"
+        assert session.get(WorkflowNodeRun, invalid_ids[0]).status == "running"
+        assert session.get(WorkflowNodeRun, invalid_ids[1]).status == "succeeded"
+
+
+@pytest.mark.parametrize("payload_corruption", ["changed_values", "equivalent_pairs"])
 def test_corrupted_succeeded_artifact_blocks_resume_instead_of_rerunning(
     client: TestClient,
+    payload_corruption: str,
 ) -> None:
     project = create_project(
         client,
@@ -351,9 +538,13 @@ def test_corrupted_succeeded_artifact_blocks_resume_instead_of_rerunning(
 
         assert artifact is not None
 
-        artifact.payload_json = {
-            "tampered": True,
-        }
+        if payload_corruption == "equivalent_pairs":
+            # The prior verifier coerced this JSON array back to a dict,
+            # producing the original SHA-256 despite a changed stored type.
+            artifact.payload_json = cast(Any, list(artifact.payload_json.items()))
+            assert canonical_json_sha256(dict(artifact.payload_json)) == artifact.payload_sha256
+        else:
+            artifact.payload_json = {"tampered": True}
 
         session.commit()
 
@@ -984,6 +1175,10 @@ def test_phase10c_saved_scientist_graph_runs_to_verified_terminal_outputs_and_re
     assert plan.status_code == 200, plan.text
 
     assert plan.json()["executable"] is True
+    # The saved workflow's omitted mode must resolve through the catalog's
+    # explicit auto default rather than an invalid null.
+    training_step = next(step for step in plan.json()["steps"] if step["node_id"] == "train")
+    assert training_step["parameters"]["initialization_mode"] == "auto"
 
     run_id, job_id = _save_and_queue(
         client,
@@ -1019,6 +1214,37 @@ def test_phase10c_saved_scientist_graph_runs_to_verified_terminal_outputs_and_re
             client,
             str(track_id),
         )
+
+    # The scientist must not approve a saved temporal-pose artifact whose
+    # payload changed after the workflow paused, even when review is ready.
+    review_input_ids = first_nodes["pose_review"]["input_artifact_ids_json"]
+    assert len(review_input_ids) == 1
+    review_input_id = review_input_ids[0]
+    with app.state.session_factory() as session:
+        artifact = session.get(WorkflowArtifact, review_input_id)
+        assert artifact is not None
+        original_review_input = dict(artifact.payload_json)
+        artifact.payload_json = {**original_review_input, "unverified_edit": True}
+        session.commit()
+
+    tampered_resume = client.post(
+        f"/api/v1/workflow-node-runs/{first_nodes['pose_review']['id']}/resume-review",
+        json={"reviewed_by": "scientist", "note": "Do not approve tampered science."},
+    )
+    assert tampered_resume.status_code == 409, tampered_resume.text
+    assert "Workflow artifact checksum failed" in tampered_resume.json()["detail"]
+
+    with app.state.session_factory() as session:
+        run = session.get(WorkflowRun, run_id)
+        job = session.get(Job, job_id)
+        review_node = session.get(WorkflowNodeRun, first_nodes["pose_review"]["id"])
+        artifact = session.get(WorkflowArtifact, review_input_id)
+        assert run is not None and run.status == "waiting_for_review"
+        assert job is not None and job.status == "waiting_for_review"
+        assert review_node is not None and review_node.status == "waiting_for_review"
+        assert artifact is not None
+        artifact.payload_json = original_review_input
+        session.commit()
 
     resumed = client.post(
         (f"/api/v1/workflow-node-runs/{first_nodes['pose_review']['id']}/resume-review"),
@@ -1208,5 +1434,110 @@ def test_phase10c_saved_scientist_graph_runs_to_verified_terminal_outputs_and_re
 
     assert (
         reopened.json()["run"]["result_json"]["provenance_sha256"]
+        == run_result["provenance_sha256"]
+    )
+
+    # The executed pose-training node consumes both a frozen verified dataset
+    # and a registered seed checkpoint. Swapping their saved input positions
+    # must not silently rebind them to the graph's different target ports.
+    train_node = next(item for item in payload["nodes"] if item["node_id"] == "train")
+    original_inputs = list(train_node["input_artifact_ids_json"])
+    assert len(original_inputs) == len(set(original_inputs)) == 2
+
+    with app.state.session_factory() as session:
+        persisted = session.get(WorkflowNodeRun, train_node["id"])
+        assert persisted is not None
+        persisted.input_artifact_ids_json = list(reversed(original_inputs))
+        session.commit()
+
+    swapped = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert swapped.status_code == 409, swapped.text
+    assert swapped.json() == {
+        "detail": "Succeeded workflow node inputs do not match saved graph edges"
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="inputs do not match saved graph edges"),
+    ):
+        build_workflow_run_provenance(session, run_id=run_id)
+
+    with app.state.session_factory() as session:
+        persisted = session.get(WorkflowNodeRun, train_node["id"])
+        assert persisted is not None
+        persisted.input_artifact_ids_json = original_inputs
+        session.commit()
+
+    restored = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert restored.status_code == 200, restored.text
+    assert (
+        restored.json()["run"]["result_json"]["provenance_sha256"]
+        == run_result["provenance_sha256"]
+    )
+
+    # Preserve the actual frozen pose-training parameters' JSON shape.
+    # A list of key/value pairs must not bypass the checksum-pinned graph
+    # comparison simply because dict(list_of_pairs) would look equivalent.
+    original_parameters = dict(train_node["parameters_json"])
+    assert original_parameters
+    with app.state.session_factory() as session:
+        persisted = session.get(WorkflowNodeRun, train_node["id"])
+        assert persisted is not None
+        persisted.parameters_json = [[key, value] for key, value in original_parameters.items()]
+        session.commit()
+
+    malformed = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert malformed.status_code == 409, malformed.text
+    assert malformed.json() == {"detail": "Workflow node parameters must be a JSON object"}
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="parameters must be a JSON object"),
+    ):
+        build_workflow_run_provenance(session, run_id=run_id)
+
+    with app.state.session_factory() as session:
+        persisted = session.get(WorkflowNodeRun, train_node["id"])
+        assert persisted is not None
+        persisted.parameters_json = original_parameters
+        session.commit()
+
+    restored_parameters = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert restored_parameters.status_code == 200, restored_parameters.text
+    assert (
+        restored_parameters.json()["run"]["result_json"]["provenance_sha256"]
+        == run_result["provenance_sha256"]
+    )
+
+    # This completed saved Workflow Builder run contains a scientist review
+    # approval. Changing its reviewer without altering artifact hashes must
+    # invalidate the terminal provenance snapshot on reopen.
+    pose_review_node = next(item for item in payload["nodes"] if item["node_id"] == "pose_review")
+    with app.state.session_factory() as session:
+        persisted = session.get(WorkflowNodeRun, pose_review_node["id"])
+        assert persisted is not None
+        original_review_result = dict(persisted.result_json or {})
+        approval = original_review_result.get("review_approval")
+        assert isinstance(approval, dict)
+        persisted.result_json = {
+            **original_review_result,
+            "review_approval": {**approval, "reviewed_by": "unverified-replacement"},
+        }
+        session.commit()
+
+    tampered_review = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert tampered_review.status_code == 409, tampered_review.text
+    assert tampered_review.json() == {
+        "detail": "Workflow run saved provenance no longer matches persisted science"
+    }
+
+    with app.state.session_factory() as session:
+        persisted = session.get(WorkflowNodeRun, pose_review_node["id"])
+        assert persisted is not None
+        persisted.result_json = original_review_result
+        session.commit()
+
+    restored_review = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert restored_review.status_code == 200, restored_review.text
+    assert (
+        restored_review.json()["run"]["result_json"]["provenance_sha256"]
         == run_result["provenance_sha256"]
     )

@@ -34,7 +34,12 @@ def verify_workflow_artifact(
     if expected_run_id is not None and artifact.workflow_run_id != expected_run_id:
         raise ConflictError("Workflow artifact belongs to a different workflow run")
 
-    actual = canonical_json_sha256(dict(artifact.payload_json or {}))
+    # A JSON array of key/value pairs can coerce to the same dictionary and
+    # digest as the original payload. Preserve the stored artifact type.
+    if not isinstance(artifact.payload_json, dict):
+        raise ConflictError("Workflow artifact payload must be a JSON object")
+
+    actual = canonical_json_sha256(artifact.payload_json)
 
     if actual != artifact.payload_sha256:
         raise ConflictError(f"Workflow artifact checksum failed for {artifact.id}")
@@ -76,6 +81,20 @@ def _artifact_by_id(
     return artifact
 
 
+def _artifact_ids(value: Any, *, field: str) -> list[str]:
+    """Reject malformed persisted lineage instead of iterating JSON object keys."""
+
+    if value is None:
+        return []
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
+        raise ConflictError(f"Workflow node {field} must be a list of artifact IDs")
+    # One produced artifact has one output identity. Repeated inputs can be
+    # legitimate fan-out across different ports, but repeated outputs cannot.
+    if field == "output IDs" and len(value) != len(set(value)):
+        raise ConflictError("Workflow node output IDs contain duplicates")
+    return value
+
+
 def verify_succeeded_node_artifacts(
     session: Session,
     *,
@@ -86,10 +105,18 @@ def verify_succeeded_node_artifacts(
 
     if node_run.workflow_run_id != run_id:
         raise ConflictError("Workflow node belongs to a different run")
+    # A valid persisted output is not evidence that an incomplete or failed
+    # node can be replayed as successful during interrupted-run recovery.
+    if node_run.status != "succeeded":
+        raise ConflictError("Workflow node is not succeeded; artifacts cannot be reused")
+    # Direct recovery/reuse callers may validate a node before the whole run
+    # graph. Reject malformed SQLite sort keys before comparing producers.
+    if type(node_run.execution_order) is not int or node_run.execution_order < 1:
+        raise ConflictError("Succeeded workflow node execution order is invalid")
 
-    input_ids = [str(value) for value in node_run.input_artifact_ids_json or []]
+    input_ids = _artifact_ids(node_run.input_artifact_ids_json, field="input IDs")
 
-    output_ids = [str(value) for value in node_run.output_artifact_ids_json or []]
+    output_ids = _artifact_ids(node_run.output_artifact_ids_json, field="output IDs")
 
     inputs = [
         _artifact_by_id(
@@ -109,20 +136,115 @@ def verify_succeeded_node_artifacts(
         for artifact_id in output_ids
     ]
 
+    # The planner saves input artifact IDs in edge-ID order. Comparing only
+    # counts allows two valid inputs to be swapped between different target
+    # ports without changing any artifact checksum or producer identity.
+    actual_bindings: list[tuple[str, str]] = []
+    for artifact in inputs:
+        producer = session.get(WorkflowNodeRun, artifact.producer_node_run_id)
+        if (
+            producer is None
+            or producer.workflow_run_id != run_id
+            or producer.status != "succeeded"
+            or type(producer.execution_order) is not int
+            or producer.execution_order < 1
+            or producer.execution_order >= node_run.execution_order
+        ):
+            raise ConflictError("Succeeded workflow node input lacks an earlier succeeded producer")
+        # A checksum-valid artifact on the expected port is not necessarily
+        # one the upstream node actually published. Recovery must reject
+        # undeclared producer outputs before reusing saved scientific inputs.
+        if artifact.id not in _artifact_ids(producer.output_artifact_ids_json, field="output IDs"):
+            raise ConflictError("Succeeded workflow node input is not a declared producer output")
+        actual_bindings.append((producer.node_id, artifact.producer_port_id))
+
+    run = session.get(WorkflowRun, run_id)
+    graph = session.get(WorkflowGraphRecord, run.workflow_graph_record_id) if run else None
+    if graph is None or run is None or not isinstance(graph.graph_json, dict):
+        raise ConflictError("Succeeded workflow node graph lineage is unavailable")
+    # Recovery can verify a succeeded node directly, before run-detail or
+    # provenance export validates the graph. Do not trust unsigned graph edits
+    # when deciding which earlier artifact bindings are safe to reuse.
+    if (
+        graph.project_id != run.project_id
+        or graph.graph_key != graph.graph_json.get("graph_id")
+        or graph.schema_version != graph.graph_json.get("schema_version")
+        or graph.graph_sha256 != run.graph_sha256
+        or canonical_json_sha256(graph.graph_json) != run.graph_sha256
+    ):
+        raise ConflictError("Succeeded workflow node graph provenance checksum failed")
+    # Interrupted-run recovery may reuse a succeeded node before normal
+    # run-detail lineage validation. A changed adapter type must not reuse
+    # artifacts produced under a different checksum-pinned graph node.
+    graph_nodes = graph.graph_json.get("nodes")
+    matching_nodes = (
+        [
+            item
+            for item in graph_nodes
+            if isinstance(item, dict) and item.get("node_id") == node_run.node_id
+        ]
+        if isinstance(graph_nodes, list)
+        else []
+    )
+    if len(matching_nodes) != 1 or matching_nodes[0].get("node_type") != node_run.node_type:
+        raise ConflictError("Succeeded workflow node identity does not match saved graph")
+
+    # Direct interrupted-run recovery must honor frozen scientific inputs,
+    # including the verified pose dataset's pinned manifest checksum.
+    saved_parameters = matching_nodes[0].get("parameters", {})
+    node_parameters = node_run.parameters_json
+    if node_parameters is not None and not isinstance(node_parameters, dict):
+        raise ConflictError("Succeeded workflow node parameters must be a JSON object")
+    if not isinstance(saved_parameters, dict) or any(
+        not isinstance(node_parameters, dict)
+        or key not in node_parameters
+        or node_parameters[key] != value
+        for key, value in saved_parameters.items()
+    ):
+        raise ConflictError("Succeeded workflow node parameters do not match saved graph")
+
+    raw_edges = graph.graph_json.get("edges", [])
+    if not isinstance(raw_edges, list) or any(
+        not isinstance(edge, dict) or not isinstance(edge.get("edge_id"), str) for edge in raw_edges
+    ):
+        raise ConflictError("Succeeded workflow node graph edges are invalid")
+    expected_bindings = [
+        (edge.get("source_node_id"), edge.get("source_port_id"))
+        for edge in sorted(raw_edges, key=lambda edge: edge["edge_id"])
+        if edge.get("target_node_id") == node_run.node_id
+    ]
+    if actual_bindings != expected_bindings:
+        raise ConflictError("Succeeded workflow node inputs do not match saved graph edges")
+
     for artifact in outputs:
         if artifact.producer_node_run_id != node_run.id:
             raise ConflictError(
                 "Succeeded workflow node references an output produced by another node"
             )
 
+    # A JSON array of key/value pairs can coerce into the original dictionary,
+    # concealing structural corruption of persisted scientific run evidence.
+    if node_run.result_json is not None and not isinstance(node_run.result_json, dict):
+        raise ConflictError("Succeeded workflow node result must be a JSON object")
+
     result = dict(node_run.result_json or {})
 
     declared_outputs = result.get("outputs")
+
+    # Older records may omit the summary, but an explicitly persisted one
+    # must retain its list shape. Otherwise malformed lineage is ignored.
+    if "outputs" in result and not isinstance(declared_outputs, list):
+        raise ConflictError("Succeeded workflow node output summary must be a list")
 
     if isinstance(
         declared_outputs,
         list,
     ):
+        # The worker writes exactly one declaration per persisted artifact.
+        # A duplicate or forged extra entry must not disappear in the ID map.
+        if len(declared_outputs) != len(outputs):
+            raise ConflictError("Succeeded workflow node output summary count mismatch")
+
         declarations = {
             str(item.get("artifact_id")): item
             for item in declared_outputs
@@ -159,12 +281,140 @@ def verify_succeeded_node_artifacts(
     }
 
 
+def verify_completed_run_artifact_ownership(
+    run: WorkflowRun,
+    nodes: list[WorkflowNodeRun],
+    artifacts: list[WorkflowArtifact],
+) -> None:
+    """Reject undeclared artifacts in a completed scientific workflow run."""
+
+    # Interrupted or review-paused runs can still be recovering their node
+    # declarations. A succeeded run must account for every saved artifact.
+    if run.status != "succeeded":
+        return
+
+    # Terminal success means every planned operation completed. A failed or
+    # pending node with no artifacts could otherwise masquerade as a fully
+    # reproducible scientific run because ownership checks only see outputs.
+    if any(node.status != "succeeded" for node in nodes):
+        raise ConflictError("Succeeded workflow run contains an incomplete node")
+
+    declared_by_producer = {
+        node.id: set(_artifact_ids(node.output_artifact_ids_json, field="output IDs"))
+        for node in nodes
+        if node.status == "succeeded"
+    }
+    for artifact in artifacts:
+        producer_outputs = declared_by_producer.get(artifact.producer_node_run_id, set())
+        if artifact.id not in producer_outputs:
+            raise ConflictError("Succeeded workflow run contains an undeclared output artifact")
+
+
+def verify_workflow_run_node_graph_lineage(
+    graph: WorkflowGraphRecord,
+    nodes: list[WorkflowNodeRun],
+) -> None:
+    """Bind saved node identities to the checksum-pinned workflow graph."""
+
+    raw_nodes = graph.graph_json.get("nodes")
+    error = "Workflow run node lineage does not match saved graph"
+    if not isinstance(raw_nodes, list) or not raw_nodes:
+        raise ConflictError(error)
+
+    expected: dict[str, tuple[str, dict[str, Any]]] = {}
+    for item in raw_nodes:
+        if (
+            not isinstance(item, dict)
+            or not isinstance(item.get("node_id"), str)
+            or not isinstance(item.get("node_type"), str)
+            or not isinstance(item.get("parameters", {}), dict)
+            or item["node_id"] in expected
+        ):
+            raise ConflictError(error)
+        expected[item["node_id"]] = (item["node_type"], item.get("parameters", {}))
+
+    if len(nodes) != len(expected):
+        raise ConflictError(error)
+
+    # The planner persists a one-based, contiguous execution order. Missing,
+    # duplicated, or out-of-range positions corrupt the scientific run order
+    # even when node IDs and types still match the checksum-pinned graph.
+    # Corrupted persisted sort keys must fail as scientific lineage conflicts,
+    # not raise TypeError while sorting mixed integer/string database values.
+    # Use exact int identity so booleans cannot impersonate an execution step.
+    if any(type(node.execution_order) is not int for node in nodes):
+        raise ConflictError(error)
+    expected_orders = list(range(1, len(expected) + 1))
+    if sorted(node.execution_order for node in nodes) != expected_orders:
+        raise ConflictError(error)
+
+    seen: set[str] = set()
+    for node in nodes:
+        graph_node = expected.get(node.node_id)
+        if node.node_id in seen or graph_node is None or graph_node[0] != node.node_type:
+            raise ConflictError(error)
+        # A JSON array of key/value pairs can bypass the saved-parameter
+        # comparison while representing a different persisted JSON shape.
+        if node.parameters_json is not None and not isinstance(node.parameters_json, dict):
+            raise ConflictError("Workflow node parameters must be a JSON object")
+        # A missing parameter object must not erase explicitly pinned
+        # scientific inputs (for example, a frozen pose dataset checksum).
+        if node.parameters_json is None and graph_node[1]:
+            raise ConflictError(error)
+        # Pending and review-paused nodes also carry scientific audit data.
+        # A JSON array of pairs must not be coerced into a result object.
+        if node.result_json is not None and not isinstance(node.result_json, dict):
+            raise ConflictError("Workflow node result must be a JSON object")
+        # The planner may add optional defaults, but it must preserve every
+        # explicitly saved scientific parameter from the checksum-pinned graph.
+        if isinstance(node.parameters_json, dict) and any(
+            key not in node.parameters_json or node.parameters_json[key] != value
+            for key, value in graph_node[1].items()
+        ):
+            raise ConflictError(error)
+        seen.add(node.node_id)
+
+    # A contiguous sequence is insufficient: swapping a producer with its
+    # consumer preserves every position while falsifying execution lineage.
+    positions = {node.node_id: node.execution_order for node in nodes}
+    edges = graph.graph_json.get("edges", [])
+    if not isinstance(edges, list):
+        raise ConflictError(error)
+    incoming_counts = {node_id: 0 for node_id in positions}
+    for edge in edges:
+        if not isinstance(edge, dict):
+            raise ConflictError(error)
+        source_id = edge.get("source_node_id")
+        target_id = edge.get("target_node_id")
+        if (
+            not isinstance(source_id, str)
+            or not isinstance(target_id, str)
+            or source_id not in positions
+            or target_id not in positions
+            or positions[source_id] >= positions[target_id]
+        ):
+            raise ConflictError(error)
+        incoming_counts[target_id] += 1
+
+    # A completed node must retain one recorded input for each pinned graph
+    # edge. Otherwise deleting an input ID can erase scientific dependencies
+    # without altering the graph checksum or any remaining artifact digest.
+    for node in nodes:
+        if (
+            node.status == "succeeded"
+            and len(_artifact_ids(node.input_artifact_ids_json, field="input IDs"))
+            != incoming_counts[node.node_id]
+        ):
+            raise ConflictError("Succeeded workflow node input count does not match saved graph")
+
+
 def build_workflow_run_provenance(
     session: Session,
     *,
     run_id: str,
+    verify_saved_closeout: bool = True,
 ) -> dict[str, Any]:
-    """Build the canonical inspectable lineage manifest for a workflow run."""
+    """Build scientific lineage; verify the immutable closeout on subsequent reads."""
 
     run = session.get(
         WorkflowRun,
@@ -182,10 +432,24 @@ def build_workflow_run_provenance(
     if graph is None:
         raise NotFoundError("Workflow graph revision not found")
 
-    calculated_graph_sha = canonical_json_sha256(dict(graph.graph_json or {}))
-
-    if calculated_graph_sha != graph.graph_sha256 or graph.graph_sha256 != run.graph_sha256:
+    # A digest authenticates graph contents, not the owning project or the
+    # saved revision identity. Match the run-detail API's lineage checks.
+    if (
+        graph.project_id != run.project_id
+        or not isinstance(graph.graph_json, dict)
+        or graph.graph_key != graph.graph_json.get("graph_id")
+        or graph.schema_version != graph.graph_json.get("schema_version")
+        or graph.graph_sha256 != run.graph_sha256
+        or canonical_json_sha256(graph.graph_json) != run.graph_sha256
+    ):
         raise ConflictError("Workflow graph provenance checksum failed")
+
+    # Persisted run inputs and results are scientific evidence. Coercing a
+    # JSON array of pairs to a dict can hide changes to its original shape.
+    if run.input_json is not None and not isinstance(run.input_json, dict):
+        raise ConflictError("Workflow run inputs must be a JSON object")
+    if run.result_json is not None and not isinstance(run.result_json, dict):
+        raise ConflictError("Workflow run result must be a JSON object")
 
     nodes = list(
         session.scalars(
@@ -197,6 +461,8 @@ def build_workflow_run_provenance(
             )
         )
     )
+
+    verify_workflow_run_node_graph_lineage(graph, nodes)
 
     artifacts = list(
         session.scalars(
@@ -211,6 +477,8 @@ def build_workflow_run_provenance(
 
     artifacts_by_id = {artifact.id: artifact for artifact in artifacts}
 
+    verify_completed_run_artifact_ownership(run, nodes, artifacts)
+
     for persisted_artifact in artifacts:
         verify_workflow_artifact(
             persisted_artifact,
@@ -222,9 +490,14 @@ def build_workflow_run_provenance(
     node_manifest: list[dict[str, Any]] = []
 
     for node in nodes:
-        input_ids = [str(value) for value in node.input_artifact_ids_json or []]
+        # Provenance export must enforce the same succeeded-node output
+        # declarations as run-detail retrieval and interrupted-run replay.
+        if node.status == "succeeded":
+            verify_succeeded_node_artifacts(session, run_id=run.id, node_run=node)
 
-        output_ids = [str(value) for value in node.output_artifact_ids_json or []]
+        input_ids = _artifact_ids(node.input_artifact_ids_json, field="input IDs")
+
+        output_ids = _artifact_ids(node.output_artifact_ids_json, field="output IDs")
 
         consumed_ids.update(input_ids)
 
@@ -251,9 +524,19 @@ def build_workflow_run_provenance(
 
             output_refs.append(_artifact_ref(artifact))
 
+        # Preserve the persisted parameter JSON type in exported scientific
+        # provenance; dict(list_of_pairs) would conceal a corrupted record.
+        if node.parameters_json is not None and not isinstance(node.parameters_json, dict):
+            raise ConflictError("Workflow node parameters must be a JSON object")
+
         result = dict(node.result_json or {})
 
         review_approval = result.get("review_approval")
+
+        # An explicitly persisted approval is scientific review evidence.
+        # Do not silently turn a malformed approval into an absent one.
+        if review_approval is not None and not isinstance(review_approval, dict):
+            raise ConflictError("Workflow node review approval must be a JSON object")
 
         node_manifest.append(
             {
@@ -290,16 +573,18 @@ def build_workflow_run_provenance(
         [],
     )
 
-    recovery_history = (
-        list(raw_history)
-        if isinstance(
-            raw_history,
-            list,
-        )
-        else []
-    )
+    # An explicitly saved recovery history is scientific audit evidence.
+    # Never silently discard malformed entries from a persisted run.
+    if "recovery_history" in result and not isinstance(raw_history, list):
+        raise ConflictError("Workflow recovery history must be a list")
+    # The list itself can be valid while individual audit entries have been
+    # replaced with scalars. Preserve recovery-event structure on export.
+    if any(not isinstance(entry, dict) for entry in raw_history):
+        raise ConflictError("Workflow recovery history entries must be JSON objects")
 
-    return {
+    recovery_history = list(raw_history)
+
+    manifest = {
         "schema_version": (WORKFLOW_PROVENANCE_SCHEMA_VERSION),
         "workflow_run_id": run.id,
         "project_id": run.project_id,
@@ -324,3 +609,22 @@ def build_workflow_run_provenance(
         "started_at": (run.started_at.isoformat() if run.started_at else None),
         "completed_at": (run.completed_at.isoformat() if run.completed_at else None),
     }
+
+    # Closeout first freezes this manifest in run.result_json. Later direct
+    # provenance exports must not silently regenerate different science from
+    # edited rows (or accept deletion of both saved closeout fields).
+    # The closeout worker explicitly opts out while creating the first digest.
+    if verify_saved_closeout and run.status == "succeeded":
+        if "provenance_manifest" not in result or "provenance_sha256" not in result:
+            raise ConflictError("Succeeded workflow run is missing saved provenance")
+        saved_manifest = result["provenance_manifest"]
+        saved_sha256 = result["provenance_sha256"]
+        if (
+            not isinstance(saved_manifest, dict)
+            or not isinstance(saved_sha256, str)
+            or canonical_json_sha256(saved_manifest) != saved_sha256
+            or canonical_json_sha256(manifest) != saved_sha256
+        ):
+            raise ConflictError("Workflow run saved provenance no longer matches persisted science")
+
+    return manifest

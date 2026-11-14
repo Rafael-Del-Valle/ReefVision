@@ -2,11 +2,24 @@ from __future__ import annotations
 
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from reefvision.db.models import ModelRegistration, ProjectExchangePackage
+from reefvision.db.models import (
+    ModelRegistration,
+    ProjectExchangePackage,
+    WorkflowArtifact,
+    WorkflowGraphRecord,
+    WorkflowNodeRun,
+    WorkflowRun,
+)
+from reefvision.domain.errors import ConflictError
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.services.workflow_provenance import (
+    build_workflow_run_provenance,
+    verify_succeeded_node_artifacts,
+)
 from reefvision.tests.test_annotations import create_project, import_one
 
 
@@ -131,6 +144,288 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
     assert set(artifacts["image_collection"]["payload_json"]["image_ids"]) == image_ids
     assert artifacts["image_collection"]["payload_json"]["count"] == 2
     assert all(len(item["payload_sha256"]) == 64 for item in payload["artifacts"])
+
+    # This executed two-node graph has a real producer -> consumer edge.
+    # Reversing both saved positions remains contiguous but must invalidate
+    # run detail and exported scientific provenance until restored.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert producer is not None and consumer is not None
+        assert (producer.execution_order, consumer.execution_order) == (1, 2)
+        producer.execution_order = 2
+        consumer.execution_order = 1
+        session.commit()
+
+    reversed_detail = client.get(f"/api/v1/workflow-runs/{run['id']}")
+    assert reversed_detail.status_code == 409, reversed_detail.text
+    assert reversed_detail.json() == {
+        "detail": "Workflow run node lineage does not match saved graph"
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="node lineage does not match saved graph"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(run["id"]))
+
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert producer is not None and consumer is not None
+        producer.execution_order = 1
+        consumer.execution_order = 2
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
+    # A persisted text execution order is not an integer step. This actual
+    # two-node run must return a provenance conflict, not crash while sorting
+    # an integer and string loaded from SQLite.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        assert producer is not None
+        # SQLite accepts text in an INTEGER column; cast only satisfies static typing.
+        producer.execution_order = cast(int, "invalid-order")
+        session.commit()
+
+    malformed_order = client.get(f"/api/v1/workflow-runs/{run['id']}")
+    assert malformed_order.status_code == 409, malformed_order.text
+    assert malformed_order.json() == {
+        "detail": "Workflow run node lineage does not match saved graph"
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="node lineage does not match saved graph"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(run["id"]))
+
+    # Direct interrupted-run recovery checks inputs without first validating
+    # the full execution graph. Malformed producer sort keys must fail closed
+    # with a provenance conflict, not leak a Python comparison TypeError.
+    with app.state.session_factory() as session:
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert consumer is not None
+        with pytest.raises(ConflictError, match="input lacks an earlier succeeded producer"):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        assert producer is not None
+        producer.execution_order = 1
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
+    # The completed image-collection node cannot consume its own output.
+    # That output has a valid checksum and belongs to the same run, so
+    # artifact integrity alone cannot detect the falsified input lineage.
+    with app.state.session_factory() as session:
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert consumer is not None
+        consumer.input_artifact_ids_json = [payload["nodes"][1]["output_artifact_ids_json"][0]]
+        session.commit()
+
+    invalid_input = client.get(f"/api/v1/workflow-runs/{run['id']}")
+    assert invalid_input.status_code == 409, invalid_input.text
+    assert invalid_input.json() == {
+        "detail": "Succeeded workflow node input lacks an earlier succeeded producer"
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="input lacks an earlier succeeded producer"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(run["id"]))
+
+    with app.state.session_factory() as session:
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert consumer is not None
+        consumer.input_artifact_ids_json = payload["nodes"][1]["input_artifact_ids_json"]
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
+    # An empty saved input list must not erase the graph's producer edge.
+    # This checks an actual completed two-node run, not a fabricated fixture.
+    with app.state.session_factory() as session:
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert consumer is not None
+        consumer.input_artifact_ids_json = []
+        session.commit()
+
+    missing_binding = client.get(f"/api/v1/workflow-runs/{run['id']}")
+    assert missing_binding.status_code == 409, missing_binding.text
+    assert missing_binding.json() == {
+        "detail": "Succeeded workflow node input count does not match saved graph"
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="input count does not match saved graph"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(run["id"]))
+
+    with app.state.session_factory() as session:
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert consumer is not None
+        consumer.input_artifact_ids_json = payload["nodes"][1]["input_artifact_ids_json"]
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
+    # A saved input can still reference an earlier succeeded producer while
+    # consuming the wrong output port. Change the producer's declared port
+    # consistently so its output summary and artifact checksums remain valid.
+    with app.state.session_factory() as session:
+        artifact = session.get(WorkflowArtifact, artifacts["project_reference"]["id"])
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        assert artifact is not None and producer is not None
+        original_port = artifact.producer_port_id
+        original_result = dict(producer.result_json or {})
+        assert original_port == "project"
+        declared_outputs = original_result["outputs"]
+        assert declared_outputs[0]["port_id"] == original_port
+        artifact.producer_port_id = "substituted-port"
+        producer.result_json = {
+            **original_result,
+            "outputs": [{**item, "port_id": "substituted-port"} for item in declared_outputs],
+        }
+        session.commit()
+
+    wrong_port = client.get(f"/api/v1/workflow-runs/{run['id']}")
+    assert wrong_port.status_code == 409, wrong_port.text
+    assert wrong_port.json() == {
+        "detail": "Succeeded workflow node inputs do not match saved graph edges"
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="inputs do not match saved graph edges"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(run["id"]))
+
+    with app.state.session_factory() as session:
+        artifact = session.get(WorkflowArtifact, artifacts["project_reference"]["id"])
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        assert artifact is not None and producer is not None
+        artifact.producer_port_id = original_port
+        producer.result_json = original_result
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
+    # The executed project's input may have a valid checksum and the exact
+    # graph-required producer/port but still be an undeclared, substituted
+    # artifact. Verify persisted-node reuse independently of terminal-run
+    # checks, which do not apply during interrupted workflow recovery.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        original = session.get(WorkflowArtifact, artifacts["project_reference"]["id"])
+        assert producer is not None and consumer is not None and original is not None
+        undeclared = WorkflowArtifact(
+            workflow_run_id=str(run["id"]),
+            producer_node_run_id=producer.id,
+            producer_port_id=original.producer_port_id,
+            data_type=original.data_type,
+            payload_json=dict(original.payload_json),
+            payload_sha256=original.payload_sha256,
+        )
+        session.add(undeclared)
+        session.flush()
+        consumer.input_artifact_ids_json = [undeclared.id]
+        session.flush()
+        with pytest.raises(ConflictError, match="input is not a declared producer output"):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
+    # This graph was actually executed and its provenance frozen at closeout.
+    # Removing *both* saved provenance fields used to bypass the integrity check.
+    with app.state.session_factory() as session:
+        saved_run = session.get(WorkflowRun, str(run["id"]))
+        assert saved_run is not None
+        original_result = dict(saved_run.result_json or {})
+        assert "provenance_manifest" in original_result
+        assert "provenance_sha256" in original_result
+        saved_run.result_json = {
+            key: value
+            for key, value in original_result.items()
+            if key not in {"provenance_manifest", "provenance_sha256"}
+        }
+        session.commit()
+
+    missing_provenance = client.get(f"/api/v1/workflow-runs/{run['id']}")
+    assert missing_provenance.status_code == 409, missing_provenance.text
+    assert missing_provenance.json() == {
+        "detail": "Succeeded workflow run is missing saved provenance"
+    }
+    # Direct provenance export must enforce the same frozen closeout as
+    # run-detail retrieval, not regenerate an unfrozen replacement manifest.
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="missing saved provenance"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(run["id"]))
+
+    with app.state.session_factory() as session:
+        saved_run = session.get(WorkflowRun, str(run["id"]))
+        assert saved_run is not None
+        saved_run.result_json = original_result
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+    with app.state.session_factory() as session:
+        assert (
+            build_workflow_run_provenance(session, run_id=str(run["id"]))
+            == original_result["provenance_manifest"]
+        )
+
+    # The real executed graph has a frozen checksum. Changing only its edge
+    # identity preserves producer/port bindings, but must not allow direct
+    # succeeded-node reuse before whole-run provenance is inspected.
+    with app.state.session_factory() as session:
+        graph_record = session.get(WorkflowGraphRecord, str(saved["id"]))
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert graph_record is not None and consumer is not None
+        verified = verify_succeeded_node_artifacts(
+            session, run_id=str(run["id"]), node_run=consumer
+        )
+        assert verified["input_artifact_count"] == 1
+        original_graph = graph_record.graph_json
+        assert isinstance(original_graph, dict)
+        original_edges = original_graph["edges"]
+        assert isinstance(original_edges, list) and len(original_edges) == 1
+        graph_record.graph_json = {
+            **original_graph,
+            "edges": [{**original_edges[0], "edge_id": "tampered-edge-identity"}],
+        }
+        session.flush()
+        session.expire_all()
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert consumer is not None
+        with pytest.raises(ConflictError, match="graph provenance checksum failed"):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
+    # Reuse must check the saved node type even when the original graph and
+    # artifacts still have valid SHA-256 checksums. Exercise the existing
+    # completed project-image workflow, not a fabricated execution record.
+    with app.state.session_factory() as session:
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert consumer is not None
+        assert consumer.node_type != payload["nodes"][0]["node_type"]
+        consumer.node_type = str(payload["nodes"][0]["node_type"])
+        session.flush()
+        with pytest.raises(ConflictError, match="node identity does not match saved graph"):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
+    # Direct recovery must not reuse a checksum-valid artifact when the saved
+    # execution node was marked incomplete after interruption or corruption.
+    # Exercise the real executed workflow, preserving the original closeout.
+    with app.state.session_factory() as session:
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert consumer is not None and consumer.status == "succeeded"
+        consumer.status = "running"
+        session.flush()
+        with pytest.raises(ConflictError, match="not succeeded; artifacts cannot be reused"):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
 
 def test_workflow_graph_revisions_are_deduplicated_and_versioned(

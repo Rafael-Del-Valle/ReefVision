@@ -30,7 +30,6 @@ def test_pose_architectures_train_without_seed_and_preserve_initialization(
             test_settings,
             project_id=str(project["id"]),
             dataset_payload={"dataset_id": dataset["id"]},
-            initial_model_payload={},
             parameters={
                 "initialization_mode": "random",
                 "architecture": f"yolo11{scale}-pose.yaml",

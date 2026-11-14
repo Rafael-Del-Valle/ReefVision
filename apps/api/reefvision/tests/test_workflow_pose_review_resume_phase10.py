@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 import reefvision.jobs.video_tracking as tracking_job_module
-from reefvision.db.models import Job
+from reefvision.db.models import Job, WorkflowArtifact, WorkflowNodeRun, WorkflowRun
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_pose_provider_backends import (
@@ -17,6 +19,33 @@ from reefvision.tests.test_pose_provider_backends import (
     _import_pose_video,
     _pose_model,
 )
+
+
+def _resign_artifact_with_producer_summary(
+    session: Session,
+    artifact: WorkflowArtifact,
+    payload: dict[str, Any],
+) -> None:
+    """Preserve producer provenance so malformed pose data reaches review validators."""
+    checksum = canonical_json_sha256(payload)
+    artifact.payload_json = payload
+    artifact.payload_sha256 = checksum
+    producer = session.get(WorkflowNodeRun, artifact.producer_node_run_id)
+    assert producer is not None
+    summary = dict(producer.result_json or {})
+    outputs = summary.get("outputs")
+    assert isinstance(outputs, list)
+    assert all(isinstance(output, dict) for output in outputs)
+    assert sum(output.get("artifact_id") == artifact.id for output in outputs) == 1
+    producer.result_json = {
+        **summary,
+        "outputs": [
+            {**output, "payload_sha256": checksum}
+            if output["artifact_id"] == artifact.id
+            else output
+            for output in outputs
+        ],
+    }
 
 
 def _tracking_job_count(
@@ -290,6 +319,78 @@ def test_phase10_pose_review_pauses_and_resumes_without_rerunning_pose(
             client,
             str(track_id),
         )
+
+    # A saved artifact with a valid recalculated checksum must still be
+    # rejected if its source-track revision pins have been removed.
+    with app.state.session_factory() as session:
+        stored = session.get(WorkflowArtifact, str(temporal_artifact["id"]))
+        assert stored is not None
+        original_payload = dict(stored.payload_json)
+        assert original_payload["builds"]
+        unpinned_payload = {
+            **original_payload,
+            "builds": [
+                {k: v for k, v in build.items() if k != "source_track_revision"}
+                for build in original_payload["builds"]
+            ],
+        }
+        _resign_artifact_with_producer_summary(session, stored, unpinned_payload)
+        session.commit()
+
+    rejected = client.post(
+        (f"/api/v1/workflow-node-runs/{nodes_before['review']['id']}/resume-review"),
+        json={"reviewed_by": "scientist", "note": "Review without revision pins"},
+    )
+    assert rejected.status_code == 400, rejected.text
+    assert rejected.json()["detail"] == "Pose Review source track revisions are invalid"
+    with app.state.session_factory() as session:
+        paused_node = session.get(WorkflowNodeRun, str(nodes_before["review"]["id"]))
+        paused_run = session.get(WorkflowRun, run_id)
+        paused_job = session.get(Job, job_id)
+        assert paused_node is not None and paused_node.status == "waiting_for_review"
+        assert paused_run is not None and paused_run.status == "waiting_for_review"
+        assert paused_job is not None and paused_job.status == "waiting_for_review"
+        stored = session.get(WorkflowArtifact, str(temporal_artifact["id"]))
+        assert stored is not None
+        _resign_artifact_with_producer_summary(session, stored, original_payload)
+        session.commit()
+
+    # Even with a recomputed artifact checksum, a saved temporal review
+    # must not silently ignore malformed or duplicated source-track IDs.
+    original_track_ids = list(original_payload["track_ids"])
+    assert original_track_ids
+    for corrupt_ids, expected_detail in (
+        ([*original_track_ids, None], "Pose Review artifact track_ids are invalid"),
+        (
+            [*original_track_ids, original_track_ids[0]],
+            "Pose Review artifact track_ids contain duplicates",
+        ),
+    ):
+        with app.state.session_factory() as session:
+            stored = session.get(WorkflowArtifact, str(temporal_artifact["id"]))
+            assert stored is not None
+            corrupted_payload = {**original_payload, "track_ids": corrupt_ids}
+            _resign_artifact_with_producer_summary(session, stored, corrupted_payload)
+            session.commit()
+
+        rejected = client.post(
+            f"/api/v1/workflow-node-runs/{nodes_before['review']['id']}/resume-review",
+            json={"reviewed_by": "scientist", "note": "Reject malformed source tracks"},
+        )
+        assert rejected.status_code == 400, rejected.text
+        assert rejected.json()["detail"] == expected_detail
+
+        with app.state.session_factory() as session:
+            paused_node = session.get(WorkflowNodeRun, str(nodes_before["review"]["id"]))
+            paused_run = session.get(WorkflowRun, run_id)
+            paused_job = session.get(Job, job_id)
+            assert paused_node is not None and paused_node.status == "waiting_for_review"
+            assert paused_run is not None and paused_run.status == "waiting_for_review"
+            assert paused_job is not None and paused_job.status == "waiting_for_review"
+            stored = session.get(WorkflowArtifact, str(temporal_artifact["id"]))
+            assert stored is not None
+            _resign_artifact_with_producer_summary(session, stored, original_payload)
+            session.commit()
 
     resumed = client.post(
         (f"/api/v1/workflow-node-runs/{nodes_before['review']['id']}/resume-review"),
@@ -565,6 +666,46 @@ def test_phase10_active_learning_review_resume_freezes_verified_truth(
         assert verified.status_code == 200, verified.text
 
         assert verified.json()["review_status"] == "verified"
+
+    # A saved AL round must not approve different selection evidence even if
+    # its artifact checksum is recomputed after the payload was altered.
+    round_artifact_id = artifacts["pose_active_learning_round"]["id"]
+    for changed_fields, expected_error in (
+        (
+            {"selection_sha256": "0" * 64},
+            "Pose Active Learning Review selection differs from saved workflow evidence",
+        ),
+        (
+            {"candidate_ids": ["not-in-round"]},
+            "Pose Active Learning Review candidates differ from saved workflow evidence",
+        ),
+    ):
+        with app.state.session_factory() as session:
+            artifact = session.get(WorkflowArtifact, round_artifact_id)
+            assert artifact is not None
+            original_payload = dict(artifact.payload_json)
+            changed_payload = {**original_payload, **changed_fields}
+            _resign_artifact_with_producer_summary(session, artifact, changed_payload)
+            session.commit()
+
+        rejected = client.post(
+            f"/api/v1/workflow-node-runs/{nodes_before['al_review']['id']}/resume-review",
+            json={"reviewed_by": "scientist", "note": "Approve saved selection."},
+        )
+        assert rejected.status_code == 400, rejected.text
+        assert expected_error in rejected.text
+
+        with app.state.session_factory() as session:
+            paused_run = session.get(WorkflowRun, run_id)
+            paused_job = session.get(Job, job_id)
+            paused_node = session.get(WorkflowNodeRun, nodes_before["al_review"]["id"])
+            assert paused_run is not None and paused_run.status == "waiting_for_review"
+            assert paused_job is not None and paused_job.status == "waiting_for_review"
+            assert paused_node is not None and paused_node.status == "waiting_for_review"
+            artifact = session.get(WorkflowArtifact, round_artifact_id)
+            assert artifact is not None
+            _resign_artifact_with_producer_summary(session, artifact, original_payload)
+            session.commit()
 
     resumed = client.post(
         (f"/api/v1/workflow-node-runs/{nodes_before['al_review']['id']}/resume-review"),
