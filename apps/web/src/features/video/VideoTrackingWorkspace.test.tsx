@@ -1299,3 +1299,31 @@ it("selects a registered pose model from a Model Hub workspace command", async (
     "reefpose-model-1",
   );
 });
+
+it("opens a non-first source video when its managed list arrives after navigation", async () => {
+  const videos = await api.getVideos(project.id);
+  let resolveVideos!: (
+    videos: Awaited<ReturnType<typeof api.getVideos>>,
+  ) => void;
+  vi.mocked(api.getVideos).mockReturnValue(
+    new Promise((resolve) => {
+      resolveVideos = resolve;
+    }),
+  );
+  vi.mocked(api.getTrackingModels).mockResolvedValue([]);
+  const handled = vi.fn();
+  renderWorkspace({
+    workspaceCommand: { id: 10, type: "select_video", videoId: "video-2" },
+    onWorkspaceCommandHandled: handled,
+  });
+
+  expect(handled).not.toHaveBeenCalled();
+  resolveVideos([
+    ...videos,
+    { ...videos[0], id: "video-2", original_filename: "second-video.mp4" },
+  ]);
+  await waitFor(() => expect(handled).toHaveBeenCalledWith(10));
+  expect(screen.getByRole("combobox", { name: "Video" })).toHaveValue(
+    "video-2",
+  );
+});

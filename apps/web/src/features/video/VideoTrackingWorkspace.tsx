@@ -1301,6 +1301,13 @@ export function VideoTrackingWorkspace({
       return;
     }
 
+    if (
+      workspaceCommand.type === "select_video" &&
+      videosQuery.data === undefined
+    ) {
+      return;
+    }
+
     lastWorkspaceCommandIdRef.current = workspaceCommand.id;
 
     if (workspaceCommand.type === "select_video") {
