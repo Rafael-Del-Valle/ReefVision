@@ -24,6 +24,15 @@ PARAMS = {
     "surface_trace_vertex_paths": [[0, 2, 1]],
 }
 
+# The second calibrated segment is real, but adding it to the first is
+# beyond float precision. The standalone API and saved workflow must retain
+# the individual edge length and report the unresolved cumulative waypoint.
+RESOLUTION_LIMITED_PARAMS = {
+    **PARAMS,
+    "vertices": [[0, 0, 0], [1, 0, 0], [1, 1e-17, 0]],
+    "surface_trace_vertex_paths": [[0, 1, 2]],
+}
+
 
 def test_trace_follows_selected_edges_not_the_shortest_route() -> None:
     result = measure_mesh_preview(**PARAMS)
@@ -40,12 +49,8 @@ def test_trace_follows_selected_edges_not_the_shortest_route() -> None:
     assert trace["segment_lengths_m"] == pytest.approx([0.01, sqrt(2) * 0.01])
     expected = (1 + sqrt(2)) * 0.01
     assert trace["length_m"] == pytest.approx(expected)
-    assert trace["cumulative_lengths_m"] == pytest.approx(
-        [0.0, 0.01, expected]
-    )
-    assert trace["length_scale_only_interval_m"] == pytest.approx(
-        [expected * 0.9, expected * 1.1]
-    )
+    assert trace["cumulative_lengths_m"] == pytest.approx([0.0, 0.01, expected])
+    assert trace["length_scale_only_interval_m"] == pytest.approx([expected * 0.9, expected * 1.1])
     assert trace["length_m"] > result["surface_edge_paths"][0]["length_m"]
     assert trace["qc_warnings"] == [
         "caller_selected_surface_trace_not_anatomical_centerline",
@@ -71,9 +76,7 @@ def test_trace_schema_or_engine_rejects_invalid_vertex_paths(
 ) -> None:
     project_id = str(create_project(client, "Bad surface trace")["id"])
     params = {**PARAMS, "surface_trace_vertex_paths": paths}
-    response = client.post(
-        f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params
-    )
+    response = client.post(f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params)
     assert response.status_code == 422, response.text
 
 
@@ -84,10 +87,17 @@ def test_selected_trace_requires_real_triangle_edges(client: TestClient) -> None
         "vertices": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [2, 0, 0]],
         "surface_trace_vertex_paths": [[0, 3]],
     }
-    response = client.post(
-        f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params
-    )
+    response = client.post(f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params)
     assert response.status_code == 422, response.text
+
+
+def test_trace_flags_positive_segment_lost_in_cumulative_distance() -> None:
+    trace = measure_mesh_preview(**RESOLUTION_LIMITED_PARAMS)["surface_edge_traces"][0]
+    assert trace["segment_lengths_m"][1] > 0
+    assert trace["cumulative_lengths_m"][1] == trace["cumulative_lengths_m"][2]
+    assert trace["length_m"] == pytest.approx(0.01)
+    assert "surface_trace_cumulative_distance_resolution_loss" in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
 
 
 def test_omitted_trace_does_not_invent_anatomical_centerlines() -> None:
@@ -100,9 +110,7 @@ def test_omitted_trace_does_not_invent_anatomical_centerlines() -> None:
 def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
     uncertainty: float | None,
 ) -> None:
-    result = measure_mesh_preview(
-        **{**PARAMS, "relative_scale_uncertainty": uncertainty}
-    )
+    result = measure_mesh_preview(**{**PARAMS, "relative_scale_uncertainty": uncertainty})
     trace = result["surface_edge_traces"][0]
     expected = (1 + sqrt(2)) * 0.01
     assert trace["length_scale_only_interval_m"] == (
@@ -111,12 +119,14 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
     assert trace["human_review_verified"] is False
 
 
+@pytest.mark.parametrize("resolution_limited", [False, True])
 def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
-    client: TestClient,
+    client: TestClient, resolution_limited: bool
 ) -> None:
     project_id = str(create_project(client, "Surface edge trace workflow")["id"])
     base = f"/api/v1/projects/{project_id}"
-    standalone = client.post(f"{base}/spatial/mesh-preview", json=PARAMS)
+    params = RESOLUTION_LIMITED_PARAMS if resolution_limited else PARAMS
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 200, standalone.text
 
     graph = {
@@ -124,7 +134,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "name": "Provisional scientist-selected triangle edge trace",
         "nodes": [
             {"node_id": "p", "node_type": "project_source"},
-            {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": PARAMS},
+            {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": params},
         ],
         "edges": [
             {
@@ -140,7 +150,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert saved.status_code == 201, saved.text
     assert (
         saved.json()["graph_json"]["nodes"][1]["parameters"]["surface_trace_vertex_paths"]
-        == [[0, 2, 1]]
+        == params["surface_trace_vertex_paths"]
     )
     run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
@@ -160,3 +170,8 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert artifact["provenance"] == standalone.json()["provenance"]
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["surface_edge_traces"][0]["human_review_verified"] is False
+    if resolution_limited:
+        assert (
+            "surface_trace_cumulative_distance_resolution_loss"
+            in artifact["surface_edge_traces"][0]["qc_warnings"]
+        )
