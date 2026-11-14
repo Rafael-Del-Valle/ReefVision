@@ -774,16 +774,45 @@ def test_validation_persists_original_machine_comparison_and_development_sensiti
         session.add(test_run)
         session.commit()
         heldout_run_id = test_run.id
-    heldout_response = client.post(
-        validation_url,
-        json={
-            "reference_id": frozen.json()["id"],
-            "split": "test",
-            "rater_id": "rater-b",
-            "source_runs": {heldout["video_id"]: heldout_run_id},
-            "development_job_id": job_id,
-        },
+    heldout_request = {
+        "reference_id": frozen.json()["id"],
+        "split": "test",
+        "rater_id": "rater-b",
+        "source_runs": {heldout["video_id"]: heldout_run_id},
+        "development_job_id": job_id,
+    }
+    interrupted = client.post(validation_url, json=heldout_request)
+    assert interrupted.status_code == 202, interrupted.text
+    interrupted_id = interrupted.json()["id"]
+    cancelled = client.post(f"/api/v1/jobs/{interrupted_id}/cancel")
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["status"] == "cancelled"
+    raw = export_archive(client, test_settings, project_id)
+
+    def alter_lock(_manifest, sections):
+        sections["reefpose_heldout_locks"][0]["protocol_sha256"] = "0" * 64
+
+    corrupted = import_archive(client, rewrite(raw, alter_lock))
+    assert corrupted.status_code == 400, corrupted.text
+    assert "pinned protocol" in corrupted.text
+    premature = import_archive(client, raw)
+    assert premature.status_code == 201, premature.text
+    snapshot = premature.json()
+    early_mapping = snapshot["package"]["options_json"]["id_map"]
+    early_url = f"/api/v1/projects/{snapshot['project_id']}/reefpose-validations"
+    imported_interrupted = client.get(f"/api/v1/jobs/{early_mapping[interrupted_id]}").json()
+    imported_payload = imported_interrupted["request_json"]["payload"]
+    assert imported_interrupted["status"] == "cancelled"
+    early_replay = client.post(early_url, json=imported_payload)
+    assert early_replay.status_code == 202, early_replay.text
+    modified = client.post(early_url, json={**imported_payload, "rater_id": "rater-a"})
+    assert modified.status_code == 409, modified.text
+    assert process_reefpose_validation_job(
+        client.app.state.settings, client.app.state.session_factory, early_replay.json()["id"]
     )
+    assert client.get(f"{early_url}/{early_replay.json()['id']}/export").status_code == 200
+
+    heldout_response = client.post(validation_url, json=heldout_request)
     assert heldout_response.status_code == 202, heldout_response.text
     heldout_job = heldout_response.json()["id"]
     assert process_reefpose_validation_job(

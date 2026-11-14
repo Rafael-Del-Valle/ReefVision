@@ -242,6 +242,29 @@ def validate_pose_rows(sections: dict[str, list[dict[str, Any]]]) -> None:
         if checksum != canonical_json_sha256(report):
             raise ValidationError("Exchange ReefPose validation report checksum does not match")
         validate_reefpose_report(report, references.get(report["reference_id"]))
+    locks = {
+        row["scope_sha256"]: row["protocol_sha256"]
+        for row in sections.get("reefpose_heldout_locks", [])
+    }
+    for job in sections.get("jobs", []):
+        if job["job_type"] != "reefpose_validation":
+            continue
+        request = job["request_json"]
+        pending = request.get("heldout_input_manifest")
+        if pending is None:
+            continue  # Older jobs persisted only an opaque lock digest.
+        reference = references.get(pending["reference_id"])
+        if (
+            pending["split"] != "test"
+            or reference is None
+            or reference["manifest_sha256"] != pending["reference_sha256"]
+            or canonical_json_sha256(pending) != request["input_sha256"]
+            or any(
+                locks.get(scope) != digest
+                for scope, digest in _heldout_locks(job["project_id"], pending).items()
+            )
+        ):
+            raise ValidationError("Exchange held-out job does not match its pinned protocol")
 
 
 def validate_frozen_pose_frames(sections: dict[str, list[dict[str, Any]]]) -> None:
@@ -372,6 +395,32 @@ def restore_pose_reports(
                     "source_track_id": row["source_video_track_id"],
                 }
             )
+
+    def remap_manifest(original: dict[str, Any]) -> dict[str, Any]:
+        report: dict[str, Any] = map_values(original, {**id_map, **digests})
+        report["models"] = {
+            id_map[key]: map_values(value, {**id_map, **digests})
+            for key, value in original["models"].items()
+        }
+        manifest = deepcopy(original["scored_reference_manifest"])
+        _remap_reference_manifest(manifest, id_map)
+        _update_keys(manifest, ("parent_sha256",), digests)
+        report["scored_reference_manifest"] = manifest
+        for old_entry, entry in zip(
+            original["prediction_sources"], report["prediction_sources"], strict=True
+        ):
+            source_observations = observations.get(old_entry.get("id"), [])
+            old_hash = old_entry["observations_sha256"]
+            original_order = sorted(source_observations, key=lambda row: (row["frame"], row["id"]))
+            if canonical_json_sha256(original_order) == old_hash:
+                copied = deepcopy(source_observations)
+                for observation in copied:
+                    _update_keys(observation, ("id", "identity_id", "source_track_id"), id_map)
+                copied.sort(key=lambda row: (row["frame"], row["id"]))
+                entry["observations_sha256"] = canonical_json_sha256(copied)
+        report["prediction_sources"].sort(key=lambda item: item["video_id"])
+        return report
+
     waiting: dict[str, list[dict[str, Any]]] = {}
     for row in old_reports:
         waiting.setdefault(row["result_json"]["result_sha256"], []).append(row)
@@ -387,41 +436,9 @@ def restore_pose_reports(
             report_jobs = waiting.pop(digest)
             source = report_jobs[0]
             old_report = source["result_json"]
-            report = map_values(old_report, {**id_map, **digests})
-            report["models"] = {
-                id_map[key]: map_values(value, {**id_map, **digests})
-                for key, value in old_report["models"].items()
-            }
-            manifest = deepcopy(old_report["scored_reference_manifest"])
-            _remap_reference_manifest(manifest, id_map)
-            _update_keys(manifest, ("parent_sha256",), digests)
-            report["scored_reference_manifest"] = manifest
-            for old_entry, entry in zip(
-                old_report["prediction_sources"], report["prediction_sources"], strict=True
-            ):
-                source_observations = observations.get(old_entry.get("id"), [])
-                old_hash = old_entry["observations_sha256"]
-                original_order = sorted(
-                    source_observations, key=lambda row: (row["frame"], row["id"])
-                )
-                if canonical_json_sha256(original_order) == old_hash:
-                    copied = deepcopy(source_observations)
-                    for observation in copied:
-                        _update_keys(observation, ("id", "identity_id", "source_track_id"), id_map)
-                    copied.sort(key=lambda row: (row["frame"], row["id"]))
-                    entry["observations_sha256"] = canonical_json_sha256(copied)
-            report["prediction_sources"].sort(key=lambda item: item["video_id"])
+            report = remap_manifest(old_report)
             if report["split"] == "test":
-                pose_sources = {entry["video_id"]: entry for entry in report["prediction_sources"]}
-                for recording in report["scored_reference_manifest"]["recordings"]:
-                    source_entry = pose_sources[recording["video_id"]]
-                    checkpoint = (
-                        report["models"].get(source_entry["model_id"], {}).get("checkpoint_sha256")
-                    )
-                    old_scope = heldout_scope(
-                        source["project_id"], recording["video_sha256"], checkpoint
-                    )
-                    locks[old_scope] = _heldout_protocol(report, source_entry)
+                locks.update(_heldout_locks(source["project_id"], report))
             manifest_keys = (
                 "schema_version",
                 "reference_id",
@@ -450,6 +467,21 @@ def restore_pose_reports(
                     request = dict(job.request_json)
                     request["input_sha256"] = report["input_sha256"]
                     job.request_json = request
+    for source in sections.get("jobs", []):
+        if source["job_type"] != "reefpose_validation":
+            continue
+        original = source["request_json"].get("heldout_input_manifest")
+        if original is None:
+            continue
+        updated = remap_manifest(original)
+        locks.update(_heldout_locks(source["project_id"], updated))
+        job = session.get(Job, id_map[source["id"]])
+        if job is not None:
+            job.request_json = {
+                **job.request_json,
+                "heldout_input_manifest": updated,
+                "input_sha256": canonical_json_sha256(updated),
+            }
     return locks
 
 
@@ -590,14 +622,21 @@ def heldout_scope(project_id: str, video_checksum: str, model_checksum: str | No
     )
 
 
-def _heldout_protocol(report: dict[str, Any], source: dict[str, Any]) -> str:
-    return canonical_json_sha256(
-        {
-            "development_lock": report["development_lock_sha256"],
-            "tracker_protocol": report["tracker_protocol"],
-            "reference": report["reference_sha256"],
-            "rater": report["rater_id"],
-            "bootstrap_seed": report["bootstrap_seed"],
-            "observations_sha256": source["observations_sha256"],
-        }
-    )
+def _heldout_locks(project_id: str, manifest: dict[str, Any]) -> dict[str, str]:
+    sources = {entry["video_id"]: entry for entry in manifest["prediction_sources"]}
+    locks = {}
+    for recording in manifest["scored_reference_manifest"]["recordings"]:
+        source = sources[recording["video_id"]]
+        checkpoint = manifest["models"].get(source["model_id"], {}).get("checkpoint_sha256")
+        scope = heldout_scope(project_id, recording["video_sha256"], checkpoint)
+        locks[scope] = canonical_json_sha256(
+            {
+                "development_lock": manifest["development_lock_sha256"],
+                "tracker_protocol": manifest["tracker_protocol"],
+                "reference": manifest["reference_sha256"],
+                "rater": manifest["rater_id"],
+                "bootstrap_seed": manifest["bootstrap_seed"],
+                "observations_sha256": source["observations_sha256"],
+            }
+        )
+    return locks

@@ -528,6 +528,7 @@ def submit_validation(
         request_json={
             "payload": request.model_dump(mode="json"),
             "input_sha256": input_hash,
+            **({"heldout_input_manifest": manifest} if request.split == "test" else {}),
             **(workflow_context or {}),
         },
     )
