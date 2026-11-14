@@ -156,8 +156,19 @@ def verify_succeeded_node_artifacts(
 
     run = session.get(WorkflowRun, run_id)
     graph = session.get(WorkflowGraphRecord, run.workflow_graph_record_id) if run else None
-    if graph is None or not isinstance(graph.graph_json, dict):
+    if graph is None or run is None or not isinstance(graph.graph_json, dict):
         raise ConflictError("Succeeded workflow node graph lineage is unavailable")
+    # Recovery can verify a succeeded node directly, before run-detail or
+    # provenance export validates the graph. Do not trust unsigned graph edits
+    # when deciding which earlier artifact bindings are safe to reuse.
+    if (
+        graph.project_id != run.project_id
+        or graph.graph_key != graph.graph_json.get("graph_id")
+        or graph.schema_version != graph.graph_json.get("schema_version")
+        or graph.graph_sha256 != run.graph_sha256
+        or canonical_json_sha256(graph.graph_json) != run.graph_sha256
+    ):
+        raise ConflictError("Succeeded workflow node graph provenance checksum failed")
     raw_edges = graph.graph_json.get("edges", [])
     if not isinstance(raw_edges, list) or any(
         not isinstance(edge, dict) or not isinstance(edge.get("edge_id"), str) for edge in raw_edges
