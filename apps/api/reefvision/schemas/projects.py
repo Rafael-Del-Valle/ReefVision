@@ -179,9 +179,7 @@ class LabelClassMergeRequest(BaseModel):
     # reviewed counts so an intervening data change rejects the merge.
     expected_usage_counts: dict[str, int] | None = None
     # Optional for legacy callers; the reviewed GUI supplies the identity-set hash.
-    expected_usage_fingerprint: str | None = Field(
-        default=None, pattern=r"^[0-9a-f]{64}$"
-    )
+    expected_usage_fingerprint: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
 class LabelClassMergeCountResponse(BaseModel):

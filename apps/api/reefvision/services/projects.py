@@ -251,7 +251,8 @@ class ProjectService:
             raise NotFoundError("Label class not found")
         return label_class
 
-    def _usage_snapshot(s        # Class-merge approval must bind to exact references, not just counts.
+    def _usage_snapshot(self, label_class: LabelClass) -> LabelClassUsageSnapshot:
+        # Class-merge approval must bind to exact references, not just counts.
         # A one-for-one swap within a category invalidates the review.
         reference_ids: dict[str, list[str]] = {key: [] for key in USAGE_CATEGORY_ORDER}
 
@@ -342,10 +343,6 @@ class ProjectService:
                 "utf-8"
             )
         ).hexdigest()
-
-       if isinstance(value, str)
-            }
-        )
 
         delete_blockers: list[str] = []
         if counts["annotations_active"] > 0:

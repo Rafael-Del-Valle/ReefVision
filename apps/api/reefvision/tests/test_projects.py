@@ -567,9 +567,7 @@ def test_used_class_delete_is_blocked_and_usage_is_reported(client: TestClient) 
 
     swapped_usage = client.get(f"/api/v1/classes/{source_class['id']}/usage")
     assert swapped_usage.status_code == 200
-    assert {
-        item["key"]: item["count"] for item in swapped_usage.json()["counts"]
-    } == counts
+    assert {item["key"]: item["count"] for item in swapped_usage.json()["counts"]} == counts
     assert swapped_usage.json()["reference_fingerprint"] != reviewed_fingerprint
 
     stale_identity_merge = client.post(
@@ -596,9 +594,7 @@ def test_used_class_delete_is_blocked_and_usage_is_reported(client: TestClient) 
         session.delete(replacement)
         session.commit()
     assert (
-        client.get(f"/api/v1/classes/{source_class['id']}/usage").json()[
-            "reference_fingerprint"
-        ]
+        client.get(f"/api/v1/classes/{source_class['id']}/usage").json()["reference_fingerprint"]
         == reviewed_fingerprint
     )
 
