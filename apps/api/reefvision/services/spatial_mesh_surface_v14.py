@@ -86,6 +86,7 @@ def measure_mesh_preview(
     relative_scale_uncertainty: float | None = None,
     source_label: str | None = None,
     surface_path_vertex_pairs: list[list[int]] | None = None,
+    surface_trace_vertex_paths: list[list[int]] | None = None,
 ) -> dict[str, Any]:
     if (
         not 3 <= len(vertices) <= spatial_mesh_obj_v14.MAX_VERTICES
@@ -638,6 +639,9 @@ def measure_mesh_preview(
         "surface_edge_paths": spatial_mesh_paths_v14.mesh_edge_paths(
             points, faces, surface_path_vertex_pairs, scale, relative_scale_uncertainty
         ),
+        "surface_edge_traces": spatial_mesh_paths_v14.mesh_surface_edge_traces(
+            points, faces, surface_trace_vertex_paths, scale, relative_scale_uncertainty
+        ),
         "boundary_edge_length_scale_uncertainty_m": (
             boundary_length_m * relative_scale_uncertainty
             if relative_scale_uncertainty is not None
@@ -877,6 +881,7 @@ def preview_from_request(payload: Any) -> dict[str, Any]:
         relative_scale_uncertainty=payload.relative_scale_uncertainty,
         source_label=payload.source_label,
         surface_path_vertex_pairs=payload.surface_path_vertex_pairs,
+        surface_trace_vertex_paths=payload.surface_trace_vertex_paths,
     )
     source_byte_count = len(source_bytes) if source_bytes is not None else None
     result["provenance"].update(
