@@ -847,9 +847,7 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
   await expect(objectOptions.last()).toHaveAttribute("aria-setsize", "1500");
   await expect(page.getByRole("heading", { name: "1 selected" })).toBeVisible();
 
-  await page
-    .getByRole("button", { name: "Back to first 200 objects" })
-    .click();
+  await page.getByRole("button", { name: "Back to first 200 objects" }).click();
   await expect(objectOptions).toHaveCount(201);
   await expect(objectOptions.first()).toHaveAttribute("aria-posinset", "1");
   await expect(objectOptions.last()).toHaveAttribute("aria-posinset", "600");
