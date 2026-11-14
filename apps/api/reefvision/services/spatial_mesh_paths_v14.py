@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from fractions import Fraction
 from heapq import heappop, heappush
 from itertools import accumulate, pairwise
 from math import atan2, degrees, dist, hypot, isfinite
@@ -164,6 +165,20 @@ def mesh_edge_paths(
         # a much larger accumulated cost. Such rounded route ties are not
         # evidence of genuinely equal shortest paths.
         lost_positive_edge_cost = False
+
+        def exact_selected_path_cost(vertex: int) -> Fraction:
+            """Exact sum of stored binary64 edge lengths for the parent path.
+
+            Used only for suspected ties; the displayed distances and chosen
+            Dijkstra route retain their original floating-point semantics.
+            """
+            total = Fraction(0)
+            while vertex != start:
+                predecessor = parent[vertex]
+                total += Fraction(adjacency[predecessor][vertex])
+                vertex = predecessor
+            return total
+
         if not status:
             while queue:
                 length, vertex = heappop(queue)
@@ -177,6 +192,12 @@ def mesh_edge_paths(
                 for neighbor, edge_length in sorted(adjacency[vertex].items()):
                     candidate = length + edge_length
                     if not isfinite(candidate):
+                        # A finite destination has already been found. This
+                        # candidate cannot improve it, so overflow on an
+                        # unrelated detour must not invalidate its uncertainty
+                        # measurement. Unreachable finite routes still fail.
+                        if end in shortest:
+                            continue
                         raise ValueError("Accumulated mesh path length overflowed")
                     if edge_length > 0 and candidate == length:
                         lost_positive_edge_cost = True
@@ -187,6 +208,16 @@ def mesh_edge_paths(
                         parent[neighbor] = vertex
                         heappush(queue, (candidate, neighbor))
                     elif candidate == prior:
+                        # Equal rounded totals need not be equal sums of the
+                        # stored source edge lengths. In particular, a tiny
+                        # prefix may be lost when a subsequent huge edge is
+                        # added, even when no positive edge itself rounds
+                        # away against the accumulated prefix.
+                        if (
+                            exact_selected_path_cost(vertex) + Fraction(edge_length)
+                            != exact_selected_path_cost(neighbor)
+                        ):
+                            lost_positive_edge_cost = True
                         shortest_counts[neighbor] = min(
                             2, shortest_counts[neighbor] + shortest_counts[vertex]
                         )
