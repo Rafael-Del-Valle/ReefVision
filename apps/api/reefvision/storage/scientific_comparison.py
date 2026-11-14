@@ -4,6 +4,7 @@ import csv
 from io import StringIO
 
 from reefvision.schemas.scientific_comparison import ComparisonRecord
+from reefvision.schemas.static_comparison import StaticComparisonRecord
 
 
 def _text_cell(value: str) -> str:
@@ -89,6 +90,67 @@ def comparison_csv(report: ComparisonRecord) -> str:
                         None,
                         None,
                         _text_cell(excluded.reason),
+                    ]
+                )
+    return buffer.getvalue()
+
+
+def static_comparison_csv(report: StaticComparisonRecord) -> str:
+    buffer = StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+    writer.writerow(
+        [
+            "comparison_sha256",
+            "reference_sha256",
+            "checkpoint_sha256",
+            "lineage",
+            "model_id",
+            "model",
+            "image_id",
+            "image",
+            "group_key",
+            "class_id",
+            "class",
+            "reference",
+            "predicted",
+            "signed_error",
+            "absolute_error",
+            "signed_percentage_error",
+            "status",
+            "message",
+        ]
+    )
+    snapshot = report.snapshot
+    evidence = snapshot.evidence
+    images = {row.id: row for row in evidence.images}
+    classes = {row.id: row.name for row in evidence.classes}
+    for model, result in zip(evidence.models, snapshot.results, strict=True):
+        for row in result.images:
+            image = images[row.image_id]
+            for count in row.counts:
+                error = count.prediction - count.reference if count.prediction is not None else None
+                writer.writerow(
+                    [
+                        report.content_sha256,
+                        evidence.reference_sha256,
+                        model.checkpoint_sha256,
+                        model.lineage.status,
+                        model.id,
+                        _text_cell(model.name),
+                        image.id,
+                        _text_cell(image.name),
+                        _text_cell(image.group_key or ""),
+                        count.class_id,
+                        _text_cell(classes[count.class_id]),
+                        count.reference,
+                        count.prediction,
+                        error,
+                        abs(error) if error is not None else None,
+                        error / count.reference * 100
+                        if error is not None and count.reference
+                        else None,
+                        count.status,
+                        _text_cell(row.message or ""),
                     ]
                 )
     return buffer.getvalue()

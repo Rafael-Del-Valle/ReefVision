@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, FiniteFloat
 
 from reefvision.schemas.ecology_pose_links import Digest
 
-ReportSource = Literal["ecology", "event_summary", "comparison"]
+ReportSource = Literal["ecology", "event_summary", "comparison", "static_comparison"]
 Figure = Literal[
     "trajectory",
     "group_summary",

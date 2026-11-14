@@ -11,6 +11,10 @@ from sqlalchemy.orm import Session
 from reefvision.db.models import Job
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.scientific_comparison import ComparisonRecord
+from reefvision.services.project_exchange_static_comparison import (
+    restore_static_comparisons,
+    validate_static_comparison_exchange,
+)
 from reefvision.services.scientific_comparison import (
     JOB_TYPE,
     agreement_statistics,
@@ -18,6 +22,7 @@ from reefvision.services.scientific_comparison import (
     read_comparison,
     scored_pairs,
 )
+from reefvision.services.static_comparison import STATIC_COMPARISON_JOB, read_static_comparison
 from reefvision.services.workflow_scientific_comparison import comparison_artifact
 from reefvision.storage.datasets import canonical_json_sha256
 
@@ -26,6 +31,7 @@ def validate_comparison_exchange(sections: dict[str, list[dict[str, Any]]]) -> N
     jobs = {row["id"]: row for row in sections.get("jobs", [])}
     references = {row["id"]: row for row in sections.get("reefpose_references", [])}
     comparison_ids = {identifier for identifier, row in jobs.items() if row["job_type"] == JOB_TYPE}
+    static_ids = validate_static_comparison_exchange(sections)
     for identifier in comparison_ids:
         row = jobs[identifier]
         try:
@@ -121,7 +127,7 @@ def validate_comparison_exchange(sections: dict[str, list[dict[str, Any]]]) -> N
             payload = artifact["payload_json"]
             identifier = payload.get("comparison_id")
             if (
-                identifier not in comparison_ids
+                identifier not in comparison_ids | static_ids
                 or jobs[identifier]["project_id"] != payload.get("project_id")
                 or jobs[identifier]["result_json"]["content_sha256"]
                 != payload.get("content_sha256")
@@ -136,6 +142,7 @@ def restore_comparison_jobs(
     id_map: dict[str, str],
     digest_map: dict[str, str],
 ) -> None:
+    restore_static_comparisons(session, sections, id_map)
     for row in sections.get("jobs", []):
         if row["job_type"] != JOB_TYPE:
             continue
@@ -173,7 +180,13 @@ def restore_comparison_jobs(
 def restore_comparison_artifact(
     session: Session, project_id: str, payload: dict[str, Any]
 ) -> dict[str, Any]:
-    report = read_comparison(session, project_id, payload["comparison_id"])
+    identifier = payload["comparison_id"]
+    job = session.get(Job, identifier)
+    report = (
+        read_static_comparison(session, project_id, identifier)
+        if job and job.job_type == STATIC_COMPARISON_JOB
+        else read_comparison(session, project_id, identifier)
+    )
     if report.content_sha256 != payload.get("content_sha256"):
         raise ValidationError("Imported workflow artifact disagrees with its scientific comparison")
     return comparison_artifact(report)

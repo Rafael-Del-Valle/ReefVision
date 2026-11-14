@@ -88,7 +88,7 @@ function interval(value: [number, number] | null): string {
   return value ? value.map(decimal).join(" to ") : "Unavailable";
 }
 
-function PairPlot({
+export function PairPlot({
   modelName,
   pairs,
   unit,
@@ -97,7 +97,7 @@ function PairPlot({
   limits,
 }: {
   modelName: string;
-  pairs: Pair[];
+  pairs: Pick<Pair, "reference" | "estimate" | "individual_id">[];
   unit: string;
   difference: boolean;
   bias: number;

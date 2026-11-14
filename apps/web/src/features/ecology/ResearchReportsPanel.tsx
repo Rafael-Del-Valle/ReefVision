@@ -3,10 +3,15 @@ import { useState } from "react";
 
 import { request } from "../../api/client";
 import { getApiBaseUrl } from "../../runtime";
+import {
+  listStaticComparisons,
+  staticLineageLabels,
+} from "../video/staticComparisonApi";
 import { listEcologyAnalyses } from "./ecologyAnalysisApi";
 import { listEventSummaries } from "./EventSummaryPanel";
 
-type SourceKind = "ecology" | "event_summary" | "comparison";
+type SourceKind =
+  "ecology" | "event_summary" | "comparison" | "static_comparison";
 type FigureKind =
   | "trajectory"
   | "group_summary"
@@ -102,6 +107,29 @@ export function ResearchReportsPanel({ projectId }: { projectId: string }) {
           figures: ["event_rate"],
         }));
       }
+      if (kind === "static_comparison") {
+        const data = await listStaticComparisons(
+          projectId,
+          20,
+          offset,
+          signal,
+          true,
+        );
+        return data
+          .filter((row) => row.status === "succeeded")
+          .map((row) => ({
+            id: row.id,
+            label: [
+              row.reference_name,
+              row.model_names.join(" / "),
+              row.evaluation_status &&
+                staticLineageLabels[row.evaluation_status],
+            ]
+              .filter(Boolean)
+              .join(" · "),
+            figures: ["identity_scatter", "bland_altman"],
+          }));
+      }
       const data = await request<
         {
           id: string;
@@ -182,6 +210,9 @@ export function ResearchReportsPanel({ projectId }: { projectId: string }) {
             <option value="ecology">Reviewed ecological analysis</option>
             <option value="event_summary">Reviewed event summary</option>
             <option value="comparison">Held-out human–model comparison</option>
+            <option value="static_comparison">
+              Static-image human–model comparison
+            </option>
           </select>
         </label>
         <label>

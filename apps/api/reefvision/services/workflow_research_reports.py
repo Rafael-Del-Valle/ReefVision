@@ -53,7 +53,6 @@ def execute_research_report(
     parameters: dict[str, Any],
     inputs: dict[str, list[WorkflowArtifact]],
 ) -> list[dict[str, Any]]:
-    del settings
     projects = inputs.get("project", [])
     if len(projects) != 1 or projects[0].payload_json.get("project_id") != project_id:
         raise ValidationError("Research reports require the current project")
@@ -61,7 +60,7 @@ def execute_research_report(
     configuration = parameters.get("configuration")
     if bool(identifier) == bool(configuration):
         raise ValidationError("Provide exactly one saved report ID or figure configuration")
-    service = ResearchReportService(session)
+    service = ResearchReportService(session, settings)
     try:
         report = (
             service.get(project_id, str(UUID(str(identifier))))

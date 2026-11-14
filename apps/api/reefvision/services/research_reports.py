@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision import __version__
+from reefvision.config import Settings
 from reefvision.db.models import Job, Project
 from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_level
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
@@ -37,6 +38,7 @@ from reefvision.schemas.research_reports import (
 from reefvision.services.ecology_analysis import EcologyAnalysisService
 from reefvision.services.ecology_event_summary import EcologyEventSummaryService
 from reefvision.services.scientific_comparison import read_comparison
+from reefvision.services.static_comparison import read_static_comparison
 from reefvision.storage.datasets import canonical_json_sha256
 
 REPORT_JOB = "research_publication_figure"
@@ -417,6 +419,69 @@ def _comparison_series(source: Any, options: FigureRequest) -> dict[str, Any]:
     }
 
 
+def _static_comparison_series(source: Any, options: FigureRequest) -> dict[str, Any]:
+    if options.figure not in {"identity_scatter", "bland_altman"}:
+        raise ValidationError("Choose an identity or Bland-Altman plot for static-image counts")
+    difference = options.figure == "bland_altman"
+    snapshot = source.snapshot
+    evidence = snapshot.evidence
+    names = {image.id: image.name for image in evidence.images}
+    series = []
+    excluded = []
+    guidelines = []
+    provenance = {
+        "reference_sha256": evidence.reference_sha256,
+        "lineage": snapshot.evaluation_status,
+    }
+    for model, result in zip(evidence.models, snapshot.results, strict=True):
+        points = []
+        for row in result.images:
+            statuses = {count.status for count in row.counts} - {"scored"}
+            if statuses:
+                excluded.append(
+                    f"{model.name} · {names[row.image_id]}: {', '.join(sorted(statuses))}"
+                )
+                continue
+            reference = sum(count.reference for count in row.counts)
+            estimate = sum(count.prediction for count in row.counts if count.prediction is not None)
+            points.append(
+                FigurePoint(
+                    x=(reference + estimate) / 2 if difference else reference,
+                    y=estimate - reference if difference else estimate,
+                    label=f"{names[row.image_id]} · {row.image_id}",
+                )
+            )
+        series.append(FigureSeries(label=model.name, points=points))
+        provenance[f"checkpoint {model.name}"] = model.checkpoint_sha256
+        stats = result.total_statistics
+        if difference and stats.bias is not None:
+            guidelines.append((f"{model.name} bias", stats.bias))
+            if stats.limits_of_agreement:
+                low, high = stats.limits_of_agreement
+                guidelines.extend(
+                    [
+                        (f"{model.name} lower agreement limit", low),
+                        (f"{model.name} upper agreement limit", high),
+                    ]
+                )
+    return {
+        "source_method": snapshot.method,
+        "source_evidence": snapshot.evaluation_status,
+        "geometry": "points",
+        "series": series,
+        "guidelines": guidelines,
+        "zero_identity": not difference,
+        "x_label": "Pair mean (count)" if difference else "Reviewed reference (count)",
+        "y_label": "Model minus reference (count)" if difference else "Model estimate (count)",
+        "uncertainty": "Limits of agreement are shown when the comparison meets the assumptions."
+        if difference
+        else None,
+        "exclusions": excluded,
+        "limitations": snapshot.limitations,
+        "provenance": provenance,
+    }
+
+
 def assemble_figure_snapshot(
     source: Any, options: FigureRequest, *, software_version: str
 ) -> FigureSnapshot:
@@ -425,6 +490,7 @@ def assemble_figure_snapshot(
         "ecology": _ecology_series,
         "event_summary": _event_series,
         "comparison": _comparison_series,
+        "static_comparison": _static_comparison_series,
     }
     fields = builders[options.source_kind](source, options)
     if not any(row.points for row in fields["series"]):
@@ -440,14 +506,17 @@ def assemble_figure_snapshot(
 
 
 class ResearchReportService:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, settings: Settings | None = None) -> None:
         self.session = session
+        self.settings = settings
 
     def _source(self, project_id: str, kind: str, source_id: str) -> Any:
         if kind == "ecology":
             return EcologyAnalysisService(self.session).get(project_id, source_id)
         if kind == "event_summary":
             return EcologyEventSummaryService(self.session).get(project_id, source_id)
+        if kind == "static_comparison":
+            return read_static_comparison(self.session, project_id, source_id, self.settings)
         return read_comparison(self.session, project_id, source_id)
 
     def save(self, project_id: str, options: FigureRequest) -> FigureRecord:
