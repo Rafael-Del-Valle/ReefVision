@@ -1,5 +1,33 @@
 # ReefVision 1.4 provisional mesh-edge paths
 
+## Raw mesh-coordinate evidence independent of calibration
+
+Caller-selected surface-edge traces now persist three additional audit fields:
+`source_segment_lengths_mesh_units` (one distance per indexed edge),
+`source_trace_length_mesh_units` (the sum of source-frame edge lengths when
+representable), and `source_endpoint_chord_mesh_units` (source-frame endpoint
+separation). These values are measured before multiplying by
+`meters_per_unit`. A positive source segment therefore remains visible in
+the saved scientific artifact even when an extremely small calibration
+underflows its `segment_lengths_m` to zero. Source totals too large for a
+finite binary64 result are **null**, accompanied by
+`surface_trace_source_length_unrepresentable` QC; no Infinity or invented
+precision is serialized.
+
+These are **native imported mesh coordinate units**, not validated meters,
+millimeters, coral branch lengths, or independent ground-truth landmarks.
+The existing calibrated meter fields, scale-only intervals, numerical QC,
+calibration provenance, original vertex indices and unverified reviewer
+status remain intact. In particular, a calibrated physical zero caused by
+underflow is **not** evidence that the underlying source edge has zero
+length. Researchers must review reconstruction geometry, acquisition scale
+and calibration before interpreting physical growth or comparing dates.
+These added audit fields are carried identically by the standalone
+`mesh-preview` API and an executed, persisted, typed `mesh_surface_preview`
+Workflow Builder graph; synthetic regressions cover both paths and a
+positive imported source segment whose calibrated meter representation
+underflows.
+
 ## Exact-cost route alternatives (provisional QC)
 
 A shortest mesh-edge route need not be geometrically unique: a square mesh can
