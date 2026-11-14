@@ -278,3 +278,37 @@ must then match the persisted typed Workflow Builder measurement artifact.
 The same checks also preserve the route-level numerical QC warnings and
 representable calibrated area; this is reproducibility of provisional
 measurements, **not** independent calibration or anatomical validation.
+
+
+## Caller-selected contiguous surface edge traces (provisional)
+
+The mesh preview also accepts up to 16 optional `surface_trace_vertex_paths`
+(each an ordered sequence of 2–128 distinct **zero-based parsed vertex indices**).
+Unlike `surface_path_vertex_pairs`, which chooses a shortest route between two
+endpoints, a selected trace follows **exactly the specified consecutive mesh
+triangle edges**. A path such as `[0, 2, 1]` therefore retains the scientist's
+explicit detour even if `[0, 1]` is a shorter edge. Non-adjacent vertices,
+repeated vertices, bad indices and excessive trace sizes are rejected rather
+than silently bridged, truncated or converted to fabricated measurements.
+
+The standalone preview and executable, typed, persisted `mesh_surface_preview`
+Workflow Builder node both emit `surface_edge_traces`. Each trace stores the
+ordered vertex IDs, complete calibrated source-frame coordinates (including
+vertices omitted from a decimated visual preview), segment and cumulative
+lengths, total geometric trace length, scale-only interval when supplied,
+topological QC flags and explicit `human_review_verified: false`. An omitted
+trace list returns null. The same preview artifact preserves geometry and
+import-source checksums, caller calibration, source coordinate frame and
+unverified scientific provenance; saved-workflow tests compare the entire
+enriched provenance and trace evidence against the standalone API.
+
+This is **a manually selected mesh *surface* polyline**, not a coral skeletal
+centerline, verified anatomical branch length, observed growth, or a
+biologically reviewed annotation. The system does not infer anatomical meaning
+from who submitted the vertices. A trace crossing an open boundary, nonmanifold
+edge, zero-length edge or calibrated underflow carries specific QC. The scale
+interval applies one common positive calibration factor across the complete
+trace. It is neither a sampling-based confidence interval nor an estimate of
+reconstruction, localization, topology or inter-observer uncertainty. A 100%
+relative scale uncertainty yields [0, 2L] for representable nominal length L.
+Independent anatomical and calibration acceptance remains mandatory.
