@@ -308,8 +308,10 @@ def test_exact_ties_and_roundoff_are_scoped_to_each_connected_scan_component(
         "vertices": [
             *GEOMETRY["vertices"],
             [10.0, 0.0, 0.0],
-            [1e9 + 10.0, 0.0, 0.0],
-            [1e9 + 10.0, 1e-8, 0.0],
+            # Remain inside the bounded public preview's 1e9 vertex limit,
+            # while keeping a sub-ULP positive edge for numerical QC.
+            [900_000_010.0, 0.0, 0.0],
+            [900_000_010.0, 1e-8, 0.0],
         ],
         "faces": [*GEOMETRY["faces"], [4, 5, 6]],
         "surface_path_vertex_pairs": [[0, 3], [4, 6], [0, 1]],
