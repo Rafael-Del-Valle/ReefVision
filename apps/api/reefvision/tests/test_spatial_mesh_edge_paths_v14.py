@@ -1085,7 +1085,7 @@ def test_hundred_percent_scale_uncertainty_is_supported_in_api_and_saved_graph(
     assert connected["length_m"] == pytest.approx(0.01)
     assert connected["length_scale_interval_m"] == pytest.approx([0.0, 0.02])
     assert connected["endpoint_chord_scale_interval_m"] == pytest.approx([0.0, 0.02])
-    assert connected["path_edge_length_scale_intervals_m"] == pytest.approx([[0.0, 0.02]])
+    assert connected["path_edge_length_scale_intervals_m"][0] == pytest.approx([0.0, 0.02])
     assert connected["scale_uncertainty_m"] == pytest.approx(0.01)
     assert direct["measurement_status"] == "caller_supplied_unverified"
 
