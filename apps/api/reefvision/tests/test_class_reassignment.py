@@ -22,6 +22,8 @@ from reefvision.db.models import (
     QualityControlRun,
     ReviewQueue,
     ReviewQueueItem,
+    WorkflowArtifact,
+    WorkflowNodeRun,
 )
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.class_operations import ClassOperationExecuteRequest
