@@ -13,7 +13,9 @@ on:
       - apps/api/reefvision/tests/test_windows_installer_preflight_103.py
       - apps/api/reefvision/storage/images.py
       - apps/api/reefvision/services/images.py
-      - apps/api/reefvision/tests/test_camera_jpeg_regression_103.py
+      # Any new camera-specific regression must trigger Windows acceptance,
+      # rather than relying only on the broad CI suite.
+      - apps/api/reefvision/tests/test_camera_*_103.py
       - scripts/verify_camera_jpeg_fixtures.py
       - scripts/test_verify_camera_jpeg_fixtures.py
       - apps/api/reefvision/tests/test_image_import_collision_103.py
@@ -89,13 +91,20 @@ jobs:
       - name: Verify read-only camera JPEG fixture inventory, aliases, and EXIF
         shell: pwsh
         run: python -m unittest discover -s scripts -p test_verify_camera_jpeg_fixtures.py -v
-      - name: Verify JPEG camera formats and immutable original storage
+      - name: Verify all camera JPEG aliases, EXIF, geometry, and immutable originals
         shell: pwsh
         env:
           REEFVISION_ENV: test
           REEFVISION_BACKGROUND_WORKER_ENABLED: "false"
         run: |
-          python -m pytest apps/api/reefvision/tests/test_camera_jpeg_regression_103.py apps/api/reefvision/tests/test_image_import_collision_103.py -q
+          # Discover the whole camera-specific suite so new metadata/EXIF
+          # regressions are not accidentally omitted from Windows coverage.
+          $cameraTests = @(Get-ChildItem -LiteralPath apps/api/reefvision/tests -Filter 'test_camera_*_103.py' -File |
+            Sort-Object Name | ForEach-Object { $_.FullName })
+          if ($cameraTests.Count -eq 0) { throw 'No camera regression tests were found.' }
+          Write-Output "Running $($cameraTests.Count) camera regression modules on Windows"
+          python -m pytest @cameraTests apps/api/reefvision/tests/test_image_import_collision_103.py -q
+          if ($LASTEXITCODE -ne 0) { throw 'Windows camera import regressions failed.' }
       - name: Verify read-only training log tail and symlink security
         shell: pwsh
         env:
