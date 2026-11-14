@@ -202,8 +202,6 @@ describe("dense object-browser window", () => {
       ["box-7900", "box-12", "box-7999"],
       [],
     );
-    expect(rows.slice(10).map((row) => row.position)).toEqual([
-      12, 7900, 7999,
-    ]);
+    expect(rows.slice(10).map((row) => row.position)).toEqual([12, 7900, 7999]);
   });
 });
