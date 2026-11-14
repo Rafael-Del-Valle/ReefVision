@@ -110,7 +110,8 @@ test("runs a registered detector against reviewed counts and reopens the saved f
   await panel
     .getByText("Inference and agreement settings", { exact: true })
     .click();
-  await panel.getByLabel("Device", { exact: true }).selectOption("cpu");
+  const device = process.env.REEFVISION_STATIC_TEST_DEVICE ?? "cpu";
+  await panel.getByLabel("Device").selectOption(device);
   const queued = page.waitForResponse(
     (response) =>
       response.request().method() === "POST" &&
