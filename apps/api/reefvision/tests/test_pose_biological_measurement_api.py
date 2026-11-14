@@ -502,6 +502,16 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
     assert summary["organism_key"] == "reviewed-fish"
     assert not event_report["stale_reasons"]
     assert client.get(f"{summary_url}/{event_report['id']}/results.csv").status_code == 200
+    assert (
+        client.post(
+            summary_url,
+            json={
+                **event_report["snapshot"]["selection"],
+                "sessions": event_report["snapshot"]["selection"]["sessions"] * 2,
+            },
+        ).status_code
+        == 422
+    )
     graph = {
         "graph_id": "event-summary-replay",
         "name": "Replay reviewed event summary",
