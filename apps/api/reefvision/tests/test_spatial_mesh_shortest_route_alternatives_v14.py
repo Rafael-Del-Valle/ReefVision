@@ -162,6 +162,8 @@ def test_tied_route_qc_roundtrips_standalone_and_persisted_graph(
     assert artifact["surface_edge_paths"] == measured["surface_edge_paths"]
     assert artifact["provenance"] == measured["provenance"]
     assert artifact["provenance"]["calibration_verified"] is False
+
+
 # A positive 1e-8 edge cannot be added accurately to a 1e9 accumulated
 # route cost in binary64. This is numerical ambiguity, not a biological or
 # mathematically exact second shortest route.
@@ -206,8 +208,7 @@ def test_route_roundoff_qc_roundtrips_standalone_and_saved_workflow(
     assert standalone.status_code == 200, standalone.text
     measured = standalone.json()
     assert all(
-        route["shortest_route_alternatives_status"]
-        == "unassessable_floating_point_cost_resolution"
+        route["shortest_route_alternatives_status"] == "unassessable_floating_point_cost_resolution"
         for route in measured["surface_edge_paths"]
     )
     assert measured["measurement_status"] == "caller_supplied_unverified"
