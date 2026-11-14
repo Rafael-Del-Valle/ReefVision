@@ -1,0 +1,9 @@
+# ReefVision 1.6: reviewed class-merge target identity
+
+The existing class-usage review plus source reference-inventory fingerprint protect the **source** of a merge. They cannot detect a researcher changing the **target** name, scientific name, or biological state between loading the target list and execution, which can silently reclassify observations while leaving source counts and IDs unchanged.
+
+The Class Manager confirmation now names the target, class index, scientific name and state. It submits those observed semantic fields as `expected_target_identity` alongside reviewed source counts and the reference fingerprint. The backend compares them to the current target before any mutation and returns HTTP 409 for a mismatch, requesting new researcher approval. Only the project's active target is valid. The field is optional for legacy local scripts. Cosmetic display color, description and display order do not invalidate biological approval.
+
+The real-database `test_used_class_delete_is_blocked_and_usage_is_reported` now changes target state after source evidence was reviewed, demands HTTP 409 without modifying original annotation/QC/source class, restores target state and verifies the approved merge succeeds. The GUI test asserts the target-identity request and visible confirmation.
+
+This is an optimistic, pre-write semantic check, not an atomic cross-process lock against edits racing between comparison and commit. It does not validate taxonomy externally. Manual class metadata operations are not executable analytical Workflow Builder nodes; existing typed executable QC nodes, saved graphs/runs, lineage and review gates remain unchanged. No migration, downloaded models, network services or researcher-asset mutation was required. Native Windows MSI and installed-GUI validation and real biological acceptance remain open.

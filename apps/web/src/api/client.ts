@@ -1865,6 +1865,12 @@ export async function mergeLabelClass(
     target_class_id: string;
     expected_usage_counts?: Record<string, number>;
     expected_usage_fingerprint?: string;
+    expected_target_identity?: {
+      name: string;
+      class_index: number;
+      scientific_name: string | null;
+      state_name: string | null;
+    };
   },
 ): Promise<LabelClassMergeResponse> {
   return request<LabelClassMergeResponse>(`/classes/${classId}/merge`, {

@@ -181,7 +181,14 @@ describe("ClassManagerPanel", () => {
         zeroUsageCounts().map((item) => [item.key, 0]),
       ),
       expected_usage_fingerprint: "a".repeat(64),
+      expected_target_identity: {
+        name: "Muricea Open",
+        class_index: 1,
+        scientific_name: null,
+        state_name: null,
+      },
     });
+    expect(confirmation.mock.calls[0]?.[0]).toContain('"Muricea Open"');
     expect(confirmation.mock.calls[0]?.[0]).toContain("0 immutable references");
   });
 

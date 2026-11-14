@@ -173,6 +173,15 @@ class LabelClassUsageResponse(BaseModel):
     counts: list[LabelClassUsageCountResponse]
 
 
+class LabelClassMergeTargetIdentity(BaseModel):
+    """Reviewed biological identity of the target class, not display styling."""
+
+    name: str
+    class_index: int
+    scientific_name: str | None
+    state_name: str | None
+
+
 class LabelClassMergeRequest(BaseModel):
     target_class_id: str = Field(min_length=1, max_length=36)
     # Optional for legacy local clients. The 1.6 GUI supplies all eight
@@ -180,6 +189,8 @@ class LabelClassMergeRequest(BaseModel):
     expected_usage_counts: dict[str, int] | None = None
     # Optional for legacy callers; the reviewed GUI supplies the identity-set hash.
     expected_usage_fingerprint: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    # Optional for legacy clients; the GUI binds approval to target semantics.
+    expected_target_identity: LabelClassMergeTargetIdentity | None = None
 
 
 class LabelClassMergeCountResponse(BaseModel):

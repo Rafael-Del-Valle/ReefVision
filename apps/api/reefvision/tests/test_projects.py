@@ -598,12 +598,50 @@ def test_used_class_delete_is_blocked_and_usage_is_reported(client: TestClient) 
         == reviewed_fingerprint
     )
 
+    # Target biological identity may change without changing source references.
+    # A reviewed merge must fail before any scientific writes in this case.
+    target_identity = {
+        "name": target_class["name"],
+        "class_index": target_class["class_index"],
+        "scientific_name": target_class["scientific_name"],
+        "state_name": target_class["state_name"],
+    }
+    changed_target = client.patch(
+        f"/api/v1/classes/{target_class['id']}",
+        json={"state_name": "Feeding"},
+    )
+    assert changed_target.status_code == 200, changed_target.text
+    stale_target_merge = client.post(
+        f"/api/v1/classes/{source_class['id']}/merge",
+        json={
+            "target_class_id": target_class["id"],
+            "expected_usage_counts": counts,
+            "expected_usage_fingerprint": reviewed_fingerprint,
+            "expected_target_identity": target_identity,
+        },
+    )
+    assert stale_target_merge.status_code == 409, stale_target_merge.text
+    assert "Target class identity changed" in stale_target_merge.text
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        source = session.get(LabelClass, source_class["id"])
+        annotation = session.get(Annotation, "annotation-active")
+        issue = session.get(QualityControlIssue, "qc-issue-1")
+        assert source is not None and source.is_active
+        assert annotation is not None and annotation.label_class_id == source_class["id"]
+        assert issue is not None and issue.class_ids_json == [source_class["id"]]
+
+    restored_target = client.patch(
+        f"/api/v1/classes/{target_class['id']}",
+        json={"state_name": None},
+    )
+    assert restored_target.status_code == 200, restored_target.text
     merged = client.post(
         f"/api/v1/classes/{source_class['id']}/merge",
         json={
             "target_class_id": target_class["id"],
             "expected_usage_counts": counts,
             "expected_usage_fingerprint": reviewed_fingerprint,
+            "expected_target_identity": target_identity,
         },
     )
     assert merged.status_code == 200, merged.text

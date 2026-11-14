@@ -29,10 +29,18 @@ type BoundClassPreview = {
   selectionKey: string;
 };
 
+type MergeTargetIdentity = {
+  name: string;
+  class_index: number;
+  scientific_name: string | null;
+  state_name: string | null;
+};
+
 type MergeClassApproval = {
   targetClassId: string;
   expectedUsageCounts: Record<string, number>;
   expectedUsageFingerprint: string;
+  expectedTargetIdentity: MergeTargetIdentity;
 };
 
 // A preview is not permission to execute while any safety evidence is blocked
@@ -259,6 +267,9 @@ function ClassRow({
     [allClasses, labelClass.id],
   );
   const [mergeTargetId, setMergeTargetId] = useState(mergeTargets[0]?.id ?? "");
+  const selectedMergeTarget = mergeTargets.find(
+    (candidate) => candidate.id === mergeTargetId,
+  );
   const [reassignTargetId, setReassignTargetId] = useState(
     mergeTargets[0]?.id ?? "",
   );
@@ -368,6 +379,7 @@ function ClassRow({
         target_class_id: approved.targetClassId,
         expected_usage_counts: approved.expectedUsageCounts,
         expected_usage_fingerprint: approved.expectedUsageFingerprint,
+        expected_target_identity: approved.expectedTargetIdentity,
       }),
     onSuccess: refresh,
   });
@@ -479,7 +491,7 @@ function ClassRow({
     usage.isSuccess &&
     !usage.isFetching &&
     mergeUsageCounts !== null &&
-    !!mergeTargetId &&
+    selectedMergeTarget !== undefined &&
     !merge.isPending;
 
   return (
@@ -631,17 +643,24 @@ function ClassRow({
           disabled={!canMerge}
           onClick={() => {
             if (
+              selectedMergeTarget !== undefined &&
               mergeUsageCounts !== null &&
               typeof mergeUsageFingerprint === "string" &&
               /^[0-9a-f]{64}$/.test(mergeUsageFingerprint) &&
               window.confirm(
-                `Merge "${labelClass.name}" into the selected class? ${usage.data?.total_references ?? 0} reviewed class references include ${usage.data?.immutable_reference_count ?? 0} immutable references. Mutable references will be reassigned, historical records kept, and the source archived. Confirm only after inspecting Usage.`,
+                `Merge "${labelClass.name}" into "${selectedMergeTarget.name}" (class ${selectedMergeTarget.class_index}; scientific name ${selectedMergeTarget.scientific_name ?? "unspecified"}; state ${selectedMergeTarget.state_name ?? "unspecified"})? ${usage.data?.total_references ?? 0} reviewed class references include ${usage.data?.immutable_reference_count ?? 0} immutable references. Mutable references will be reassigned, historical records kept, and the source archived. Confirm only after inspecting Usage and the target identity.`,
               )
             ) {
               merge.mutate({
-                targetClassId: mergeTargetId,
+                targetClassId: selectedMergeTarget.id,
                 expectedUsageCounts: { ...mergeUsageCounts },
                 expectedUsageFingerprint: mergeUsageFingerprint,
+                expectedTargetIdentity: {
+                  name: selectedMergeTarget.name,
+                  class_index: selectedMergeTarget.class_index,
+                  scientific_name: selectedMergeTarget.scientific_name,
+                  state_name: selectedMergeTarget.state_name,
+                },
               });
             }
           }}
