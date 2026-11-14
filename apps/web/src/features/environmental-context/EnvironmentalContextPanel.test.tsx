@@ -76,6 +76,9 @@ function renderPanel() {
 }
 
 function chooseJson(content: string) {
+  fireEvent.click(
+    screen.getByRole("button", { name: "Add environmental data" }),
+  );
   fireEvent.change(screen.getByLabelText("Sensor JSON file"), {
     target: {
       files: [new File([content], "sensor.json", { type: "application/json" })],
@@ -84,9 +87,111 @@ function chooseJson(content: string) {
   fireEvent.click(screen.getByRole("button", { name: "Import sensor JSON" }));
 }
 
+function openNoaa() {
+  fireEvent.click(
+    screen.getByRole("button", { name: "Add environmental data" }),
+  );
+  fireEvent.change(screen.getByLabelText("Data source"), {
+    target: { value: "noaa" },
+  });
+}
+
 afterEach(() => vi.restoreAllMocks());
 
 describe("EnvironmentalContextPanel", () => {
+  it("keeps acquisition drafts across views and resets them for another project", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      json({ items: [], total: 0 }),
+    );
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const renderProject = (value: Project) => (
+      <QueryClientProvider client={client}>
+        <EnvironmentalContextPanel project={value} />
+      </QueryClientProvider>
+    );
+    const panel = render(renderProject(project));
+    expect(await screen.findByText("No scientific records yet")).toBeVisible();
+    expect(
+      screen.queryByRole("textbox", { name: "NOAA station ID" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add environmental data" }),
+    );
+    fireEvent.change(screen.getByLabelText("Data source"), {
+      target: { value: "noaa" },
+    });
+    fireEvent.change(screen.getByLabelText("NOAA station ID"), {
+      target: { value: "8724580" },
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "Analyses" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Data sources" }));
+    expect(screen.getByLabelText("NOAA station ID")).toHaveValue("8724580");
+    panel.rerender(renderProject({ ...project, id: "other-project" }));
+    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      screen.queryByRole("textbox", { name: "NOAA station ID" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows one record inspector and reports coverage scope", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      json({
+        items: [
+          storedRecord,
+          {
+            ...storedRecord,
+            id: "record-2",
+            value: 72,
+            calibration_current: false,
+          },
+        ],
+        total: 102,
+      }),
+    );
+    renderPanel();
+    expect(await screen.findByText("102")).toBeVisible();
+    expect(screen.getByText(/showing 2 of 102 saved records/i)).toBeVisible();
+    fireEvent.click(screen.getByRole("tab", { name: "Data sources" }));
+    const table = screen.getByRole("table", {
+      name: "Saved scientific records",
+    });
+    expect(within(table).getAllByRole("row")).toHaveLength(3);
+    expect(screen.queryByRole("article")).not.toBeInTheDocument();
+    fireEvent.click(within(table).getAllByRole("button")[1]);
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+    expect(screen.getByText(/source calibration has changed/i)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Close record" }));
+    expect(screen.queryByRole("article")).not.toBeInTheDocument();
+  });
+
+  it("keeps pending imports visible when another environmental view opens", async () => {
+    let complete: (response: Response) => void = () => {};
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) =>
+      init?.method === "POST"
+        ? new Promise((resolve) => {
+            complete = resolve;
+          })
+        : json({ items: [], total: 0 }),
+    );
+    renderPanel();
+    chooseJson(JSON.stringify({ records: [sensorRecord] }));
+    expect(
+      await screen.findByText("In progress: Sensor JSON import"),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("tab", { name: "Analyses" }));
+    expect(screen.getByText("In progress: Sensor JSON import")).toBeVisible();
+    complete(json({ items: [storedRecord], total: 1 }, 201));
+    fireEvent.click(screen.getByRole("tab", { name: "Data sources" }));
+    expect(
+      await screen.findByText("Imported 1 scientific record."),
+    ).toBeVisible();
+  });
+
   it("labels superseded provider observations as historical", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       json({
@@ -95,6 +200,10 @@ describe("EnvironmentalContextPanel", () => {
       }),
     );
     renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: "Data sources" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Water temperature/ }),
+    );
     expect(
       await screen.findByText(
         "Historical provider snapshot; excluded from current environmental lookup.",
@@ -113,15 +222,22 @@ describe("EnvironmentalContextPanel", () => {
     renderPanel();
     expect(screen.getByText("Loading scientific records")).toBeInTheDocument();
     complete(json({ items: [storedRecord], total: 1 }));
+    fireEvent.click(screen.getByRole("tab", { name: "Data sources" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Water temperature/ }),
+    );
+    const inspector = within(
+      screen.getByRole("region", { name: "Selected record" }),
+    );
 
-    expect(await screen.findByText("68 degF")).toBeInTheDocument();
+    expect(inspector.getByText("68 degF")).toBeInTheDocument();
     expect(screen.getByText("20 degC")).toBeInTheDocument();
     expect(screen.getByText("2026-10-17 12:30:00 UTC")).toBeInTheDocument();
     expect(screen.getByText("Unknown depth")).toBeInTheDocument();
     expect(screen.getByText("Observed")).toBeInTheDocument();
     expect(screen.getByText("Suspect")).toBeInTheDocument();
     expect(screen.getByText("sensor_drift")).toBeInTheDocument();
-    expect(screen.getByText("Reef logger 7")).toBeInTheDocument();
+    expect(inspector.getByText("Reef logger 7")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Provenance and record details"));
     expect(screen.getByText(storedRecord.content_sha256)).toBeInTheDocument();
     expect(screen.getByText(/logger-7/)).toBeInTheDocument();
@@ -246,6 +362,7 @@ describe("EnvironmentalContextPanel", () => {
         return json({ items: [], total: 0 });
       });
       renderPanel();
+      openNoaa();
       fireEvent.change(screen.getByLabelText("NOAA station ID"), {
         target: { value: "8724580" },
       });
@@ -284,6 +401,7 @@ describe("EnvironmentalContextPanel", () => {
         : json({ items: [], total: 0 }),
     );
     renderPanel();
+    openNoaa();
     fireEvent.change(screen.getByLabelText("NOAA station ID"), {
       target: { value: "8724580" },
     });
@@ -322,6 +440,7 @@ describe("EnvironmentalContextPanel", () => {
       });
     });
     renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: "Data sources" }));
     expect(await screen.findByText("Records 1–100 of 101")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Next page" }));
     expect(await screen.findByText("72 degF")).toBeInTheDocument();

@@ -23,6 +23,7 @@ export function LunarContextPanel({ projectId }: { projectId: string }) {
   const [inputError, setInputError] = useState("");
 
   const lunar = useMutation({
+    mutationKey: ["environment-workspace", projectId, "Lunar calculation"],
     mutationFn: () => calculateLunarContext(projectId, observedAt.trim()),
   });
 
@@ -65,6 +66,7 @@ export function LunarContextPanel({ projectId }: { projectId: string }) {
             required
             placeholder="2026-10-28T18:00:00Z"
             value={observedAt}
+            disabled={lunar.isPending}
             onChange={(event) => {
               setObservedAt(event.target.value);
               setInputError("");

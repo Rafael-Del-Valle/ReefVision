@@ -1,5 +1,7 @@
 # Contributing to ReefVision
 
+ReefVision's original software is licensed under [AGPL-3.0-only](LICENSE). Contributions should be compatible with that license; please only submit code, documentation, and other materials you have the right to contribute. Do not incorporate third-party code or research data without the necessary permission and attribution. External dependencies keep their own licenses.
+
 Read `AGENTS.md` and `docs/REEFVISION_PRODUCT_SPEC.md` before making changes.
 Work on one milestone at a time and add tests with production code.
 

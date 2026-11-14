@@ -193,6 +193,29 @@ describe("EnvironmentalAnalysisWorkspace", () => {
     });
   });
 
+  it("shows current evidence warnings on saved analyses", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) =>
+      String(url).endsWith("/validation")
+        ? json({
+            result_id: result().id,
+            current: false,
+            result_sha256: HASH,
+            reasons: ["source_record_calibration_stale:source-id"],
+          })
+        : json({ items: [result("lagged_comparison")], total: 1 }),
+    );
+    renderWorkspace();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load saved analyses" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Check evidence" }),
+    );
+    expect(
+      await screen.findByText(/saved evidence is stale or invalid/i),
+    ).toBeVisible();
+  });
+
   it("loads persisted history only when requested", async () => {
     const fetch = vi
       .spyOn(globalThis, "fetch")

@@ -20,7 +20,7 @@ import {
 } from "./poseInteroperabilityApi";
 import { useGeographicMovementAnalytics } from "./useGeographicMovementAnalytics";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { cancelJob, retryJob, type Project } from "../../api/client";
 import { PoseAnnotationEditor } from "../pose/PoseAnnotationEditor";
@@ -126,6 +126,7 @@ export function VideoTrackingWorkspace({
   const pendingMapSeekRef = useRef<PendingVideoMapSeek | null>(null);
   const mapSeekSequenceRef = useRef(0);
   const lastWorkspaceCommandIdRef = useRef(0);
+  const previousSelectedVideoIdRef = useRef("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [telemetryFile, setTelemetryFile] = useState<File | null>(null);
   const [telemetryUtcOffsetMinutes, setTelemetryUtcOffsetMinutes] =
@@ -454,7 +455,11 @@ export function VideoTrackingWorkspace({
       setSelectedVideoId(videosQuery.data[0].id);
     }
   }, [selectedVideoId, videosQuery.data]);
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const previousVideoId = previousSelectedVideoIdRef.current;
+    previousSelectedVideoIdRef.current = selectedVideoId;
+    // Initial video hydration can coincide with the first import interaction.
+    if (!previousVideoId || previousVideoId === selectedVideoId) return;
     pendingMapSeekRef.current = null;
     setFrameIndex(0);
     setPreviewFrameIndex(0);
@@ -1820,6 +1825,7 @@ export function VideoTrackingWorkspace({
             <label>
               Pose file
               <input
+                key={selectedVideo.id}
                 aria-label="Pose interoperability import file"
                 type="file"
                 accept=".slp,.nwb,.json,.csv,.zip,application/zip"
@@ -1840,9 +1846,9 @@ export function VideoTrackingWorkspace({
               file has no ReefVision provenance
             </label>
             <p className="annotation-helper">
-              Imported instances use the current Identity class selected in the
-              Track editor. External tracked instances keep their grouping;
-              untracked instances are never auto-associated across frames.
+              Choose an identity class and pose file to enable import. External
+              tracked instances keep their grouping. Untracked instances are
+              never auto-associated across frames.
             </p>
             <button
               type="button"

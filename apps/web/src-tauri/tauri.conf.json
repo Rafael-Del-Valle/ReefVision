@@ -17,8 +17,8 @@
         "title": "ReefVision",
         "width": 1440,
         "height": 960,
-        "minWidth": 1200,
-        "minHeight": 760,
+        "minWidth": 880,
+        "minHeight": 440,
         "resizable": true
       }
     ],

@@ -556,8 +556,7 @@ export function ModelManager({
     <section className="gallery-panel model-ai-workspace">
       <div className="section-heading gallery-heading model-ai-header">
         <div>
-          <p className="eyebrow">Models & AI</p>
-          <h3>AI workspace</h3>
+          <h3>Choose a model</h3>
           <span>
             Train from supported architectures or register your own trained
             models. No model weights are bundled or downloaded.
@@ -580,7 +579,9 @@ export function ModelManager({
             }}
             disabled={modelHubBootstrap.isPending || catalogQuery.isPending}
           >
-            Refresh all
+            {modelHubBootstrap.isPending || catalogQuery.isPending
+              ? "Loading models…"
+              : "Refresh all"}
           </button>
         </div>
       </div>
@@ -641,17 +642,12 @@ export function ModelManager({
         </button>
         <button
           type="button"
-          onClick={() => jumpToModelSection("model-ai-project-models")}
-        >
-          My models
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            document
-              .getElementById("model-registration")
-              ?.setAttribute("open", "")
-          }
+          onClick={() => {
+            const section = document.getElementById("model-registration");
+            section?.setAttribute("open", "");
+            jumpToModelSection("model-registration");
+            section?.querySelector("summary")?.focus({ preventScroll: true });
+          }}
         >
           Register Existing Model
         </button>

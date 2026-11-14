@@ -19,7 +19,13 @@ import {
 } from "./environmentalContextApi";
 import { utcTime } from "./ScientificRecordCard";
 
-export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
+export function OceanCurrentWorkspace({
+  projectId,
+  onAddData,
+}: {
+  projectId: string;
+  onAddData?: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [cacheKey, setCacheKey] = useState("");
   const [offset, setOffset] = useState(0);
@@ -105,6 +111,11 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
   );
   const metrics = useMemo(() => summarizeCurrentSlice(vectors), [vectors]);
   const streamlineMutation = useMutation({
+    mutationKey: [
+      "environment-workspace",
+      projectId,
+      "Current streamline analysis",
+    ],
     mutationFn: () =>
       previewCurrentStreamlines(projectId, {
         scientific_record_ids: vectors.flatMap((vector) => vector.recordIds),
@@ -195,6 +206,20 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
           )}
           {(datasets.isFetching || dataset.isFetching) && (
             <p role="status">Opening local cache…</p>
+          )}
+          {datasets.isSuccess && datasets.data.total === 0 && (
+            <div>
+              <p>
+                No ocean datasets are cached for this project. Current maps need
+                paired eastward and northward velocities from the same time and
+                depth.
+              </p>
+              {onAddData && (
+                <button type="button" className="secondary" onClick={onAddData}>
+                  Add Copernicus data
+                </button>
+              )}
+            </div>
           )}
           {dataset.data && (
             <>
@@ -513,13 +538,12 @@ export function OceanCurrentWorkspace({ projectId }: { projectId: string }) {
               </ul>
             </>
           )}
-          <CopernicusImportForm projectId={projectId} />
         </>
       )}
     </section>
   );
 }
-function CopernicusImportForm({ projectId }: { projectId: string }) {
+export function CopernicusImportForm({ projectId }: { projectId: string }) {
   const client = useQueryClient();
   const [values, setValues] = useState({
     dataset_id: "",
@@ -540,6 +564,7 @@ function CopernicusImportForm({ projectId }: { projectId: string }) {
   const [offline, setOffline] = useState(true);
   const [refresh, setRefresh] = useState(false);
   const mutation = useMutation({
+    mutationKey: ["environment-workspace", projectId, "Copernicus acquisition"],
     mutationFn: () =>
       importCopernicus(projectId, {
         dataset_id: values.dataset_id,
@@ -569,8 +594,7 @@ function CopernicusImportForm({ projectId }: { projectId: string }) {
     },
   });
   return (
-    <details>
-      <summary>Acquire Copernicus modeled data</summary>
+    <div className="training-content">
       <p>
         Requires a configured optional Copernicus Toolbox runtime and backend
         credentials. Credentials stay outside project records and exports.
@@ -579,32 +603,37 @@ function CopernicusImportForm({ projectId }: { projectId: string }) {
         thetao remains potential temperature.
       </p>
       <form
+        className="training-content"
         onSubmit={(e) => {
           e.preventDefault();
           mutation.mutate();
         }}
       >
-        {Object.entries(values).map(([key, value]) => (
-          <label key={key}>
-            {key.replaceAll("_", " ")}
-            {key.endsWith("datetime") ? " (UTC)" : ""}
-            <input
-              required
-              type={
-                key.endsWith("datetime")
-                  ? "datetime-local"
-                  : key.startsWith("minimum") || key.startsWith("maximum")
-                    ? "number"
-                    : "text"
-              }
-              step="any"
-              value={value}
-              onChange={(e) => setValues({ ...values, [key]: e.target.value })}
-            />
-          </label>
-        ))}
+        <div className="training-form-grid">
+          {Object.entries(values).map(([key, value]) => (
+            <label key={key}>
+              {key.replaceAll("_", " ")}
+              {key.endsWith("datetime") ? " (UTC)" : ""}
+              <input
+                required
+                type={
+                  key.endsWith("datetime")
+                    ? "datetime-local"
+                    : key.startsWith("minimum") || key.startsWith("maximum")
+                      ? "number"
+                      : "text"
+                }
+                step="any"
+                value={value}
+                onChange={(e) =>
+                  setValues({ ...values, [key]: e.target.value })
+                }
+              />
+            </label>
+          ))}
+        </div>
         {(["uo", "vo", "thetao", "so"] as const).map((variable) => (
-          <label key={variable}>
+          <label className="checkbox-row" key={variable}>
             <input
               type="checkbox"
               checked={variables.includes(variable)}
@@ -626,7 +655,7 @@ function CopernicusImportForm({ projectId }: { projectId: string }) {
             }
           </label>
         ))}
-        <label>
+        <label className="checkbox-row">
           <input
             type="checkbox"
             checked={offline}
@@ -634,7 +663,7 @@ function CopernicusImportForm({ projectId }: { projectId: string }) {
           />
           Copernicus cached data only
         </label>
-        <label>
+        <label className="checkbox-row">
           <input
             type="checkbox"
             disabled={offline}
@@ -647,7 +676,9 @@ function CopernicusImportForm({ projectId }: { projectId: string }) {
           type="submit"
           disabled={mutation.isPending || variables.length === 0}
         >
-          Acquire Copernicus subset
+          {mutation.isPending
+            ? "Acquiring Copernicus subset…"
+            : "Acquire Copernicus subset"}
         </button>
         {mutation.error && <p role="alert">{mutation.error.message}</p>}
         {mutation.data && (
@@ -658,6 +689,6 @@ function CopernicusImportForm({ projectId }: { projectId: string }) {
           </p>
         )}
       </form>
-    </details>
+    </div>
   );
 }

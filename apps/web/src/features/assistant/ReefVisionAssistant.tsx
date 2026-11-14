@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { getProjectModelCatalog, type Project } from "../../api/client";
 import {
@@ -250,6 +251,17 @@ export function ReefVisionAssistant({
   onNavigate,
 }: ReefVisionAssistantProps) {
   const [open, setOpen] = useState(false);
+  const panelId = useId();
+  const trigger = useRef<HTMLButtonElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (open) closeButton.current?.focus();
+  }, [open]);
+
+  function close() {
+    setOpen(false);
+    trigger.current?.focus();
+  }
   const [question, setQuestion] = useState("");
   const [selectedImageId, setSelectedImageId] = useState("");
   const [useImageModel, setUseImageModel] = useState(false);
@@ -387,158 +399,170 @@ export function ReefVisionAssistant({
   }
 
   return (
-    <div
-      data-testid="reefvision-assistant"
-      data-open={open ? "true" : "false"}
-      className={`rv-research-assistant ${open ? "open" : "closed"}`}
-    >
-      {!open ? (
-        <button type="button" onClick={() => setOpen(true)}>
-          Ask ReefVision
-        </button>
-      ) : (
-        <section
-          className="panel-card rv-research-assistant-panel"
-          aria-label="ReefVision Assistant"
-        >
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Research assistant</p>
-              <h3>Ask ReefVision</h3>
-              <p className="annotation-helper">
-                {project.name} · {VIEW_LABELS[activeView] ?? activeView}
-              </p>
-            </div>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => setOpen(false)}
-            >
-              Close
-            </button>
-          </div>
-
-          <p className="annotation-helper">
-            Navigation, workflow, and keyboard help are grounded in ReefVision's
-            canonical controls. The base SmolVLM model provides optional local
-            image interpretation and remains advisory; it never changes research
-            data.
-          </p>
-
-          <div
-            aria-live="polite"
-            style={{
-              display: "grid",
-              gap: 8,
-              maxHeight: 300,
-              overflow: "auto",
-              marginBottom: 12,
+    <>
+      <button
+        ref={trigger}
+        className="secondary"
+        type="button"
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        onClick={() => setOpen((current) => !current)}
+      >
+        Ask ReefVision
+      </button>
+      {open &&
+        createPortal(
+          <section
+            id={panelId}
+            className="panel-card rv-research-assistant-panel"
+            aria-label="ReefVision Assistant"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.stopPropagation();
+                close();
+              }
             }}
           >
-            {messages.length === 0 && (
-              <p className="muted-copy">
-                Ask where a tool lives, how a workflow works, or optionally ask
-                SmolVLM about a selected project image.
-              </p>
-            )}
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className="annotation-selection-row"
-                style={{ display: "block" }}
-              >
-                <strong>
-                  {message.role === "user" ? "You" : "ReefVision"}
-                </strong>
-                <p style={{ whiteSpace: "pre-wrap" }}>{message.text}</p>
-                {message.navigateTo && message.navigateLabel && (
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => {
-                      onNavigate(message.navigateTo as ReefVisionView);
-                      setOpen(false);
-                    }}
-                  >
-                    {message.navigateLabel}
-                  </button>
-                )}
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Research assistant</p>
+                <h3>Ask ReefVision</h3>
+                <p className="annotation-helper">
+                  {project.name} · {VIEW_LABELS[activeView] ?? activeView}
+                </p>
               </div>
-            ))}
-          </div>
-
-          <label>
-            Question
-            <textarea
-              rows={3}
-              value={question}
-              onChange={(event) => setQuestion(event.target.value)}
-              placeholder="How do I calibrate an image?"
-            />
-          </label>
-
-          <details>
-            <summary>Optional image interpretation</summary>
-            <label>
-              Image
-              <select
-                value={selectedImageId}
-                onChange={(event) => setSelectedImageId(event.target.value)}
+              <button
+                ref={closeButton}
+                type="button"
+                className="secondary"
+                onClick={close}
               >
-                <option value="">Choose an image</option>
-                {imagesQuery.data?.map((image) => (
-                  <option key={image.id} value={image.id}>
-                    {image.original_filename}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={useImageModel}
-                disabled={!smolvlmReady || !selectedImageId}
-                onChange={(event) => setUseImageModel(event.target.checked)}
-              />{" "}
-              Ask SmolVLM about this image
-            </label>
-            <p className="annotation-helper">
-              SmolVLM status:{" "}
-              {modelCatalogQuery.isPending
-                ? "Checking…"
-                : (smolvlm?.installation_state ?? "Model Required")}
-            </p>
-            {!smolvlmReady && !modelCatalogQuery.isPending && (
-              <p className="form-error">
-                Model required — register a compatible SmolVLM model to use
-                image interpretation.
-              </p>
-            )}
-          </details>
+                Close
+              </button>
+            </div>
 
-          <div className="button-row">
-            <button
-              type="button"
-              onClick={() => void submitQuestion()}
-              disabled={
-                !question.trim() ||
-                imageMutation.isPending ||
-                (useImageModel && (!selectedImageId || !smolvlmReady))
-              }
+            <p className="annotation-helper">
+              Navigation, workflow, and keyboard help are grounded in
+              ReefVision's canonical controls. The base SmolVLM model provides
+              optional local image interpretation and remains advisory; it never
+              changes research data.
+            </p>
+
+            <div
+              aria-live="polite"
+              style={{
+                display: "grid",
+                gap: 8,
+                maxHeight: 300,
+                overflow: "auto",
+                marginBottom: 12,
+              }}
             >
-              {imageMutation.isPending ? "Thinking…" : "Ask"}
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => setMessages([])}
-              disabled={messages.length === 0}
-            >
-              Clear
-            </button>
-          </div>
-        </section>
-      )}
-    </div>
+              {messages.length === 0 && (
+                <p className="muted-copy">
+                  Ask where a tool lives, how a workflow works, or optionally
+                  ask SmolVLM about a selected project image.
+                </p>
+              )}
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className="annotation-selection-row"
+                  style={{ display: "block" }}
+                >
+                  <strong>
+                    {message.role === "user" ? "You" : "ReefVision"}
+                  </strong>
+                  <p style={{ whiteSpace: "pre-wrap" }}>{message.text}</p>
+                  {message.navigateTo && message.navigateLabel && (
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => {
+                        onNavigate(message.navigateTo as ReefVisionView);
+                        setOpen(false);
+                      }}
+                    >
+                      {message.navigateLabel}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <label>
+              Question
+              <textarea
+                rows={3}
+                value={question}
+                onChange={(event) => setQuestion(event.target.value)}
+                placeholder="How do I calibrate an image?"
+              />
+            </label>
+
+            <details>
+              <summary>Optional image interpretation</summary>
+              <label>
+                Image
+                <select
+                  value={selectedImageId}
+                  onChange={(event) => setSelectedImageId(event.target.value)}
+                >
+                  <option value="">Choose an image</option>
+                  {imagesQuery.data?.map((image) => (
+                    <option key={image.id} value={image.id}>
+                      {image.original_filename}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={useImageModel}
+                  disabled={!smolvlmReady || !selectedImageId}
+                  onChange={(event) => setUseImageModel(event.target.checked)}
+                />{" "}
+                Ask SmolVLM about this image
+              </label>
+              <p className="annotation-helper">
+                SmolVLM status:{" "}
+                {modelCatalogQuery.isPending
+                  ? "Checking…"
+                  : (smolvlm?.installation_state ?? "Model Required")}
+              </p>
+              {!smolvlmReady && !modelCatalogQuery.isPending && (
+                <p className="form-error">
+                  Model required — register a compatible SmolVLM model to use
+                  image interpretation.
+                </p>
+              )}
+            </details>
+
+            <div className="button-row">
+              <button
+                type="button"
+                onClick={() => void submitQuestion()}
+                disabled={
+                  !question.trim() ||
+                  imageMutation.isPending ||
+                  (useImageModel && (!selectedImageId || !smolvlmReady))
+                }
+              >
+                {imageMutation.isPending ? "Thinking…" : "Ask"}
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setMessages([])}
+                disabled={messages.length === 0}
+              >
+                Clear
+              </button>
+            </div>
+          </section>,
+          document.body,
+        )}
+    </>
   );
 }

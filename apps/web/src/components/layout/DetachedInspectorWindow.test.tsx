@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 describe("DetachedInspectorSurface", () => {
-  it("renders the canonical scientist inspector in a detached shell", () => {
+  it("renders the canonical scientist inspector in a detached shell", async () => {
     render(
       <DetachedInspectorSurface
         snapshot={snapshot}
@@ -44,7 +44,9 @@ describe("DetachedInspectorSurface", () => {
       screen.getByLabelText("Scientific truth boundary"),
     ).toBeInTheDocument();
 
-    expect(screen.getByText("Canonical workspace")).toBeInTheDocument();
+    await userEvent.click(screen.getByText("Project context"));
+    expect(screen.getByText("Active classes")).toBeVisible();
+    expect(screen.getByText("4")).toBeVisible();
   });
 
   it("requests docking without mutating scientific state", async () => {

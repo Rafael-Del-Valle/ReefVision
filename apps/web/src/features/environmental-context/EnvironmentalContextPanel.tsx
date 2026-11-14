@@ -1,9 +1,19 @@
-import { OceanCurrentWorkspace } from "./OceanCurrentWorkspace";
+import {
+  CopernicusImportForm,
+  OceanCurrentWorkspace,
+} from "./OceanCurrentWorkspace";
 import { LunarContextPanel } from "./LunarContextPanel";
-import { EnvironmentalAnalysisWorkspace } from "./EnvironmentalAnalysisWorkspace";
-import { StatusBadge } from "../../components/ui/StatusBadge";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import {
+  EnvironmentalAnalysisWorkspace,
+  TidalImportForm,
+} from "./EnvironmentalAnalysisWorkspace";
+import {
+  useMutationState,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useId, useRef, useState, type KeyboardEvent } from "react";
+import "./environmental-workspace.css";
 
 import type { Project } from "../../api/client";
 import {
@@ -15,63 +25,95 @@ import {
   ScientificRecordCard,
   SOURCE_LABELS,
   utcTime,
-  sourceUrl,
+  scientificVariableLabel,
 } from "./ScientificRecordCard";
+import { SensorAndNoaaForms } from "./SensorAndNoaaForms";
 import { EnvironmentalSubjectInspector } from "./EnvironmentalSubjectInspector";
 import {
   getScientificRecords,
-  importNOAARecords,
-  importScientificRecords,
-  type ScientificRecordCreate,
+  type ScientificRecord,
   type ScientificSourceKind,
 } from "./environmentalContextApi";
 
 const PAGE_SIZE = 100;
-const CACHE_LABELS = {
-  downloaded: "Downloaded from NOAA",
-  fresh: "Fresh cached data",
-  stale_offline: "Stale cache used offline",
-};
-
-function readSensorFile(
-  file: File,
-): Promise<{ records: ScientificRecordCreate[] }> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () =>
-      reject(new Error("The selected JSON file could not be read."));
-    reader.onload = () => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(String(reader.result));
-      } catch {
-        reject(new Error("The selected file is not valid JSON."));
-        return;
-      }
-      if (
-        !parsed ||
-        typeof parsed !== "object" ||
-        !("records" in parsed) ||
-        !Array.isArray(parsed.records) ||
-        parsed.records.length < 1 ||
-        parsed.records.length > 5000
-      ) {
-        reject(
-          new Error(
-            "The JSON file must contain a records array with 1 to 5000 records.",
-          ),
-        );
-        return;
-      }
-      // The backend validates units, subjects, timestamps, and each record's provenance.
-      resolve(parsed as { records: ScientificRecordCreate[] });
-    };
-    reader.readAsText(file);
-  });
-}
+const VIEWS = [
+  ["overview", "Overview"],
+  ["sources", "Data sources"],
+  ["analyses", "Analyses"],
+] as const;
+type View = (typeof VIEWS)[number][0];
+type Source = "local" | "noaa" | "tides" | "copernicus";
+type AnalysisTask = "saved" | "currents" | "lunar";
 
 export function EnvironmentalContextPanel({ project }: { project: Project }) {
+  return <EnvironmentalWorkspace key={project.id} projectId={project.id} />;
+}
+
+function EnvironmentalWorkspace({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient();
+  const tabId = useId();
+  const sourcePicker = useRef<HTMLSelectElement>(null);
+  const addButton = useRef<HTMLButtonElement>(null);
+  const selectedTrigger = useRef<HTMLButtonElement>(null);
+  const inspectorHeading = useRef<HTMLHeadingElement>(null);
+  const addDataRequested = useRef(false);
+  const [view, setView] = useState<View>("overview");
+  const [source, setSource] = useState<Source>("local");
+  const [showImport, setShowImport] = useState(false);
+  const [visitedSources, setVisitedSources] = useState<Source[]>([]);
+  const [task, setTask] = useState<AnalysisTask>("saved");
+  const [visitedTasks, setVisitedTasks] = useState<AnalysisTask[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const pending = useMutationState({
+    filters: {
+      mutationKey: ["environment-workspace", projectId],
+      status: "pending",
+    },
+    select: (mutation) => mutation.options.mutationKey?.[2],
+  });
+
+  function chooseSource(next: Source) {
+    setSource(next);
+    setVisitedSources((current) =>
+      current.includes(next) ? current : [...current, next],
+    );
+  }
+
+  function openImport(provider?: Source) {
+    if (provider) chooseSource(provider);
+    addDataRequested.current = true;
+    setView("sources");
+    setShowImport(true);
+    setVisitedSources((previous) => (previous.length ? previous : ["local"]));
+    if (view === "sources" && showImport) {
+      sourcePicker.current?.focus();
+      addDataRequested.current = false;
+    }
+  }
+
+  function selectView(next: View) {
+    setView(next);
+    if (next === "analyses")
+      setVisitedTasks((previous) => (previous.length ? previous : ["saved"]));
+  }
+
+  function focusView(next: View) {
+    selectView(next);
+    document.getElementById(`${tabId}-tab-${next}`)?.focus();
+  }
+
+  function handleTabs(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    const last = VIEWS.length - 1;
+    const next = {
+      ArrowLeft: (index + last) % VIEWS.length,
+      ArrowRight: (index + 1) % VIEWS.length,
+      Home: 0,
+      End: last,
+    }[event.key];
+    if (next === undefined) return;
+    event.preventDefault();
+    focusView(VIEWS[next][0]);
+  }
   const [offset, setOffset] = useState(0);
   const [variableInput, setVariableInput] = useState("");
   const [sourceInput, setSourceInput] = useState<ScientificSourceKind | "">("");
@@ -79,19 +121,15 @@ export function EnvironmentalContextPanel({ project }: { project: Project }) {
     variable: string;
     sourceKind: ScientificSourceKind | "";
   }>({ variable: "", sourceKind: "" });
-  const [file, setFile] = useState<File | null>(null);
-  const [stationId, setStationId] = useState("");
-  const [day, setDay] = useState("");
-  const [offline, setOffline] = useState(false);
   const recordsQuery = useQuery({
     queryKey: [
       "scientific-records",
-      project.id,
+      projectId,
       { limit: PAGE_SIZE, offset, ...filters },
     ],
     queryFn: ({ signal }) =>
       getScientificRecords(
-        project.id,
+        projectId,
         { limit: PAGE_SIZE, offset, ...filters },
         signal,
       ),
@@ -99,295 +137,572 @@ export function EnvironmentalContextPanel({ project }: { project: Project }) {
   const refreshRecords = async () => {
     setOffset(0);
     await queryClient.invalidateQueries({
-      queryKey: ["scientific-records", project.id],
+      queryKey: ["scientific-records", projectId],
     });
   };
-  const sensorMutation = useMutation({
-    mutationFn: async () => {
-      if (!file) throw new Error("Choose a sensor JSON file first.");
-      return importScientificRecords(project.id, await readSensorFile(file));
-    },
-    onSuccess: refreshRecords,
+  const activeFilter = Boolean(filters.variable || filters.sourceKind);
+  const overview = useQuery({
+    queryKey: [
+      "scientific-records",
+      projectId,
+      { limit: PAGE_SIZE, offset: 0, variable: "", sourceKind: "" },
+    ],
+    queryFn: ({ signal }) =>
+      getScientificRecords(projectId, { limit: PAGE_SIZE, offset: 0 }, signal),
+    enabled: view === "overview" && (offset !== 0 || activeFilter),
   });
-  const noaaMutation = useMutation({
-    mutationFn: () =>
-      importNOAARecords(project.id, { station_id: stationId, day, offline }),
-    onSuccess: refreshRecords,
-  });
+  const overviewQuery = offset === 0 && !activeFilter ? recordsQuery : overview;
   const records = recordsQuery.data;
-  const importing = sensorMutation.isPending || noaaMutation.isPending;
-  const noaaLink = sourceUrl(noaaMutation.data?.source_url);
-
+  const selected = records?.items.find((record) => record.id === selectedId);
   return (
     <section
-      className="feature-workspace"
+      className="feature-workspace environmental-workspace"
       aria-label="Environmental Context workspace"
     >
-      <div className="section-heading">
+      <header className="environment-heading">
         <div>
-          <p className="eyebrow">Project scientific records</p>
           <h2>Environmental Context</h2>
           <p>
-            Inspect sensor measurements and environmental observations with
-            their original units, normalized quantities, quality flags, and
-            source provenance.
+            Bring site measurements and environmental conditions into your
+            project.
           </p>
         </div>
-      </div>
-      <div className="training-card-grid">
-        <form
-          className="panel-card training-content"
-          onSubmit={(event) => {
-            event.preventDefault();
-            sensorMutation.mutate();
-          }}
-        >
-          <h3>Local sensor JSON</h3>
-          <p>
-            Choose a JSON object containing a <code>records</code> array. Each
-            record needs a variable, value, unit, observation timestamp with UTC
-            offset, source kind, and provenance with source and acquisition
-            time.
-          </p>
-          <label>
-            Sensor JSON file
-            <input
-              type="file"
-              accept=".json,application/json"
-              disabled={importing}
-              onChange={(event) => {
-                setFile(event.target.files?.[0] ?? null);
-                sensorMutation.reset();
-              }}
-            />
-          </label>
-          <button type="submit" disabled={!file || importing}>
-            {sensorMutation.isPending
-              ? "Importing sensor JSON…"
-              : "Import sensor JSON"}
-          </button>
-          {sensorMutation.error && (
-            <ErrorState
-              title="Sensor import failed"
-              message={sensorMutation.error.message}
-            />
-          )}
-          {sensorMutation.isSuccess && (
-            <p role="status">
-              Imported {sensorMutation.data.total} scientific{" "}
-              {sensorMutation.data.total === 1 ? "record" : "records"}.
-            </p>
-          )}
-        </form>
-        <form
-          className="panel-card training-content"
-          onSubmit={(event) => {
-            event.preventDefault();
-            noaaMutation.mutate();
-          }}
-        >
-          <h3>NOAA station data</h3>
-          <p>
-            Import station water temperature for one UTC day. Station
-            measurements describe the station location; their measurement depth
-            may be unknown.
-          </p>
-          <div className="training-form-grid">
-            <label>
-              NOAA station ID
-              <input
-                inputMode="numeric"
-                pattern="[0-9]{7}"
-                maxLength={7}
-                required
-                placeholder="7-digit station ID"
-                value={stationId}
-                onChange={(event) => {
-                  setStationId(event.target.value);
-                  noaaMutation.reset();
-                }}
-                disabled={importing}
-              />
-            </label>
-            <label>
-              Observation day (UTC)
-              <input
-                type="date"
-                required
-                value={day}
-                onChange={(event) => {
-                  setDay(event.target.value);
-                  noaaMutation.reset();
-                }}
-                disabled={importing}
-              />
-            </label>
-          </div>
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={offline}
-              onChange={(event) => {
-                setOffline(event.target.checked);
-                noaaMutation.reset();
-              }}
-              disabled={importing}
-            />
-            Use cached data only (offline)
-          </label>
+        <button ref={addButton} type="button" onClick={() => openImport()}>
+          Add environmental data
+        </button>
+      </header>
+      <div
+        className="environment-tabs"
+        role="tablist"
+        aria-label="Environmental Context views"
+      >
+        {VIEWS.map(([id, label], index) => (
           <button
-            type="submit"
-            disabled={importing || !/^\d{7}$/.test(stationId) || !day}
+            type="button"
+            role="tab"
+            id={`${tabId}-tab-${id}`}
+            key={id}
+            aria-controls={`${tabId}-panel-${id}`}
+            aria-selected={view === id}
+            tabIndex={view === id ? 0 : -1}
+            onClick={() => selectView(id)}
+            onKeyDown={(event) => handleTabs(event, index)}
           >
-            {noaaMutation.isPending
-              ? "Importing NOAA data…"
-              : "Import NOAA data"}
+            {label}
           </button>
-          {noaaMutation.error && (
-            <ErrorState
-              title="NOAA import failed"
-              message={noaaMutation.error.message}
-            />
-          )}
-          {noaaMutation.isSuccess && (
-            <div role="status" aria-label="NOAA import result">
-              <p>
-                <StatusBadge
-                  status={
-                    noaaMutation.data.cache_status === "stale_offline"
-                      ? "warning"
-                      : "ready"
-                  }
-                  label={CACHE_LABELS[noaaMutation.data.cache_status]}
-                />
-              </p>
-              <p>
-                {noaaMutation.data.items.length} records available. Missing
-                values skipped: {noaaMutation.data.skipped_missing}
-              </p>
-              <p>Fetched: {utcTime(noaaMutation.data.fetched_at)}</p>
-              <p>Cache expires: {utcTime(noaaMutation.data.expires_at)}</p>
-              {noaaLink && (
-                <a href={noaaLink} target="_blank" rel="noreferrer">
-                  NOAA source
-                </a>
-              )}
-            </div>
-          )}
-        </form>
+        ))}
       </div>
-      <section className="training-content" aria-label="Scientific records">
-        <h3>Saved scientific records</h3>
-        <form
-          className="training-form-grid"
-          onSubmit={(event) => {
-            event.preventDefault();
-            setOffset(0);
-            setFilters({
-              variable: variableInput.trim(),
-              sourceKind: sourceInput,
-            });
-          }}
-        >
-          <label>
-            Variable filter
-            <input
-              value={variableInput}
-              placeholder="All variables"
-              onChange={(event) => setVariableInput(event.target.value)}
+      {pending.length > 0 && (
+        <p className="environment-feedback" role="status">
+          In progress: {pending.join(", ")}
+        </p>
+      )}
+      <section
+        role="tabpanel"
+        id={`${tabId}-panel-overview`}
+        aria-labelledby={`${tabId}-tab-overview`}
+        hidden={view !== "overview"}
+        tabIndex={0}
+      >
+        {view === "overview" &&
+          (overviewQuery.isPending ? (
+            <LoadingState
+              title="Loading scientific records"
+              description="Reading this project's saved records."
             />
-          </label>
-          <label>
-            Source kind filter
-            <select
-              value={sourceInput}
-              onChange={(event) =>
-                setSourceInput(event.target.value as ScientificSourceKind | "")
+          ) : overviewQuery.error ? (
+            <ErrorState
+              title="Scientific records could not be loaded"
+              message={overviewQuery.error.message}
+              onRetry={() => {
+                void overviewQuery.refetch();
+              }}
+            />
+          ) : overviewQuery.data && overviewQuery.data.total ? (
+            <EnvironmentOverview
+              records={overviewQuery.data.items}
+              total={overviewQuery.data.total}
+              onBrowse={() => focusView("sources")}
+              onAnalyze={() => focusView("analyses")}
+            />
+          ) : (
+            <EmptyState
+              title="No scientific records yet"
+              description="Add measurements from a sensor file, a NOAA station, or Copernicus Marine. You can also calculate lunar context from a UTC timestamp."
+              action={
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => focusView("analyses")}
+                >
+                  Choose an analysis
+                </button>
               }
-            >
-              <option value="">All source kinds</option>
-              {Object.entries(SOURCE_LABELS).map(([kind, label]) => (
-                <option key={kind} value={kind}>
-                  {label} sources
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="submit">Apply filters</button>
-        </form>
-        {recordsQuery.isPending && (
-          <LoadingState
-            title="Loading scientific records"
-            description="Reading saved records for this project."
-          />
+            />
+          ))}
+      </section>
+      <section
+        role="tabpanel"
+        id={`${tabId}-panel-sources`}
+        aria-labelledby={`${tabId}-tab-sources`}
+        hidden={view !== "sources"}
+        tabIndex={0}
+      >
+        {(showImport || visitedSources.length > 0) && (
+          <section
+            hidden={!showImport}
+            className="environment-acquisition panel-card"
+            aria-label="Add environmental data"
+          >
+            <div className="environment-section-heading">
+              <h3>Add environmental data</h3>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  setShowImport(false);
+                  addButton.current?.focus();
+                }}
+              >
+                Hide import form
+              </button>
+            </div>
+            <label>
+              <span id={`${tabId}-source-label`}>Data source</span>
+              <select
+                aria-labelledby={`${tabId}-source-label`}
+                value={source}
+                ref={(element) => {
+                  sourcePicker.current = element;
+                  if (
+                    element &&
+                    view === "sources" &&
+                    addDataRequested.current
+                  ) {
+                    addDataRequested.current = false;
+                    element.focus();
+                  }
+                }}
+                onChange={(event) => chooseSource(event.target.value as Source)}
+              >
+                <option value="local">Local sensor JSON</option>
+                <option value="noaa">NOAA station temperature</option>
+                <option value="tides">NOAA tides</option>
+                <option value="copernicus">Copernicus Marine</option>
+              </select>
+            </label>
+
+            <SensorAndNoaaForms
+              projectId={projectId}
+              source={source === "local" || source === "noaa" ? source : null}
+              onImported={refreshRecords}
+            />
+            {visitedSources.includes("tides") && (
+              <div hidden={source !== "tides"}>
+                <TidalImportForm projectId={projectId} />
+              </div>
+            )}
+            {visitedSources.includes("copernicus") && (
+              <div hidden={source !== "copernicus"}>
+                <CopernicusImportForm projectId={projectId} />
+              </div>
+            )}
+          </section>
         )}
-        {recordsQuery.error && (
-          <ErrorState
-            title="Scientific records could not be loaded"
-            message={recordsQuery.error.message}
-            onRetry={() => {
-              void recordsQuery.refetch();
+        <section
+          className="environment-records"
+          aria-label="Scientific records"
+        >
+          <h3>Saved scientific records</h3>
+          <form
+            className="training-form-grid"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setOffset(0);
+              setSelectedId(null);
+              setFilters({
+                variable: variableInput.trim(),
+                sourceKind: sourceInput,
+              });
             }}
-          />
-        )}
-        {recordsQuery.isSuccess && records && (
-          <>
-            {records.items.length === 0 ? (
+          >
+            <label>
+              Variable filter
+              <input
+                value={variableInput}
+                placeholder="All variables"
+                onChange={(event) => setVariableInput(event.target.value)}
+              />
+            </label>
+            <label>
+              Source kind filter
+              <select
+                value={sourceInput}
+                onChange={(event) =>
+                  setSourceInput(
+                    event.target.value as ScientificSourceKind | "",
+                  )
+                }
+              >
+                <option value="">All source kinds</option>
+                {Object.entries(SOURCE_LABELS).map(([kind, label]) => (
+                  <option key={kind} value={kind}>
+                    {label} sources
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="submit" className="secondary">
+              Apply filters
+            </button>
+          </form>
+
+          {view === "sources" &&
+            (recordsQuery.isPending ? (
+              <LoadingState
+                title="Loading scientific records"
+                description="Reading this project's saved records."
+              />
+            ) : recordsQuery.error ? (
+              <ErrorState
+                title="Scientific records could not be loaded"
+                message={recordsQuery.error.message}
+                onRetry={() => {
+                  void recordsQuery.refetch();
+                }}
+              />
+            ) : records && records.items.length === 0 ? (
               <EmptyState
                 title={
-                  filters.variable || filters.sourceKind
+                  activeFilter
                     ? "No records match these filters"
                     : "No scientific records yet"
                 }
-                description="Import local sensor JSON or NOAA station data to add environmental context."
+                description={
+                  activeFilter
+                    ? "Clear the filters to browse the full record list."
+                    : "Add environmental data to start this record list."
+                }
+                action={
+                  activeFilter ? (
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => {
+                        setVariableInput("");
+                        setSourceInput("");
+                        setOffset(0);
+                        setSelectedId(null);
+                        setFilters({ variable: "", sourceKind: "" });
+                      }}
+                    >
+                      Clear filters
+                    </button>
+                  ) : undefined
+                }
               />
             ) : (
-              records.items.map((record) => (
-                <div key={record.id}>
-                  <ScientificRecordCard record={record} />
-                  {record.variable === "geographic_position" &&
-                    record.subject && (
-                      <EnvironmentalSubjectInspector
-                        projectId={project.id}
-                        subject={record.subject}
+              records && (
+                <>
+                  {selected && (
+                    <section
+                      className="environment-record-inspector"
+                      aria-label="Selected record"
+                    >
+                      <div className="environment-section-heading">
+                        <h4 ref={inspectorHeading} tabIndex={-1}>
+                          Selected record
+                        </h4>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => {
+                            setSelectedId(null);
+                            selectedTrigger.current?.focus();
+                          }}
+                        >
+                          Close record
+                        </button>
+                      </div>
+                      <ScientificRecordCard
+                        key={selected.id}
+                        record={selected}
                       />
-                    )}
-                </div>
-              ))
-            )}
-            <nav className="pagination" aria-label="Scientific record pages">
-              <button
-                type="button"
-                disabled={offset === 0 || recordsQuery.isFetching}
-                onClick={() =>
-                  setOffset((current) => Math.max(0, current - PAGE_SIZE))
-                }
-              >
-                Previous page
-              </button>
-              <span role="status">
-                Records {records.items.length ? offset + 1 : 0}–
-                {offset + records.items.length} of {records.total}
-              </span>
-              <button
-                type="button"
-                disabled={
-                  offset + PAGE_SIZE >= records.total || recordsQuery.isFetching
-                }
-                onClick={() => setOffset((current) => current + PAGE_SIZE)}
-              >
-                Next page
-              </button>
-            </nav>
-          </>
+                      {selected.variable === "geographic_position" &&
+                        selected.subject && (
+                          <EnvironmentalSubjectInspector
+                            key={selected.id}
+                            projectId={projectId}
+                            subject={selected.subject}
+                          />
+                        )}
+                    </section>
+                  )}
+                  <div
+                    className="environment-table-scroll"
+                    tabIndex={0}
+                    role="region"
+                    aria-label="Scrollable scientific records"
+                  >
+                    <table aria-label="Saved scientific records">
+                      <thead>
+                        <tr>
+                          <th scope="col">Measurement</th>
+                          <th scope="col">Observed (UTC)</th>
+                          <th scope="col">Source</th>
+                          <th scope="col">Quality</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {records.items.map((record) => (
+                          <tr
+                            key={record.id}
+                            className={
+                              record.id === selectedId ? "selected" : ""
+                            }
+                          >
+                            <th scope="row">
+                              <button
+                                type="button"
+                                className="environment-record-button"
+                                aria-pressed={record.id === selectedId}
+                                onClick={(event) => {
+                                  selectedTrigger.current = event.currentTarget;
+                                  setSelectedId(record.id);
+                                  const keyboard = event.detail === 0;
+                                  requestAnimationFrame(() => {
+                                    const heading = inspectorHeading.current;
+                                    heading?.scrollIntoView?.({
+                                      block: "nearest",
+                                    });
+                                    if (keyboard)
+                                      heading?.focus({ preventScroll: true });
+                                  });
+                                }}
+                              >
+                                <span>
+                                  {scientificVariableLabel(record.variable)}
+                                </span>
+                                <small>
+                                  {record.value} {record.unit}
+                                </small>
+                              </button>
+                            </th>
+                            <td>
+                              <time dateTime={record.observed_at}>
+                                {utcTime(record.observed_at).replace(
+                                  / UTC$/,
+                                  "",
+                                )}
+                              </time>
+                            </td>
+                            <td>{record.provenance.source}</td>
+                            <td>
+                              <span
+                                className={
+                                  record.qc === "suspect" ||
+                                  record.qc === "rejected"
+                                    ? "environment-warning"
+                                    : ""
+                                }
+                              >
+                                {record.qc ?? "unassessed"}
+                              </span>
+                              {record.environmental_snapshot_current ===
+                                false && (
+                                <small className="environment-warning">
+                                  Historical snapshot
+                                </small>
+                              )}
+                              {record.calibration_current === false && (
+                                <small className="environment-warning">
+                                  Stale calibration
+                                </small>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <nav
+                    className="pagination"
+                    aria-label="Scientific record pages"
+                  >
+                    <button
+                      type="button"
+                      disabled={offset === 0 || recordsQuery.isFetching}
+                      onClick={() => {
+                        setSelectedId(null);
+                        setOffset((current) =>
+                          Math.max(0, current - PAGE_SIZE),
+                        );
+                      }}
+                    >
+                      Previous page
+                    </button>
+                    <span role="status">
+                      Records {records.items.length ? offset + 1 : 0}–
+                      {offset + records.items.length} of {records.total}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={
+                        offset + PAGE_SIZE >= records.total ||
+                        recordsQuery.isFetching
+                      }
+                      onClick={() => {
+                        setSelectedId(null);
+                        setOffset((current) => current + PAGE_SIZE);
+                      }}
+                    >
+                      Next page
+                    </button>
+                  </nav>
+                </>
+              )
+            ))}
+        </section>
+      </section>
+      <section
+        role="tabpanel"
+        id={`${tabId}-panel-analyses`}
+        aria-labelledby={`${tabId}-tab-analyses`}
+        hidden={view !== "analyses"}
+        tabIndex={0}
+      >
+        <label className="environment-task">
+          <span id={`${tabId}-analysis-label`}>Analysis task</span>
+          <select
+            aria-labelledby={`${tabId}-analysis-label`}
+            value={task}
+            onChange={(event) => {
+              const next = event.target.value as AnalysisTask;
+              setTask(next);
+              setVisitedTasks((previous) =>
+                previous.includes(next) ? previous : [...previous, next],
+              );
+            }}
+          >
+            <option value="saved">Saved environmental analyses</option>
+            <option value="currents">Ocean current map</option>
+            <option value="lunar">Quick lunar context (offline)</option>
+          </select>
+        </label>
+        {visitedTasks.includes("saved") && (
+          <div hidden={task !== "saved"}>
+            <EnvironmentalAnalysisWorkspace
+              projectId={projectId}
+              onAddTides={() => openImport("tides")}
+            />
+          </div>
+        )}
+        {visitedTasks.includes("currents") && (
+          <div hidden={task !== "currents"}>
+            <OceanCurrentWorkspace
+              projectId={projectId}
+              onAddData={() => openImport("copernicus")}
+            />
+          </div>
+        )}
+        {visitedTasks.includes("lunar") && (
+          <div hidden={task !== "lunar"}>
+            <LunarContextPanel projectId={projectId} />
+          </div>
         )}
       </section>
-      <OceanCurrentWorkspace key={project.id} projectId={project.id} />
-      <EnvironmentalAnalysisWorkspace
-        key={`analyses-${project.id}`}
-        projectId={project.id}
-      />
-      <LunarContextPanel key={project.id} projectId={project.id} />
     </section>
+  );
+}
+
+function EnvironmentOverview({
+  records,
+  total,
+  onBrowse,
+  onAnalyze,
+}: {
+  records: ScientificRecord[];
+  total: number;
+  onBrowse: () => void;
+  onAnalyze: () => void;
+}) {
+  const times = records
+    .map((record) => record.observed_at)
+    .filter((time) => Number.isFinite(Date.parse(time)))
+    .sort((a, b) => Date.parse(a) - Date.parse(b));
+  const firstTime = times[0];
+  const lastTime = times.at(-1);
+  const sources = [
+    ...new Set(records.map((record) => record.provenance.source)),
+  ];
+  const flagged = records.filter(
+    (record) =>
+      record.qc === "suspect" ||
+      record.qc === "rejected" ||
+      record.qc_flags?.length,
+  ).length;
+  const historical = records.filter(
+    (record) =>
+      record.environmental_snapshot_current === false ||
+      record.calibration_current === false,
+  ).length;
+  const withoutLocation = records.filter((record) => !record.location).length;
+  return (
+    <div className="environment-overview">
+      <h3>Project evidence</h3>
+      <dl className="environment-summary">
+        <div>
+          <dt>Saved records</dt>
+          <dd>{total.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt>Sources in view</dt>
+          <dd>{sources.length.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt>Flagged for quality</dt>
+          <dd>{flagged.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt>Historical or stale</dt>
+          <dd>{historical.toLocaleString()}</dd>
+        </div>
+      </dl>
+      <section className="panel-card environment-coverage">
+        <h4>Observation coverage</h4>
+        <p className="secondary-text">
+          {records.length === total
+            ? "All saved records"
+            : `Showing ${records.length} of ${total} saved records`}{" "}
+          · Observation times shown in UTC
+        </p>
+        {firstTime && lastTime && (
+          <p>
+            {utcTime(firstTime)}
+            {firstTime !== lastTime && <> to {utcTime(lastTime)}</>}
+          </p>
+        )}
+        {sources.length > 0 && (
+          <p>
+            Sources: {sources.slice(0, 4).join(", ")}
+            {sources.length > 4 && ` and ${sources.length - 4} more`}
+          </p>
+        )}
+        {withoutLocation > 0 && (
+          <p className="environment-warning">
+            {withoutLocation} without coordinates. Geographic matching requires
+            a recorded location.
+          </p>
+        )}
+      </section>
+      <div className="environment-overview-actions">
+        <button type="button" className="secondary" onClick={onBrowse}>
+          Browse records
+        </button>
+        <button type="button" className="secondary" onClick={onAnalyze}>
+          Choose an analysis
+        </button>
+      </div>
+    </div>
   );
 }

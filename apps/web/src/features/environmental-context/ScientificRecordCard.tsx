@@ -9,6 +9,12 @@ export const SOURCE_LABELS: Record<ScientificSourceKind, string> = {
   modeled: "Modeled",
   derived: "Derived",
 };
+export function scientificVariableLabel(value: string): string {
+  return value
+    .replaceAll("_", " ")
+    .replace(/^./, (letter) => letter.toUpperCase());
+}
+
 export function utcTime(value: string): string {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return "Unknown time";
@@ -38,11 +44,16 @@ export function ScientificRecordCard({ record }: { record: ScientificRecord }) {
   const link = sourceUrl(provenance.source_url);
   return (
     <article className="panel-card" aria-label={record.variable}>
-      <h4>{record.variable}</h4>
+      <h4>{scientificVariableLabel(record.variable)}</h4>
       {record.environmental_snapshot_current === false && (
-        <p role="status">
+        <p className="environment-warning" role="status">
           Historical provider snapshot; excluded from current environmental
           lookup.
+        </p>
+      )}
+      {record.calibration_current === false && (
+        <p className="environment-warning" role="status">
+          The source calibration has changed since this record was saved.
         </p>
       )}
       <dl className="training-kv-grid">
@@ -151,11 +162,6 @@ export function ScientificRecordCard({ record }: { record: ScientificRecord }) {
         <p>
           Record checksum: <code>{record.content_sha256}</code>
         </p>
-        {record.calibration_current === false && (
-          <p role="status">
-            The source calibration has changed since this record was saved.
-          </p>
-        )}
         <pre className="json-block">
           {JSON.stringify(
             {
