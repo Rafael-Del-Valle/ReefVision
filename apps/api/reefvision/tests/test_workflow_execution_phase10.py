@@ -414,6 +414,19 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
+    # Direct recovery must not reuse a checksum-valid artifact when the saved
+    # execution node was marked incomplete after interruption or corruption.
+    # Exercise the real executed workflow, preserving the original closeout.
+    with app.state.session_factory() as session:
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert consumer is not None and consumer.status == "succeeded"
+        consumer.status = "running"
+        session.flush()
+        with pytest.raises(ConflictError, match="not succeeded; artifacts cannot be reused"):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
 
 def test_workflow_graph_revisions_are_deduplicated_and_versioned(
     client: TestClient,
