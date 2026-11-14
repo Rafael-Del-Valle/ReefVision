@@ -92,9 +92,8 @@ def test_trace_follows_selected_edges_not_the_shortest_route() -> None:
 
 def test_selected_trace_turn_angles_are_scale_invariant_and_provisional() -> None:
     first = measure_mesh_preview(**PARAMS)["surface_edge_traces"][0]
-    rescaled = measure_mesh_preview(
-        **{**PARAMS, "meters_per_unit": 0.02}
-    )["surface_edge_traces"][0]
+    rescaled_params = {**PARAMS, "meters_per_unit": 0.02}
+    rescaled = measure_mesh_preview(**rescaled_params)["surface_edge_traces"][0]
     for trace in (first, rescaled):
         assert trace["turn_angles_deg"][0] is None
         assert trace["turn_angles_deg"][1] == pytest.approx(135.0)
