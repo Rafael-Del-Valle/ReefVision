@@ -52,7 +52,7 @@ INCONSISTENT_WINDING_PARAMS = {
 # waypoints 0 and 2 coincide spatially across distinct indexed faces.
 COINCIDENT_NONADJACENT_PARAMS = {
     **PARAMS,
-    "vertices": [[0, 0, 0], [1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]],
+    "vertices": [[0, 0, 0], [1, 0, 0], [0, 0, 0], [0, 1, 0], [1, -1, 0]],
     "faces": [[0, 1, 3], [1, 2, 4]],
     "surface_trace_vertex_paths": [[0, 1, 2]],
 }
