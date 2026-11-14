@@ -19,15 +19,26 @@ reports `shortest_route_alternatives_status` on every requested route:
   edge is outside the selected route, because zero-weight cycles invalidate
   simple positive-weight path counting. Zero-length edges in **disconnected**
   components cannot affect this route and do not suppress its diagnostic.
+- `unassessable_floating_point_cost_resolution`: at least one strictly
+  positive mesh-edge cost was rounded away during the bounded search at or
+  below the selected destination cost. A very long edge followed by an
+  extremely short positive edge may look like an *exact* shortest-route tie
+  in binary64 when it is not one. This status emits
+  `positive_mesh_edge_cost_rounded_away` in `path_qc_warnings` instead of
+  asserting a mathematically exact alternative. Zero-length-edge ambiguity
+  takes precedence. The selected path and measurements remain provisional.
 - `null`: disconnected or unreferenced endpoints have no route to compare.
 
 Shortest-path multiplicity is counted only to two; exponential counts are not
 persisted. A deterministic tie-breaking route remains available for inspection,
 but its turning angles and vertex sequence cannot be interpreted as a uniquely
 identified coral branch when alternative paths tie. The diagnostic compares
-**exact recorded floating-point path costs**, with no asserted tolerance,
+**recorded floating-point path costs**, with no asserted tolerance,
 reconstruction-error model, independent calibration review, or biological
-centerline verification. A near tie may therefore remain undetected.
+centerline verification. The new resolution guard detects a *positive*
+edge whose addition cannot advance an accumulated binary64 path cost; it
+does not certify uniqueness in other near-tie scenarios. A near tie may
+therefore remain undetected.
 
 The project-scoped standalone preview and executable typed persisted
 `mesh_surface_preview` Workflow Builder graph share this implementation.
