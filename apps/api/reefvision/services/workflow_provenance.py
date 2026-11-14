@@ -288,6 +288,11 @@ def verify_workflow_run_node_graph_lineage(
     # The planner persists a one-based, contiguous execution order. Missing,
     # duplicated, or out-of-range positions corrupt the scientific run order
     # even when node IDs and types still match the checksum-pinned graph.
+    # Corrupted persisted sort keys must fail as scientific lineage conflicts,
+    # not raise TypeError while sorting mixed integer/string database values.
+    # Use exact int identity so booleans cannot impersonate an execution step.
+    if any(type(node.execution_order) is not int for node in nodes):
+        raise ConflictError(error)
     expected_orders = list(range(1, len(expected) + 1))
     if sorted(node.execution_order for node in nodes) != expected_orders:
         raise ConflictError(error)
