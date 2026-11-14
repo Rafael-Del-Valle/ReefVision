@@ -45,8 +45,52 @@ function previewHasNoBlockingEvidence(
   );
 }
 
+// Keep the deletion review synchronized with the eight scientific reference
+// categories returned by ProjectService._usage_response. A partial or
+// unfamiliar breakdown must never authorize irreversible class deletion.
+const REQUIRED_USAGE_CATEGORIES: Readonly<
+  Record<string, { mutable: boolean; immutable: boolean }>
+> = {
+  annotations_active: { mutable: true, immutable: false },
+  annotations_deleted: { mutable: false, immutable: true },
+  annotation_history: { mutable: false, immutable: true },
+  prediction_proposals: { mutable: true, immutable: false },
+  quality_control_issues: { mutable: true, immutable: false },
+  review_queue_items: { mutable: true, immutable: false },
+  dataset_versions: { mutable: false, immutable: true },
+  model_registrations: { mutable: false, immutable: true },
+};
+
+function usageHasCompleteEmptyBreakdown(
+  counts: Awaited<ReturnType<typeof getProjectLabelClassUsage>>["counts"],
+): boolean {
+  if (
+    !Array.isArray(counts) ||
+    counts.length !== Object.keys(REQUIRED_USAGE_CATEGORIES).length
+  ) {
+    return false;
+  }
+  const seen = new Set<string>();
+  return counts.every((item) => {
+    if (!item || typeof item.key !== "string" || seen.has(item.key)) {
+      return false;
+    }
+    const expected = REQUIRED_USAGE_CATEGORIES[item.key];
+    if (
+      !expected ||
+      item.count !== 0 ||
+      item.mutable !== expected.mutable ||
+      item.immutable !== expected.immutable
+    ) {
+      return false;
+    }
+    seen.add(item.key);
+    return true;
+  });
+}
+
 // A can_delete flag alone is not sufficient evidence to destroy a class.
-// Reject cross-project results and internally contradictory reference counts.
+// Reject cross-project results, contradictory totals and incomplete categories.
 function usageConfirmsEmptyClass(
   usage: Awaited<ReturnType<typeof getProjectLabelClassUsage>> | undefined,
   projectId: string,
@@ -60,8 +104,7 @@ function usageConfirmsEmptyClass(
     usage.total_references === 0 &&
     usage.mutable_reference_count === 0 &&
     usage.immutable_reference_count === 0 &&
-    Array.isArray(usage.counts) &&
-    usage.counts.every((item) => item.count === 0) &&
+    usageHasCompleteEmptyBreakdown(usage.counts) &&
     Array.isArray(usage.delete_blockers) &&
     usage.delete_blockers.length === 0
   );
@@ -482,8 +525,8 @@ function ClassRow({
         !usageIsVerifiedEmpty &&
         usage.data.can_delete === true && (
           <p className="form-error" role="alert">
-            Usage evidence has an inconsistent class scope or reference count.
-            Deletion remains disabled.
+            Usage evidence has an inconsistent scope, reference total or
+            incomplete category breakdown. Deletion remains disabled.
           </p>
         )}
 
