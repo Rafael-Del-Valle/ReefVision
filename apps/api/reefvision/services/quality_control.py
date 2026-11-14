@@ -25,6 +25,7 @@ from reefvision.db.models import (
     Project,
     QualityControlIssue,
     QualityControlRun,
+    WorkflowRun,
 )
 from reefvision.domain.enums import (
     QUALITY_CONTROL_RULE_CATEGORIES,
@@ -47,6 +48,14 @@ from reefvision.schemas.quality_control import (
     QualityControlRunResponse,
     QualityControlThresholdConfig,
 )
+from reefvision.services.acquisition_quality import (
+    METHOD as ACQUISITION_METHOD,
+)
+from reefvision.services.acquisition_quality import (
+    RULE_ID as ACQUISITION_RULE_ID,
+)
+from reefvision.services.acquisition_quality import evaluate_acquisition, metadata_evidence
+from reefvision.storage.acquisition_quality import acquisition_image_path
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -1404,6 +1413,16 @@ RULE_REGISTRY: tuple[QualityControlRule, ...] = (
         evaluator=_evaluate_broken_managed_files,
     ),
 )
+
+
+class AcquisitionQualityRule(QualityControlRule):
+    rule_id = ACQUISITION_RULE_ID
+    rule_version = ACQUISITION_METHOD
+    category: QualityControlRuleCategory = "acquisition"
+
+
+ACQUISITION_RULE = AcquisitionQualityRule()
+RULE_REGISTRY += (ACQUISITION_RULE,)
 RULES_BY_ID: dict[str, QualityControlRule] = {rule.rule_id: rule for rule in RULE_REGISTRY}
 
 
@@ -1456,6 +1475,7 @@ class QualityControlService:
         project: Project,
         dataset_version: DatasetVersion | None,
         request: QualityControlRunCreateRequest,
+        workflow_context: dict[str, str] | None = None,
     ) -> QualityControlRun:
         rules = self._selected_rules(request)
         run = QualityControlRun(
@@ -1468,6 +1488,7 @@ class QualityControlService:
             thresholds_json=request.thresholds.model_dump(mode="json"),
             configuration_json={
                 "ruleset_version": CURRENT_QC_RULESET_VERSION,
+                **(workflow_context or {}),
                 "scope_type": "dataset_version" if dataset_version else "project",
                 "selected_rule_ids": [rule.rule_id for rule in rules],
                 "rule_versions": {rule.rule_id: rule.rule_version for rule in rules},
@@ -1483,7 +1504,7 @@ class QualityControlService:
             job_type="qc",
             status="queued",
             progress_total=len(rules),
-            request_json={"quality_control_run_id": run.id},
+            request_json={"quality_control_run_id": run.id, **(workflow_context or {})},
         )
         self.session.add(job)
         self.session.flush()
@@ -1512,6 +1533,38 @@ class QualityControlService:
             self._queue_run(project=version.project, dataset_version=version, request=request)
         )
 
+    def create_workflow_acquisition_run(
+        self,
+        project_id: str,
+        dataset_version_id: str | None,
+        request: QualityControlRunCreateRequest,
+        workflow_context: dict[str, str],
+    ) -> QualityControlRun:
+        project = self._project(project_id)
+        version = self._version(dataset_version_id) if dataset_version_id else None
+        if version is not None and version.project_id != project_id:
+            raise ValidationError("Dataset version belongs to a different project")
+        prior = self.session.scalar(
+            select(QualityControlRun)
+            .where(
+                QualityControlRun.project_id == project_id,
+                QualityControlRun.configuration_json["workflow_run_id"].as_string()
+                == workflow_context["workflow_run_id"],
+                QualityControlRun.configuration_json["workflow_node_run_id"].as_string()
+                == workflow_context["workflow_node_run_id"],
+            )
+            .order_by(QualityControlRun.created_at.desc())
+            .limit(1)
+        )
+        if prior is not None:
+            return prior
+        return self._queue_run(
+            project=project,
+            dataset_version=version,
+            request=request,
+            workflow_context=workflow_context,
+        )
+
     def list_runs(
         self,
         project_id: str,
@@ -1526,8 +1579,45 @@ class QualityControlService:
             )
         ]
 
+    def _acquisition_stale_reasons(self, run: QualityControlRun) -> list[str]:
+        report = run.summary_json.get("acquisition")
+        if not report:
+            return []
+        evidence = {row["source_sha256"]: row for row in report["images"]}
+        current_images = self._current_project_images(run.project_id)
+        current_by_hash = {image.sha256: image for image in current_images.values()}
+        reasons: list[str] = []
+        if not evidence.keys() <= current_by_hash.keys() or (
+            run.scope_type == "project" and evidence.keys() != current_by_hash.keys()
+        ):
+            reasons.append("acquisition_scope_changed")
+        for digest in evidence.keys() & current_by_hash.keys():
+            image = current_by_hash[digest]
+            prior = evidence[digest]
+            current = metadata_evidence(image, current_images)
+            if (
+                current["metadata_sha256"] != prior["metadata_sha256"]
+                and "acquisition_metadata_changed" not in reasons
+            ):
+                reasons.append("acquisition_metadata_changed")
+            path = acquisition_image_path(self.settings, image.managed_path)
+            if path is None and "acquisition_media_unavailable" not in reasons:
+                reasons.append("acquisition_media_unavailable")
+        return reasons
+
+    def _current_project_images(self, project_id: str) -> dict[str, ImageAsset]:
+        return {
+            image.id: image
+            for image in self.session.scalars(
+                select(ImageAsset).where(ImageAsset.project_id == project_id)
+            )
+        }
+
     def get_run(self, run_id: str) -> QualityControlRunResponse:
-        return QualityControlRunResponse.model_validate(self._run(run_id))
+        run = self._run(run_id)
+        return QualityControlRunResponse.model_validate(run).model_copy(
+            update={"acquisition_stale_reasons": self._acquisition_stale_reasons(run)}
+        )
 
     def cancel_run(self, run_id: str) -> QualityControlRunResponse:
         run = self._run(run_id)
@@ -1668,8 +1758,13 @@ class QualityControlService:
         self.session.expire_all()
         run = self._run(run_id)
         job = self.jobs.get(run.job_id) if run.job_id else None
-        if run.status == "cancel_requested" or (
-            job is not None and job.status == "cancel_requested"
+        parent_id = run.configuration_json.get("workflow_run_id")
+        parent = self.session.get(WorkflowRun, parent_id) if parent_id else None
+        parent_job = self.jobs.get(parent.job_id) if parent and parent.job_id else None
+        if (
+            run.status == "cancel_requested"
+            or (job is not None and job.status == "cancel_requested")
+            or (parent_job is not None and parent_job.status in {"cancel_requested", "cancelled"})
         ):
             raise ConflictError("Quality-control run was cancelled")
 
@@ -1974,8 +2069,26 @@ class QualityControlService:
         for issue in self.quality_control.issues_for_run(previous.id):
             if issue.status not in {"open", "acknowledged"}:
                 continue
-            if issue.fingerprint in current_fingerprints:
+            if (
+                issue.fingerprint in current_fingerprints
+                or issue.rule_id not in run.selected_rule_ids_json
+            ):
                 continue
+            # An unavailable image has no evidence that a prior visual flag cleared.
+            if issue.rule_id == ACQUISITION_RULE_ID:
+                report = run.summary_json.get("acquisition") or {}
+                prior_source = issue.measured_values_json.get("source_sha256")
+                confirmed_source = next(
+                    (
+                        row
+                        for row in report.get("images", [])
+                        if row["source_sha256"] == prior_source
+                        and row["measurements"]["status"] == "measured"
+                    ),
+                    None,
+                )
+                if confirmed_source is None:
+                    continue
             issue.status = "resolved_in_later_run"
             issue.resolution_run_id = run.id
             issue.resolution_metadata_json = {
@@ -2006,10 +2119,47 @@ class QualityControlService:
         self.session.commit()
 
         pending_issues: list[PendingIssue] = []
+        acquisition = None
         try:
             for index, rule in enumerate(selected_rules, start=1):
                 self._check_cancelled(run.id)
-                pending_issues.extend(rule.evaluate(context, thresholds))
+                if rule is ACQUISITION_RULE:
+                    current = self._current_project_images(run.project_id)
+                    acquisition, findings = evaluate_acquisition(
+                        self.settings,
+                        [current[image.image_id] for image in context.images],
+                        current,
+                        thresholds.acquisition,
+                        lambda: self._check_cancelled(run.id),
+                        expected_sources={
+                            image.image_id: (image.sha256, image.width_px, image.height_px)
+                            for image in context.images
+                        },
+                    )
+                    pending_issues.extend(
+                        _issue(
+                            rule=rule,
+                            severity="warning",
+                            title=finding.title,
+                            explanation=finding.explanation,
+                            project_id=run.project_id,
+                            dataset_version_id=run.dataset_version_id,
+                            image_id=image.id,
+                            measured_values={
+                                "check": finding.check,
+                                "source_sha256": image.sha256,
+                                **finding.values,
+                            },
+                            thresholds=thresholds.acquisition.model_dump(mode="json"),
+                            fingerprint_payload={
+                                "check": finding.check,
+                                "source_sha256": image.sha256,
+                            },
+                        )
+                        for image, finding in findings
+                    )
+                else:
+                    pending_issues.extend(rule.evaluate(context, thresholds))
                 if job is not None:
                     job.progress_current = index
                     self.session.commit()
@@ -2063,9 +2213,16 @@ class QualityControlService:
         ]
         self.quality_control.add_issues(issue_rows)
         run.issue_count = len(issue_rows)
-        self._apply_resolution_links(run, issue_rows)
         run.summary_json = self._summarize_issues(issue_rows)
+        if acquisition is not None:
+            run.summary_json = {**run.summary_json, "acquisition": acquisition}
+            run.input_checksums_json = {
+                **run.input_checksums_json,
+                "acquisition_evidence_sha256": acquisition["evidence_sha256"],
+            }
+        self._apply_resolution_links(run, issue_rows)
         run.status = "succeeded"
+        run.error_message = None
         run.completed_at = _utc_now()
         if job is not None:
             job.status = "succeeded"

@@ -1161,7 +1161,46 @@ export type QualityControlRuleCategory =
   | "image_integrity"
   | "predictions"
   | "statistics"
-  | "dataset_versions";
+  | "dataset_versions"
+  | "acquisition";
+
+export interface AcquisitionQualityThresholds {
+  min_width_px: number;
+  min_height_px: number;
+  min_sharpness: number;
+  dark_luma_max: number;
+  bright_luma_min: number;
+  max_clipped_fraction: number;
+  require_capture_time: boolean;
+  require_camera_metadata: boolean;
+  require_calibration: boolean;
+}
+
+export interface AcquisitionQualityReport {
+  method: string;
+  review_status: "review_required";
+  evaluated_image_count: number;
+  unavailable_image_count: number;
+  finding_counts: Record<string, number>;
+  thresholds: AcquisitionQualityThresholds;
+  evidence_sha256: string;
+  images: {
+    filename: string;
+    source_sha256: string;
+    width_px: number;
+    height_px: number;
+    capture_time_utc: string | null;
+    camera_metadata: Record<string, string>;
+    calibration_sha256: string | null;
+    measurements: {
+      status: string;
+      dark_fraction: number | null;
+      bright_fraction: number | null;
+      sharpness: number | null;
+      opaque_sample_count: number;
+    };
+  }[];
+}
 
 export interface QualityControlThresholdConfig {
   small_box_min_width_px: number;
@@ -1175,6 +1214,7 @@ export interface QualityControlThresholdConfig {
   suspicious_bulk_acceptance_min_count: number;
   suspicious_bulk_acceptance_window_minutes: number;
   overlap_spatial_cell_px: number;
+  acquisition?: AcquisitionQualityThresholds;
 }
 
 export interface QualityControlRunRecord {
@@ -1189,7 +1229,10 @@ export interface QualityControlRunRecord {
   thresholds_json: Record<string, unknown>;
   configuration_json: Record<string, unknown>;
   input_checksums_json: Record<string, unknown>;
-  summary_json: Record<string, unknown>;
+  summary_json: Record<string, unknown> & {
+    acquisition?: AcquisitionQualityReport;
+  };
+  acquisition_stale_reasons?: string[];
   issue_count: number;
   created_by: string;
   created_at: string;
