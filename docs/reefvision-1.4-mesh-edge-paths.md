@@ -344,12 +344,28 @@ selection, viewing geometry, or independent biological replicates.
 calibration uncertainty to the chord; it is `null` when uncertainty is absent
 and is not a statistical confidence interval. Because the trace length and
 chord share the same scale, the ratio is scale invariant and **must not** be
-assigned an artificial independent scale-error interval. A zero calibrated
-endpoint chord yields a `null` ratio plus
-`surface_trace_zero_endpoint_chord` QC, not infinity or zero biological
-curvature. When a positive chord leads to an unrepresentable ratio,
+assigned an artificial independent scale-error interval. The shared helper
+now computes the physical chord as source-frame endpoint distance multiplied
+once by the scale, and the dimensionless ratio from source-frame distances.
+Subtracting independently rounded calibrated endpoint coordinates can erase
+a real source-frame separation and previously produce an incorrect zero
+chord and missing ratio. The exported calibrated waypoint coordinates are
+preserved for visualization; they must not silently redefine the measurement.
+
+Three distinct states are explicitly flagged: truly coincident source-frame
+endpoints produce `surface_trace_zero_endpoint_chord`; a positive source
+chord that underflows after calibration produces
+`calibrated_surface_trace_endpoint_chord_underflow`; and endpoints whose
+calibrated visualization coordinates coincide despite a representable
+positive physical chord produce
+`surface_trace_endpoint_chord_display_coordinate_collapse`. In the last
+case the positive calibrated measurement and dimensionless ratio remain
+available, but visual interpretation needs review. The first two cases
+yield a `null` ratio, not infinity or zero biological curvature. When a
+positive chord leads to an unrepresentable ratio,
 `surface_trace_detour_ratio_unrepresentable` is reported and the ratio
-remains `null`.
+remains `null`. None of these diagnostics is an uncertainty interval or
+biological validation.
 
 The source geometry, human-review status, and full provenance stay unchanged.
 Direct measurement, standalone API, and executed persisted typed Workflow
@@ -422,3 +438,17 @@ vertices and zero-length edges. The project-scoped standalone mesh preview
 and an executed, typed, persisted Workflow Builder graph must return identical
 trace evidence and provenance with `human_review_verified: false`. Historical
 artifacts are not retroactively changed or declared anatomically validated.
+
+### Precision regression and acceptance note
+
+A small, bounded mesh fixture with a genuinely nonzero binary64 endpoint
+separation but identical calibrated display endpoint coordinates now exercises
+the same scientific output through direct measurement, the project-scoped
+standalone endpoint, and an **executed saved typed Workflow Builder graph**.
+The saved measurement and provenance must match the standalone response
+exactly, retain human-review status as unverified, and surface display
+coordinate collapse as QC. A separate direct-engine fixture distinguishes
+positive source chord underflow from truly coincident endpoints. These are
+synthetic numerical tests, **not** held-out biological or installed-GUI
+validation; historical artifacts remain historical evidence and are not
+silently rewritten.
