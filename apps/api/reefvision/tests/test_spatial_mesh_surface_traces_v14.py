@@ -122,6 +122,23 @@ def test_direct_trace_zero_edge_has_unknown_turn_not_a_fabricated_zero() -> None
     assert trace["human_review_verified"] is False
 
 
+def test_straight_trace_distinguishes_zero_bend_from_no_interior_turn() -> None:
+    traces = mesh_surface_edge_traces(
+        [(0, 0, 0), (1, 0, 0), (2, 0, 0), (0, 1, 0)],
+        [[0, 1, 3], [1, 2, 3]],
+        [[0, 1, 2], [0, 1]],
+        0.01,
+        None,
+    )
+    straight, two_vertices = traces
+    assert straight["turn_angles_deg"] == [None, 0.0, None]
+    assert straight["maximum_turn_angle_deg"] == 0.0
+    assert straight["total_absolute_geometric_turn_deg"] == 0.0
+    assert two_vertices["turn_angles_deg"] == [None, None]
+    assert two_vertices["maximum_turn_angle_deg"] is None
+    assert two_vertices["total_absolute_geometric_turn_deg"] == 0.0
+
+
 @pytest.mark.parametrize(
     ("paths", "expected_status"),
     [
