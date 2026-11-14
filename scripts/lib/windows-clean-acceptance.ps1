@@ -30,7 +30,16 @@ function Invoke-ReefVisionIsolatedEnvironment {
     # Clear these only inside the action and restore the caller's exact values.
     $SensitiveInherited = @(
         'HF_TOKEN', 'HUGGING_FACE_HUB_TOKEN', 'HF_ENDPOINT',
-        'WANDB_API_KEY', 'COMET_API_KEY', 'MLFLOW_TRACKING_URI'
+        'WANDB_API_KEY', 'COMET_API_KEY', 'MLFLOW_TRACKING_URI',
+        # Disposable packaging must never inherit developer AI credentials,
+        # cloud-service identities or credential-file pointers. An offline
+        # model flag cannot prevent unrelated SDKs from using these values.
+        'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'AZURE_OPENAI_API_KEY',
+        'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN',
+        'AWS_PROFILE', 'AWS_DEFAULT_PROFILE',
+        'AWS_SHARED_CREDENTIALS_FILE', 'AWS_CONFIG_FILE', 'AWS_ENDPOINT_URL',
+        'GOOGLE_APPLICATION_CREDENTIALS', 'GOOGLE_API_KEY',
+        'AZURE_CLIENT_ID', 'AZURE_TENANT_ID', 'AZURE_CLIENT_SECRET'
     )
     # The default remains strictly offline. Only explicitly requested
     # disposable live-SAM acceptance may permit network model acquisition.
