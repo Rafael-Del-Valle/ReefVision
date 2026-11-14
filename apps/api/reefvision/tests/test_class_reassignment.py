@@ -1435,10 +1435,11 @@ def test_merge_preserves_accepted_predictions_and_completed_qc_history(
         assert frozen_dataset.class_map_json[0]["id"] == source["id"]
 
 
-def test_completed_saved_qc_workflow_class_evidence_survives_merge(
-    client: TestClient,
+@pytest.mark.parametrize("finish_review", [False, True], ids=["pending", "completed"])
+def test_saved_qc_workflow_class_evidence_survives_merge(
+    client: TestClient, finish_review: bool
 ) -> None:
-    """An executable saved QC result must retain its completed review's class."""
+    """An executable saved QC result must keep class evidence at every review state."""
     project = create_project(client, name="Saved QC merge integrity")
     source = create_label_class(
         client, project["id"], class_index=0, name="Muricea Closed", display_color="#E76F51"
