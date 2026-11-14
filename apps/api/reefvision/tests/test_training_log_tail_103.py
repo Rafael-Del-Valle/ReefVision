@@ -62,6 +62,67 @@ def test_log_tail_rejects_file_swapped_between_validation_and_open(
     assert log.read_bytes() == private_bytes
 
 
+def test_log_tail_rejects_path_replaced_after_bounded_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rotated/supplanted log cannot be reported as the current job's log."""
+    log = tmp_path / "training.log"
+    original = b"epoch=2\\ntrain/box_loss=0.25\\n"
+    log.write_bytes(original)
+    replacement = tmp_path / "different-run.log"
+    unrelated = b"epoch=90\\ntrain/box_loss=9.99\\n"
+    replacement.write_bytes(unrelated)
+    real_fstat = os.fstat
+    fstat_calls = 0
+
+    def replace_after_tail_read(fd: int) -> os.stat_result:
+        nonlocal fstat_calls
+        fstat_calls += 1
+        observed = real_fstat(fd)
+        if fstat_calls == 2:
+            # The first fstat anchors the opened handle. The second happens
+            # after reading the tail, before its metrics reach the caller.
+            os.replace(replacement, log)
+        return observed
+
+    monkeypatch.setattr(training_routes.os, "fstat", replace_after_tail_read)
+    with pytest.raises(HTTPException) as error:
+        training_routes._training_log_tail("training.log", tmp_path)
+
+    assert error.value.status_code == 403
+    assert fstat_calls == 2
+    assert log.read_bytes() == unrelated
+
+
+def test_log_tail_allows_worker_append_during_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Worker appends must not be mistaken for a rotated training-log inode."""
+    log = tmp_path / "training.log"
+    original = b"epoch=2\\ntrain/cls_loss=0.40\\n"
+    log.write_bytes(original)
+    appended = b"epoch=3\\ntrain/cls_loss=0.30\\n"
+    real_fstat = os.fstat
+    fstat_calls = 0
+
+    def append_after_tail_read(fd: int) -> os.stat_result:
+        nonlocal fstat_calls
+        fstat_calls += 1
+        observed = real_fstat(fd)
+        if fstat_calls == 2:
+            with log.open("ab") as writer:
+                writer.write(appended)
+        return observed
+
+    monkeypatch.setattr(training_routes.os, "fstat", append_after_tail_read)
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": original.decode("utf-8"),
+    }
+    assert fstat_calls == 2
+    assert log.read_bytes() == original + appended
+
+
 def test_log_tail_rejects_in_root_hardlink_to_unrelated_scientific_file(
     tmp_path: Path,
 ) -> None:
