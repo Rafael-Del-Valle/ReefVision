@@ -303,6 +303,22 @@ if ($latestMetrics['train/box_loss'] -ne 0.25 -or
     $latestMetrics['train/dfl_loss'] -ne 0.1) {
   throw 'Latest finite persisted box/cls/dfl losses did not override stale summaries.'
 }
+
+# Histories can have gaps and need not align with the global progress epoch.
+# Display the actual evidence source/entry index for each loss instead of
+# presenting a prior or summary-only value as a verified current epoch.
+foreach ($expected in @(
+  @{ key = 'train/box_loss'; note = ' [history entry 3/3; epoch association unverified]' },
+  @{ key = 'train/cls_loss'; note = ' [history entry 2/3; epoch association unverified]' },
+  @{ key = 'train/dfl_loss'; note = ' [history entry 2/2; epoch association unverified]' }
+)) {
+  if ($metricSourceNotes[$expected.key] -cne $expected.note) {
+    throw ('Training monitor did not disclose the recorded loss source: {0}' -f $expected.key)
+  }
+}
+if (([regex]::Matches($monitorScript, [regex]::Escape('$metricSourceNotes[$key]'))).Count -ne 3) {
+  throw 'Training, validation and other metric displays must all show source provenance.'
+}
 # A trailing nonfinite sample must be disclosed, but a valid last sample must
 # not be mislabeled as stale. This describes the history entry, not an assumed
 # biological observation or an inferred training epoch.
@@ -319,6 +335,9 @@ $run.metrics_history = [pscustomobject]@{
 Invoke-Expression $selectionCode
 if ($latestMetrics['train/box_loss'] -ne 9.0) {
   throw 'Invalid epoch history must not erase the last finite summary loss.'
+}
+if ($metricSourceNotes['train/box_loss'] -cne ' [summary metric; epoch association unverified]') {
+  throw 'Fallback loss must identify the summary rather than imply a valid epoch sample.'
 }
 if ($staleMetricSamples['train/box_loss'] -cne ' [summary fallback; no finite history entry among 2]' -or
     $staleMetricSamples.ContainsKey('train/cls_loss')) {
@@ -392,12 +411,18 @@ foreach ($expected in @(
 if ($staleMetricSamples.Count -ne 0) {
   throw 'Empty history was mistaken for an invalid observed epoch.'
 }
+if ($metricSourceNotes['train/box_loss'] -cne ' [summary metric; epoch association unverified]') {
+  throw 'A summary-only training loss must disclose its unverified epoch association.'
+}
 # Conversely, no metric may appear when the worker has not yet recorded any.
 $run.metrics = [pscustomobject]@{}
 $run.metrics_history = [pscustomobject]@{}
 Invoke-Expression $selectionCode
 if ($latestMetrics.Count -ne 0) {
   throw 'An unstarted training run fabricated a loss measurement.'
+}
+if ($metricSourceNotes.Count -ne 0) {
+  throw 'An unstarted training run fabricated metric source provenance.'
 }
 
 # A persisted history can contain unrelated scientific or validation metrics.

@@ -285,6 +285,10 @@ while ($true) {
     # where both sources have a value, the latest persisted epoch history
     # wins so box/cls/dfl losses reflect the actual training progression.
     $latestMetrics = @{}
+    # A metrics-history array is not necessarily one entry per displayed
+    # progress epoch. Label the evidence source and entry position instead
+    # of silently claiming every loss was measured at the current epoch.
+    $metricSourceNotes = @{}
     # Scientific QC: a trailing null/nonfinite history entry means the loss
     # shown below is a previously recorded sample, not a current-epoch value.
     # Keep the persisted history unchanged and disclose that age in the view.
@@ -293,6 +297,7 @@ while ($true) {
       foreach ($metric in $run.metrics.PSObject.Properties) {
         if (Test-FiniteMetricValue -Value $metric.Value) {
           $latestMetrics[$metric.Name] = $metric.Value
+          $metricSourceNotes[$metric.Name] = ' [summary metric; epoch association unverified]'
         }
       }
     }
@@ -304,6 +309,7 @@ while ($true) {
           if (Test-FiniteMetricValue -Value $values[$index]) {
             $foundFiniteSample = $true
             $latestMetrics[$series.Name] = $values[$index]
+            $metricSourceNotes[$series.Name] = (' [history entry {0}/{1}; epoch association unverified]' -f ($index + 1), $values.Count)
             if ($index -lt ($values.Count - 1)) {
               $staleMetricSamples[$series.Name] = (' [prior history entry {0}/{1}; latest unavailable]' -f ($index + 1), $values.Count)
             }
@@ -324,8 +330,9 @@ while ($true) {
       Write-Host 'Training losses'
       foreach ($key in $trainingLosses) {
         if ($latestMetrics.ContainsKey($key)) {
+          $source = if ($metricSourceNotes.ContainsKey($key)) { $metricSourceNotes[$key] } else { '' }
           $note = if ($staleMetricSamples.ContainsKey($key)) { $staleMetricSamples[$key] } else { '' }
-          Write-Host ('  {0,-20} {1}{2}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key]), $note)
+          Write-Host ('  {0,-20} {1}{2}{3}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key]), $source, $note)
         }
       }
     }
@@ -334,8 +341,9 @@ while ($true) {
       Write-Host 'Validation losses'
       foreach ($key in $validationLosses) {
         if ($latestMetrics.ContainsKey($key)) {
+          $source = if ($metricSourceNotes.ContainsKey($key)) { $metricSourceNotes[$key] } else { '' }
           $note = if ($staleMetricSamples.ContainsKey($key)) { $staleMetricSamples[$key] } else { '' }
-          Write-Host ('  {0,-20} {1}{2}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key]), $note)
+          Write-Host ('  {0,-20} {1}{2}{3}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key]), $source, $note)
         }
       }
     }
@@ -346,8 +354,9 @@ while ($true) {
       Write-Host ''
       Write-Host 'Other model metrics'
       foreach ($key in $otherMetrics) {
+        $source = if ($metricSourceNotes.ContainsKey($key)) { $metricSourceNotes[$key] } else { '' }
         $note = if ($staleMetricSamples.ContainsKey($key)) { $staleMetricSamples[$key] } else { '' }
-        Write-Host ('  {0,-30} {1}{2}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key]), $note)
+        Write-Host ('  {0,-30} {1}{2}{3}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key]), $source, $note)
       }
     }
     # Never follow an API redirect to a remote host: monitoring stays on loopback.
