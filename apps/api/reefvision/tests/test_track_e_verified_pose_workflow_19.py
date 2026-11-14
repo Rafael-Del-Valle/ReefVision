@@ -39,7 +39,10 @@ from reefvision.services.workflow_pose_training import (
     create_pose_workflow_training_result,
     execute_pose_training_dataset_adapter,
 )
-from reefvision.services.workflow_provenance import build_workflow_run_provenance
+from reefvision.services.workflow_provenance import (
+    build_workflow_run_provenance,
+    verify_succeeded_node_artifacts,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_workflow_pose_training_phase10 import _frozen_dataset
@@ -377,6 +380,17 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         node.parameters_json = {**original_parameters, "manifest_sha256": "0" * 64}
         session.commit()
 
+    # Check direct interrupted-run reuse, not only run-detail/provenance export.
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        with pytest.raises(
+            ConflictError, match="node parameters do not match saved graph"
+        ):
+            verify_succeeded_node_artifacts(
+                session, run_id=str(queued.json()["id"]), node_run=node
+            )
+
     substituted_parameters = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert substituted_parameters.status_code == 409, substituted_parameters.text
     assert substituted_parameters.json() == {
@@ -402,6 +416,17 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         assert node is not None
         node.parameters_json = None
         session.commit()
+
+    # Check direct interrupted-run reuse, not only run-detail/provenance export.
+    with app.state.session_factory() as session:
+        node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert node is not None
+        with pytest.raises(
+            ConflictError, match="node parameters do not match saved graph"
+        ):
+            verify_succeeded_node_artifacts(
+                session, run_id=str(queued.json()["id"]), node_run=node
+            )
 
     missing_parameters = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert missing_parameters.status_code == 409, missing_parameters.text
