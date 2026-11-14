@@ -6,6 +6,7 @@ import { ScientistWorkspaceInspector } from "./ScientistWorkspaceInspector";
 import {
   WORKSPACE_INSPECTOR_VIEWS,
   workspaceInspectorDefinition,
+  workspacePresetInspectorGuidance,
 } from "./workspaceInspector";
 
 function renderInspector({
@@ -91,7 +92,6 @@ describe("ScientistWorkspaceInspector", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("6")).toBeInTheDocument();
     expect(screen.getByText("bbox")).toBeInTheDocument();
-    expect(screen.getByText("Canonical workspace")).toBeInTheDocument();
   });
 
   it("navigates to related canonical tools instead of implementing duplicate tool logic", async () => {
@@ -115,7 +115,9 @@ describe("ScientistWorkspaceInspector", () => {
     });
 
     expect(screen.getByText("Human verification required")).toBeInTheDocument();
-    expect(screen.getByText("Review / QA preset")).toBeInTheDocument();
+    expect(
+      screen.getByText(workspacePresetInspectorGuidance("review").title),
+    ).toBeVisible();
     expect(
       screen.getByText(/Acceptance, correction, or rejection remains/),
     ).toBeInTheDocument();

@@ -595,15 +595,6 @@
   gap: 0.4rem;
 }
 
-.rv-workbench-toolbar-meta span {
-  padding: 0.3rem 0.55rem;
-  border: 1px solid var(--rv-border);
-  border-radius: 999px;
-  color: var(--rv-muted-strong);
-  font-size: 0.68rem;
-  white-space: nowrap;
-}
-
 .rv-workbench-stage {
   min-width: 0;
   padding: 1.15rem;
@@ -700,18 +691,10 @@
     border-left: 0;
     box-shadow: none;
   }
-
-  .rv-workbench-toolbar-meta {
-    display: none;
-  }
 }
 
 @media (max-width: 46rem) {
   .rv-global-context {
-    display: none;
-  }
-
-  .rv-global-actions button:not(:last-child) {
     display: none;
   }
 
@@ -2534,5 +2517,82 @@ body:has([data-testid="reefvision-assistant"][data-open="true"])
 
   .rv-project-import-summary {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Binary controls keep their intrinsic size inside stacks and toolbars. */
+input[type="checkbox"],
+input[type="radio"] {
+  width: 1.125rem;
+  height: 1.125rem;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  accent-color: var(--rv-success);
+  flex: 0 0 auto;
+}
+
+label.checkbox-row,
+label:has(> input[type="checkbox"]:first-child),
+label:has(> input[type="radio"]:first-child) {
+  display: flex;
+  align-items: center;
+  gap: var(--rv-space-2);
+  min-height: 1.75rem;
+}
+
+.rv-workbench-project > div {
+  min-width: 0;
+}
+
+.rv-workbench-toolbar h3 {
+  overflow-wrap: anywhere;
+}
+
+details.rv-inspector-card > summary,
+.rv-inspector-policy > summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.modal-backdrop {
+  z-index: 12000;
+}
+
+.modal {
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+}
+
+.modal-actions {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 70rem) {
+  .rv-global-context,
+  .rv-global-brand p {
+    display: none;
+  }
+
+  .rv-global-actions {
+    gap: var(--rv-space-2);
+  }
+
+  .rv-global-actions button {
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 46rem) {
+  .rv-global-bar {
+    flex-wrap: wrap;
+  }
+
+  .rv-global-actions {
+    flex-wrap: wrap;
+  }
+
+  .rv-global-actions button:not(:last-child) {
+    display: inline-flex;
   }
 }

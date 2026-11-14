@@ -206,6 +206,33 @@ test("supports keyboard skip navigation and the minimum desktop viewport without
     expect(stageBox.x + stageBox.width <= inspectorBox.x + 1).toBe(true);
   }
 
+  const dataGroup = page.getByRole("tab", {
+    name: "Data & annotation",
+    exact: true,
+  });
+  await dataGroup.focus();
+  await page.keyboard.press("ArrowDown");
+  const modelsGroup = page.getByRole("tab", {
+    name: "Models & AI",
+    exact: true,
+  });
+  await expect(modelsGroup).toBeFocused();
+  await expect(modelsGroup).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Home");
+  await expect(dataGroup).toBeFocused();
+
+  const help = page.getByRole("button", { name: "Help", exact: true });
+  await help.click();
+  const guide = page.getByRole("dialog", { name: /Welcome to ReefVision/ });
+  await expect(guide.getByRole("button", { name: "Close" })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(
+    guide.getByRole("button", { name: "Don't show on startup" }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(guide).toBeHidden();
+  await expect(help).toBeFocused();
+
   expect(await hasHorizontalOverflow(page)).toBe(false);
 });
 
