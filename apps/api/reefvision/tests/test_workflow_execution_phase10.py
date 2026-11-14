@@ -182,7 +182,7 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
     with app.state.session_factory() as session:
         producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
         assert producer is not None
-        producer.execution_order = "invalid-order"
+        setattr(producer, "execution_order", "invalid-order")
         session.commit()
 
     malformed_order = client.get(f"/api/v1/workflow-runs/{run['id']}")
