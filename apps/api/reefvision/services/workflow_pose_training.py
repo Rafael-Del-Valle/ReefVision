@@ -512,6 +512,7 @@ def _completed_workflow_pose_training_run(
     )
 
     expected_validation_id = validation_dataset.id if validation_dataset is not None else None
+    completed: TrainingRun | None = None
 
     for candidate in candidates:
         # Persisted snapshot provenance must be a JSON object. A list of
@@ -662,7 +663,12 @@ def _completed_workflow_pose_training_run(
             raise ValidationError("Recovered pose-training node configuration changed")
 
         if candidate.status == "completed":
-            return candidate
+            if completed is not None:
+                raise ValidationError(
+                    "Pose-training workflow node has multiple completed child runs"
+                )
+            completed = candidate
+            continue
 
         # Workflow retries must not start a second training job while the
         # original child run is queued or executing. Failed/cancelled attempts
@@ -670,7 +676,7 @@ def _completed_workflow_pose_training_run(
         if candidate.status not in {"failed", "cancelled"}:
             raise ValidationError("Pose-training workflow node already has an active child run")
 
-    return None
+    return completed
 
 
 def _reused_pose_training_result(
