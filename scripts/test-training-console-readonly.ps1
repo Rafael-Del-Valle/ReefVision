@@ -196,15 +196,15 @@ if ($output -match 'train/box_loss\s+0\.99') {
 }
 # A fully invalid persisted epoch series cannot validate the summary loss.
 # Display the actual summary with its source uncertainty, not a new value.
-if ($output -notmatch 'val/seg_loss\s+0\.17 \[summary fallback; no finite history entry among 2\]') {
+if ($output -notmatch 'val/seg_loss\s+0\.17 \[summary metric; epoch association unverified\] \[summary fallback; no finite history entry among 2\]') {
   throw 'Monitor hid the source uncertainty of an invalid epoch history.'
 }
 # Persisted history may end with a null or nonfinite placeholder while
 # training continues. Show the last measured value, but explicitly identify
 # that it comes from an earlier history entry, not the current epoch.
-if ($output -notmatch 'train/box_loss\s+0\.25 \[prior history entry 2/3; latest unavailable\]' -or
-    $output -notmatch 'train/cls_loss\s+0\.24 \[prior history entry 3/4; latest unavailable\]' -or
-    $output -notmatch 'train/dfl_loss\s+0\.08 \[prior history entry 3/4; latest unavailable\]') {
+if ($output -notmatch 'train/box_loss\s+0\.25 \[history entry 2/3; epoch association unverified\] \[prior history entry 2/3; latest unavailable\]' -or
+    $output -notmatch 'train/cls_loss\s+0\.24 \[history entry 3/4; epoch association unverified\] \[prior history entry 3/4; latest unavailable\]' -or
+    $output -notmatch 'train/dfl_loss\s+0\.08 \[history entry 3/4; epoch association unverified\] \[prior history entry 3/4; latest unavailable\]') {
   throw 'Read-only monitor failed to disclose stale measured-loss provenance.'
 }
 if ($output.Contains('spoofed console title') -or $output.Contains('spoofed log title')) {
@@ -245,6 +245,9 @@ foreach ($terminalStatus in @('failed', 'cancelled')) {
     throw "Missing $terminalStatus terminal-state monitor output."
   }
   if ($terminalStatus -eq 'failed') {
+    if ($terminalOutput -notmatch 'train/box_loss\s+0\.4(?:0)? \[summary metric; epoch association unverified\]') {
+      throw 'Failed-run summary loss was displayed without its unverified epoch provenance.'
+    }
     if (-not $terminalOutput.Contains('Training job log unavailable (status/metrics remain live).') -or
         -not $terminalOutput.Contains('GPU out of memory') -or
         -not $terminalOutput.Contains('training stopped') -or
