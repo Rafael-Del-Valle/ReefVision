@@ -3901,7 +3901,10 @@ export function AnnotationEditor({
                 className="secondary"
                 onClick={() =>
                   setObjectListLimit((current) =>
-                    Math.min(filteredObjectCount - objectListStart, current + 200),
+                    Math.min(
+                      filteredObjectCount - objectListStart,
+                      current + 200,
+                    ),
                   )
                 }
               >
@@ -3919,7 +3922,9 @@ export function AnnotationEditor({
                     max={filteredObjectCount}
                     step={1}
                     value={objectJumpPosition}
-                    onChange={(event) => setObjectJumpPosition(event.target.value)}
+                    onChange={(event) =>
+                      setObjectJumpPosition(event.target.value)
+                    }
                   />
                 </label>
                 <button
