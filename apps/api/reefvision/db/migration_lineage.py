@@ -97,7 +97,7 @@ def resolve_legacy_revision(connection: Connection, heads: tuple[str, ...]) -> s
         "computed_metric_results": {"result_kind"},
         "ecology_identity_image_evidence": {"source_metadata_sha256"},
     }
-    missing_columns = []
+    missing_columns: list[str] = []
     for table in sorted(tables & branch_tables):
         required = set(Base.metadata.tables[table].columns.keys()) - later_columns.get(table, set())
         actual = {column["name"] for column in schema.get_columns(table)}
