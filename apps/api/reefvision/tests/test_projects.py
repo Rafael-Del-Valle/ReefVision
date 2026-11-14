@@ -14,8 +14,11 @@ from reefvision.db.models import (
     AnnotationEvent,
     DatasetVersion,
     ImageAsset,
+    ImageLabel,
     Job,
     LabelClass,
+    MaskAnnotation,
+    MaskAnnotationEvent,
     ModelRegistration,
     PredictionProposal,
     QualityControlIssue,
@@ -256,6 +259,126 @@ def test_class_description_archive_restore_usage_and_delete(client: TestClient) 
     fetched = client.get(f"/api/v1/projects/{project['id']}")
     assert fetched.status_code == 200
     assert fetched.json()["label_classes"] == []
+
+
+def test_mask_and_image_label_references_block_unsafe_class_deletion_and_merge(
+    client: TestClient,
+) -> None:
+    project = create_project(client, seed_classes=False)
+    source = create_label_class(
+        client, project["id"], class_index=0, name="Coral Polyp", display_color="#123456"
+    )
+    target = create_label_class(
+        client, project["id"], class_index=1, name="Other Polyp", display_color="#654321"
+    )
+
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        image = ImageAsset(
+            id="image-scientific-refs",
+            project_id=project["id"],
+            original_filename="polyp.png",
+            managed_path=f"{project['storage_root']}/images/originals/polyp.png",
+            thumbnail_path=None,
+            sha256="a" * 64,
+            width_px=640,
+            height_px=480,
+            file_size_bytes=1024,
+            media_type="image/png",
+            import_source="fixture/polyp.png",
+            annotation_status="in_progress",
+            annotation_revision=1,
+            metadata_json={},
+        )
+        active_mask = MaskAnnotation(
+            id="mask-active",
+            image_id=image.id,
+            label_class_id=source["id"],
+            polygon_json=[[10, 10], [20, 10], [20, 20]],
+        )
+        deleted_mask = MaskAnnotation(
+            id="mask-deleted",
+            image_id=image.id,
+            label_class_id=source["id"],
+            polygon_json=[[30, 30], [40, 30], [40, 40]],
+            deleted_at=datetime.now(UTC),
+        )
+        event = MaskAnnotationEvent(
+            id="mask-event",
+            mask_annotation_id=active_mask.id,
+            image_id=image.id,
+            event_type="created",
+            before_json=None,
+            after_json={"label_class_id": source["id"]},
+            actor="local_user",
+        )
+        active_label = ImageLabel(
+            id="label-active",
+            image_id=image.id,
+            label_class_id=source["id"],
+            label_set="primary",
+        )
+        deleted_label = ImageLabel(
+            id="label-deleted",
+            image_id=image.id,
+            label_class_id=source["id"],
+            label_set="archive",
+            deleted_at=datetime.now(UTC),
+        )
+        session.add_all(
+            [image, active_mask, deleted_mask, event, active_label, deleted_label]
+        )
+        session.commit()
+
+    usage_response = client.get(f"/api/v1/classes/{source['id']}/usage")
+    assert usage_response.status_code == 200
+    usage = usage_response.json()
+    counts = {item["key"]: item["count"] for item in usage["counts"]}
+    assert len(counts) == 13
+    assert {
+        key: counts[key]
+        for key in (
+            "mask_annotations_active",
+            "mask_annotations_deleted",
+            "mask_annotation_history",
+            "image_labels_active",
+            "image_labels_deleted",
+        )
+    } == {
+        "mask_annotations_active": 1,
+        "mask_annotations_deleted": 1,
+        "mask_annotation_history": 1,
+        "image_labels_active": 1,
+        "image_labels_deleted": 1,
+    }
+    assert usage["mutable_reference_count"] == 2
+    assert usage["immutable_reference_count"] == 3
+    assert usage["can_delete"] is False
+    assert client.delete(f"/api/v1/classes/{source['id']}").status_code == 409
+
+    blocked_merge = client.post(
+        f"/api/v1/classes/{source['id']}/merge",
+        json={
+            "target_class_id": target["id"],
+            "expected_usage_counts": counts,
+            "expected_usage_fingerprint": usage["reference_fingerprint"],
+        },
+    )
+    assert blocked_merge.status_code == 409, blocked_merge.text
+    assert "Mask or image-level classification references" in blocked_merge.text
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        source_record = session.get(LabelClass, source["id"])
+        target_record = session.get(LabelClass, target["id"])
+        assert source_record is not None and source_record.is_active
+        assert target_record is not None and target_record.is_active
+        for record_type, identifier in (
+            (MaskAnnotation, "mask-active"),
+            (MaskAnnotation, "mask-deleted"),
+            (ImageLabel, "label-active"),
+            (ImageLabel, "label-deleted"),
+        ):
+            record = session.get(record_type, identifier)
+            assert record is not None and record.label_class_id == source["id"]
+        assert session.get(MaskAnnotationEvent, "mask-event") is not None
 
 
 def test_used_class_delete_is_blocked_and_usage_is_reported(client: TestClient) -> None:
