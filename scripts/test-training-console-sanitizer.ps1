@@ -213,12 +213,23 @@ if (-not $runIdGuard.Success -or
     $runIdGuard.Groups['body'].Value -notmatch 'byte == b''_''') {
   throw 'Training run IDs must remain bounded to opaque ASCII alphanumeric/hyphen/underscore identifiers.'
 }
+# The command now delegates both checks to a small validated URL helper.
+# Assert the helper's actual restrictions as well as the call site, so a
+# refactor cannot accidentally bypass the run-ID or loopback-origin guard.
+$validatedUrlHelper = [regex]::Match(
+  $source,
+  '(?ms)^fn validated_training_console_url\(api_base_url: &str, run_id: &str\) -> Result<String, String> \{(?<body>.*?)^\}'
+)
 $consoleCommand = [regex]::Match($source, '(?s)fn open_training_console\(.*?\n\}')
-if (-not $consoleCommand.Success -or
-    $consoleCommand.Value -notmatch 'if !valid_training_run_id\(&run_id\)' -or
-    $consoleCommand.Value -notmatch 'state\.context\.api_base_url' -or
+if (-not $validatedUrlHelper.Success -or
+    $validatedUrlHelper.Groups['body'].Value -notmatch 'if !valid_training_run_id\(run_id\)' -or
+    $validatedUrlHelper.Groups['body'].Value -notmatch '\.strip_prefix\("http://127\.0\.0\.1:"\)' -or
+    $validatedUrlHelper.Groups['body'].Value -notmatch '\.strip_suffix\("/api/v1"\)' -or
+    $validatedUrlHelper.Groups['body'].Value -notmatch 'port == 0 \|\| port\.to_string\(\) != port_string' -or
+    -not $consoleCommand.Success -or
+    $consoleCommand.Value -notmatch 'validated_training_console_url\(&state\.context\.api_base_url, &run_id\)\?' -or
     $consoleCommand.Value -match 'frontend_api_base_url|renderer_api_base_url') {
-  throw 'Training monitor must validate the run ID and use the trusted desktop API origin.'
+  throw 'Training monitor must validate the run ID and canonical local desktop API origin.'
 }
 # -NoExit exposes an unrestricted PowerShell prompt after the read-only observer
 # reaches a terminal state. Keep the final logs visible with an idle observer
