@@ -731,6 +731,41 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     assert reused["training_run_id"] == result["training_run_id"]
     assert reused["result_checkpoint_sha256"] == result["result_checkpoint_sha256"]
 
+    # This API-frozen, scientist-verified dataset produced a real persisted
+    # experiment record. A changed software environment cannot be replayed
+    # under the originally frozen checkpoint and workflow lineage.
+    with app.state.session_factory() as session:
+        experiment = session.scalar(
+            select(ExperimentRecord).where(
+                ExperimentRecord.training_run_id == result["training_run_id"]
+            )
+        )
+        assert experiment is not None
+        original_packages = dict(experiment.package_versions_json)
+        assert (
+            experiment.artifact_manifest_json["experiment_package_versions_sha256"]
+            == canonical_json_sha256(original_packages)
+        )
+        experiment.package_versions_json = {
+            **original_packages,
+            "tampered-runtime-package": "0.0.0",
+        }
+        session.commit()
+
+    with pytest.raises(ValidationError, match="package-version provenance changed"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        experiment = session.scalar(
+            select(ExperimentRecord).where(
+                ExperimentRecord.training_run_id == result["training_run_id"]
+            )
+        )
+        assert experiment is not None
+        experiment.package_versions_json = original_packages
+        session.commit()
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
     # A completed saved Workflow Builder node must have one unambiguous child
     # training run. A second older completed record must not be silently
     # ignored simply because its checkpoint was not chosen by the sort order.

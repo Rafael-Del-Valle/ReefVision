@@ -987,6 +987,20 @@ def _reused_pose_training_result(
                 "Recovered pose-training experiment manifest must be a JSON object"
             )
         experiment_manifest = dict(experiment.artifact_manifest_json or {})
+        # A scientist's software versions are part of the reproducible
+        # experiment record. For new workflow runs, require an actual JSON
+        # object and compare it with the digest frozen at first completion.
+        if is_current_snapshot and (
+            not isinstance(experiment.package_versions_json, dict)
+            or (
+                "experiment_package_versions_sha256" in frozen_checkpoint
+                and frozen_checkpoint["experiment_package_versions_sha256"]
+                != canonical_json_sha256(experiment.package_versions_json)
+            )
+        ):
+            raise ValidationError(
+                "Recovered pose-training experiment package-version provenance changed"
+            )
         # Current experiments expose native metric rows and worker artifacts as
         # well as checkpoint lineage. All persisted scientific evidence must
         # still match the completed run, not only the selected lineage fields.
@@ -1794,6 +1808,19 @@ def create_pose_workflow_training_result(
     if experiment_manifest != worker_manifest:
         raise ValidationError("Completed pose training experiment artifact provenance changed")
 
+    # Freeze the experiment's actual local package versions alongside the
+    # checkpoint checksums. Earlier completed runs without this new assertion
+    # remain readable, while new runs detect post-training environment edits.
+    if not isinstance(experiment.package_versions_json, dict):
+        raise ValidationError(
+            "Completed pose-training experiment package versions must be a JSON object"
+        )
+    run.artifact_manifest_json = {
+        **run.artifact_manifest_json,
+        "experiment_package_versions_sha256": canonical_json_sha256(
+            experiment.package_versions_json
+        ),
+    }
     experiment.artifact_manifest_json = dict(run.artifact_manifest_json)
 
     # A JSON array of key/value pairs can coerce to the same dict and digest
