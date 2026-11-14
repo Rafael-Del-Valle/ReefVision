@@ -10,7 +10,7 @@ from sqlalchemy import ColumnElement, Table, select
 from sqlalchemy.orm import Session
 
 from reefvision.db.base import Base
-from reefvision.db.models import Annotation, ImageAsset, MaskAnnotation
+from reefvision.db.models import Annotation, ImageAsset, Job, MaskAnnotation
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.coral_graph import CorrespondenceSnapshot, GraphSnapshot, GrowthSnapshot
 from reefvision.schemas.ecology_analysis import (
@@ -28,8 +28,10 @@ from reefvision.services.project_exchange_comparison import validate_comparison_
 from reefvision.services.project_exchange_event_summary import validate_event_summary_exchange
 from reefvision.services.project_exchange_pose import validate_pose_rows
 from reefvision.services.project_exchange_reports import validate_report_exchange
+from reefvision.services.project_exchange_temporal_reefpose import validate_temporal_exchange
 from reefvision.services.project_exchange_workflows import validate_workflow_rows
 from reefvision.services.reefpose_validation import heldout_scope
+from reefvision.services.static_comparison import STATIC_COMPARISON_JOB
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.ecology_pose_links import remap_pose_link_source
 
@@ -58,6 +60,9 @@ SECTION_NAMES = (
     "pose_biological_event_revisions",
     "reefpose_references",
     "reefpose_heldout_locks",
+    "temporal_reefpose_datasets",
+    "temporal_reefpose_runs",
+    "temporal_reefpose_frames",
 )
 _NEW_SECTION_NAMES = (
     "coral_graph_revisions",
@@ -77,6 +82,7 @@ _PARENTS = {
     "pose_measurement_samples": ("series_id", "pose_measurement_series"),
     "pose_event_detection_runs": ("measurement_run_id", "pose_measurement_runs"),
     "pose_biological_event_revisions": ("event_detection_run_id", "pose_event_detection_runs"),
+    "temporal_reefpose_frames": ("run_id", "temporal_reefpose_runs"),
 }
 
 
@@ -127,6 +133,18 @@ def integrated_records(session: Session, project_id: str) -> dict[str, Sequence[
 
 
 def has_integrated_records(session: Session, project_id: str) -> bool:
+    if (
+        session.scalar(
+            select(Job.id)
+            .where(
+                Job.project_id == project_id,
+                Job.job_type == STATIC_COMPARISON_JOB,
+            )
+            .limit(1)
+        )
+        is not None
+    ):
+        return True
     return any(
         session.scalar(select(table.c.project_id).where(table.c.project_id == project_id).limit(1))
         for name, model in integrated_models().items()
@@ -277,9 +295,10 @@ def validate_integrated_records(
             parent_first(rows, models[name])
     validate_pose_rows(sections)
     validate_event_summary_exchange(sections)
+    validate_comparison_exchange(sections)
     validate_report_exchange(sections)
     validate_acquisition_exchange(sections)
-    validate_comparison_exchange(sections)
+    validate_temporal_exchange(sections)
     validate_workflow_rows(sections)
     heldout_scope_mappings(project_id, project_id, sections)
     ids = {key for rows in by_section.values() for key in rows if key is not None}

@@ -104,6 +104,10 @@ from reefvision.services.project_exchange_scientific import (
     remap_scientific_sections,
     validate_exchange_records,
 )
+from reefvision.services.project_exchange_temporal_reefpose import (
+    remap_temporal_exchange_row,
+    restore_temporal_links,
+)
 from reefvision.services.project_exchange_workflows import restore_workflow_provenance
 from reefvision.services.projects import ProjectService
 from reefvision.services.scientific_data import content_hash
@@ -599,6 +603,9 @@ def import_project_exchange(
                         remap_reviewed_snapshot(
                             section_name, row, values, by_section, id_map, digests
                         )
+                        remap_temporal_exchange_row(
+                            section_name, row, values, id_map, digests, track_digests
+                        )
                     if integrated and section_name == "video_tracks":
                         track_digests[row["id"]] = (
                             canonical_json_sha256(row["keyframes_json"]),
@@ -775,6 +782,7 @@ def import_project_exchange(
                 restore_pose_model_lineage(session, project.id, section_rows, id_map, digests)
             if integrated:
                 restore_phase6_track_digests(session, project.id, id_map, track_digests)
+                restore_temporal_links(session, project.id, digests)
                 restored_locks = restore_pose_reports(
                     session, section_rows, id_map, digests, _remap_json
                 )

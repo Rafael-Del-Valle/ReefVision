@@ -217,7 +217,7 @@ jobs:
           }
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
-            -ExpectedVersion '1.3.0' -ExpectedSchemaRevision 'b13_scientific_0001' `
+            -ExpectedVersion '1.3.0' -ExpectedSchemaRevision 'b13_temporal_0001' `
             -AcceptanceRoot 'C:\reefvision-1-3-0-disposable-acceptance' `
             -SkipUpgrade -DisposableTest -KeepArtifacts
 
@@ -293,7 +293,7 @@ jobs:
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
             -PreviousInstallerPath $previousMsi -PreviousInstallerSupportsIsolatedAcceptance `
-            -ExpectedVersion '1.3.0' -ExpectedSchemaRevision 'b13_scientific_0001' `
+            -ExpectedVersion '1.3.0' -ExpectedSchemaRevision 'b13_temporal_0001' `
             -AcceptanceRoot 'C:\reefvision-1-3-0-upgrade-acceptance' `
             -DisposableTest -KeepArtifacts
 

@@ -84,7 +84,9 @@ from reefvision.api.routes.segmentation_learning_evaluation import (
     router as segmentation_learning_evaluation_router,
 )
 from reefvision.api.routes.skeleton_records import router as skeleton_records_router
+from reefvision.api.routes.static_comparison import router as static_comparison_router
 from reefvision.api.routes.system import router as system_router
+from reefvision.api.routes.temporal_reefpose import router as temporal_reefpose_router
 from reefvision.api.routes.training import router as training_router
 from reefvision.api.routes.video_science import router as video_science_router
 from reefvision.api.routes.videos import router as videos_router
@@ -142,6 +144,7 @@ api_router.include_router(active_learning_router)
 api_router.include_router(pose_active_learning_router)
 api_router.include_router(pose_evaluation_router)
 api_router.include_router(reefpose_validation_router)
+api_router.include_router(temporal_reefpose_router)
 api_router.include_router(pose_identity_tracking_router)
 api_router.include_router(pose_biological_measurement_router)
 api_router.include_router(pose_schemas_router)
@@ -156,6 +159,7 @@ api_router.include_router(coral_graph_router)
 api_router.include_router(ecology_analysis_router)
 api_router.include_router(ecology_event_summary_router)
 api_router.include_router(scientific_comparison_router)
+api_router.include_router(static_comparison_router)
 api_router.include_router(research_reports_router)
 api_router.include_router(ecology_pose_links_router)
 api_router.include_router(model_agreement_router)
