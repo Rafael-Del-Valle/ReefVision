@@ -8,8 +8,10 @@ potentially different turning-angle summaries. The shared 1.4 engine now
 reports `shortest_route_alternatives_status` on every requested route:
 
 - `multiple_exact_equal_cost_routes`: at least two edge paths reach the
-  selected endpoint with the same floating-point accumulated cost; also emits
-  `multiple_equal_cost_mesh_routes` in `path_qc_warnings`.
+  selected endpoint with the same accumulated binary64 cost **and** equal
+  exact sums of their stored binary64 edge weights; also emits
+  `multiple_equal_cost_mesh_routes` in `path_qc_warnings`. This says
+  nothing about exact distances in the underlying continuous surface.
 - `no_exact_equal_cost_alternative_detected`: exactly one minimum-cost path
   was found by the strictly positive-weight, bounded graph search. This is
   **not** proof that the biological path or an approximately equal-cost
@@ -19,14 +21,14 @@ reports `shortest_route_alternatives_status` on every requested route:
   edge is outside the selected route, because zero-weight cycles invalidate
   simple positive-weight path counting. Zero-length edges in **disconnected**
   components cannot affect this route and do not suppress its diagnostic.
-- `unassessable_floating_point_cost_resolution`: at least one strictly
-  positive mesh-edge cost was rounded away during the bounded search at or
-  below the selected destination cost. A very long edge followed by an
-  extremely short positive edge may look like an *exact* shortest-route tie
-  in binary64 when it is not one. This status emits
-  `positive_mesh_edge_cost_rounded_away` in `path_qc_warnings` instead of
-  asserting a mathematically exact alternative. Zero-length-edge ambiguity
-  takes precedence. The selected path and measurements remain provisional.
+- `unassessable_floating_point_cost_resolution`: the bounded search
+  encounters a positive edge whose cost disappears in binary64 addition,
+  **or** encounters competing rounded-equal route costs whose exact sums
+  of represented edge weights differ. Both tiny edges after long paths
+  and tiny prefixes before long edges can produce false ties. This status
+  emits `positive_mesh_edge_cost_rounded_away` in `path_qc_warnings`
+  instead of asserting a mathematically exact alternative. Zero-length-edge
+  ambiguity takes precedence. The selected path remains provisional.
 - `null`: disconnected or unreferenced endpoints have no route to compare.
 
 Shortest-path multiplicity is counted only to two; exponential counts are not
@@ -35,10 +37,17 @@ but its turning angles and vertex sequence cannot be interpreted as a uniquely
 identified coral branch when alternative paths tie. The diagnostic compares
 **recorded floating-point path costs**, with no asserted tolerance,
 reconstruction-error model, independent calibration review, or biological
-centerline verification. The new resolution guard detects a *positive*
-edge whose addition cannot advance an accumulated binary64 path cost; it
-does not certify uniqueness in other near-tie scenarios. A near tie may
-therefore remain undetected.
+centerline verification. The resolution guard also compares suspect rounded ties using exact
+rational sums of the **already rounded binary64 edge lengths**; this avoids
+a false exact-tie claim when a small prefix was lost before adding a huge
+edge. It does not reconstruct exact real-valued Euclidean distances, model
+uncertainty, or certify near-tie uniqueness. A near tie may remain undetected.
+
+When a valid finite destination cost is already known, an overflowing
+alternative detour cannot replace that result and is ignored. A route
+without a representable finite destination still fails closed on accumulated
+cost overflow. Calibration uncertainty bounds are checked independently
+after a valid finite route is selected.
 
 The project-scoped standalone preview and executable typed persisted
 `mesh_surface_preview` Workflow Builder graph share this implementation.
