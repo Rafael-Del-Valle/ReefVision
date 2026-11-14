@@ -428,6 +428,30 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
 
+    # A SHA-valid image artifact cannot be retyped to a project reference by
+    # changing only persisted type metadata and its output summary. The typed
+    # port registry remains authoritative during direct interrupted-run reuse.
+    with app.state.session_factory() as session:
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        artifact = session.get(WorkflowArtifact, artifacts["image_collection"]["id"])
+        assert consumer is not None and artifact is not None
+        assert artifact.data_type == "image_collection"
+        original_result = dict(consumer.result_json or {})
+        summary = original_result.get("outputs")
+        assert isinstance(summary, list) and len(summary) == 1
+        assert summary[0]["data_type"] == "image_collection"
+        artifact.data_type = "project_reference"
+        consumer.result_json = {
+            **original_result,
+            "outputs": [{**summary[0], "data_type": "project_reference"}],
+        }
+        session.flush()
+        with pytest.raises(ConflictError, match="output type does not match registry"):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
+
 def test_workflow_graph_revisions_are_deduplicated_and_versioned(
     client: TestClient,
 ) -> None:
