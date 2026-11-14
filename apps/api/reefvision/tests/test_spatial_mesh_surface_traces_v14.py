@@ -107,9 +107,8 @@ def test_selected_trace_turn_angles_are_scale_invariant_and_provisional() -> Non
 
 @pytest.mark.parametrize("scale", [0.01, 0.02])
 def test_selected_trace_endpoint_chord_and_detour_are_scale_invariant(scale: float) -> None:
-    trace = measure_mesh_preview(**{**PARAMS, "meters_per_unit": scale})[
-        "surface_edge_traces"
-    ][0]
+    result = measure_mesh_preview(**{**PARAMS, "meters_per_unit": scale})
+    trace = result["surface_edge_traces"][0]
     assert trace["endpoint_chord_length_m"] == pytest.approx(scale)
     assert trace["endpoint_chord_scale_only_interval_m"] == pytest.approx(
         [0.9 * scale, 1.1 * scale]
