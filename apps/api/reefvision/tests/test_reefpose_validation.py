@@ -6,7 +6,7 @@ import pytest
 from alembic import command
 from fastapi.testclient import TestClient
 
-from reefvision.config import clear_settings_cache
+from reefvision.config import Settings, clear_settings_cache
 from reefvision.db.models import (
     Job,
     ModelRegistration,
@@ -16,9 +16,11 @@ from reefvision.db.models import (
 from reefvision.repositories.jobs import JobRepository
 from reefvision.schemas.reefpose_validation import ReferenceRecording, ValidationConfiguration
 from reefvision.services.reefpose_validation_analysis import analyze
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_pose_biological_measurement_migration import _config
 from reefvision.tests.test_pose_identity_tracking_api import _first_class, _track, _video
+from reefvision.tests.test_scientific_project_exchange import export_archive, import_archive
 
 
 def freeze_fixture(client: TestClient, monkeypatch: pytest.MonkeyPatch):
@@ -341,6 +343,7 @@ def test_reference_migration_round_trip(tmp_path, monkeypatch: pytest.MonkeyPatc
 def test_validation_persists_original_machine_comparison_and_development_sensitivity(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
+    test_settings: Settings,
 ) -> None:
     url, payload, _ = freeze_fixture(client, monkeypatch)
     project_id = url.split("/")[-2]
@@ -395,7 +398,7 @@ def test_validation_persists_original_machine_comparison_and_development_sensiti
             algorithm="synthetic",
             algorithm_version="1",
             parameters_json={},
-            parameters_sha256="a" * 64,
+            parameters_sha256=canonical_json_sha256({}),
             input_manifest_sha256="b" * 64,
             source_width=320,
             source_height=180,
@@ -555,7 +558,7 @@ def test_validation_persists_original_machine_comparison_and_development_sensiti
             algorithm="synthetic",
             algorithm_version="1",
             parameters_json={},
-            parameters_sha256="a" * 64,
+            parameters_sha256=canonical_json_sha256({}),
             input_manifest_sha256="c" * 64,
             source_width=320,
             source_height=180,
@@ -600,6 +603,28 @@ def test_validation_persists_original_machine_comparison_and_development_sensiti
     summary = client.get(f"{validation_url}/{heldout_job}/export?format=summary")
     assert summary.status_code == 200
     assert "report_sha256,video_id,individual" in summary.text
+    imported = import_archive(client, export_archive(client, test_settings, project_id))
+    assert imported.status_code == 201, imported.text
+    archive_result = imported.json()
+    mapping = archive_result["package"]["options_json"]["id_map"]
+    target_validation = f"/api/v1/projects/{archive_result['project_id']}/reefpose-validations"
+    reopened = client.get(f"{target_validation}/{mapping[job_id]}/export")
+    copied_test = client.get(f"{target_validation}/{mapping[heldout_job]}/export")
+    assert reopened.status_code == copied_test.status_code == 200, copied_test.text
+    assert reopened.json()["identity"] == result["identity"]
+    assert reopened.json()["reference_id"] == mapping[result["reference_id"]]
+    assert copied_test.json()["development_lock_sha256"] == reopened.json()["result_sha256"]
+    archived_lock = client.post(
+        target_validation,
+        json={
+            "reference_id": mapping[frozen.json()["id"]],
+            "split": "test",
+            "rater_id": "rater-a",
+            "source_runs": {mapping[heldout["video_id"]]: mapping[heldout_run_id]},
+            "development_job_id": mapping[job_id],
+        },
+    )
+    assert archived_lock.status_code == 409, archived_lock.text
 
     from reefvision.db.models import WorkflowArtifact
     from reefvision.services.workflow_reefpose_validation import (

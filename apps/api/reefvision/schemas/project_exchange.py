@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -38,6 +38,14 @@ class ProjectExchangeCreateResponse(BaseModel):
     job_id: str
 
 
+class ProjectExchangeUnavailableAsset(BaseModel):
+    kind: Literal["image", "video", "model"]
+    record_id: str
+    imported_record_id: str | None = None
+    name: str
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class ProjectExchangeInspectionResponse(BaseModel):
     compatible: bool
     format_name: str | None
@@ -48,6 +56,7 @@ class ProjectExchangeInspectionResponse(BaseModel):
     section_counts: dict[str, int]
     included_media_count: int
     included_generated_artifact_count: int = 0
+    unavailable_assets: list[ProjectExchangeUnavailableAsset] = Field(default_factory=list)
     warnings: list[str]
     errors: list[str]
 
@@ -60,5 +69,6 @@ class ProjectExchangeImportResponse(BaseModel):
     imported_counts: dict[str, int]
     copied_media_count: int
     copied_generated_artifact_count: int = 0
+    unavailable_assets: list[ProjectExchangeUnavailableAsset] = Field(default_factory=list)
     warnings: list[str]
     package: ProjectExchangePackageResponse

@@ -118,9 +118,8 @@ export function InteroperabilityWorkspace({
             separate redistribution licenses.
           </p>
           <p className="annotation-helper">
-            Use a backup to preserve ecological identity history, ReefPose
-            references, and reviewed movement records. Inspect a ZIP to see
-            which record groups it excludes.
+            Inspect the ZIP to see which scientific records it contains and
+            which original media or checkpoints are unavailable.
           </p>
           <button
             type="button"
@@ -178,6 +177,35 @@ export function InteroperabilityWorkspace({
                 Generated artifacts:{" "}
                 {inspectMutation.data.included_generated_artifact_count}
               </p>
+              <details>
+                <summary>Record inventory</summary>
+                <ul>
+                  {Object.entries(inspectMutation.data.section_counts)
+                    .filter(([, count]) => count > 0)
+                    .map(([section, count]) => (
+                      <li key={section}>
+                        {section.replaceAll("_", " ")} · {count}
+                      </li>
+                    ))}
+                </ul>
+              </details>
+              {!!inspectMutation.data.unavailable_assets?.length && (
+                <details>
+                  <summary>
+                    Unavailable assets ·{" "}
+                    {inspectMutation.data.unavailable_assets.length}
+                  </summary>
+                  <p>These records keep their identity and checksum.</p>
+                  <ul>
+                    {inspectMutation.data.unavailable_assets.map((asset) => (
+                      <li key={asset.record_id}>
+                        {asset.name} ({asset.kind}) ·{" "}
+                        <code>{asset.sha256}</code>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
               {inspectMutation.data.warnings.length > 0 && (
                 <ul>
                   {inspectMutation.data.warnings.map((warning) => (
@@ -204,11 +232,9 @@ export function InteroperabilityWorkspace({
                 />
               </label>
               <p className="annotation-helper">
-                Import always creates a new managed project. Source UUIDs are
-                remapped, exact ID references inside workflow/provenance JSON
-                are remapped, packaged media is copied into the new project
-                storage tree, and included generated artifacts are restored to
-                their managed project-relative paths.
+                Import creates a new managed project. It keeps the source
+                archive and identifier mapping in the exchange history. Packaged
+                files are copied into the new project.
               </p>
               <button
                 type="button"
@@ -251,6 +277,12 @@ export function InteroperabilityWorkspace({
                   {importMutation.data.copied_generated_artifact_count}
                 </span>
               </div>
+              {!!importMutation.data.unavailable_assets?.length && (
+                <div className="annotation-selection-row">
+                  <strong>Unavailable assets</strong>
+                  <span>{importMutation.data.unavailable_assets.length}</span>
+                </div>
+              )}
               <div className="annotation-selection-row">
                 <strong>Source manifest</strong>
                 <code>

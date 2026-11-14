@@ -83,7 +83,7 @@ def _insert_after(section_name: str, after: str) -> None:
     base_import.SECTION_ORDER.insert(index + 1, section_name)
 
 
-def _register_v1_sections() -> None:
+def register_v1_sections() -> None:
     base_import.SECTION_MODELS.update(
         {
             "training_drafts": TrainingDraft,
@@ -1037,7 +1037,7 @@ def import_project_exchange_v1(
 ) -> ProjectExchangeImportResponse:
     """Import the complete 1.0 portable record inventory into a new project."""
 
-    _register_v1_sections()
+    register_v1_sections()
     copied_generated = 0
 
     def finalize(project: Project, package: ProjectExchangePackage) -> None:

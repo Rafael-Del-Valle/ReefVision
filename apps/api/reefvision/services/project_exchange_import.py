@@ -12,6 +12,7 @@ from typing import Any, BinaryIO
 from uuid import uuid4
 
 from sqlalchemy import DateTime
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
@@ -73,11 +74,29 @@ from reefvision.services.project_exchange_inspection import (
     MANIFEST_NAME,
     inspect_project_exchange,
 )
+from reefvision.services.project_exchange_integrated import (
+    FORMAT_VERSION as INTEGRATED_FORMAT_VERSION,
+)
+from reefvision.services.project_exchange_integrated import (
+    heldout_scope_mappings,
+    integrated_models,
+    map_origin_ids,
+    parent_first,
+    remap_ecology_evidence,
+    remap_reviewed_snapshot,
+)
+from reefvision.services.project_exchange_pose import (
+    remap_measurement_digests,
+    remap_pose_row,
+    restore_pose_comparisons,
+    restore_pose_reports,
+)
 from reefvision.services.project_exchange_scientific import (
     SCIENCE_SECTIONS,
     remap_scientific_sections,
     validate_exchange_records,
 )
+from reefvision.services.project_exchange_workflows import restore_workflow_provenance
 from reefvision.services.projects import ProjectService
 from reefvision.services.scientific_data import content_hash
 from reefvision.services.scientific_heatmaps import scientific_heatmap_content_hash
@@ -384,7 +403,12 @@ def import_project_exchange(
             if isinstance(member, str):
                 section_rows[section_name] = _read_jsonl(archive, member)
 
-        validate_exchange_records(old_project_id, section_rows, SECTION_MODELS)
+        integrated = (
+            integrated_models() if inspection.format_version == INTEGRATED_FORMAT_VERSION else {}
+        )
+        models = {**SECTION_MODELS, **integrated}
+        order = [*SECTION_ORDER, *integrated]
+        validate_exchange_records(old_project_id, section_rows, models)
         validate_computed_exchange_records(old_project_id, section_rows)
         validate_environmental_analysis_exchange(old_project_id, section_rows)
         _validate_heatmap_artifacts(old_project_id, section_rows)
@@ -416,12 +440,13 @@ def import_project_exchange(
 
             id_map: dict[str, str] = {old_project_id: project.id}
             for section_name, rows in section_rows.items():
-                if section_name not in SECTION_MODELS:
+                if section_name not in models:
                     continue
                 for row in rows:
                     old_id = row.get("id")
                     if isinstance(old_id, str) and old_id:
                         id_map[old_id] = str(uuid4())
+            id_map.update(heldout_scope_mappings(old_project_id, project.id, section_rows))
 
             # Immutable revision-series identifiers are not primary keys, but they
             # still must be remapped when a package is imported more than once.
@@ -433,6 +458,10 @@ def import_project_exchange(
                         "bout_series_id",
                         "observation_series_id",
                         "analysis_series_id",
+                        "event_series_id",
+                        "link_id",
+                        "graph_id",
+                        "correspondence_id",
                     ):
                         value = row.get(field)
                         if isinstance(value, str) and value:
@@ -476,12 +505,30 @@ def import_project_exchange(
             dataset_parent_links: list[tuple[DatasetVersion, str]] = []
             imported_graphs: dict[str, WorkflowGraphRecord] = {}
 
-            for section_name in SECTION_ORDER:
-                model = SECTION_MODELS[section_name]
+            by_section = {
+                name: {row.get("id"): row for row in rows} for name, rows in section_rows.items()
+            }
+            mapped_ecology: dict[str, list[dict[str, Any]]] = {}
+            digests = remap_measurement_digests(section_rows, id_map) if integrated else {}
+            source_jobs = {row["id"]: row for row in section_rows.get("jobs", [])}
+            for section_name in order:
+                model = models[section_name]
                 rows = section_rows.get(section_name, [])
                 if not rows:
                     imported_counts[section_name] = 0
                     continue
+                if section_name == "ecology_identity_revisions":
+                    mapped_ecology, ecology_digests = remap_ecology_evidence(
+                        session, section_rows, id_map
+                    )
+                    digests.update(ecology_digests)
+                if section_name in integrated:
+                    rows = parent_first(rows, model)
+                restored_locks = (
+                    restore_pose_reports(session, section_rows, id_map, digests, _remap_json)
+                    if section_name == "reefpose_heldout_locks"
+                    else {}
+                )
                 created: list[Any] = []
                 for row_index, source_row in enumerate(rows):
                     row = dict(source_row)
@@ -502,8 +549,26 @@ def import_project_exchange(
                         mapped = environmental_analysis_rows[section_name][row_index]
                         # Scientific IDs and literal study labels are already separated.
                         values = _coerce_row(model, mapped, {})
+                    elif section_name in mapped_ecology:
+                        values = _coerce_row(model, mapped_ecology[section_name][row_index], {})
                     else:
                         values = _coerce_row(model, row, id_map)
+                    if integrated and section_name in integrated:
+                        # Literal text may happen to equal a UUID. Physical
+                        # lineage keys remap independently of investigator text.
+                        for literal in (
+                            "actor",
+                            "reviewer",
+                            "reason",
+                            "name",
+                            "display_name",
+                            "organism_key",
+                            "parent_colony_key",
+                            "experimental_unit_id",
+                            "verified_by",
+                        ):
+                            if literal in row:
+                                values[literal] = row[literal]
                     _rewrite_project_paths(
                         values,
                         model,
@@ -514,6 +579,17 @@ def import_project_exchange(
                         values["project_id"] = project.id
                     if isinstance(old_id, str) and "id" in model.__table__.columns:
                         values["id"] = id_map[old_id]
+                    if section_name in integrated:
+                        remap_pose_row(
+                            session, section_name, row, values, id_map, digests, source_jobs
+                        )
+                        remap_reviewed_snapshot(
+                            section_name, row, values, by_section, id_map, digests
+                        )
+                    if section_name == "reefpose_heldout_locks":
+                        values["protocol_sha256"] = restored_locks.get(
+                            row["scope_sha256"], row["protocol_sha256"]
+                        )
 
                     if section_name == "images":
                         # Thumbnails are generated artifacts, not original media. Never
@@ -523,17 +599,35 @@ def import_project_exchange(
                         # A UUID-looking group value must remain literal across exchange.
                         values["group_key"] = row.get("group_key")
 
+                    if integrated and section_name == "jobs":
+                        # Imported history never starts local work on its own.
+                        if values["status"] in {"queued", "running"}:
+                            values["status"] = "cancelled"
+                            values["error_message"] = "Interrupted by project exchange"
+                        values["deduplication_key"] = None
+
                     if section_name == "dataset_versions":
                         old_parent = row.get("parent_version_id")
                         if isinstance(old_parent, str) and old_parent:
                             values["parent_version_id"] = None
 
                     if section_name == "workflow_runs":
+                        if integrated and values["status"] in {"queued", "running"}:
+                            values["status"] = "cancelled"
+                            values["error_message"] = "Interrupted by project exchange"
                         graph_id = values.get("workflow_graph_record_id")
                         if isinstance(graph_id, str):
                             graph = imported_graphs.get(graph_id)
                             if graph is not None:
                                 values["graph_sha256"] = graph.graph_sha256
+
+                    if (
+                        integrated
+                        and section_name == "workflow_node_runs"
+                        and values["status"] == "running"
+                    ):
+                        values["status"] = "cancelled"
+                        values["error_message"] = "Interrupted by project exchange"
 
                     if section_name == "workflow_artifacts":
                         payload = values["payload_json"]
@@ -617,6 +711,9 @@ def import_project_exchange(
                 session.flush()
                 imported_counts[section_name] = len(created)
 
+            if integrated and not section_rows.get("reefpose_heldout_locks", []):
+                restore_pose_reports(session, section_rows, id_map, digests, _remap_json)
+
             for version, old_parent_id in dataset_parent_links:
                 new_parent_id = id_map.get(old_parent_id)
                 if new_parent_id is not None:
@@ -635,6 +732,8 @@ def import_project_exchange(
                 shutil.copyfileobj(source, target)
 
             manifest_sha256 = canonical_json_sha256(manifest)
+            origin = (manifest.get("origin") or {}) if integrated else {}
+            origin_ids = map_origin_ids(origin, id_map)
             package = ProjectExchangePackage(
                 id=package_id,
                 project_id=project.id,
@@ -649,6 +748,7 @@ def import_project_exchange(
                     "source_project_name": source_project.get("name"),
                     "id_remapped": True,
                     "id_map": id_map,
+                    **({"digest_map": digests, "origin_id_map": origin_ids} if integrated else {}),
                     "copied_media_count": copied_media_count,
                 },
                 completed_at=datetime.now(UTC),
@@ -657,14 +757,22 @@ def import_project_exchange(
             session.flush()
             if finalize is not None:
                 finalize(project, package)
+            if integrated:
+                restore_pose_comparisons(session, project.id, digests)
+                restore_workflow_provenance(
+                    session, project.id, section_rows, id_map, digests, _remap_json
+                )
+                package.options_json = {**package.options_json, "digest_map": digests}
             session.commit()
             session.refresh(project)
             session.refresh(package)
-        except Exception:
+        except Exception as exc:
             session.rollback()
             if project is not None:
                 project_root = resolve_managed_project_path(settings, project.storage_root)
                 shutil.rmtree(project_root, ignore_errors=True)
+            if isinstance(exc, (IntegrityError, KeyError, TypeError, ValueError)):
+                raise ValidationError("Exchange project data is invalid or inconsistent") from exc
             raise
 
     return ProjectExchangeImportResponse(
@@ -674,6 +782,10 @@ def import_project_exchange(
         source_manifest_sha256=manifest_sha256,
         imported_counts=imported_counts,
         copied_media_count=copied_media_count,
+        unavailable_assets=[
+            asset.model_copy(update={"imported_record_id": id_map[asset.record_id]})
+            for asset in inspection.unavailable_assets
+        ],
         warnings=list(dict.fromkeys(warnings)),
         package=ProjectExchangePackageResponse.model_validate(package),
     )

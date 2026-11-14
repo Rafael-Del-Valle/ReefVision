@@ -48,7 +48,19 @@ def _validate_exchange_records(
             continue
         by_section[name] = {}
         for row in rows:
-            identifier = row.get("id")
+            primary_key = next(iter(models[name].__table__.primary_key)).name
+            identifier = row.get(primary_key)
+            if primary_key != "id":
+                if (
+                    not isinstance(identifier, str)
+                    or not identifier
+                    or identifier in by_section[name]
+                ):
+                    raise ValidationError(f"Missing or duplicate exchange identifier in {name}")
+                by_section[name][identifier] = row
+                if "project_id" in row and row["project_id"] != project_id:
+                    raise ValidationError(f"Foreign project reference in {name}")
+                continue
             if not isinstance(identifier, str) or not identifier or identifier in seen:
                 raise ValidationError(f"Missing or duplicate exchange identifier in {name}")
             seen.add(identifier)
@@ -57,21 +69,29 @@ def _validate_exchange_records(
                 raise ValidationError(f"Foreign project reference in {name}")
     scientific = by_section.get("scientific_records", {})
     caches = by_section.get("environmental_cache_entries", {})
-    if not scientific and not caches:
-        return
-    # Every scalar FK in an enriched archive must resolve to a record in this archive.
+    # Every declared FK in an enriched archive must resolve to a record in this archive.
     tables = {model.__table__.name: by_section.get(name, {}) for name, model in models.items()}
     tables["projects"] = {project_id: {"id": project_id}}
-    for name, rows in sections.items():
-        if name not in models:
-            continue
-        for column in models[name].__table__.columns:
-            for fk in column.foreign_keys:
+    if scientific or caches or "reefpose_heldout_locks" in models:
+        for name, rows in sections.items():
+            if name not in models:
+                continue
+            for constraint in models[name].__table__.foreign_key_constraints:
+                foreign = list(constraint.elements)
+                target_rows = tables.get(foreign[0].column.table.name, {}).values()
+                target_keys = {
+                    tuple(row.get(fk.column.name) for fk in foreign) for row in target_rows
+                }
                 for row in rows:
-                    value = row.get(column.name)
-                    if value is not None and value not in tables.get(fk.column.table.name, {}):
-                        raise ValidationError(f"Unresolved {name}.{column.name} reference")
-    cache_by_key = {}
+                    reference = tuple(row.get(fk.parent.name) for fk in foreign)
+                    if (
+                        all(value is not None for value in reference)
+                        and reference not in target_keys
+                    ):
+                        raise ValidationError(
+                            f"Unresolved {name}.{foreign[0].parent.name} reference"
+                        )
+    cache_by_key: dict[str, dict[str, Any]] = {}
     for cache in caches.values():
         key = cache.get("cache_key")
         if not isinstance(key, str) or len(key) != 64 or key in cache_by_key:

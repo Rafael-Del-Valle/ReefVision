@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from reefvision.config import Settings
 from reefvision.db.models import (
     Job,
     PoseAnimalIdentity,
@@ -23,6 +24,7 @@ from reefvision.jobs.pose_biological_measurement import (
     process_pose_biological_measurement_job,
 )
 from reefvision.services.pose_biological_measurement import PoseBiologicalMeasurementService
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_pose_identity_tracking_api import (
     SCHEMA_HASH,
@@ -31,6 +33,7 @@ from reefvision.tests.test_pose_identity_tracking_api import (
     _track,
     _video,
 )
+from reefvision.tests.test_scientific_project_exchange import export_archive, import_archive
 
 
 def test_service_exposes_measurement_event_review_and_export_contracts() -> None:
@@ -46,7 +49,7 @@ def test_service_exposes_measurement_event_review_and_export_contracts() -> None
 
 
 def test_fish_gape_vertical_slice_persists_reviews_and_export(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, test_settings: Settings
 ) -> None:
     project = create_project(client, "Phase 5 gape")
     video = _video(client, str(project["id"]), monkeypatch, "phase5-gape")
@@ -68,7 +71,7 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
             algorithm="synthetic-fixture",
             algorithm_version="1",
             parameters_json={},
-            parameters_sha256="b" * 64,
+            parameters_sha256=canonical_json_sha256({}),
             input_manifest_sha256="c" * 64,
             source_coordinate_space="source_pixels",
             source_width=320,
@@ -333,6 +336,31 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
         multi_series_run = session.get(PoseEventDetectionRun, multi_series_run_id)
         assert multi_series_run is not None and multi_series_run.status == "completed"
     assert len(client.get(f"/api/v1/pose-event-runs/{multi_series_run_id}/events").json()) == 4
+    organism = client.post(
+        f"/api/v1/projects/{project['id']}/ecology/organisms",
+        json={
+            "organism_key": "reviewed-fish",
+            "kind": "individual",
+            "reason": "Scientist identified this fish",
+        },
+    )
+    assert organism.status_code == 201, organism.text
+    link_url = f"/api/v1/projects/{project['id']}/ecology/pose-links"
+    link_review = {
+        "confirm": True,
+        "reviewer": "fixture scientist",
+        "reason": "Matched the fish's known distinguishing marks",
+        "organism_revision_id": organism.json()["id"],
+        "association_run_id": identity_run_id,
+        "animal_identity_id": events[0]["animal_identity_id"],
+        "expected_identity_run_revision": 1,
+        "frame_start": 0,
+        "frame_end": 5,
+        "event_revision_ids": [events[0]["id"]],
+    }
+    unreviewed_link = client.post(link_url, json=link_review)
+    assert unreviewed_link.status_code == 400
+    assert "scientist-confirmed" in unreviewed_link.text
     current_events = list(events)
     invalid_boundary = client.post(
         f"/api/v1/pose-biological-events/{events[0]['id']}/corrections",
@@ -433,6 +461,35 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
         assert manifest["files"]["measurements.csv"]["sha256"]
         assert "pixel_unit,physical_unit" in measurements_csv
 
+    confirmed_event = next(
+        event for event in history if event["is_current"] and event["start_frame"] == 0
+    )
+    link_review["event_revision_ids"] = [confirmed_event["id"]]
+    clipped = client.post(link_url, json={**link_review, "frame_start": 1})
+    assert clipped.status_code == 400
+    assert "full confirmed event" in clipped.text
+    created_link = client.post(link_url, json=link_review)
+    assert created_link.status_code == 201, created_link.text
+    evidence = created_link.json()
+    assert evidence["source"]["events"][0]["id"] == confirmed_event["id"]
+    assert evidence["source"]["measurements"][0]["id"] == gape_series["id"]
+    assert evidence["source"]["measurements"][0]["run_id"] == measurement_run_id
+
+    imported = import_archive(client, export_archive(client, test_settings, project["id"]))
+    assert imported.status_code == 201, imported.text
+    destination = imported.json()["project_id"]
+    mapping = imported.json()["package"]["options_json"]["id_map"]
+    target_link = (
+        f"/api/v1/projects/{destination}/ecology/pose-links/{mapping[evidence['link_id']]}"
+    )
+    reopened_link = client.get(target_link)
+    assert reopened_link.status_code == 200, reopened_link.text
+    reopened_evidence = reopened_link.json()[0]
+    assert reopened_evidence["status"] == "current", reopened_evidence["stale_reason"]
+    assert reopened_evidence["source"]["events"][0]["id"] == mapping[confirmed_event["id"]]
+    target_event_export = client.get(f"/api/v1/pose-event-runs/{mapping[event_run_id]}/export")
+    assert target_event_export.status_code == 200, target_event_export.text
+
     with client.app.state.session_factory() as session:
         event_run = session.get(PoseEventDetectionRun, event_run_id)
         assert event_run is not None
@@ -451,6 +508,10 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
     exploratory_export = client.get(f"/api/v1/pose-event-runs/{event_run_id}/export")
     assert exploratory_export.status_code == 400
     assert "scientific identity verification" in exploratory_export.text
+    stale_link = client.get(f"{link_url}/{evidence['link_id']}").json()[0]
+    assert stale_link["status"] == "stale"
+    assert stale_link["source"] == evidence["source"]
+    assert stale_link["source_sha256"] == evidence["source_sha256"]
     with client.app.state.session_factory() as session:
         measurement_run = session.get(PoseMeasurementRun, measurement_run_id)
         assert measurement_run is not None

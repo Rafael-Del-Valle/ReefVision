@@ -26,8 +26,17 @@ export interface ProjectExchangeInspection {
   section_counts: Record<string, number>;
   included_media_count: number;
   included_generated_artifact_count: number;
+  unavailable_assets?: ProjectExchangeUnavailableAsset[];
   warnings: string[];
   errors: string[];
+}
+
+export interface ProjectExchangeUnavailableAsset {
+  kind: "image" | "video" | "model";
+  record_id: string;
+  imported_record_id: string | null;
+  name: string;
+  sha256: string;
 }
 
 export interface ProjectExchangeImportResult {
@@ -38,6 +47,7 @@ export interface ProjectExchangeImportResult {
   imported_counts: Record<string, number>;
   copied_media_count: number;
   copied_generated_artifact_count: number;
+  unavailable_assets?: ProjectExchangeUnavailableAsset[];
   warnings: string[];
   package: ProjectExchangePackageRecord;
 }

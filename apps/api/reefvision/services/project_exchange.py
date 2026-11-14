@@ -394,6 +394,8 @@ class ProjectExchangeService:
                     for image in cast(Sequence[ImageAsset], sections["images"]):
                         source = resolve_managed_project_path(self.settings, image.managed_path)
                         if not source.is_file():
+                            if (image.metadata_json or {}).get("exchange_media_missing") is True:
+                                continue
                             raise ValidationError(
                                 f"Managed image is missing: {image.original_filename}"
                             )
@@ -411,6 +413,8 @@ class ProjectExchangeService:
                     for video in cast(Sequence[VideoAsset], sections["videos"]):
                         source = resolve_managed_project_path(self.settings, video.managed_path)
                         if not source.is_file():
+                            if (video.metadata_json or {}).get("exchange_media_missing") is True:
+                                continue
                             raise ValidationError(
                                 f"Managed video is missing: {video.original_filename}"
                             )
@@ -430,6 +434,8 @@ class ProjectExchangeService:
                     for model in cast(Sequence[ModelRegistration], sections["models"]):
                         source = resolve_managed_project_path(self.settings, model.managed_path)
                         if not source.is_file():
+                            if (model.metadata_json or {}).get("exchange_media_missing") is True:
+                                continue
                             raise ValidationError(f"Managed model is missing: {model.display_name}")
                         member = f"models/{model.id}{source.suffix.lower()}"
                         archive.write(source, member)

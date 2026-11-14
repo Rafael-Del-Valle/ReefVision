@@ -6,10 +6,14 @@ import hashlib
 import json
 import zipfile
 from collections import Counter
-from pathlib import PurePosixPath
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any, BinaryIO
 
-from reefvision.schemas.project_exchange import ProjectExchangeInspectionResponse
+from reefvision.domain.errors import ValidationError
+from reefvision.schemas.project_exchange import (
+    ProjectExchangeInspectionResponse,
+    ProjectExchangeUnavailableAsset,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 
 FORMAT_NAME = "reefvision-project-exchange"
@@ -21,7 +25,12 @@ MAX_EXPANDED_BYTES = 100 * 1024**3
 
 def _safe_member(name: str) -> bool:
     path = PurePosixPath(name.replace("\\", "/"))
-    return bool(name) and not path.is_absolute() and ".." not in path.parts
+    return (
+        bool(name)
+        and not path.is_absolute()
+        and not PureWindowsPath(name).drive
+        and ".." not in path.parts
+    )
 
 
 def _sha256(payload: bytes) -> str:
@@ -60,15 +69,53 @@ def _validate_file_inventory(
         if member not in name_set:
             errors.append(f"{label.title()} file is missing: {member or index}")
             continue
-        payload = archive.read(member)
         expected_sha = str(descriptor.get("sha256", ""))
-        if expected_sha and _sha256(payload) != expected_sha:
-            errors.append(f"{label.title()} checksum failed: {member}")
         expected_size = descriptor.get("size_bytes")
-        if expected_size is not None and len(payload) != int(expected_size):
+        digest = hashlib.sha256()
+        with archive.open(member) as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if expected_sha and digest.hexdigest() != expected_sha:
+            errors.append(f"{label.title()} checksum failed: {member}")
+        if expected_size is not None and archive.getinfo(member).file_size != int(expected_size):
             errors.append(f"{label.title()} size failed: {member}")
         valid.append(descriptor)
     return valid
+
+
+def _integrated_media_gaps(
+    sections: dict[str, list[dict[str, Any]]], media: list[dict[str, Any]]
+) -> list[ProjectExchangeUnavailableAsset]:
+    records = {
+        (kind, row["id"]): row
+        for name, kind in (("images", "image"), ("videos", "video"), ("models", "model"))
+        for row in sections.get(name, [])
+    }
+    seen: set[tuple[str, str]] = set()
+    for descriptor in media:
+        key = (descriptor["kind"], descriptor["record_id"])
+        source = records.get(key)
+        if (
+            source is None
+            or key in seen
+            or source["sha256"] != descriptor.get("sha256")
+            or (
+                source.get("file_size_bytes") is not None
+                and source["file_size_bytes"] != descriptor.get("size_bytes")
+            )
+        ):
+            raise ValidationError("Exchange media has duplicate or inconsistent source provenance")
+        seen.add(key)
+    return [
+        ProjectExchangeUnavailableAsset(
+            kind=kind,
+            record_id=identifier,
+            name=row.get("original_filename") or row.get("source_filename") or identifier,
+            sha256=row["sha256"],
+        )
+        for (kind, identifier), row in records.items()
+        if (kind, identifier) not in seen
+    ]
 
 
 def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionResponse:
@@ -78,6 +125,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
     manifest: dict[str, Any] | None = None
     included_media_count = 0
     included_generated_artifact_count = 0
+    unavailable_assets: list[ProjectExchangeUnavailableAsset] = []
     try:
         source.seek(0)
         with zipfile.ZipFile(source, "r") as archive:
@@ -118,7 +166,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
             if manifest.get("format_name") != FORMAT_NAME:
                 errors.append("Archive is not a ReefVision project exchange package")
             version = str(manifest.get("format_version", ""))
-            if version not in {"1.0", "1.1"}:
+            if version not in {"1.0", "1.1", "1.2"}:
                 errors.append("Unsupported exchange format version")
 
             excluded = manifest.get("excluded_record_groups", [])
@@ -134,6 +182,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
             if not isinstance(sections, dict):
                 errors.append("Manifest sections are invalid")
                 sections = {}
+            section_rows: dict[str, list[dict[str, Any]]] = {}
             for name, descriptor_value in sections.items():
                 if not isinstance(descriptor_value, dict):
                     errors.append(f"Section descriptor is invalid: {name}")
@@ -149,12 +198,48 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                 section_counts[str(name)] = len(lines)
                 if len(lines) != int(descriptor_value.get("count", -1)):
                     errors.append(f"Section row count failed: {name}")
+                section_rows[name] = []
                 for line_number, line in enumerate(lines, start=1):
                     try:
-                        json.loads(line)
-                    except json.JSONDecodeError:
+                        row = json.loads(line)
+                        if not isinstance(row, dict):
+                            raise ValueError
+                        section_rows[name].append(row)
+                    except ValueError:
                         errors.append(f"Section JSON is invalid: {name} line {line_number}")
                         break
+            if version == "1.2" and not errors:
+                from reefvision.services.project_exchange_import import SECTION_MODELS
+                from reefvision.services.project_exchange_import_v1 import register_v1_sections
+                from reefvision.services.project_exchange_integrated import (
+                    integrated_models,
+                    validate_integrated_records,
+                    validate_origin,
+                )
+                from reefvision.services.project_exchange_scientific import (
+                    validate_exchange_records,
+                )
+
+                register_v1_sections()
+                integration = integrated_models()
+                models = {**SECTION_MODELS, **integration}
+                project_rows = section_rows.pop("project", [])
+                project = manifest.get("project")
+                if (
+                    len(project_rows) != 1
+                    or not isinstance(project, dict)
+                    or not isinstance(project.get("id"), str)
+                    or not project["id"]
+                    or project_rows[0].get("id") != project["id"]
+                ):
+                    raise ValidationError("Exchange archive must identify one source project")
+                if not any(section_rows.get(name) for name in integration):
+                    raise ValidationError(
+                        "Exchange 1.2 archive has no integrated scientific records"
+                    )
+                validate_exchange_records(project["id"], section_rows, models)
+                validate_integrated_records(project["id"], section_rows, models)
+                validate_origin(manifest.get("origin"))
 
             media = _validate_file_inventory(
                 archive=archive,
@@ -165,6 +250,8 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                 errors=errors,
             )
             included_media_count = len(media)
+            if version == "1.2" and not errors:
+                unavailable_assets = _integrated_media_gaps(section_rows, media)
             if not media:
                 warnings.append(
                     "Package does not include original media; imported records may require "
@@ -212,7 +299,16 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                 errors=errors,
             )
             included_generated_artifact_count = len(generated)
-    except (zipfile.BadZipFile, json.JSONDecodeError, OSError, ValueError) as exc:
+            if version == "1.2" and not errors:
+                paths = [
+                    str(item["source_relative_path"]).replace("\\", "/").casefold()
+                    for item in generated
+                ]
+                if len(paths) != len(set(paths)) or any(
+                    path.split("/", 1)[0] in {"exchanges", "exchange-import"} for path in paths
+                ):
+                    raise ValidationError("Exchange generated file destinations overlap")
+    except (zipfile.BadZipFile, OSError, ValueError, TypeError, KeyError, ValidationError) as exc:
         errors.append(f"Archive could not be inspected: {exc}")
 
     project_value = manifest.get("project") if manifest else None
@@ -226,6 +322,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
         section_counts=section_counts,
         included_media_count=included_media_count,
         included_generated_artifact_count=included_generated_artifact_count,
+        unavailable_assets=unavailable_assets,
         warnings=warnings,
         errors=errors,
     )
