@@ -694,6 +694,47 @@ def test_used_class_delete_is_blocked_and_usage_is_reported(client: TestClient) 
     reviewed_fingerprint = payload["reference_fingerprint"]
     assert len(reviewed_fingerprint) == 64
 
+    # A merge approval must bind to reviewer decisions and workflow ownership,
+    # not merely the same set of database IDs and unchanged aggregate counts.
+    review_mutations = [
+        (PredictionProposal, "proposal-1", "review_status", "rejected"),
+        (QualityControlIssue, "qc-issue-1", "status", "acknowledged"),
+        (ReviewQueueItem, "queue-item-1", "review_state", "in_progress"),
+        (ReviewQueue, "queue-1", "created_by", "workflow:research:qc"),
+    ]
+    for model, record_id, field, changed_value in review_mutations:
+        with Session(cast(FastAPI, client.app).state.engine) as session:
+            record = session.get(model, record_id)
+            assert record is not None
+            original_value = getattr(record, field)
+            setattr(record, field, changed_value)
+            session.commit()
+        refreshed = client.get(f"/api/v1/classes/{source_class['id']}/usage")
+        assert refreshed.status_code == 200, refreshed.text
+        assert {item["key"]: item["count"] for item in refreshed.json()["counts"]} == counts
+        assert refreshed.json()["reference_fingerprint"] != reviewed_fingerprint
+        stale_merge = client.post(
+            f"/api/v1/classes/{source_class['id']}/merge",
+            json={
+                "target_class_id": target_class["id"],
+                "expected_usage_counts": counts,
+                "expected_usage_fingerprint": reviewed_fingerprint,
+            },
+        )
+        assert stale_merge.status_code == 409, stale_merge.text
+        with Session(cast(FastAPI, client.app).state.engine) as session:
+            source_record = session.get(LabelClass, source_class["id"])
+            annotation = session.get(Annotation, "annotation-active")
+            record = session.get(model, record_id)
+            assert source_record is not None and source_record.is_active
+            assert annotation is not None and annotation.label_class_id == source_class["id"]
+            assert record is not None
+            setattr(record, field, original_value)
+            session.commit()
+        restored = client.get(f"/api/v1/classes/{source_class['id']}/usage")
+        assert restored.status_code == 200, restored.text
+        assert restored.json()["reference_fingerprint"] == reviewed_fingerprint
+
     deleted = client.delete(f"/api/v1/classes/{source_class['id']}")
     assert deleted.status_code == 409
 

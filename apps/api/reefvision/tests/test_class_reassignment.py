@@ -1524,6 +1524,39 @@ def test_saved_qc_workflow_class_evidence_survives_merge(
     usage_response = client.get(f"/api/v1/classes/{source['id']}/usage")
     assert usage_response.status_code == 200, usage_response.text
     usage = usage_response.json()
+
+    # The same saved, executable QC workflow must invalidate an approved
+    # legacy merge when its researcher-review state changes under the same
+    # queue item ID. Restore evidence before testing the successful path.
+    with Session(app.state.engine) as session:
+        saved_item = session.get(ReviewQueueItem, item_id)
+        assert saved_item is not None
+        reviewed_state = saved_item.review_state
+        saved_item.review_state = (
+            "in_progress" if reviewed_state != "in_progress" else "pending"
+        )
+        session.commit()
+    rejected = client.post(
+        f"/api/v1/classes/{source['id']}/merge",
+        json={
+            "target_class_id": target["id"],
+            "expected_usage_counts": {item["key"]: item["count"] for item in usage["counts"]},
+            "expected_usage_fingerprint": usage["reference_fingerprint"],
+        },
+    )
+    assert rejected.status_code == 409, rejected.text
+    assert "reference identities changed" in rejected.text
+    with Session(app.state.engine) as session:
+        source_record = session.get(LabelClass, source["id"])
+        saved_item = session.get(ReviewQueueItem, item_id)
+        assert source_record is not None and source_record.is_active
+        assert saved_item is not None and saved_item.label_class_ids_json == [source["id"]]
+        saved_item.review_state = reviewed_state
+        session.commit()
+    restored_usage = client.get(f"/api/v1/classes/{source['id']}/usage")
+    assert restored_usage.status_code == 200, restored_usage.text
+    assert restored_usage.json()["reference_fingerprint"] == usage["reference_fingerprint"]
+
     merged = client.post(
         f"/api/v1/classes/{source['id']}/merge",
         json={
@@ -1627,14 +1660,10 @@ def test_class_reassignment_preserves_executable_saved_qc_evidence(
             }
         ],
     }
-    plan = client.post(
-        f"/api/v1/projects/{project['id']}/workflow-graphs/plan", json=graph
-    )
+    plan = client.post(f"/api/v1/projects/{project['id']}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
     assert plan.json()["valid"] and plan.json()["executable"]
-    saved = client.post(
-        f"/api/v1/projects/{project['id']}/workflow-graphs", json={"graph": graph}
-    )
+    saved = client.post(f"/api/v1/projects/{project['id']}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
     launched = client.post(
         f"/api/v1/projects/{project['id']}/workflow-runs",
@@ -1671,9 +1700,10 @@ def test_class_reassignment_preserves_executable_saved_qc_evidence(
     protected = {group["key"]: group for group in approval["plan"]["protected_records"]}
     mutable = {group["key"]: group for group in approval["plan"]["mutable_records"]}
     assert items[0]["id"] in protected["review_queue_items_closed"]["record_ids"]
-    assert items[0]["id"] not in mutable.get(
-        "review_queue_items_open", {"record_ids": []}
-    )["record_ids"]
+    assert (
+        items[0]["id"]
+        not in mutable.get("review_queue_items_open", {"record_ids": []})["record_ids"]
+    )
     assert any(
         "Saved Workflow Builder QC queue class evidence" in warning
         for warning in approval["plan"]["warnings"]
@@ -1787,4 +1817,3 @@ def test_reassignment_preview_rejects_review_queue_ownership_drift(
         pending = session.get(ReviewQueueItem, "queue-item-pending")
         assert annotation is not None and annotation.label_class_id == source["id"]
         assert pending is not None and pending.label_class_ids_json == [source["id"]]
-

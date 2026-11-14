@@ -346,18 +346,18 @@ class ProjectService:
             str(item.id) for item in image_labels if item.deleted_at is not None
         ]
 
-        reference_ids["prediction_proposals"] = [
-            str(item.id)
-            for item in self.session.scalars(
+        prediction_records = list(
+            self.session.scalars(
                 select(PredictionProposal).where(
                     PredictionProposal.project_id == label_class.project_id,
                     PredictionProposal.label_class_id == label_class.id,
                 )
             )
-        ]
+        )
+        reference_ids["prediction_proposals"] = [str(item.id) for item in prediction_records]
 
-        reference_ids["quality_control_issues"] = [
-            str(item.id)
+        qc_reference_records = [
+            item
             for item in self.session.scalars(
                 select(QualityControlIssue).where(
                     QualityControlIssue.project_id == label_class.project_id
@@ -365,13 +365,19 @@ class ProjectService:
             )
             if label_class.id in item.class_ids_json
         ]
+        reference_ids["quality_control_issues"] = [
+            str(item.id) for item in qc_reference_records
+        ]
 
-        reference_ids["review_queue_items"] = [
-            str(item.id)
+        review_reference_records = [
+            item
             for item in self.session.scalars(
                 select(ReviewQueueItem).where(ReviewQueueItem.project_id == label_class.project_id)
             )
             if label_class.id in item.label_class_ids_json
+        ]
+        reference_ids["review_queue_items"] = [
+            str(item.id) for item in review_reference_records
         ]
 
         reference_ids["dataset_versions"] = [
@@ -398,9 +404,41 @@ class ProjectService:
         ]
 
         counts = {key: len(reference_ids[key]) for key in USAGE_CATEGORY_ORDER}
+        # A stable record ID is insufficient merge-approval evidence: a pending
+        # proposal or QC review can become accepted/closed (or revert) between
+        # the researcher's usage review and execution. Bind those mutable states
+        # and class memberships without changing the public count categories.
+        # Queue ownership matters because saved Workflow Builder QC evidence
+        # must never be relabeled, even while a researcher review is pending.
+        queue_creator_by_id = {
+            queue.id: queue.created_by
+            for queue in self.session.scalars(
+                select(ReviewQueue).where(ReviewQueue.project_id == label_class.project_id)
+            )
+        }
         canonical_inventory = [
             label_class.id,
             [[key, sorted(reference_ids[key])] for key in USAGE_CATEGORY_ORDER],
+            {
+                "prediction_review_states": [
+                    [item.id, item.review_status]
+                    for item in sorted(prediction_records, key=lambda item: item.id)
+                ],
+                "qc_review_states": [
+                    [item.id, item.status, sorted(item.class_ids_json)]
+                    for item in sorted(qc_reference_records, key=lambda item: item.id)
+                ],
+                "queue_review_states": [
+                    [
+                        item.id,
+                        item.review_state,
+                        item.review_queue_id,
+                        queue_creator_by_id.get(item.review_queue_id),
+                        sorted(item.label_class_ids_json),
+                    ]
+                    for item in sorted(review_reference_records, key=lambda item: item.id)
+                ],
+            },
         ]
         reference_fingerprint = hashlib.sha256(
             json.dumps(canonical_inventory, ensure_ascii=False, separators=(",", ":")).encode(
