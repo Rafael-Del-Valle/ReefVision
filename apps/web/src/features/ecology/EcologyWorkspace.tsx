@@ -301,7 +301,7 @@ function EvidenceForm({
             </select>
           </label>
           {images.data && images.data.pages > 1 && (
-            <div className="button-row">
+            <div className="annotation-editor-inline-actions">
               <button
                 type="button"
                 className="secondary"
@@ -436,7 +436,7 @@ function LongitudinalCandidates({ projectId }: { projectId: string }) {
         Scientist review required. These comparisons use calibrated 2D geometry
         from source images.
       </p>
-      <div className="button-row">
+      <div className="annotation-editor-inline-actions">
         <a
           href={ecologyCsv(
             projectId,
@@ -625,7 +625,7 @@ export function EcologyWorkspace({
       <div className="section-heading">
         <h2>Organisms and longitudinal observations</h2>
       </div>
-      <div className="button-row">
+      <div className="annotation-editor-inline-actions">
         <button
           type="button"
           className="secondary"
