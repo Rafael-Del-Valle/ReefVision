@@ -197,6 +197,15 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
     ):
         build_workflow_run_provenance(session, run_id=str(run["id"]))
 
+    # Direct interrupted-run recovery checks inputs without first validating
+    # the full execution graph. Malformed producer sort keys must fail closed
+    # with a provenance conflict, not leak a Python comparison TypeError.
+    with app.state.session_factory() as session:
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert consumer is not None
+        with pytest.raises(ConflictError, match="input lacks an earlier succeeded producer"):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+
     with app.state.session_factory() as session:
         producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
         assert producer is not None

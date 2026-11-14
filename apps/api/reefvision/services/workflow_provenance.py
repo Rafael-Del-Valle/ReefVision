@@ -105,6 +105,10 @@ def verify_succeeded_node_artifacts(
 
     if node_run.workflow_run_id != run_id:
         raise ConflictError("Workflow node belongs to a different run")
+    # Direct recovery/reuse callers may validate a node before the whole run
+    # graph. Reject malformed SQLite sort keys before comparing producers.
+    if type(node_run.execution_order) is not int or node_run.execution_order < 1:
+        raise ConflictError("Succeeded workflow node execution order is invalid")
 
     input_ids = _artifact_ids(node_run.input_artifact_ids_json, field="input IDs")
 
@@ -138,6 +142,8 @@ def verify_succeeded_node_artifacts(
             producer is None
             or producer.workflow_run_id != run_id
             or producer.status != "succeeded"
+            or type(producer.execution_order) is not int
+            or producer.execution_order < 1
             or producer.execution_order >= node_run.execution_order
         ):
             raise ConflictError("Succeeded workflow node input lacks an earlier succeeded producer")
