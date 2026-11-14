@@ -127,6 +127,36 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                 errors, ["non-regular JPEG fixture not inspected: camera.JPG"]
             )
 
+    def test_external_hardlink_cannot_masquerade_as_approved_camera_capture(self) -> None:
+        """One approved path to another study's inode is not provenance evidence."""
+        import os
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "approved-camera-fixtures"
+            root.mkdir()
+            outside = Path(directory) / "other-study.JPG"
+            original = b"\xff\xd8other-study-private-capture\xff\xd9"
+            outside.write_bytes(original)
+            photo = root / "capture.JPG"
+            try:
+                os.link(outside, photo)
+            except (OSError, NotImplementedError) as error:
+                self.skipTest(f"Hard links unavailable on this filesystem: {error}")
+            if photo.stat().st_ino == 0 or photo.stat().st_nlink < 2:
+                self.skipTest("Filesystem does not expose hard-link identity")
+
+            records, errors = MODULE.inventory(root)
+            self.assertEqual([record["path"] for record in records], ["capture.JPG"])
+            self.assertEqual(
+                errors,
+                [
+                    "JPEG hard-link alias outside approved fixture inventory: "
+                    "capture.JPG (1 inventoried of 2 filesystem links)"
+                ],
+            )
+            self.assertEqual(photo.read_bytes(), original)
+            self.assertEqual(outside.read_bytes(), original)
+
     def test_hardlinked_camera_files_are_flagged_as_one_scientific_source(self) -> None:
         """Two JPEG paths pointing to one inode must not count as independent captures."""
         with tempfile.TemporaryDirectory() as directory:
