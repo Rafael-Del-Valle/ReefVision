@@ -66,6 +66,28 @@ REVERSE_TURN_PARAMS = {
     "surface_trace_vertex_paths": [[0, 1, 2]],
 }
 
+# Imported OBJ/PLY-style seam vertices have different indices but identical
+# XYZ endpoints. These nonduplicate triangles permit either same-direction or
+# reverse traversal of the same real geometric edge during one ordered trace.
+REUSED_GEOMETRIC_SEGMENT_PARAMS = {
+    **PARAMS,
+    "vertices": [
+        [0, 0, 0],
+        [1, 0, 0],
+        [1, 1, 0],
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 0, 1],
+        [2, 0, 1],
+        [0, 1, 1],
+        [0, -1, 1],
+        [1, 1, 1],
+    ],
+    "faces": [[0, 1, 5], [1, 2, 6], [2, 3, 7], [2, 4, 9], [3, 4, 8]],
+    "surface_trace_vertex_paths": [[0, 1, 2, 3, 4]],
+}
+
+
 # Source endpoints are separated by one representable binary64 step, but
 # independently scaling their absolute coordinates erases that separation.
 # The full mesh has positive area, so API and persisted graph can execute.
@@ -191,6 +213,26 @@ def test_selected_trace_endpoint_chord_and_detour_are_scale_invariant(scale: flo
     )
     assert trace["geometric_detour_ratio"] == pytest.approx(1 + sqrt(2))
     assert trace["human_review_verified"] is False
+
+
+@pytest.mark.parametrize("vertex_path", [[0, 1, 2, 3, 4], [0, 1, 2, 4, 3]])
+def test_seam_vertex_aliases_cannot_hide_reused_surface_trace_segment(
+    vertex_path: list[int],
+) -> None:
+    params = {
+        **REUSED_GEOMETRIC_SEGMENT_PARAMS,
+        "surface_trace_vertex_paths": [vertex_path],
+    }
+    trace = measure_mesh_preview(**params)["surface_edge_traces"][0]
+    assert trace["vertex_indices"] == vertex_path
+    assert len(set(trace["vertex_indices"])) == len(vertex_path)
+    assert trace["repeated_geometric_segment_index_pairs"] == [[0, 3]]
+    assert "surface_trace_reused_geometric_segment" in trace["qc_warnings"]
+    assert trace["segment_lengths_m"][0] == pytest.approx(
+        trace["segment_lengths_m"][3]
+    )
+    assert trace["human_review_verified"] is False
+    assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
 
 
 def test_coincident_trace_endpoints_have_unknown_detour_not_infinity() -> None:
@@ -545,6 +587,7 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
         "inconsistent_winding",
         "coincident_nonadjacent",
         "reverse_turn",
+        "reused_geometric_segment",
         "display_chord_rounding",
         "display_segment_rounding",
         "uncertainty_missing",
@@ -564,6 +607,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "inconsistent_winding": INCONSISTENT_WINDING_PARAMS,
         "coincident_nonadjacent": COINCIDENT_NONADJACENT_PARAMS,
         "reverse_turn": REVERSE_TURN_PARAMS,
+        "reused_geometric_segment": REUSED_GEOMETRIC_SEGMENT_PARAMS,
         "display_chord_rounding": DISPLAY_CHORD_ROUNDING_PARAMS,
         "display_segment_rounding": DISPLAY_SEGMENT_ROUNDING_PARAMS,
         "uncertainty_missing": {**PARAMS, "relative_scale_uncertainty": None},
@@ -625,6 +669,8 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert trace["turn_angles_deg"][0] is None
     assert trace["turn_angles_deg"][-1] is None
     if case == "ordinary":
+        assert trace["repeated_geometric_segment_index_pairs"] == []
+        assert "surface_trace_reused_geometric_segment" not in trace["qc_warnings"]
         assert trace["geometric_detour_ratio"] == pytest.approx(1 + sqrt(2))
         assert trace["endpoint_chord_length_m"] == pytest.approx(0.01)
         assert trace["maximum_turn_angle_deg"] == pytest.approx(135.0)
@@ -675,6 +721,10 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert trace["vertices_in_source_frame_m"][0] == trace["vertices_in_source_frame_m"][1]
         assert trace["display_coordinate_collapsed_segment_indices"] == [0]
         assert "surface_trace_segment_display_coordinate_collapse" in trace["qc_warnings"]
+        assert trace["human_review_verified"] is False
+    if case == "reused_geometric_segment":
+        assert trace["repeated_geometric_segment_index_pairs"] == [[0, 3]]
+        assert "surface_trace_reused_geometric_segment" in trace["qc_warnings"]
         assert trace["human_review_verified"] is False
     if case == "reverse_turn":
         assert trace["maximum_turn_angle_deg"] == pytest.approx(180.0)
