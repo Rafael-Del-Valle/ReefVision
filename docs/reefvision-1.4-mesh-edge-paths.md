@@ -329,6 +329,34 @@ reconstruction, localization, topology or inter-observer uncertainty. A 100%
 relative scale uncertainty yields [0, 2L] for representable nominal length L.
 Independent anatomical and calibration acceptance remains mandatory.
 
+### Endpoint chord and geometric detour for provisional surface traces
+
+Caller-selected surface-edge traces report `endpoint_chord_length_m`, the
+straight-line Euclidean distance between the calibrated first and last selected
+vertices. `geometric_detour_ratio` is the dimensionless traced edge length
+divided by that chord, *only* when the chord is positive and the ratio is
+numerically representable. On a straight trace the ideal ratio is 1; bends can
+increase it. This is not a coral branch tortuosity estimate or a verified
+anatomical measurement. It does not account for reconstruction, landmark
+selection, viewing geometry, or independent biological replicates.
+
+`endpoint_chord_scale_only_interval_m` applies the same single caller-provided
+calibration uncertainty to the chord; it is `null` when uncertainty is absent
+and is not a statistical confidence interval. Because the trace length and
+chord share the same scale, the ratio is scale invariant and **must not** be
+assigned an artificial independent scale-error interval. A zero calibrated
+endpoint chord yields a `null` ratio plus
+`surface_trace_zero_endpoint_chord` QC, not infinity or zero biological
+curvature. When a positive chord leads to an unrepresentable ratio,
+`surface_trace_detour_ratio_unrepresentable` is reported and the ratio
+remains `null`.
+
+The source geometry, human-review status, and full provenance stay unchanged.
+Direct measurement, standalone API, and executed persisted typed Workflow
+Builder graphs share this computation. Regression tests challenge calibrated
+scale changes, selected bends, zero-chord endpoints, missing uncertainty,
+and saved-workflow artifact parity.
+
 ### Segment and waypoint scale-only uncertainty for selected traces
 
 Each selected trace now records `segment_length_scale_only_intervals_m`
