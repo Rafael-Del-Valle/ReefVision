@@ -295,3 +295,87 @@ def test_route_roundoff_qc_roundtrips_standalone_and_saved_workflow(
     assert artifact["surface_edge_paths"] == measured["surface_edge_paths"]
     assert artifact["provenance"] == measured["provenance"]
     assert artifact["provenance"]["calibration_verified"] is False
+
+
+def test_exact_ties_and_roundoff_are_scoped_to_each_connected_scan_component(
+    client: TestClient,
+) -> None:
+    # The first reconstruction admits two mathematically equal shortest
+    # routes; the disconnected second has a positive edge that rounds away.
+    # Never let numerical ambiguity in one scan relabel the other specimen.
+    geometry = {
+        **GEOMETRY,
+        "vertices": [
+            *GEOMETRY["vertices"],
+            [10.0, 0.0, 0.0],
+            [1e9 + 10.0, 0.0, 0.0],
+            [1e9 + 10.0, 1e-8, 0.0],
+        ],
+        "faces": [*GEOMETRY["faces"], [4, 5, 6]],
+        "surface_path_vertex_pairs": [[0, 3], [4, 6], [0, 1]],
+    }
+    paths = mesh_edge_paths(
+        points=[tuple(point) for point in geometry["vertices"]],
+        faces=geometry["faces"],
+        pairs=geometry["surface_path_vertex_pairs"],
+        scale=0.02,
+        scale_uncertainty=0.1,
+    )
+    assert paths is not None
+    assert [path["shortest_route_alternatives_status"] for path in paths] == [
+        "multiple_exact_equal_cost_routes",
+        "unassessable_floating_point_cost_resolution",
+        "no_exact_equal_cost_alternative_detected",
+    ]
+    assert "multiple_equal_cost_mesh_routes" in paths[0]["path_qc_warnings"]
+    assert "positive_mesh_edge_cost_rounded_away" in paths[1]["path_qc_warnings"]
+    assert "positive_mesh_edge_cost_rounded_away" not in paths[0]["path_qc_warnings"]
+    assert "positive_mesh_edge_cost_rounded_away" not in paths[2]["path_qc_warnings"]
+
+    project_id = str(create_project(client, "Independent numerical route QC")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=geometry)
+    assert standalone.status_code == 200, standalone.text
+    measured = standalone.json()
+    assert measured["surface_edge_paths"] == paths
+    assert measured["measurement_status"] == "caller_supplied_unverified"
+
+    graph = {
+        "graph_id": "mixed-route-precision-v14",
+        "name": "Independent mesh route precision QC",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": geometry},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["surface_edge_paths"] == measured["surface_edge_paths"]
+    assert artifact["provenance"] == measured["provenance"]
+    assert artifact["provenance"]["calibration_verified"] is False
