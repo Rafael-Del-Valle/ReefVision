@@ -1506,19 +1506,20 @@ def test_saved_qc_workflow_class_evidence_survives_merge(
     item_id = items[0]["id"]
     assert source["id"] in items[0]["label_class_ids_json"]
 
-    started = client.post(f"/api/v1/review-queue-items/{item_id}/start")
-    assert started.status_code == 200, started.text
-    completed = client.post(
-        f"/api/v1/review-queues/{queue_id}/items/bulk",
-        json={
-            "item_ids": [item_id],
-            "action": "complete",
-            "actor": "coral reviewer",
-            "review_confirmed": True,
-        },
-    )
-    assert completed.status_code == 200, completed.text
-    assert completed.json()["changed_count"] == 1
+    if finish_review:
+        started = client.post(f"/api/v1/review-queue-items/{item_id}/start")
+        assert started.status_code == 200, started.text
+        completed = client.post(
+            f"/api/v1/review-queues/{queue_id}/items/bulk",
+            json={
+                "item_ids": [item_id],
+                "action": "complete",
+                "actor": "coral reviewer",
+                "review_confirmed": True,
+            },
+        )
+        assert completed.status_code == 200, completed.text
+        assert completed.json()["changed_count"] == 1
 
     usage_response = client.get(f"/api/v1/classes/{source['id']}/usage")
     assert usage_response.status_code == 200, usage_response.text
