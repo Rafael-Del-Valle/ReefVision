@@ -4,6 +4,7 @@ import { AnnotatedVideoExportPanel } from "./AnnotatedVideoExportPanel";
 import { BehaviorDynamicsPanel } from "./BehaviorDynamicsPanel";
 import { BiologicalMovementPanel } from "./BiologicalMovementPanel";
 import { ReefPoseValidationPanel } from "./ReefPoseValidationPanel";
+import { TemporalReefPosePanel } from "./TemporalReefPosePanel";
 import { GeoreferencedMapPanel } from "./GeoreferencedMapPanel";
 import { GeoreferencingSetupPanel } from "./GeoreferencingSetupPanel";
 import { GeographicExportPanel } from "./GeographicExportPanel";
@@ -182,6 +183,12 @@ export function VideoTrackingWorkspace({
   workspaceCommand = null,
   onWorkspaceCommandHandled,
 }: VideoTrackingWorkspaceProps) {
+  const [temporalReview, setTemporalReview] = useState<{
+    videoId: string;
+    identityRunId: string;
+    animalIdentityId: string;
+    frameIndex: number;
+  } | null>(null);
   const queryClient = useQueryClient();
   const desktopMode =
     typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -2018,9 +2025,13 @@ export function VideoTrackingWorkspace({
               }}
             />
             <BiologicalMovementPanel
-              key={`movement-${selectedVideo.id}-${poseEvidence?.videoId === selectedVideo.id ? poseEvidence.id : ""}`}
+              key={`movement-${selectedVideo.id}-${poseEvidence?.videoId === selectedVideo.id ? poseEvidence.id : ""}-${temporalReview?.identityRunId ?? ""}`}
               evidence={
-                poseEvidence?.videoId === selectedVideo.id ? poseEvidence : null
+                temporalReview?.videoId === selectedVideo.id
+                  ? temporalReview
+                  : poseEvidence?.videoId === selectedVideo.id
+                    ? poseEvidence
+                    : null
               }
               projectId={project.id}
               videoId={selectedVideo.id}
@@ -2037,6 +2048,31 @@ export function VideoTrackingWorkspace({
               onFrameChange={(nextFrame) => {
                 setFrameIndex(nextFrame);
                 setPreviewFrameIndex(nextFrame);
+              }}
+            />
+            <TemporalReefPosePanel
+              key={`temporal-${project.id}-${selectedVideo.id}`}
+              projectId={project.id}
+              videoId={selectedVideo.id}
+              onFrameChange={(nextFrame) => {
+                setFrameIndex(nextFrame);
+                setPreviewFrameIndex(nextFrame);
+              }}
+              onReviewed={(identityRunId, animalIdentityId) => {
+                setTemporalReview({
+                  videoId: selectedVideo.id,
+                  identityRunId,
+                  animalIdentityId,
+                  frameIndex,
+                });
+                requestAnimationFrame(() => {
+                  const target = document.querySelector<HTMLElement>(
+                    '[aria-label="Biological movement analysis"]',
+                  );
+                  target?.setAttribute("tabindex", "-1");
+                  target?.focus();
+                  target?.scrollIntoView({ block: "start" });
+                });
               }}
             />
           </>

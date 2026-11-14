@@ -30,6 +30,7 @@ import {
 } from "../video/poseActiveLearningApi";
 import { PoseEvaluationComparisonPanel } from "./PoseEvaluationComparisonPanel";
 import { ReefPoseValidationPanel } from "../video/ReefPoseValidationPanel";
+import { StaticComparisonPanel } from "../video/StaticComparisonPanel";
 
 const optionalModelProviders = [
   { id: "grounding_dino", label: "Grounding DINO", extension: ".zip" },
@@ -148,6 +149,46 @@ function ModelRow({
           </div>
         )}
         {model.notes && <p>{model.notes}</p>}
+        {model.task === "pose_temporal" && (
+          <details>
+            <summary>Temporal ReefPose checkpoint provenance</summary>
+            <dl className="training-provenance-list">
+              <div>
+                <dt>Frame checkpoint SHA-256</dt>
+                <dd>
+                  <code>
+                    {String(
+                      model.metadata_json.frame_model_sha256 ?? "Unavailable",
+                    )}
+                  </code>
+                </dd>
+              </div>
+              <div>
+                <dt>Anatomy SHA-256</dt>
+                <dd>
+                  <code>
+                    {String(model.metadata_json.schema_hash ?? "Unavailable")}
+                  </code>
+                </dd>
+              </div>
+              <div>
+                <dt>Temporal context</dt>
+                <dd>
+                  {String(model.metadata_json.context_mode ?? "Unavailable")} ·{" "}
+                  {String(model.metadata_json.window_length ?? "Unavailable")}{" "}
+                  frames
+                </dd>
+              </div>
+            </dl>
+            <p>
+              Use Native temporal ReefPose in Video &amp; tracking to run this
+              checkpoint with compatible frame-model observations.
+            </p>
+            <pre className="json-block">
+              {JSON.stringify(model.metadata_json, null, 2)}
+            </pre>
+          </details>
+        )}
         {reefpose && poseSchema && (
           <details>
             <summary>ReefPose anatomy and provenance</summary>
@@ -474,12 +515,14 @@ export function ModelManager({
   onTrainPoseArchitecture,
   onTrainClassificationArchitecture,
   onUsePoseModel,
+  onOpenComparisonImage,
 }: {
   project: Project;
   onSelectCatalogModel?: (catalogId: string) => void;
   onTrainPoseArchitecture?: (architecture: string) => void;
   onTrainClassificationArchitecture?: (architecture: string) => void;
   onUsePoseModel?: (modelId: string) => void;
+  onOpenComparisonImage?: (imageId: string) => void;
 }) {
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
@@ -1524,6 +1567,10 @@ export function ModelManager({
           datasets={poseDatasetsQuery.data ?? []}
         />
       )}
+      <StaticComparisonPanel
+        projectId={project.id}
+        onOpenImage={onOpenComparisonImage}
+      />
       <ReefPoseValidationPanel key={project.id} projectId={project.id} />
       <div className="image-grid">
         {models.map((model) => (

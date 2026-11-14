@@ -10,6 +10,14 @@ import type {
   WorkflowNodeDefinition,
   WorkflowRunDetail,
 } from "./workflowGraphApi";
+import {
+  hasScientificNodeControls,
+  ScientificNodeControls,
+} from "./ScientificNodeControls";
+import {
+  temporalKind,
+  TemporalWorkflowControls,
+} from "../video/TemporalReefPoseFields";
 
 interface GraphNode {
   node_id: string;
@@ -43,6 +51,7 @@ interface GraphShape {
 }
 
 interface WorkflowVisualEditorProps {
+  projectId?: string;
   graph: Record<string, unknown>;
   registry: WorkflowNodeDefinition[];
   onChange: (graph: Record<string, unknown>) => void;
@@ -143,6 +152,7 @@ function isPrimitive(value: unknown): boolean {
 }
 
 export function WorkflowVisualEditor({
+  projectId,
   graph: rawGraph,
   registry,
   onChange,
@@ -1149,102 +1159,141 @@ export function WorkflowVisualEditor({
                 </div>
               )}
 
-              {parameterKeys.length > 0 && (
-                <div className="workflow-parameter-grid">
-                  {parameterKeys
-                    .filter(
-                      (key) =>
-                        selectedNode.node_type !== "pose_model_training" ||
-                        ![
-                          "provider_id",
-                          "initialization_mode",
-                          "architecture",
-                          "device",
-                          "precision",
-                          "training_config",
-                        ].includes(key),
-                    )
-                    .filter(
-                      (key) =>
-                        selectedNode.node_type !== "pose_model_evaluation" ||
-                        ![
-                          "device",
-                          "pck_thresholds",
-                          "confidence_thresholds",
-                          "calibration_bins",
-                        ].includes(key),
-                    )
-                    .map((key) => {
-                      const fallback =
-                        selectedDefinition?.optional_parameters[key];
-                      const value =
-                        selectedNode.parameters &&
-                        Object.prototype.hasOwnProperty.call(
-                          selectedNode.parameters,
-                          key,
-                        )
-                          ? selectedNode.parameters[key]
-                          : fallback;
-                      const required =
-                        selectedDefinition?.required_parameters.includes(key) ??
-                        false;
-                      if (!isPrimitive(value)) {
+              {parameterKeys.length > 0 &&
+                (!projectId ||
+                  (!hasScientificNodeControls(selectedNode.node_type) &&
+                    !temporalKind(selectedNode.node_type))) && (
+                  <div className="workflow-parameter-grid">
+                    {parameterKeys
+                      .filter(
+                        (key) =>
+                          selectedNode.node_type !== "pose_model_training" ||
+                          ![
+                            "provider_id",
+                            "initialization_mode",
+                            "architecture",
+                            "device",
+                            "precision",
+                            "training_config",
+                          ].includes(key),
+                      )
+                      .filter(
+                        (key) =>
+                          selectedNode.node_type !== "pose_model_evaluation" ||
+                          ![
+                            "device",
+                            "pck_thresholds",
+                            "confidence_thresholds",
+                            "calibration_bins",
+                          ].includes(key),
+                      )
+                      .map((key) => {
+                        const fallback =
+                          selectedDefinition?.optional_parameters[key];
+                        const value =
+                          selectedNode.parameters &&
+                          Object.prototype.hasOwnProperty.call(
+                            selectedNode.parameters,
+                            key,
+                          )
+                            ? selectedNode.parameters[key]
+                            : fallback;
+                        const required =
+                          selectedDefinition?.required_parameters.includes(
+                            key,
+                          ) ?? false;
+                        if (!isPrimitive(value)) {
+                          return (
+                            <div className="workflow-parameter-field" key={key}>
+                              <strong>{key}</strong>
+                              <small>
+                                Nested setting · edit in Advanced parameter
+                                JSON.
+                              </small>
+                            </div>
+                          );
+                        }
+                        if (typeof value === "boolean") {
+                          return (
+                            <label
+                              className="workflow-parameter-toggle"
+                              key={key}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={value}
+                                onChange={(event) =>
+                                  setSelectedParameter(
+                                    key,
+                                    event.target.checked,
+                                  )
+                                }
+                              />
+                              <span>
+                                {key}
+                                {required ? " *" : ""}
+                              </span>
+                            </label>
+                          );
+                        }
                         return (
-                          <div className="workflow-parameter-field" key={key}>
-                            <strong>{key}</strong>
-                            <small>
-                              Nested setting · edit in Advanced parameter JSON.
-                            </small>
-                          </div>
-                        );
-                      }
-                      if (typeof value === "boolean") {
-                        return (
-                          <label
-                            className="workflow-parameter-toggle"
-                            key={key}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={value}
-                              onChange={(event) =>
-                                setSelectedParameter(key, event.target.checked)
-                              }
-                            />
+                          <label className="workflow-parameter-field" key={key}>
                             <span>
                               {key}
                               {required ? " *" : ""}
                             </span>
+                            <input
+                              type={
+                                typeof value === "number" ? "number" : "text"
+                              }
+                              value={
+                                value === null || value === undefined
+                                  ? ""
+                                  : String(value)
+                              }
+                              onChange={(event) => {
+                                const next =
+                                  typeof value === "number"
+                                    ? Number(event.target.value)
+                                    : event.target.value;
+                                setSelectedParameter(key, next);
+                              }}
+                            />
                           </label>
                         );
-                      }
-                      return (
-                        <label className="workflow-parameter-field" key={key}>
-                          <span>
-                            {key}
-                            {required ? " *" : ""}
-                          </span>
-                          <input
-                            type={typeof value === "number" ? "number" : "text"}
-                            value={
-                              value === null || value === undefined
-                                ? ""
-                                : String(value)
-                            }
-                            onChange={(event) => {
-                              const next =
-                                typeof value === "number"
-                                  ? Number(event.target.value)
-                                  : event.target.value;
-                              setSelectedParameter(key, next);
-                            }}
-                          />
-                        </label>
-                      );
-                    })}
-                </div>
-              )}
+                      })}
+                  </div>
+                )}
 
+              {projectId &&
+                hasScientificNodeControls(selectedNode.node_type) && (
+                  <ScientificNodeControls
+                    key={`${projectId}/${selectedNode.node_id}`}
+                    projectId={projectId}
+                    nodeType={selectedNode.node_type}
+                    parameters={selectedNode.parameters ?? {}}
+                    onChange={replaceSelectedParameters}
+                  />
+                )}
+              {projectId && temporalKind(selectedNode.node_type) && (
+                <TemporalWorkflowControls
+                  key={`${projectId}/${selectedNode.node_id}`}
+                  projectId={projectId}
+                  nodeType={selectedNode.node_type}
+                  parameters={selectedNode.parameters ?? {}}
+                  onChange={replaceSelectedParameters}
+                  connectedDataset={currentGraph.edges.some(
+                    (edge) =>
+                      edge.target_node_id === selectedNode.node_id &&
+                      edge.target_port_id === "dataset",
+                  )}
+                  connectedModel={currentGraph.edges.some(
+                    (edge) =>
+                      edge.target_node_id === selectedNode.node_id &&
+                      edge.target_port_id === "model",
+                  )}
+                />
+              )}
               <details className="advanced-disclosure">
                 <summary>Advanced parameter JSON</summary>
                 <textarea

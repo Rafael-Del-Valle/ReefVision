@@ -22,6 +22,8 @@ export interface MeasurementRun {
   progress_json: Record<string, unknown>;
   verification_state: string;
   result_sha256: string | null;
+  source_stale?: boolean;
+  pose_output_provenance?: Record<string, unknown> | null;
 }
 
 export interface MeasurementDefinition {
@@ -61,6 +63,8 @@ export interface EventRun {
   status: string;
   progress_json: Record<string, unknown>;
   result_sha256: string | null;
+  source_stale?: boolean;
+  pose_output_provenance?: Record<string, unknown> | null;
 }
 
 export interface BiologicalEvent {
