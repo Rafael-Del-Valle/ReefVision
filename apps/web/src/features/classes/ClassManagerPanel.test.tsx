@@ -89,6 +89,11 @@ const usageCategoryDefinitions = [
   ["annotations_active", true, false],
   ["annotations_deleted", false, true],
   ["annotation_history", false, true],
+  ["mask_annotations_active", true, false],
+  ["mask_annotations_deleted", false, true],
+  ["mask_annotation_history", false, true],
+  ["image_labels_active", true, false],
+  ["image_labels_deleted", false, true],
   ["prediction_proposals", true, false],
   ["quality_control_issues", true, false],
   ["review_queue_items", true, false],
@@ -231,6 +236,56 @@ describe("ClassManagerPanel", () => {
     ).toBeInTheDocument();
     expect(mergeButton).toBeDisabled();
     await userEvent.click(mergeButton);
+    expect(confirmation).not.toHaveBeenCalled();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith("/classes/class-1/merge"),
+      ),
+    ).toBe(false);
+  });
+
+  it.each([
+    "mask_annotations_active",
+    "mask_annotations_deleted",
+    "mask_annotation_history",
+    "image_labels_active",
+    "image_labels_deleted",
+  ])("blocks merge and delete for unhandled %s references", async (key) => {
+    const category = usageCategoryDefinitions.find(([name]) => name === key);
+    expect(category).toBeDefined();
+    const mutable = category?.[1] === true;
+    const counts = zeroUsageCounts().map((item) =>
+      item.key === key ? { ...item, count: 1 } : item,
+    );
+    const confirmation = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith(`/projects/${project.id}/classes/class-1/usage`)) {
+        return jsonResponse({
+          ...classUsage(false, 1),
+          counts,
+          mutable_reference_count: mutable ? 1 : 0,
+          immutable_reference_count: mutable ? 0 : 1,
+          delete_blockers: ["Scientific references still exist"],
+        });
+      }
+      throw new Error(`Unexpected request: GET ${url}`);
+    });
+
+    renderPanel();
+    const row = sourceClassRow();
+    await userEvent.click(within(row).getByRole("button", { name: "Usage" }));
+    expect(
+      await within(row).findByText(
+        /Class merge is blocked while mask or image-level classification records/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(row).getByRole("button", { name: "Merge class" }),
+    ).toBeDisabled();
+    expect(
+      within(row).getByRole("button", { name: "Delete unused" }),
+    ).toBeDisabled();
     expect(confirmation).not.toHaveBeenCalled();
     expect(
       fetchMock.mock.calls.some(([input]) =>
