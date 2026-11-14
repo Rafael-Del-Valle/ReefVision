@@ -1108,6 +1108,7 @@ def test_class_execution_cannot_reuse_preview_claimed_by_other_writer(
             )
         )
 
+
 @pytest.mark.parametrize("operation_endpoint", ["reassign", "reassign-delete"])
 def test_class_execution_rechecks_intervening_biological_identity_change(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, operation_endpoint: str
@@ -1172,5 +1173,90 @@ def test_class_execution_rechecks_intervening_biological_identity_change(
         assert not list(
             session.scalars(
                 select(AnnotationEvent.id).where(AnnotationEvent.event_type == "class_reassigned")
+            )
+        )
+
+
+@pytest.mark.parametrize("operation_endpoint", ["reassign", "reassign-delete"])
+def test_class_execution_rolls_back_scientific_mutations_when_qc_rewrite_fails(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, operation_endpoint: str
+) -> None:
+    """A failure after mutating an annotation and prediction cannot partially commit."""
+    project = create_project(client, name="Atomic biological rollback")
+    source = create_label_class(
+        client, project["id"], class_index=0, name="Swiftia closed", display_color="#E76F51"
+    )
+    target = create_label_class(
+        client, project["id"], class_index=1, name="Swiftia open", display_color="#2A9D8F"
+    )
+    seed_reassignment_records(
+        client,
+        project,
+        source,
+        target,
+        include_deleted_annotation=False,
+        include_historical_prediction=False,
+    )
+    route = f"/api/v1/projects/{project['id']}/classes/{source['id']}/{operation_endpoint}"
+    preview_response = client.post(f"{route}/preview", json={"target_class_id": target["id"]})
+    assert preview_response.status_code == 201, preview_response.text
+    preview = preview_response.json()
+    assert preview["plan"]["blockers"] == []
+
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        original_annotation = session.get(Annotation, "annotation-active")
+        assert original_annotation is not None
+        original_revision = original_annotation.revision
+
+    reached_qc_rewrite = False
+
+    def fault_after_observation_mutations(
+        class_ids: list[str], old_class_id: str, new_class_id: str
+    ) -> list[str]:
+        nonlocal reached_qc_rewrite
+        assert old_class_id == source["id"]
+        assert new_class_id == target["id"]
+        assert source["id"] in class_ids
+        reached_qc_rewrite = True
+        raise RuntimeError("synthetic QC rewrite failure")
+
+    monkeypatch.setattr(
+        class_operations_module, "_replace_class_id_list", fault_after_observation_mutations
+    )
+    with pytest.raises(RuntimeError, match="synthetic QC rewrite failure"):
+        client.post(
+            route,
+            json={"operation_id": preview["id"], "preview_checksum": preview["preview_checksum"]},
+        )
+    assert reached_qc_rewrite
+
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        operation = session.get(ClassOperation, preview["id"])
+        annotation = session.get(Annotation, "annotation-active")
+        prediction = session.get(PredictionProposal, "proposal-pending")
+        issue = session.get(QualityControlIssue, "qc-issue-open")
+        queue_item = session.get(ReviewQueueItem, "queue-item-pending")
+        source_class = session.get(LabelClass, source["id"])
+        assert operation is not None
+        assert operation.status == "rolled_back"
+        assert operation.final_state == "rolled_back"
+        assert operation.started_at is not None and operation.completed_at is not None
+        assert operation.rollback_result_json == {"rolled_back": True}
+        assert "synthetic QC rewrite failure" in operation.failures_json
+        assert annotation is not None
+        assert annotation.label_class_id == source["id"]
+        assert annotation.revision == original_revision
+        assert prediction is not None and prediction.label_class_id == source["id"]
+        assert prediction.was_edited is False
+        assert issue is not None and issue.class_ids_json == [source["id"]]
+        assert queue_item is not None and queue_item.label_class_ids_json == [source["id"]]
+        assert source_class is not None
+        assert not list(
+            session.scalars(
+                select(AnnotationEvent.id).where(
+                    AnnotationEvent.event_type.in_(
+                        ("class_reassigned", "class_reassigned_for_delete")
+                    )
+                )
             )
         )
