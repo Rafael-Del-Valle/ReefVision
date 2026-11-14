@@ -2,7 +2,6 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 import pytest
-
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -608,6 +607,7 @@ def test_reassign_delete_deletes_source_after_safe_reassignment(client: TestClie
         assert dataset_version.class_map_json[0]["id"] == source_class["id"]
         assert model.class_map_json["mapping"][source_class["name"]] == source_class["id"]
         assert operation.status == "completed"
+
 
 @pytest.mark.parametrize("operation_type", ["reassign", "reassign-delete"])
 @pytest.mark.parametrize("changed_role", ["source", "target"])
