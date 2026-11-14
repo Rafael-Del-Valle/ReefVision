@@ -187,40 +187,37 @@ describe("ClassManagerPanel", () => {
     ["incomplete reference categories", { counts: zeroUsageCounts().slice(1) }],
     ["missing compatibility warnings", { compatibility_warnings: null }],
     ["missing blocker evidence", { delete_blockers: null }],
-  ] as const)(
-    "rejects %s before merging",
-    async (_reason, invalidFields) => {
-      const confirmation = vi.spyOn(window, "confirm").mockReturnValue(true);
-      const fetchMock = vi
-        .spyOn(globalThis, "fetch")
-        .mockImplementation(async (input) => {
-          const url = String(input);
-          if (url.endsWith(`/projects/${project.id}/classes/class-1/usage`)) {
-            return jsonResponse({ ...classUsage(true), ...invalidFields });
-          }
-          throw new Error(`Unexpected request: GET ${url}`);
-        });
-      renderPanel();
-      const row = sourceClassRow();
-      const mergeButton = within(row).getByRole("button", {
-        name: "Merge class",
+  ] as const)("rejects %s before merging", async (_reason, invalidFields) => {
+    const confirmation = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith(`/projects/${project.id}/classes/class-1/usage`)) {
+          return jsonResponse({ ...classUsage(true), ...invalidFields });
+        }
+        throw new Error(`Unexpected request: GET ${url}`);
       });
-      await userEvent.click(within(row).getByRole("button", { name: "Usage" }));
-      expect(
-        await within(row).findByText(
-          /complete, internally consistent class usage/,
-        ),
-      ).toBeInTheDocument();
-      expect(mergeButton).toBeDisabled();
-      await userEvent.click(mergeButton);
-      expect(confirmation).not.toHaveBeenCalled();
-      expect(
-        fetchMock.mock.calls.some(([input]) =>
-          String(input).endsWith("/classes/class-1/merge"),
-        ),
-      ).toBe(false);
-    },
-  );
+    renderPanel();
+    const row = sourceClassRow();
+    const mergeButton = within(row).getByRole("button", {
+      name: "Merge class",
+    });
+    await userEvent.click(within(row).getByRole("button", { name: "Usage" }));
+    expect(
+      await within(row).findByText(
+        /complete, internally consistent class usage/,
+      ),
+    ).toBeInTheDocument();
+    expect(mergeButton).toBeDisabled();
+    await userEvent.click(mergeButton);
+    expect(confirmation).not.toHaveBeenCalled();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith("/classes/class-1/merge"),
+      ),
+    ).toBe(false);
+  });
 
   it("preserves nonzero immutable science counts in the approved merge request", async () => {
     const counts = zeroUsageCounts().map((item) => {
@@ -254,15 +251,18 @@ describe("ClassManagerPanel", () => {
       });
     renderPanel();
     const row = sourceClassRow();
-    const mergeButton = within(row).getByRole("button", { name: "Merge class" });
+    const mergeButton = within(row).getByRole("button", {
+      name: "Merge class",
+    });
     await userEvent.click(within(row).getByRole("button", { name: "Usage" }));
     await waitFor(() => expect(mergeButton).toBeEnabled());
     await userEvent.click(mergeButton);
     await waitFor(() =>
       expect(
-        fetchMock.mock.calls.some(([input, init]) =>
-          String(input).endsWith("/classes/class-1/merge") &&
-          init?.method === "POST",
+        fetchMock.mock.calls.some(
+          ([input, init]) =>
+            String(input).endsWith("/classes/class-1/merge") &&
+            init?.method === "POST",
         ),
       ).toBe(true),
     );
