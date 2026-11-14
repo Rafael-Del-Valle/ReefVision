@@ -44,6 +44,9 @@ from reefvision.services.workflow_pose_training import (
 from reefvision.services.workflow_runtime_adapters import (
     RUNTIME_ADAPTER_NODE_TYPES,
 )
+from reefvision.storage.datasets import (
+    canonical_json_sha256,
+)
 from reefvision.storage.projects import (
     resolve_managed_project_path,
 )
