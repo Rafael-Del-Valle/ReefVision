@@ -160,7 +160,7 @@ if (Test-FiniteMetricValue -Value $structuredLoss) {
 # Check the actual embedded PowerShell script, not a mock monitor: a future
 # refactor must not add a mutation request, job launch, or process termination.
 $monitorStart = $source.IndexOf("let script = format!")
-$monitorEnd = $source.IndexOf('Command::new("powershell.exe")', $monitorStart)
+$monitorEnd = $source.IndexOf('let powershell = trusted_powershell_executable()', $monitorStart)
 if ($monitorStart -lt 0 -or $monitorEnd -le $monitorStart) {
   throw 'Could not isolate the external training monitor script.'
 }
@@ -228,11 +228,19 @@ if (-not $consoleCommand.Success -or
 # process launcher: it stops at a PowerShell function before .args() appears.
 $launcher = [regex]::Match(
   $source,
-  '(?s)Command::new\("powershell\.exe"\)\s*\.args\(\["-NoProfile", "-NonInteractive", "-Command", &script\]\)\s*\.spawn\(\)'
+  '(?s)let powershell = trusted_powershell_executable\(\).*?Command::new\(powershell\)\s*\.args\(\["-NoProfile", "-NonInteractive", "-Command", &script\]\)\s*\.spawn\(\)'
 )
 if (-not $launcher.Success -or
     $launcher.Value -match '"-NoExit"') {
-  throw 'External training console must not expose an interactive PowerShell prompt.'
+  throw 'External training console must use trusted system PowerShell without an interactive prompt.'
+}
+# Resolve the PowerShell executable with the Windows API. Searching PATH
+# for "powershell.exe" permits a working-directory or PATH executable spoof.
+# This assertion complements the native Windows Rust helper/unit test.
+if ($source -notmatch 'GetSystemDirectoryW\(' -or
+    $source -notmatch 'fn trusted_powershell_executable\(' -or
+    $source -match 'Command::new\("powershell\.exe"\)') {
+  throw 'Read-only monitor must resolve PowerShell from the OS system directory.'
 }
 if ($monitorScript -notmatch 'while \(\$true\) \{ Start-Sleep -Seconds 3600 \}') {
   throw 'Final read-only training status must remain inspectable without -NoExit.'

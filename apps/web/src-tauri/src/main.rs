@@ -170,9 +170,8 @@ fn trusted_powershell_executable() -> std::io::Result<PathBuf> {
     // execute in the scientific training monitor's security context.
     let mut system_dir = vec![0_u16; 260];
     let length = loop {
-        let copied =
-            unsafe { GetSystemDirectoryW(system_dir.as_mut_ptr(), system_dir.len() as u32) }
-                as usize;
+        let copied = unsafe { GetSystemDirectoryW(system_dir.as_mut_ptr(), system_dir.len() as u32) };
+        let copied = copied as usize;
         if copied == 0 {
             return Err(std::io::Error::last_os_error());
         }
@@ -194,7 +193,10 @@ fn trusted_powershell_executable() -> std::io::Result<PathBuf> {
     if !executable.is_file() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("The Windows system PowerShell executable was not found: {}", executable.display()),
+            format!(
+                "The Windows system PowerShell executable was not found: {}",
+                executable.display()
+            ),
         ));
     }
     Ok(executable)
