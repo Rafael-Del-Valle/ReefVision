@@ -290,9 +290,7 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         consumer.input_artifact_ids_json = [undeclared.id]
         session.flush()
         with pytest.raises(ConflictError, match="input is not a declared producer output"):
-            verify_succeeded_node_artifacts(
-                session, run_id=str(run["id"]), node_run=consumer
-            )
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
