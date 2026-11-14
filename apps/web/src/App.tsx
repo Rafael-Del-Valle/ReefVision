@@ -25,6 +25,7 @@ import {
 import { ActiveLearningWorkspace } from "./features/active-learning/ActiveLearningWorkspace";
 import { AdvancedProviderWorkspace } from "./features/advanced-providers/AdvancedProviderWorkspace";
 import { ReefVisionAssistant } from "./features/assistant/ReefVisionAssistant";
+import { SegmentationExportLauncher } from "./features/dataset-versions/SegmentationExportLauncher";
 import { EnhancedAnnotationEditor } from "./features/annotation-editor/EnhancedAnnotationEditor";
 import { ClassManagerPanel } from "./features/classes/ClassManagerPanel";
 import { ClassificationWorkspace } from "./features/classification/ClassificationWorkspace";
@@ -711,6 +712,14 @@ function ReefVisionMainApp() {
           >
             System status
           </button>
+          <SegmentationExportLauncher editorOpen={editorLaunch !== null} />
+          {selectedProject && !editorLaunch && (
+            <ReefVisionAssistant
+              project={selectedProject}
+              activeView={activeView}
+              onNavigate={(view) => setActiveView(view as ProjectView)}
+            />
+          )}
           <div className="api-status" aria-live="polite">
             <StatusBadge
               status={
@@ -1068,13 +1077,6 @@ function ReefVisionMainApp() {
         )}
       </section>
 
-      {selectedProject && !editorLaunch && (
-        <ReefVisionAssistant
-          project={selectedProject}
-          activeView={activeView}
-          onNavigate={(view) => setActiveView(view as ProjectView)}
-        />
-      )}
       {showCreate && (
         <div className="modal-backdrop" role="presentation">
           <section

@@ -233,6 +233,28 @@ test("supports keyboard skip navigation and the minimum desktop viewport without
   await expect(guide).toBeHidden();
   await expect(help).toBeFocused();
 
+  await page.setViewportSize({ width: 910, height: 512 });
+  const toolbar = page.locator(".rv-global-actions");
+  const exports = toolbar.getByRole("button", { name: "Dataset exports" });
+  await exports.focus();
+  await page.keyboard.press("Enter");
+  const exportDialog = page.getByRole("dialog", { name: /dataset export/i });
+  await expect(exportDialog).toBeVisible();
+  await expect(
+    exportDialog.getByRole("button", { name: "Close" }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(exportDialog).toBeHidden();
+  await expect(exports).toBeFocused();
+  const assistant = toolbar.getByRole("button", { name: "Ask ReefVision" });
+  await assistant.focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("region", { name: "ReefVision Assistant" }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(assistant).toBeFocused();
+
   expect(await hasHorizontalOverflow(page)).toBe(false);
 });
 
