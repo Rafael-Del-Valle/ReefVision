@@ -987,6 +987,7 @@ def test_class_operation_preview_expires_after_compatibility_provenance_change(
         assert session.get(LabelClass, source["id"]) is not None
         assert session.get(LabelClass, target["id"]) is not None
 
+
 def test_class_execution_never_publishes_partial_running_state(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
