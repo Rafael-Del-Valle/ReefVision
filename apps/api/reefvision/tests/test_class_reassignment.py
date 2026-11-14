@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
+from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.db.models import (
     Annotation,
     AnnotationEvent,
@@ -1431,3 +1432,122 @@ def test_merge_preserves_accepted_predictions_and_completed_qc_history(
         assert completed_item.review_state == "completed"
         assert frozen_dataset is not None
         assert frozen_dataset.class_map_json[0]["id"] == source["id"]
+
+
+def test_completed_saved_qc_workflow_class_evidence_survives_merge(
+    client: TestClient,
+) -> None:
+    """An executable saved QC result must retain its completed review's class."""
+    project = create_project(client, name="Saved QC merge integrity")
+    source = create_label_class(
+        client, project["id"], class_index=0, name="Muricea Closed", display_color="#E76F51"
+    )
+    target = create_label_class(
+        client, project["id"], class_index=1, name="Muricea Open", display_color="#2A9D8F"
+    )
+    seed_reassignment_records(client, project, source, target)
+
+    graph = {
+        "graph_id": "class-merge-saved-qc",
+        "name": "Reviewed coral QC",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "qc", "node_type": "qc_review_queue"},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-qc",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "qc",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"/api/v1/projects/{project['id']}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["valid"] and plan.json()["executable"]
+    saved = client.post(
+        f"/api/v1/projects/{project['id']}/workflow-graphs", json={"graph": graph}
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project['id']}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    app = cast(FastAPI, client.app)
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(queued.json()["job_id"]),
+        )
+        is True
+    )
+    run_id = queued.json()["id"]
+    before = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert before.status_code == 200, before.text
+    assert before.json()["run"]["status"] == "succeeded"
+    outputs = [
+        artifact
+        for artifact in before.json()["artifacts"]
+        if artifact["data_type"] == "review_queue_reference"
+    ]
+    assert len(outputs) == 1
+    output = outputs[0]
+    assert output["payload_json"]["priority_score_unit"] == "dimensionless"
+    assert output["payload_json"]["review_status"] == "requires_researcher_review"
+    queue_id = output["payload_json"]["queue_id"]
+    queue_items = client.get(f"/api/v1/review-queues/{queue_id}/items")
+    assert queue_items.status_code == 200, queue_items.text
+    items = queue_items.json()["items"]
+    assert len(items) == 1
+    item_id = items[0]["id"]
+    assert source["id"] in items[0]["label_class_ids_json"]
+
+    started = client.post(f"/api/v1/review-queue-items/{item_id}/start")
+    assert started.status_code == 200, started.text
+    completed = client.post(
+        f"/api/v1/review-queues/{queue_id}/items/bulk",
+        json={
+            "item_ids": [item_id],
+            "action": "complete",
+            "actor": "coral reviewer",
+            "review_confirmed": True,
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["changed_count"] == 1
+
+    usage_response = client.get(f"/api/v1/classes/{source['id']}/usage")
+    assert usage_response.status_code == 200, usage_response.text
+    usage = usage_response.json()
+    merged = client.post(
+        f"/api/v1/classes/{source['id']}/merge",
+        json={
+            "target_class_id": target["id"],
+            "expected_usage_counts": {
+                item["key"]: item["count"] for item in usage["counts"]
+            },
+            "expected_usage_fingerprint": usage["reference_fingerprint"],
+        },
+    )
+    assert merged.status_code == 200, merged.text
+
+    reviewed = client.get(f"/api/v1/review-queues/{queue_id}/items")
+    assert reviewed.status_code == 200, reviewed.text
+    assert reviewed.json()["items"][0]["id"] == item_id
+    assert reviewed.json()["items"][0]["review_state"] == "completed"
+    assert reviewed.json()["items"][0]["label_class_ids_json"] == [source["id"]]
+    after = client.get(f"/api/v1/workflow-runs/{run_id}")
+    assert after.status_code == 200, after.text
+    assert after.json()["run"]["status"] == "succeeded"
+    updated_outputs = [
+        artifact
+        for artifact in after.json()["artifacts"]
+        if artifact["data_type"] == "review_queue_reference"
+    ]
+    assert len(updated_outputs) == 1
+    assert updated_outputs[0]["payload_json"] == output["payload_json"]
+    assert updated_outputs[0]["payload_sha256"] == output["payload_sha256"]
