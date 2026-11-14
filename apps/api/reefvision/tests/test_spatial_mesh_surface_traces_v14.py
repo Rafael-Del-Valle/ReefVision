@@ -95,6 +95,25 @@ DISPLAY_SEGMENT_ROUNDING_PARAMS = {
 }
 
 
+# Source endpoint separation is real and has a finite source-frame detour
+# ratio, although its scaled meter chord underflows. The triangulated mesh
+# remains nondegenerate and calibrated area is representable: this exercises
+# the full standalone preview and a persisted Workflow Builder graph.
+FINITE_DETOUR_CHORD_UNDERFLOW_PARAMS = {
+    **PARAMS,
+    "vertices": [
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [1e-250, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+    ],
+    "faces": [[0, 1, 3], [1, 2, 3]],
+    "meters_per_unit": 1e-100,
+    "surface_path_vertex_pairs": None,
+    "surface_trace_vertex_paths": [[0, 1, 2]],
+}
+
+
 def test_trace_follows_selected_edges_not_the_shortest_route() -> None:
     result = measure_mesh_preview(**PARAMS)
     trace = result["surface_edge_traces"][0]
@@ -366,6 +385,22 @@ def test_surface_trace_flags_real_segment_erased_from_display_positions() -> Non
     assert trace["human_review_verified"] is False
 
 
+def test_finite_source_detour_survives_calibrated_chord_underflow() -> None:
+    trace = measure_mesh_preview(**FINITE_DETOUR_CHORD_UNDERFLOW_PARAMS)[
+        "surface_edge_traces"
+    ][0]
+    assert trace["length_m"] > 0
+    assert trace["endpoint_chord_length_m"] == 0
+    # An underflowed positive chord has no trustworthy numerical meter bound.
+    # A genuinely coincident source chord, by contrast, has a [0, 0] bound.
+    assert trace["endpoint_chord_scale_only_interval_m"] is None
+    assert trace["geometric_detour_ratio"] == pytest.approx(2e250, rel=1e-12)
+    assert "calibrated_surface_trace_endpoint_chord_underflow" in trace["qc_warnings"]
+    assert "surface_trace_detour_ratio_unrepresentable" not in trace["qc_warnings"]
+    assert "surface_trace_zero_endpoint_chord" not in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+
+
 def test_surface_trace_distinguishes_calibrated_chord_underflow() -> None:
     smallest = float.fromhex("0x0.0000000000001p-1022")
     trace = mesh_surface_edge_traces(
@@ -378,6 +413,8 @@ def test_surface_trace_distinguishes_calibrated_chord_underflow() -> None:
     assert trace["length_m"] > 0
     assert trace["endpoint_chord_length_m"] == 0
     assert trace["geometric_detour_ratio"] is None
+    assert trace["endpoint_chord_scale_only_interval_m"] is None
+    assert "surface_trace_detour_ratio_unrepresentable" in trace["qc_warnings"]
     assert "calibrated_surface_trace_endpoint_chord_underflow" in trace["qc_warnings"]
     assert "surface_trace_zero_endpoint_chord" not in trace["qc_warnings"]
     assert trace["human_review_verified"] is False
@@ -437,6 +474,7 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
         "display_segment_rounding",
         "uncertainty_missing",
         "uncertainty_max",
+        "finite_detour_chord_underflow",
     ],
 )
 def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
@@ -454,6 +492,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "display_segment_rounding": DISPLAY_SEGMENT_ROUNDING_PARAMS,
         "uncertainty_missing": {**PARAMS, "relative_scale_uncertainty": None},
         "uncertainty_max": {**PARAMS, "relative_scale_uncertainty": 1.0},
+        "finite_detour_chord_underflow": FINITE_DETOUR_CHORD_UNDERFLOW_PARAMS,
     }[case]
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 200, standalone.text
@@ -531,6 +570,13 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             "inconsistent_winding_edge_on_surface_trace"
             in artifact["surface_edge_traces"][0]["qc_warnings"]
         )
+    if case == "finite_detour_chord_underflow":
+        assert trace["endpoint_chord_length_m"] == 0
+        assert trace["endpoint_chord_scale_only_interval_m"] is None
+        assert trace["geometric_detour_ratio"] == pytest.approx(2e250, rel=1e-12)
+        assert "calibrated_surface_trace_endpoint_chord_underflow" in trace["qc_warnings"]
+        assert "surface_trace_detour_ratio_unrepresentable" not in trace["qc_warnings"]
+        assert trace["human_review_verified"] is False
     if case == "display_chord_rounding":
         assert trace["endpoint_chord_length_m"] > 0
         assert trace["geometric_detour_ratio"] > 1
