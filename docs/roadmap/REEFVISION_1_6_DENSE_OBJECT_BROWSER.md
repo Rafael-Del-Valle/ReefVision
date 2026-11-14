@@ -71,3 +71,30 @@ access behavior.
 Pure regressions cover 20,000 selected boxes, mixed large box/mask selections,
 and sparse distant selections. Browser E2E, exact-head repository CI, and
 installed Windows performance on real dense data remain release gates.
+
+## Direct position navigation without unbounded DOM growth
+
+The incremental **Show 200 more objects** control alone required dozens of
+clicks to reach a distant, unselected observation in a 20,000-object image.
+Researchers can now enter a **1-based filtered object position** and jump
+directly to the corresponding 200-object page without mounting the skipped
+rows. Positions are in the same deterministic order (all boxes followed by
+masks), and the helper retains each row's original `aria-posinset` and
+`aria-setsize` metadata. The existing initial prefix/reveal behavior remains
+the default; jumping and returning to the first page are explicit UI actions.
+
+At most 200 selected boxes and 200 selected masks outside the target window
+remain pinned, including selections *before* a jumped-to page. Invalid,
+out-of-range, non-integer or unsafe input cannot trigger a jump; changing
+image, project or class filter resets the page. No scientific record, selected
+ID, human QC decision, calibration, source image or Workflow Builder run is
+modified. This is editor navigation, not a new analysis or model operation,
+so a duplicate workflow node would be inappropriate.
+
+Unit tests cover 20,000 observations with bounded indexed reads, cross-type
+box/mask page boundaries, out-of-window selected observations, and invalid
+offsets. The built-app Playwright scenario exercises a 1,500-object jump to
+the final page, asserts 101 mounted rows (100 page rows plus one previously
+selected pinned row), correct full-document accessible positions, invalid
+input rejection and return-to-first-page behavior. Full exact-head CI and
+installed Windows GUI usability still require independent verification.
