@@ -75,7 +75,7 @@ def test_mesh_edge_paths_do_not_invent_disconnected_distances(
         (float("nan"), None),
         (float("inf"), None),
         (1.0, -0.1),
-        (1.0, 1.0),
+        (1.0, 1.0000000000000002),
         (1.0, float("nan")),
         (1.0, float("inf")),
     ],
@@ -93,6 +93,47 @@ def test_direct_mesh_path_engine_rejects_invalid_calibration(
             scale=scale,
             scale_uncertainty=uncertainty,
         )
+
+
+@pytest.mark.parametrize(
+    ("scale", "uncertainty"),
+    [
+        (True, None),
+        ("1.0", None),
+        (10**400, None),
+        (1.0, True),
+        (1.0, "0.1"),
+        (1.0, 10**400),
+    ],
+)
+def test_direct_mesh_path_engine_rejects_non_numeric_calibration(
+    scale: object, uncertainty: object | None
+) -> None:
+    # Unlike the strict API schema, direct scientific-engine calls previously
+    # treated True as 1 m/unit or a 100% uncertainty bound. Huge Python ints
+    # used to raise OverflowError instead of a controlled validation failure.
+    from reefvision.services.spatial_mesh_paths_v14 import mesh_edge_paths
+
+    with pytest.raises(ValueError, match="Mesh path"):
+        mesh_edge_paths(
+            points=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+            faces=[[0, 1, 2]],
+            pairs=[[0, 1]],
+            scale=cast(float, scale),
+            scale_uncertainty=cast(float | None, uncertainty),
+        )
+
+
+@pytest.mark.parametrize("field", ["meters_per_unit", "relative_scale_uncertainty"])
+def test_public_mesh_preview_rejects_boolean_calibration(
+    client: TestClient, field: str
+) -> None:
+    project_id = str(create_project(client, "Strict mesh calibration input")["id"])
+    parameters = {**PARAMS, field: True}
+    response = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=parameters
+    )
+    assert response.status_code == 422, response.text
 
 
 @pytest.mark.parametrize(
@@ -211,7 +252,9 @@ def test_mesh_edge_paths_flag_coincident_vertices() -> None:
     assert route["length_m"] == 0.0
     assert route["endpoint_chord_length_m"] == 0.0
     assert route["geometric_detour_ratio"] is None
+    assert route["shortest_route_alternatives_status"] == "unassessable_zero_length_edges"
     assert route["path_qc_warnings"] == [
+        "zero_length_mesh_edge_in_connected_component",
         "degenerate_triangle_on_path",
         "open_boundary_edge_on_path",
         "zero_length_edge_on_path",
