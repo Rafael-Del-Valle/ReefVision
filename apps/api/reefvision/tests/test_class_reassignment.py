@@ -8,7 +8,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
-from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.db.models import (
     Annotation,
     AnnotationEvent,
@@ -24,6 +23,7 @@ from reefvision.db.models import (
     ReviewQueue,
     ReviewQueueItem,
 )
+from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.class_operations import ClassOperationExecuteRequest
 from reefvision.services import class_operations as class_operations_module
 from reefvision.services.class_operations import ClassOperationsService
@@ -1382,9 +1382,7 @@ def test_merge_preserves_accepted_predictions_and_completed_qc_history(
         f"/api/v1/classes/{source['id']}/merge",
         json={
             "target_class_id": target["id"],
-            "expected_usage_counts": {
-                item["key"]: item["count"] for item in usage["counts"]
-            },
+            "expected_usage_counts": {item["key"]: item["count"] for item in usage["counts"]},
             "expected_usage_fingerprint": usage["reference_fingerprint"],
         },
     )
@@ -1467,9 +1465,7 @@ def test_completed_saved_qc_workflow_class_evidence_survives_merge(
     plan = client.post(f"/api/v1/projects/{project['id']}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
     assert plan.json()["valid"] and plan.json()["executable"]
-    saved = client.post(
-        f"/api/v1/projects/{project['id']}/workflow-graphs", json={"graph": graph}
-    )
+    saved = client.post(f"/api/v1/projects/{project['id']}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
     queued = client.post(
         f"/api/v1/projects/{project['id']}/workflow-runs",
@@ -1527,9 +1523,7 @@ def test_completed_saved_qc_workflow_class_evidence_survives_merge(
         f"/api/v1/classes/{source['id']}/merge",
         json={
             "target_class_id": target["id"],
-            "expected_usage_counts": {
-                item["key"]: item["count"] for item in usage["counts"]
-            },
+            "expected_usage_counts": {item["key"]: item["count"] for item in usage["counts"]},
             "expected_usage_fingerprint": usage["reference_fingerprint"],
         },
     )
