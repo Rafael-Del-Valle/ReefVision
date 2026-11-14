@@ -1,5 +1,34 @@
 # ReefVision 1.4 provisional mesh-edge paths
 
+## Scale-only intervals when a real trace edge underflows
+
+A real positive source-frame edge can become `0.0` after multiplication by
+an extremely small meter-per-mesh-unit scale. For a nonzero imported distance,
+a generated `[0.0, 0.0]` interval would misleadingly claim an exact physical
+zero. The provisional surface-trace engine now records such calibrated
+segment underflow in `qc_warnings` and preserves its original positive
+`source_segment_lengths_mesh_units`; when uncertainty was supplied, it
+withholds the entire `segment_length_scale_only_intervals_m` and
+`cumulative_length_scale_only_intervals_m` collections (null), preserving
+the existing array-of-pairs contract rather than mixing unknown and numeric
+bounds. If the positive entire source trace also underflows, its
+`length_scale_only_interval_m` is null. A representable positive total
+retains its scale-only total interval, even if an individual tiny segment
+requires withholding the segment/waypoint collection.
+
+A **genuinely zero-length** source edge is different: it retains its valid
+`[0.0, 0.0]` scale-only bounds, and its zero-length topology QC. Missing
+uncertainty remains null even without underflow; zero supplied uncertainty
+does not make an underflowed positive measurement exact. No such interval is
+a statistical confidence interval or proof of reconstructed anatomy.
+
+Synthetic scientific tests cover both cases with direct engine calls and a
+representable full-mesh preview containing an underflowed edge. A standalone
+API request and a saved, typed, executable Workflow Builder graph must agree
+on all numerical fields, source geometry, QC, calibration provenance, and
+`human_review_verified: false`. Hardware accuracy, independent field
+calibration, and coral centerline identity require separate review.
+
 ## Raw mesh-coordinate evidence independent of calibration
 
 Caller-selected surface-edge traces now persist three additional audit fields:
