@@ -162,3 +162,96 @@ def test_tied_route_qc_roundtrips_standalone_and_persisted_graph(
     assert artifact["surface_edge_paths"] == measured["surface_edge_paths"]
     assert artifact["provenance"] == measured["provenance"]
     assert artifact["provenance"]["calibration_verified"] is False
+# A positive 1e-8 edge cannot be added accurately to a 1e9 accumulated
+# route cost in binary64. This is numerical ambiguity, not a biological or
+# mathematically exact second shortest route.
+ROUNDING_GEOMETRY = {
+    "vertices": [[0.0, 0.0, 0.0], [1e9, 0.0, 0.0], [1e9, 1e-8, 0.0]],
+    "faces": [[0, 1, 2]],
+    "meters_per_unit": 0.02,
+    "calibration_method": "ruler",
+    "calibration_evidence": "Synthetic numerical-resolution reference, unverified",
+    "relative_scale_uncertainty": 0.1,
+    "surface_path_vertex_pairs": [[0, 2], [0, 1], [2, 0]],
+}
+
+
+def test_positive_edge_cost_roundoff_does_not_claim_exact_route_multiplicity() -> None:
+    # 1e9 + 1e-8 == 1e9 in binary64, although the positive edge is real.
+    assert 1e9 + 1e-8 == 1e9
+    routes = mesh_edge_paths(
+        points=[tuple(point) for point in ROUNDING_GEOMETRY["vertices"]],
+        faces=ROUNDING_GEOMETRY["faces"],
+        pairs=ROUNDING_GEOMETRY["surface_path_vertex_pairs"],
+        scale=0.02,
+        scale_uncertainty=0.1,
+    )
+    assert routes is not None
+    for route in routes:
+        assert route["status"] == "connected"
+        assert route["shortest_route_alternatives_status"] == (
+            "unassessable_floating_point_cost_resolution"
+        )
+        assert "positive_mesh_edge_cost_rounded_away" in route["path_qc_warnings"]
+        assert "multiple_equal_cost_mesh_routes" not in route["path_qc_warnings"]
+        assert route["length_m"] == pytest.approx(2e7)
+
+
+def test_route_roundoff_qc_roundtrips_standalone_and_saved_workflow(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Mesh path floating precision QC")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=ROUNDING_GEOMETRY)
+    assert standalone.status_code == 200, standalone.text
+    measured = standalone.json()
+    assert all(
+        route["shortest_route_alternatives_status"]
+        == "unassessable_floating_point_cost_resolution"
+        for route in measured["surface_edge_paths"]
+    )
+    assert measured["measurement_status"] == "caller_supplied_unverified"
+
+    graph = {
+        "graph_id": "mesh-route-roundoff-v14",
+        "name": "Floating precision path multiplicity QC",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "mesh",
+                "node_type": "mesh_surface_preview",
+                "parameters": ROUNDING_GEOMETRY,
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["surface_edge_paths"] == measured["surface_edge_paths"]
+    assert artifact["provenance"] == measured["provenance"]
+    assert artifact["provenance"]["calibration_verified"] is False
