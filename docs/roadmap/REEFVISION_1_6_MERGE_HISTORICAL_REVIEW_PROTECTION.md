@@ -41,13 +41,13 @@ uses the established mixed mutable/historical fixture. It checks reviewed
 merge approval, transferred counts, each protected and mutable modality,
 frozen class maps and researcher-facing preservation warnings.
 
-`test_completed_saved_qc_workflow_class_evidence_survives_merge` also executes
-an actual persisted typed `project_source -> qc_review_queue` graph, checks
-the dimensionless priority-score output and required researcher review gate,
-records a researcher-confirmed completed review, and merges its source class.
-It then checks that the completed queue item still has the original biological
-class ID and that the saved run's typed output payload and SHA-256 have not
-changed. This is stronger than validating a fabricated graph JSON fixture.
+`test_saved_qc_workflow_class_evidence_survives_merge` executes an actual
+persisted typed `project_source -> qc_review_queue` graph with both pending
+and researcher-completed review states. It verifies dimensionless priority
+scores, the required researcher-review gate, unchanged historical class IDs
+and the saved run's original typed payload and SHA-256. The test replays the
+real persisted QC node adapter after merge; this is stronger than inspecting
+a fabricated graph JSON fixture.
 
 This change is class-administration behavior, **not a new scientific analysis**;
 adding a duplicate Workflow Builder node would be misleading. The executable
