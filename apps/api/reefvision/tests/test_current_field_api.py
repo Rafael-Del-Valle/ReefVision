@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
 
+import pytest
+
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_scientific_project_exchange import export_archive, import_archive
 
@@ -108,6 +110,71 @@ def test_streamline_preview_uses_one_compatible_scientific_record_slice(
     assert imported_validation.status_code == 200
     assert imported_validation.json()["current"] is True
 
+
+
+@pytest.mark.parametrize(
+    ("altered_field", "replacement", "diagnostic"),
+    [
+        ("observed_at", "2026-01-01T01:00:00Z", "share UTC"),
+        ("source_kind", "observed", "share UTC"),
+        ("depth_m", 10.0, "share UTC"),
+        ("depth_reference", "seabed", "share UTC"),
+        ("provenance.source", "different provider", "share UTC"),
+        ("provenance.dataset_id", "different grid", "share UTC"),
+        ("provenance.model_version", "v2", "share UTC"),
+        ("qc", "suspect", "Suspect or rejected"),
+    ],
+)
+def test_streamline_preview_rejects_mixed_scientific_identity_or_qc(
+    client, altered_field, replacement, diagnostic
+) -> None:
+    """Never blend different time/depth/provider/QC identities into one velocity cell."""
+    project = create_project(client, "Incompatible current sources")
+    records = [
+        {
+            "variable": variable,
+            "value": value,
+            "unit": "m/s",
+            "observed_at": "2026-01-01T00:00:00Z",
+            "source_kind": "modeled",
+            "location": {"latitude": latitude, "longitude": longitude},
+            "depth_m": 0.0,
+            "depth_reference": "sea_surface",
+            "qc": "accepted",
+            "provenance": {
+                "source": "synthetic grid",
+                "dataset_id": "fixture-v1",
+                "model_version": "v1",
+                "acquired_at": "2026-01-02T00:00:00Z",
+            },
+        }
+        for latitude in (-1.0, 1.0)
+        for longitude in (-1.0, 1.0)
+        for variable, value in (
+            ("current_eastward_velocity", 1.0),
+            ("current_northward_velocity", 0.0),
+        )
+    ]
+    if altered_field.startswith("provenance."):
+        records[0]["provenance"][altered_field.removeprefix("provenance.")] = replacement
+    else:
+        records[0][altered_field] = replacement
+
+    created = client.post(
+        f"/api/v1/projects/{project['id']}/scientific-records",
+        json={"records": records},
+    )
+    assert created.status_code == 201, created.text
+    response = client.post(
+        f"/api/v1/projects/{project['id']}/current-field/streamlines/preview",
+        json={
+            "scientific_record_ids": [item["id"] for item in created.json()["items"]],
+            "seeds": [{"latitude": 0, "longitude": 0}],
+            "max_steps": 2,
+        },
+    )
+    assert response.status_code == 400, response.text
+    assert diagnostic.lower() in response.json()["detail"].lower()
 
 def test_streamline_preview_rejects_incomplete_component_grid(client) -> None:
     project = create_project(client, "Incomplete current")
