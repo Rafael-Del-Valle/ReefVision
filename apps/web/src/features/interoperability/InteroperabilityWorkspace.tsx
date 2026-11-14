@@ -272,12 +272,12 @@ export function InteroperabilityWorkspace({
             <ul className="record-list">
               {packagesQuery.data.map((item) => (
                 <li key={item.id}>
-                  <strong>{item.status}</strong> Â· format {item.format_version}
+                  <strong>{item.status}</strong> · format {item.format_version}
                   <br />
                   <code>{item.manifest_sha256.slice(0, 12) || "pending"}</code>
                   {item.status === "complete" && (
                     <>
-                      {" Â· "}
+                      {" · "}
                       <a href={projectExchangeDownloadUrl(item.id)}>
                         Download ZIP
                       </a>
