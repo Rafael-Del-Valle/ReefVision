@@ -32,7 +32,12 @@ A successful mutation records its start time immediately after all locked
 scientific evidence checks pass. On stale evidence or blocked delete, the
 operation's existing failed-result provenance is committed without applying
 scientific changes; on in-transaction errors, work is rolled back and the
-existing failure/rollback path retains the attempted mutation start time.
+failure path records the attempted mutation start time only while the
+preview remains unclaimed. A failed transaction releases the SQLite writer
+lock; the failure-state write now conditionally claims status `previewed`
+again, so it cannot overwrite a newer worker's successful completion if that
+worker obtained the lock first. The original failure still propagates; the
+winning execution's scientific records and provenance remain authoritative.
 
 The lock and race guarantee here concern **local SQLite writer
 serialization**, not external filesystem changes, model artifacts or a future
@@ -58,6 +63,15 @@ are preserved; class-metadata edits are not a new analytical workflow node.
    before its writer claim causes a stale approval (HTTP 409), without
    reclassifying annotations or predictions. No scientific execution start
    timestamp is recorded for a rejected preview.
+4. For both Reassign and Reassign-and-Delete, a synthetic QC reference
+   rewrite failure after annotation/prediction edits triggers a complete
+   transaction rollback: source-class biological evidence, QC memberships,
+   review references, annotation revisions and append-only history remain
+   unchanged. The attempted execution receives a `rolled_back` record.
+5. A real second local execution may complete after a first failed executor
+   releases its lock but before the first records its rollback. The final
+   failure-status compare-and-set must not overwrite the second executor's
+   `completed` status, biological updates, QC references or scientific history.
 
 These are deterministic synthetic database tests, not representative
 biological acceptance. All original annotations, masks, image labels,
