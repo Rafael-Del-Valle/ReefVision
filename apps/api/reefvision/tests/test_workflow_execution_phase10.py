@@ -176,6 +176,33 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.commit()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
+    # A persisted text execution order is not an integer step. This actual
+    # two-node run must return a provenance conflict, not crash while sorting
+    # an integer and string loaded from SQLite.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        assert producer is not None
+        producer.execution_order = "invalid-order"
+        session.commit()
+
+    malformed_order = client.get(f"/api/v1/workflow-runs/{run['id']}")
+    assert malformed_order.status_code == 409, malformed_order.text
+    assert malformed_order.json() == {
+        "detail": "Workflow run node lineage does not match saved graph"
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="node lineage does not match saved graph"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(run["id"]))
+
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        assert producer is not None
+        producer.execution_order = 1
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
     # The completed image-collection node cannot consume its own output.
     # That output has a valid checksum and belongs to the same run, so
     # artifact integrity alone cannot detect the falsified input lineage.
