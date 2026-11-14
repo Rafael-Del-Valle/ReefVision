@@ -745,10 +745,9 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
         )
         assert experiment is not None
         original_packages = dict(experiment.package_versions_json)
-        assert (
-            experiment.artifact_manifest_json["experiment_package_versions_sha256"]
-            == canonical_json_sha256(original_packages)
-        )
+        assert experiment.artifact_manifest_json[
+            "experiment_package_versions_sha256"
+        ] == canonical_json_sha256(original_packages)
         experiment.package_versions_json = {
             **original_packages,
             "tampered-runtime-package": "0.0.0",
