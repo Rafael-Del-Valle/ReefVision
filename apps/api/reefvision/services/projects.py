@@ -22,6 +22,9 @@ from reefvision.db.models import (
     DatasetVersion,
     ImageAsset,
     LabelClass,
+    ImageLabel,
+    MaskAnnotation,
+    MaskAnnotationEvent,
     ModelRegistration,
     PredictionProposal,
     Project,
@@ -64,6 +67,11 @@ USAGE_CATEGORY_ORDER = [
     "annotations_active",
     "annotations_deleted",
     "annotation_history",
+    "mask_annotations_active",
+    "mask_annotations_deleted",
+    "mask_annotation_history",
+    "image_labels_active",
+    "image_labels_deleted",
     "prediction_proposals",
     "quality_control_issues",
     "review_queue_items",
@@ -75,6 +83,11 @@ USAGE_CATEGORY_META: dict[str, tuple[str, bool, bool]] = {
     "annotations_active": ("Active annotations", True, False),
     "annotations_deleted": ("Deleted annotations", False, True),
     "annotation_history": ("Annotation history events", False, True),
+    "mask_annotations_active": ("Active mask annotations", True, False),
+    "mask_annotations_deleted": ("Deleted mask annotations", False, True),
+    "mask_annotation_history": ("Mask annotation history events", False, True),
+    "image_labels_active": ("Active image-level classifications", True, False),
+    "image_labels_deleted": ("Deleted image-level classifications", False, True),
     "prediction_proposals": ("Prediction proposals", True, False),
     "quality_control_issues": ("Quality-control issues", True, False),
     "review_queue_items": ("Review-queue items", True, False),
@@ -282,6 +295,46 @@ class ProjectService:
             or _contains_label_class_reference(item.after_json, label_class.id)
         ]
 
+        # These scientific modalities also carry class foreign keys. Omitting
+        # them would allow DELETE to cascade through verified masks or image labels.
+        masks = list(
+            self.session.scalars(
+                select(MaskAnnotation).where(MaskAnnotation.label_class_id == label_class.id)
+            )
+        )
+        reference_ids["mask_annotations_active"] = [
+            str(item.id) for item in masks if item.deleted_at is None
+        ]
+        reference_ids["mask_annotations_deleted"] = [
+            str(item.id) for item in masks if item.deleted_at is not None
+        ]
+
+        mask_events = list(
+            self.session.scalars(
+                select(MaskAnnotationEvent)
+                .join(ImageAsset, ImageAsset.id == MaskAnnotationEvent.image_id)
+                .where(ImageAsset.project_id == label_class.project_id)
+            )
+        )
+        reference_ids["mask_annotation_history"] = [
+            str(item.id)
+            for item in mask_events
+            if _contains_label_class_reference(item.before_json, label_class.id)
+            or _contains_label_class_reference(item.after_json, label_class.id)
+        ]
+
+        image_labels = list(
+            self.session.scalars(
+                select(ImageLabel).where(ImageLabel.label_class_id == label_class.id)
+            )
+        )
+        reference_ids["image_labels_active"] = [
+            str(item.id) for item in image_labels if item.deleted_at is None
+        ]
+        reference_ids["image_labels_deleted"] = [
+            str(item.id) for item in image_labels if item.deleted_at is not None
+        ]
+
         reference_ids["prediction_proposals"] = [
             str(item.id)
             for item in self.session.scalars(
@@ -351,6 +404,12 @@ class ProjectService:
             )
         if counts["annotations_deleted"] > 0 or counts["annotation_history"] > 0:
             delete_blockers.append("Historical annotation records still reference this class.")
+        if counts["mask_annotations_active"] > 0:
+            delete_blockers.append("Verified mask annotations still reference this class.")
+        if counts["mask_annotations_deleted"] > 0 or counts["mask_annotation_history"] > 0:
+            delete_blockers.append("Historical mask records still reference this class.")
+        if counts["image_labels_active"] > 0 or counts["image_labels_deleted"] > 0:
+            delete_blockers.append("Image-level classification labels still reference this class.")
         if counts["prediction_proposals"] > 0:
             delete_blockers.append("Prediction proposals still reference this class.")
         if counts["quality_control_issues"] > 0:
@@ -363,6 +422,14 @@ class ProjectService:
             delete_blockers.append("Registered model class maps still reference this class.")
 
         compatibility_warnings: list[str] = []
+        if counts["mask_annotations_deleted"] > 0 or counts["mask_annotation_history"] > 0:
+            compatibility_warnings.append(
+                "Historical mask annotations and events remain unchanged for auditability."
+            )
+        if counts["image_labels_deleted"] > 0:
+            compatibility_warnings.append(
+                "Deleted image-level classification labels remain in the scientific record."
+            )
         if counts["dataset_versions"] > 0:
             compatibility_warnings.append(
                 "Historical dataset versions keep their original class map for reproducibility."
@@ -563,6 +630,21 @@ class ProjectService:
             raise ConflictError(
                 "Class reference identities changed since the usage review. "
                 "Refresh usage and confirm the merge again."
+            )
+        # The legacy merge implementation reassigns boxes, predictions, QC and
+        # review queues, but not masks or image-level classification labels.
+        # Refuse to archive the source and strand unhandled biological records.
+        unsupported_merge_categories = (
+            "mask_annotations_active",
+            "mask_annotations_deleted",
+            "mask_annotation_history",
+            "image_labels_active",
+            "image_labels_deleted",
+        )
+        if any(source_usage.counts[key] > 0 for key in unsupported_merge_categories):
+            raise ConflictError(
+                "Mask or image-level classification references prevent a safe class merge. "
+                "Review these records before merging; automatic reassignment is not supported."
             )
         affected_counts: dict[str, int] = defaultdict(int)
 
