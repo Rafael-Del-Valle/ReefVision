@@ -54,6 +54,9 @@ from reefvision.api.routes.segmentation_learning_evaluation import (
     router as segmentation_learning_evaluation_router,
 )
 from reefvision.api.routes.skeleton_records import router as skeleton_records_router
+from reefvision.api.routes.spatial_source_assets_v14 import (
+    router as spatial_source_assets_router,
+)
 from reefvision.api.routes.system import router as system_router
 from reefvision.api.routes.training import router as training_router
 from reefvision.api.routes.video_science import router as video_science_router
@@ -102,6 +105,7 @@ api_router.include_router(pose_training_datasets_router)
 api_router.include_router(advanced_providers_router)
 api_router.include_router(advanced_provider_execution_router)
 api_router.include_router(workflow_graphs_router)
+api_router.include_router(spatial_source_assets_router)
 api_router.include_router(learning_evaluation_router)
 api_router.include_router(segmentation_learning_evaluation_router)
 api_router.include_router(segmentation_deployment_router)

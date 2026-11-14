@@ -19,6 +19,11 @@ import {
   createPoseArchitectureWorkflow,
   workflowTemplates,
 } from "./workflowTemplates";
+import { LocalMeshPreview } from "./LocalMeshPreview";
+import { LocalPointCloudPreview } from "./LocalPointCloudPreview";
+import { ProjectSpatialAssetPreview } from "./ProjectSpatialAssetPreview";
+import { MeshArtifactViewer } from "./MeshArtifactViewer";
+import { PointCloudArtifactViewer } from "./PointCloudArtifactViewer";
 import { WorkflowVisualEditor } from "./WorkflowVisualEditor";
 
 interface WorkflowGraphWorkspaceProps {
@@ -262,6 +267,10 @@ export function WorkflowGraphWorkspace({
           }
         </p>
       </div>
+
+      <ProjectSpatialAssetPreview projectId={project.id} />
+      <LocalMeshPreview projectId={project.id} />
+      <LocalPointCloudPreview projectId={project.id} />
 
       {poseDatasetSources.length > 0 && (
         <section className="panel-card">
@@ -621,6 +630,15 @@ export function WorkflowGraphWorkspace({
                     <code>{artifact.data_type}</code> from{" "}
                     {artifact.producer_port_id} ·{" "}
                     <code>{shortHash(artifact.payload_sha256)}</code>
+                    {artifact.data_type === "mesh_measurement_preview" && (
+                      <MeshArtifactViewer artifact={artifact.payload_json} />
+                    )}
+                    {artifact.data_type ===
+                      "point_cloud_measurement_preview" && (
+                      <PointCloudArtifactViewer
+                        artifact={artifact.payload_json}
+                      />
+                    )}
                     <details>
                       <summary>Inspect artifact</summary>
                       <pre>
