@@ -10,6 +10,7 @@ from reefvision.db.models import (
     ModelRegistration,
     ProjectExchangePackage,
     WorkflowArtifact,
+    WorkflowGraphRecord,
     WorkflowNodeRun,
     WorkflowRun,
 )
@@ -370,6 +371,33 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
             build_workflow_run_provenance(session, run_id=str(run["id"]))
             == original_result["provenance_manifest"]
         )
+
+    # The real executed graph has a frozen checksum. Changing only its edge
+    # identity preserves producer/port bindings, but must not allow direct
+    # succeeded-node reuse before whole-run provenance is inspected.
+    with app.state.session_factory() as session:
+        graph_record = session.get(WorkflowGraphRecord, str(saved["id"]))
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert graph_record is not None and consumer is not None
+        assert verify_succeeded_node_artifacts(
+            session, run_id=str(run["id"]), node_run=consumer
+        )["input_artifact_count"] == 1
+        original_graph = graph_record.graph_json
+        assert isinstance(original_graph, dict)
+        original_edges = original_graph["edges"]
+        assert isinstance(original_edges, list) and len(original_edges) == 1
+        graph_record.graph_json = {
+            **original_graph,
+            "edges": [{**original_edges[0], "edge_id": "tampered-edge-identity"}],
+        }
+        session.flush()
+        session.expire_all()
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert consumer is not None
+        with pytest.raises(ConflictError, match="graph provenance checksum failed"):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
 
 def test_workflow_graph_revisions_are_deduplicated_and_versioned(
