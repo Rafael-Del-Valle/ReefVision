@@ -209,13 +209,16 @@ def verify_succeeded_node_artifacts(
     from reefvision.services.workflow_graphs import workflow_node_registry
 
     definition = workflow_node_registry().get(node_run.node_type)
-    if definition is not None:
-        declared_types = {
-            port.port_id: set(port.accepted_types) for port in definition.output_ports
-        }
-        for artifact in outputs:
-            if artifact.data_type not in declared_types.get(artifact.producer_port_id, set()):
-                raise ConflictError("Succeeded workflow node output type does not match registry")
+    if definition is None:
+        # A missing adapter definition makes the saved port contract unknowable.
+        # Do not silently waive type validation while recovering offline runs.
+        raise ConflictError("Succeeded workflow node type is not registered for artifact reuse")
+    declared_types = {
+        port.port_id: set(port.accepted_types) for port in definition.output_ports
+    }
+    for artifact in outputs:
+        if artifact.data_type not in declared_types.get(artifact.producer_port_id, set()):
+            raise ConflictError("Succeeded workflow node output type does not match registry")
 
     raw_edges = graph.graph_json.get("edges", [])
     if not isinstance(raw_edges, list) or any(
@@ -233,18 +236,17 @@ def verify_succeeded_node_artifacts(
     # The artifact digest covers the payload but not its declared data type.
     # Recovery must honor the consumer's typed input-port contract as well
     # as the producer's output-port contract before reusing saved science.
-    if definition is not None:
-        accepted_inputs = {
-            port.port_id: set(port.accepted_types) for port in definition.input_ports
-        }
-        incoming_edges = [
-            edge
-            for edge in sorted(raw_edges, key=lambda edge: edge["edge_id"])
-            if edge.get("target_node_id") == node_run.node_id
-        ]
-        for edge, artifact in zip(incoming_edges, inputs, strict=True):
-            if artifact.data_type not in accepted_inputs.get(edge.get("target_port_id"), set()):
-                raise ConflictError("Succeeded workflow node input type does not match registry")
+    accepted_inputs = {
+        port.port_id: set(port.accepted_types) for port in definition.input_ports
+    }
+    incoming_edges = [
+        edge
+        for edge in sorted(raw_edges, key=lambda edge: edge["edge_id"])
+        if edge.get("target_node_id") == node_run.node_id
+    ]
+    for edge, artifact in zip(incoming_edges, inputs, strict=True):
+        if artifact.data_type not in accepted_inputs.get(edge.get("target_port_id"), set()):
+            raise ConflictError("Succeeded workflow node input type does not match registry")
 
     for artifact in outputs:
         if artifact.producer_node_run_id != node_run.id:

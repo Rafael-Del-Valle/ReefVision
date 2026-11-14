@@ -80,6 +80,7 @@ def _queue_run(
 
 def test_executable_workflow_persists_nodes_and_typed_artifacts(
     client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project = create_project(client, "Executable workflow")
     first = import_one(
@@ -464,6 +465,18 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         with pytest.raises(ConflictError, match="output type does not match registry"):
             verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
         session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
+    # This actually executed graph cannot safely reuse a succeeded node if
+    # its registered adapter definition disappears (e.g. after an upgrade).
+    # Its checksum-valid artifacts do not prove the missing port contracts.
+    with monkeypatch.context() as patcher:
+        patcher.setattr("reefvision.services.workflow_graphs.workflow_node_registry", lambda: {})
+        with app.state.session_factory() as session:
+            consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+            assert consumer is not None
+            with pytest.raises(ConflictError, match="type is not registered for artifact reuse"):
+                verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
 
