@@ -288,12 +288,13 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
 
     wrong_port = client.get(f"/api/v1/workflow-runs/{run['id']}")
     assert wrong_port.status_code == 409, wrong_port.text
+    # Registry-level rejection now precedes the downstream graph-edge check.
     assert wrong_port.json() == {
-        "detail": "Succeeded workflow node inputs do not match saved graph edges"
+        "detail": "Succeeded workflow node output type does not match registry"
     }
     with (
         app.state.session_factory() as session,
-        pytest.raises(ConflictError, match="inputs do not match saved graph edges"),
+        pytest.raises(ConflictError, match="output type does not match registry"),
     ):
         build_workflow_run_provenance(session, run_id=str(run["id"]))
 
