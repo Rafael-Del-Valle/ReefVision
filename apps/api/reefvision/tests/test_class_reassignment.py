@@ -905,3 +905,80 @@ def test_class_operation_preview_expires_after_observation_content_change(
         assert operation.started_at is None
         assert session.get(LabelClass, source["id"]) is not None
         assert session.get(LabelClass, target["id"]) is not None
+
+@pytest.mark.parametrize("operation_endpoint", ["reassign", "reassign-delete"])
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "dataset_class_map",
+        "dataset_manifest_checksum",
+        "model_class_map",
+        "model_weights_checksum",
+    ],
+)
+def test_class_operation_preview_expires_after_compatibility_provenance_change(
+    client: TestClient, operation_endpoint: str, mutation: str
+) -> None:
+    """Unchanged protected IDs cannot conceal revised dataset/model provenance."""
+    project = create_project(client, name="Compatibility lineage approval")
+    source = create_label_class(
+        client, project["id"], class_index=0, name="Swiftia Closed", display_color="#E76F51"
+    )
+    target = create_label_class(
+        client, project["id"], class_index=1, name="Swiftia Open", display_color="#2A9D8F"
+    )
+    seed_reassignment_records(
+        client,
+        project,
+        source,
+        target,
+        include_deleted_annotation=False,
+        include_historical_prediction=False,
+    )
+    route = f"/api/v1/projects/{project['id']}/classes/{source['id']}/{operation_endpoint}"
+    response = client.post(f"{route}/preview", json={"target_class_id": target["id"]})
+    assert response.status_code == 201, response.text
+    preview = response.json()
+    assert preview["plan"]["blockers"] == []
+
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        version = session.get(DatasetVersion, "dataset-version-1")
+        model = session.get(ModelRegistration, "model-1")
+        assert version is not None and model is not None
+        if mutation == "dataset_class_map":
+            version.class_map_json = [
+                {**entry, "name": "reinterpreted source"} if entry["id"] == source["id"] else entry
+                for entry in version.class_map_json
+            ]
+        elif mutation == "dataset_manifest_checksum":
+            version.manifest_sha256 = "0" * 64
+        elif mutation == "model_class_map":
+            model.class_map_json = {
+                **model.class_map_json,
+                "labels": ["reinterpreted source", target["name"]],
+            }
+        else:
+            model.sha256 = "1" * 64
+        session.commit()
+
+    execute = client.post(
+        route,
+        json={"operation_id": preview["id"], "preview_checksum": preview["preview_checksum"]},
+    )
+    assert execute.status_code == 409, execute.text
+    assert "stale" in execute.json()["detail"].lower()
+
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        annotation = session.get(Annotation, "annotation-active")
+        prediction = session.get(PredictionProposal, "proposal-pending")
+        issue = session.get(QualityControlIssue, "qc-issue-open")
+        queue_item = session.get(ReviewQueueItem, "queue-item-pending")
+        operation = session.get(ClassOperation, preview["id"])
+        assert annotation is not None and annotation.label_class_id == source["id"]
+        assert prediction is not None and prediction.label_class_id == source["id"]
+        assert issue is not None and issue.class_ids_json == [source["id"]]
+        assert queue_item is not None and queue_item.label_class_ids_json == [source["id"]]
+        assert operation is not None and operation.status == "failed"
+        assert operation.final_state == "preview_stale" and operation.started_at is None
+        assert session.get(LabelClass, source["id"]) is not None
+        assert session.get(LabelClass, target["id"]) is not None
