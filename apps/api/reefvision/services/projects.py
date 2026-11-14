@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import unicodedata
 from collections import defaultdict
@@ -84,6 +86,7 @@ USAGE_CATEGORY_META: dict[str, tuple[str, bool, bool]] = {
 @dataclass(slots=True)
 class LabelClassUsageSnapshot:
     counts: dict[str, int]
+    reference_fingerprint: str
     delete_blockers: list[str]
     compatibility_warnings: list[str]
 
@@ -248,18 +251,21 @@ class ProjectService:
             raise NotFoundError("Label class not found")
         return label_class
 
-    def _usage_snapshot(self, label_class: LabelClass) -> LabelClassUsageSnapshot:
-        counts = {key: 0 for key in USAGE_CATEGORY_ORDER}
+    def _usage_snapshot(s        # Class-merge approval must bind to exact references, not just counts.
+        # A one-for-one swap within a category invalidates the review.
+        reference_ids: dict[str, list[str]] = {key: [] for key in USAGE_CATEGORY_ORDER}
 
         annotations = list(
             self.session.scalars(
                 select(Annotation).where(Annotation.label_class_id == label_class.id)
             )
         )
-        counts["annotations_active"] = sum(1 for item in annotations if item.deleted_at is None)
-        counts["annotations_deleted"] = sum(
-            1 for item in annotations if item.deleted_at is not None
-        )
+        reference_ids["annotations_active"] = [
+            str(item.id) for item in annotations if item.deleted_at is None
+        ]
+        reference_ids["annotations_deleted"] = [
+            str(item.id) for item in annotations if item.deleted_at is not None
+        ]
 
         annotation_events = list(
             self.session.scalars(
@@ -268,52 +274,51 @@ class ProjectService:
                 .where(ImageAsset.project_id == label_class.project_id)
             )
         )
-        counts["annotation_history"] = sum(
-            1
+        reference_ids["annotation_history"] = [
+            str(item.id)
             for item in annotation_events
             if _contains_label_class_reference(item.before_json, label_class.id)
             or _contains_label_class_reference(item.after_json, label_class.id)
-        )
+        ]
 
-        counts["prediction_proposals"] = len(
-            list(
-                self.session.scalars(
-                    select(PredictionProposal).where(
-                        PredictionProposal.project_id == label_class.project_id,
-                        PredictionProposal.label_class_id == label_class.id,
-                    )
+        reference_ids["prediction_proposals"] = [
+            str(item.id)
+            for item in self.session.scalars(
+                select(PredictionProposal).where(
+                    PredictionProposal.project_id == label_class.project_id,
+                    PredictionProposal.label_class_id == label_class.id,
                 )
             )
-        )
+        ]
 
-        counts["quality_control_issues"] = sum(
-            1
+        reference_ids["quality_control_issues"] = [
+            str(item.id)
             for item in self.session.scalars(
                 select(QualityControlIssue).where(
                     QualityControlIssue.project_id == label_class.project_id
                 )
             )
             if label_class.id in item.class_ids_json
-        )
+        ]
 
-        counts["review_queue_items"] = sum(
-            1
+        reference_ids["review_queue_items"] = [
+            str(item.id)
             for item in self.session.scalars(
                 select(ReviewQueueItem).where(ReviewQueueItem.project_id == label_class.project_id)
             )
             if label_class.id in item.label_class_ids_json
-        )
+        ]
 
-        counts["dataset_versions"] = sum(
-            1
+        reference_ids["dataset_versions"] = [
+            str(item.id)
             for item in self.session.scalars(
                 select(DatasetVersion).where(DatasetVersion.project_id == label_class.project_id)
             )
             if any(entry.get("id") == label_class.id for entry in item.class_map_json)
-        )
+        ]
 
-        counts["model_registrations"] = sum(
-            1
+        reference_ids["model_registrations"] = [
+            str(item.id)
             for item in self.session.scalars(
                 select(ModelRegistration).where(
                     ModelRegistration.project_id == label_class.project_id
@@ -324,6 +329,21 @@ class ProjectService:
                 value
                 for value in (item.class_map_json.get("mapping") or {}).values()
                 if isinstance(value, str)
+            }
+        ]
+
+        counts = {key: len(reference_ids[key]) for key in USAGE_CATEGORY_ORDER}
+        canonical_inventory = [
+            label_class.id,
+            [[key, sorted(reference_ids[key])] for key in USAGE_CATEGORY_ORDER],
+        ]
+        reference_fingerprint = hashlib.sha256(
+            json.dumps(canonical_inventory, ensure_ascii=False, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+
+       if isinstance(value, str)
             }
         )
 
@@ -361,6 +381,7 @@ class ProjectService:
 
         return LabelClassUsageSnapshot(
             counts=counts,
+            reference_fingerprint=reference_fingerprint,
             delete_blockers=delete_blockers,
             compatibility_warnings=compatibility_warnings,
         )
@@ -374,6 +395,7 @@ class ProjectService:
             class_id=label_class.id,
             project_id=label_class.project_id,
             class_name=label_class.name,
+            reference_fingerprint=snapshot.reference_fingerprint,
             is_active=label_class.is_active,
             archived_at=label_class.archived_at,
             total_references=snapshot.total_references,
@@ -501,6 +523,14 @@ class ProjectService:
         ):
             raise ConflictError(
                 "Class references changed since the usage review. "
+                "Refresh usage and confirm the merge again."
+            )
+        if (
+            payload.expected_usage_fingerprint is not None
+            and payload.expected_usage_fingerprint != source_usage.reference_fingerprint
+        ):
+            raise ConflictError(
+                "Class reference identities changed since the usage review. "
                 "Refresh usage and confirm the merge again."
             )
         affected_counts: dict[str, int] = defaultdict(int)

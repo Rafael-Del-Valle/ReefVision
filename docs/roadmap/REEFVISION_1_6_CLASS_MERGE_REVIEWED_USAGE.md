@@ -12,17 +12,20 @@ usage before they approve a merge.
   response, eight unique canonical reference categories, correct
   mutable/immutable flags, and internally consistent totals.
 - The confirmation displays total and immutable reference counts.
-- The approved request carries a snapshot of all eight reference-category
-  counts. The backend recomputes counts before any class mutation and returns
-  HTTP 409 if any count changed. No merge writes occur on that mismatch.
+- The approved request carries all eight reference-category counts and a
+  SHA-256 fingerprint of the sorted, category-scoped source record IDs. The
+  backend recomputes the inventory before any merge and rejects count drift
+  **or equal-count identity swaps** with HTTP 409 before class mutations.
+  The usage API exposes the digest, not raw record identities.
 - A failed/pending/refetching/hidden usage inspection cannot authorize the
   GUI Merge action. Preexisting local scripts without
   `expected_usage_counts` remain compatible.
-- This protects **count drift**, not changes to record identity with exactly
-  the same category counts. The existing server validations, append-only
-  annotation event creation, and researcher QC workflows remain authoritative.
-  A future version should offer a revisioned, full-identity merge preview for
-  legacy API callers.
+- This protects **record-identity drift** even when the category counts are
+  unchanged. It does not fingerprint edits to content under identical record
+  IDs or lock the inventory against concurrent writes between check and commit.
+  Legacy scripts may omit both optional approvals for compatibility; scripts
+  requiring stronger safeguards should provide both reviewed values. Existing
+  append-only event and researcher-review workflows remain authoritative.
 
 The change is class-administration safety, not a new scientific analysis.
 No duplicate Workflow Builder node, migration, model checkpoint, remote
@@ -31,11 +34,13 @@ saved QC Workflow Builder regression suite must remain green.
 
 ## Verification and release limits
 
-Backend regression: stale reviewed counts reject with 409 and preserve source
-annotation/class/QC references; matching counts permit the existing merge.
+Backend regression: stale counts and equal-count record-ID replacement both
+reject with 409 before writes; restoration of the reviewed inventory allows
+normal merge and preserves annotation/QC historical behavior.
 Legacy request contract remains covered. Frontend regressions: merging is
-disabled before an inspected usage response and for incomplete evidence; valid
-zero/nonzero reviewed source counts travel into the merge request.
+disabled without an inspected report, complete count breakdown and a valid
+64-character identity digest; valid zero/nonzero source counts and digest both
+travel with the reviewed merge request.
 
 Full exact-head CI, representative biological-data and saved-workflow
 acceptance, Alembic 0038 cross-version reconciliation, Windows MSI/CAB

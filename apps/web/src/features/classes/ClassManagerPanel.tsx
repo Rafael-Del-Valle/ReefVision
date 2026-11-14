@@ -32,6 +32,7 @@ type BoundClassPreview = {
 type MergeClassApproval = {
   targetClassId: string;
   expectedUsageCounts: Record<string, number>;
+  expectedUsageFingerprint: string;
 };
 
 // A preview is not permission to execute while any safety evidence is blocked
@@ -366,6 +367,7 @@ function ClassRow({
       mergeLabelClass(labelClass.id, {
         target_class_id: approved.targetClassId,
         expected_usage_counts: approved.expectedUsageCounts,
+        expected_usage_fingerprint: approved.expectedUsageFingerprint,
       }),
     onSuccess: refresh,
   });
@@ -469,7 +471,10 @@ function ClassRow({
     project.id,
     labelClass.id,
   );
+  const mergeUsageFingerprint = usage.data?.reference_fingerprint;
   const canMerge =
+    typeof mergeUsageFingerprint === "string" &&
+    /^[0-9a-f]{64}$/.test(mergeUsageFingerprint) &&
     showUsage &&
     usage.isSuccess &&
     !usage.isFetching &&
@@ -627,6 +632,8 @@ function ClassRow({
           onClick={() => {
             if (
               mergeUsageCounts !== null &&
+              typeof mergeUsageFingerprint === "string" &&
+              /^[0-9a-f]{64}$/.test(mergeUsageFingerprint) &&
               window.confirm(
                 `Merge "${labelClass.name}" into the selected class? ${usage.data?.total_references ?? 0} reviewed class references include ${usage.data?.immutable_reference_count ?? 0} immutable references. Mutable references will be reassigned, historical records kept, and the source archived. Confirm only after inspecting Usage.`,
               )
@@ -634,6 +641,7 @@ function ClassRow({
               merge.mutate({
                 targetClassId: mergeTargetId,
                 expectedUsageCounts: { ...mergeUsageCounts },
+                expectedUsageFingerprint: mergeUsageFingerprint,
               });
             }
           }}

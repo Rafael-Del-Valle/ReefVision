@@ -111,6 +111,7 @@ function classUsage(canDelete: boolean, total = canDelete ? 0 : 1) {
     class_id: "class-1",
     project_id: project.id,
     class_name: "Muricea Closed",
+    reference_fingerprint: "a".repeat(64),
     is_active: true,
     archived_at: null,
     total_references: total,
@@ -179,6 +180,7 @@ describe("ClassManagerPanel", () => {
       expected_usage_counts: Object.fromEntries(
         zeroUsageCounts().map((item) => [item.key, 0]),
       ),
+      expected_usage_fingerprint: "a".repeat(64),
     });
     expect(confirmation.mock.calls[0]?.[0]).toContain("0 immutable references");
   });
@@ -187,6 +189,8 @@ describe("ClassManagerPanel", () => {
     ["incomplete reference categories", { counts: zeroUsageCounts().slice(1) }],
     ["missing compatibility warnings", { compatibility_warnings: null }],
     ["missing blocker evidence", { delete_blockers: null }],
+    ["missing identity inventory", { reference_fingerprint: null }],
+    ["malformed identity inventory", { reference_fingerprint: "bad" }],
   ] as const)("rejects %s before merging", async (_reason, invalidFields) => {
     const confirmation = vi.spyOn(window, "confirm").mockReturnValue(true);
     const fetchMock = vi
@@ -271,9 +275,11 @@ describe("ClassManagerPanel", () => {
     );
     const body = JSON.parse(String(merged?.[1]?.body)) as {
       expected_usage_counts: Record<string, number>;
+      expected_usage_fingerprint: string;
     };
     expect(body.expected_usage_counts.annotations_active).toBe(2);
     expect(body.expected_usage_counts.dataset_versions).toBe(1);
+    expect(body.expected_usage_fingerprint).toBe("a".repeat(64));
     expect(confirmation.mock.calls[0]?.[0]).toContain("1 immutable references");
   });
 

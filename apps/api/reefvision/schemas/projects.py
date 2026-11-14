@@ -161,6 +161,7 @@ class LabelClassUsageResponse(BaseModel):
     class_id: str
     project_id: str
     class_name: str
+    reference_fingerprint: str
     is_active: bool
     archived_at: datetime | None
     total_references: int
@@ -177,6 +178,10 @@ class LabelClassMergeRequest(BaseModel):
     # Optional for legacy local clients. The 1.6 GUI supplies all eight
     # reviewed counts so an intervening data change rejects the merge.
     expected_usage_counts: dict[str, int] | None = None
+    # Optional for legacy callers; the reviewed GUI supplies the identity-set hash.
+    expected_usage_fingerprint: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
 
 
 class LabelClassMergeCountResponse(BaseModel):

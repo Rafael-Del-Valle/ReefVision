@@ -513,6 +513,8 @@ def test_used_class_delete_is_blocked_and_usage_is_reported(client: TestClient) 
     assert payload["immutable_reference_count"] == 4
     assert len(payload["delete_blockers"]) >= 4
     assert len(payload["compatibility_warnings"]) >= 2
+    reviewed_fingerprint = payload["reference_fingerprint"]
+    assert len(reviewed_fingerprint) == 64
 
     deleted = client.delete(f"/api/v1/classes/{source_class['id']}")
     assert deleted.status_code == 409
@@ -538,11 +540,74 @@ def test_used_class_delete_is_blocked_and_usage_is_reported(client: TestClient) 
         assert qc_issue is not None
         assert qc_issue.class_ids_json == [source_class["id"]]
 
+    # The reviewed count vector is unchanged after this one-for-one swap.
+    # Identity fingerprint must prevent reassignment of unreviewed references.
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        proposal = session.get(PredictionProposal, "proposal-1")
+        assert proposal is not None
+        proposal.label_class_id = target_class["id"]
+        replacement = PredictionProposal(
+            id="proposal-replacement",
+            project_id=project["id"],
+            image_id="image-1",
+            model_id="model-1",
+            inference_job_id="job-inference-1",
+            model_checksum="c" * 64,
+            label_class_id=source_class["id"],
+            predicted_label="Muricea Closed",
+            predicted_index=0,
+            confidence=0.75,
+            x_min=200,
+            y_min=210,
+            x_max=300,
+            y_max=310,
+        )
+        session.add(replacement)
+        session.commit()
+
+    swapped_usage = client.get(f"/api/v1/classes/{source_class['id']}/usage")
+    assert swapped_usage.status_code == 200
+    assert {
+        item["key"]: item["count"] for item in swapped_usage.json()["counts"]
+    } == counts
+    assert swapped_usage.json()["reference_fingerprint"] != reviewed_fingerprint
+
+    stale_identity_merge = client.post(
+        f"/api/v1/classes/{source_class['id']}/merge",
+        json={
+            "target_class_id": target_class["id"],
+            "expected_usage_counts": counts,
+            "expected_usage_fingerprint": reviewed_fingerprint,
+        },
+    )
+    assert stale_identity_merge.status_code == 409
+    assert "reference identities changed" in stale_identity_merge.text
+    with Session(cast(FastAPI, client.app).state.engine) as session:
+        source = session.get(LabelClass, source_class["id"])
+        original = session.get(Annotation, "annotation-active")
+        replacement = session.get(PredictionProposal, "proposal-replacement")
+        assert source is not None and source.is_active
+        assert original is not None and original.label_class_id == source_class["id"]
+        assert replacement is not None
+        assert replacement.label_class_id == source_class["id"]
+        original_proposal = session.get(PredictionProposal, "proposal-1")
+        assert original_proposal is not None
+        original_proposal.label_class_id = source_class["id"]
+        session.delete(replacement)
+        session.commit()
+    assert (
+        client.get(f"/api/v1/classes/{source_class['id']}/usage").json()[
+            "reference_fingerprint"
+        ]
+        == reviewed_fingerprint
+    )
+
     merged = client.post(
         f"/api/v1/classes/{source_class['id']}/merge",
         json={
             "target_class_id": target_class["id"],
             "expected_usage_counts": counts,
+            "expected_usage_fingerprint": reviewed_fingerprint,
         },
     )
     assert merged.status_code == 200, merged.text
