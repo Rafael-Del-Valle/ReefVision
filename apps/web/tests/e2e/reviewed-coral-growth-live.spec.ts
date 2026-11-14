@@ -195,12 +195,12 @@ test("reviews two dated coral graphs and saves and exports projected branch grow
   expect(csv.ok()).toBeTruthy();
   expect(await csv.text()).toContain("absolute_change");
   if (process.env.REEFVISION_BRANCH_EVIDENCE_DIR) {
+    await table.scrollIntoViewIfNeeded();
     await page.screenshot({
       path: join(
         process.env.REEFVISION_BRANCH_EVIDENCE_DIR,
         "coral-growth.png",
       ),
-      fullPage: true,
     });
   }
   await page.reload();

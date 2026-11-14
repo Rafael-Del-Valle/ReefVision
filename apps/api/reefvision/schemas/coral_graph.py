@@ -39,20 +39,27 @@ class GapDecision(StrictRequest):
 
 
 class GraphEdit(StrictRequest):
-    kind: Literal["add", "split", "merge", "remove", "correct"]
+    kind: Literal["add", "split", "merge", "remove", "correct", "reconnect"]
     branch_ids: list[Identifier] = Field(default_factory=list, max_length=2)
     points: list[SkeletonPixelEdit] = Field(default_factory=list, max_length=25000)
     snap_tolerance_px: float = Field(default=0, ge=0, le=25, allow_inf_nan=False)
 
     @model_validator(mode="after")
     def operation_arguments(self) -> Self:
-        required_branches = {"add": 0, "split": 1, "merge": 2, "remove": 1, "correct": 1}
+        required_branches = {
+            "add": 0,
+            "split": 1,
+            "merge": 2,
+            "remove": 1,
+            "correct": 1,
+            "reconnect": 1,
+        }
         if len(self.branch_ids) != required_branches[self.kind] or len(set(self.branch_ids)) != len(
             self.branch_ids
         ):
             raise ValueError("Select the required distinct branches for this operation")
         if (
-            (self.kind in {"add", "correct"} and len(self.points) < 2)
+            (self.kind in {"add", "correct", "reconnect"} and len(self.points) < 2)
             or (self.kind == "split" and len(self.points) != 1)
             or (self.kind in {"merge", "remove"} and self.points)
             or (self.kind != "add" and self.snap_tolerance_px != 0)
@@ -65,12 +72,21 @@ class GraphReview(StrictRequest):
     identity_revision_id: UUID
     analysis_id: UUID
     base_revision_id: UUID | None = None
+    restore_revision_id: UUID | None = None
     decision: Literal["accepted", "rejected"]
     reviewer: Reviewer
     reason: Reason
     observed_at: AwareDatetime
     edit: GraphEdit | None = None
     gaps: list[GapDecision] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def restore_requires_one_operation(self) -> Self:
+        if self.restore_revision_id is not None and (
+            self.base_revision_id is None or self.edit is not None or self.gaps
+        ):
+            raise ValueError("Restoring history requires a base and no simultaneous geometry edit")
+        return self
 
     @field_validator("observed_at")
     @classmethod
@@ -81,6 +97,13 @@ class GraphReview(StrictRequest):
 class BranchSupersession(BaseModel):
     previous_branch_ids: list[str]
     successor_branch_ids: list[str]
+
+
+class TraceCoverage(BaseModel):
+    source_skeleton_pixels: int = Field(ge=0)
+    retained_source_skeleton_pixels: int = Field(ge=0)
+    reviewed_trace_pixels: int = Field(ge=0)
+    reviewed_trace_outside_mask_pixels: int = Field(ge=0)
 
 
 class GraphSnapshot(BaseModel):
@@ -103,6 +126,8 @@ class GraphSnapshot(BaseModel):
     calibration_sha256: str | None = None
     edit: GraphEdit | None = None
     attached_pixel: SkeletonPixelEdit | None = None
+    restored_from_sha256: str | None = None
+    coverage: TraceCoverage | None = None
     gaps: list[GapDecision]
     supersession: list[BranchSupersession] = Field(default_factory=list)
     qc: list[str]

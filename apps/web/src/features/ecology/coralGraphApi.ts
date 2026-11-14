@@ -5,13 +5,15 @@ import type {
   SkeletonPixel,
 } from "../annotation-editor/skeletonAnalysisApi";
 
-export type GraphEditKind = "add" | "split" | "merge" | "remove" | "correct";
+export type GraphEditKind =
+  "add" | "split" | "merge" | "remove" | "correct" | "reconnect";
 export type GapDisposition =
   "observed_attachment" | "occluded" | "unknown" | "separate_colony";
 export interface GraphReview {
   identity_revision_id: string;
   analysis_id: string;
   base_revision_id?: string;
+  restore_revision_id?: string;
   decision: "accepted" | "rejected";
   observed_at: string;
   reviewer: string;
@@ -58,6 +60,12 @@ export interface GraphRecord {
     total_physical: number | null;
     calibration: { unit: string } | null;
     qc: string[];
+    coverage?: {
+      source_skeleton_pixels: number;
+      retained_source_skeleton_pixels: number;
+      reviewed_trace_pixels: number;
+      reviewed_trace_outside_mask_pixels: number;
+    } | null;
     eligible_for_growth: boolean;
     supersession: {
       previous_branch_ids: string[];

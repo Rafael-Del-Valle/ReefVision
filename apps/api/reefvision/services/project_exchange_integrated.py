@@ -19,6 +19,8 @@ from reefvision.schemas.ecology_analysis import (
 )
 from reefvision.schemas.ecology_pose_links import PoseLinkSource
 from reefvision.services.annotations import annotation_snapshot, mask_annotation_snapshot
+from reefvision.services.coral_graph_geometry import frozen_skeleton_digest, validate_graph_snapshot
+from reefvision.services.coral_growth import calculate_pinned_growth, validate_branch_correspondence
 from reefvision.services.ecology_identity import EcologyIdentityService
 from reefvision.services.project_exchange_pose import heldout_scope, validate_pose_rows
 from reefvision.services.project_exchange_workflows import validate_workflow_rows
@@ -312,6 +314,9 @@ def _validate_coral_lineage(by_section: dict[str, dict[Any, dict[str, Any]]]) ->
     for graph in graphs.values():
         snapshot = graph["payload_json"]
         mapping = graph["source_id_map_json"]
+        image = by_section.get("images", {}).get(
+            mapping.get(snapshot["image_id"], snapshot["image_id"])
+        )
         analysis = by_section.get("skeleton_analysis_revisions", {}).get(graph["analysis_id"])
         identity = by_section.get("ecology_identity_revisions", {}).get(
             graph["identity_revision_id"]
@@ -319,38 +324,101 @@ def _validate_coral_lineage(by_section: dict[str, dict[Any, dict[str, Any]]]) ->
         if (
             not analysis
             or not identity
+            or not image
+            or identity["kind"] != "colony"
+            or snapshot["image_sha256"] != image["sha256"]
             or snapshot["organism_key"] != identity["organism_key"]
             or mapping.get(snapshot["image_id"], snapshot["image_id"]) != analysis["image_id"]
             or mapping.get(snapshot["mask_annotation_id"], snapshot["mask_annotation_id"])
             != analysis["mask_annotation_id"]
             or snapshot["analysis_sha256"] != analysis["result_sha256"]
+            or snapshot["mask_revision"] != analysis["mask_revision"]
+            or snapshot["mask_sha256"] != analysis["input_mask_sha256"]
+            or snapshot["calibration_sha256"] != analysis["calibration_sha256"]
+            or snapshot["analysis_algorithm"] != analysis["algorithm"]
+            or snapshot["analysis_algorithm_version"] != analysis["algorithm_version"]
         ):
             raise ValidationError(
                 "Reviewed coral graph source does not match the exchange snapshot"
             )
-    for row in correspondences.values():
-        snap = row["payload_json"]
-        for side in ("earlier", "later"):
-            graph = graphs[row[f"{side}_graph_revision_id"]]
-            edges = {edge["id"] for edge in graph["payload_json"]["edges"]}
-            linked = [edge for match in snap["matches"] for edge in match[f"{side}_branch_ids"]]
+        if (
+            frozen_skeleton_digest(
+                analysis["result_json"],
+                snapshot["image_id"],
+                snapshot["mask_annotation_id"],
+                mapping,
+            )
+            != analysis["result_sha256"]
+        ):
+            raise ValidationError(
+                "Reviewed coral graph source does not match the exchange snapshot"
+            )
+        validated = GraphSnapshot.model_validate(snapshot)
+        validate_graph_snapshot(
+            validated,
+            width=image["width_px"],
+            height=image["height_px"],
+            accepted=graph["decision"] == "accepted",
+        )
+        if validated.coverage is not None:
+            skeleton_pixels = {
+                (point["x"], point["y"])
+                for point in analysis["result_json"]["final_skeleton_pixels"]
+            }
+            trace = {(point.x, point.y) for edge in validated.edges for point in edge.pixels}
+            coverage = validated.coverage
             if (
-                graph["content_sha256"] != snap[f"{side}_graph_sha256"]
-                or graph["decision"] != "accepted"
-                or len(linked) != len(set(linked))
-                or not set(linked) <= edges
+                coverage.source_skeleton_pixels != len(skeleton_pixels)
+                or coverage.retained_source_skeleton_pixels != len(skeleton_pixels & trace)
+                or coverage.reviewed_trace_pixels != len(trace)
+                or coverage.reviewed_trace_outside_mask_pixels > len(trace)
             ):
-                raise ValidationError(
-                    "Coral correspondence does not match exchanged reviewed branches"
-                )
+                raise ValidationError("Coral graph coverage disagrees with its source skeleton")
+    for row in correspondences.values():
+        snap = CorrespondenceSnapshot.model_validate(row["payload_json"])
+        earlier = graphs[row["earlier_graph_revision_id"]]
+        later = graphs[row["later_graph_revision_id"]]
+        if (
+            earlier["content_sha256"] != snap.earlier_graph_sha256
+            or later["content_sha256"] != snap.later_graph_sha256
+            or any(graph["decision"] != "accepted" for graph in (earlier, later))
+        ):
+            raise ValidationError("Coral correspondence does not match exchanged reviewed branches")
+        validate_branch_correspondence(
+            GraphSnapshot.model_validate(earlier["payload_json"]),
+            GraphSnapshot.model_validate(later["payload_json"]),
+            snap.matches,
+        )
+    parents_by_digest = {row["content_sha256"]: row for row in correspondences.values()}
+
+    def expected_growth(parent: dict[str, Any]) -> dict[str, Any]:
+        earlier = graphs[parent["earlier_graph_revision_id"]]
+        later = graphs[parent["later_graph_revision_id"]]
+        return calculate_pinned_growth(
+            GraphSnapshot.model_validate(earlier["payload_json"]),
+            GraphSnapshot.model_validate(later["payload_json"]),
+            CorrespondenceSnapshot.model_validate(parent["payload_json"]),
+            parent["content_sha256"],
+        ).model_dump(mode="json")
+
     for row in by_section.get("coral_growth_records", {}).values():
         parent = correspondences[row["correspondence_revision_id"]]
-        snap = row["payload_json"]
-        if snap["correspondence_sha256"] != parent["content_sha256"] or any(
-            snap[f"{side}_graph_sha256"] != parent["payload_json"][f"{side}_graph_sha256"]
-            for side in ("earlier", "later")
+        if expected_growth(parent) != row["payload_json"]:
+            raise ValidationError(
+                "Coral growth result does not replay from exchanged correspondence"
+            )
+    for artifact in by_section.get("workflow_artifacts", {}).values():
+        if artifact["data_type"] != "coral_branch_growth":
+            continue
+        payload = artifact["payload_json"]
+        snapshot = GrowthSnapshot.model_validate(payload["snapshot"])
+        workflow_parent = parents_by_digest.get(snapshot.correspondence_sha256)
+        if (
+            workflow_parent is None
+            or expected_growth(workflow_parent) != payload["snapshot"]
+            or payload["content_sha256"] != canonical_json_sha256(payload["snapshot"])
         ):
-            raise ValidationError("Coral growth result does not match exchanged correspondence")
+            raise ValidationError("Coral workflow growth does not replay from exchanged evidence")
 
 
 def remap_reviewed_snapshot(

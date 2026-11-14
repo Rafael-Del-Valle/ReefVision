@@ -44,6 +44,7 @@ def _validate_file_inventory(
     descriptors: Any,
     label: str,
     require_source_relative_path: bool,
+    require_integrity: bool,
     errors: list[str],
 ) -> list[dict[str, Any]]:
     if not isinstance(descriptors, list):
@@ -71,6 +72,14 @@ def _validate_file_inventory(
             continue
         expected_sha = str(descriptor.get("sha256", ""))
         expected_size = descriptor.get("size_bytes")
+        if require_integrity and (
+            len(expected_sha) != 64
+            or any(character not in "0123456789abcdef" for character in expected_sha)
+            or type(expected_size) is not int
+            or expected_size < 0
+        ):
+            errors.append(f"{label.title()} checksum or size is invalid: {member}")
+            continue
         digest = hashlib.sha256()
         with archive.open(member) as stream:
             for chunk in iter(lambda: stream.read(1024 * 1024), b""):
@@ -247,6 +256,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                 descriptors=manifest.get("media", []),
                 label="media",
                 require_source_relative_path=False,
+                require_integrity=version == "1.2",
                 errors=errors,
             )
             included_media_count = len(media)
@@ -267,6 +277,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                 ),
                 label="telemetry sidecar",
                 require_source_relative_path=True,
+                require_integrity=version == "1.2",
                 errors=errors,
             )
 
@@ -296,6 +307,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                 descriptors=manifest.get("generated_artifacts", []),
                 label="generated artifact",
                 require_source_relative_path=True,
+                require_integrity=version == "1.2",
                 errors=errors,
             )
             included_generated_artifact_count = len(generated)

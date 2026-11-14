@@ -4,9 +4,15 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from reefvision.config import Settings
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import import_one
 from reefvision.tests.test_connected_branch_preview_api_1_2 import _save_calibrated_analysis
-from reefvision.tests.test_scientific_project_exchange import export_archive, import_archive
+from reefvision.tests.test_scientific_project_exchange import (
+    database_counts,
+    export_archive,
+    import_archive,
+    rewrite,
+)
 from reefvision.tests.test_workflow_connected_branch_preview_1_2 import _run
 
 
@@ -57,6 +63,33 @@ def test_reviewed_graph_records_keep_rejected_edit_and_stable_edges(client: Test
     assert client.get(f"{endpoint}/{rejected.json()['id']}").json()["decision"] == "rejected"
     stale = client.post(endpoint, json={**change, "decision": "accepted"})
     assert stale.status_code == 409, stale.text
+
+    restored = post(
+        client,
+        endpoint,
+        {
+            **change,
+            "base_revision_id": updated["id"],
+            "decision": "accepted",
+            "edit": None,
+            "restore_revision_id": original["id"],
+        },
+    )
+    assert restored["snapshot"]["edges"] == original["snapshot"]["edges"]
+    assert restored["snapshot"]["restored_from_sha256"] == original["content_sha256"]
+    redone = post(
+        client,
+        endpoint,
+        {
+            **change,
+            "base_revision_id": restored["id"],
+            "decision": "accepted",
+            "edit": None,
+            "restore_revision_id": updated["id"],
+        },
+    )
+    assert redone["snapshot"]["edges"] == updated["snapshot"]["edges"]
+    assert redone["snapshot"]["restored_from_sha256"] == updated["content_sha256"]
 
 
 def test_two_date_growth_saved_workflow_exchange_and_stale_review(
@@ -187,6 +220,43 @@ def test_two_date_growth_saved_workflow_exchange_and_stale_review(
     assert second["stale_reasons"] == []
 
     raw = export_archive(client, test_settings, project_id)
+
+    def change_growth(_manifest: dict[str, Any], sections: dict[str, Any]) -> None:
+        forged = sections["coral_growth_records"][0]
+        result = forged["payload_json"]
+        result["total"]["absolute_change"] = 250
+        forged["content_sha256"] = canonical_json_sha256(result)
+
+    def change_source(_manifest: dict[str, Any], sections: dict[str, Any]) -> None:
+        source = next(
+            row
+            for row in sections["skeleton_analysis_revisions"]
+            if row["id"] == first_analysis["id"]
+        )
+        source["result_json"]["removed_spur_count"] += 1
+
+    def change_correspondence(_manifest: dict[str, Any], sections: dict[str, Any]) -> None:
+        row = sections["coral_branch_correspondence_revisions"][0]
+        match = row["payload_json"]["matches"][0]
+        match["status"] = "missing"
+        match["later_branch_ids"] = []
+        row["content_sha256"] = canonical_json_sha256(row["payload_json"])
+
+    for edit, message in (
+        (change_growth, "does not replay"),
+        (change_source, "does not match the exchange snapshot"),
+        (change_correspondence, "Review each branch exactly once"),
+    ):
+        tampered = rewrite(raw, edit)
+        before_counts = database_counts(client)
+        inspected = client.post(
+            "/api/v1/exchange-packages/inspect",
+            files={"file": ("tampered.zip", tampered, "application/zip")},
+        )
+        assert not inspected.json()["compatible"]
+        assert message in " ".join(inspected.json()["errors"])
+        assert import_archive(client, tampered).status_code == 400
+        assert database_counts(client) == before_counts
     imported = import_archive(client, raw)
     assert imported.status_code == 201, imported.text
     value = imported.json()
@@ -268,3 +338,54 @@ def test_reviewed_graph_refresh_keeps_ids_and_corrects_stale_calibration(
     assert refreshed["snapshot"]["total_physical"] == 2 * first["snapshot"]["total_physical"]
     assert refreshed["current"]
     assert client.get(graph_url).json()["snapshot"] == first["snapshot"]
+
+
+def test_unrelated_split_cannot_clear_a_reviewed_gap(client: TestClient) -> None:
+    image_id, source, _ = _save_calibrated_analysis(client)
+    project_id = client.get(f"/api/v1/images/{image_id}").json()["project_id"]
+    base = f"/api/v1/projects/{project_id}/ecology"
+    colony = post(
+        client,
+        f"{base}/organisms",
+        {
+            "organism_key": "gap-colony",
+            "kind": "colony",
+            "reason": "Permanent field ID",
+        },
+    )
+    request = {
+        "identity_revision_id": colony["id"],
+        "analysis_id": source["id"],
+        "decision": "accepted",
+        "reviewer": "Scientist",
+        "reason": "Reviewed visible trace",
+        "observed_at": "2026-03-10T10:00:00Z",
+    }
+    gap = {
+        "disposition": "occluded",
+        "points": [{"x": 3, "y": 3}, {"x": 4, "y": 3}],
+        "reason": "Overlapping animal",
+    }
+    original = post(client, f"{base}/coral-graphs", {**request, "gaps": [gap]})
+    branch = original["snapshot"]["edges"][0]
+    split = {
+        **request,
+        "base_revision_id": original["id"],
+        "edit": {
+            "kind": "split",
+            "branch_ids": [branch["id"]],
+            "points": [branch["pixels"][3]],
+        },
+    }
+    forged = client.post(
+        f"{base}/coral-graphs",
+        json={
+            **split,
+            "gaps": [{**gap, "disposition": "observed_attachment"}],
+        },
+    )
+    assert forged.status_code == 400, forged.text
+    assert "measured attachment path" in forged.text
+    saved = post(client, f"{base}/coral-graphs", split)
+    assert saved["snapshot"]["gaps"] == [gap]
+    assert not saved["snapshot"]["eligible_for_growth"]

@@ -2363,3 +2363,38 @@ summary:focus-visible {
   flex: 1;
   min-inline-size: 0.35rem;
 }
+
+.coral-growth-panel fieldset {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  margin-block: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line, #294a50);
+  border-radius: 0.5rem;
+}
+
+.coral-growth-table {
+  overflow-x: auto;
+}
+
+.coral-growth-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.coral-growth-table caption {
+  margin-block-end: 0.5rem;
+  text-align: start;
+}
+
+.coral-growth-table :is(th, td) {
+  padding: 0.5rem;
+  border-block-end: 1px solid var(--line, #294a50);
+  text-align: end;
+}
+
+.coral-growth-table :is(th, td):first-child {
+  text-align: start;
+}

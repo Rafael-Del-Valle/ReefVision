@@ -34,10 +34,9 @@ from reefvision.schemas.coral_graph import (
     GraphRecord,
     GraphReview,
     GraphSnapshot,
-    GrowthBranch,
-    GrowthChange,
     GrowthRecord,
     GrowthSnapshot,
+    TraceCoverage,
 )
 from reefvision.schemas.skeletonization import SkeletonPixelEdit
 from reefvision.services.connected_branch_editing import BranchEditError, validate_branch_graph
@@ -45,10 +44,13 @@ from reefvision.services.connected_branch_preview import source_skeleton_graph
 from reefvision.services.coral_graph_geometry import (
     apply_graph_edit,
     assign_ids,
+    frozen_skeleton_digest,
     match_unchanged_geometry,
+    merge_gap_reviews,
     pixel,
     restore_graph,
 )
+from reefvision.services.coral_growth import calculate_pinned_growth, validate_branch_correspondence
 from reefvision.services.skeletonization import (
     SkeletonizationService,
     skeleton_calibration_payload,
@@ -155,7 +157,17 @@ class CoralGraphService:
                 .order_by(SkeletonAnalysisRevision.analysis_revision.desc())
                 .limit(1)
             )
-            if latest != row.analysis_id or (analysis.result_sha256 != snapshot.analysis_sha256):
+            analysis_digest = frozen_skeleton_digest(
+                analysis.result_json,
+                snapshot.image_id,
+                snapshot.mask_annotation_id,
+                row.source_id_map_json,
+            )
+            if (
+                latest != row.analysis_id
+                or analysis.result_sha256 != snapshot.analysis_sha256
+                or analysis_digest != analysis.result_sha256
+            ):
                 stale.append("source_analysis_changed")
         if row.decision == "accepted" and active is not None and active.id != row.id:
             stale.append("superseded_graph")
@@ -261,18 +273,14 @@ class CoralGraphService:
             raise ValidationError(
                 "Review and save the source mask and image before reviewing a coral graph"
             )
-        analysis = SkeletonizationService(self.session, self.settings).get_persisted_analysis(
-            stored.id
-        )
+        skeletons = SkeletonizationService(self.session, self.settings)
+        analysis = skeletons.get_persisted_analysis(stored.id)
         if (
             analysis.stale
             or analysis.mask_revision != mask.revision
             or not analysis.is_latest_revision
         ):
             raise ConflictError("Create a skeleton analysis from the current mask and calibration")
-        if canonical_json_sha256(analysis.result.model_dump(mode="json")) != analysis.result_sha256:
-            raise ValidationError("Source skeleton checksum does not match")
-
         base = None
         graph_id = str(uuid5(NAMESPACE_URL, f"reefvision:{project_id}:coral:{mask.id}"))
         if payload.base_revision_id is not None:
@@ -316,6 +324,27 @@ class CoralGraphService:
                     "This mask already has a reviewed graph. Select its latest accepted revision."
                 )
         prior = self.graph_record(base).snapshot if base is not None else None
+        payload_json = analysis.result.model_dump(mode="json")
+        current_digest = canonical_json_sha256(payload_json)
+        source_ids: dict[str, str] = {}
+        if current_digest != analysis.result_sha256:
+            if (
+                base is None
+                or prior is None
+                or frozen_skeleton_digest(
+                    payload_json, prior.image_id, prior.mask_annotation_id, base.source_id_map_json
+                )
+                != analysis.result_sha256
+            ):
+                raise ValidationError("Source skeleton checksum does not match")
+            source_ids = {
+                origin: base.source_id_map_json[origin]
+                for origin in (prior.image_id, prior.mask_annotation_id)
+                if origin in base.source_id_map_json
+            }
+            profile = prior.calibration.profile_source_image_id if prior.calibration else None
+            if profile is not None and profile in base.source_id_map_json:
+                source_ids[profile] = base.source_id_map_json[profile]
         if prior is not None and prior.observed_at != payload.observed_at:
             raise ValidationError("A graph edit must preserve the recorded observation timestamp")
         lineage: list[BranchSupersession] = []
@@ -331,6 +360,27 @@ class CoralGraphService:
             )
         else:
             nodes, edges = restore_graph(prior)
+
+        restored_from = None
+        if payload.restore_revision_id is not None and base is not None and prior is not None:
+            restored = self.owned(CoralGraphRevision, project_id, str(payload.restore_revision_id))
+            historical = self.graph_record(restored).snapshot
+            if (
+                restored.graph_id != base.graph_id
+                or restored.decision != "accepted"
+                or restored.analysis_id != stored.id
+                or restored.identity_revision_id != identity.id
+            ):
+                raise ValidationError(
+                    "Restore an accepted revision using the same source and colony"
+                )
+            nodes, edges = restore_graph(historical)
+            removed = {edge.id for edge in prior.edges} - {edge.id for edge in edges}
+            if removed:
+                lineage = [
+                    BranchSupersession(previous_branch_ids=sorted(removed), successor_branch_ids=[])
+                ]
+            restored_from = restored.content_sha256
 
         points = [point for gap in payload.gaps for point in gap.points]
         if payload.edit:
@@ -354,14 +404,17 @@ class CoralGraphService:
             connected = bool(edges)
         except BranchEditError:
             pass
-        gaps = payload.gaps or (prior.gaps if prior is not None else [])
-        if (
-            any(gap.disposition == "observed_attachment" for gap in payload.gaps)
-            and attachment is None
-        ):
-            raise ValidationError(
-                "Record the observed attachment with an explicit geometry operation"
-            )
+        gaps = merge_gap_reviews(
+            prior.gaps if prior is not None else [],
+            payload.gaps,
+            performed_path=(
+                (attachment, *[pixel(point) for point in payload.edit.points[1:]])
+                if payload.edit
+                and payload.edit.kind in {"add", "reconnect"}
+                and attachment is not None
+                else ()
+            ),
+        )
         unresolved = any(gap.disposition != "observed_attachment" for gap in gaps)
         if not connected and payload.decision == "accepted" and not unresolved:
             raise ValidationError(
@@ -371,6 +424,8 @@ class CoralGraphService:
             qc.append("reviewed_gap_excludes_growth")
         if not connected:
             qc.append("disconnected_or_unmeasurable")
+        if any(edge.node_to_node_length_pixels < 3 for edge in edges):
+            qc.append("short_centerline_segments")
         if analysis.result.removed_spur_count:
             qc.append("source_spur_pruning")
         if not analysis.result.topology_preserved:
@@ -393,6 +448,18 @@ class CoralGraphService:
             qc.append("pixel_only")
         elif not is_ecological_physical_length_unit(calibration.unit):
             qc.append("unsupported_physical_length_unit")
+        source_pixels = {(point.x, point.y) for point in analysis.result.final_skeleton_pixels}
+        trace = {point for edge in edges for point in edge.pixels}
+        mask_pixels, width, _ = skeletons._binary_mask(mask, image)
+        outside = sum(not mask_pixels[y * width + x] for x, y in trace)
+        if outside:
+            qc.append("trace_extends_outside_source_mask")
+        coverage = TraceCoverage(
+            source_skeleton_pixels=len(source_pixels),
+            retained_source_skeleton_pixels=len(source_pixels & trace),
+            reviewed_trace_pixels=len(trace),
+            reviewed_trace_outside_mask_pixels=outside,
+        )
         snapshot = GraphSnapshot(
             organism_key=identity.organism_key,
             image_id=image.id,
@@ -437,6 +504,8 @@ class CoralGraphService:
             if attachment
             else None,
             gaps=gaps,
+            restored_from_sha256=restored_from,
+            coverage=coverage,
             supersession=lineage,
             qc=qc,
             connected=connected,
@@ -455,6 +524,19 @@ class CoralGraphService:
                 CoralGraphRevision.graph_id == graph_id
             )
         )
+        if source_ids and prior is not None:
+            # The source analysis retains its canonical digest after exchange.
+            snapshot.image_id = prior.image_id
+            snapshot.mask_annotation_id = prior.mask_annotation_id
+            if snapshot.calibration is not None and prior.calibration is not None:
+                profile = prior.calibration.profile_source_image_id
+                if (
+                    profile
+                    and source_ids.get(profile) == snapshot.calibration.profile_source_image_id
+                ):
+                    snapshot.calibration = snapshot.calibration.model_copy(
+                        update={"profile_source_image_id": profile}
+                    )
         data = snapshot.model_dump(mode="json")
         row = CoralGraphRevision(
             project_id=project_id,
@@ -467,6 +549,7 @@ class CoralGraphService:
             reviewer=payload.reviewer,
             reason=payload.reason,
             payload_json=data,
+            source_id_map_json=source_ids,
             content_sha256=canonical_json_sha256(data),
         )
         self.session.add(row)
@@ -545,23 +628,7 @@ class CoralGraphService:
         )
         if not earlier.current or not later.current:
             raise ConflictError("Select current accepted graph revisions at both dates")
-        if earlier.snapshot.organism_key != later.snapshot.organism_key:
-            raise ValidationError("Both observations must be of the same registered colony")
-        if (
-            earlier.snapshot.image_sha256 == later.snapshot.image_sha256
-            or earlier.snapshot.observed_at >= later.snapshot.observed_at
-        ):
-            raise ValidationError("Use distinct source images in chronological order")
-        for key, graph in (("earlier_branch_ids", earlier), ("later_branch_ids", later)):
-            selected = [
-                identifier for match in payload.matches for identifier in getattr(match, key)
-            ]
-            if len(set(selected)) != len(selected) or set(selected) != {
-                edge.id for edge in graph.snapshot.edges
-            }:
-                raise ValidationError(
-                    "Review each branch exactly once, including missing or ambiguous observations"
-                )
+        validate_branch_correspondence(earlier.snapshot, later.snapshot, payload.matches)
         series_id = str(
             uuid5(
                 NAMESPACE_URL, f"reefvision:{project_id}:coral:{earlier.graph_id}:{later.graph_id}"
@@ -625,78 +692,11 @@ class CoralGraphService:
         earlier_record, later_record = self._pair(
             project_id, row.earlier_graph_revision_id, row.later_graph_revision_id
         )
-        earlier, later = earlier_record.snapshot, later_record.snapshot
-        if (
-            earlier.calibration is None
-            or later.calibration is None
-            or not (earlier.eligible_for_growth and later.eligible_for_growth)
-        ):
-            raise ValidationError(
-                "Growth requires calibrated, connected observations with reviewed visibility"
-            )
-        if earlier.calibration.unit.casefold() != later.calibration.unit.casefold() or (
-            (earlier.calibration.perspective_homography is None)
-            != (later.calibration.perspective_homography is None)
-        ):
-            raise ValidationError(
-                "Growth requires the same physical unit and reference-plane method"
-            )
-        elapsed = (later.observed_at - earlier.observed_at).total_seconds() / 86400
-        if elapsed <= 0:
-            raise ValidationError("Later observation must follow earlier observation")
-
-        def change(before: float | None, after: float | None) -> GrowthChange:
-            if before is None or after is None:
-                raise ValidationError("A referenced branch has no calibrated length")
-            difference = after - before
-            rate = difference / elapsed
-            if not all(isfinite(value) for value in (difference, rate)):
-                raise ValidationError("Growth change is outside supported numeric precision")
-            return GrowthChange(
-                earlier_length=before,
-                later_length=after,
-                absolute_change=difference,
-                change_per_day=rate,
-            )
-
-        old = {edge.id: edge.length_physical for edge in earlier.edges}
-        new = {edge.id: edge.length_physical for edge in later.edges}
-        limitations = [
-            "Projected centerline lengths in a common reference-plane method; no depth correction.",
-            "Imaging orientation and visibility can affect measured change.",
-            "Calibration and tracing uncertainty were not quantified.",
-        ]
-        complete = not any(
-            match.status in {"missing", "ambiguous", "occluded"}
-            for match in correspondence.snapshot.matches
-        )
-        if not complete:
-            limitations.append(
-                "Colony total change withheld because some branches were unresolved."
-            )
-        return GrowthSnapshot(
-            organism_key=earlier.organism_key,
-            correspondence_sha256=row.content_sha256,
-            earlier_graph_sha256=earlier_record.content_sha256,
-            later_graph_sha256=later_record.content_sha256,
-            earlier_observed_at=earlier.observed_at,
-            later_observed_at=later.observed_at,
-            elapsed_days=elapsed,
-            unit=earlier.calibration.unit,
-            total=change(earlier.total_physical, later.total_physical) if complete else None,
-            branches=[
-                GrowthBranch(
-                    status=match.status,
-                    earlier_branch_ids=match.earlier_branch_ids,
-                    later_branch_ids=match.later_branch_ids,
-                    change=change(old[match.earlier_branch_ids[0]], new[match.later_branch_ids[0]])
-                    if match.status == "matched"
-                    else None,
-                    reason=match.reason,
-                )
-                for match in correspondence.snapshot.matches
-            ],
-            limitations=limitations,
+        return calculate_pinned_growth(
+            earlier_record.snapshot,
+            later_record.snapshot,
+            correspondence.snapshot,
+            row.content_sha256,
         )
 
     def save_growth(self, project_id: str, correspondence_id: str) -> GrowthRecord:

@@ -85,15 +85,25 @@ def export_graph(
             "graph_revision_id",
             "review_decision",
             "current",
+            "stale_reasons",
+            "eligible_for_growth",
             "source_image_id",
             "observed_at",
             "analysis_id",
             "mask_revision",
+            "mask_sha256",
+            "source_algorithm",
+            "source_algorithm_version",
             "graph_sha256",
             "calibration_sha256",
             "method",
             "qc",
+            "source_skeleton_pixels",
+            "retained_source_skeleton_pixels",
+            "reviewed_trace_pixels",
+            "reviewed_trace_outside_mask_pixels",
             "branch_id",
+            "supersedes_branch_ids",
             "source_junction_id",
             "target_junction_id",
             "length_px",
@@ -105,6 +115,7 @@ def export_graph(
             "reviewed_at",
         ]
     )
+    coverage = snapshot.coverage
     for edge in snapshot.edges:
         output.writerow(
             [
@@ -114,15 +125,27 @@ def export_graph(
                 graph.id,
                 graph.decision,
                 graph.current,
+                "|".join(graph.stale_reasons),
+                snapshot.eligible_for_growth,
                 snapshot.image_id,
                 snapshot.observed_at.isoformat(),
                 graph.analysis_id,
                 snapshot.mask_revision,
+                snapshot.mask_sha256,
+                snapshot.analysis_algorithm,
+                snapshot.analysis_algorithm_version,
                 graph.content_sha256,
                 snapshot.calibration_sha256,
                 snapshot.method,
                 "|".join(snapshot.qc),
+                *(list(coverage.model_dump().values()) if coverage else [None] * 4),
                 edge.id,
+                "|".join(
+                    identifier
+                    for link in snapshot.supersession
+                    if edge.id in link.successor_branch_ids
+                    for identifier in link.previous_branch_ids
+                ),
                 edge.source_node_id,
                 edge.target_node_id,
                 edge.node_to_node_length_pixels,

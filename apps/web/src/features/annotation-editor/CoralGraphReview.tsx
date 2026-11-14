@@ -27,10 +27,11 @@ export function CoralGraphReview({
   onGraph: (record: GraphRecord | null) => void;
 }) {
   const [colony, setColony] = useState("");
-  const [operation, setOperation] = useState<GraphEditKind | "source">(
-    "source",
-  );
+  const [operation, setOperation] = useState<
+    GraphEditKind | "source" | "restore"
+  >("source");
   const [branchIds, setBranchIds] = useState<string[]>([]);
+  const [restoreId, setRestoreId] = useState("");
   const [observedAt, setObservedAt] = useState("");
   const [reviewer, setReviewer] = useState("");
   const [reason, setReason] = useState("");
@@ -78,10 +79,11 @@ export function CoralGraphReview({
   const count =
     operation === "merge"
       ? 2
-      : operation === "source" || operation === "add"
+      : operation === "source" || operation === "restore" || operation === "add"
         ? 0
         : 1;
-  const requiresPath = operation === "add" || operation === "correct";
+  const requiresPath =
+    operation === "add" || operation === "correct" || operation === "reconnect";
   const date =
     base?.snapshot.observed_at ??
     (observedAt && new Date(observedAt + "Z").toISOString());
@@ -91,6 +93,7 @@ export function CoralGraphReview({
     reviewer.trim() &&
     reason.trim().length >= 3 &&
     branchIds.length === count &&
+    (operation !== "restore" || !!restoreId) &&
     (!requiresPath || drawn.length >= 2) &&
     (operation !== "split" || drawn.length === 1) &&
     (!gap || drawn.length >= 2) &&
@@ -102,12 +105,13 @@ export function CoralGraphReview({
       identity_revision_id: colonyRecord.id,
       analysis_id: analysisId,
       base_revision_id: base?.id,
+      restore_revision_id: operation === "restore" ? restoreId : undefined,
       observed_at: date,
       reviewer,
       reason,
       decision,
       edit:
-        operation === "source"
+        operation === "source" || operation === "restore"
           ? undefined
           : {
               kind: operation,
@@ -115,7 +119,10 @@ export function CoralGraphReview({
               points: requiresPath || operation === "split" ? drawn : [],
               snap_tolerance_px: operation === "add" ? Number(tolerance) : 0,
             },
-      gaps: gap ? [{ disposition: gap, points: drawn, reason }] : undefined,
+      gaps:
+        gap && operation !== "restore"
+          ? [{ disposition: gap, points: drawn, reason }]
+          : undefined,
     });
   }
 
@@ -167,6 +174,16 @@ export function CoralGraphReview({
               {active.snapshot.edges.length} branches
             </p>
           )}
+          {active?.snapshot.coverage && (
+            <p>
+              Retained{" "}
+              {active.snapshot.coverage.retained_source_skeleton_pixels} of{" "}
+              {active.snapshot.coverage.source_skeleton_pixels} source skeleton
+              pixels.{" "}
+              {active.snapshot.coverage.reviewed_trace_outside_mask_pixels}{" "}
+              reviewed trace pixels lie outside the source mask.
+            </p>
+          )}
           {base && !active && (
             <p role="status">
               Source evidence changed. Review the current source before editing
@@ -180,6 +197,8 @@ export function CoralGraphReview({
               onChange={(event) => {
                 setOperation(event.target.value as typeof operation);
                 setBranchIds([]);
+                setGap("");
+                setRestoreId("");
               }}
             >
               <option value="source">
@@ -193,6 +212,12 @@ export function CoralGraphReview({
                   <option value="split">Split at drawn point</option>
                   <option value="remove">Remove branch</option>
                   <option value="merge">Merge adjacent branches</option>
+                  <option value="reconnect">
+                    Reconnect branch with drawn path
+                  </option>
+                  <option value="restore">
+                    Restore an accepted graph revision
+                  </option>
                   <option value="correct">
                     Replace branch with drawn path
                   </option>
@@ -200,6 +225,30 @@ export function CoralGraphReview({
               )}
             </select>
           </label>
+          {operation === "restore" && (
+            <label>
+              Accepted revision to restore
+              <select
+                value={restoreId}
+                onChange={(event) => setRestoreId(event.target.value)}
+              >
+                <option value="">Choose historical revision</option>
+                {history
+                  .filter(
+                    (row) =>
+                      row.decision === "accepted" &&
+                      row.id !== active?.id &&
+                      row.analysis_id === analysisId &&
+                      row.identity_revision_id === colonyRecord?.id,
+                  )
+                  .map((row) => (
+                    <option key={row.id} value={row.id}>
+                      Revision {row.revision} · {row.reason}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          )}
           {count > 0 && (
             <label>
               Branch selection
@@ -239,21 +288,23 @@ export function CoralGraphReview({
               />
             </label>
           )}
-          <label>
-            Gap disposition
-            <select
-              value={gap}
-              onChange={(event) => setGap(event.target.value as typeof gap)}
-            >
-              <option value="">No gap recorded</option>
-              <option value="observed_attachment">
-                Visible tissue attachment
-              </option>
-              <option value="occluded">Occluded</option>
-              <option value="unknown">Unresolved</option>
-              <option value="separate_colony">Separate colony</option>
-            </select>
-          </label>
+          {operation !== "restore" && (
+            <label>
+              Gap disposition
+              <select
+                value={gap}
+                onChange={(event) => setGap(event.target.value as typeof gap)}
+              >
+                <option value="">No gap recorded</option>
+                <option value="observed_attachment">
+                  Visible tissue attachment
+                </option>
+                <option value="occluded">Occluded</option>
+                <option value="unknown">Unresolved</option>
+                <option value="separate_colony">Separate colony</option>
+              </select>
+            </label>
+          )}
           <label>
             Graph reviewer
             <input

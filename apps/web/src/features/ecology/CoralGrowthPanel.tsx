@@ -187,7 +187,10 @@ export function CoralGrowthPanel({ projectId }: { projectId: string }) {
   }
 
   return (
-    <section className="management-card" aria-label="Reviewed coral growth">
+    <section
+      className="management-card coral-growth-panel"
+      aria-label="Reviewed coral growth"
+    >
       <h3>Coral branch correspondence and growth</h3>
       <p>
         Review a calibrated colony graph in the mask editor for each date.
@@ -413,46 +416,48 @@ export function CoralGrowthPanel({ projectId }: { projectId: string }) {
             {result.snapshot.elapsed_days.toFixed(3)} days ·{" "}
             {result.snapshot.unit}
           </p>
-          <table>
-            <caption>Projected branch length changes</caption>
-            <thead>
-              <tr>
-                <th>Evidence</th>
-                <th>Earlier</th>
-                <th>Later</th>
-                <th>Change</th>
-                <th>Per day</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[
-                {
-                  id: "total",
-                  label: "Unique-edge colony total",
-                  change: result.snapshot.total,
-                },
-                ...result.snapshot.branches.map((row, index) => ({
-                  id: String(index),
-                  label: `Branch review ${index + 1} · ${row.status}`,
-                  change: row.change,
-                })),
-              ].map((row) => (
-                <tr key={row.id}>
-                  <th scope="row">{row.label}</th>
-                  {row.change ? (
-                    <>
-                      <td>{row.change.earlier_length.toFixed(3)}</td>
-                      <td>{row.change.later_length.toFixed(3)}</td>
-                      <td>{row.change.absolute_change.toFixed(3)}</td>
-                      <td>{row.change.change_per_day.toFixed(3)}</td>
-                    </>
-                  ) : (
-                    <td colSpan={4}>Withheld</td>
-                  )}
+          <div className="coral-growth-table">
+            <table>
+              <caption>Projected branch length changes</caption>
+              <thead>
+                <tr>
+                  <th>Evidence</th>
+                  <th>Earlier</th>
+                  <th>Later</th>
+                  <th>Change</th>
+                  <th>Per day</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {[
+                  {
+                    id: "total",
+                    label: "Unique-edge colony total",
+                    change: result.snapshot.total,
+                  },
+                  ...result.snapshot.branches.map((row, index) => ({
+                    id: String(index),
+                    label: `Branch review ${index + 1} · ${row.status}`,
+                    change: row.change,
+                  })),
+                ].map((row) => (
+                  <tr key={row.id}>
+                    <th scope="row">{row.label}</th>
+                    {row.change ? (
+                      <>
+                        <td>{row.change.earlier_length.toFixed(3)}</td>
+                        <td>{row.change.later_length.toFixed(3)}</td>
+                        <td>{row.change.absolute_change.toFixed(3)}</td>
+                        <td>{row.change.change_per_day.toFixed(3)}</td>
+                      </>
+                    ) : (
+                      <td colSpan={4}>Withheld</td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <ul>
             {result.snapshot.limitations.map((note) => (
               <li key={note}>{note}</li>

@@ -1,11 +1,15 @@
 """Geometry and identity rules for append-only coral graph review."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
-from math import hypot
+from itertools import pairwise
+from math import hypot, isclose
+from typing import Any
 from uuid import uuid4
 
-from reefvision.schemas.coral_graph import BranchSupersession, GraphEdit, GraphSnapshot
+from reefvision.domain.ecology_physical_units import is_ecological_physical_length_unit
+from reefvision.domain.errors import ValidationError
+from reefvision.schemas.coral_graph import BranchSupersession, GapDecision, GraphEdit, GraphSnapshot
 from reefvision.schemas.skeletonization import SkeletonPixelEdit
 from reefvision.services.connected_branch_editing import (
     BranchEditError,
@@ -17,6 +21,8 @@ from reefvision.services.connected_branch_editing import (
     validate_branch_graph,
 )
 from reefvision.services.skeleton_algorithms import SkeletonGraphEdge, SkeletonGraphNode
+from reefvision.services.skeletonization import skeleton_edge_physical_lengths
+from reefvision.storage.datasets import canonical_json_sha256
 
 
 def pixel(point: SkeletonPixelEdit) -> Pixel:
@@ -169,15 +175,25 @@ def apply_graph_edit(
         path = (*reversed(_orient(first, junction_id)), *_orient(second, junction_id)[1:])
         successors = [_edge(str(uuid4()), start, end, path)]
         attachment = junction.source_pixels[0]
-    elif edit.kind == "correct":
+    elif edit.kind in {"correct", "reconnect"}:
         original = selected[0]
+        path = _checked_path(points)
         start = nodes_by_id[original.source_node_id]
         end = nodes_by_id[original.target_node_id]
-        path = _checked_path(points)
-        if path[0] not in start.source_pixels or path[-1] not in end.source_pixels:
-            raise BranchEditError(
-                "Corrected centerline must connect the original junctions in order"
-            )
+        if edit.kind == "correct":
+            if path[0] not in start.source_pixels or path[-1] not in end.source_pixels:
+                raise BranchEditError(
+                    "Corrected centerline must connect the original junctions in order"
+                )
+        else:
+            starts = [node for node in nodes if path[0] in node.source_pixels]
+            ends = [node for node in nodes if path[-1] in node.source_pixels]
+            if len(starts) != 1 or len(ends) != 1:
+                raise BranchEditError("A reconnect path must start and end at existing junctions")
+            start, end = starts[0], ends[0]
+            if (start.id, end.id) == (original.source_node_id, original.target_node_id):
+                raise BranchEditError("Use correction to keep both original junctions")
+            attachment = path[0]
         other_pixels = {
             point for edge in edges if edge.id != original.id for point in edge.pixels
         } | {point for node in nodes for point in node.source_pixels}
@@ -247,3 +263,102 @@ def match_unchanged_geometry(
         if retired
         else [],
     )
+
+
+def merge_gap_reviews(
+    prior: list[GapDecision], current: list[GapDecision], *, performed_path: tuple[Pixel, ...]
+) -> list[GapDecision]:
+    """Preserve unrelated concerns and require measured geometry for each repaired gap."""
+
+    def path_key(gap: GapDecision) -> tuple[Pixel, ...]:
+        path = tuple(map(pixel, gap.points))
+        return min(path, path[::-1])
+
+    merged = {path_key(gap): gap for gap in prior}
+    seen: set[tuple[Pixel, ...]] = set()
+    assessed_steps = {frozenset(pair) for pair in pairwise(performed_path)}
+    for gap in current:
+        key = path_key(gap)
+        if key in seen:
+            raise ValidationError("Record only one disposition for each gap path")
+        if gap.disposition == "observed_attachment":
+            steps = {frozenset(pair) for pair in pairwise(key)}
+            if not steps or not steps <= assessed_steps or any(len(step) != 2 for step in steps):
+                raise ValidationError("A repaired gap must follow the measured attachment path")
+        seen.add(key)
+        merged[key] = gap
+    return list(merged.values())
+
+
+def validate_graph_snapshot(
+    snapshot: GraphSnapshot,
+    *,
+    width: int,
+    height: int,
+    accepted: bool,
+) -> None:
+    """Verify frozen geometry and independently measure each retained edge."""
+    nodes, edges = restore_graph(snapshot)
+    points = [point for node in nodes for point in node.source_pixels]
+    points.extend(point for edge in edges for point in edge.pixels)
+    if any(x >= width or y >= height for x, y in points):
+        raise ValidationError("Exchanged coral graph extends outside source bounds")
+    try:
+        validate_branch_graph(nodes, edges, require_connected=False)
+    except BranchEditError as exc:
+        raise ValidationError(f"Invalid coral graph geometry: {exc}") from exc
+    try:
+        validate_branch_graph(nodes, edges)
+        connected = bool(edges)
+    except BranchEditError:
+        connected = False
+    unresolved = any(gap.disposition != "observed_attachment" for gap in snapshot.gaps)
+    calibration = snapshot.calibration
+    eligible = (
+        accepted
+        and connected
+        and not unresolved
+        and calibration is not None
+        and calibration.reference_plane_only
+        and is_ecological_physical_length_unit(calibration.unit)
+    )
+    if (
+        connected != snapshot.connected
+        or eligible != snapshot.eligible_for_growth
+        or (accepted and (not snapshot.source_reviewed or (not connected and not unresolved)))
+    ):
+        raise ValidationError(
+            "Exchanged coral graph eligibility disagrees with its review or geometry"
+        )
+    physical = skeleton_edge_physical_lengths(
+        nodes,
+        edges,
+        calibration,
+        reject_projective_horizon=True,
+    )
+
+    def same(first: float | None, second: float | None) -> bool:
+        if first is None or second is None:
+            return first is second
+        return isclose(first, second, rel_tol=1e-9, abs_tol=1e-9)
+
+    if (
+        not same(snapshot.total_pixels, sum(edge.node_to_node_length_pixels for edge in edges))
+        or not same(snapshot.total_physical, sum(physical.values()) if calibration else None)
+        or any(not same(edge.length_physical, physical.get(edge.id)) for edge in snapshot.edges)
+    ):
+        raise ValidationError("Exchanged coral graph measurements disagree with pinned geometry")
+
+
+def frozen_skeleton_digest(
+    result: Mapping[str, Any],
+    image_id: str,
+    mask_id: str,
+    source_id_map: Mapping[str, str],
+) -> str:
+    """Reverse only known source links mapped by an archive import."""
+    payload = dict(result)
+    for key, origin in (("image_id", image_id), ("mask_annotation_id", mask_id)):
+        if payload.get(key) == source_id_map.get(origin, origin):
+            payload[key] = origin
+    return canonical_json_sha256(payload)
