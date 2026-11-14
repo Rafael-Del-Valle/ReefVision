@@ -94,7 +94,7 @@ def test_projected_box_candidates_are_typed_unverified_and_saved(
     assert artifacts[0]["payload_json"] == payload
 
 
-@pytest.mark.parametrize("offset", ["-04:00", None])
+@pytest.mark.parametrize("offset", ["-04:00", "\x00", None])
 def test_imported_exif_captures_explicit_offset_through_sqlite(
     client: TestClient, offset: str | None
 ) -> None:
@@ -126,7 +126,7 @@ def test_imported_exif_captures_explicit_offset_through_sqlite(
     assert _link_calibration(client, project_id, annotation.json()).status_code == 201
     candidates = _get(client, project_id).json()["candidates"]
     assert len(candidates) == 2
-    if offset is None:
+    if offset != "-04:00":
         assert all(row["capture_time_status"] == "timezone_missing" for row in candidates)
         assert all(row["capture_timestamp_utc"] is None for row in candidates)
     else:

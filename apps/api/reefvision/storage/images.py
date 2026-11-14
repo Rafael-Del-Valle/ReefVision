@@ -204,12 +204,13 @@ def recover_explicit_exif_capture_time(
     for date_name, offset_name, fraction_name, date_tag, offset_tag, fraction_tag in fields:
         if date_name not in exif:
             continue
-        if not exif.get(offset_name):
+        offset = exif.get(offset_name)
+        if not isinstance(offset, str) or not offset.rstrip("\x00"):
             return None
         recovered = _capture_timestamp(
             {
                 date_tag: exif[date_name],
-                offset_tag: exif[offset_name],
+                offset_tag: offset.rstrip("\x00"),
                 fraction_tag: exif.get(fraction_name),
             }
         )
