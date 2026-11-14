@@ -21,7 +21,6 @@ def test_finite_individual_edges_cannot_silently_overflow_total_path() -> None:
         mesh_edge_paths(points, faces, [[0, 3]], 1.0, None)
 
 
-
 def test_overflowing_detour_before_destination_discovery_does_not_hide_valid_path() -> None:
     # Popping vertex 1 before vertex 2 first encounters the reverse edge to
     # vertex 0: 1e308 + 1e308 overflows, although vertex 3 is still reachable
