@@ -193,9 +193,7 @@ class ClassOperationsService:
         """
         masks = list(
             self.session.scalars(
-                select(MaskAnnotation).where(
-                    MaskAnnotation.label_class_id == source_class.id
-                )
+                select(MaskAnnotation).where(MaskAnnotation.label_class_id == source_class.id)
             )
         )
         mask_events = list(
@@ -211,9 +209,7 @@ class ClassOperationsService:
             )
         )
         record_ids = {
-            "mask_annotations_active": sorted(
-                item.id for item in masks if item.deleted_at is None
-            ),
+            "mask_annotations_active": sorted(item.id for item in masks if item.deleted_at is None),
             "mask_annotations_deleted": sorted(
                 item.id for item in masks if item.deleted_at is not None
             ),
@@ -793,8 +789,7 @@ class ClassOperationsService:
                 # transaction, even when the original preview was approved.
                 remaining_usage = self.project_service._usage_snapshot(source_class)
                 if any(
-                    remaining_usage.counts[key] > 0
-                    for key in UNHANDLED_CLASS_REFERENCE_CATEGORIES
+                    remaining_usage.counts[key] > 0 for key in UNHANDLED_CLASS_REFERENCE_CATEGORIES
                 ):
                     raise ConflictError(
                         "Mask or image-level classification references still prevent "

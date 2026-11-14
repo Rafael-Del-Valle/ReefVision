@@ -324,9 +324,7 @@ def test_mask_and_image_label_references_block_unsafe_class_deletion_and_merge(
             label_set="archive",
             deleted_at=datetime.now(UTC),
         )
-        session.add_all(
-            [image, active_mask, deleted_mask, event, active_label, deleted_label]
-        )
+        session.add_all([image, active_mask, deleted_mask, event, active_label, deleted_label])
         session.commit()
 
     usage_response = client.get(f"/api/v1/classes/{source['id']}/usage")
@@ -374,8 +372,7 @@ def test_mask_and_image_label_references_block_unsafe_class_deletion_and_merge(
     operation = preview.json()
     assert any("mask" in message.lower() for message in operation["plan"]["blockers"])
     assert any(
-        "image-level classification" in message.lower()
-        for message in operation["plan"]["blockers"]
+        "image-level classification" in message.lower() for message in operation["plan"]["blockers"]
     )
     # Exact scientific record identities must be reviewable, not just totals.
     expected_record_ids = {
