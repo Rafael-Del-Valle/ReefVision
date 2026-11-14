@@ -169,6 +169,22 @@ def verify_succeeded_node_artifacts(
         or canonical_json_sha256(graph.graph_json) != run.graph_sha256
     ):
         raise ConflictError("Succeeded workflow node graph provenance checksum failed")
+    # Interrupted-run recovery may reuse a succeeded node before normal
+    # run-detail lineage validation. A changed adapter type must not reuse
+    # artifacts produced under a different checksum-pinned graph node.
+    graph_nodes = graph.graph_json.get("nodes")
+    matching_nodes = (
+        [
+            item
+            for item in graph_nodes
+            if isinstance(item, dict) and item.get("node_id") == node_run.node_id
+        ]
+        if isinstance(graph_nodes, list)
+        else []
+    )
+    if len(matching_nodes) != 1 or matching_nodes[0].get("node_type") != node_run.node_type:
+        raise ConflictError("Succeeded workflow node identity does not match saved graph")
+
     raw_edges = graph.graph_json.get("edges", [])
     if not isinstance(raw_edges, list) or any(
         not isinstance(edge, dict) or not isinstance(edge.get("edge_id"), str) for edge in raw_edges
