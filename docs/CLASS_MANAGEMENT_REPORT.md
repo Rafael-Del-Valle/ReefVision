@@ -74,3 +74,25 @@ Passed in this pass:
 - Open-affected-annotations and open-affected-predictions shortcuts are not wired into the class manager yet.
 - Dataset and model compatibility is reported as warnings in the usage report, but there is not yet a dedicated compatibility inspector UI.
 - Full `1.6.0` class-management scope is still incomplete until those remaining workflows are added.
+
+## ReefVision 1.6: complete class-deletion evidence categories
+
+The existing class-usage endpoint reports eight separate reference
+categories: active/deleted annotations, annotation history, predictions,
+quality-control issues, review-queue items, immutable dataset versions,
+and model-registration class maps. Aggregate zero counts and a true
+`can_delete` flag are **not** adequate to prove that every category was
+checked: a malformed, truncated, duplicate, unfamiliar or incorrectly
+classified category list can falsely appear empty.
+
+The 1.6 class manager now requires one and only one zero-count entry for
+each of the eight known categories, with the server-defined mutable and
+immutable flags, in addition to matching project/class scope, zero
+aggregate totals, and empty explicit deletion blockers. Any incomplete or
+inconsistent evidence disables the Delete unused control and shows a
+warning. The backend independently recomputes usage on DELETE; this UI
+guard does not replace server-side enforcement or migration/scientific
+validation. Tests cover complete evidence and unsafe incomplete,
+duplicate, unknown, contradictory and misclassified breakdowns.
+No scientific record or Workflow Builder graph is modified; a user
+metadata deletion command does not introduce a new analysis node.
