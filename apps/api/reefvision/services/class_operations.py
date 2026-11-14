@@ -340,7 +340,9 @@ class ClassOperationsService:
             (
                 version
                 for version in self.session.scalars(
-                    select(DatasetVersion).where(DatasetVersion.project_id == source_class.project_id)
+                    select(DatasetVersion).where(
+                        DatasetVersion.project_id == source_class.project_id
+                    )
                 )
                 if any(entry.get("id") == source_class.id for entry in version.class_map_json)
             ),
