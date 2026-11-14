@@ -779,7 +779,14 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
   const objectOptions = page
     .getByRole("listbox", { name: "Objects" })
     .getByRole("option");
-  await expect(objectOptions).toHaveCount(annotations.length);
+  // The sidebar must stay bounded rather than constructing 1,500 DOM options.
+  // ARIA still reports the full scientific dataset's filtered row count.
+  await expect(objectOptions).toHaveCount(200);
+  await expect(objectOptions.last()).toHaveAttribute("aria-posinset", "200");
+  await expect(objectOptions.last()).toHaveAttribute("aria-setsize", "1500");
+  await expect(
+    page.getByText("Showing 200 of 1500 matching objects.", { exact: false }),
+  ).toBeVisible();
 
   await allAnnotations.first().dispatchEvent("pointerdown", {
     button: 0,
@@ -790,11 +797,34 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
     pointerType: "mouse",
   });
   await expect(page.getByRole("heading", { name: "1 selected" })).toBeVisible();
-  // A box omitted from the viewport SVG remains selectable from the full
-  // object list. Display culling must never discard the source annotation.
-  await objectOptions.last().click();
+
+  // Incremental reveal exposes items outside the first window for selection.
+  const showMore = page.getByRole("button", { name: "Show 200 more objects" });
+  await showMore.click();
+  await expect(objectOptions).toHaveCount(400);
+  await showMore.click();
+  await expect(objectOptions).toHaveCount(600);
+  await objectOptions.nth(599).click();
+  await expect(objectOptions.nth(599)).toHaveAttribute("aria-selected", "true");
+  await expect(objectOptions.nth(599)).toHaveAttribute("aria-posinset", "600");
+
+  // Filtering resets the window without losing a selected observation whose
+  // original position is now outside the first 200 filtered class objects.
+  const filter = page.getByPlaceholder("Filter by class");
+  await filter.fill("Muricea Open");
+  await expect(objectOptions).toHaveCount(201);
   await expect(objectOptions.last()).toHaveAttribute("aria-selected", "true");
+  await expect(objectOptions.last()).toHaveAttribute("aria-posinset", "300");
+  await expect(objectOptions.last()).toHaveAttribute("aria-setsize", "750");
   await expect(page.getByRole("heading", { name: "1 selected" })).toBeVisible();
+
+  // Removing the filter also preserves that selected observation; an omitted
+  // sidebar row never means deletion from the annotated scientific document.
+  await filter.clear();
+  await expect(objectOptions).toHaveCount(201);
+  await expect(objectOptions.last()).toHaveAttribute("aria-selected", "true");
+  await expect(objectOptions.last()).toHaveAttribute("aria-posinset", "600");
+  await expect(objectOptions.last()).toHaveAttribute("aria-setsize", "1500");
 });
 
 test("renders the first opened image after a deliberately delayed display response", async ({
