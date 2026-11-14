@@ -194,7 +194,9 @@ describe("ClassManagerPanel", () => {
         state_name: null,
       },
     });
-    expect(confirmation.mock.calls[0]?.[0]).toContain('source "Muricea Closed"');
+    expect(confirmation.mock.calls[0]?.[0]).toContain(
+      'source "Muricea Closed"',
+    );
     expect(confirmation.mock.calls[0]?.[0]).toContain('target "Muricea Open"');
     expect(confirmation.mock.calls[0]?.[0]).toContain("0 immutable references");
   });
