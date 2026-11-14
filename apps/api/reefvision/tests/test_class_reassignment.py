@@ -678,6 +678,7 @@ def test_class_operation_preview_expires_after_biological_identity_change(
         assert session.get(LabelClass, source_class["id"]) is not None
         assert session.get(LabelClass, target_class["id"]) is not None
 
+
 @pytest.mark.parametrize("operation_endpoint", ["reassign", "reassign-delete"])
 def test_class_operation_execute_requires_previewing_local_researcher(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, operation_endpoint: str
@@ -701,9 +702,7 @@ def test_class_operation_execute_requires_previewing_local_researcher(
     identity_module = "reefvision.services.class_operations.get_local_user_identity"
     monkeypatch.setattr(identity_module, lambda _settings: "local-user:researcher-a")
     route = f"/api/v1/projects/{project['id']}/classes/{source_class['id']}/{operation_endpoint}"
-    preview_response = client.post(
-        f"{route}/preview", json={"target_class_id": target_class["id"]}
-    )
+    preview_response = client.post(f"{route}/preview", json={"target_class_id": target_class["id"]})
     assert preview_response.status_code == 201, preview_response.text
     preview = preview_response.json()
     assert preview["requested_by_identity"] == "local-user:researcher-a"
