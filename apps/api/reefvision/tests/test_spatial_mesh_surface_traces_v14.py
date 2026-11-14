@@ -66,6 +66,23 @@ REVERSE_TURN_PARAMS = {
     "surface_trace_vertex_paths": [[0, 1, 2]],
 }
 
+# Source endpoints are separated by one representable binary64 step, but
+# independently scaling their absolute coordinates erases that separation.
+# The full mesh has positive area, so API and persisted graph can execute.
+DISPLAY_CHORD_ROUNDING_PARAMS = {
+    **PARAMS,
+    "vertices": [
+        [100.0, 0.0, 0.0],
+        [101.0, 0.0, 0.0],
+        [100.00000000000001, 0.0, 0.0],
+        [100.0, 2.0, 0.0],
+        [101.0, 2.0, 0.0],
+    ],
+    "faces": [[0, 1, 3], [1, 2, 4]],
+    "meters_per_unit": 1e-100,
+    "surface_trace_vertex_paths": [[0, 1, 2]],
+}
+
 
 def test_trace_follows_selected_edges_not_the_shortest_route() -> None:
     result = measure_mesh_preview(**PARAMS)
@@ -312,6 +329,45 @@ def test_trace_flags_full_geometric_reversal_without_repeated_vertices() -> None
     assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
 
 
+def test_surface_trace_source_chord_survives_calibrated_display_rounding() -> None:
+    params = DISPLAY_CHORD_ROUNDING_PARAMS
+    trace = measure_mesh_preview(**params)["surface_edge_traces"][0]
+    source_chord = 100.00000000000001 - 100.0
+    expected_chord_m = source_chord * params["meters_per_unit"]
+    assert trace["vertices_in_source_frame_m"][0] == (
+        trace["vertices_in_source_frame_m"][-1]
+    )
+    assert trace["endpoint_chord_length_m"] == pytest.approx(
+        expected_chord_m, rel=1e-12, abs=0
+    )
+    source_route_length = 1.0 + (101.0 - 100.00000000000001)
+    assert trace["geometric_detour_ratio"] == pytest.approx(
+        source_route_length / source_chord, rel=1e-12
+    )
+    assert "surface_trace_endpoint_chord_display_coordinate_collapse" in (
+        trace["qc_warnings"]
+    )
+    assert "surface_trace_zero_endpoint_chord" not in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+
+
+def test_surface_trace_distinguishes_calibrated_chord_underflow() -> None:
+    smallest = float.fromhex("0x0.0000000000001p-1022")
+    trace = mesh_surface_edge_traces(
+        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (smallest, 0.0, 0.0)],
+        [[0, 1, 2]],
+        [[0, 1, 2]],
+        smallest,
+        None,
+    )[0]
+    assert trace["length_m"] > 0
+    assert trace["endpoint_chord_length_m"] == 0
+    assert trace["geometric_detour_ratio"] is None
+    assert "calibrated_surface_trace_endpoint_chord_underflow" in trace["qc_warnings"]
+    assert "surface_trace_zero_endpoint_chord" not in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+
+
 def test_trace_flags_positive_segment_lost_in_cumulative_distance() -> None:
     trace = measure_mesh_preview(**RESOLUTION_LIMITED_PARAMS)["surface_edge_traces"][0]
     assert trace["segment_lengths_m"][1] > 0
@@ -362,6 +418,7 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
         "inconsistent_winding",
         "coincident_nonadjacent",
         "reverse_turn",
+        "display_chord_rounding",
         "uncertainty_missing",
         "uncertainty_max",
     ],
@@ -377,6 +434,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "inconsistent_winding": INCONSISTENT_WINDING_PARAMS,
         "coincident_nonadjacent": COINCIDENT_NONADJACENT_PARAMS,
         "reverse_turn": REVERSE_TURN_PARAMS,
+        "display_chord_rounding": DISPLAY_CHORD_ROUNDING_PARAMS,
         "uncertainty_missing": {**PARAMS, "relative_scale_uncertainty": None},
         "uncertainty_max": {**PARAMS, "relative_scale_uncertainty": 1.0},
     }[case]
@@ -456,6 +514,13 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             "inconsistent_winding_edge_on_surface_trace"
             in artifact["surface_edge_traces"][0]["qc_warnings"]
         )
+    if case == "display_chord_rounding":
+        assert trace["endpoint_chord_length_m"] > 0
+        assert trace["geometric_detour_ratio"] > 1
+        assert "surface_trace_endpoint_chord_display_coordinate_collapse" in (
+            trace["qc_warnings"]
+        )
+        assert trace["human_review_verified"] is False
     if case == "reverse_turn":
         assert trace["maximum_turn_angle_deg"] == pytest.approx(180.0)
         assert "surface_trace_180_degree_geometric_turn" in trace["qc_warnings"]
