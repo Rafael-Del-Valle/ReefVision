@@ -294,7 +294,7 @@ export function QualityControlDashboard({
   };
 
   return (
-    <section className="dashboard-panel">
+    <section className="dashboard-panel quality-control-dashboard">
       <div className="section-heading">
         <div>
           <p className="eyebrow">Automated checks</p>
