@@ -77,6 +77,7 @@ def extend_mesh_registry(
                 "observed_at_utc": None,
                 "coordinate_frame_id": None,
                 "surface_path_vertex_pairs": None,
+                "surface_trace_vertex_paths": None,
             },
             execution_state="executable_analysis",
             executable=True,
@@ -89,6 +90,7 @@ def extend_mesh_registry(
                 "Large stored originals remain subject to bounded preview parser limits.",
                 "Optional source SHA-256 binding rejects changed OBJ/PLY/GLB bytes on replay.",
                 "Optional edge routes are not biologically verified branch lengths.",
+                "Caller-selected edge traces are not verified anatomical centerlines.",
             ],
         )
         nodes[POINT_NODE_TYPE] = WorkflowNodeDefinitionResponse(
