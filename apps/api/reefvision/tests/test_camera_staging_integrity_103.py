@@ -57,3 +57,59 @@ def test_camera_staging_stream_failure_removes_only_partial_new_file(tmp_path: P
 
     assert not destination.exists()
     assert destination.parent.is_dir()
+
+
+def test_staged_jpeg_replacement_between_verification_and_decode_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A same-sized decodable JPEG swap must not publish stale capture provenance."""
+    from PIL import Image
+
+    from reefvision.storage import images
+
+    staged = tmp_path / "capture.JPG"
+    replacement = tmp_path / "replacement.JPG"
+    Image.new("RGB", (23, 17), (25, 50, 75)).save(staged, format="JPEG")
+    Image.new("RGB", (23, 17), (160, 20, 35)).save(replacement, format="JPEG")
+    original = staged.read_bytes()
+    changed = replacement.read_bytes()
+    # Trailing JPEG data does not affect decoded pixels; normalize length
+    # to demonstrate that st_size alone cannot detect the replacement.
+    same_size = max(len(original), len(changed))
+    original = original.ljust(same_size, b"\x00")
+    changed = changed.ljust(same_size, b"\x00")
+    staged.write_bytes(original)
+    assert len(original) == len(changed)
+    assert original != changed
+
+    upload_hash = hashlib.sha256(original).hexdigest()
+    original_open = images.Image.open
+    opens = 0
+
+    def swapped_open(*args: object, **kwargs: object):
+        nonlocal opens
+        opens += 1
+        if opens == 2:
+            staged.write_bytes(changed)
+        return original_open(*args, **kwargs)
+
+    monkeypatch.setattr(images.Image, "open", swapped_open)
+    with pytest.raises(images.InvalidImageError, match="checksum or byte count mismatch"):
+        images.inspect_staged_image(staged, upload_hash, len(original))
+
+    assert opens == 2
+    assert staged.read_bytes() == changed
+
+
+def test_staged_camera_import_rejects_stale_file_size(tmp_path: Path) -> None:
+    """A stale upload byte count cannot be stored with valid decoded pixels."""
+    from PIL import Image
+
+    from reefvision.storage.images import InvalidImageError, inspect_staged_image
+
+    staged = tmp_path / "capture.jpeg"
+    Image.new("RGB", (19, 11), (20, 40, 60)).save(staged, format="JPEG")
+    original = staged.read_bytes()
+    with pytest.raises(InvalidImageError, match="checksum or byte count mismatch"):
+        inspect_staged_image(staged, hashlib.sha256(original).hexdigest(), len(original) + 1)
+    assert staged.read_bytes() == original

@@ -411,6 +411,20 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                         "EXIF contains digitization or file-modification time but no "
                         "DateTimeOriginal exposure time; UTC capture timestamp not inferred"
                     )
+            # The file can change after the upload stream was checksummed,
+            # or between Pillow's header verification and pixel decode.
+            # Anchor scientific dimensions and camera EXIF to the actual
+            # uploaded bytes before a database row can reference them.
+            verified_digest = hashlib.sha256()
+            verified_size = 0
+            with path.open("rb") as checksum_stream:
+                while block := checksum_stream.read(1024 * 1024):
+                    verified_digest.update(block)
+                    verified_size += len(block)
+            if verified_size != file_size_bytes or verified_digest.hexdigest() != sha256:
+                raise InvalidImageError(
+                    "Staged image changed after upload; checksum or byte count mismatch"
+                )
             return InspectedImage(
                 sha256=sha256,
                 width_px=width,
@@ -421,7 +435,7 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                 metadata=metadata,
                 capture_timestamp=capture_timestamp,
             )
-    except UnsupportedImageError:
+    except (UnsupportedImageError, InvalidImageError):
         raise
     except (
         Image.DecompressionBombError,
