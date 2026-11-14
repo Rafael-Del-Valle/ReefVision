@@ -46,6 +46,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Check Windows installer version before packaging
+        run: python scripts/check-windows-installer-acceptance-version.py
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -215,7 +218,7 @@ jobs:
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
             -ExpectedVersion '1.2.0' -ExpectedSchemaRevision 'b12_integrated_0001' `
-            -AcceptanceRoot 'C:\reefvision-1-1-0-disposable-acceptance' `
+            -AcceptanceRoot 'C:\reefvision-1-2-0-disposable-acceptance' `
             -SkipUpgrade -DisposableTest -KeepArtifacts
 
       - name: Upload isolated Windows acceptance report and MSI logs
@@ -291,7 +294,7 @@ jobs:
             -InstallerPath $msi `
             -PreviousInstallerPath $previousMsi -PreviousInstallerSupportsIsolatedAcceptance `
             -ExpectedVersion '1.2.0' -ExpectedSchemaRevision 'b12_integrated_0001' `
-            -AcceptanceRoot 'C:\reefvision-1-1-0-upgrade-acceptance' `
+            -AcceptanceRoot 'C:\reefvision-1-2-0-upgrade-acceptance' `
             -DisposableTest -KeepArtifacts
 
       - name: Upload isolated Windows upgrade report and MSI logs
