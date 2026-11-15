@@ -44,6 +44,63 @@ def test_malformed_persisted_log_path_is_unavailable_not_server_error(
     assert genuine.read_bytes() == original
 
 
+@pytest.mark.parametrize("error_type", [OSError, RuntimeError, ValueError])
+def test_log_tail_filesystem_inspection_failure_is_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    error_type: type[Exception],
+) -> None:
+    """A transient filesystem error cannot crash or modify a live training job."""
+    log = tmp_path / "training.log"
+    original = b"train/box_loss=0.25\\ntrain/cls_loss=0.30\\n"
+    log.write_bytes(original)
+    original_is_file = Path.is_file
+
+    def failing_is_file(path: Path) -> bool:
+        if path == log:
+            raise error_type("transient filesystem failure")
+        return original_is_file(path)
+
+    monkeypatch.setattr(Path, "is_file", failing_is_file)
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": False,
+        "text": "",
+    }
+    assert log.read_bytes() == original
+
+
+@pytest.mark.parametrize("failure_check", [2, 3])
+@pytest.mark.parametrize("error_type", [RuntimeError, ValueError])
+def test_log_tail_resolution_failure_during_read_is_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_check: int,
+    error_type: type[Exception],
+) -> None:
+    """A path that becomes unresolvable after validation cannot leak metrics."""
+    log = tmp_path / "training.log"
+    original = b"epoch=4\\ntrain/dfl_loss=0.10\\n"
+    log.write_bytes(original)
+    original_resolve = Path.resolve
+    log_checks = 0
+
+    def failing_resolve(path: Path, *args: object, **kwargs: object) -> Path:
+        nonlocal log_checks
+        if path == log:
+            log_checks += 1
+            if log_checks == failure_check:
+                raise error_type("transient link resolution failure")
+        return original_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", failing_resolve)
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": False,
+        "text": "",
+    }
+    assert log_checks == failure_check
+    assert log.read_bytes() == original
+
+
 def test_log_tail_is_bounded_and_read_only(tmp_path: Path) -> None:
     log = tmp_path / "training.log"
     original = b"earlier epochs\n" + b"x" * 20000 + b"\ntrain/box_loss=0.25\n"
