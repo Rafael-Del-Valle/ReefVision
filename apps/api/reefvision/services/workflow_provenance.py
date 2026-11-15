@@ -229,7 +229,9 @@ def verify_succeeded_node_artifacts(
         frozen_parameters = producer_matches[0].get("parameters", {})
         producer_parameters = producer.parameters_json
         if producer_parameters is not None and not isinstance(producer_parameters, dict):
-            raise ConflictError("Succeeded workflow input producer parameters must be a JSON object")
+            raise ConflictError(
+                "Succeeded workflow input producer parameters must be a JSON object"
+            )
         if not isinstance(frozen_parameters, dict) or any(
             not isinstance(producer_parameters, dict)
             or key not in producer_parameters
