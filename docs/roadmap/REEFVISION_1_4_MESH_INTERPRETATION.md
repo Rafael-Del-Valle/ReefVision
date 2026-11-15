@@ -1010,3 +1010,30 @@ one and two indexed incident faces with a third split-face edge, scale
 invariance, standalone API measurement, and a persisted executable typed
 Workflow Builder graph with complete artifact/provenance parity. Independent
 biological validation and installed-GUI/GPU acceptance remain outstanding.
+
+## Geometric orientation conflicts hidden by split vertex indices
+
+A manually selected surface trace now includes
+`split_vertex_winding_segment_indices` and the corresponding
+`split_vertex_hidden_winding_conflict_on_surface_trace` QC warning. A segment
+is flagged only if its positive-length exact source-frame XYZ edge is shared
+by **exactly two** triangle face-edge occurrences, the selected original indexed
+edge has only one incident face, and both face occurrences traverse that XYZ
+edge with the same orientation. Separate imported vertex IDs would otherwise
+hide the winding conflict from indexed-edge diagnostics.
+
+A correctly opposed two-face split seam yields an empty winding-conflict index
+list; a shared indexed edge with inconsistent winding remains classified by
+`inconsistent_winding_segment_indices`. Three-or-more-face geometric junctions
+are reported separately as hidden nonmanifold edges rather than assigned an
+arbitrary two-face orientation. Zero-length geometric edges are excluded because
+they have no meaningful direction. The warning does **not** automatically weld,
+reverse, or repair imported geometry, nor does it certify an anatomical coral
+branch or reconstructed surface.
+
+The standalone mesh preview and executable, typed, saved
+`project_source → mesh_surface_preview` Workflow Builder graph use the same
+source-frame audit and must persist identical measurement and provenance
+artifacts. Synthetic opposite/same-orientation fixtures and calibration-scale
+invariance tests preserve `human_review_verified: false` pending independent
+reconstruction and biological validation.
