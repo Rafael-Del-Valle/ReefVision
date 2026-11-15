@@ -726,7 +726,9 @@ def build_workflow_run_provenance(
             for artifact in artifacts
         ]
         if not isinstance(result["artifacts"], list) or result["artifacts"] != expected_summary:
-            raise ConflictError("Succeeded workflow run artifact summary does not match saved artifacts")
+            raise ConflictError(
+                "Succeeded workflow run artifact summary does not match saved artifacts"
+            )
 
     raw_history = result.get(
         "recovery_history",
