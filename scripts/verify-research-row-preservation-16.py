@@ -136,7 +136,7 @@ def _fingerprint(
     return rows, sha.hexdigest()
 
 
-def _asset_state(info: os.stat_result) -> tuple[int, int, int, int, int, int]:
+def _asset_state(info: os.stat_result) -> tuple[int, int, int, int, int, int, int]:
     """Identity and mutation-sensitive metadata for an offline regular file."""
     return (
         info.st_dev,
@@ -145,6 +145,7 @@ def _asset_state(info: os.stat_result) -> tuple[int, int, int, int, int, int]:
         info.st_mtime_ns,
         info.st_ctime_ns,
         stat.S_IFMT(info.st_mode),
+        info.st_nlink,
     )
 
 
@@ -274,6 +275,12 @@ def _compare_assets(before_root: Path, after_root: Path) -> dict:
     _assert_asset_tree_unchanged(after_root, candidate_states)
     if baseline_ids & candidate_ids:
         raise ValueError("asset_copies_share_hardlinks")
+    # Distinct roots can still contain hardlinks to a THIRD directory. A later
+    # edit through that undisclosed alias would change supposedly independent
+    # original or candidate data. Require a single filesystem link per file;
+    # link-count changes during either scan are caught by _asset_state.
+    if any(state[-1] != 1 for state in (*baseline_states.values(), *candidate_states.values())):
+        raise ValueError("asset_hardlinks_not_independent")
     missing = sum(path not in candidate for path in baseline)
     changed = sum(
         path in candidate and candidate[path] != checksum for path, checksum in baseline.items()
