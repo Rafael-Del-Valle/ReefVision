@@ -573,9 +573,7 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
             with pytest.raises(
                 ConflictError, match="input producer resolved defaults differ from saved plan"
             ):
-                verify_succeeded_node_artifacts(
-                    session, run_id=str(run["id"]), node_run=consumer
-                )
+                verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
             session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
