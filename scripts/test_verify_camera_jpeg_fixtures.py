@@ -481,6 +481,54 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             for name, original in originals.items():
                 self.assertEqual((root / name).read_bytes(), original)
 
+    def test_malformed_exif_parser_fails_only_affected_camera_fixture(self) -> None:
+        """Malformed EXIF parsing must not abort QC for unrelated captures."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; malformed camera EXIF not verified")
+        for failure in (SyntaxError, EOFError, IndexError, KeyError, TypeError):
+            with self.subTest(failure=failure.__name__):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    bad = root / "broken_exif.JPG"
+                    good = root / "healthy.JPEG"
+                    Image.new("RGB", (12, 8), (10, 40, 80)).save(
+                        bad, format="JPEG"
+                    )
+                    Image.new("RGB", (12, 8), (20, 50, 90)).save(
+                        good, format="JPEG"
+                    )
+                    originals = {p.name: p.read_bytes() for p in (bad, good)}
+                    original_getexif = Image.Image.getexif
+
+                    def selective_getexif(image):
+                        if Path(getattr(image, "filename", "")).name == bad.name:
+                            raise failure("malformed camera EXIF")
+                        return original_getexif(image)
+
+                    with mock.patch.object(
+                        Image.Image, "getexif", selective_getexif
+                    ):
+                        records, errors = MODULE.inventory(root, verify_decode=True)
+                    self.assertEqual(
+                        errors,
+                        [f"JPEG decode failed: {bad.name}: {failure.__name__}"],
+                    )
+                    self.assertEqual(len(records), 2)
+                    by_path = {record["path"]: record for record in records}
+                    self.assertFalse(by_path[bad.name]["jpeg_decodable"])
+                    self.assertNotIn("jpeg_display_width", by_path[bad.name])
+                    self.assertTrue(by_path[good.name]["jpeg_decodable"])
+                    self.assertEqual(
+                        (by_path[good.name]["jpeg_display_width"],
+                         by_path[good.name]["jpeg_display_height"]),
+                        (12, 8),
+                    )
+                    self.assertEqual(
+                        {p.name: p.read_bytes() for p in (bad, good)}, originals
+                    )
+
     def test_invalid_exif_orientation_fails_geometry_qc_read_only(self) -> None:
         """Do not invent display dimensions for malformed camera EXIF."""
         try:
