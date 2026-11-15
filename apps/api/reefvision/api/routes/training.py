@@ -268,11 +268,14 @@ def _training_log_tail(
     empty: dict[str, bool | str] = {"available": False, "text": ""}
     if not log_path:
         return empty
-    root = data_dir.resolve()
-    candidate = Path(log_path)
-    if not candidate.is_absolute():
-        candidate = root / candidate
     try:
+        # The configured data root can itself be offline or unresolvable (for
+        # example a temporarily disconnected research drive). Treat that as
+        # an unavailable observer snapshot, not a failure of the training job.
+        root = data_dir.resolve()
+        candidate = Path(log_path)
+        if not candidate.is_absolute():
+            candidate = root / candidate
         path = candidate.resolve(strict=True)
     except (OSError, RuntimeError, ValueError):
         # A damaged persisted path can contain a NUL character. Path.resolve
