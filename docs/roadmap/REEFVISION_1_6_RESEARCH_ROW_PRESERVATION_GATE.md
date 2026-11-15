@@ -1,0 +1,31 @@
+# ReefVision 1.6 — research row-preservation gate for migration copies
+
+**Status: development validation, not release approval.** Track D, draft PR #77 and master issue #76. This is a content-level companion to the existing structural read-only checks in scripts/inspect_sqlite_lineage_16.py and scripts/inspect-alembic-lineage.py, not another migrator, class/QC service, or Workflow Builder node.
+
+## Reason for the gate
+
+A schema fingerprint, a valid Alembic stamp, passing SQLite integrity checks and a green workflow CI do **not** prove that a 1.1 → 1.6 migration preserved original biological observations, reviewed annotations, user visibility, append-only reviewer events, or persisted executable Workflow Builder graphs and artifacts. A migration could delete, insert, or silently overwrite rows while leaving its DDL unchanged.
+
+The independent, standard-library CLI scripts/verify-research-row-preservation-16.py accepts **two different, offline, disposable SQLite copies**: the original before migration and the same dataset after a candidate migration. It opens both read-only (mode=ro, query_only=ON), pins SQLite read transactions, checks database and FK integrity, and rejects observed WAL/SHM/rollback-journal sidecars. It compares the original ordinary-column projection in each protected baseline table, in deterministic primary-key order (or all-column order without a declared PK). Each value has a type-specific encoding so NULL, INTEGER, REAL, TEXT and BLOB cannot be silently confused. Checksums and counts are returned; no biological values, reviewer comments or raw JSON payloads are printed.
+
+Protected evidence includes project/class identity; individual and project-default visibility; manual box/mask annotation and edit events; dataset versions; QC runs, queues, reviewer events and bulk request identities; saved Workflow Builder graphs, executions, node-run state and typed artifacts; scientific observations, NOAA/environmental cache and computed metrics; and the later environmental event/analysis tables. The exact enumerated coverage is in source. Tables absent from the *before* database can legitimately be created in the *after* database; new columns in existing tables are permitted only if every original projected value is retained. Any change in existing row content/count, missing original column/table, or changed primary key fails closed.
+
+## Run on independent offline copies
+
+~~~powershell
+python scripts/inspect-alembic-lineage.py --fail-on-warning C:\research\before.sqlite
+python scripts/inspect_sqlite_lineage_16.py --compare-to C:\research\after.sqlite --fail-on-integrity-error C:\research\before.sqlite
+python scripts/verify-research-row-preservation-16.py --before C:\research\before.sqlite --after C:\research\after.sqlite
+~~~
+
+The last command exits **0** with PASS_PRESERVATION_ONLY only for a content-preserving projection and exits **2** with HOLD otherwise. A passing result **always** contains upgrade_authorized: false and requires_researcher_approval: true. In particular, the known independent 1.1/1.6 **Alembic revision 0038 collision** is **not resolved** by two equivalent content digests, because this tool intentionally permits different after-migration Alembic markers and new schema objects.
+
+**Scope limits:** Only explicitly enumerated tables are checked; this does not verify external image/video/audio files, model weights, all database tables, migrations' DDL and constraints, image geometry validity, scientific units, or any real installed desktop. Rows inserted into previously existing tables are treated conservatively as changes rather than presumed acceptable backfills. Generated/hidden columns are not covered by the original ordinary-column projection; independent schema-topology comparison remains required. A live database can change even when sidecars are not observed. Protect originals and make verified offline backups before attempting candidate upgrade/rollback testing.
+
+## Regressions and release hold
+
+Run pytest -q scripts/tests/test_verify_research_row_preservation_16.py to check typed scientific values, changed biological observations, removed reviewer events, changed class visibility and saved graphs, removed columns/tables, new compatible columns/tables, added baseline rows, reordered baseline records, malformed inputs, no covered evidence, privacy/no source disclosure, bytes of both databases unchanged, and active WAL sidecar refusal. These are synthetic disposable SQLite checks, **not** representative scientist-reviewed datasets or native Windows MSI/CAB acceptance.
+
+The existing executable saved project_source → qc_review_queue Workflow Builder integration, typed reference/data outputs, dimensional units, immutable provenance, idempotent retry and explicit researcher-review gates are preserved unchanged. This verifier audits *migration acceptance*, not an analysis/measurement feature requiring a new workflow node.
+
+**Release 1.6 remains HOLD:** independently reconcile both 0038 branches with the owning 1.1 integration lane, then exercise the documented migration fixture matrix with actual migrations and representative records, end-to-end standalone/saved QC workflows, full exact-head CI, Windows MSI clean-install/upgrade/rollback, installed GUI and explicit researcher approval. Do not merge, re-stamp, deploy, download pretrained weights, publish or delete user research data based on this gate alone.
