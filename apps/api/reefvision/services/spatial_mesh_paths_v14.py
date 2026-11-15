@@ -640,6 +640,34 @@ def _closed_loop_source_segment_intersections(
     return proper, touching, overlapping
 
 
+def _closed_loop_source_enclosed_planar_area(
+    positions: list[_SourcePoint],
+) -> float | None:
+    """Source-unit area of an already-audited simple planar edge loop.
+
+    A translated exact-rational vector shoelace avoids false cancellation in
+    imported source XYZ. Float conversion is only for a representable output;
+    unrepresentable positive areas remain unknown, never zero or infinity.
+    This footprint is not coral surface area or a verified anatomical section.
+    """
+    source = [tuple(Fraction(value) for value in point) for point in positions[:-1]]
+    origin = source[0]
+    twice_area_vector = [Fraction(0), Fraction(0), Fraction(0)]
+    for current, following in pairwise([*source, source[0]]):
+        a = [value - base for value, base in zip(current, origin, strict=True)]
+        b = [value - base for value, base in zip(following, origin, strict=True)]
+        twice_area_vector[0] += a[1] * b[2] - a[2] * b[1]
+        twice_area_vector[1] += a[2] * b[0] - a[0] * b[2]
+        twice_area_vector[2] += a[0] * b[1] - a[1] * b[0]
+    if not any(twice_area_vector):
+        return None
+    try:
+        area = hypot(*(float(component / 2) for component in twice_area_vector))
+    except OverflowError:
+        return None
+    return area if isfinite(area) and area > 0 else None
+
+
 def mesh_surface_edge_traces(
     points: list[tuple[float, float, float]],
     faces: list[list[int]],
@@ -919,7 +947,7 @@ def mesh_surface_edge_traces(
         positions = [_source_xyz(points[index]) for index in vertices]
         # A closed source-edge loop does not necessarily lie in a plane.
         # Exclude its repeated terminal vertex from the exact XYZ audit.
-        # No area is inferred, even when submitted coordinates are coplanar.
+        # A conditional planar footprint below is not mesh surface area.
         source_exact_coplanarity: bool | None = None
         source_noncoplanar_waypoint_offsets: list[int] = []
         proper_crossing_segment_pairs: list[list[int]] | None = None
@@ -1148,6 +1176,36 @@ def mesh_surface_edge_traces(
             )
             if local_backtrack_waypoint_offsets:
                 warnings.append("closed_surface_trace_source_adjacent_backtrack")
+        # Only an exactly planar, geometrically simple loop has a meaningful
+        # enclosed planar footprint. In particular, do not assign an area to
+        # nonplanar loops, bow-ties, contacts, overlaps, or open traces.
+        source_planar_area_units2: float | None = None
+        calibrated_planar_area_m2: float | None = None
+        planar_area_scale_interval_m2: list[float] | None = None
+        if source_is_simple_planar_perimeter is True:
+            source_planar_area_units2 = _closed_loop_source_enclosed_planar_area(positions)
+            if source_planar_area_units2 is None:
+                warnings.append("closed_surface_trace_source_planar_area_unrepresentable")
+            else:
+                area_m2 = source_planar_area_units2 * scale * scale
+                if isfinite(area_m2) and area_m2 > 0:
+                    calibrated_planar_area_m2 = area_m2
+                    if scale_uncertainty is not None:
+                        lower_scale = scale * (1 - scale_uncertainty)
+                        upper_scale = scale * (1 + scale_uncertainty)
+                        lower = source_planar_area_units2 * lower_scale * lower_scale
+                        upper = source_planar_area_units2 * upper_scale * upper_scale
+                        if (
+                            isfinite(lower)
+                            and isfinite(upper)
+                            and (lower > 0 or scale_uncertainty == 1)
+                            and upper > 0
+                        ):
+                            planar_area_scale_interval_m2 = [lower, upper]
+                        else:
+                            warnings.append("closed_surface_trace_planar_area_interval_unrepresentable")
+                else:
+                    warnings.append("closed_surface_trace_calibrated_planar_area_unrepresentable")
         if segment_underflow:
             warnings.append("calibrated_surface_trace_segment_underflow")
         # A positive calibrated segment may disappear from cumulative distances
@@ -1190,6 +1248,11 @@ def mesh_surface_edge_traces(
                 ),
                 "closed_loop_source_is_simple_planar_perimeter": (
                     source_is_simple_planar_perimeter
+                ),
+                "closed_loop_source_planar_enclosed_area_mesh_units2": source_planar_area_units2,
+                "closed_loop_planar_enclosed_area_m2": calibrated_planar_area_m2,
+                "closed_loop_planar_enclosed_area_scale_only_interval_m2": (
+                    planar_area_scale_interval_m2
                 ),
                 "vertex_indices": list(vertices),
                 "nonadjacent_coincident_waypoint_index_pairs": (
