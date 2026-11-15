@@ -37,9 +37,10 @@ def test_malformed_persisted_log_path_is_unavailable_not_server_error(
         "available": False,
         "text": "",
     }
-    assert training_routes._training_log_tail(
-        str(tmp_path / unsafe_name), tmp_path
-    ) == {"available": False, "text": ""}
+    assert training_routes._training_log_tail(str(tmp_path / unsafe_name), tmp_path) == {
+        "available": False,
+        "text": "",
+    }
     assert genuine.read_bytes() == original
 
 
