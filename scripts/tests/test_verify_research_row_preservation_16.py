@@ -1,6 +1,8 @@
 """Non-destructive, source-projection preservation checks for 1.1/1.6 convergence."""
 
 import json
+import os
+import runpy
 import shutil
 import sqlite3
 import subprocess
@@ -441,3 +443,78 @@ def test_database_only_preservation_does_not_claim_research_assets(tmp_path: Pat
     assert code == 0
     assert report["research_assets"] == {"checked": False}
     assert report["upgrade_authorized"] is False
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["baseline_rewritten", "baseline_removed", "candidate_rewritten", "candidate_added"],
+)
+def test_asset_comparison_rejects_changes_between_inventory_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mutation: str
+) -> None:
+    """A scanner must not PASS against a baseline edited during candidate hashing."""
+    original = tmp_path / "original"
+    candidate = tmp_path / "candidate"
+    original.mkdir()
+    candidate.mkdir()
+    baseline_file = original / "private-coral-sample.raw"
+    candidate_file = candidate / baseline_file.name
+    baseline_file.write_bytes(b"original measured observation")
+    candidate_file.write_bytes(b"original measured observation")
+    compare = runpy.run_path(str(SCRIPT))["_compare_assets"]
+    inventory = compare.__globals__["_asset_inventory"]
+
+    def mutate_after_candidate_scan(root: Path) -> object:
+        result = inventory(root)
+        if root == candidate:
+            if mutation == "baseline_rewritten":
+                baseline_file.write_bytes(b"rewritten measured observation")
+            elif mutation == "baseline_removed":
+                baseline_file.unlink()
+            elif mutation == "candidate_rewritten":
+                candidate_file.write_bytes(b"rewritten measured observation")
+            else:
+                (candidate / "late-added.jpg").write_bytes(b"new unverified image")
+        return result
+
+    monkeypatch.setitem(
+        compare.__globals__, "_asset_inventory", mutate_after_candidate_scan
+    )
+    with pytest.raises(ValueError, match="asset_changed_after_inventory") as error:
+        compare(original, candidate)
+    assert "private-coral-sample.raw" not in str(error.value)
+
+
+def test_asset_scan_rejects_symlink_swap_between_lstat_and_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On platforms without O_NOFOLLOW, descriptor identity still detects swaps."""
+    root = tmp_path / "original"
+    root.mkdir()
+    asset = root / "recording.raw"
+    asset.write_bytes(b"reviewed biological pixels")
+    external = tmp_path / "external-research.raw"
+    external.write_bytes(b"private unrelated research")
+    scan = runpy.run_path(str(SCRIPT))["_asset_inventory"]
+    actual_open = os.open
+    swapped = False
+
+    def swap_on_open(path: os.PathLike[str] | str, flags: int, *args: object, **kwargs: object) -> int:
+        nonlocal swapped
+        if not swapped and Path(path) == asset:
+            swapped = True
+            asset.unlink()
+            try:
+                asset.symlink_to(external)
+            except (OSError, NotImplementedError):
+                pytest.skip("filesystem does not permit symlink race fixture")
+        return actual_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", swap_on_open)
+    with pytest.raises(
+        ValueError, match="asset_(symlink_not_allowed|changed_during_inspection)"
+    ) as error:
+        scan(root)
+    assert swapped
+    assert "external-research.raw" not in str(error.value)
+    assert external.read_bytes() == b"private unrelated research"
