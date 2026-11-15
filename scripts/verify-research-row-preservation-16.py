@@ -173,7 +173,7 @@ def _is_unsafe_asset_link(path: Path, info: os.stat_result | None = None) -> boo
     return (
         stat.S_ISLNK(details.st_mode)
         or bool(reparse and (getattr(details, "st_file_attributes", 0) & reparse))
-        or path.is_junction()
+        or bool(getattr(path, "is_junction", lambda: False)())
     )
 
 
