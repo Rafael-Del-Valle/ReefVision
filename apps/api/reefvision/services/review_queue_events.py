@@ -140,6 +140,15 @@ def list_review_events(
     page: int,
     page_size: int,
 ) -> ReviewQueueEventsPage:
+    # SQLite's implicit SELECT transactions do not always pin a read snapshot.
+    # Start one before the queue provenance check, count, event page and
+    # assignment lookup: a concurrent editor must not produce a contradictory
+    # audit response containing an old total and a new assignment.
+    connection = session.connection()
+    if connection.dialect.name == "sqlite" and not getattr(
+        connection.connection.driver_connection, "in_transaction", False
+    ):
+        connection.exec_driver_sql("BEGIN")
     _scope(session, queue_id, item_id)
     filters = [ReviewQueueItemEvent.review_queue_item_id == item_id]
     total = (

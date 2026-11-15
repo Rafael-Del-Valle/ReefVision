@@ -1,0 +1,52 @@
+# ReefVision 1.6 — consistent QC event-history reads
+
+**Branch:** `develop/reefvision-1.6` (draft PR #77). **Status:** release HOLD.
+**Coordination:** issue #76. This change is not a migration or review approval.
+
+## Audited existing behavior and the gap
+
+The established 1.6 QC API already provides append-only comments, assignment
+history, manual triage, idempotent event keys, saved executable
+`project_source -> qc_review_queue` Workflow Builder runs, typed
+`review_queue_reference` output, immutable provenance and explicit
+researcher review gates. It also detects mismatched event provenance and
+handles SQLite contention. Those capabilities remain intact.
+
+The event-history GET response is composed from separate SQLite reads:
+queue/item provenance, event total, paginated events and latest assignment.
+Under the sqlite3 driver's legacy implicit-transaction behavior, one request
+could observe the count before another editor committed an unassignment,
+then return the new event or assignee afterward. That makes a scientifically
+misleading review-audit response even though every individual SQL query was
+valid.
+
+## Change and guarantees
+
+The history-read service establishes an explicit SQLite read transaction
+before the first queue/provenance SELECT if a driver transaction is not
+already active. All subsequent reads for that HTTP request use one SQLite
+snapshot, including the latest assignment and out-of-range pages. Existing
+active transactions are respected; no writing transaction, schema migration,
+stamping, automatic scientific approval, network service or new workflow
+node is introduced. A later independent request observes newly committed
+reviewer evidence.
+
+`test_review_queue_event_contention_16.py` adds deterministic SQLite WAL
+interleaving tests for **both** standalone and saved/executable Workflow
+Builder queues. A second connection commits a reviewer unassignment after
+the first event count but before the event-page fetch. The first response
+must retain the prior count, original event, old assignee and researcher
+review requirement. A subsequent response must show both events and no
+assignee, while the queue items remain pending.
+
+## Acceptance and blockers
+
+Run the two new cases and the existing QC event-contention suite using
+pytest, together with Ruff, mypy, full backend/frontend and Windows checks.
+The branch's independently unresolved Alembic 1.1/1.6 revision-0038 collision
+still blocks integration. Representative biological-data validation, native
+Windows MSI/CAB install and upgrade/rollback, installed-GUI validation and
+researcher approval are required before any 1.6 release decision.
+
+No existing annotation, review, model, workflow artifact or user media is
+rewritten by this read-only change.

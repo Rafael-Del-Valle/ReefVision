@@ -10,7 +10,7 @@ import sqlite3
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
@@ -297,6 +297,87 @@ def test_huge_review_history_pages_preserve_audit_summary(
     assert first_page.json()["total"] == 1
     assert [event["id"] for event in first_page.json()["items"]] == [created.json()["id"]]
     assert first_page.json()["current_assignee"] == "reviewer-two"
+    items = client.get(f"/api/v1/review-queues/{queue_id}/items")
+    assert items.status_code == 200, items.text
+    assert {item["review_state"] for item in items.json()["items"]} == {"pending"}
+
+
+@pytest.mark.parametrize("saved_workflow", [False, True])
+def test_review_history_page_pins_one_sqlite_snapshot_during_concurrent_assignment(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, saved_workflow: bool
+) -> None:
+    """Count, events, assignee and provenance must describe one committed state.
+
+    Exercise the standalone API and a persisted, executable Workflow Builder
+    queue. A second SQLite connection commits an unassignment between the
+    reader's count and its event-page query; the first response stays frozen,
+    while a fresh request sees the newly committed review evidence.
+    """
+    queue_id, item_ids = _make_queue(client, saved_workflow=saved_workflow)
+    item_id = item_ids[0]
+    url = f"/api/v1/review-queues/{queue_id}/items/{item_id}/events"
+    assigned = client.post(
+        url,
+        json={
+            "client_request_id": str(uuid4()),
+            "event_type": "assign",
+            "actor": "researcher",
+            "assignee": "reviewer-one",
+        },
+    )
+    assert assigned.status_code == 201, assigned.text
+
+    app = cast(FastAPI, client.app)
+    with app.state.engine.connect() as connection:
+        assert connection.exec_driver_sql("PRAGMA journal_mode=WAL").scalar() == "wal"
+    queue = client.get(f"/api/v1/review-queues/{queue_id}")
+    assert queue.status_code == 200, queue.text
+    project_id = queue.json()["project_id"]
+
+    original_scalar = Session.scalar
+    writer_commits: list[bool] = []
+
+    def commit_between_history_queries(
+        session: Session, statement: Any, *args: Any, **kwargs: Any
+    ) -> Any:
+        value = original_scalar(session, statement, *args, **kwargs)
+        sql = str(statement)
+        if "count(" in sql and "review_queue_item_events" in sql and not writer_commits:
+            with app.state.session_factory() as writer:
+                writer.add(
+                    ReviewQueueItemEvent(
+                        review_queue_id=queue_id,
+                        review_queue_item_id=item_id,
+                        project_id=project_id,
+                        client_request_id=str(uuid4()),
+                        event_type="unassign",
+                        actor="researcher",
+                    )
+                )
+                writer.commit()
+            writer_commits.append(True)
+        return value
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Session, "scalar", commit_between_history_queries)
+        snapshot = client.get(url, params={"page_size": 1})
+    assert snapshot.status_code == 200, snapshot.text
+    assert writer_commits == [True]
+    prior = snapshot.json()
+    assert prior["total"] == 1
+    assert [event["id"] for event in prior["items"]] == [assigned.json()["id"]]
+    assert prior["current_assignee"] == "reviewer-one"
+    assert prior["requires_researcher_review"] is True
+
+    current = client.get(url, params={"page_size": 10})
+    assert current.status_code == 200, current.text
+    assert current.json()["total"] == 2
+    assert [event["event_type"] for event in current.json()["items"]] == [
+        "assign",
+        "unassign",
+    ]
+    assert current.json()["current_assignee"] is None
+    assert current.json()["requires_researcher_review"] is True
     items = client.get(f"/api/v1/review-queues/{queue_id}/items")
     assert items.status_code == 200, items.text
     assert {item["review_state"] for item in items.json()["items"]} == {"pending"}
