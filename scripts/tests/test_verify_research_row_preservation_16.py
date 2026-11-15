@@ -3,10 +3,12 @@
 import json
 import os
 import runpy
+import stat
 import shutil
 import sqlite3
 import subprocess
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -657,3 +659,100 @@ def test_additive_science_schema_preserves_autoincrement_counter(tmp_path: Path)
     assert report["problems"] == []
     assert before.read_bytes() == original_bytes
     assert after.read_bytes() == candidate_bytes
+
+
+def test_windows_reparse_metadata_is_not_confused_with_regular_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Windows junctions and non-symlink reparse files must never pass as originals."""
+    is_link = runpy.run_path(str(SCRIPT))["_is_unsafe_asset_link"]
+    monkeypatch.setattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400, raising=False)
+    for mode in (stat.S_IFDIR, stat.S_IFREG):
+        metadata = SimpleNamespace(st_mode=mode, st_file_attributes=0x400)
+        assert is_link(tmp_path / "private-redirect", metadata)
+
+
+def test_asset_verifier_detects_empty_directory_swap_after_hashing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Swapping an empty subtree must not escape the second-pass inventory."""
+    original = tmp_path / "original"
+    candidate = tmp_path / "candidate"
+    original.mkdir()
+    candidate.mkdir()
+    for root in (original, candidate):
+        (root / "coral.raw").write_bytes(b"preserved study image")
+        (root / "empty-study-folder").mkdir()
+    replaced = original / "empty-study-folder"
+    compare = runpy.run_path(str(SCRIPT))["_compare_assets"]
+    inventory = compare.__globals__["_asset_inventory"]
+
+    def replace_after_candidate_scan(root: Path) -> object:
+        snapshot = inventory(root)
+        if root == candidate:
+            replaced.rename(tmp_path / "original-folder-before-swap")
+            replaced.mkdir()
+        return snapshot
+
+    monkeypatch.setitem(compare.__globals__, "_asset_inventory", replace_after_candidate_scan)
+    with pytest.raises(ValueError, match="asset_changed_after_inventory") as error:
+        compare(original, candidate)
+    assert "empty-study-folder" not in str(error.value)
+    assert (original / "coral.raw").read_bytes() == b"preserved study image"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows junction acceptance")
+@pytest.mark.parametrize(
+    "placement",
+    ["original_root", "candidate_root", "original_child", "candidate_child"],
+)
+def test_windows_native_junctions_block_research_asset_preservation(
+    tmp_path: Path, placement: str
+) -> None:
+    """A real NTFS junction must not redirect the verifier outside its scope."""
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    _seed(before)
+    shutil.copyfile(before, after)
+    original = tmp_path / "original-assets"
+    candidate = tmp_path / "candidate-assets"
+    outside = tmp_path / "external-science"
+    outside.mkdir()
+    (outside / "private.raw").write_bytes(b"unrelated field observation")
+    victim = original if placement.startswith("original") else candidate
+
+    if placement.endswith("root"):
+        other = candidate if victim == original else original
+        other.mkdir()
+        (other / "original.raw").write_bytes(b"preserved coral")
+        junction = victim
+    else:
+        original.mkdir()
+        candidate.mkdir()
+        (original / "original.raw").write_bytes(b"preserved coral")
+        (candidate / "original.raw").write_bytes(b"preserved coral")
+        junction = victim / "redirected"
+
+    try:
+        command = subprocess.run(
+            ["cmd", "/c", f'mklink /J "{junction}" "{outside}"'],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if command.returncode:
+            pytest.skip("Windows runner cannot create NTFS junction fixture")
+        before_bytes, after_bytes = before.read_bytes(), after.read_bytes()
+        code, report = _run(before, after, original, candidate)
+        assert code == 2
+        assert report["status"] == "HOLD"
+        assert report["upgrade_authorized"] is False
+        assert report["requires_researcher_approval"] is True
+        assert "asset_symlink_not_allowed" in report["problems"]
+        assert "private.raw" not in json.dumps(report)
+        assert before.read_bytes() == before_bytes
+        assert after.read_bytes() == after_bytes
+        assert (outside / "private.raw").read_bytes() == b"unrelated field observation"
+    finally:
+        if junction.exists():
+            junction.rmdir()
