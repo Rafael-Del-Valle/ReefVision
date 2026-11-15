@@ -64,3 +64,22 @@ upgrade PASS only after the post-migration snapshot. These checks protect the
 evidence policy but are not proof that a real MSI upgrade has run. Full
 Windows installer, GUI, backward-compatible Alembic lineage and biological
 acceptance remain blocked pending independent execution.
+
+## Clean-install versus upgrade approval regression (2026-11-14)
+
+An exact-head CI run for the prior verifier change completed the full backend
+suite (**1,888 passed, 32 skipped**) and MSI-provenance tests (**27 passed**),
+but exposed one failing installed-evidence test: its expected error was the
+*final* upgrade approval failure even though the new pre-migration
+`upgrade_install` gate correctly fails first for clean-install-only evidence.
+The regression now verifies these two failures separately, so neither the
+installer stage nor the later scientific acceptance stage can be mistaken for
+the other.
+
+The native harness always sets the same reason for both SKIPPED upgrade gates
+(`SkipUpgrade requested` or `previous installer not supplied`). The
+independent verifier now rejects conflicting stage reasons even if both gates
+say SKIPPED. Tests cover both mismatched directions and the valid no-previous-
+installer path. This validates report consistency, **not** a real MSI upgrade,
+Windows GUI acceptance, workflow correctness on biological datasets, or
+reconciled Alembic lineage.
