@@ -1037,3 +1037,24 @@ source-frame audit and must persist identical measurement and provenance
 artifacts. Synthetic opposite/same-orientation fixtures and calibration-scale
 invariance tests preserve `human_review_verified: false` pending independent
 reconstruction and biological validation.
+
+## Localizing nonadjacent coincident surface-trace waypoints
+
+Caller-selected mesh-surface traces now preserve
+`nonadjacent_coincident_waypoint_index_pairs`, an ordered list of
+`[earlier_offset, later_offset]` positions **within the selected waypoint
+sequence**. This localizes the previously aggregated
+`nonadjacent_coincident_surface_trace_vertices` QC warning whenever distinct
+nonadjacent imported vertex IDs share exactly the same source-frame XYZ.
+Adjacent coincident vertices remain handled by the existing zero-length-edge
+warning; they are not reclassified as nonadjacent revisits.
+
+Pairs use the original exact source coordinates, without spatial tolerance,
+vertex welding, registration, or inferred biological reidentification.
+Source indexes, calibration, measured lengths, uncertainties, and
+`human_review_verified: false` remain unchanged. Synthetic direct-engine
+regressions distinguish adjacent aliases from multiple distant revisits,
+and the standalone mesh-preview API and executable typed persisted
+Workflow Builder graph assert complete trace and provenance parity.
+These are reconstruction/trace-review diagnostics, **not** verified coral
+branch, tissue, condition, or longitudinal-growth measurements.
