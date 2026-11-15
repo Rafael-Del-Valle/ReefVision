@@ -282,6 +282,19 @@ def verify_succeeded_node_artifacts(
             raise ConflictError(
                 "Succeeded workflow input producer resolved defaults differ from saved plan"
             )
+        # Workflow planning persists only graph-specified parameters and
+        # registered optional defaults. An added producer parameter can
+        # change the scientific result even with valid artifact checksums.
+        if producer_definition is not None and isinstance(producer_parameters, dict):
+            unplanned = (
+                set(producer_parameters)
+                - set(frozen_parameters)
+                - set(producer_definition.optional_parameters)
+            )
+            if unplanned:
+                raise ConflictError(
+                    "Succeeded workflow input producer has unplanned resolved parameters"
+                )
 
     # Direct interrupted-run recovery must honor frozen scientific inputs,
     # including the verified pose dataset's pinned manifest checksum.
@@ -315,6 +328,14 @@ def verify_succeeded_node_artifacts(
         for key, default in definition.optional_parameters.items()
     ):
         raise ConflictError("Succeeded workflow node resolved defaults differ from saved plan")
+    # Do not allow additional runtime parameters to appear outside the
+    # checksum-pinned graph and the planner's registered default contract.
+    if isinstance(node_parameters, dict):
+        unplanned = (
+            set(node_parameters) - set(saved_parameters) - set(definition.optional_parameters)
+        )
+        if unplanned:
+            raise ConflictError("Succeeded workflow node has unplanned resolved parameters")
 
     declared_types = {port.port_id: set(port.accepted_types) for port in definition.output_ports}
     for artifact in outputs:
