@@ -296,6 +296,12 @@ def _training_log_tail(
             if (
                 expected_identity.st_nlink != 1
                 or opened_identity.st_nlink != 1
+                # An append between validation and open is normal, but a
+                # same-size rewrite would invalidate the pre-open snapshot.
+                or (
+                    expected_identity.st_size == opened_identity.st_size
+                    and expected_identity.st_mtime_ns != opened_identity.st_mtime_ns
+                )
                 or path.resolve(strict=True) != path
                 or (
                     opened_identity.st_dev,

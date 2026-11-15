@@ -62,6 +62,66 @@ def test_log_tail_rejects_file_swapped_between_validation_and_open(
     assert log.read_bytes() == private_bytes
 
 
+def test_log_tail_rejects_same_size_rewrite_before_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An in-place replacement between stat and open is not a valid snapshot."""
+    log = tmp_path / "training.log"
+    original = b"epoch=4\ntrain/box_loss=0.25\n"
+    replacement = b"epoch=9\ntrain/box_loss=9.99\n"
+    assert len(original) == len(replacement)
+    log.write_bytes(original)
+    initial_stat = log.stat()
+    original_open = Path.open
+    rewritten = False
+
+    def rewrite_before_read(path: Path, mode: str = "r", *args: object, **kwargs: object):
+        nonlocal rewritten
+        if path == log and mode == "rb" and not rewritten:
+            rewritten = True
+            log.write_bytes(replacement)
+            os.utime(
+                log,
+                ns=(initial_stat.st_atime_ns, initial_stat.st_mtime_ns + 1_000_000_000),
+            )
+        return original_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", rewrite_before_read)
+    with pytest.raises(HTTPException) as error:
+        training_routes._training_log_tail("training.log", tmp_path)
+    assert error.value.status_code == 403
+    assert rewritten
+    assert log.read_bytes() == replacement
+
+
+def test_log_tail_allows_append_between_stat_and_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Concurrent worker appends are not mistaken for in-place rewrites."""
+    log = tmp_path / "training.log"
+    original = b"epoch=4\ntrain/box_loss=0.25\n"
+    appended = b"train/cls_loss=0.30\n"
+    log.write_bytes(original)
+    original_open = Path.open
+    did_append = False
+
+    def append_before_read(path: Path, mode: str = "r", *args: object, **kwargs: object):
+        nonlocal did_append
+        if path == log and mode == "rb" and not did_append:
+            did_append = True
+            with original_open(log, "ab") as writer:
+                writer.write(appended)
+        return original_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", append_before_read)
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": (original + appended).decode("utf-8"),
+    }
+    assert did_append
+    assert log.read_bytes() == original + appended
+
+
 def test_log_tail_rejects_path_replaced_after_bounded_read(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
