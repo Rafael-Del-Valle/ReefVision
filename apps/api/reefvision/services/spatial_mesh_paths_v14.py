@@ -694,20 +694,35 @@ def mesh_surface_edge_traces(
         source_trace_length_mesh_units = (
             source_trace_length if isfinite(source_trace_length) else None
         )
+        # Preserve edge-by-edge topology behind aggregate scientific QC.
+        # Counts use original indexed faces, not spatially welded vertices;
+        # they cannot certify an anatomical coral branch or clean reconstruction.
+        face_incidence_counts = [incidence[edge] for edge in edges]
+        open_boundary_segment_indices = [
+            index for index, count in enumerate(face_incidence_counts) if count == 1
+        ]
+        nonmanifold_segment_indices = [
+            index for index, count in enumerate(face_incidence_counts) if count > 2
+        ]
+        duplicate_triangle_segment_indices = [
+            index for index, edge in enumerate(edges) if edge in duplicate_face_edges
+        ]
+        inconsistent_winding_segment_indices = [
+            index
+            for index, edge in enumerate(edges)
+            if len(edge_orientations[edge]) == 2
+            and edge_orientations[edge][0] == edge_orientations[edge][1]
+        ]
         warnings = ["caller_selected_surface_trace_not_anatomical_centerline"]
         if source_trace_length_mesh_units is None:
             warnings.append("surface_trace_source_length_unrepresentable")
-        if any(incidence[edge] == 1 for edge in edges):
+        if open_boundary_segment_indices:
             warnings.append("open_boundary_edge_on_surface_trace")
-        if any(incidence[edge] > 2 for edge in edges):
+        if nonmanifold_segment_indices:
             warnings.append("nonmanifold_edge_on_surface_trace")
-        if any(edge in duplicate_face_edges for edge in edges):
+        if duplicate_triangle_segment_indices:
             warnings.append("duplicate_triangle_on_surface_trace")
-        if any(
-            len(edge_orientations[edge]) == 2
-            and edge_orientations[edge][0] == edge_orientations[edge][1]
-            for edge in edges
-        ):
+        if inconsistent_winding_segment_indices:
             warnings.append("inconsistent_winding_edge_on_surface_trace")
         if any(length == 0 for length in source_lengths):
             warnings.append("zero_length_edge_on_surface_trace")
@@ -812,9 +827,16 @@ def mesh_surface_edge_traces(
                 "source_segment_lengths_mesh_units": source_lengths,
                 "source_trace_length_mesh_units": source_trace_length_mesh_units,
                 "source_endpoint_chord_mesh_units": source_chord,
+                "mesh_edge_face_incidence_counts": face_incidence_counts,
+                "open_boundary_segment_indices": open_boundary_segment_indices,
+                "nonmanifold_segment_indices": nonmanifold_segment_indices,
+                "duplicate_triangle_segment_indices": duplicate_triangle_segment_indices,
+                "inconsistent_winding_segment_indices": inconsistent_winding_segment_indices,
                 "display_coordinate_collapsed_segment_indices": collapsed_display_segments,
                 "repeated_geometric_segment_index_pairs": repeated_geometric_segment_index_pairs,
-                "reused_geometric_segment_source_length_mesh_units": reused_source_length_mesh_units,
+                "reused_geometric_segment_source_length_mesh_units": (
+                    reused_source_length_mesh_units
+                ),
                 "reused_geometric_segment_fraction_of_trace": reused_fraction,
                 "turn_angles_deg": turn_angles_deg,
                 "maximum_turn_angle_deg": maximum_turn_angle_deg,
