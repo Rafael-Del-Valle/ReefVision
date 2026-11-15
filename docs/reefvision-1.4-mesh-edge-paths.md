@@ -662,3 +662,18 @@ reversed seam aliases, positive scales, zero reuse, and complete standalone
 versus executed persisted typed Workflow Builder artifact/provenance parity.
 These are synthetic QC checks, not held-out biological or installed-GUI
 validation.
+
+### Fixed-width source-coordinate key contract
+
+Geometric edge incidence, seam orientation, and repeated-traversal QC use
+immutable **three-coordinate** source XYZ keys. The standalone scientific
+engine accepts validated vertex triples supplied as either Python tuples or
+JSON-style lists; converting either representation to a fixed-width key must
+preserve exact source values, original imported vertex indices, winding
+direction, and existing geometric QC. This prevents malformed static typing
+from concealing a runtime list-versus-tuple discrepancy; it does **not** weld
+vertices, impose a spatial tolerance, or certify a reconstructed coral branch.
+Synthetic direct-call regressions exercise both input representations and both
+opposing and conflicting split-vertex seam winding. Existing project-scoped
+standalone and executed typed persisted Workflow Builder comparison tests
+remain the acceptance route for saved artifact and provenance parity.
