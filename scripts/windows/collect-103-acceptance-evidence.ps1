@@ -45,10 +45,24 @@ $webview = @($webviewPaths | ForEach-Object {
     }
 })
 $gpu = $null
-$nvidiaSmi = Get-Command nvidia-smi.exe -ErrorAction SilentlyContinue
+# Never execute a PATH-resolved program while collecting supposedly read-only
+# evidence. A project-local nvidia-smi.exe could otherwise be launched merely
+# by running the acceptance inventory. Prefer known driver installation paths.
+$trustedNvidiaSmiPaths = @(
+    (Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::System)) 'nvidia-smi.exe')
+    (Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFiles)) 'NVIDIA Corporation\NVSMI\nvidia-smi.exe')
+)
+$nvidiaSmi = $trustedNvidiaSmiPaths |
+    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+    Select-Object -First 1
 if ($null -ne $nvidiaSmi) {
     try {
-        $gpu = @(& $nvidiaSmi.Source --query-gpu=name,driver_version,memory.total --format=csv,noheader 2>&1 | ForEach-Object { [string]$_ })
+        $output = @(& $nvidiaSmi --query-gpu=name,driver_version,memory.total --format=csv,noheader 2>&1 | ForEach-Object { [string]$_ })
+        if ($LASTEXITCODE -eq 0) {
+            $gpu = $output
+        } else {
+            $gpu = @("nvidia-smi exited with code $LASTEXITCODE; GPU inventory unverified")
+        }
     } catch {
         $gpu = @("nvidia-smi query failed: $($_.Exception.Message)")
     }
@@ -72,6 +86,7 @@ $os = Get-CimInstance Win32_OperatingSystem
     limitations = @(
         'Read-only inventory; does not prove installation, GUI, training, or scientific acceptance.',
         'WebView2 registry detection is advisory; absence does not prove runtime is unavailable.',
+        'GPU inventory uses trusted Windows driver paths only; missing or failed nvidia-smi is not GPU acceptance.',
         'No file contents or scientific datasets are uploaded.'
     )
 } | ConvertTo-Json -Depth 7
