@@ -959,3 +959,40 @@ also exercise the flag through the standalone API and persisted typed
 Workflow Builder graph, requiring complete measurement and provenance
 parity. These are not independent biological, Windows installed-GUI, or
 physical GPU release validations.
+
+### Source-planar perimeter compactness (provisional shape only)
+
+An exactly source-planar, geometrically simple, researcher-selected closed
+edge trace also reports
+`closed_loop_source_planar_isoperimetric_quotient`, computed as
+`4 * pi * source_enclosed_area / source_perimeter²`. This dimensionless
+shape descriptor uses the original mesh source coordinates; a shared
+positive calibration scale cancels, as do changing the starting waypoint
+and reversing traversal. A perfect circle has the limiting value 1;
+a nondegenerate polygon must have a positive value below 1. The value
+is **not** a physical area, biological condition score, coral cross-section
+classification, validated organism morphology, or anatomical centerline
+measurement.
+
+The quotient is only emitted when the source polygon passes existing
+planarity, simplicity, nonzero-segment and intersection QC, and both
+its positive enclosed area and perimeter are numerically representable.
+It is `null` for open, nonplanar, crossing, touching, overlapping,
+degenerate, or source-area-unrepresentable traces. A finite source area
+with an unrepresentable quotient produces the
+`closed_surface_trace_planar_compactness_unrepresentable` warning
+instead of a false numeric zero, infinity, or spurious circularity.
+The implementation evaluates `4*pi*(sqrt(area)/perimeter)²` to avoid
+unnecessary squared-perimeter overflow; it is still subject to
+binary64 output limits and does not claim uncertainty from the
+reconstruction or endpoint-placement process.
+
+Two independently specified right-triangle references, including
+one embedded in the YZ plane, and reversed/rotated closure tests
+check shape invariance. Invalid-loop tests check withholding.
+The same field is evaluated in saved, typed, executable Workflow
+Builder graphs, with full measurement and provenance equality
+against the standalone API. `human_review_verified` stays false;
+independent contour annotation, specimen-level repeatability,
+installed Windows GUI, and physical GPU validation remain separate
+release requirements.
