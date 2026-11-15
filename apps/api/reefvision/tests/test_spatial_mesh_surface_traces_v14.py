@@ -565,7 +565,10 @@ def test_exact_planar_loop_reports_proper_source_segment_crossings(
 
 def test_proper_source_crossing_audit_uses_non_xy_reference_plane() -> None:
     # Every vertex has constant X. Projection to YZ must retain the crossing.
-    points = [(0.0, float(x), float(y)) for x, y, _ in PROPER_CROSSING_CLOSED_LOOP_PARAMS["vertices"]]
+    points = [
+        (0.0, float(x), float(y))
+        for x, y, _ in PROPER_CROSSING_CLOSED_LOOP_PARAMS["vertices"]
+    ]
     traces = mesh_surface_edge_traces(
         points=points,
         faces=PROPER_CROSSING_CLOSED_LOOP_PARAMS["faces"],
