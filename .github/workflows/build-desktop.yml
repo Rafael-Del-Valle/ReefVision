@@ -28,10 +28,25 @@ jobs:
   build-windows-installer:
     runs-on: windows-latest
     timeout-minutes: 120
+    outputs:
+      release-version: ${{ steps.package-version.outputs.release-version }}
+      release-slug: ${{ steps.package-version.outputs.release-slug }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      # Exercise the actual embedded monitor formatter on Windows before
+      # spending time packaging the multi-GB MSI/CAB payload.
+      - name: Verify read-only PowerShell monitor output sanitization
+        shell: pwsh
+        run: ./scripts/test-training-console-sanitizer.ps1
+
+      # Run the embedded monitor against mocked local GET responses to catch
+      # stale box/cls/dfl losses and accidental training API mutations.
+      - name: Verify live read-only PowerShell loss polling
+        shell: pwsh
+        run: ./scripts/test-training-console-readonly.ps1
 
       # Fast safety checks run before bootstrap / the multi-GB MSI build.
       - name: Validate Windows clean-install harness safeguards
@@ -45,6 +60,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Resolve package version
+        id: package-version
+        shell: pwsh
+        run: |
+          $config = Get-Content apps/web/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $releaseVersion = [string]$config.version
+          if ($releaseVersion -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Invalid Tauri package version: $releaseVersion"
+          }
+          "release-version=$releaseVersion" >> $env:GITHUB_OUTPUT
+          "release-slug=$($releaseVersion.Replace('.', '-'))" >> $env:GITHUB_OUTPUT
+
+      - name: Check Windows installer version before packaging
+        shell: pwsh
+        run: python scripts/check-windows-installer-acceptance-version.py
 
       - uses: actions/setup-node@v4
         with:
