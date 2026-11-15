@@ -601,9 +601,7 @@ def test_asset_scan_rejects_symlink_swap_between_lstat_and_open(
         "INSERT INTO sqlite_sequence (name, seq) VALUES ('scientific_records', 3)",
     ],
 )
-def test_autoincrement_allocation_history_is_preserved(
-    tmp_path: Path, mutation: str
-) -> None:
+def test_autoincrement_allocation_history_is_preserved(tmp_path: Path, mutation: str) -> None:
     """A migration must not reuse an old scientific identifier after deletion."""
     before = tmp_path / "original.sqlite"
     after = tmp_path / "migrated.sqlite"
@@ -627,9 +625,10 @@ def test_autoincrement_allocation_history_is_preserved(
     assert report["upgrade_authorized"] is False
     assert report["requires_researcher_approval"] is True
     assert "scientific_records:changed_autoincrement_sequence" in report["problems"]
-    assert next(
-        item for item in report["tables"] if item["table"] == "scientific_records"
-    )["status"] == "changed_autoincrement_sequence"
+    assert (
+        next(item for item in report["tables"] if item["table"] == "scientific_records")["status"]
+        == "changed_autoincrement_sequence"
+    )
     assert "Swiftia" not in json.dumps(report)
     assert before.read_bytes() == original_bytes
     assert after.read_bytes() == candidate_bytes
@@ -644,14 +643,10 @@ def test_additive_science_schema_preserves_autoincrement_counter(tmp_path: Path)
             "CREATE TABLE scientific_records "
             "(id INTEGER PRIMARY KEY AUTOINCREMENT, species TEXT NOT NULL)"
         )
-        connection.execute(
-            "INSERT INTO scientific_records (species) VALUES ('Swiftia')"
-        )
+        connection.execute("INSERT INTO scientific_records (species) VALUES ('Swiftia')")
     shutil.copyfile(before, after)
     with sqlite3.connect(after) as connection:
-        connection.execute(
-            "ALTER TABLE scientific_records ADD COLUMN verified_note TEXT"
-        )
+        connection.execute("ALTER TABLE scientific_records ADD COLUMN verified_note TEXT")
     original_bytes, candidate_bytes = before.read_bytes(), after.read_bytes()
     code, report = _run(before, after)
     assert code == 0
