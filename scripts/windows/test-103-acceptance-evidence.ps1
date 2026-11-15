@@ -91,7 +91,28 @@ try {
     $missingRejected = $false
     try { $null = & $collector -CandidateSha $sha -MsiPath (Join-Path $fixture 'missing.msi') 2>&1 } catch { $missingRejected = $true }
     if (-not $missingRejected) { throw 'Missing MSI was incorrectly treated as validated.' }
-    Write-Output 'PASS: SHA validation, MSI/CAB hashes, missing artifacts, mutation-sensitive hashes, directory rejection, and evidence limitations.'
+    # An untrusted image-analysis workspace may prepend a fake executable to
+    # PATH. The acceptance collector is read-only and must never resolve or
+    # execute that program simply to inventory an optional GPU.
+    $oldPath = $env:PATH
+    $untrustedDirectory = Join-Path $fixture 'untrusted PATH tools'
+    New-Item -ItemType Directory -Path $untrustedDirectory -ErrorAction Stop | Out-Null
+    [System.IO.File]::WriteAllBytes(
+        (Join-Path $untrustedDirectory 'nvidia-smi.exe'), [byte[]](77, 90, 0, 0)
+    )
+    $env:PATH = $untrustedDirectory + [System.IO.Path]::PathSeparator + $oldPath
+    function Get-Command { throw 'Untrusted PATH lookup attempted by the evidence collector.' }
+    try {
+        $trusted = (& $collector -CandidateSha $sha | Out-String | ConvertFrom-Json)
+        if ($trusted.candidateSha -cne $sha -or
+            -not @($trusted.limitations | Where-Object { $_ -match 'trusted Windows driver paths' }).Count) {
+            throw 'GPU inventory did not preserve commit identity and trusted-path limitations.'
+        }
+    } finally {
+        Remove-Item Function:\Get-Command -ErrorAction SilentlyContinue
+        $env:PATH = $oldPath
+    }
+    Write-Output 'PASS: SHA validation, MSI/CAB hashes, missing artifacts, mutation-sensitive hashes, safe GPU executable discovery, directory rejection, and evidence limitations.'
 } finally {
     Remove-Item -LiteralPath $fixture -Recurse -Force -ErrorAction SilentlyContinue
 }
