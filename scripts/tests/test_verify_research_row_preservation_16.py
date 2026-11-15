@@ -514,7 +514,7 @@ def test_asset_scan_rejects_symlink_swap_between_lstat_and_open(
 
     monkeypatch.setattr(os, "open", swap_on_open)
     with pytest.raises(
-        ValueError, match="asset_(symlink_not_allowed|changed_during_inspection)"
+        ValueError, match=r"asset_(symlink_not_allowed|changed_during_inspection)"
     ) as error:
         scan(root)
     assert swapped
