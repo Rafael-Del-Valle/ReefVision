@@ -185,12 +185,19 @@ function Start-AcceptanceDesktop {
     }
 }
 function Stop-AcceptanceDesktop($Process) {
+    $Process.Refresh()
     if ($Process.HasExited) { return }
-    $signature = '[DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);'
-    if (-not ('ReefVisionAcceptanceNative' -as [type])) { Add-Type -MemberDefinition $signature -Name ReefVisionAcceptanceNative -Namespace ReefVision }
-    if ($Process.MainWindowHandle -ne 0) { [ReefVision.ReefVisionAcceptanceNative]::PostMessage($Process.MainWindowHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null }
-    $Process.WaitForExit(15000) | Out-Null
-    if (-not $Process.HasExited) { throw 'ReefVision did not close cleanly within 15 seconds.' }
+    # -WindowStyle Hidden can make MainWindowHandle zero even though the
+    # Tauri process owns a native, invisible top-level WebView2 window.
+    $posted = Invoke-ReefVisionWindowClose -ProcessId $Process.Id
+    if ($posted -eq 0) {
+        throw "ReefVision PID $($Process.Id) has no top-level window available for a graceful WM_CLOSE."
+    }
+    # Keep the close-and-exit requirement strict, but give the frozen sidecar
+    # shutdown on a resource-constrained Windows runner a bounded 30 seconds.
+    if (-not $Process.WaitForExit(30000)) {
+        throw "ReefVision PID $($Process.Id) did not close cleanly within 30 seconds after WM_CLOSE ($posted window(s) signaled)."
+    }
 }
 function Import-AcceptanceImage(
     [string]$Url,

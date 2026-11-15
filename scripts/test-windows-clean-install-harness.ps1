@@ -78,6 +78,15 @@ $parseErrors = $null
 )
 Assert-True (@($parseErrors).Count -eq 0) "Windows acceptance PowerShell syntax invalid: $($parseErrors -join '; ')"
 $acceptanceScript = Get-Content -LiteralPath $acceptancePath -Raw
+
+# Compile and exercise the actual native enumeration path on the Windows
+# acceptance runner. PID 0 cannot own a user desktop window; no process is
+# signaled and no live ReefVision training or desktop job is interrupted.
+Assert-True ((Invoke-ReefVisionWindowClose -ProcessId 0) -eq 0) 'PID-zero window enumeration should signal nothing.'
+Assert-True ($acceptanceScript.Contains('Invoke-ReefVisionWindowClose -ProcessId $Process.Id')) 'Acceptance shutdown must enumerate hidden native windows, not MainWindowHandle.'
+Assert-True (-not $acceptanceScript.Contains('$Process.MainWindowHandle')) 'Hidden desktop acceptance must not depend on MainWindowHandle.'
+Assert-True (-not $acceptanceScript.Contains('Stop-Process -Force')) 'Acceptance must not mask a failed graceful shutdown with a forced kill.'
+
 # Guard the packaged acceptance request against retired project templates and
 # legacy model catalog selectors. Production API supports blank projects only.
 Assert-True ($acceptanceScript.Contains("template='blank'")) 'Acceptance project must use the supported blank template.'

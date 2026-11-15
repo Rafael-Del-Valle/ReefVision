@@ -181,3 +181,58 @@ function Test-ReefVisionAdministrator {
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
+
+# The Windows CI runner launches the desktop with -WindowStyle Hidden. .NET's
+# MainWindowHandle ignores hidden top-level windows, so a normal WM_CLOSE
+# request was sometimes silently skipped during previous-release upgrades.
+# Enumerate the *specific launched process's* windows, including invisible
+# ones. Never terminate processes or fall back to taskkill: failure to close
+# cleanly must remain an explicit release-blocking acceptance failure.
+function Invoke-ReefVisionWindowClose {
+    param([Parameter(Mandatory = $true)][uint32]$ProcessId)
+    if (-not ('ReefVisionAcceptance.WindowClose' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+namespace ReefVisionAcceptance
+{
+    public static class WindowClose
+    {
+        private delegate bool WindowEnumerator(IntPtr window, IntPtr data);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool EnumWindows(WindowEnumerator callback, IntPtr data);
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+
+        public static int RequestClose(uint processId)
+        {
+            int posted = 0;
+            WindowEnumerator callback = (window, data) =>
+            {
+                uint owner;
+                GetWindowThreadProcessId(window, out owner);
+                if (owner == processId && PostMessage(window, 0x0010, IntPtr.Zero, IntPtr.Zero))
+                {
+                    posted++;
+                }
+                return true;
+            };
+            if (!EnumWindows(callback, IntPtr.Zero))
+            {
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(),
+                    "Could not enumerate Windows desktop windows for clean-install acceptance.");
+            }
+            return posted;
+        }
+    }
+}
+'@
+    }
+    return [ReefVisionAcceptance.WindowClose]::RequestClose($ProcessId)
+}
