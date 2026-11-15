@@ -114,6 +114,27 @@ GEOMETRIC_SEAM_PARAMS = {
 }
 
 
+# Three distinct triangles meet at one exact geometric XYZ edge, but use
+# different original vertex IDs. Indexed topology sees only one incident
+# face on the selected edge, concealing a geometric nonmanifold junction.
+GEOMETRIC_NONMANIFOLD_SEAM_PARAMS = {
+    **PARAMS,
+    "vertices": [
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, -1, 0],
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 0, 1],
+    ],
+    "faces": [[0, 1, 2], [4, 3, 5], [6, 7, 8]],
+    "surface_trace_vertex_paths": [[0, 1]],
+}
+
+
 # Source endpoints are separated by one representable binary64 step, but
 # independently scaling their absolute coordinates erases that separation.
 # The full mesh has positive area, so API and persisted graph can execute.
@@ -200,6 +221,33 @@ def test_selected_trace_locates_indexed_face_topology_for_review(
     assert len(counts) == trace["edge_count"]
     assert trace["human_review_verified"] is False
     assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
+
+
+@pytest.mark.parametrize("shared_indexed_edge", [False, True])
+@pytest.mark.parametrize("scale", [0.01, 1.0])
+def test_split_vertex_seam_cannot_hide_geometric_nonmanifold_junction(
+    shared_indexed_edge: bool, scale: float
+) -> None:
+    params = {
+        **GEOMETRIC_NONMANIFOLD_SEAM_PARAMS,
+        "meters_per_unit": scale,
+    }
+    if shared_indexed_edge:
+        # Two faces really share indexed [0, 1]; the third remains split.
+        params["faces"] = [[0, 1, 2], [1, 0, 5], [6, 7, 8]]
+    preview = measure_mesh_preview(**params)
+    trace = preview["surface_edge_traces"][0]
+    assert trace["mesh_edge_face_incidence_counts"] == [2 if shared_indexed_edge else 1]
+    assert trace["geometric_edge_face_incidence_counts"] == [3]
+    assert trace["nonmanifold_segment_indices"] == []
+    assert trace["split_vertex_nonmanifold_segment_indices"] == [0]
+    assert trace["split_vertex_seam_segment_indices"] == [0]
+    assert "split_vertex_hidden_nonmanifold_on_surface_trace" in trace["qc_warnings"]
+    assert "nonmanifold_edge_on_surface_trace" not in trace["qc_warnings"]
+    assert trace["segment_lengths_m"] == pytest.approx([scale])
+    assert preview["surface_area_m2"] == pytest.approx(1.5 * scale * scale)
+    assert preview["provenance"]["calibration_verified"] is False
+    assert trace["human_review_verified"] is False
 
 
 def test_trace_follows_selected_edges_not_the_shortest_route() -> None:
@@ -712,6 +760,7 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
         "duplicate_face",
         "nonmanifold",
         "geometric_seam",
+        "geometric_nonmanifold_seam",
         "coincident_nonadjacent",
         "reverse_turn",
         "reused_geometric_segment",
@@ -735,6 +784,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "duplicate_face": DUPLICATE_FACE_PARAMS,
         "nonmanifold": NONMANIFOLD_EDGE_PARAMS,
         "geometric_seam": GEOMETRIC_SEAM_PARAMS,
+        "geometric_nonmanifold_seam": GEOMETRIC_NONMANIFOLD_SEAM_PARAMS,
         "coincident_nonadjacent": COINCIDENT_NONADJACENT_PARAMS,
         "reverse_turn": REVERSE_TURN_PARAMS,
         "reused_geometric_segment": REUSED_GEOMETRIC_SEGMENT_PARAMS,
@@ -811,6 +861,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             "duplicate_triangle_segment_indices",
             "inconsistent_winding_segment_indices",
             "split_vertex_seam_segment_indices",
+            "split_vertex_nonmanifold_segment_indices",
         )
         for index in trace[field]
     )
@@ -853,12 +904,22 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert trace["duplicate_triangle_segment_indices"] == [0]
         assert "duplicate_triangle_on_surface_trace" in trace["qc_warnings"]
     if case == "geometric_seam":
+        assert trace["split_vertex_nonmanifold_segment_indices"] == []
         assert trace["mesh_edge_face_incidence_counts"] == [1, 1]
         assert trace["geometric_edge_face_incidence_counts"] == [2, 1]
         assert trace["split_vertex_seam_segment_indices"] == [0]
         assert "split_vertex_geometric_seam_on_surface_trace" in trace["qc_warnings"]
         assert trace["human_review_verified"] is False
+    if case == "geometric_nonmanifold_seam":
+        assert trace["mesh_edge_face_incidence_counts"] == [1]
+        assert trace["geometric_edge_face_incidence_counts"] == [3]
+        assert trace["split_vertex_seam_segment_indices"] == [0]
+        assert trace["split_vertex_nonmanifold_segment_indices"] == [0]
+        assert trace["nonmanifold_segment_indices"] == []
+        assert "split_vertex_hidden_nonmanifold_on_surface_trace" in trace["qc_warnings"]
+        assert trace["human_review_verified"] is False
     if case == "nonmanifold":
+        assert trace["split_vertex_nonmanifold_segment_indices"] == []
         assert trace["mesh_edge_face_incidence_counts"] == [3]
         assert trace["nonmanifold_segment_indices"] == [0]
         assert "nonmanifold_edge_on_surface_trace" in trace["qc_warnings"]
