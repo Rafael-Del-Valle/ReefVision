@@ -550,31 +550,29 @@ def _closed_loop_exact_source_coplanarity(
     return not noncoplanar_offsets, noncoplanar_offsets
 
 
-def _closed_loop_source_proper_crossings(
+def _closed_loop_source_segment_intersections(
     positions: list[_SourcePoint],
-) -> list[list[int]]:
-    """Locate strict crossings of nonadjacent segments in an exactly planar loop.
+) -> tuple[list[list[int]], list[list[int]], list[list[int]]]:
+    """Audit nonadjacent proper crossings, endpoint contacts, and line overlaps.
 
-    Uses exact submitted binary64 coordinates and a nondegenerate 2-D
-    projection of their known plane. Endpoint touches and collinear overlaps
-    are deliberately not classified as *proper* crossings. No area, physical
-    proximity tolerance, or anatomical identity is inferred.
+    All predicates operate on the submitted binary64 source coordinates
+    converted to exact rational values in a nondegenerate source-plane
+    projection. This is geometric QC, not physical proximity or contour area.
+    The repeated terminal waypoint is excluded from segment enumeration.
     """
     source = [(Fraction(x), Fraction(y), Fraction(z)) for x, y, z in positions[:-1]]
     axes: tuple[int, int] | None = None
     for first, second in ((0, 1), (0, 2), (1, 2)):
         if any(
-            (source[i][first] - source[0][first])
-            * (source[j][second] - source[0][second])
-            != (source[i][second] - source[0][second])
-            * (source[j][first] - source[0][first])
+            (source[i][first] - source[0][first]) * (source[j][second] - source[0][second])
+            != (source[i][second] - source[0][second]) * (source[j][first] - source[0][first])
             for i in range(1, len(source))
             for j in range(i + 1, len(source))
         ):
             axes = first, second
             break
     if axes is None:
-        return []
+        return [], [], []
     first, second = axes
     projected = [(point[first], point[second]) for point in source]
 
@@ -582,17 +580,43 @@ def _closed_loop_source_proper_crossings(
         a, b, c = projected[i], projected[j], projected[k]
         return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
 
+    def on_segment(a: int, b: int, c: int) -> bool:
+        start, end, point = projected[a], projected[b], projected[c]
+        return (
+            orient(a, b, c) == 0
+            and min(start[0], end[0]) <= point[0] <= max(start[0], end[0])
+            and min(start[1], end[1]) <= point[1] <= max(start[1], end[1])
+        )
+
     count = len(projected)
-    crossing_pairs: list[list[int]] = []
+    proper: list[list[int]] = []
+    touching: list[list[int]] = []
+    overlapping: list[list[int]] = []
     for earlier in range(count):
         for later in range(earlier + 2, count):
             if earlier == 0 and later == count - 1:
-                continue  # The first and closing segments share an endpoint.
-            first_a = orient(earlier, (earlier + 1) % count, later)
-            first_b = orient(earlier, (earlier + 1) % count, (later + 1) % count)
-            second_a = orient(later, (later + 1) % count, earlier)
-            second_b = orient(later, (later + 1) % count, (earlier + 1) % count)
-            if (
+                continue  # Consecutive closure edges share their endpoint.
+            a, b = earlier, (earlier + 1) % count
+            c, d = later, (later + 1) % count
+            first_a, first_b = orient(a, b, c), orient(a, b, d)
+            second_a, second_b = orient(c, d, a), orient(c, d, b)
+            if first_a == first_b == second_a == second_b == 0:
+                # Along a common line, strict interval intersection means
+                # positive-length overlap; equality is a point contact.
+                axis = 0 if projected[a][0] != projected[b][0] or projected[c][0] != projected[d][0] else 1
+                lower = max(
+                    min(projected[a][axis], projected[b][axis]),
+                    min(projected[c][axis], projected[d][axis]),
+                )
+                upper = min(
+                    max(projected[a][axis], projected[b][axis]),
+                    max(projected[c][axis], projected[d][axis]),
+                )
+                if lower < upper:
+                    overlapping.append([earlier, later])
+                elif lower == upper:
+                    touching.append([earlier, later])
+            elif (
                 first_a != 0
                 and first_b != 0
                 and second_a != 0
@@ -600,8 +624,15 @@ def _closed_loop_source_proper_crossings(
                 and (first_a > 0) != (first_b > 0)
                 and (second_a > 0) != (second_b > 0)
             ):
-                crossing_pairs.append([earlier, later])
-    return crossing_pairs
+                proper.append([earlier, later])
+            elif (
+                on_segment(a, b, c)
+                or on_segment(a, b, d)
+                or on_segment(c, d, a)
+                or on_segment(c, d, b)
+            ):
+                touching.append([earlier, later])
+    return proper, touching, overlapping
 
 
 def mesh_surface_edge_traces(
@@ -887,15 +918,19 @@ def mesh_surface_edge_traces(
         source_exact_coplanarity: bool | None = None
         source_noncoplanar_waypoint_offsets: list[int] = []
         proper_crossing_segment_pairs: list[list[int]] | None = None
+        touching_segment_pairs: list[list[int]] | None = None
+        overlapping_segment_pairs: list[list[int]] | None = None
         if is_closed_surface_loop:
             (
                 source_exact_coplanarity,
                 source_noncoplanar_waypoint_offsets,
             ) = _closed_loop_exact_source_coplanarity(positions)
             if source_exact_coplanarity is True:
-                proper_crossing_segment_pairs = _closed_loop_source_proper_crossings(
-                    positions
-                )
+                (
+                    proper_crossing_segment_pairs,
+                    touching_segment_pairs,
+                    overlapping_segment_pairs,
+                ) = _closed_loop_source_segment_intersections(positions)
         geometric_face_incidence_counts = [
             geometric_incidence[(start, end) if start <= end else (end, start)]
             for start, end in pairwise(positions)
@@ -971,6 +1006,10 @@ def mesh_surface_edge_traces(
                 warnings.append("closed_surface_trace_source_reference_plane_undefined")
             if proper_crossing_segment_pairs:
                 warnings.append("closed_surface_trace_source_proper_self_intersection")
+            if touching_segment_pairs:
+                warnings.append("closed_surface_trace_source_nonadjacent_segment_contact")
+            if overlapping_segment_pairs:
+                warnings.append("closed_surface_trace_source_collinear_segment_overlap")
         if source_trace_length_mesh_units is None:
             warnings.append("surface_trace_source_length_unrepresentable")
         if source_cumulative_arc_length_fractions is None:
@@ -1103,9 +1142,9 @@ def mesh_surface_edge_traces(
                 "closed_loop_source_noncoplanar_waypoint_offsets": (
                     source_noncoplanar_waypoint_offsets
                 ),
-                "closed_loop_source_proper_crossing_segment_pairs": (
-                    proper_crossing_segment_pairs
-                ),
+                "closed_loop_source_proper_crossing_segment_pairs": proper_crossing_segment_pairs,
+                "closed_loop_source_touching_segment_pairs": touching_segment_pairs,
+                "closed_loop_source_collinear_overlap_segment_pairs": overlapping_segment_pairs,
                 "vertex_indices": list(vertices),
                 "nonadjacent_coincident_waypoint_index_pairs": (
                     nonadjacent_coincident_waypoint_index_pairs
