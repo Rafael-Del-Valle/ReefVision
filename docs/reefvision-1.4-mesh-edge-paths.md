@@ -1,5 +1,33 @@
 # ReefVision 1.4 provisional mesh-edge paths
 
+## Duplicate triangle exclusion versus direct topology diagnostics
+
+The direct `mesh_surface_edge_traces` measurement engine can identify
+`duplicate_triangle_segment_indices` for a deliberately malformed face list.
+This diagnostic is **not** permission to publish an area or execute a preview
+on duplicate faces. The complete `measure_mesh_preview` pipeline rejects
+repeated indexed triangles because they would double-count surface area;
+the project-scoped standalone API must reject that input as well. A saved,
+typed `mesh_surface_preview` workflow may retain the researcher's input,
+but execution must fail without emitting a `mesh_measurement_preview`
+artifact. This keeps invalid topology from becoming apparently valid saved
+scientific measurements.
+
+Likewise, source-XYZ seam aliases can repeat more than one edge within a
+single vertex-ID-unique trace. For example, visiting the same two coordinate
+segments in reverse order produces both reuse pairs `[1, 2]` and `[0, 3]`,
+not only the last pair. The reported reused source length and dimensionless
+fraction must include **both** later traversals, without automatically
+subtracting either from the researcher's selected route. These diagnostics
+remain unreviewed geometry, not anatomical centerline or organism identity.
+
+The synthetic regression distinguishes diagnostic-only engine behavior from
+the public preview's fail-closed validation, checks a failed persisted typed
+workflow emits no false measurement artifact, and covers both alias traversal
+orders. These are automated checks, **not** field validation, installed-GUI
+acceptance, or human verification of biological condition.
+
+
 
 ## Split-vertex geometric seams in imported triangle meshes
 
