@@ -84,9 +84,7 @@ def test_concurrent_wal_commit_cannot_mix_scientific_revision_and_inventory(
     writer = sqlite3.connect(database)
     try:
         writer.execute("PRAGMA journal_mode=WAL")
-        writer.execute(
-            "CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)"
-        )
+        writer.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
         writer.execute("INSERT INTO alembic_version VALUES ('0039')")
         for name in (
             "scientific_records",
@@ -150,24 +148,14 @@ def test_concurrent_wal_commit_cannot_mix_scientific_revision_and_inventory(
         assert committed_during_scan
         assert before_commit_view["revision_rows"] == ["0039"]
         assert before_commit_view["lineage_hint"] == "scientific"
-        assert not before_commit_view["inventory"]["environmental_event_definitions"][
-            "present"
-        ]
-        assert not before_commit_view["inventory"]["environmental_analysis_results"][
-            "present"
-        ]
+        assert not before_commit_view["inventory"]["environmental_event_definitions"]["present"]
+        assert not before_commit_view["inventory"]["environmental_analysis_results"]["present"]
         assert before_commit_view["upgrade_authorized"] is False
 
         after_commit_view = inspector(database)
         assert after_commit_view["revision_rows"] == ["0042"]
-        assert after_commit_view["inventory"]["environmental_event_definitions"][
-            "present"
-        ]
-        assert after_commit_view["inventory"]["environmental_analysis_results"][
-            "present"
-        ]
-        assert writer.execute("SELECT note FROM biological_sentinel").fetchone() == (
-            "preserve",
-        )
+        assert after_commit_view["inventory"]["environmental_event_definitions"]["present"]
+        assert after_commit_view["inventory"]["environmental_analysis_results"]["present"]
+        assert writer.execute("SELECT note FROM biological_sentinel").fetchone() == ("preserve",)
     finally:
         writer.close()
