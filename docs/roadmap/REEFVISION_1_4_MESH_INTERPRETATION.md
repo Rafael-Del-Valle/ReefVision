@@ -1058,3 +1058,31 @@ and the standalone mesh-preview API and executable typed persisted
 Workflow Builder graph assert complete trace and provenance parity.
 These are reconstruction/trace-review diagnostics, **not** verified coral
 branch, tissue, condition, or longitudinal-growth measurements.
+
+
+## Source-normalized waypoint progression for selected mesh traces
+
+Caller-selected surface-edge traces now expose
+`source_cumulative_arc_length_fractions`, a dimensionless array aligned with
+`vertex_indices`. It begins at 0 and ends at 1 for positive-total-length
+traces. Each interior entry is the accumulated source-coordinate edge length
+divided by the complete selected source trace length. It is **not** a matching
+anatomical landmark across observations. Exact rational accumulation of finite
+binary64 edge lengths avoids loss from multiplying by a tiny calibration scale
+and can report valid fractions even when the *sum* of source mesh-unit lengths
+cannot be represented as a finite binary64 number. These ratios are therefore
+numerical trace positions, not independently calibrated spatial distances.
+
+If all selected source segments are zero length, the array is `null` and QC
+contains `surface_trace_source_arc_fractions_undefined_zero_total`. If a
+positive source segment is too small for a distinct adjacent binary64 fraction,
+QC contains `surface_trace_source_arc_fraction_resolution_loss`: equal
+displayed fractions must **not** be interpreted as evidence of zero edge
+length. Existing raw source lengths, scaled measurements, uncertainties,
+reconstruction QC, provenance, and `human_review_verified: false` remain
+unchanged. Synthetic tests cover scale invariance, tiny calibration,
+subnormal precision limits, source-length overflow and zero-length traces;
+standalone mesh previews and saved executable typed Workflow Builder runs
+persist identical complete measurement/provenance artifacts. Valid biological
+reidentification, matching trace topology, anatomical homology and longitudinal
+growth still require independent human validation.
