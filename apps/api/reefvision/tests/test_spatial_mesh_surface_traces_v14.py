@@ -499,6 +499,18 @@ def test_simple_planar_footprint_is_scale_qualified_and_order_invariant(
     assert trace["closed_loop_source_planar_isoperimetric_quotient"] == pytest.approx(
         2 * pi / (2 + sqrt(2)) ** 2
     )
+    # Equivalent-circle diameter is a scale-qualified geometric width, not
+    # an anatomical branch diameter or a verified coral cross-section.
+    source_diameter = sqrt(2 / pi)
+    assert trace["closed_loop_source_planar_equivalent_diameter_mesh_units"] == pytest.approx(
+        source_diameter
+    )
+    assert trace["closed_loop_planar_equivalent_diameter_m"] == pytest.approx(
+        0.01 * source_diameter
+    )
+    assert trace["closed_loop_planar_equivalent_diameter_scale_only_interval_m"] == (
+        pytest.approx([0.009 * source_diameter, 0.011 * source_diameter])
+    )
     assert trace["human_review_verified"] is False
 
 
@@ -513,6 +525,16 @@ def test_planar_footprint_non_xy_plane_and_full_scale_uncertainty() -> None:
     # The non-XY triangle has area 3 and source perimeter 5 + sqrt(13).
     assert trace["closed_loop_source_planar_isoperimetric_quotient"] == pytest.approx(
         12 * pi / (5 + sqrt(13)) ** 2
+    )
+    source_diameter = 2 * sqrt(3 / pi)
+    assert trace["closed_loop_source_planar_equivalent_diameter_mesh_units"] == pytest.approx(
+        source_diameter
+    )
+    assert trace["closed_loop_planar_equivalent_diameter_m"] == pytest.approx(
+        0.01 * source_diameter
+    )
+    assert trace["closed_loop_planar_equivalent_diameter_scale_only_interval_m"] == (
+        pytest.approx([0.0, 0.02 * source_diameter])
     )
     assert trace["human_review_verified"] is False
 
@@ -534,6 +556,9 @@ def test_non_simple_or_open_loops_never_have_planar_footprint(
     assert trace["closed_loop_planar_enclosed_area_m2"] is None
     assert trace["closed_loop_planar_enclosed_area_scale_only_interval_m2"] is None
     assert trace["closed_loop_source_planar_isoperimetric_quotient"] is None
+    assert trace["closed_loop_source_planar_equivalent_diameter_mesh_units"] is None
+    assert trace["closed_loop_planar_equivalent_diameter_m"] is None
+    assert trace["closed_loop_planar_equivalent_diameter_scale_only_interval_m"] is None
 
 
 def test_planar_area_underflow_is_unknown_not_numeric_zero() -> None:
@@ -543,6 +568,8 @@ def test_planar_area_underflow_is_unknown_not_numeric_zero() -> None:
     assert source["closed_loop_source_planar_enclosed_area_mesh_units2"] is None
     assert source["closed_loop_planar_enclosed_area_m2"] is None
     assert source["closed_loop_source_planar_isoperimetric_quotient"] is None
+    assert source["closed_loop_source_planar_equivalent_diameter_mesh_units"] is None
+    assert source["closed_loop_planar_equivalent_diameter_m"] is None
     assert "closed_surface_trace_source_planar_area_unrepresentable" in source["qc_warnings"]
 
     ordinary = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)]
@@ -550,6 +577,14 @@ def test_planar_area_underflow_is_unknown_not_numeric_zero() -> None:
     assert calibrated["closed_loop_source_planar_enclosed_area_mesh_units2"] == 0.5
     assert calibrated["closed_loop_planar_enclosed_area_m2"] is None
     assert calibrated["closed_loop_planar_enclosed_area_scale_only_interval_m2"] is None
+    # A linear dimension can still be represented when its square cannot.
+    source_diameter = sqrt(2 / pi)
+    assert calibrated["closed_loop_planar_equivalent_diameter_m"] == pytest.approx(
+        source_diameter * 1e-200
+    )
+    assert calibrated["closed_loop_planar_equivalent_diameter_scale_only_interval_m"] == (
+        pytest.approx([source_diameter * 0.9e-200, source_diameter * 1.1e-200])
+    )
     assert (
         "closed_surface_trace_calibrated_planar_area_unrepresentable" in calibrated["qc_warnings"]
     )
@@ -1634,6 +1669,15 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             )
             assert trace["closed_loop_planar_enclosed_area_m2"] == pytest.approx(
                 expected_source_area * 0.0001
+            )
+            # This value is present in both standalone and the persisted typed
+            # graph artifact, whose full payload/provenance equality is checked.
+            diameter = 2 * sqrt(expected_source_area / pi)
+            assert trace["closed_loop_source_planar_equivalent_diameter_mesh_units"] == (
+                pytest.approx(diameter)
+            )
+            assert trace["closed_loop_planar_equivalent_diameter_m"] == pytest.approx(
+                0.01 * diameter
             )
             expected_compactness = (
                 12 * pi / (5 + sqrt(13)) ** 2
