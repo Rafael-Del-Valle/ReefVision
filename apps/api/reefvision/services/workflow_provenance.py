@@ -266,11 +266,15 @@ def verify_succeeded_node_artifacts(
         # upstream resolved optional defaults as well as graph-specified values.
         # The producer contract's absence is rejected by the port check below.
         producer_definition = registry.get(producer.node_type)
-        if producer_definition is not None and isinstance(producer_parameters, dict) and any(
-            key not in frozen_parameters
-            and key in producer_parameters
-            and producer_parameters[key] != default
-            for key, default in producer_definition.optional_parameters.items()
+        if (
+            producer_definition is not None
+            and isinstance(producer_parameters, dict)
+            and any(
+                key not in frozen_parameters
+                and key in producer_parameters
+                and producer_parameters[key] != default
+                for key, default in producer_definition.optional_parameters.items()
+            )
         ):
             raise ConflictError(
                 "Succeeded workflow input producer resolved defaults differ from saved plan"
