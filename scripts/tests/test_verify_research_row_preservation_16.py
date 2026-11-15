@@ -364,6 +364,33 @@ def test_upgrade_asset_inventory_fails_closed_without_changing_evidence(
     assert (before_assets / "original.mp4").read_bytes() == original_asset_bytes
 
 
+def test_asset_copies_must_not_share_hardlinked_original_storage(
+    tmp_path: Path,
+) -> None:
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    _seed(before)
+    shutil.copyfile(before, after)
+    original = tmp_path / "original"
+    candidate = tmp_path / "candidate"
+    original.mkdir()
+    candidate.mkdir()
+    source = original / "camera.raw"
+    source.write_bytes(b"source pixels")
+    try:
+        (candidate / "camera.raw").hardlink_to(source)
+    except (NotImplementedError, OSError):
+        pytest.skip("filesystem does not permit hardlinks")
+    assert source.stat().st_ino != 0
+    baseline_bytes = source.read_bytes()
+    code, report = _run(before, after, original, candidate)
+    assert code == 2
+    assert report["status"] == "HOLD"
+    assert "asset_copies_share_hardlinks" in report["problems"]
+    assert "camera.raw" not in json.dumps(report)
+    assert source.read_bytes() == baseline_bytes
+
+
 def test_empty_asset_baseline_cannot_claim_preservation(tmp_path: Path) -> None:
     before = tmp_path / "before.sqlite"
     after = tmp_path / "after.sqlite"
