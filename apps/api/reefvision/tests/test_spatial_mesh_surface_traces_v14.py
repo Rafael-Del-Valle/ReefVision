@@ -384,10 +384,9 @@ def test_reused_geometric_segment_fraction_is_calibration_invariant(scale: float
     assert trace["human_review_verified"] is False
 
 
-def test_reuse_fraction_withholds_overflowed_source_total() -> None:
-    # Direct source-coordinate audit: the meter-scaled path remains finite,
-    # but a sum of individually representable source segments overflows.
-    # Never serialize an infinite reuse fraction or claim biological validity.
+def test_reuse_fraction_remains_finite_with_overflowed_source_total() -> None:
+    # A source-coordinate total can overflow while the exact dimensionless
+    # fraction remains meaningful. Keep the measured lengths provisional.
     points = [
         (0.0, 0.0, 0.0),
         (1e308, 0.0, 0.0),
@@ -409,7 +408,9 @@ def test_reuse_fraction_withholds_overflowed_source_total() -> None:
     assert trace["length_m"] == pytest.approx(3 + sqrt(2))
     assert trace["source_trace_length_mesh_units"] is None
     assert trace["reused_geometric_segment_source_length_mesh_units"] == pytest.approx(1e308)
-    assert trace["reused_geometric_segment_fraction_of_trace"] is None
+    assert trace["reused_geometric_segment_fraction_of_trace"] == pytest.approx(
+        1 / (3 + sqrt(2))
+    )
     fractions = trace["source_cumulative_arc_length_fractions"]
     assert fractions is not None
     assert fractions[0] == 0.0
@@ -417,7 +418,38 @@ def test_reuse_fraction_withholds_overflowed_source_total() -> None:
     assert all(0 <= a < b <= 1 for a, b in pairwise(fractions))
     assert trace["source_arc_fraction_resolution_loss_segment_indices"] == []
     assert "surface_trace_source_length_unrepresentable" in trace["qc_warnings"]
-    assert "surface_trace_reuse_fraction_unrepresentable" in trace["qc_warnings"]
+    assert "surface_trace_reuse_fraction_unrepresentable" not in trace["qc_warnings"]
+    assert "surface_trace_reuse_fraction_resolution_loss" not in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+
+
+def test_reuse_fraction_flags_subnormal_source_ratio_rounding_to_zero() -> None:
+    # An exact positive reused fraction may be too small for binary64. Report
+    # precision loss; zero in the persisted field must not imply no reuse.
+    smallest = float.fromhex("0x0.0000000000001p-1022")
+    points = [
+        (0.0, 0.0, 0.0),
+        (smallest, 0.0, 0.0),
+        (0.0, 0.0, 0.0),
+        (smallest, 0.0, 0.0),
+        (1e308, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, -1.0, 0.0),
+        (0.0, 0.0, 1.0),
+        (0.0, 0.0, -1.0),
+    ]
+    trace = mesh_surface_edge_traces(
+        points,
+        [[0, 1, 5], [1, 2, 6], [2, 3, 7], [3, 4, 8]],
+        [[0, 1, 2, 3, 4]],
+        1e-308,
+        0.1,
+    )[0]
+    assert trace["repeated_geometric_segment_index_pairs"] == [[0, 1], [0, 2]]
+    assert trace["reused_geometric_segment_source_length_mesh_units"] > 0
+    assert trace["reused_geometric_segment_fraction_of_trace"] == 0.0
+    assert "surface_trace_reused_geometric_segment" in trace["qc_warnings"]
+    assert "surface_trace_reuse_fraction_resolution_loss" in trace["qc_warnings"]
     assert trace["human_review_verified"] is False
 
 
