@@ -58,9 +58,21 @@ def good_report() -> dict:
 
 class AcceptanceEvidenceTests(unittest.TestCase):
     def test_clean_install_passes_but_does_not_claim_upgrade(self) -> None:
-        MODULE.validate_report(good_report(), expected_version="1.0.2")
+        clean = good_report()
+        MODULE.validate_report(clean, expected_version="1.0.2")
+        # Distinguish the two independently required real-upgrade stages.
+        with self.assertRaisesRegex(
+            MODULE.AcceptanceEvidenceError, "pre-migration asset retention did not PASS"
+        ):
+            MODULE.validate_report(
+                clean, expected_version="1.0.2", expected_upgrade="passed"
+            )
+        staged_only = copy.deepcopy(clean)
+        staged_only["upgrade_install"] = pass_evidence()
         with self.assertRaisesRegex(MODULE.AcceptanceEvidenceError, "upgrade did not PASS"):
-            MODULE.validate_report(good_report(), expected_version="1.0.2", expected_upgrade="passed")
+            MODULE.validate_report(
+                staged_only, expected_version="1.0.2", expected_upgrade="passed"
+            )
 
     def test_missing_and_skipped_required_gates_fail(self) -> None:
         for key in MODULE.REQUIRED_PASS:
@@ -286,6 +298,24 @@ class AcceptanceEvidenceTests(unittest.TestCase):
         report["upgrade"] = {"status": "SKIPPED", "detail": "not tested"}
         with self.assertRaises(MODULE.AcceptanceEvidenceError):
             MODULE.validate_report(report, expected_version="1.0.2")
+
+    def test_upgrade_skip_reason_must_match_across_phases(self) -> None:
+        # The native offline harness selects exactly one skip policy, not an
+        # installer-stage reason different from the final approval reason.
+        report = good_report()
+        for changed_gate in ("upgrade_install", "upgrade"):
+            with self.subTest(changed_gate=changed_gate):
+                inconsistent = copy.deepcopy(report)
+                inconsistent[changed_gate]["detail"] = "previous installer not supplied"
+                with self.assertRaisesRegex(
+                    MODULE.AcceptanceEvidenceError, "skip reasons disagree"
+                ):
+                    MODULE.validate_report(inconsistent, expected_version="1.0.2")
+
+        # Either legitimate skip policy remains valid when both gates agree.
+        report["upgrade_install"]["detail"] = "previous installer not supplied"
+        report["upgrade"]["detail"] = "previous installer not supplied"
+        MODULE.validate_report(report, expected_version="1.0.2")
 
     def test_installed_acceptance_requires_causal_gate_timestamps(self) -> None:
         # Every mandatory status may say PASS with a valid run-window time,
