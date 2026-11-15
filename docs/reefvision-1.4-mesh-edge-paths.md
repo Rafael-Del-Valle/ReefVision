@@ -1074,3 +1074,37 @@ standalone project-scoped API result. These synthetic tests do **not**
 satisfy held-out coral annotation, independent calibration, installed Windows
 GUI, physical GPU or release-readiness acceptance. The output remains
 `human_review_verified: false`.
+
+### Source-plane filled-outline centroid (provisional coordinate anchor)
+
+Exactly planar, geometrically simple, caller-selected closed surface-edge
+contours expose `closed_loop_source_planar_centroid_mesh_units` and
+`closed_loop_planar_centroid_m`. These are XYZ geometric centroids of the
+**filled source-plane polygon**, not means of its perimeter vertices.
+Signed shoelace weights from an exact-rational source-coordinate projection
+determine all three axes, including XZ and YZ contours. Translation,
+winding reversal, and changing the start vertex preserve the underlying
+centroid; the meter coordinates apply the same caller-selected calibration.
+
+The coordinate is **not** an organism location, coral attachment point,
+tissue center of mass, reidentification decision, anatomical landmark, or
+verified frame registration. It is a nominal coordinate, not a positional
+confidence interval. Scale uncertainty, camera/mesh reconstruction error,
+source-frame alignment, and human contour placement require separate
+scientific treatment; no new uncertainty model is invented.
+
+Open, noncoplanar, self-intersecting and otherwise nonsimple contours
+return `null` for both coordinates. An exactly valid polygon can have
+a squared area below binary64 representation yet have a representable
+linear centroid coordinate; centroid calculation is independent of the
+serialized area. Unrepresentable values are withheld with explicit
+`closed_surface_trace_source_planar_centroid_unrepresentable` or
+`closed_surface_trace_calibrated_planar_centroid_unrepresentable` QC,
+rather than fabricated zero coordinates. Original mesh geometry,
+calibration provenance and `human_review_verified: false` are preserved.
+
+Analytical XY and YZ triangle references, reversed and rotated paths,
+area underflow, non-simple loops, and standalone versus executable,
+typed, persisted Workflow Builder graph comparisons provide synthetic
+regression coverage. Biological verification, independent calibration,
+installed Windows GUI and physical GPU acceptance remain outstanding.
