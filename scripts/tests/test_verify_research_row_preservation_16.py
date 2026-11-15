@@ -381,7 +381,8 @@ def test_asset_copies_must_not_share_hardlinked_original_storage(
         (candidate / "camera.raw").hardlink_to(source)
     except (NotImplementedError, OSError):
         pytest.skip("filesystem does not permit hardlinks")
-    assert source.stat().st_ino != 0
+    if source.stat().st_ino == 0:
+        pytest.skip("filesystem does not expose stable inodes")
     baseline_bytes = source.read_bytes()
     code, report = _run(before, after, original, candidate)
     assert code == 2
