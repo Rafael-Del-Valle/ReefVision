@@ -809,3 +809,35 @@ also runs through the persisted, executable typed Workflow Builder graph;
 the standalone API and saved workflow must produce identical measurement
 artifacts and provenance. This remains synthetic geometric QC, **not**
 field-measured anatomical, installed Windows GUI, or GPU validation.
+
+### Exact proper segment-crossing audit for source-planar closed loops
+
+When a caller-selected closed surface trace is **exactly coplanar** in its
+submitted source coordinates, ReefVision now reports
+`closed_loop_source_proper_crossing_segment_pairs`. Each zero-based
+`[earlier, later]` pair identifies two **nonadjacent** selected perimeter
+segments with a strict interior-to-interior crossing. The common first/last
+waypoint is excluded from crossing candidates. A reproducible nondegenerate
+2D projection of the exact source plane and rational orientation predicates
+avoid adding an arbitrary near-intersection tolerance.
+
+The warning `closed_surface_trace_source_proper_self_intersection`
+requires explicit scientific inspection. The saved pairs are `[]` when
+the source-planar trace has no **proper** crossing. They are **null** when
+the trace is open, noncoplanar, or lacks a definable source plane; null must
+not be interpreted as a simple loop. Endpoint-to-interior contacts,
+nonadjacent endpoint coincidences, and collinear overlap are **outside this
+strict crossing diagnostic** and are not certified absent. Even `[]`
+does not verify topological simplicity, reconstruction quality, an anatomical
+coral cross-section, enclosed area, or organism-level condition.
+
+A synthetic planar bow-tie perimeter is tested in both winding directions
+and with a rotated start index; a YZ-plane reference checks that the
+implementation does not assume an XY camera projection. The bow-tie
+fixture also executes through an explicitly saved, typed Workflow Builder
+graph, with exact comparison of its persisted trace artifact and provenance
+to the standalone project-scoped API. The original mesh, calibration,
+scale-only perimeter interval, QC, and
+`human_review_verified: false` remain unmodified. These are **synthetic**
+mesh integrity checks, not held-out biological or installed-GUI/GPU
+acceptance.
