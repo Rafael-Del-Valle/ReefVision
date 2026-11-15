@@ -37,6 +37,12 @@ _SCIENCE_TABLES = frozenset(
         "environmental_cache_entries",
         "computed_metric_definitions",
         "computed_metric_results",
+        # 1.1 revision 0040 can leave a standalone query definition after
+        # interrupted SQLite DDL; 0042 creates two independent tables.
+        # Neither requires the older 0038/0039 tables to survive a restore.
+        "environmental_event_definitions",
+        "environmental_analysis_definitions",
+        "environmental_analysis_results",
     }
 )
 _BULK_TABLE = "review_queue_bulk_requests"
