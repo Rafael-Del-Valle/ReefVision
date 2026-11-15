@@ -84,3 +84,15 @@ def test_desktop_build_and_rust_guard_stage_the_candidate_version() -> None:
     ):
         release_paths = re.findall(r"release-\d+\.\d+\.\d+", path.read_text(encoding="utf-8"))
         assert set(release_paths) == {staging}, path
+
+
+def test_web_tooling_supports_only_the_verified_node_lts_range() -> None:
+    root = Path(__file__).resolve().parents[4]
+    web_package = json.loads((root / "apps" / "web" / "package.json").read_text(encoding="utf-8"))
+    node_tools = (root / "scripts" / "lib" / "node-tools.ps1").read_text(encoding="utf-8")
+    workflow = (root / ".github" / "workflows" / "build-desktop.yml").read_text(encoding="utf-8")
+
+    assert web_package["engines"]["node"] == ">=22 <25"
+    assert "[int]$MaximumNodeMajor = 24" in node_tools
+    assert "$nodeMajor -gt $MaximumNodeMajor" in node_tools
+    assert 'node-version: "22"' in workflow
