@@ -36,13 +36,18 @@ def _seed(path: Path) -> None:
             )
 
 
-def _run(before: Path, after: Path) -> tuple[int, dict]:
-    completed = subprocess.run(
-        [sys.executable, str(SCRIPT), "--before", str(before), "--after", str(after)],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+def _run(
+    before: Path,
+    after: Path,
+    before_assets: Path | None = None,
+    after_assets: Path | None = None,
+) -> tuple[int, dict]:
+    command = [sys.executable, str(SCRIPT), "--before", str(before), "--after", str(after)]
+    if before_assets is not None:
+        command.extend(["--before-assets", str(before_assets)])
+    if after_assets is not None:
+        command.extend(["--after-assets", str(after_assets)])
+    completed = subprocess.run(command, text=True, capture_output=True, check=False)
     return completed.returncode, json.loads(completed.stdout)
 
 
@@ -264,3 +269,134 @@ def test_wal_sidecar_blocks_preservation_claim(tmp_path: Path) -> None:
         assert "mutable_sqlite_sidecar_detected" in report["problems"]
     finally:
         writer.close()
+
+
+def test_upgrade_asset_inventory_preserves_original_media_and_allows_additions(
+    tmp_path: Path,
+) -> None:
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    _seed(before)
+    shutil.copyfile(before, after)
+    before_assets = tmp_path / "original-assets"
+    after_assets = tmp_path / "candidate-assets"
+    (before_assets / "study-1").mkdir(parents=True)
+    (after_assets / "study-1").mkdir(parents=True)
+    (before_assets / "study-1" / "video.mov").write_bytes(b"frame" * 10_000)
+    (before_assets / "study-1" / "mask.png").write_bytes(b"\x00\xff\x01")
+    shutil.copytree(before_assets, after_assets, dirs_exist_ok=True)
+    (after_assets / "study-1" / "new-image.jpg").write_bytes(b"new observation")
+    original = before.read_bytes()
+    candidate = after.read_bytes()
+    baseline_assets = {
+        path.relative_to(before_assets): path.read_bytes()
+        for path in before_assets.rglob("*")
+        if path.is_file()
+    }
+
+    code, report = _run(before, after, before_assets, after_assets)
+
+    assert code == 0
+    assert report["status"] == "PASS_PRESERVATION_ONLY"
+    assert report["research_assets"] == {
+        "checked": True,
+        "baseline_files": 2,
+        "candidate_files": 3,
+        "missing_files": 0,
+        "changed_files": 0,
+        "added_files": 1,
+    }
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    assert "video.mov" not in json.dumps(report)
+    assert "mask.png" not in json.dumps(report)
+    assert before.read_bytes() == original
+    assert after.read_bytes() == candidate
+    assert all(
+        (before_assets / relative).read_bytes() == content
+        for relative, content in baseline_assets.items()
+    )
+
+
+@pytest.mark.parametrize("mutation", ["removed", "changed", "symlink"])
+def test_upgrade_asset_inventory_fails_closed_without_changing_evidence(
+    tmp_path: Path, mutation: str
+) -> None:
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    _seed(before)
+    shutil.copyfile(before, after)
+    before_assets = tmp_path / "original"
+    after_assets = tmp_path / "candidate"
+    before_assets.mkdir()
+    after_assets.mkdir()
+    (before_assets / "original.mp4").write_bytes(b"archival coral video\x00")
+    candidate_file = after_assets / "original.mp4"
+    candidate_file.write_bytes(b"archival coral video\x00")
+    if mutation == "removed":
+        candidate_file.unlink()
+    elif mutation == "changed":
+        candidate_file.write_bytes(b"archival coral video\x01")
+    else:
+        candidate_file.unlink()
+        try:
+            candidate_file.symlink_to(before_assets / "original.mp4")
+        except (NotImplementedError, OSError):
+            pytest.skip("platform does not permit symlinks")
+    baseline_before, baseline_after = before.read_bytes(), after.read_bytes()
+    original_asset_bytes = (before_assets / "original.mp4").read_bytes()
+    code, report = _run(before, after, before_assets, after_assets)
+    assert code == 2
+    assert report["status"] == "HOLD"
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    if mutation == "removed":
+        assert "research_assets_missing" in report["problems"]
+        assert report["research_assets"]["missing_files"] == 1
+    elif mutation == "changed":
+        assert "research_assets_changed" in report["problems"]
+        assert report["research_assets"]["changed_files"] == 1
+    else:
+        assert "asset_symlink_not_allowed" in report["problems"]
+    assert "original.mp4" not in json.dumps(report)
+    assert before.read_bytes() == baseline_before
+    assert after.read_bytes() == baseline_after
+    assert (before_assets / "original.mp4").read_bytes() == original_asset_bytes
+
+
+@pytest.mark.parametrize("case", ["unpaired", "same_root", "nested_root"])
+def test_upgrade_asset_inventory_rejects_unsafe_scope(tmp_path: Path, case: str) -> None:
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    _seed(before)
+    shutil.copyfile(before, after)
+    original = tmp_path / "original"
+    original.mkdir()
+    (original / "one.jpg").write_bytes(b"original")
+    if case == "unpaired":
+        before_assets, after_assets = original, None
+    elif case == "same_root":
+        before_assets, after_assets = original, original
+    else:
+        candidate = original / "nested"
+        candidate.mkdir()
+        before_assets, after_assets = original, candidate
+    code, report = _run(before, after, before_assets, after_assets)
+    assert code == 2
+    assert report["status"] == "HOLD"
+    assert report["upgrade_authorized"] is False
+    assert "one.jpg" not in json.dumps(report)
+    assert (original / "one.jpg").read_bytes() == b"original"
+
+
+def test_database_only_preservation_does_not_claim_research_assets(
+    tmp_path: Path,
+) -> None:
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    _seed(before)
+    shutil.copyfile(before, after)
+    code, report = _run(before, after)
+    assert code == 0
+    assert report["research_assets"] == {"checked": False}
+    assert report["upgrade_authorized"] is False
