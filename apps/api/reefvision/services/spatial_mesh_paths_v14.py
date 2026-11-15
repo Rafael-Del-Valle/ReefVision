@@ -590,7 +590,9 @@ def mesh_surface_edge_traces(
         # A closed surface loop explicitly repeats only its initial vertex at
         # the last waypoint. Repeating any intermediate index remains invalid.
         is_closed_surface_loop = (
-            isinstance(vertices, list) and len(vertices) >= 4 and vertices[0] == vertices[-1]
+            isinstance(vertices, list)
+            and len(vertices) >= 4
+            and vertices[0] == vertices[-1]
         )
         distinct_vertices = vertices[:-1] if is_closed_surface_loop else vertices
         if (
