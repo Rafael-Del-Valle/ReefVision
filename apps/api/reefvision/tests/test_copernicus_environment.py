@@ -173,6 +173,12 @@ def test_unbounded_or_ambiguous_requests_rejected(patch):
         "non_object_sample",
         "non_object_dataset_metadata",
         "non_object_coordinate_resolution",
+        "zero_time_resolution",
+        "negative_latitude_resolution",
+        "string_time_resolution",
+        "boolean_time_resolution",
+        "nonfinite_longitude_resolution",
+        "unknown_resolution_axis",
     ],
 )
 def test_invalid_provider_grid_never_persists_scientific_records(
@@ -216,6 +222,18 @@ def test_invalid_provider_grid_never_persists_scientific_records(
         raw["dataset_metadata"] = []
     elif damage == "non_object_coordinate_resolution":
         raw["coordinate_resolution"] = None
+    elif damage == "zero_time_resolution":
+        raw["coordinate_resolution"]["time"] = 0.0
+    elif damage == "negative_latitude_resolution":
+        raw["coordinate_resolution"]["latitude"] = -0.1
+    elif damage == "string_time_resolution":
+        raw["coordinate_resolution"]["time"] = "3600"
+    elif damage == "boolean_time_resolution":
+        raw["coordinate_resolution"]["time"] = True
+    elif damage == "nonfinite_longitude_resolution":
+        raw["coordinate_resolution"]["longitude"] = float("inf")
+    elif damage == "unknown_resolution_axis":
+        raw["coordinate_resolution"]["vertical_datum"] = 1.0
     else:
         raw["dataset_version"] = "different"
     with client.app.state.session_factory() as session, pytest.raises(ValidationError):
@@ -223,6 +241,57 @@ def test_invalid_provider_grid_never_persists_scientific_records(
             project["id"], request()
         )
     assert client.get(f"/api/v1/projects/{project['id']}/scientific-records").json()["total"] == 0
+
+
+
+def test_invalid_copernicus_resolution_refresh_keeps_prior_offline_snapshot(
+    client, test_settings, monkeypatch
+):
+    """Reject misleading provider grid spacing without losing validated cache."""
+    project = create_project(client)
+    original = raw_fixture(monkeypatch)
+    now = datetime(2026, 4, 4, tzinfo=UTC)
+    with client.app.state.session_factory() as session:
+        cached = CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: deepcopy(original), now=now
+        ).acquire(project["id"], request())
+    corrupted = deepcopy(original)
+    corrupted["coordinate_resolution"]["time"] = 0.0
+    with client.app.state.session_factory() as session, pytest.raises(ValidationError):
+        CopernicusEnvironmentService(
+            session,
+            test_settings,
+            fetch=lambda *_: deepcopy(corrupted),
+            now=now + timedelta(days=2),
+        ).acquire(project["id"], request(refresh=True))
+    with client.app.state.session_factory() as session:
+        offline = CopernicusEnvironmentService(
+            session,
+            test_settings,
+            fetch=lambda *_: pytest.fail("offline must not acquire remote data"),
+            now=now + timedelta(days=2),
+        ).acquire(project["id"], request(offline=True))
+    assert offline.cache_status == "stale_offline"
+    assert [item.id for item in offline.items] == [item.id for item in cached.items]
+
+
+def test_valid_provider_grid_spacing_is_retained_as_unassessed_provenance(
+    client, test_settings, monkeypatch
+):
+    """Synthetic spacing is preserved explicitly, without claiming QC acceptance."""
+    project = create_project(client)
+    raw = raw_fixture(monkeypatch)
+    raw["coordinate_resolution"] = {"time": 3600.0, "longitude": 0.5}
+    with client.app.state.session_factory() as session:
+        result = CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: deepcopy(raw)
+        ).acquire(project["id"], request())
+    assert all(item.provenance.temporal_resolution_s == 3600.0 for item in result.items)
+    assert all(item.qc == "unassessed" for item in result.items)
+    assert all(
+        item.provenance.source_metadata["coordinate_resolution"]["longitude"] == 0.5
+        for item in result.items
+    )
 
 
 def test_missing_copernicus_configuration_fails_without_leaking_secrets(client):
