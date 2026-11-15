@@ -158,7 +158,9 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
         assert producer is not None
         original = artifacts["project_reference"]
-        with pytest.raises(ConflictError, match="already persisted a different artifact"):
+        with pytest.raises(
+            ConflictError, match="already persisted a different artifact"
+        ):
             WorkflowExecutionService(session).persist_artifact(
                 run_id=str(run["id"]),
                 node_run=producer,
