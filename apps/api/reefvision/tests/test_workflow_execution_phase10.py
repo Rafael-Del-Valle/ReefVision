@@ -15,7 +15,8 @@ from reefvision.db.models import (
     WorkflowRun,
 )
 from reefvision.domain.errors import ConflictError
-from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.jobs.workflow import _input_artifacts, process_workflow_run_job
+from reefvision.schemas.workflow_graphs import WorkflowPlanInputBinding
 from reefvision.services.workflow_provenance import (
     build_workflow_run_provenance,
     verify_succeeded_node_artifacts,
@@ -145,6 +146,37 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
     assert set(artifacts["image_collection"]["payload_json"]["image_ids"]) == image_ids
     assert artifacts["image_collection"]["payload_json"]["count"] == 2
     assert all(len(item["payload_sha256"]) == 64 for item in payload["artifacts"])
+
+    # An already executed producer's declared output can drift between step
+    # commits. The downstream node must refuse to consume it even when the
+    # artifact itself still has its original valid SHA-256.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        assert producer is not None
+        original_result = dict(producer.result_json or {})
+        declared_outputs = original_result["outputs"]
+        assert isinstance(declared_outputs, list) and len(declared_outputs) == 1
+        producer.result_json = {
+            **original_result,
+            "outputs": [{**declared_outputs[0], "payload_sha256": "0" * 64}],
+        }
+        session.flush()
+        with pytest.raises(ConflictError, match="output summary"):
+            _input_artifacts(
+                session,
+                run_id=str(run["id"]),
+                step_node_id="images",
+                bindings=[
+                    WorkflowPlanInputBinding(
+                        target_port_id="project",
+                        source_node_id="project",
+                        source_port_id="project",
+                        data_type="project_reference",
+                    )
+                ],
+            )
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
     # The saved graph omitted the image-status filter, so Workflow Builder
     # materialized its registered default. Altering only that resolved value
