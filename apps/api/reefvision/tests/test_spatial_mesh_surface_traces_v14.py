@@ -555,6 +555,20 @@ def test_planar_area_underflow_is_unknown_not_numeric_zero() -> None:
     )
 
 
+
+def test_planar_compactness_underflow_is_unknown_not_false_zero() -> None:
+    # The area is representable but the area/perimeter² quotient is not.
+    # Withholding a tiny positive value avoids a fabricated compactness of 0.
+    points = [(0.0, 0.0, 0.0), (1e200, 0.0, 0.0), (0.0, 1e-200, 0.0)]
+    trace = mesh_surface_edge_traces(points, [[0, 1, 2]], [[0, 1, 2, 0]], 1.0, None)[0]
+    assert trace["closed_loop_source_is_simple_planar_perimeter"] is True
+    assert trace["closed_loop_source_planar_enclosed_area_mesh_units2"] == pytest.approx(0.5)
+    assert trace["source_trace_length_mesh_units"] == pytest.approx(2e200)
+    assert trace["closed_loop_source_planar_isoperimetric_quotient"] is None
+    assert "closed_surface_trace_planar_compactness_unrepresentable" in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+
+
 @pytest.mark.parametrize("scale", [0.01, 0.02])
 def test_closed_surface_loop_measures_perimeter_once_with_a_unique_closure_turn(
     scale: float,
