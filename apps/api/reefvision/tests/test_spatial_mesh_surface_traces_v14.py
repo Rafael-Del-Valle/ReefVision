@@ -209,7 +209,6 @@ SEGMENT_UNDERFLOW_PREVIEW_PARAMS = {
     ("params", "counts", "boundary", "nonmanifold", "duplicate", "winding"),
     [
         (PARAMS, [1, 1], [0, 1], [], [], []),
-        (DUPLICATE_FACE_PARAMS, [2], [], [], [0], []),
         (INCONSISTENT_WINDING_PARAMS, [2], [], [], [], [0]),
         (NONMANIFOLD_EDGE_PARAMS, [3], [], [0], [], []),
     ],
@@ -231,6 +230,33 @@ def test_selected_trace_locates_indexed_face_topology_for_review(
     assert len(counts) == trace["edge_count"]
     assert trace["human_review_verified"] is False
     assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
+
+
+
+def test_duplicate_face_qc_is_direct_engine_only_and_preview_rejects_it(
+    client: TestClient,
+) -> None:
+    # Diagnostic engine exposes malformed indexed topology; the public
+    # scientific preview must reject triangles that would double-count area.
+    params = DUPLICATE_FACE_PARAMS
+    trace = mesh_surface_edge_traces(
+        [tuple(vertex) for vertex in params["vertices"]],
+        params["faces"],
+        params["surface_trace_vertex_paths"],
+        params["meters_per_unit"],
+        params["relative_scale_uncertainty"],
+    )[0]
+    assert trace["mesh_edge_face_incidence_counts"] == [2]
+    assert trace["duplicate_triangle_segment_indices"] == [0]
+    assert "duplicate_triangle_on_surface_trace" in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+    with pytest.raises(ValueError, match="Duplicate triangles would double-count surface area"):
+        measure_mesh_preview(**params)
+
+    project_id = str(create_project(client, "Invalid duplicated triangle mesh")["id"])
+    response = client.post(f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params)
+    assert response.status_code == 400
+    assert "Duplicate triangles would double-count surface area" in response.text
 
 
 @pytest.mark.parametrize("scale", [0.01, 1.0])
@@ -352,9 +378,15 @@ def test_selected_trace_endpoint_chord_and_detour_are_scale_invariant(scale: flo
     assert trace["human_review_verified"] is False
 
 
-@pytest.mark.parametrize("vertex_path", [[0, 1, 2, 3, 4], [0, 1, 2, 4, 3]])
+@pytest.mark.parametrize(
+    ("vertex_path", "expected_pairs", "expected_reuse"),
+    [
+        ([0, 1, 2, 3, 4], [[0, 3]], 1.0),
+        ([0, 1, 2, 4, 3], [[1, 2], [0, 3]], 2.0),
+    ],
+)
 def test_seam_vertex_aliases_cannot_hide_reused_surface_trace_segment(
-    vertex_path: list[int],
+    vertex_path: list[int], expected_pairs: list[list[int]], expected_reuse: float
 ) -> None:
     params = {
         **REUSED_GEOMETRIC_SEGMENT_PARAMS,
@@ -363,11 +395,13 @@ def test_seam_vertex_aliases_cannot_hide_reused_surface_trace_segment(
     trace = measure_mesh_preview(**params)["surface_edge_traces"][0]
     assert trace["vertex_indices"] == vertex_path
     assert len(set(trace["vertex_indices"])) == len(vertex_path)
-    assert trace["repeated_geometric_segment_index_pairs"] == [[0, 3]]
+    assert trace["repeated_geometric_segment_index_pairs"] == expected_pairs
     assert "surface_trace_reused_geometric_segment" in trace["qc_warnings"]
-    assert trace["reused_geometric_segment_source_length_mesh_units"] == pytest.approx(1.0)
+    assert trace["reused_geometric_segment_source_length_mesh_units"] == pytest.approx(
+        expected_reuse
+    )
     assert trace["reused_geometric_segment_fraction_of_trace"] == pytest.approx(
-        1.0 / sum(trace["source_segment_lengths_mesh_units"])
+        expected_reuse / sum(trace["source_segment_lengths_mesh_units"])
     )
     assert trace["segment_lengths_m"][0] == pytest.approx(trace["segment_lengths_m"][3])
     assert trace["human_review_verified"] is False
@@ -950,7 +984,6 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
         "ordinary",
         "resolution_limited",
         "inconsistent_winding",
-        "duplicate_face",
         "nonmanifold",
         "geometric_seam",
         "geometric_winding_seam",
@@ -975,7 +1008,6 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "ordinary": PARAMS,
         "resolution_limited": RESOLUTION_LIMITED_PARAMS,
         "inconsistent_winding": INCONSISTENT_WINDING_PARAMS,
-        "duplicate_face": DUPLICATE_FACE_PARAMS,
         "nonmanifold": NONMANIFOLD_EDGE_PARAMS,
         "geometric_seam": GEOMETRIC_SEAM_PARAMS,
         "geometric_winding_seam": GEOMETRIC_WINDING_SEAM_PARAMS,
