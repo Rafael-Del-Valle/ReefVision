@@ -1220,7 +1220,9 @@ def mesh_surface_edge_traces(
                                     "closed_surface_trace_planar_diameter_interval_unrepresentable"
                                 )
                     else:
-                        warnings.append("closed_surface_trace_calibrated_planar_diameter_unrepresentable")
+                        warnings.append(
+                            "closed_surface_trace_calibrated_planar_diameter_unrepresentable"
+                        )
                 else:
                     warnings.append("closed_surface_trace_source_planar_diameter_unrepresentable")
                 area_m2 = source_planar_area_units2 * scale * scale
