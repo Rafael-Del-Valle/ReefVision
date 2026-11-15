@@ -23,6 +23,34 @@ def test_missing_log_does_not_fabricate_output(tmp_path: Path) -> None:
     }
 
 
+@pytest.mark.parametrize("error_type", [OSError, RuntimeError, ValueError])
+@pytest.mark.parametrize("absolute_path", [False, True])
+def test_unresolvable_training_data_root_is_unavailable_without_reading_logs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    error_type: type[Exception],
+    absolute_path: bool,
+) -> None:
+    """A disconnected training-data drive cannot crash the passive observer."""
+    log = tmp_path / "training.log"
+    original = b"epoch=4\ntrain/box_loss=0.25\n"
+    log.write_bytes(original)
+    original_resolve = Path.resolve
+
+    def unavailable_root(path: Path, *args: object, **kwargs: object) -> Path:
+        if path == tmp_path:
+            raise error_type("training data root unavailable")
+        return original_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", unavailable_root)
+    name = str(log) if absolute_path else "training.log"
+    assert training_routes._training_log_tail(name, tmp_path) == {
+        "available": False,
+        "text": "",
+    }
+    assert log.read_bytes() == original
+
+
 @pytest.mark.parametrize("unsafe_name", ["invalid\0.log", "invalid\0.txt"])
 def test_malformed_persisted_log_path_is_unavailable_not_server_error(
     tmp_path: Path, unsafe_name: str
