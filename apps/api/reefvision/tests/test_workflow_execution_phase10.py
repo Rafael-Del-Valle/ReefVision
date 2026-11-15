@@ -654,6 +654,41 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
+    # A forged sibling can have a real checksum and valid artifact ID while
+    # belonging to a different completed node. Replacing both the producer's
+    # output list and summary must not bypass direct consumer recovery.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert producer is not None and consumer is not None
+        original_ids = producer.output_artifact_ids_json
+        sibling_ids = consumer.output_artifact_ids_json
+        producer_result = dict(producer.result_json or {})
+        original_summary = producer_result.get("outputs")
+        assert isinstance(original_ids, list) and len(original_ids) == 1
+        assert isinstance(sibling_ids, list) and len(sibling_ids) == 1
+        assert isinstance(original_summary, list) and len(original_summary) == 1
+        sibling = session.get(WorkflowArtifact, sibling_ids[0])
+        assert sibling is not None
+        producer.output_artifact_ids_json = [*original_ids, sibling.id]
+        producer.result_json = {
+            **producer_result,
+            "outputs": [
+                *original_summary,
+                {
+                    "artifact_id": sibling.id,
+                    "port_id": sibling.producer_port_id,
+                    "data_type": sibling.data_type,
+                    "payload_sha256": sibling.payload_sha256,
+                },
+            ],
+        }
+        session.flush()
+        with pytest.raises(ConflictError, match="input contradicts producer output summary"):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
     # This actually executed graph cannot safely reuse a succeeded node if
     # its registered adapter definition disappears (e.g. after an upgrade).
     # Its checksum-valid artifacts do not prove the missing port contracts.
