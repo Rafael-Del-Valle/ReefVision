@@ -407,10 +407,12 @@ def test_reuse_fraction_remains_finite_with_overflowed_source_total() -> None:
     )[0]
     assert trace["length_m"] == pytest.approx(3 + sqrt(2))
     assert trace["source_trace_length_mesh_units"] is None
+    # The source total exceeds binary64, but its dimensionless endpoint
+    # detour remains finite and is independent of the shared calibration.
+    assert trace["geometric_detour_ratio"] == pytest.approx(3 + sqrt(2))
+    assert "surface_trace_detour_ratio_unrepresentable" not in trace["qc_warnings"]
     assert trace["reused_geometric_segment_source_length_mesh_units"] == pytest.approx(1e308)
-    assert trace["reused_geometric_segment_fraction_of_trace"] == pytest.approx(
-        1 / (3 + sqrt(2))
-    )
+    assert trace["reused_geometric_segment_fraction_of_trace"] == pytest.approx(1 / (3 + sqrt(2)))
     fractions = trace["source_cumulative_arc_length_fractions"]
     assert fractions is not None
     assert fractions[0] == 0.0
@@ -420,6 +422,24 @@ def test_reuse_fraction_remains_finite_with_overflowed_source_total() -> None:
     assert "surface_trace_source_length_unrepresentable" in trace["qc_warnings"]
     assert "surface_trace_reuse_fraction_unrepresentable" not in trace["qc_warnings"]
     assert "surface_trace_reuse_fraction_resolution_loss" not in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+
+
+def test_genuinely_unrepresentable_detour_remains_null_with_explicit_qc() -> None:
+    # The source total is finite, but dividing by the positive subnormal
+    # endpoint chord exceeds binary64. Do not serialize infinity as evidence.
+    smallest = float.fromhex("0x0.0000000000001p-1022")
+    trace = mesh_surface_edge_traces(
+        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (smallest, 0.0, 0.0)],
+        [[0, 1, 2]],
+        [[0, 1, 2]],
+        1.0,
+        None,
+    )[0]
+    assert trace["source_trace_length_mesh_units"] == pytest.approx(2.0)
+    assert trace["source_endpoint_chord_mesh_units"] == smallest
+    assert trace["geometric_detour_ratio"] is None
+    assert "surface_trace_detour_ratio_unrepresentable" in trace["qc_warnings"]
     assert trace["human_review_verified"] is False
 
 
