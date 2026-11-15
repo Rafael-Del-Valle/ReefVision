@@ -1071,16 +1071,18 @@ class WorkflowExecutionService:
             # coercion but is not a valid persisted scientific artifact.
             verify_workflow_artifact(candidate, expected_run_id=run_id)
 
-            # A single output port has one persisted typed artifact.
-            # Deduplication must not create a second record by changing
-            # the data type while keeping the same producer and port.
+        # A single producer output port has one persisted typed artifact.
+        # Check every existing record: returning the first matching checksum
+        # could otherwise hide an ambiguous sibling on the same port.
+        if len(existing) > 1:
+            raise ConflictError("Workflow node has ambiguous persisted artifacts for this output")
+        if existing:
+            candidate = existing[0]
             if (
                 candidate.data_type == specification.data_type
                 and candidate.payload_sha256 == checksum
             ):
                 return candidate
-
-        if existing:
             raise ConflictError(
                 "Workflow node already persisted a different artifact for this output"
             )
