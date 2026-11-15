@@ -111,7 +111,7 @@ def test_streamline_preview_uses_one_compatible_scientific_record_slice(
     assert imported_validation.json()["current"] is True
 
 
-@pytest.mark.parametrize
+@pytest.mark.parametrize(
     ("altered_field", "replacement", "diagnostic"),
     [
         ("observed_at", "2026-01-01T01:00:00Z", "share UTC"),
