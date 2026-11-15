@@ -54,6 +54,43 @@ replace field measurements, Windows MSI/CAB installed GUI checks, or GPU
 acceptance.
 
 
+## Scale-qualified area-equivalent circle diameter
+
+Exactly planar, non-self-intersecting, researcher-selected closed mesh traces
+also report a provisional **area-equivalent circle diameter**: the diameter
+of a circle with the same source-plane footprint, `D = 2 sqrt(A / pi)`.
+It is not a fitted circle or a measured diameter between two coral landmarks.
+
+- `closed_loop_source_planar_equivalent_diameter_mesh_units`: source-coordinate
+  circle-equivalent diameter; independent of isotropic calibration and of
+  reversal or cyclic rotation of the trace vertices.
+- `closed_loop_planar_equivalent_diameter_m`: equivalent diameter in meters
+  using the caller-supplied positive isotropic scale.
+- `closed_loop_planar_equivalent_diameter_scale_only_interval_m`: conditional
+  **linear** uncertainty bounds at `D * scale * (1 - u)` and
+  `D * scale * (1 + u)`. These are not statistical confidence bounds and
+  exclude reconstruction error, contour selection, point-placement error and
+  observer variation. A lower zero bound is legitimate only for `u = 1`.
+
+All three fields are null for open, nonplanar, self-crossing, touching,
+overlapping, degenerate, or otherwise non-simple selections, or when the
+source area cannot be represented reliably. If a nominal positive value or
+its uncertainty interval is numerically unrepresentable, the affected output
+is null with an explicit `closed_surface_trace_*planar_diameter*unrepresentable`
+QC warning; there is no false zero. **A linear diameter may be representable
+even if its squared calibrated footprint underflows**, so the two diagnostics
+are assessed independently. None of these fields certifies coral branch
+width, skeletal thickness, growth, specimen condition or anatomical identity;
+all results retain `human_review_verified: false`.
+
+Synthetic right-triangle references at two scales, a triangle in the YZ
+plane, reversed and cyclically rotated vertex order, full-scale uncertainty,
+invalid loops, and numerical underflow exercise the field. The persisted,
+typed, executable `mesh_surface_preview` Workflow Builder regression checks
+that the complete saved output and provenance match the standalone API.
+Physical calibration, independent contour review, installed Windows GUI and
+GPU acceptance are still required before scientific release.
+
 ## Duplicate triangle exclusion versus direct topology diagnostics
 
 The direct `mesh_surface_edge_traces` measurement engine can identify
