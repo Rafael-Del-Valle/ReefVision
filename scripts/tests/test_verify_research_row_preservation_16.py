@@ -300,7 +300,7 @@ def test_upgrade_asset_inventory_preserves_original_media_and_allows_additions(
 
     code, report = _run(before, after, before_assets, after_assets)
 
-    assert code == 0
+    assert code == 0, report["problems"]
     assert report["status"] == "PASS_PRESERVATION_ONLY"
     assert report["research_assets"] == {
         "checked": True,
@@ -425,7 +425,7 @@ def test_asset_preservation_rejects_unscanned_external_hardlink(
     assert report["status"] == "HOLD"
     assert report["upgrade_authorized"] is False
     assert report["requires_researcher_approval"] is True
-    assert "asset_hardlinks_not_independent" in report["problems"]
+    assert "asset_hardlinks_not_independent" in report["problems"], report["problems"]
     assert "private-field-video.raw" not in json.dumps(report)
     assert "unscanned-hardlink.raw" not in json.dumps(report)
     assert before.read_bytes() == before_bytes
@@ -735,13 +735,21 @@ def test_windows_native_junctions_block_research_asset_preservation(
 
     try:
         command = subprocess.run(
-            ["cmd", "/c", f'mklink /J "{junction}" "{outside}"'],
+            [
+                "pwsh",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "New-Item -ItemType Junction -Path $env:RV_JUNCTION "
+                "-Target $env:RV_TARGET | Out-Null",
+            ],
+            env={**os.environ, "RV_JUNCTION": str(junction), "RV_TARGET": str(outside)},
             capture_output=True,
             text=True,
             check=False,
         )
         if command.returncode:
-            raise AssertionError("Windows NTFS junction fixture creation failed")
+            raise AssertionError("Windows NTFS junction fixture creation failed: " + command.stderr.strip()[:300])
         before_bytes, after_bytes = before.read_bytes(), after.read_bytes()
         code, report = _run(before, after, original, candidate)
         assert code == 2
