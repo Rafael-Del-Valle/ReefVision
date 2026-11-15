@@ -26,6 +26,13 @@ PARAMS = {
     "surface_trace_vertex_paths": [[0, 2, 1]],
 }
 
+# Closed edge loops are selected mesh geometry, not inferred polyp contours
+# or biological branch measurements. A return to vertex zero is intentional.
+CLOSED_LOOP_PARAMS = {
+    **PARAMS,
+    "surface_trace_vertex_paths": [[0, 1, 2, 0]],
+}
+
 # The second calibrated segment is real, but adding it to the first is
 # beyond float precision. The standalone API and saved workflow must retain
 # the individual edge length and report the unresolved cumulative waypoint.
@@ -422,6 +429,33 @@ def test_trace_follows_selected_edges_not_the_shortest_route() -> None:
     assert result["measurement_status"] == "caller_supplied_unverified"
 
 
+@pytest.mark.parametrize("scale", [0.01, 0.02])
+def test_closed_surface_loop_measures_perimeter_once_with_a_unique_closure_turn(
+    scale: float,
+) -> None:
+    trace = measure_mesh_preview(
+        **{**CLOSED_LOOP_PARAMS, "meters_per_unit": scale}
+    )["surface_edge_traces"][0]
+    assert trace["is_closed_surface_loop"] is True
+    assert trace["vertex_indices"] == [0, 1, 2, 0]
+    assert trace["edge_count"] == 3
+    assert trace["segment_lengths_m"] == pytest.approx([scale, sqrt(2) * scale, scale])
+    assert trace["length_m"] == pytest.approx((2 + sqrt(2)) * scale)
+    assert trace["turn_angles_deg"][:3] == pytest.approx([90.0, 135.0, 135.0])
+    assert trace["turn_angles_deg"][-1] is None
+    assert trace["maximum_turn_angle_deg"] == pytest.approx(135.0)
+    assert trace["total_absolute_geometric_turn_deg"] == pytest.approx(360.0)
+    assert trace["source_endpoint_chord_mesh_units"] == 0.0
+    assert trace["geometric_detour_ratio"] is None
+    assert trace["nonadjacent_coincident_waypoint_index_pairs"] == []
+    assert trace["repeated_geometric_segment_index_pairs"] == []
+    assert "closed_surface_trace_not_verified_anatomical_contour" in trace["qc_warnings"]
+    assert "surface_trace_zero_endpoint_chord" in trace["qc_warnings"]
+    assert "nonadjacent_coincident_surface_trace_vertices" not in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+    assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
+
+
 def test_selected_trace_turn_angles_are_scale_invariant_and_provisional() -> None:
     first = measure_mesh_preview(**PARAMS)["surface_edge_traces"][0]
     rescaled_params = {**PARAMS, "meters_per_unit": 0.02}
@@ -687,6 +721,9 @@ def test_straight_trace_distinguishes_zero_bend_from_no_interior_turn() -> None:
         ([[0]], 422),
         ([[0, 0]], 422),
         ([[0, 1, 0]], 422),
+        ([[0, 1, 0, 1]], 422),
+        ([[0, 1, 2, 1, 0]], 422),
+        ([[0, 1, 2, 0, 0]], 422),
         ([[0, 3]], 400),
         ([[True, 1]], 422),
         ([[-1, 2]], 422),
@@ -1058,6 +1095,7 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
     "case",
     [
         "ordinary",
+        "closed_loop",
         "resolution_limited",
         "inconsistent_winding",
         "nonmanifold",
@@ -1082,6 +1120,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     base = f"/api/v1/projects/{project_id}"
     params = {
         "ordinary": PARAMS,
+        "closed_loop": CLOSED_LOOP_PARAMS,
         "resolution_limited": RESOLUTION_LIMITED_PARAMS,
         "inconsistent_winding": INCONSISTENT_WINDING_PARAMS,
         "nonmanifold": NONMANIFOLD_EDGE_PARAMS,
@@ -1198,8 +1237,18 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert "source_endpoint_chord_mesh_units" in trace
     assert "source_trace_length_mesh_units" in trace
     assert len(trace["turn_angles_deg"]) == len(trace["vertex_indices"])
-    assert trace["turn_angles_deg"][0] is None
-    assert trace["turn_angles_deg"][-1] is None
+    if case == "closed_loop":
+        assert trace["is_closed_surface_loop"] is True
+        assert trace["turn_angles_deg"][0] == pytest.approx(90.0)
+        assert trace["turn_angles_deg"][-1] is None
+        assert trace["total_absolute_geometric_turn_deg"] == pytest.approx(360.0)
+        assert trace["nonadjacent_coincident_waypoint_index_pairs"] == []
+        assert "closed_surface_trace_not_verified_anatomical_contour" in trace["qc_warnings"]
+        assert trace["human_review_verified"] is False
+    else:
+        assert trace["is_closed_surface_loop"] is False
+        assert trace["turn_angles_deg"][0] is None
+        assert trace["turn_angles_deg"][-1] is None
     if case == "ordinary":
         assert trace["nonadjacent_coincident_waypoint_index_pairs"] == []
         assert trace["reused_geometric_segment_source_length_mesh_units"] == 0.0
