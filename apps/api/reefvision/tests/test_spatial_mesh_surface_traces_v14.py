@@ -552,6 +552,9 @@ def test_planar_footprint_non_xy_plane_and_full_scale_uncertainty() -> None:
         sqrt(13)
     )
     assert trace["closed_loop_source_planar_maximum_vertex_chord_waypoint_offsets"] == [1, 2]
+    assert trace["closed_loop_source_planar_chord_to_equivalent_diameter_ratio"] == pytest.approx(
+        sqrt(13) / source_diameter
+    )
     assert trace["closed_loop_planar_maximum_vertex_chord_m"] == pytest.approx(
         0.01 * sqrt(13)
     )
@@ -583,8 +586,33 @@ def test_non_simple_or_open_loops_never_have_planar_footprint(
     assert trace["closed_loop_planar_equivalent_diameter_scale_only_interval_m"] is None
     assert trace["closed_loop_source_planar_maximum_vertex_chord_mesh_units"] is None
     assert trace["closed_loop_source_planar_maximum_vertex_chord_waypoint_offsets"] is None
+    assert trace["closed_loop_source_planar_chord_to_equivalent_diameter_ratio"] is None
     assert trace["closed_loop_planar_maximum_vertex_chord_m"] is None
     assert trace["closed_loop_planar_maximum_vertex_chord_scale_only_interval_m"] is None
+
+
+@pytest.mark.parametrize("scale", [0.01, 1.0])
+@pytest.mark.parametrize(
+    "path",
+    [[0, 1, 2, 0], [0, 2, 1, 0], [1, 2, 0, 1]],
+)
+def test_planar_elongation_ratio_is_scale_and_winding_invariant(
+    scale: float, path: list[int]
+) -> None:
+    # Independent analytical reference for a right triangle (area 1/2,
+    # maximum chord sqrt(2)); these are geometric, not anatomical measures.
+    params = {
+        **CLOSED_LOOP_PARAMS,
+        "meters_per_unit": scale,
+        "surface_trace_vertex_paths": [path],
+    }
+    trace = measure_mesh_preview(**params)["surface_edge_traces"][0]
+    expected = sqrt(2) / (2 * sqrt(0.5 / pi))
+    assert trace["closed_loop_source_is_simple_planar_perimeter"] is True
+    assert trace["closed_loop_source_planar_chord_to_equivalent_diameter_ratio"] == (
+        pytest.approx(expected)
+    )
+    assert trace["human_review_verified"] is False
 
 
 def test_planar_maximum_vertex_chord_source_overflow_is_unknown_not_infinity() -> None:
@@ -602,11 +630,12 @@ def test_planar_maximum_vertex_chord_source_overflow_is_unknown_not_infinity() -
     assert trace["closed_loop_source_is_simple_planar_perimeter"] is True
     assert trace["closed_loop_source_planar_maximum_vertex_chord_mesh_units"] is None
     assert trace["closed_loop_source_planar_maximum_vertex_chord_waypoint_offsets"] is None
+    assert trace["closed_loop_source_planar_chord_to_equivalent_diameter_ratio"] is None
     assert trace["closed_loop_planar_maximum_vertex_chord_m"] is None
     assert trace["closed_loop_planar_maximum_vertex_chord_scale_only_interval_m"] is None
-    assert "closed_surface_trace_source_planar_maximum_chord_unrepresentable" in trace[
-        "qc_warnings"
-    ]
+    assert (
+        "closed_surface_trace_source_planar_maximum_chord_unrepresentable" in trace["qc_warnings"]
+    )
     assert trace["human_review_verified"] is False
 
 
@@ -1759,10 +1788,14 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             assert trace["closed_loop_planar_maximum_vertex_chord_m"] == pytest.approx(
                 0.01 * source_maximum_span
             )
+            assert trace["closed_loop_source_planar_chord_to_equivalent_diameter_ratio"] == (
+                pytest.approx(source_maximum_span / diameter)
+            )
             assert trace["closed_loop_planar_maximum_vertex_chord_scale_only_interval_m"] == (
                 pytest.approx(
                     [
-                        0.0 if case in ("non_xy_planar_closed_loop", "closed_loop_max_uncertainty")
+                        0.0
+                        if case in ("non_xy_planar_closed_loop", "closed_loop_max_uncertainty")
                         else 0.009 * source_maximum_span,
                         0.02 * source_maximum_span
                         if case in ("non_xy_planar_closed_loop", "closed_loop_max_uncertainty")
