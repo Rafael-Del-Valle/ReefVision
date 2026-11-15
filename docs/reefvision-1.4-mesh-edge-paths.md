@@ -1,5 +1,40 @@
 # ReefVision 1.4 provisional mesh-edge paths
 
+
+## Split-vertex geometric seams in imported triangle meshes
+
+An OBJ/PLY/GLB reconstruction may duplicate vertex IDs along an otherwise
+coincident source-XYZ triangle edge (for example at a UV or material seam).
+A selected mesh surface trace can therefore appear to traverse a single-face
+indexed boundary even though another face uses the same physical endpoint
+coordinates with **different source indices**. Treating the indexed
+face-incidence count as proof of a real external coral boundary can be wrong.
+
+Each trace now also reports `geometric_edge_face_incidence_counts`, the
+number of source triangle-edge occurrences with exactly equal unordered
+endpoint XYZ pairs, in trace segment order. A positive-length segment where
+that count exceeds `mesh_edge_face_incidence_counts` is identified by its
+zero-based index in `split_vertex_seam_segment_indices`, with warning
+`split_vertex_geometric_seam_on_surface_trace`. Exact coordinates, not
+a fuzzy weld tolerance, define the match. Zero-length edges retain their
+separate degeneracy QC and are excluded from split-seam flagging.
+
+**No mesh repair is performed.** Geometric coincidence may reflect an
+intentional export seam, duplicate reconstruction, overlapping faces, or
+erroneous geometry; neither the count nor the warning certifies topological
+connectivity, anatomical branch length, biological condition or identity.
+The indexed vertex path, original face incidence, calibrated measurements,
+scale-only uncertainty, provenance and `human_review_verified: false` remain
+unchanged. Prior saved artifacts without these fields are not retroactively
+interpreted as seam-free.
+
+Synthetic tests cover two distinct triangles sharing equal source XYZ edge
+endpoints but no vertex IDs, a genuinely shared indexed edge (no false split
+seam), scale invariance, and equality of standalone mesh-preview and
+executable, typed, persisted Workflow Builder results. Installed Windows
+GUI, independent coral reconstruction and GPU acceptance are still pending.
+
+
 ## Indexed triangle-edge topology along selected traces
 
 A selected surface trace now includes `mesh_edge_face_incidence_counts`,
