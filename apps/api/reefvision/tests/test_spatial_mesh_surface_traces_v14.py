@@ -479,9 +479,10 @@ def test_closed_surface_loop_perimeter_is_winding_and_start_invariant(
     assert candidate["length_scale_only_interval_m"] == pytest.approx(
         reference["length_scale_only_interval_m"]
     )
-    assert sorted(angle for angle in candidate["turn_angles_deg"] if angle is not None) == (
-        pytest.approx([90.0, 135.0, 135.0])
+    geometric_turns = sorted(
+        angle for angle in candidate["turn_angles_deg"] if angle is not None
     )
+    assert geometric_turns == pytest.approx([90.0, 135.0, 135.0])
     assert candidate["turn_angles_deg"][-1] is None
     assert candidate["total_absolute_geometric_turn_deg"] == pytest.approx(360.0)
     assert candidate["source_endpoint_chord_mesh_units"] == 0.0
