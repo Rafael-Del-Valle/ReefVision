@@ -788,6 +788,43 @@ def test_log_tail_strips_zero_width_controls_without_losing_scientific_units(
     assert log.read_bytes() == original
 
 
+def test_training_log_api_handles_disconnected_data_root(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed root lookup returns no metrics without interrupting training."""
+    log = test_settings.resolved_data_dir / "training.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    original = b"epoch=4\ntrain/box_loss=0.25\n"
+    log.write_bytes(original)
+    looked_up: list[str] = []
+
+    def fake_service(_request: object, _session: object) -> SimpleNamespace:
+        def get_run(run_id: str) -> SimpleNamespace:
+            looked_up.append(run_id)
+            return SimpleNamespace(logs_path=str(log), status="training")
+
+        return SimpleNamespace(get_run=get_run)
+
+    monkeypatch.setattr(training_routes, "service", fake_service)
+    data_root = test_settings.data_dir
+    original_resolve = Path.resolve
+
+    def unavailable_root(path: Path, *args: object, **kwargs: object) -> Path:
+        if path == data_root:
+            raise OSError("research data drive temporarily unavailable")
+        return original_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", unavailable_root)
+    response = client.get("/api/v1/training-runs/run-1/logs/tail")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json() == {"available": False, "text": ""}
+    assert looked_up == ["run-1"]
+    assert log.read_bytes() == original
+
+
 def test_training_log_api_handles_corrupted_persisted_path(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
