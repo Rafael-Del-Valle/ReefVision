@@ -775,3 +775,37 @@ Both reversed and rotated cases also execute through saved typed workflows;
 neither transform establishes contour correspondence across biological samples.
 This is not held-out biological, Windows installed-GUI, or physical GPU
 acceptance evidence.
+
+
+### Exact submitted-coordinate coplanarity for closed traces
+
+The provisional closed-loop diagnostic now includes
+`closed_loop_source_exact_coplanarity` and
+`closed_loop_source_noncoplanar_waypoint_offsets`. For a selected closed
+mesh-edge loop, ReefVision identifies a noncollinear source-XYZ reference
+triple and checks all distinct waypoints against its plane using exact
+rational arithmetic on the **submitted binary64 coordinates**. The repeated
+terminal waypoint is excluded. `true` means exactly coplanar submitted
+coordinates, `false` identifies at least one out-of-plane waypoint, and
+`null` means a reference plane cannot be defined because all source
+waypoints are collinear/coincident (or the trace is open). The zero-based
+offsets locate outliers relative to the selected trace ordering, **not**
+a registered organism or a measured anatomical landmark.
+
+`closed_surface_trace_exact_source_noncoplanarity` and
+`closed_surface_trace_source_reference_plane_undefined` are explicit QC
+warnings. This is **not** tolerance-based planarity testing: reconstruction
+noise or one changed floating-point bit may trigger an exact mismatch.
+Neither a `true` nor `null` status permits computing a biological
+cross-sectional area, surface patch, planar projection, signed winding or
+verified anatomical contour. Geometry remains unchanged, calibration and
+scale-only perimeter intervals are preserved, and
+`human_review_verified: false` is never promoted.
+
+Synthetic tests cover a planar triangle, a noncoplanar closed tetrahedral
+edge loop under both orientation reversal and start rotation, and
+collinear-waypoint indeterminacy (direct engine only). The noncoplanar case
+also runs through the persisted, executable typed Workflow Builder graph;
+the standalone API and saved workflow must produce identical measurement
+artifacts and provenance. This remains synthetic geometric QC, **not**
+field-measured anatomical, installed Windows GUI, or GPU validation.
