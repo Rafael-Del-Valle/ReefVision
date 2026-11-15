@@ -742,3 +742,80 @@ def test_broken_scientific_stage_dependencies_are_read_only_and_fail_closed(
         assert connection.execute("SELECT note FROM biological_sentinel").fetchone() == (
             "coral-preserve",
         )
+
+@pytest.mark.parametrize(
+    ("revision", "tables", "expected_warnings"),
+    [
+        (
+            "0038",
+            ("review_queue_item_events",),
+            ("revision_0038_requires_schema_lineage_reconciliation",),
+        ),
+        ("0039", ("review_queue_item_events",), ()),
+        ("0040", ("review_queue_item_events",), ()),
+        ("0041", ("review_queue_item_events", "review_queue_bulk_requests"), ()),
+        (
+            "0037",
+            ("review_queue_item_events",),
+            ("qc_events_before_revision_0038",),
+        ),
+        (
+            "0039",
+            ("review_queue_bulk_requests",),
+            (
+                "qc_bulk_registry_without_review_events",
+                "qc_bulk_registry_before_revision_0041",
+            ),
+        ),
+        (
+            "0041",
+            ("review_queue_bulk_requests",),
+            ("qc_bulk_registry_without_review_events",),
+        ),
+        (
+            "0040",
+            ("review_queue_item_events", "review_queue_bulk_requests"),
+            ("qc_bulk_registry_before_revision_0041",),
+        ),
+        (
+            "0041",
+            ("review_queue_item_events",),
+            ("qc_0041_missing_bulk_registry",),
+        ),
+    ],
+)
+def test_qc_16_migration_stages_preserve_records_and_diagnose_interrupted_ddl(
+    tmp_path: Path, revision: str, tables: tuple[str, ...], expected_warnings: tuple[str, ...]
+) -> None:
+    """A legitimate 0038-0040 review audit must not require 0041 bulk DDL."""
+    database = tmp_path / "qc-stage.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
+        connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
+        for table in tables:
+            connection.execute(f'CREATE TABLE "{table}" (id INTEGER PRIMARY KEY, note TEXT)')
+            connection.execute(f'INSERT INTO "{table}" VALUES (1, ?)', ("review-preserve",))
+        connection.execute("CREATE TABLE biological_sentinel (id INTEGER, note TEXT)")
+        connection.execute("INSERT INTO biological_sentinel VALUES (1, 'coral-preserve')")
+    before = database.read_bytes()
+    for _ in range(2):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--fail-on-warning", str(database)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == (2 if expected_warnings else 0), result.stderr
+        report = json.loads(result.stdout)
+        assert report["warnings"] == list(expected_warnings)
+        assert report["lineage_hint"] == "qc"
+        assert report["upgrade_authorized"] is False
+        assert database.read_bytes() == before
+        with sqlite3.connect(database) as connection:
+            for table in tables:
+                assert connection.execute(f'SELECT note FROM "{table}"').fetchone() == (
+                    "review-preserve",
+                )
+            assert connection.execute("SELECT note FROM biological_sentinel").fetchone() == (
+                "coral-preserve",
+            )
