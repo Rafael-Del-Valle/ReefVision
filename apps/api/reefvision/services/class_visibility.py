@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
+from reefvision.db.models.project import Project
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.repositories.class_visibility import (
     ClassVisibilityPreferenceRepository,
@@ -54,6 +56,16 @@ class ClassVisibilityService:
     def _validated_hidden_class_ids(
         self, project_id: str, hidden_class_ids: list[str]
     ) -> tuple[list[str], tuple[str, ...]]:
+        # A class can be deleted by another local editor between validation and
+        # preference insertion: hidden IDs are JSON, not foreign keys. Claim the
+        # SQLite writer lock *before* reading the project class inventory and
+        # hold it through the preference/default commit. This no-op preserves
+        # the project's updated_at revision and all scientific records.
+        self.session.execute(
+            update(Project)
+            .where(Project.id == project_id)
+            .values(updated_at=Project.updated_at)
+        )
         valid_class_ids = self._project_class_ids(project_id)
         valid = set(valid_class_ids)
         invalid = [class_id for class_id in hidden_class_ids if class_id not in valid]
