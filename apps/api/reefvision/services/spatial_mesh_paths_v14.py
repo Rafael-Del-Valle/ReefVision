@@ -1203,7 +1203,9 @@ def mesh_surface_edge_traces(
                         ):
                             planar_area_scale_interval_m2 = [lower, upper]
                         else:
-                            warnings.append("closed_surface_trace_planar_area_interval_unrepresentable")
+                            warnings.append(
+                                "closed_surface_trace_planar_area_interval_unrepresentable"
+                            )
                 else:
                     warnings.append("closed_surface_trace_calibrated_planar_area_unrepresentable")
         if segment_underflow:
