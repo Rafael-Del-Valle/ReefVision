@@ -477,9 +477,7 @@ def test_asset_comparison_rejects_changes_between_inventory_passes(
                 (candidate / "late-added.jpg").write_bytes(b"new unverified image")
         return result
 
-    monkeypatch.setitem(
-        compare.__globals__, "_asset_inventory", mutate_after_candidate_scan
-    )
+    monkeypatch.setitem(compare.__globals__, "_asset_inventory", mutate_after_candidate_scan)
     with pytest.raises(ValueError, match="asset_changed_after_inventory") as error:
         compare(original, candidate)
     assert "private-coral-sample.raw" not in str(error.value)
