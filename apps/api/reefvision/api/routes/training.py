@@ -281,9 +281,11 @@ def _training_log_tail(
         return empty
     if not path.is_relative_to(root) or path.suffix.lower() not in {".log", ".txt"}:
         raise HTTPException(status_code=403, detail="Training log path is not permitted")
-    if not path.is_file():
-        return empty
     try:
+        # The file may disappear or become unreadable between resolution and
+        # inspection. Monitor failures must not interrupt the training worker.
+        if not path.is_file():
+            return empty
         # Anchor the read to the validated file identity. A local process may
         # replace the resolved log between path validation and open; without
         # this check the read-only monitor could display another job's data.
@@ -369,7 +371,9 @@ def _training_log_tail(
                 )
             ):
                 raise HTTPException(status_code=403, detail="Training log changed during read")
-    except OSError:
+    except (OSError, RuntimeError, ValueError):
+        # Transient filesystem failures or a symlink loop after the initial
+        # validation are unavailable snapshots, not training-job failures.
         return empty
     text = _safe_terminal_log_text(payload)
     # Trainer logs may use Windows CRLF while the API is also exercised from
