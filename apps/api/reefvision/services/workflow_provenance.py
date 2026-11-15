@@ -222,10 +222,7 @@ def verify_succeeded_node_artifacts(
             for saved in graph_nodes
             if isinstance(saved, dict) and saved.get("node_id") == producer.node_id
         ]
-        if (
-            len(producer_matches) != 1
-            or producer_matches[0].get("node_type") != producer.node_type
-        ):
+        if len(producer_matches) != 1 or producer_matches[0].get("node_type") != producer.node_type:
             raise ConflictError(
                 "Succeeded workflow input producer identity does not match saved graph"
             )
