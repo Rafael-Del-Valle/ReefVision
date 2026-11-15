@@ -499,6 +499,60 @@ def _source_xyz(point: _SourcePoint) -> _SourcePoint:
     return (point[0], point[1], point[2])
 
 
+def _closed_loop_exact_source_coplanarity(
+    positions: list[_SourcePoint],
+) -> tuple[bool | None, list[int]]:
+    """Audit exact submitted XYZ, not tolerated physical planarity or anatomical area.
+
+    The final position repeats the first. Fraction preserves the binary64
+    source values without scale-dependent rounding or an arbitrary tolerance.
+    No plane is defined for collinear or coincident selected waypoints.
+    """
+    source = [
+        (Fraction(point[0]), Fraction(point[1]), Fraction(point[2]))
+        for point in positions[:-1]
+    ]
+    origin = source[0]
+    base: tuple[Fraction, Fraction, Fraction] | None = None
+    for point in source[1:]:
+        if point != origin:
+            base = (
+                point[0] - origin[0],
+                point[1] - origin[1],
+                point[2] - origin[2],
+            )
+            break
+    if base is None:
+        return None, []
+    normal: tuple[Fraction, Fraction, Fraction] | None = None
+    for point in source[1:]:
+        other = (
+            point[0] - origin[0],
+            point[1] - origin[1],
+            point[2] - origin[2],
+        )
+        cross = (
+            base[1] * other[2] - base[2] * other[1],
+            base[2] * other[0] - base[0] * other[2],
+            base[0] * other[1] - base[1] * other[0],
+        )
+        if any(cross):
+            normal = cross
+            break
+    if normal is None:
+        return None, []
+    noncoplanar_offsets = [
+        index
+        for index, point in enumerate(source)
+        if (
+            normal[0] * (point[0] - origin[0])
+            + normal[1] * (point[1] - origin[1])
+            + normal[2] * (point[2] - origin[2])
+        ) != 0
+    ]
+    return not noncoplanar_offsets, noncoplanar_offsets
+
+
 def mesh_surface_edge_traces(
     points: list[tuple[float, float, float]],
     faces: list[list[int]],
@@ -776,6 +830,16 @@ def mesh_surface_edge_traces(
         # they cannot certify an anatomical coral branch or clean reconstruction.
         face_incidence_counts = [incidence[edge] for edge in edges]
         positions = [_source_xyz(points[index]) for index in vertices]
+        # A closed source-edge loop does not necessarily lie in a plane.
+        # Exclude its repeated terminal vertex from the exact XYZ audit.
+        # No area is inferred, even when submitted coordinates are coplanar.
+        source_exact_coplanarity: bool | None = None
+        source_noncoplanar_waypoint_offsets: list[int] = []
+        if is_closed_surface_loop:
+            (
+                source_exact_coplanarity,
+                source_noncoplanar_waypoint_offsets,
+            ) = _closed_loop_exact_source_coplanarity(positions)
         geometric_face_incidence_counts = [
             geometric_incidence[(start, end) if start <= end else (end, start)]
             for start, end in pairwise(positions)
@@ -845,6 +909,10 @@ def mesh_surface_edge_traces(
         warnings = ["caller_selected_surface_trace_not_anatomical_centerline"]
         if is_closed_surface_loop:
             warnings.append("closed_surface_trace_not_verified_anatomical_contour")
+            if source_exact_coplanarity is False:
+                warnings.append("closed_surface_trace_exact_source_noncoplanarity")
+            elif source_exact_coplanarity is None:
+                warnings.append("closed_surface_trace_source_reference_plane_undefined")
         if source_trace_length_mesh_units is None:
             warnings.append("surface_trace_source_length_unrepresentable")
         if source_cumulative_arc_length_fractions is None:
@@ -973,6 +1041,10 @@ def mesh_surface_edge_traces(
                 "biological_validation_status": "not_verified_anatomical_centerline",
                 "human_review_verified": False,
                 "is_closed_surface_loop": is_closed_surface_loop,
+                "closed_loop_source_exact_coplanarity": source_exact_coplanarity,
+                "closed_loop_source_noncoplanar_waypoint_offsets": (
+                    source_noncoplanar_waypoint_offsets
+                ),
                 "vertex_indices": list(vertices),
                 "nonadjacent_coincident_waypoint_index_pairs": (
                     nonadjacent_coincident_waypoint_index_pairs
