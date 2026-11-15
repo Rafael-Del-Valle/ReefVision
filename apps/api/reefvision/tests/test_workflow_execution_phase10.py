@@ -192,9 +192,7 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.flush()
         with pytest.raises(ConflictError, match="node has unplanned resolved parameters"):
             verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=producer)
-        with pytest.raises(
-            ConflictError, match="input producer has unplanned resolved parameters"
-        ):
+        with pytest.raises(ConflictError, match="input producer has unplanned resolved parameters"):
             verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
