@@ -137,7 +137,9 @@ def _fingerprint(
 
 
 
-def _protected_autoincrement_sequences(connection: sqlite3.Connection) -> dict[str, list[object]]:
+def _protected_autoincrement_sequences(
+    connection: sqlite3.Connection,
+) -> dict[str, list[object]]:
     """Read allocation history for protected AUTOINCREMENT tables, if present.
 
     sqlite_sequence is SQLite bookkeeping rather than an ordinary scientific
