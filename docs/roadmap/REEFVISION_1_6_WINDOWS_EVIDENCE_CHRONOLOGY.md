@@ -83,3 +83,28 @@ say SKIPPED. Tests cover both mismatched directions and the valid no-previous-
 installer path. This validates report consistency, **not** a real MSI upgrade,
 Windows GUI acceptance, workflow correctness on biological datasets, or
 reconciled Alembic lineage.
+
+## 2026-11-14 — independently bind the migrated target MSI (Track D)
+
+The first `migration` report object describes the original packaged API
+launch. During a real MSI upgrade, that can still be the **previous** desktop
+version. It is not evidence that the **target** MSI has finished schema
+migration, even if the initial SQLite revision is healthy.
+
+For a real upgrade the native harness now records a separate
+`post_upgrade_migration` snapshot only **after** verifying the restarted,
+registered target application and disposable database path. It includes target
+application version, schema status, actual/expected Alembic revision, isolation
+boolean and UTC observation time. The independent verifier requires these
+fields, a matching target version, matching nonempty revisions, isolated
+database, `up_to_date` status and event chronology between successful MSI
+installation and the restart PASS. Missing, old-version, stale, inconsistent,
+out-of-run or out-of-order snapshots cannot satisfy real-upgrade acceptance.
+
+Clean-install-only reports explicitly carry `null` and cannot borrow
+post-upgrade evidence. Existing baseline `migration` evidence remains
+mandatory for first launch. This hardens acceptance **evidence**, not the
+Alembic-0038 collision or the migration itself; it is not proof of a physical
+MSI installation, interactive GUI exercise or rollback. The branch remains on
+release hold until native Windows, representative biological data and unified
+migration-lineage acceptance are independently verified.
