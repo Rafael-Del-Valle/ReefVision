@@ -381,3 +381,73 @@ def test_review_history_page_pins_one_sqlite_snapshot_during_concurrent_assignme
     items = client.get(f"/api/v1/review-queues/{queue_id}/items")
     assert items.status_code == 200, items.text
     assert {item["review_state"] for item in items.json()["items"]} == {"pending"}
+
+
+@pytest.mark.parametrize("saved_workflow", [False, True])
+def test_equal_timestamp_assignments_preserve_append_order(
+    client: TestClient, saved_workflow: bool
+) -> None:
+    """Random UUID ordering must not reverse same-time reviewer decisions.
+
+    Both the standalone QC queue and the saved/executed Workflow Builder queue
+    must display append chronology and compute the current assignment from
+    the later unassign, including with paginated history.
+    """
+    queue_id, item_ids = _make_queue(client, saved_workflow=saved_workflow)
+    item_id = item_ids[0]
+    url = f"/api/v1/review-queues/{queue_id}/items/{item_id}/events"
+    queue = client.get(f"/api/v1/review-queues/{queue_id}")
+    assert queue.status_code == 200, queue.text
+    project_id = queue.json()["project_id"]
+    shared_time = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
+    # Force UUID lexical ordering to disagree with append ordering.
+    assigned_id = "ffffffff-ffff-4fff-8fff-ffffffffffff"
+    unassigned_id = "00000000-0000-4000-8000-000000000000"
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as writer:
+        writer.add(
+            ReviewQueueItemEvent(
+                id=assigned_id,
+                review_queue_id=queue_id,
+                review_queue_item_id=item_id,
+                project_id=project_id,
+                client_request_id=str(uuid4()),
+                event_type="assign",
+                actor="researcher",
+                assignee="reviewer-one",
+                created_at=shared_time,
+            )
+        )
+        writer.flush()  # Guarantee insertion, not merely SQLAlchemy batching order.
+        writer.add(
+            ReviewQueueItemEvent(
+                id=unassigned_id,
+                review_queue_id=queue_id,
+                review_queue_item_id=item_id,
+                project_id=project_id,
+                client_request_id=str(uuid4()),
+                event_type="unassign",
+                actor="researcher",
+                created_at=shared_time,
+            )
+        )
+        writer.commit()
+
+    full = client.get(url, params={"page_size": 10})
+    assert full.status_code == 200, full.text
+    assert full.json()["total"] == 2
+    assert [item["id"] for item in full.json()["items"]] == [assigned_id, unassigned_id]
+    assert full.json()["current_assignee"] is None
+    assert full.json()["requires_researcher_review"] is True
+
+    for page, expected_id in ((1, assigned_id), (2, unassigned_id)):
+        response = client.get(url, params={"page": page, "page_size": 1})
+        assert response.status_code == 200, response.text
+        assert response.json()["total"] == 2
+        assert [item["id"] for item in response.json()["items"]] == [expected_id]
+        assert response.json()["current_assignee"] is None
+        assert response.json()["requires_researcher_review"] is True
+
+    queue_items = client.get(f"/api/v1/review-queues/{queue_id}/items")
+    assert queue_items.status_code == 200, queue_items.text
+    assert {item["review_state"] for item in queue_items.json()["items"]} == {"pending"}

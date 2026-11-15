@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from sqlalchemy import func, select
+from sqlalchemy import func, literal_column, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -150,6 +150,15 @@ def list_review_events(
     ):
         connection.exec_driver_sql("BEGIN")
     _scope(session, queue_id, item_id)
+    # UUID primary keys are random: when two audit entries share a timestamp,
+    # their lexicographic UUID order can reverse an assignment/unassignment.
+    # On local SQLite, rowid follows append order for existing event rows.
+    # Keep the old deterministic UUID fallback for non-SQLite backends.
+    ordering_id = (
+        literal_column("review_queue_item_events.rowid")
+        if connection.dialect.name == "sqlite"
+        else ReviewQueueItemEvent.id
+    )
     filters = [ReviewQueueItemEvent.review_queue_item_id == item_id]
     total = (
         session.scalar(select(func.count()).select_from(ReviewQueueItemEvent).where(*filters)) or 0
@@ -169,7 +178,7 @@ def list_review_events(
                 .where(*filters)
                 .order_by(
                     ReviewQueueItemEvent.created_at,
-                    ReviewQueueItemEvent.id,
+                    ordering_id,
                 )
                 .offset(offset)
                 .limit(page_size)
@@ -183,7 +192,7 @@ def list_review_events(
         )
         .order_by(
             ReviewQueueItemEvent.created_at.desc(),
-            ReviewQueueItemEvent.id.desc(),
+            ordering_id.desc(),
         )
         .limit(1)
     )

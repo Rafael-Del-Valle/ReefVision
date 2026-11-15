@@ -50,3 +50,23 @@ researcher approval are required before any 1.6 release decision.
 
 No existing annotation, review, model, workflow artifact or user media is
 rewritten by this read-only change.
+
+
+## Equal-timestamp reviewer event ordering
+
+A second audited gap affects two legitimate append-only reviewer actions with
+identical persisted timestamps. The historical UUID-based tie-breaker could
+sort a later `unassign` before an earlier `assign`, incorrectly displaying
+an active assignee. Local SQLite reads now use the event table's insertion
+rowid as the deterministic tie-breaker for both ascending pages and the
+latest assignment lookup; the existing UUID fallback remains for other SQL
+backends. No event timestamps, UUIDs, existing rows or scientific decisions
+are rewritten. This is a read-order correction, not a new permanent event
+sequence; SQLite VACUUM can renumber rowids in tables lacking an integer
+primary key, so a future schema migration is needed for durable tie ordering
+across such maintenance.
+
+A new deterministic test inserts two equal-time events with deliberately
+reversed UUID order, verifies chronological pages and unassigned summary,
+and checks that item review state stays pending. It runs for standalone and
+saved, successfully executed Workflow Builder QC queues.
