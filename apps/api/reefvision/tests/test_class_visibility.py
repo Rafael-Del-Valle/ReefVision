@@ -750,12 +750,10 @@ def test_visibility_bundle_uses_one_snapshot_across_concurrent_scope_updates(
         )
         default_path = f"/api/v1/projects/{project['id']}/class-visibility/defaults/annotations"
         bundle_path = f"/api/v1/projects/{project['id']}/class-visibility"
-        assert client.put(
-            preference_path, json={"hidden_class_ids": [first["id"]]}
-        ).status_code == 200
-        assert client.put(
-            default_path, json={"hidden_class_ids": [first["id"]]}
-        ).status_code == 200
+        assert (
+            client.put(preference_path, json={"hidden_class_ids": [first["id"]]}).status_code == 200
+        )
+        assert client.put(default_path, json={"hidden_class_ids": [first["id"]]}).status_code == 200
 
         original_list = ClassVisibilityPreferenceRepository.list_for_project_user
         writer_commits: list[bool] = []
@@ -793,12 +791,8 @@ def test_visibility_bundle_uses_one_snapshot_across_concurrent_scope_updates(
         assert snapshot.status_code == 200, snapshot.text
         assert writer_commits == [True]
         old_bundle = snapshot.json()
-        assert old_bundle["user_preferences"]["annotations"]["hidden_class_ids"] == [
-            first["id"]
-        ]
-        assert old_bundle["project_defaults"]["annotations"]["hidden_class_ids"] == [
-            first["id"]
-        ]
+        assert old_bundle["user_preferences"]["annotations"]["hidden_class_ids"] == [first["id"]]
+        assert old_bundle["project_defaults"]["annotations"]["hidden_class_ids"] == [first["id"]]
         assert old_bundle["user_preferences"]["annotations"]["saved"] is True
         assert old_bundle["project_defaults"]["annotations"]["saved"] is True
 
