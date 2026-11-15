@@ -433,9 +433,8 @@ def test_trace_follows_selected_edges_not_the_shortest_route() -> None:
 def test_closed_surface_loop_measures_perimeter_once_with_a_unique_closure_turn(
     scale: float,
 ) -> None:
-    trace = measure_mesh_preview(
-        **{**CLOSED_LOOP_PARAMS, "meters_per_unit": scale}
-    )["surface_edge_traces"][0]
+    result = measure_mesh_preview(**{**CLOSED_LOOP_PARAMS, "meters_per_unit": scale})
+    trace = result["surface_edge_traces"][0]
     assert trace["is_closed_surface_loop"] is True
     assert trace["vertex_indices"] == [0, 1, 2, 0]
     assert trace["edge_count"] == 3
@@ -449,7 +448,9 @@ def test_closed_surface_loop_measures_perimeter_once_with_a_unique_closure_turn(
     assert trace["geometric_detour_ratio"] is None
     assert trace["nonadjacent_coincident_waypoint_index_pairs"] == []
     assert trace["repeated_geometric_segment_index_pairs"] == []
-    assert "closed_surface_trace_not_verified_anatomical_contour" in trace["qc_warnings"]
+    assert (
+        "closed_surface_trace_not_verified_anatomical_contour" in trace["qc_warnings"]
+    )
     assert "surface_trace_zero_endpoint_chord" in trace["qc_warnings"]
     assert "nonadjacent_coincident_surface_trace_vertices" not in trace["qc_warnings"]
     assert trace["human_review_verified"] is False
