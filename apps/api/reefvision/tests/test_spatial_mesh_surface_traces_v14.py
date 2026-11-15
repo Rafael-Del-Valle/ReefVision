@@ -414,6 +414,34 @@ def test_reuse_fraction_withholds_overflowed_source_total() -> None:
     assert trace["human_review_verified"] is False
 
 
+@pytest.mark.parametrize("conflicting_winding", [False, True])
+def test_direct_trace_geometric_keys_preserve_list_and_tuple_xyz(
+    conflicting_winding: bool,
+) -> None:
+    # The API uses JSON-style lists, while scientific Python callers may use
+    # tuples. Both must produce identical seam QC without mutating raw XYZ.
+    params = GEOMETRIC_WINDING_SEAM_PARAMS if conflicting_winding else GEOMETRIC_SEAM_PARAMS
+    points = [list(vertex) for vertex in params["vertices"]]
+    original_points = [list(vertex) for vertex in points]
+    faces = [list(face) for face in params["faces"]]
+    paths = [list(path) for path in params["surface_trace_vertex_paths"]]
+    list_result = mesh_surface_edge_traces(points, faces, paths, 0.01, 0.1)
+    tuple_result = mesh_surface_edge_traces(
+        [tuple(vertex) for vertex in points], faces, paths, 0.01, 0.1
+    )
+    assert list_result == tuple_result
+    assert list_result is not None
+    trace = list_result[0]
+    assert points == original_points
+    assert trace["geometric_edge_face_incidence_counts"] == [2, 1]
+    assert trace["split_vertex_seam_segment_indices"] == [0]
+    assert trace["split_vertex_winding_segment_indices"] == (
+        [0] if conflicting_winding else []
+    )
+    assert trace["human_review_verified"] is False
+    assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
+
+
 @pytest.mark.parametrize("scale", [0.001, 0.01, 3.0])
 def test_split_vertex_geometric_seam_is_localized_without_welding(scale: float) -> None:
     params = {**GEOMETRIC_SEAM_PARAMS, "meters_per_unit": scale}
