@@ -62,9 +62,7 @@ class ClassVisibilityService:
         # hold it through the preference/default commit. This no-op preserves
         # the project's updated_at revision and all scientific records.
         self.session.execute(
-            update(Project)
-            .where(Project.id == project_id)
-            .values(updated_at=Project.updated_at)
+            update(Project).where(Project.id == project_id).values(updated_at=Project.updated_at)
         )
         valid_class_ids = self._project_class_ids(project_id)
         valid = set(valid_class_ids)

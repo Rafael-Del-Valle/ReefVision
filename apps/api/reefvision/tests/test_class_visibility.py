@@ -646,6 +646,7 @@ def test_legacy_visibility_put_cannot_recycle_cas_revision(
     assert observed["hidden_class_ids"] == [label_class["id"]]
     assert observed["updated_at"] == third["updated_at"]
 
+
 @pytest.mark.parametrize("scope", ["preferences", "defaults"])
 def test_visibility_save_locks_class_inventory_until_commit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, scope: str
@@ -681,9 +682,7 @@ def test_visibility_save_locks_class_inventory_until_commit(
             with app.state.engine.connect() as competing:
                 competing.exec_driver_sql("PRAGMA busy_timeout = 50")
                 with pytest.raises(OperationalError, match="database is locked"):
-                    competing.execute(
-                        delete(LabelClass).where(LabelClass.id == label_class["id"])
-                    )
+                    competing.execute(delete(LabelClass).where(LabelClass.id == label_class["id"]))
                 competing.rollback()
             deletion_attempts.append(True)
             return validated
@@ -691,9 +690,7 @@ def test_visibility_save_locks_class_inventory_until_commit(
         monkeypatch.setattr(
             ClassVisibilityService, "_validated_hidden_class_ids", interleaved_validation
         )
-        path = (
-            f"/api/v1/projects/{project['id']}/class-visibility/{scope}/annotations"
-        )
+        path = f"/api/v1/projects/{project['id']}/class-visibility/{scope}/annotations"
         response = client.put(
             path,
             json={"hidden_class_ids": [label_class["id"]], "expected_updated_at": None},
