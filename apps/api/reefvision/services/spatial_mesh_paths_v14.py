@@ -714,6 +714,22 @@ def mesh_surface_edge_traces(
         source_trace_length_mesh_units = (
             source_trace_length if isfinite(source_trace_length) else None
         )
+        # A common calibration scale cancels from waypoint positions along a
+        # selected trace. Sum source edge lengths exactly as binary64 rationals
+        # before converting dimensionless fractions back to float. This keeps
+        # meaningful intermediate positions when calibrated lengths underflow
+        # or the unscaled source total exceeds binary64's numeric range.
+        # These fractions are not homologous anatomical landmarks.
+        exact_source_total = sum((Fraction(length) for length in source_lengths), Fraction(0))
+        source_cumulative_arc_length_fractions: list[float] | None = None
+        if exact_source_total > 0:
+            source_cumulative_arc_length_fractions = [0.0]
+            exact_source_prefix = Fraction(0)
+            for source_length in source_lengths:
+                exact_source_prefix += Fraction(source_length)
+                source_cumulative_arc_length_fractions.append(
+                    float(exact_source_prefix / exact_source_total)
+                )
         # Preserve edge-by-edge topology behind aggregate scientific QC.
         # Counts use original indexed faces, not spatially welded vertices;
         # they cannot certify an anatomical coral branch or clean reconstruction.
@@ -788,6 +804,15 @@ def mesh_surface_edge_traces(
         warnings = ["caller_selected_surface_trace_not_anatomical_centerline"]
         if source_trace_length_mesh_units is None:
             warnings.append("surface_trace_source_length_unrepresentable")
+        if source_cumulative_arc_length_fractions is None:
+            warnings.append("surface_trace_source_arc_fractions_undefined_zero_total")
+        elif any(
+            source > 0
+            and source_cumulative_arc_length_fractions[index]
+            == source_cumulative_arc_length_fractions[index + 1]
+            for index, source in enumerate(source_lengths)
+        ):
+            warnings.append("surface_trace_source_arc_fraction_resolution_loss")
         if open_boundary_segment_indices:
             warnings.append("open_boundary_edge_on_surface_trace")
         if split_vertex_seam_segment_indices:
@@ -910,6 +935,7 @@ def mesh_surface_edge_traces(
                 "segment_lengths_m": segment_lengths,
                 "source_segment_lengths_mesh_units": source_lengths,
                 "source_trace_length_mesh_units": source_trace_length_mesh_units,
+                "source_cumulative_arc_length_fractions": source_cumulative_arc_length_fractions,
                 "source_endpoint_chord_mesh_units": source_chord,
                 "mesh_edge_face_incidence_counts": face_incidence_counts,
                 "geometric_edge_face_incidence_counts": geometric_face_incidence_counts,
