@@ -135,7 +135,7 @@ def _fingerprint(
     return rows, sha.hexdigest()
 
 
-def _asset_inventory(root: Path) -> dict[str, str]:
+def _asset_inventory(root: Path) -> tuple[dict[str, str], set[tuple[int, int]]]:
     """Hash regular research assets in bounded chunks without following symlinks.
 
     File names are used only for an in-process relative-path comparison and
@@ -148,6 +148,7 @@ def _asset_inventory(root: Path) -> dict[str, str]:
         raise ValueError("asset_inventory_io_error") from exc
 
     inventory: dict[str, str] = {}
+    file_identities: set[tuple[int, int]] = set()
     for parent, directories, filenames in os.walk(
         root, topdown=True, followlinks=False, onerror=_on_walk_error
     ):
@@ -175,7 +176,9 @@ def _asset_inventory(root: Path) -> dict[str, str]:
             ):
                 raise ValueError("asset_changed_during_inspection")
             inventory[path.relative_to(root).as_posix()] = digest.hexdigest()
-    return inventory
+            if final.st_ino:
+                file_identities.add((final.st_dev, final.st_ino))
+    return inventory, file_identities
 
 
 def _compare_assets(before_root: Path, after_root: Path) -> dict:
@@ -191,10 +194,12 @@ def _compare_assets(before_root: Path, after_root: Path) -> dict:
         or after_real in before_real.parents
     ):
         raise ValueError("asset_roots_must_be_independent")
-    baseline = _asset_inventory(before_root)
+    baseline, baseline_ids = _asset_inventory(before_root)
     if not baseline:
         raise ValueError("no_research_assets_in_baseline")
-    candidate = _asset_inventory(after_root)
+    candidate, candidate_ids = _asset_inventory(after_root)
+    if baseline_ids & candidate_ids:
+        raise ValueError("asset_copies_share_hardlinks")
     missing = sum(path not in candidate for path in baseline)
     changed = sum(
         path in candidate and candidate[path] != checksum
