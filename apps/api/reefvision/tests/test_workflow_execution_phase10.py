@@ -17,6 +17,7 @@ from reefvision.db.models import (
 from reefvision.domain.errors import ConflictError
 from reefvision.jobs.workflow import _input_artifacts, process_workflow_run_job
 from reefvision.schemas.workflow_graphs import WorkflowPlanInputBinding
+from reefvision.services.workflow_execution import WorkflowArtifactSpec, WorkflowExecutionService
 from reefvision.services.workflow_provenance import (
     build_workflow_run_provenance,
     verify_succeeded_node_artifacts,
@@ -146,6 +147,26 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
     assert set(artifacts["image_collection"]["payload_json"]["image_ids"]) == image_ids
     assert artifacts["image_collection"]["payload_json"]["count"] == 2
     assert all(len(item["payload_sha256"]) == 64 for item in payload["artifacts"])
+
+    # This completed, saved two-node execution has a real producer output.
+    # Replaying the same port with a different artifact type must not insert
+    # an ambiguous sibling artifact that a downstream worker cannot consume.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        assert producer is not None
+        original = artifacts["project_reference"]
+        with pytest.raises(ConflictError, match="already persisted a different artifact"):
+            WorkflowExecutionService(session).persist_artifact(
+                run_id=str(run["id"]),
+                node_run=producer,
+                specification=WorkflowArtifactSpec(
+                    port_id=original["producer_port_id"],
+                    data_type="image_collection",
+                    payload=original["payload_json"],
+                ),
+            )
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
     # An already executed producer's declared output can drift between step
     # commits. The downstream node must refuse to consume it even when the
