@@ -3,13 +3,13 @@
 import json
 import os
 import runpy
-import stat
 import shutil
 import sqlite3
+import stat
 import subprocess
 import sys
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -749,7 +749,9 @@ def test_windows_native_junctions_block_research_asset_preservation(
             check=False,
         )
         if command.returncode:
-            raise AssertionError("Windows NTFS junction fixture creation failed: " + command.stderr.strip()[:300])
+            raise AssertionError(
+                "Windows NTFS junction fixture creation failed: " + command.stderr.strip()[:300]
+            )
         before_bytes, after_bytes = before.read_bytes(), after.read_bytes()
         code, report = _run(before, after, original, candidate)
         assert code == 2
