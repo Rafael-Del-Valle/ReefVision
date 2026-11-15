@@ -321,6 +321,13 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
             except (
                 OSError,
                 ValueError,
+                # Pillow may raise these while walking malformed camera EXIF
+                # IFDs. Reject that JPEG, keep inspecting other originals.
+                EOFError,
+                IndexError,
+                KeyError,
+                SyntaxError,
+                TypeError,
                 Image.DecompressionBombError,
                 Image.DecompressionBombWarning,
             ) as exc:
