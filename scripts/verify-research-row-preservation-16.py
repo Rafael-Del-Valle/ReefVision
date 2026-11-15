@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sqlite3
 from contextlib import ExitStack
 from pathlib import Path
@@ -134,8 +135,89 @@ def _fingerprint(
     return rows, sha.hexdigest()
 
 
-def verify(before: Path, after: Path) -> dict:
+def _asset_inventory(root: Path) -> dict[str, str]:
+    """Hash regular research assets in bounded chunks without following symlinks.
+
+    File names are used only for an in-process relative-path comparison and
+    are never included in the public diagnostic report.
+    """
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("invalid_asset_root")
+
+    def _on_walk_error(exc: OSError) -> None:
+        raise ValueError("asset_inventory_io_error") from exc
+
+    inventory: dict[str, str] = {}
+    for parent, directories, filenames in os.walk(
+        root, topdown=True, followlinks=False, onerror=_on_walk_error
+    ):
+        directories.sort()
+        filenames.sort()
+        for directory in directories:
+            if (Path(parent) / directory).is_symlink():
+                raise ValueError("asset_symlink_not_allowed")
+        for filename in filenames:
+            path = Path(parent) / filename
+            if path.is_symlink():
+                raise ValueError("asset_symlink_not_allowed")
+            if not path.is_file():
+                raise ValueError("asset_not_regular_file")
+            initial = path.stat()
+            digest = hashlib.sha256()
+            with path.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            final = path.stat()
+            if (initial.st_size, initial.st_mtime_ns, initial.st_ino) != (
+                final.st_size,
+                final.st_mtime_ns,
+                final.st_ino,
+            ):
+                raise ValueError("asset_changed_during_inspection")
+            inventory[path.relative_to(root).as_posix()] = digest.hexdigest()
+    return inventory
+
+
+def _compare_assets(before_root: Path, after_root: Path) -> dict:
+    """Require each original asset at the same relative path with equal bytes."""
+    if before_root.is_symlink() or after_root.is_symlink():
+        raise ValueError("asset_symlink_not_allowed")
+    if not before_root.is_dir() or not after_root.is_dir():
+        raise ValueError("invalid_asset_root")
+    before_real, after_real = before_root.resolve(), after_root.resolve()
+    if (
+        before_real == after_real
+        or before_real in after_real.parents
+        or after_real in before_real.parents
+    ):
+        raise ValueError("asset_roots_must_be_independent")
+    baseline = _asset_inventory(before_root)
+    candidate = _asset_inventory(after_root)
+    missing = sum(path not in candidate for path in baseline)
+    changed = sum(
+        path in candidate and candidate[path] != checksum
+        for path, checksum in baseline.items()
+    )
+    added = sum(path not in baseline for path in candidate)
+    return {
+        "checked": True,
+        "baseline_files": len(baseline),
+        "candidate_files": len(candidate),
+        "missing_files": missing,
+        "changed_files": changed,
+        "added_files": added,
+    }
+
+
+def verify(
+    before: Path,
+    after: Path,
+    before_assets: Path | None = None,
+    after_assets: Path | None = None,
+) -> dict:
     """Produce only diagnostic digests/counts; never return research row values."""
+    if (before_assets is None) != (after_assets is None):
+        raise ValueError("asset_roots_must_be_supplied_together")
     before = before.resolve()
     after = after.resolve()
     if before == after or (before.is_file() and after.is_file() and before.samefile(after)):
@@ -183,6 +265,13 @@ def verify(before: Path, after: Path) -> dict:
             tables.append(item)
         if covered == 0:
             problems.append("no_protected_baseline_tables")
+        asset_evidence = {"checked": False}
+        if before_assets is not None and after_assets is not None:
+            asset_evidence = _compare_assets(before_assets, after_assets)
+            if asset_evidence["missing_files"]:
+                problems.append("research_assets_missing")
+            if asset_evidence["changed_files"]:
+                problems.append("research_assets_changed")
         # Sidecars can appear or disappear while reading a WAL database. Even
         # successful snapshots are not approval to copy a live DB's main file.
         if sidecars_before or _sidecars(before) or _sidecars(after):
@@ -192,6 +281,7 @@ def verify(before: Path, after: Path) -> dict:
             "upgrade_authorized": False,
             "requires_researcher_approval": True,
             "protected_tables_examined": covered,
+            "research_assets": asset_evidence,
             "problems": problems,
             "tables": tables,
         }
@@ -205,9 +295,17 @@ def main() -> None:
     parser.add_argument(
         "--after", required=True, type=Path, help="Independent upgraded offline copy"
     )
+    parser.add_argument(
+        "--before-assets", type=Path, help="Original offline research media/model directory"
+    )
+    parser.add_argument(
+        "--after-assets", type=Path, help="Candidate upgraded research media/model directory"
+    )
     args = parser.parse_args()
     try:
-        report = verify(args.before, args.after)
+        report = verify(
+            args.before, args.after, args.before_assets, args.after_assets
+        )
     except (OSError, sqlite3.DatabaseError, ValueError) as exc:
         report = {
             "status": "HOLD",
