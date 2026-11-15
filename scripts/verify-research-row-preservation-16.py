@@ -310,9 +310,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     try:
-        report = verify(
-            args.before, args.after, args.before_assets, args.after_assets
-        )
+        report = verify(args.before, args.after, args.before_assets, args.after_assets)
     except (OSError, sqlite3.DatabaseError, ValueError) as exc:
         report = {
             "status": "HOLD",
