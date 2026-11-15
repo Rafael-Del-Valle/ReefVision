@@ -30,9 +30,7 @@ def _partial_science(engine: object, revision: str | None, table: str) -> None:
             text("INSERT INTO biological_observations VALUES ('coral-1', 'preserve tissue')")
         )
         if revision is not None:
-            connection.execute(
-                text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
-            )
+            connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
             connection.execute(
                 text("INSERT INTO alembic_version VALUES (:revision)"),
                 {"revision": revision},
@@ -69,7 +67,7 @@ def test_partial_late_environmental_lineage_is_rejected_read_only(
         original = _evidence(connection, table)
     for _ in range(2):
         with engine.connect() as connection:
-            with pytest.raises(RuntimeError, match="scientific|collision"):
+            with pytest.raises(RuntimeError, match=r"scientific|collision"):
                 assert_compatible_revision_0038(connection)
             assert _evidence(connection, table) == original
     engine.dispose()
