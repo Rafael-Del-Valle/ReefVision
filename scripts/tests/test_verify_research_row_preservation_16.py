@@ -28,7 +28,7 @@ def _seed(path: Path) -> None:
             )
             connection.execute(
                 f'INSERT INTO "{table}" VALUES (?, ?, ?)',
-                ("z", b"\x00\xff", "coral α; private record"),
+                ("z", b"\x00\xff", "coral \u03b1; private record"),
             )
             connection.execute(
                 f'INSERT INTO "{table}" VALUES (?, ?, ?)',
@@ -89,7 +89,7 @@ def test_detects_modified_science_qc_class_and_workflow_evidence(
     assert report["upgrade_authorized"] is False
     assert report["requires_researcher_approval"] is True
     assert any(item["table"] == table and item["status"] == expected for item in report["tables"])
-    assert "coral α; private record" not in json.dumps(report)
+    assert "coral \u03b1; private record" not in json.dumps(report)
     assert before.read_bytes() == original
     assert after.read_bytes() == modified
 
