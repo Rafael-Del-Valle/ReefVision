@@ -181,22 +181,33 @@ function Start-AcceptanceDesktop {
         $isolatedOverrides['TOKENIZERS_PARALLELISM'] = 'false'
     }
     return Invoke-ReefVisionIsolatedEnvironment -DataRoot $DataRoot -AdditionalEnvironment $isolatedOverrides -Action {
-        Start-Process -FilePath (Join-Path $InstallRoot 'ReefVision.exe') -WorkingDirectory $InstallRoot -PassThru -WindowStyle Hidden
+        # CI uses a disposable interactive Windows session. Launch the actual GUI
+        # normally: STARTF_USESHOWWINDOW/SW_HIDE can prevent a usable native main
+        # window from being exposed to CloseMainWindow and derail MSI acceptance.
+        # The installed application's normal close/sidecar-shutdown path is tested.
+        Start-Process -FilePath (Join-Path $InstallRoot 'ReefVision.exe') -WorkingDirectory $InstallRoot -PassThru
     }
 }
 function Stop-AcceptanceDesktop($Process) {
     $Process.Refresh()
     if ($Process.HasExited) { return }
-    # -WindowStyle Hidden can make MainWindowHandle zero even though the
-    # Tauri process owns a native, invisible top-level WebView2 window.
-    $posted = Invoke-ReefVisionWindowClose -ProcessId $Process.Id
-    if ($posted -eq 0) {
-        throw "ReefVision PID $($Process.Id) has no top-level window available for a graceful WM_CLOSE."
+    # Prefer the OS main-window close operation, exercising the normal Tauri
+    # CloseRequested/Exit path rather than posting WM_CLOSE to unrelated helper
+    # windows. An older hidden-window build may not expose MainWindowHandle;
+    # retain PID-scoped native enumeration as a bounded fallback only.
+    $closedByMainWindow = $Process.CloseMainWindow()
+    $posted = 0
+    if (-not $closedByMainWindow) {
+        $posted = Invoke-ReefVisionWindowClose -ProcessId $Process.Id
+        if ($posted -eq 0) {
+            throw "ReefVision PID $($Process.Id) exposes no main window or PID-owned native window for graceful close."
+        }
     }
-    # Keep the close-and-exit requirement strict, but give the frozen sidecar
-    # shutdown on a resource-constrained Windows runner a bounded 30 seconds.
+    # Never mask a real exit failure with Stop-Process/taskkill. Frozen sidecar
+    # shutdown on a disposable Windows runner still has a finite deadline.
     if (-not $Process.WaitForExit(30000)) {
-        throw "ReefVision PID $($Process.Id) did not close cleanly within 30 seconds after WM_CLOSE ($posted window(s) signaled)."
+        $strategy = if ($closedByMainWindow) { 'CloseMainWindow' } else { "WM_CLOSE ($posted window(s) signaled)" }
+        throw "ReefVision PID $($Process.Id) did not close cleanly within 30 seconds after $strategy."
     }
 }
 function Import-AcceptanceImage(
