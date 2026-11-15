@@ -30,6 +30,8 @@ jobs:
             exit 1
           fi
       - run: python -m mypy -p reefvision
+      - name: Verify release feature inventory
+        run: python scripts/check_release_feature_inventory.py --check-render
       - run: python -m pytest apps/api/reefvision/tests
       - name: Verify migrations
         shell: bash
