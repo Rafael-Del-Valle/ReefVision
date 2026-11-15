@@ -165,7 +165,8 @@ def _verify_causal_gate_order(report: dict[str, Any], *, expected_upgrade: str) 
         # QC workflow replay and post-migration science-file retention.
         pairs += (
             ("install", "upgrade_install"),
-            ("upgrade_install", "restart"),
+            ("upgrade_install", "post_upgrade_migration"),
+            ("post_upgrade_migration", "restart"),
             ("project_exchange", "upgrade"),
             ("upgrade", "uninstall"),
         )
@@ -233,6 +234,36 @@ def validate_report(
         _verified_pass(report, "upgrade_install", started=start, completed=end)
         _require(upgrade == "PASS", "Real MSI upgrade did not PASS")
         _verified_pass(report, "upgrade", started=start, completed=end)
+        # The first-launch migration describes the *previous* installed MSI.
+        # A real upgrade must independently prove the target-version API's
+        # actual schema and isolated database after restarting the desktop.
+        post_upgrade = report.get("post_upgrade_migration")
+        _require(isinstance(post_upgrade, dict), "Missing post-upgrade migration evidence")
+        _require(
+            post_upgrade.get("application_version") == expected_version,
+            "Post-upgrade migration evidence does not identify the target application",
+        )
+        _require(
+            post_upgrade.get("schema_status") == "up_to_date",
+            "Post-upgrade database is not migrated",
+        )
+        _require(
+            post_upgrade.get("database_path_is_isolated") is True,
+            "Post-upgrade database is not isolated",
+        )
+        _require(
+            isinstance(post_upgrade.get("current_revision"), str)
+            and bool(post_upgrade["current_revision"])
+            and post_upgrade["current_revision"] == post_upgrade.get("expected_revision"),
+            "Post-upgrade migration revision does not match expected revision",
+        )
+        upgraded_at = _utc(
+            post_upgrade.get("timestamp_utc"), "post_upgrade_migration.timestamp_utc"
+        )
+        _require(
+            start <= upgraded_at <= end,
+            "Post-upgrade migration timestamp falls outside the acceptance run",
+        )
         previous_path = report.get("previous_installer_path")
         previous_digest = report.get("previous_installer_sha256")
         _require(
@@ -263,6 +294,10 @@ def validate_report(
                 "Previous MSI hash differs from report",
             )
     else:
+        _require(
+            report.get("post_upgrade_migration") is None,
+            "Clean-install-only report must not claim a post-upgrade migration",
+        )
         _require(
             _status(report, "upgrade_install") == "SKIPPED",
             "Clean-install-only report must not claim real upgrade installation",
