@@ -335,8 +335,10 @@ class AcceptanceEvidenceTests(unittest.TestCase):
         report["previous_installer_sha256"] = "b" * 64
         report["previous_installer_version"] = "1.0.2"
         MODULE.validate_report(report, expected_version="1.0.3", expected_upgrade="passed")
+        # Keep restart valid relative to every other required gate, so the
+        # rejection specifically exercises the new upgrade-install ordering.
         report["upgrade_install"]["timestamp_utc"] = "2026-10-25T02:12:00Z"
-        report["restart"]["timestamp_utc"] = "2026-10-25T02:08:00Z"
+        report["restart"]["timestamp_utc"] = "2026-10-25T02:10:00Z"
         with self.assertRaisesRegex(
             MODULE.AcceptanceEvidenceError, "causal order invalid"
         ):
