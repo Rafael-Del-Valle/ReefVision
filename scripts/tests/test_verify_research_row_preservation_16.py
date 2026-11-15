@@ -499,7 +499,9 @@ def test_asset_scan_rejects_symlink_swap_between_lstat_and_open(
     actual_open = os.open
     swapped = False
 
-    def swap_on_open(path: os.PathLike[str] | str, flags: int, *args: object, **kwargs: object) -> int:
+    def swap_on_open(
+        path: os.PathLike[str] | str, flags: int, *args: object, **kwargs: object
+    ) -> int:
         nonlocal swapped
         if not swapped and Path(path) == asset:
             swapped = True
