@@ -232,12 +232,40 @@ def test_selected_trace_locates_indexed_face_topology_for_review(
     assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
 
 
+@pytest.mark.parametrize(
+    ("variant", "expected_error", "indexed_duplicate"),
+    [
+        ("reversed-indexed", "Duplicate triangles would double-count surface area", True),
+        ("same-indexed", "Duplicate triangles would double-count surface area", True),
+        ("split-geometry", "Duplicate triangle geometry would double-count surface area", False),
+    ],
+)
 def test_duplicate_face_qc_is_direct_engine_only_and_preview_rejects_it(
     client: TestClient,
+    variant: str,
+    expected_error: str,
+    indexed_duplicate: bool,
 ) -> None:
-    # Diagnostic engine exposes malformed indexed topology; the public
-    # scientific preview must reject triangles that would double-count area.
+    # Indexed duplication (same or reversed winding) and split-vertex
+    # coordinate duplication are distinct ways to double-count mesh area.
+    # The direct edge helper is diagnostic, but public previews must reject
+    # both, including saved executable workflows.
     params = DUPLICATE_FACE_PARAMS
+    if variant == "same-indexed":
+        params = {**params, "faces": [[0, 1, 2], [0, 1, 2]]}
+    elif variant == "split-geometry":
+        params = {
+            **params,
+            "vertices": [
+                [0, 0, 0],
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 0],
+                [1, 0, 0],
+                [0, 1, 0],
+            ],
+            "faces": [[0, 1, 2], [5, 4, 3]],
+        }
     trace = mesh_surface_edge_traces(
         [tuple(vertex) for vertex in params["vertices"]],
         params["faces"],
@@ -245,24 +273,29 @@ def test_duplicate_face_qc_is_direct_engine_only_and_preview_rejects_it(
         params["meters_per_unit"],
         params["relative_scale_uncertainty"],
     )[0]
-    assert trace["mesh_edge_face_incidence_counts"] == [2]
-    assert trace["duplicate_triangle_segment_indices"] == [0]
-    assert "duplicate_triangle_on_surface_trace" in trace["qc_warnings"]
+    assert trace["mesh_edge_face_incidence_counts"] == ([2] if indexed_duplicate else [1])
+    assert trace["duplicate_triangle_segment_indices"] == ([0] if indexed_duplicate else [])
+    if indexed_duplicate:
+        assert "duplicate_triangle_on_surface_trace" in trace["qc_warnings"]
+    else:
+        # Two separate vertex-ID sets share one real coordinate-space edge.
+        # Indexed topology alone must not be mistaken for whole-mesh validity.
+        assert trace["geometric_edge_face_incidence_counts"] == [2]
+        assert trace["split_vertex_seam_segment_indices"] == [0]
     assert trace["human_review_verified"] is False
-    with pytest.raises(ValueError, match="Duplicate triangles would double-count surface area"):
+    with pytest.raises(ValueError, match=expected_error):
         measure_mesh_preview(**params)
 
-    project_id = str(create_project(client, "Invalid duplicated triangle mesh")["id"])
+    project_id = str(create_project(client, f"Invalid duplicated mesh {variant}")["id"])
     response = client.post(f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params)
     assert response.status_code == 400
-    assert "Duplicate triangles would double-count surface area" in response.text
+    assert expected_error in response.text
 
-    # The persisted, typed workflow must fail closed on the same invalid mesh.
-    # It may save its parameters as a reproducible request, but must neither
-    # claim successful analysis nor emit a double-counted area artifact.
+    # Parameters may be saved for reproducibility, but the persisted typed
+    # workflow must not generate scientifically invalid surface-area evidence.
     graph = {
-        "graph_id": "rejected-duplicate-triangle-preview-v14",
-        "name": "Duplicate-face scientific validation regression",
+        "graph_id": f"rejected-duplicate-{variant}-preview-v14",
+        "name": f"Duplicate-face validation regression: {variant}",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
             {
@@ -287,9 +320,12 @@ def test_duplicate_face_qc_is_direct_engine_only_and_preview_rejects_it(
     run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
-    ) is False
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        is False
+    )
     detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "failed"
@@ -297,7 +333,6 @@ def test_duplicate_face_qc_is_direct_engine_only_and_preview_rejects_it(
         artifact["data_type"] == "mesh_measurement_preview"
         for artifact in detail.json()["artifacts"]
     )
-
 
 @pytest.mark.parametrize("scale", [0.01, 1.0])
 @pytest.mark.parametrize("conflicting", [False, True])
