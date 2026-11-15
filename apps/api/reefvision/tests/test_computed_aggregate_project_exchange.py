@@ -96,6 +96,93 @@ def test_annotation_aggregate_round_trip_remaps_evidence_but_preserves_group_key
     assert recalculated.json()["groups"] == restored_result["groups"]
 
 
+def test_stale_annotation_aggregate_round_trip_preserves_history_and_recalculates_current_grouping(
+    client: TestClient, test_settings
+) -> None:
+    project, definition, result, image_ids = _source(client)
+    historical_groups = deepcopy(result["groups"])
+    changed_image_id = image_ids[0]
+    changed = client.patch(
+        f"/api/v1/images/{changed_image_id}",
+        json={"annotation_status": "reviewed", "group_key": "current-colony-a"},
+    )
+    assert changed.status_code == 200, changed.text
+
+    source_validation = client.get(
+        f"/api/v1/projects/{project['id']}/computed-aggregate-results/{result['id']}/validation"
+    )
+    assert source_validation.status_code == 200, source_validation.text
+    assert source_validation.json()["current"] is False
+    assert f"image_group_key_changed:{changed_image_id}" in source_validation.json()["reasons"]
+
+    raw = export_archive(client, test_settings, project["id"])
+    imported = import_archive(client, raw)
+    assert imported.status_code == 201, imported.text
+    imported_project_id = imported.json()["project_id"]
+
+    restored_definition = client.get(
+        f"/api/v1/projects/{imported_project_id}/computed-aggregate-definitions"
+    ).json()["items"][0]
+    restored_result = client.get(
+        f"/api/v1/projects/{imported_project_id}/computed-aggregate-results"
+    ).json()["items"][0]
+    assert restored_definition["id"] != definition["id"]
+    assert restored_result["id"] != result["id"]
+    assert restored_result["groups"] == [
+        {
+            **historical_groups[0],
+            "image_ids": restored_result["groups"][0]["image_ids"],
+            "counts_by_class": restored_result["groups"][0]["counts_by_class"],
+        }
+    ]
+    assert restored_result["groups"][0]["unit_key"] == project["id"]
+    assert set(restored_result["groups"][0]["image_ids"]).isdisjoint(image_ids)
+    assert {item["id"] for item in restored_result["observation_snapshot"]}.isdisjoint(
+        {item["id"] for item in result["observation_snapshot"]}
+    )
+    assert restored_result["provenance"]["evidence_sha256"] == restored_result["evidence_sha256"]
+    assert restored_result["workflow_run_id"] not in (None, result["workflow_run_id"])
+    assert restored_result["workflow_node_run_id"] not in (
+        None,
+        result["workflow_node_run_id"],
+    )
+
+    imported_validation = client.get(
+        f"/api/v1/projects/{imported_project_id}/computed-aggregate-results/"
+        f"{restored_result['id']}/validation"
+    )
+    assert imported_validation.status_code == 200, imported_validation.text
+    assert imported_validation.json()["current"] is False
+    group_key_reasons = [
+        reason
+        for reason in imported_validation.json()["reasons"]
+        if reason.startswith("image_group_key_changed:")
+    ]
+    assert len(group_key_reasons) == 1
+
+    selected_image_ids = [item["image_id"] for item in restored_result["image_snapshot"]]
+    recalculated = client.post(
+        f"/api/v1/projects/{imported_project_id}/computed-aggregate-definitions/"
+        f"{restored_definition['id']}/calculate",
+        json={"image_ids": selected_image_ids},
+    )
+    assert recalculated.status_code == 201, recalculated.text
+    assert recalculated.json()["id"] != restored_result["id"]
+    assert recalculated.json()["independent_unit_count"] == 2
+    assert {group["unit_key"] for group in recalculated.json()["groups"]} == {
+        project["id"],
+        "current-colony-a",
+    }
+    historical_after = next(
+        item
+        for item in client.get(
+            f"/api/v1/projects/{imported_project_id}/computed-aggregate-results"
+        ).json()["items"]
+        if item["id"] == restored_result["id"]
+    )
+    assert historical_after == restored_result
+
+
 @pytest.mark.parametrize(
     "corruption",
     [
@@ -106,6 +193,11 @@ def test_annotation_aggregate_round_trip_remaps_evidence_but_preserves_group_key
         "wrong_class",
         "group_total",
         "observed_at",
+        "snapshot_group_key",
+        "group_unit_key",
+        "image_checksum",
+        "workflow_provenance",
+        "provenance_evidence",
     ],
 )
 def test_annotation_aggregate_exchange_rejects_corruption_atomically(
@@ -142,6 +234,38 @@ def test_annotation_aggregate_exchange_rejects_corruption_atomically(
         elif corruption == "observed_at":
             result["observed_at"] = "2030-01-01T00:00:00+00:00"
             payload["observed_at"] = result["observed_at"]
+            result["content_sha256"] = content_hash(payload)
+        elif corruption == "snapshot_group_key":
+            payload["image_snapshot"][0]["group_key"] = "tampered-group"
+            payload["evidence_sha256"] = content_hash(
+                {
+                    "definition_sha256": payload["definition_sha256"],
+                    "images": payload["image_snapshot"],
+                    "observations": payload["observation_snapshot"],
+                    "excluded_proposals_by_status": payload["excluded_proposals_by_status"],
+                }
+            )
+            payload["provenance"]["evidence_sha256"] = payload["evidence_sha256"]
+            result["content_sha256"] = content_hash(payload)
+        elif corruption == "group_unit_key":
+            payload["groups"][0]["unit_key"] = "tampered-group"
+            result["content_sha256"] = content_hash(payload)
+        elif corruption == "image_checksum":
+            payload["image_snapshot"][0]["sha256"] = "0" * 64
+            payload["evidence_sha256"] = content_hash(
+                {
+                    "definition_sha256": payload["definition_sha256"],
+                    "images": payload["image_snapshot"],
+                    "observations": payload["observation_snapshot"],
+                    "excluded_proposals_by_status": payload["excluded_proposals_by_status"],
+                }
+            )
+            payload["provenance"]["evidence_sha256"] = payload["evidence_sha256"]
+            result["content_sha256"] = content_hash(payload)
+        elif corruption == "workflow_provenance":
+            result["workflow_node_run_id"] = "missing"
+        elif corruption == "provenance_evidence":
+            payload["provenance"]["evidence_sha256"] = "0" * 64
             result["content_sha256"] = content_hash(payload)
         else:
             payload["groups"][0]["observation_count"] = 999

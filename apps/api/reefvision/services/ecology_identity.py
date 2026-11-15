@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from pydantic import ValidationError as PydanticValidationError
@@ -24,7 +24,7 @@ from reefvision.db.models.ecology_identity_revision import EcologyIdentityRevisi
 from reefvision.db.models.image import ImageAsset
 from reefvision.db.models.label_class import LabelClass
 from reefvision.db.models.mask_annotation import MaskAnnotation
-from reefvision.db.models.project import Project
+from reefvision.db.models.project import Project, utc_now
 from reefvision.domain.ecology_lineage_policy import (
     classify_ecological_unit_level,
     require_chronological_ecological_identity_revisions,
@@ -282,13 +282,26 @@ class EcologyIdentityService:
         # Check the proposed revision against the *entire* append-only history,
         # not just current identities. A case-only correction needs explicit
         # reconciliation instead of creating two apparent physical units.
-        history = self.session.scalars(
-            select(EcologyIdentityRevision).where(EcologyIdentityRevision.project_id == project_id)
+        history = list(
+            self.session.scalars(
+                select(EcologyIdentityRevision).where(
+                    EcologyIdentityRevision.project_id == project_id
+                )
+            )
         )
         try:
             require_unique_ecological_unit_spellings([*history, payload])
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
+        created_at = utc_now()
+        if history:
+            latest_recorded = max(
+                row.created_at.replace(tzinfo=UTC)
+                if row.created_at.tzinfo is None or row.created_at.utcoffset() is None
+                else row.created_at.astimezone(UTC)
+                for row in history
+            )
+            created_at = max(created_at, latest_recorded + timedelta(microseconds=1))
         record = EcologyIdentityRevision(
             project_id=project_id,
             organism_key=key,
@@ -303,6 +316,7 @@ class EcologyIdentityService:
                 if payload.study_assignment is not None
                 else retained_study
             ),
+            created_at=created_at,
         )
         self.session.add(record)
         try:

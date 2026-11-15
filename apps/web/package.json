@@ -45,7 +45,7 @@
     "vitest": "^4.1.11"
   },
   "engines": {
-    "node": ">=22",
+    "node": ">=22 <25",
     "npm": ">=10"
   },
   "allowScripts": {

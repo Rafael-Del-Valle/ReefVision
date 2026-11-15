@@ -1135,7 +1135,11 @@ def import_project_exchange_v1(
             if result_row.result_kind == "annotation_aggregate":
                 aggregates.result_response(result_row)
                 aggregate_validation = aggregates.validate_result(project.id, result_row.id)
-                if not aggregate_validation.current:
+                expected_historical_staleness = bool(aggregate_validation.reasons) and all(
+                    reason.startswith("image_group_key_changed:")
+                    for reason in aggregate_validation.reasons
+                )
+                if not aggregate_validation.current and not expected_historical_staleness:
                     raise ValidationError(
                         "Imported computed aggregate evidence is stale after remapping: "
                         + ", ".join(aggregate_validation.reasons)

@@ -96,6 +96,18 @@ def test_parent_reclassified_to_colony_before_fragment_preserves_workflow(
     )
     assert fragment.status_code == 201, fragment.text
 
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        history = list(
+            session.scalars(
+                select(EcologyIdentityRevision)
+                .where(EcologyIdentityRevision.project_id == project_id)
+                .order_by(EcologyIdentityRevision.created_at)
+            )
+        )
+        assert [row.organism_key for row in history] == ["parent-A", "parent-A", "fragment-A"]
+        assert history[0].created_at < history[1].created_at < history[2].created_at
+
     response = client.get(f"{base}/identity-registry")
     assert response.status_code == 200, response.text
     succeeded, detail = _run_saved_registry(client, project_id)
