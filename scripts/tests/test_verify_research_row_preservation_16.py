@@ -764,3 +764,26 @@ def test_windows_native_junctions_block_research_asset_preservation(
     finally:
         if junction.exists():
             junction.rmdir()
+
+
+def test_windows_ctime_handle_normalization_keeps_all_other_identity_checks() -> None:
+    """A Windows lstat/fstat creation-time mismatch must not become a false HOLD."""
+    scope = runpy.run_path(str(SCRIPT))
+    identity = scope["_asset_handle_state"]
+    full_identity = scope["_asset_state"]
+    fields = {
+        "st_dev": 1,
+        "st_ino": 42,
+        "st_size": 1024,
+        "st_mtime_ns": 2000,
+        "st_ctime_ns": 3000,
+        "st_mode": stat.S_IFREG,
+        "st_nlink": 1,
+    }
+    first = SimpleNamespace(**fields)
+    opened = SimpleNamespace(**{**fields, "st_ctime_ns": 3500})
+    assert identity(first) == identity(opened)
+    assert full_identity(first) != full_identity(opened)
+    for key in ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_mode", "st_nlink"):
+        changed = SimpleNamespace(**{**fields, key: fields[key] + 1})
+        assert identity(first) != identity(changed), key
