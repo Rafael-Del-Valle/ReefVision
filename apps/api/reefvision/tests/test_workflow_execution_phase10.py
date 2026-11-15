@@ -467,6 +467,26 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
+    # A direct consumer replay must also verify the producer's persisted
+    # result declaration. Its payload checksum alone cannot reveal a changed
+    # upstream output summary in this actually executed two-node workflow.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert producer is not None and consumer is not None
+        original_result = dict(producer.result_json or {})
+        summary = original_result.get("outputs")
+        assert isinstance(summary, list) and len(summary) == 1
+        producer.result_json = {
+            **original_result,
+            "outputs": [{**summary[0], "payload_sha256": "0" * 64}],
+        }
+        session.flush()
+        with pytest.raises(ConflictError, match="input contradicts producer output summary"):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
     # This actually executed graph cannot safely reuse a succeeded node if
     # its registered adapter definition disappears (e.g. after an upgrade).
     # Its checksum-valid artifacts do not prove the missing port contracts.
