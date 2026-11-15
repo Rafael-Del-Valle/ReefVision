@@ -43,6 +43,17 @@ NONCOPLANAR_CLOSED_LOOP_PARAMS = {
     "surface_trace_vertex_paths": [[0, 1, 2, 3, 0]],
 }
 
+# A source-planar bow-tie is built from valid indexed triangle edges.
+# Its two nonadjacent perimeter segments cross in their interiors; the
+# perimeter alone must not be treated as a biological cross-section.
+PROPER_CROSSING_CLOSED_LOOP_PARAMS = {
+    **PARAMS,
+    "vertices": [[-1, -1, 0], [1, 1, 0], [-1, 1, 0], [1, -1, 0]],
+    "faces": [[0, 1, 2], [0, 2, 3]],
+    "surface_trace_vertex_paths": [[0, 1, 2, 3, 0]],
+}
+
+
 # The second calibrated segment is real, but adding it to the first is
 # beyond float precision. The standalone API and saved workflow must retain
 # the individual edge length and report the unresolved cumulative waypoint.
@@ -448,6 +459,7 @@ def test_closed_surface_loop_measures_perimeter_once_with_a_unique_closure_turn(
     assert trace["is_closed_surface_loop"] is True
     assert trace["closed_loop_source_exact_coplanarity"] is True
     assert trace["closed_loop_source_noncoplanar_waypoint_offsets"] == []
+    assert trace["closed_loop_source_proper_crossing_segment_pairs"] == []
     assert trace["vertex_indices"] == [0, 1, 2, 0]
     assert trace["edge_count"] == 3
     assert trace["segment_lengths_m"] == pytest.approx([scale, sqrt(2) * scale, scale])
@@ -519,10 +531,51 @@ def test_closed_trace_exact_xyz_planarity_audit_is_order_invariant(
     assert trace["is_closed_surface_loop"] is True
     assert trace["closed_loop_source_exact_coplanarity"] is False
     assert trace["closed_loop_source_noncoplanar_waypoint_offsets"] == [3]
+    assert trace["closed_loop_source_proper_crossing_segment_pairs"] is None
     assert "closed_surface_trace_exact_source_noncoplanarity" in trace["qc_warnings"]
     assert "closed_surface_trace_not_verified_anatomical_contour" in trace["qc_warnings"]
     assert trace["human_review_verified"] is False
     assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
+
+
+@pytest.mark.parametrize(
+    ("path", "expected_pairs"),
+    [
+        ([0, 1, 2, 3, 0], [[0, 2]]),
+        ([0, 3, 2, 1, 0], [[1, 3]]),
+        ([1, 2, 3, 0, 1], [[1, 3]]),
+    ],
+)
+def test_exact_planar_loop_reports_proper_source_segment_crossings(
+    path: list[int], expected_pairs: list[list[int]]
+) -> None:
+    trace = measure_mesh_preview(
+        **{
+            **PROPER_CROSSING_CLOSED_LOOP_PARAMS,
+            "surface_trace_vertex_paths": [path],
+        }
+    )["surface_edge_traces"][0]
+    assert trace["is_closed_surface_loop"] is True
+    assert trace["closed_loop_source_exact_coplanarity"] is True
+    assert trace["closed_loop_source_proper_crossing_segment_pairs"] == expected_pairs
+    assert "closed_surface_trace_source_proper_self_intersection" in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+    assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
+
+
+def test_proper_source_crossing_audit_uses_non_xy_reference_plane() -> None:
+    # Every vertex has constant X. Projection to YZ must retain the crossing.
+    points = [(0.0, float(x), float(y)) for x, y, _ in PROPER_CROSSING_CLOSED_LOOP_PARAMS["vertices"]]
+    traces = mesh_surface_edge_traces(
+        points=points,
+        faces=PROPER_CROSSING_CLOSED_LOOP_PARAMS["faces"],
+        vertex_paths=[[0, 1, 2, 3, 0]],
+        scale=0.01,
+        scale_uncertainty=0.1,
+    )
+    assert traces is not None
+    assert traces[0]["closed_loop_source_exact_coplanarity"] is True
+    assert traces[0]["closed_loop_source_proper_crossing_segment_pairs"] == [[0, 2]]
 
 
 def test_closed_trace_collinear_source_waypoints_have_undefined_reference_plane() -> None:
@@ -544,6 +597,7 @@ def test_closed_trace_collinear_source_waypoints_have_undefined_reference_plane(
     trace = traces[0]
     assert trace["closed_loop_source_exact_coplanarity"] is None
     assert trace["closed_loop_source_noncoplanar_waypoint_offsets"] == []
+    assert trace["closed_loop_source_proper_crossing_segment_pairs"] is None
     assert "closed_surface_trace_source_reference_plane_undefined" in trace["qc_warnings"]
     assert trace["human_review_verified"] is False
 
@@ -1191,6 +1245,7 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
         "closed_loop_reverse",
         "closed_loop_rotated",
         "noncoplanar_closed_loop",
+        "proper_crossing_closed_loop",
         "resolution_limited",
         "inconsistent_winding",
         "nonmanifold",
@@ -1225,6 +1280,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             "surface_trace_vertex_paths": [[1, 2, 0, 1]],
         },
         "noncoplanar_closed_loop": NONCOPLANAR_CLOSED_LOOP_PARAMS,
+        "proper_crossing_closed_loop": PROPER_CROSSING_CLOSED_LOOP_PARAMS,
         "resolution_limited": RESOLUTION_LIMITED_PARAMS,
         "inconsistent_winding": INCONSISTENT_WINDING_PARAMS,
         "nonmanifold": NONMANIFOLD_EDGE_PARAMS,
@@ -1346,19 +1402,26 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "closed_loop_reverse",
         "closed_loop_rotated",
         "noncoplanar_closed_loop",
+        "proper_crossing_closed_loop",
     ):
         assert trace["is_closed_surface_loop"] is True
         assert trace["turn_angles_deg"][-1] is None
         if case == "noncoplanar_closed_loop":
             assert trace["closed_loop_source_exact_coplanarity"] is False
             assert trace["closed_loop_source_noncoplanar_waypoint_offsets"] == [3]
+            assert trace["closed_loop_source_proper_crossing_segment_pairs"] is None
             assert "closed_surface_trace_exact_source_noncoplanarity" in trace["qc_warnings"]
+        elif case == "proper_crossing_closed_loop":
+            assert trace["closed_loop_source_exact_coplanarity"] is True
+            assert trace["closed_loop_source_proper_crossing_segment_pairs"] == [[0, 2]]
+            assert "closed_surface_trace_source_proper_self_intersection" in trace["qc_warnings"]
         else:
             expected_closing_turn = 135.0 if case == "closed_loop_rotated" else 90.0
             assert trace["turn_angles_deg"][0] == pytest.approx(expected_closing_turn)
             assert trace["total_absolute_geometric_turn_deg"] == pytest.approx(360.0)
             assert trace["closed_loop_source_exact_coplanarity"] is True
             assert trace["closed_loop_source_noncoplanar_waypoint_offsets"] == []
+            assert trace["closed_loop_source_proper_crossing_segment_pairs"] == []
         assert trace["nonadjacent_coincident_waypoint_index_pairs"] == []
         assert "closed_surface_trace_not_verified_anatomical_contour" in trace["qc_warnings"]
         assert trace["human_review_verified"] is False
@@ -1366,6 +1429,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert trace["is_closed_surface_loop"] is False
         assert trace["closed_loop_source_exact_coplanarity"] is None
         assert trace["closed_loop_source_noncoplanar_waypoint_offsets"] == []
+        assert trace["closed_loop_source_proper_crossing_segment_pairs"] is None
         assert trace["turn_angles_deg"][0] is None
         assert trace["turn_angles_deg"][-1] is None
     if case == "ordinary":
