@@ -190,6 +190,16 @@ def _asset_state(info: os.stat_result) -> tuple[int, int, int, int, int, int, in
     )
 
 
+def _asset_mismatch_fields(first: os.stat_result, second: os.stat_result) -> str:
+    """Identify differing metadata categories without exposing research paths or values."""
+    labels = ("device", "inode", "size", "mtime", "ctime", "type", "links")
+    return ",".join(
+        label
+        for label, a, b in zip(labels, _asset_state(first), _asset_state(second))
+        if a != b
+    )
+
+
 def _asset_inventory(
     root: Path,
 ) -> tuple[
@@ -258,7 +268,10 @@ def _asset_inventory(
                     or _is_unsafe_asset_link(path, opened)
                     or _asset_state(opened) != _asset_state(initial)
                 ):
-                    raise ValueError("asset_changed_during_inspection")
+                    raise ValueError(
+                        "asset_changed_during_inspection:"
+                        + _asset_mismatch_fields(initial, opened)
+                    )
                 for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                     digest.update(chunk)
                 end_opened = os.fstat(stream.fileno())
@@ -269,7 +282,12 @@ def _asset_inventory(
                 or _asset_state(initial) != _asset_state(end_opened)
                 or _asset_state(initial) != _asset_state(final)
             ):
-                raise ValueError("asset_changed_during_inspection")
+                raise ValueError(
+                    "asset_changed_during_inspection:"
+                    + _asset_mismatch_fields(initial, end_opened)
+                    + ":"
+                    + _asset_mismatch_fields(initial, final)
+                )
             relative_path = path.relative_to(root).as_posix()
             inventory[relative_path] = digest.hexdigest()
             file_states[relative_path] = _asset_state(final)
