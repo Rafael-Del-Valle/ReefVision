@@ -166,6 +166,22 @@ def verify_succeeded_node_artifacts(
             producer_outputs = producer_result["outputs"]
             if not isinstance(producer_outputs, list):
                 raise ConflictError("Succeeded workflow producer output summary is invalid")
+            # Check the entire producer declaration, not just the artifact
+            # consumed by this node. Forged extra records invalidate lineage.
+            declared_ids = _artifact_ids(producer.output_artifact_ids_json, field="output IDs")
+            summary_ids = [
+                item.get("artifact_id")
+                for item in producer_outputs
+                if isinstance(item, dict) and isinstance(item.get("artifact_id"), str)
+            ]
+            if (
+                len(summary_ids) != len(producer_outputs)
+                or len(summary_ids) != len(declared_ids)
+                or set(summary_ids) != set(declared_ids)
+            ):
+                raise ConflictError(
+                    "Succeeded workflow producer output summary does not match declared outputs"
+                )
             matches = [
                 item
                 for item in producer_outputs
