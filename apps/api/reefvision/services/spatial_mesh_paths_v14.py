@@ -893,7 +893,9 @@ def mesh_surface_edge_traces(
                 source_noncoplanar_waypoint_offsets,
             ) = _closed_loop_exact_source_coplanarity(positions)
             if source_exact_coplanarity is True:
-                proper_crossing_segment_pairs = _closed_loop_source_proper_crossings(positions)
+                proper_crossing_segment_pairs = _closed_loop_source_proper_crossings(
+                    positions
+                )
         geometric_face_incidence_counts = [
             geometric_incidence[(start, end) if start <= end else (end, start)]
             for start, end in pairwise(positions)
