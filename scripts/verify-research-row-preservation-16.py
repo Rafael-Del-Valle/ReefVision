@@ -198,9 +198,10 @@ def _asset_inventory(
             digest = hashlib.sha256()
             with os.fdopen(descriptor, "rb") as stream:
                 opened = os.fstat(stream.fileno())
-                if not stat.S_ISREG(opened.st_mode) or _asset_state(
-                    opened
-                ) != _asset_state(initial):
+                if (
+                    not stat.S_ISREG(opened.st_mode)
+                    or _asset_state(opened) != _asset_state(initial)
+                ):
                     raise ValueError("asset_changed_during_inspection")
                 for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                     digest.update(chunk)
