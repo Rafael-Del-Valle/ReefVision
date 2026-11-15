@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -13,7 +14,9 @@ from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_skeleton_records_api import _seed_mask
 
 
-def _source(client: TestClient) -> tuple[str, dict[str, Any], list[dict[str, int]]]:
+def _source(
+    client: TestClient, calibrated: bool = False
+) -> tuple[str, dict[str, Any], list[dict[str, int]]]:
     mask_id = _seed_mask(client)
     response = client.post(
         f"/api/v1/mask-annotations/{mask_id}/skeleton-analyses",
@@ -21,6 +24,15 @@ def _source(client: TestClient) -> tuple[str, dict[str, Any], list[dict[str, int
     )
     assert response.status_code == 200, response.text
     source = response.json()
+    if calibrated:
+        calibration = client.put(
+            f"/api/v1/images/{source['image_id']}/measurement-calibration",
+            json={"distance_per_pixel": 0.25, "source": "manual_scale_bar", "unit": "mm"},
+        )
+        assert calibration.status_code == 200, calibration.text
+        response = client.post(f"/api/v1/mask-annotations/{mask_id}/skeleton-analyses", json={})
+        assert response.status_code == 200, response.text
+        source = response.json()
     occupied = {(point["x"], point["y"]) for point in source["result"]["final_skeleton_pixels"]}
     proposed = None
     for node in source["result"]["final_graph_nodes"]:
@@ -93,8 +105,11 @@ def _run(client: TestClient, project_id: str, graph: dict[str, Any]) -> dict[str
     return detail.json()
 
 
-def test_saved_branch_preview_matches_api_and_preserves_skeleton(client: TestClient) -> None:
-    project_id, source, points = _source(client)
+@pytest.mark.parametrize("calibrated", [False, True])
+def test_saved_branch_preview_matches_api_and_preserves_skeleton(
+    client: TestClient, calibrated: bool
+) -> None:
+    project_id, source, points = _source(client, calibrated)
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     assert registry.status_code == 200
     definition = next(
@@ -124,7 +139,12 @@ def test_saved_branch_preview_matches_api_and_preserves_skeleton(client: TestCli
     assert payload["evidence_level"] == "proposal_unverified"
     assert payload["review_gate"] == "scientist_review_required"
     assert payload["persistent_change_applied"] is False
-    assert payload["physical_length_computed"] is False
+    assert payload["physical_length_computed"] is calibrated
+    if calibrated:
+        assert payload["calibration"]["calibration_sha256"] == source["calibration_sha256"]
+        assert payload["calibration"]["added_length"] == pytest.approx(0.5)
+    else:
+        assert payload["calibration"] is None
     unchanged = client.get(f"/api/v1/skeleton-analyses/{source['id']}")
     assert unchanged.status_code == 200, unchanged.text
     assert unchanged.json() == source

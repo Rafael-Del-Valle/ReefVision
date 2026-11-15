@@ -201,6 +201,9 @@ def test_frozen_dataset_exports_exact_frames_and_loss_manifest(
             "tentacle__1",
             "tentacle__2",
         ]
+        assert manifest["pose_schema"]["definition"]["edges"] == [
+            {"from_id": "tentacle_1", "to_id": "tentacle_2"}
+        ]
 
         assert len(manifest["annotations"]) == 1
 

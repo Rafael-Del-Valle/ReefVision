@@ -21,13 +21,16 @@ from reefvision.ml.video_tracking import (
     VideoTrackingProgress,
     video_tracking_provider_for_name,
 )
+from reefvision.ml.video_tracking_fusion import fuse_tracked_models
 from reefvision.schemas.georeferenced_observation import BoundingBoxPixels
 from reefvision.schemas.pose_tracking import PoseTemporalAssociationBuildRequest
 from reefvision.services.georeferenced_observations import GeoReferencedObservationService
 from reefvision.services.pose_temporal_tracking import PoseTemporalTrackingService
 from reefvision.services.video_georeferencing import VideoGeoreferencingService
 from reefvision.services.video_georeferencing_readiness import VideoGeoreferencingReadinessService
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.results_packages import sha256_file
 
 LOGGER = logging.getLogger("reefvision.video_tracking")
 PROGRESS_WRITE_INTERVAL_SECONDS = 0.5
@@ -69,6 +72,35 @@ def _project_class_mapping(model: ModelRegistration) -> dict[str, str]:
     return {}
 
 
+def _validate_reefpose_schema_binding(
+    metadata: dict[str, object],
+    pose_landmark_schema: dict[str, object],
+) -> None:
+    """Keep checkpoint landmark order bound to its immutable registration."""
+
+    expected_labels = metadata.get("pose_landmark_labels")
+    actual_labels = pose_landmark_schema.get("expanded_labels")
+    if isinstance(expected_labels, list) and (
+        not isinstance(actual_labels, list)
+        or [str(item) for item in actual_labels] != [str(item) for item in expected_labels]
+    ):
+        raise ValidationError(
+            "ReefPose landmark schema does not match the checkpoint anatomy order"
+        )
+
+    identity_fields = (
+        ("source_pose_schema_id", "schema_id"),
+        ("source_pose_schema_revision", "schema_revision"),
+        ("source_pose_schema_content_hash", "content_hash"),
+    )
+    for source_field, schema_field in identity_fields:
+        expected = metadata.get(source_field)
+        if expected is not None and pose_landmark_schema.get(schema_field) != expected:
+            raise ValidationError(
+                "ReefPose landmark schema identity does not match the checkpoint anatomy"
+            )
+
+
 def _keyframes(
     observations: list[TrackObservation],
     pose_landmark_schema: dict[str, object] | None = None,
@@ -77,6 +109,10 @@ def _keyframes(
         pose_landmark_schema.get("expanded_labels") if pose_landmark_schema is not None else None
     )
     expanded_labels = [str(item) for item in labels_raw] if isinstance(labels_raw, list) else None
+    landmarks_raw = (
+        pose_landmark_schema.get("landmarks") if pose_landmark_schema is not None else None
+    )
+    landmarks = landmarks_raw if isinstance(landmarks_raw, list) else None
 
     keyframes: list[dict[str, object]] = []
     for item in observations:
@@ -87,6 +123,10 @@ def _keyframes(
         }
         if item.pose_uncertainty is not None:
             payload["pose_uncertainty"] = dict(item.pose_uncertainty)
+        if item.mask_polygons:
+            payload["mask_polygons"] = [
+                [list(point) for point in polygon] for polygon in item.mask_polygons
+            ]
         if item.keypoints is not None:
             payload["keypoints"] = [list(point) for point in item.keypoints]
             if expanded_labels is not None:
@@ -129,6 +169,14 @@ def _keyframes(
                             ),
                             "status": "visible" if visible else "absent",
                             "source": "model",
+                            **(
+                                {"landmark_id": str(landmarks[index]["id"])}
+                                if landmarks is not None
+                                and index < len(landmarks)
+                                and isinstance(landmarks[index], dict)
+                                and landmarks[index].get("id")
+                                else {}
+                            ),
                         }
                     )
                 payload["pose_observations"] = pose_observations
@@ -242,6 +290,13 @@ def process_video_tracking_job(
         request = dict(job.request_json)
         video = session.get(VideoAsset, str(request.get("video_id", "")))
         model = session.get(ModelRegistration, str(request.get("model_id", "")))
+        tracking_mode = str(request.get("tracking_mode", "auto"))
+        hybrid = tracking_mode == "hybrid"
+        secondary = (
+            session.get(ModelRegistration, str(request.get("segmentation_model_id", "")))
+            if hybrid
+            else None
+        )
 
         if video is None or model is None or video.project_id != model.project_id:
             job.status = "failed"
@@ -263,10 +318,30 @@ def process_video_tracking_job(
             session.commit()
             return False
 
+        if hybrid and (
+            secondary is None
+            or secondary.project_id != video.project_id
+            or secondary.id == model.id
+            or secondary.task != "segment"
+            or secondary.purpose != "segmenter"
+            or secondary.provider_name != "ultralytics"
+            or model.task != "detect"
+            or model.purpose != "detector"
+            or model.provider_name != "ultralytics"
+            or not bool(request.get("link_detections", True))
+        ):
+            job.status = "failed"
+            job.error_message = (
+                "Hybrid tracking requires a same-project Ultralytics detector and segmenter"
+            )
+            job.completed_at = datetime.now(UTC)
+            session.commit()
+            return False
+
         started_at = datetime.now(UTC)
         job.status = "running"
         job.started_at = started_at
-        job.progress_total = video.frame_count
+        job.progress_total = video.frame_count * (2 if hybrid else 1)
         job.progress_current = 0
         job.error_message = None
         job.result_json = {
@@ -282,13 +357,21 @@ def process_video_tracking_job(
 
         video_path = video.managed_path
         model_path = model.managed_path
+        secondary_model_path = secondary.managed_path if secondary is not None else None
         provider_name = model.provider_name
         class_mapping = _project_class_mapping(model)
+        detector_class_mapping = dict(class_mapping)
+        segmenter_class_mapping = _project_class_mapping(secondary) if secondary is not None else {}
+        for class_id in segmenter_class_mapping.values():
+            class_mapping[f"project:{class_id}"] = class_id
         project_id = video.project_id
         video_id = video.id
+        video_sha256 = video.sha256
         model_id = model.id
-        model_task = model.task
-        raw_pose_landmark_schema = dict(model.metadata_json or {}).get("pose_landmark_schema")
+        model_task = "hybrid" if hybrid else model.task
+        secondary_model_id = secondary.id if secondary is not None else None
+        model_metadata = dict(model.metadata_json or {})
+        raw_pose_landmark_schema = model_metadata.get("pose_landmark_schema")
         pose_landmark_schema = (
             dict(raw_pose_landmark_schema) if isinstance(raw_pose_landmark_schema, dict) else None
         )
@@ -302,7 +385,8 @@ def process_video_tracking_job(
             video.revision += 1
             session.commit()
             return False
-        total_frames = video.frame_count
+        source_frames = video.frame_count
+        total_frames = source_frames * (2 if hybrid else 1)
 
     LOGGER.info(
         "Starting video tracking job %s for video %s with model %s",
@@ -399,6 +483,8 @@ def process_video_tracking_job(
             )
 
     try:
+        if provider_name == "reefpose" and pose_landmark_schema is not None:
+            _validate_reefpose_schema_binding(model_metadata, pose_landmark_schema)
         report_progress(
             VideoTrackingProgress(
                 frames_processed=0,
@@ -440,9 +526,22 @@ def process_video_tracking_job(
         iou = float(request.get("iou", 0.5))
         device = str(request.get("device", "auto"))
 
+        checkpoint_path = resolve_managed_project_path(settings, model_path)
+        source_video_path = resolve_managed_project_path(settings, video_path)
+        # Record actual input hashes for scientific provenance. Existing fake/provider
+        # fixtures may lack managed files and retain their ordinary inference behavior.
+        input_hashes = (
+            {
+                "model_sha256": sha256_file(checkpoint_path),
+                "video_sha256": sha256_file(source_video_path),
+            }
+            if model_task == "pose" and checkpoint_path.is_file() and source_video_path.is_file()
+            else {}
+        )
+
         observations = provider.track(
-            resolve_managed_project_path(settings, model_path),
-            resolve_managed_project_path(settings, video_path),
+            checkpoint_path,
+            source_video_path,
             tracker=tracker_name,
             confidence=confidence,
             iou=iou,
@@ -451,6 +550,53 @@ def process_video_tracking_job(
             on_progress=report_progress,
             should_cancel=should_cancel,
         )
+
+        fusion_report = None
+        if hybrid:
+            if secondary_model_path is None:
+                raise ValidationError("Hybrid segmentation model is missing")
+            first_pass_progress = latest_progress
+
+            def report_segmentation_progress(progress: VideoTrackingProgress) -> None:
+                report_progress(
+                    VideoTrackingProgress(
+                        frames_processed=source_frames + progress.frames_processed,
+                        detections_seen=(
+                            first_pass_progress.detections_seen + progress.detections_seen
+                        ),
+                        tracked_observations_seen=(
+                            first_pass_progress.tracked_observations_seen
+                            + progress.tracked_observations_seen
+                        ),
+                        unique_tracks_seen=(
+                            first_pass_progress.unique_tracks_seen + progress.unique_tracks_seen
+                        ),
+                        stage=(
+                            "segmentation_" + progress.stage
+                            if progress.stage != "tracking"
+                            else "tracking"
+                        ),
+                    )
+                )
+
+            segmenter_observations = provider.track(
+                resolve_managed_project_path(settings, secondary_model_path),
+                resolve_managed_project_path(settings, video_path),
+                tracker=tracker_name,
+                confidence=confidence,
+                iou=iou,
+                device=device,
+                link_detections=True,
+                on_progress=report_segmentation_progress,
+                should_cancel=should_cancel,
+            )
+            observations, fusion_report = fuse_tracked_models(
+                observations,
+                segmenter_observations,
+                detector_class_map=detector_class_mapping,
+                segmenter_class_map=segmenter_class_mapping,
+                minimum_iou=float(request.get("hybrid_match_iou", 0.5)),
+            )
 
         with factory() as session:
             live_job = session.get(Job, job_id)
@@ -527,6 +673,7 @@ def process_video_tracking_job(
             )
 
             created = 0
+            pose_outputs: dict[str, str] = {}
             observation_count = 0
             pose_landmark_track_count = 0
             pose_temporal_observation_count = 0
@@ -572,6 +719,12 @@ def process_video_tracking_job(
                         "link_detections": link_detections,
                         "mean_confidence": mean(item.confidence for item in ordered),
                         "model_task": model_task,
+                        "tracking_mode": tracking_mode if tracking_mode != "auto" else model.task,
+                        "segmentation_model_id": secondary_model_id,
+                        "mask_observation_count": sum(bool(item.mask_polygons) for item in ordered),
+                        "hybrid_matched_track_pairs": (
+                            fusion_report.matched_track_pairs if fusion_report is not None else None
+                        ),
                         "pose_tracking": model_task == "pose",
                         "pose_keypoint_count": max(
                             (len(item.keypoints or ()) for item in ordered),
@@ -588,6 +741,8 @@ def process_video_tracking_job(
                 # We need the persistent ReefVision track UUID before
                 # constructing GeoReferencedObservation.track_id.
                 session.flush()
+                if model_task == "pose":
+                    pose_outputs[track.id] = canonical_json_sha256(track.keyframes_json)
 
                 if (
                     model_task == "pose"
@@ -626,7 +781,7 @@ def process_video_tracking_job(
             video.status = "tracked"
             video.revision += 1
             job.status = "succeeded"
-            job.progress_current = video.frame_count
+            job.progress_current = total_frames
             job.result_json = {
                 **dict(job.result_json or {}),
                 "stage": "completed",
@@ -642,7 +797,39 @@ def process_video_tracking_job(
                 "project_id": project_id,
                 "video_id": video_id,
                 "model_id": model_id,
+                **(
+                    {
+                        "pose_input_hashes": input_hashes,
+                        "pose_track_hashes": pose_outputs,
+                        "source_video_sha256": video_sha256,
+                        "pose_inference_protocol": {
+                            "tracker": tracker_name,
+                            "confidence": confidence,
+                            "iou": iou,
+                            "link_detections": link_detections,
+                            "device": device,
+                            "minimum_frames": minimum_frames,
+                            "provider": provider.provider_id,
+                            "version": provider.provider_version,
+                        },
+                    }
+                    if model_task == "pose"
+                    else {}
+                ),
                 "model_task": model_task,
+                "tracking_mode": tracking_mode if tracking_mode != "auto" else model.task,
+                "segmentation_model_id": secondary_model_id,
+                "hybrid_fusion": (
+                    {
+                        "matched_track_pairs": fusion_report.matched_track_pairs,
+                        "detector_observations": fusion_report.detector_observations,
+                        "segmenter_observations": fusion_report.segmenter_observations,
+                        "fused_observations": fusion_report.fused_observations,
+                        "masked_observations": fusion_report.masked_observations,
+                    }
+                    if fusion_report is not None
+                    else None
+                ),
                 "pose_tracking": model_task == "pose",
                 "pose_landmark_track_count": pose_landmark_track_count,
                 "pose_temporal_observation_count": pose_temporal_observation_count,

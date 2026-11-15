@@ -173,6 +173,7 @@ class PreferredTelemetrySource:
             {
                 "sample_index": base_sample.sample_index,
                 "time_s": time_s,
+                "wall_clock": srt.wall_clock if srt is not None else None,
                 "frame_number": srt.frame_number if srt is not None else None,
                 "latitude": latitude,
                 "longitude": longitude,

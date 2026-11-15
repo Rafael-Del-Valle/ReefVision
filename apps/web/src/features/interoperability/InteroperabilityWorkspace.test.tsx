@@ -73,9 +73,22 @@ describe("InteroperabilityWorkspace", () => {
       application_version: "1.0.0",
       manifest_sha256: "a".repeat(64),
       project_name: "Portable reef",
-      section_counts: { images: 3, workflow_graphs: 2 },
+      section_counts: {
+        images: 3,
+        workflow_graphs: 2,
+        coral_growth_records: 1,
+      },
       included_media_count: 3,
       included_generated_artifact_count: 4,
+      unavailable_assets: [
+        {
+          kind: "model",
+          record_id: "checkpoint",
+          imported_record_id: null,
+          name: "reefpose.pt",
+          sha256: "c".repeat(64),
+        },
+      ],
       warnings: [],
       errors: [],
     });
@@ -145,6 +158,10 @@ describe("InteroperabilityWorkspace", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Yes")).toBeInTheDocument();
     expect(screen.getByText("Generated artifacts: 4")).toBeInTheDocument();
+    expect(screen.getByText("Record inventory")).toBeInTheDocument();
+    expect(screen.getByText("coral growth records · 1")).toBeInTheDocument();
+    expect(screen.getByText("Unavailable assets · 1")).toBeInTheDocument();
+    expect(screen.getByText("reefpose.pt (model) ·")).toBeInTheDocument();
 
     fireEvent.change(
       screen.getByLabelText("Imported project name (optional)"),

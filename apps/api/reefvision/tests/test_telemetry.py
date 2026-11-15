@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -27,6 +28,8 @@ def test_modern_fields_and_missing_values() -> None:
     assert (first.horizontal_speed_mps, first.vertical_speed_mps) == (3.5, -0.5)
     assert first.iso == 100 and first.shutter_speed_s == 0.001
     assert first.focal_length_mm == 24 and first.digital_zoom_ratio == 1.5
+    assert first.wall_clock == datetime(2026, 1, 16, 15, 49, 54)
+    assert samples[1].wall_clock is None
     assert samples[1].latitude == 25.126 and samples[1].relative_altitude_m == 13
     assert samples[1].gimbal_pitch_deg is None and samples[1].frame_number is None
     assert samples[1].iso is None and samples[1].absolute_altitude_m is None

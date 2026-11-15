@@ -1,12 +1,24 @@
-﻿import L from "leaflet";
+import {
+  currentComponentUncertaintyText,
+  vectorColor,
+  type CurrentVector,
+} from "../environmental-context/currentVectors";
+import L from "leaflet";
 import { useEffect, useMemo, useRef } from "react";
 
 import "leaflet/dist/leaflet.css";
 
 import type { GeoReferencedObservationSummary } from "./videoGeoreferencedObservationsApi";
+import type { CurrentStreamline } from "../environmental-context/environmentalContextApi";
 
 interface OpenStreetMapViewProps {
   observations: GeoReferencedObservationSummary[];
+  currentVectors?: CurrentVector[];
+  currentStreamlines?: CurrentStreamline[];
+  showCurrentArrows?: boolean;
+  showCurrentSpeedHeatmap?: boolean;
+  showBasemap?: boolean;
+  mapExtent?: [[number, number], [number, number]];
   activeObservationId?: string | null;
   selectedObservationId?: string | null;
   showTrackLines?: boolean;
@@ -15,6 +27,8 @@ interface OpenStreetMapViewProps {
   onTileFailure?: () => void;
 }
 
+const NO_CURRENTS: CurrentVector[] = [];
+const NO_STREAMLINES: CurrentStreamline[] = [];
 const DEFAULT_CENTER: L.LatLngExpression = [0, 0];
 const DEFAULT_ZOOM = 2;
 
@@ -29,6 +43,12 @@ function observationPosition(
 
 export function OpenStreetMapView({
   observations,
+  currentVectors = NO_CURRENTS,
+  currentStreamlines = NO_STREAMLINES,
+  showCurrentArrows = true,
+  showCurrentSpeedHeatmap = false,
+  showBasemap = true,
+  mapExtent,
   activeObservationId = null,
   selectedObservationId = null,
   showTrackLines = true,
@@ -85,6 +105,17 @@ export function OpenStreetMapView({
       attributionControl: true,
     }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
 
+    // Panels can be resized or hidden independently of the browser window.
+    const resizeObserver =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver(([entry]) => {
+            if (entry?.contentRect.width && entry.contentRect.height) {
+              map.invalidateSize({ pan: false, debounceMoveend: true });
+            }
+          });
+    resizeObserver?.observe(containerRef.current);
+
     const tiles = L.tileLayer(
       "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
       {
@@ -110,7 +141,7 @@ export function OpenStreetMapView({
       }
     });
 
-    tiles.addTo(map);
+    if (showBasemap) tiles.addTo(map);
 
     const scaleControl = L.control
       .scale({
@@ -143,9 +174,10 @@ export function OpenStreetMapView({
     return () => {
       overlayRef.current = null;
       mapRef.current = null;
+      resizeObserver?.disconnect();
       map.remove();
     };
-  }, []);
+  }, [showBasemap]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -157,7 +189,80 @@ export function OpenStreetMapView({
 
     overlays.clearLayers();
 
-    const positions = observations.map(observationPosition);
+    const drawableCurrents = currentVectors.filter(
+      (vector) => Math.abs(vector.latitude) <= 85,
+    );
+    const positions: L.LatLngTuple[] = [
+      ...observations.map(observationPosition),
+      ...drawableCurrents.map(
+        (vector) => [vector.latitude, vector.longitude] as L.LatLngTuple,
+      ),
+      ...currentStreamlines.flatMap((line) =>
+        line.points
+          .filter((point) => Math.abs(point.latitude) <= 85)
+          .map((point) => [point.latitude, point.longitude] as L.LatLngTuple),
+      ),
+    ];
+    for (const line of currentStreamlines) {
+      const linePositions = line.points
+        .filter((point) => Math.abs(point.latitude) <= 85)
+        .map((point) => [point.latitude, point.longitude] as L.LatLngTuple);
+      if (linePositions.length < 2) continue;
+      L.polyline(linePositions, {
+        color: "#34d6ff",
+        weight: 2,
+        opacity: 0.8,
+        dashArray: "6 4",
+      })
+        .bindTooltip(
+          `Modeled current streamline; ${line.length_m.toFixed(1)} m numerical path; ${line.termination}`,
+        )
+        .addTo(overlays);
+    }
+    for (const vector of drawableCurrents) {
+      if (showCurrentSpeedHeatmap) {
+        // A sample-centered intensity marker, not an interpolated raster or
+        // an uncertainty footprint. Constant pixel radius avoids implying
+        // a physical area of influence or model-cell resolution.
+        L.circleMarker([vector.latitude, vector.longitude], {
+          radius: 18,
+          color: vectorColor(vector.speed),
+          weight: 0,
+          fillColor: vectorColor(vector.speed),
+          fillOpacity: 0.35,
+          interactive: false,
+        }).addTo(overlays);
+      }
+      if (!showCurrentArrows) continue;
+      const arrow = document.createElement("div");
+      arrow.textContent = vector.bearing === null ? "•" : "↑";
+      arrow.style.cssText = `font-size:28px;line-height:32px;text-align:center;color:${vectorColor(vector.speed)};transform:rotate(${vector.bearing ?? 0}deg);`;
+      const tooltip = document.createElement("span");
+      tooltip.textContent = [
+        `${vector.speed.toFixed(3)} m/s`,
+        vector.bearing === null
+          ? "stationary"
+          : `${vector.bearing.toFixed(1)}° toward true north`,
+        vector.sourceKind,
+        vector.dataset,
+        vector.observedAt,
+        `${vector.depthM} m (${vector.depthReference})`,
+        `east QC ${vector.eastQc}; north QC ${vector.northQc}`,
+        "vector speed/direction and position uncertainty not estimated",
+        currentComponentUncertaintyText("East", vector.eastUncertainty),
+        currentComponentUncertaintyText("North", vector.northUncertainty),
+      ].join("; ");
+      L.marker([vector.latitude, vector.longitude], {
+        icon: L.divIcon({
+          html: arrow,
+          className: "current-vector-marker",
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+        }),
+      })
+        .bindTooltip(tooltip)
+        .addTo(overlays);
+    }
 
     if (showTrackLines) {
       for (const [trackId, trackObservations] of tracks) {
@@ -225,7 +330,9 @@ export function OpenStreetMapView({
         .addTo(overlays);
     }
 
-    if (positions.length === 1) {
+    if (mapExtent) {
+      map.fitBounds(mapExtent);
+    } else if (positions.length === 1) {
       map.setView(positions[0], 18);
     } else if (positions.length > 1) {
       map.fitBounds(L.latLngBounds(positions), {
@@ -235,6 +342,12 @@ export function OpenStreetMapView({
     }
   }, [
     activeObservationId,
+    currentVectors,
+    currentStreamlines,
+    showCurrentArrows,
+    showCurrentSpeedHeatmap,
+    showBasemap,
+    mapExtent,
     observations,
     selectedObservationId,
     selectedUncertaintyRadiusM,

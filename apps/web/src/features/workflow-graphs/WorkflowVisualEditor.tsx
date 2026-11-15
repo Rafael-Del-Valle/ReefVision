@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type {
+  ModelRegistration,
+  RuntimeProviderStatus,
+} from "../../api/client";
+import type { PoseTrainingDataset } from "../video/poseActiveLearningApi";
+import type {
   WorkflowGraphPlan,
   WorkflowNodeDefinition,
   WorkflowRunDetail,
@@ -43,6 +48,9 @@ interface WorkflowVisualEditorProps {
   onChange: (graph: Record<string, unknown>) => void;
   plan?: WorkflowGraphPlan | null;
   runDetail?: WorkflowRunDetail | null;
+  poseDatasets?: PoseTrainingDataset[];
+  registeredModels?: ModelRegistration[];
+  runtimeStatuses?: RuntimeProviderStatus[];
 }
 
 interface PendingConnection {
@@ -140,6 +148,9 @@ export function WorkflowVisualEditor({
   onChange,
   plan = null,
   runDetail = null,
+  poseDatasets = [],
+  registeredModels = [],
+  runtimeStatuses = [],
 }: WorkflowVisualEditorProps) {
   const graph = asGraph(rawGraph);
   const [pending, setPending] = useState<PendingConnection | null>(null);
@@ -354,6 +365,72 @@ export function WorkflowVisualEditor({
     });
   }
 
+  function setTrainingConfigParameter(key: string, value: unknown): void {
+    const current = selectedNode?.parameters?.training_config;
+    setSelectedParameter("training_config", {
+      ...(current && !Array.isArray(current) && typeof current === "object"
+        ? (current as Record<string, unknown>)
+        : {}),
+      [key]: value,
+    });
+  }
+
+  function setPoseProvider(providerId: "reefpose" | "ultralytics"): void {
+    const parameters = selectedNode?.parameters ?? {};
+    const rawConfig = parameters.training_config;
+    const config =
+      rawConfig && !Array.isArray(rawConfig) && typeof rawConfig === "object"
+        ? (rawConfig as Record<string, unknown>)
+        : {};
+    const common = {
+      epochs: Number(config.epochs ?? 50),
+      batch: Number(config.batch ?? 8),
+      workers: Number(config.workers ?? 2),
+    };
+    replaceSelectedParameters(
+      providerId === "reefpose"
+        ? {
+            ...parameters,
+            provider_id: "reefpose",
+            architecture: "reefpose-s",
+            training_config: {
+              ...common,
+              input_height: Number(config.input_height ?? 256),
+              input_width: Number(config.input_width ?? config.imgsz ?? 256),
+              learning_rate: Number(config.learning_rate ?? 0.0003),
+              weight_decay: Number(config.weight_decay ?? 0.0001),
+            },
+          }
+        : {
+            ...parameters,
+            provider_id: "ultralytics",
+            architecture: "yolo11n-pose.yaml",
+            training_config: {
+              ...common,
+              imgsz: Number(config.imgsz ?? config.input_width ?? 640),
+            },
+          },
+    );
+  }
+
+  function setConnectedInitialModel(modelId: string): void {
+    if (!selectedNode) return;
+    const edge = currentGraph.edges.find(
+      (item) =>
+        item.target_node_id === selectedNode.node_id &&
+        item.target_port_id === "initial_model",
+    );
+    if (!edge) return;
+    emit({
+      ...currentGraph,
+      nodes: currentGraph.nodes.map((node) =>
+        node.node_id === edge.source_node_id
+          ? { ...node, parameters: { ...node.parameters, model_id: modelId } }
+          : node,
+      ),
+    });
+  }
+
   function applyParameters(): void {
     if (!selectedNode) return;
     try {
@@ -407,6 +484,60 @@ export function WorkflowVisualEditor({
         ]),
       )
     : [];
+  const selectedTrainingConfig =
+    selectedNode?.parameters?.training_config &&
+    !Array.isArray(selectedNode.parameters.training_config) &&
+    typeof selectedNode.parameters.training_config === "object"
+      ? (selectedNode.parameters.training_config as Record<string, unknown>)
+      : {};
+  const selectedProvider = String(
+    selectedNode?.parameters?.provider_id ?? "ultralytics",
+  );
+  const datasetEdge = selectedNode
+    ? currentGraph.edges.find(
+        (edge) =>
+          edge.target_node_id === selectedNode.node_id &&
+          edge.target_port_id === "dataset",
+      )
+    : undefined;
+  const datasetNode = datasetEdge
+    ? currentGraph.nodes.find(
+        (node) => node.node_id === datasetEdge.source_node_id,
+      )
+    : undefined;
+  const selectedDataset = poseDatasets.find(
+    (dataset) =>
+      dataset.id === String(datasetNode?.parameters?.dataset_id ?? ""),
+  );
+  const initialModelEdge = selectedNode
+    ? currentGraph.edges.find(
+        (edge) =>
+          edge.target_node_id === selectedNode.node_id &&
+          edge.target_port_id === "initial_model",
+      )
+    : undefined;
+  const initialModelNode = initialModelEdge
+    ? currentGraph.nodes.find(
+        (node) => node.node_id === initialModelEdge.source_node_id,
+      )
+    : undefined;
+  const compatibleModels = registeredModels.filter((model) => {
+    if (model.task !== "pose" || model.provider_name !== selectedProvider)
+      return false;
+    if (!selectedDataset) return false;
+    const rawSchema = model.metadata_json.pose_landmark_schema;
+    if (!rawSchema || Array.isArray(rawSchema) || typeof rawSchema !== "object")
+      return false;
+    const schema = rawSchema as Record<string, unknown>;
+    return (
+      schema.schema_id === selectedDataset.pose_schema_id &&
+      Number(schema.schema_revision) === selectedDataset.pose_schema_revision &&
+      schema.content_hash === selectedDataset.pose_schema_content_hash
+    );
+  });
+  const pytorchRuntime = runtimeStatuses.find(
+    (runtime) => runtime.runtime_id === "pytorch",
+  );
 
   return (
     <div className="workflow-editor-shell">
@@ -695,6 +826,22 @@ export function WorkflowVisualEditor({
               {selectedNode.node_type === "pose_model_training" && (
                 <div className="workflow-parameter-grid">
                   <label>
+                    Training provider
+                    <select
+                      value={selectedProvider}
+                      onChange={(event) =>
+                        setPoseProvider(
+                          event.target.value as "reefpose" | "ultralytics",
+                        )
+                      }
+                    >
+                      <option value="reefpose">
+                        ReefPose — native PyTorch
+                      </option>
+                      <option value="ultralytics">Ultralytics pose</option>
+                    </select>
+                  </label>
+                  <label>
                     Initialization mode
                     <select
                       value={String(
@@ -736,13 +883,180 @@ export function WorkflowVisualEditor({
                         setSelectedParameter("architecture", event.target.value)
                       }
                     >
-                      {["n", "s", "m", "l", "x"].map((size) => (
-                        <option key={size} value={`yolo11${size}-pose.yaml`}>
-                          YOLO11 {size.toUpperCase()} Pose
-                        </option>
-                      ))}
+                      {selectedProvider === "reefpose" ? (
+                        <option value="reefpose-s">ReefPose-S</option>
+                      ) : (
+                        ["n", "s", "m", "l", "x"].map((size) => (
+                          <option key={size} value={`yolo11${size}-pose.yaml`}>
+                            YOLO11 {size.toUpperCase()} Pose
+                          </option>
+                        ))
+                      )}
                     </select>
                   </label>
+                  <label>
+                    Device
+                    <select
+                      value={String(selectedNode.parameters?.device ?? "auto")}
+                      onChange={(event) =>
+                        setSelectedParameter("device", event.target.value)
+                      }
+                    >
+                      <option value="auto">Automatic</option>
+                      <option value="cpu">CPU</option>
+                      <option value="cuda">CUDA</option>
+                    </select>
+                  </label>
+                  <label>
+                    Precision
+                    <select
+                      value={String(
+                        selectedNode.parameters?.precision ?? "fp32",
+                      )}
+                      onChange={(event) =>
+                        setSelectedParameter("precision", event.target.value)
+                      }
+                    >
+                      <option value="fp32">FP32</option>
+                      <option value="amp">Automatic mixed precision</option>
+                    </select>
+                  </label>
+                  {selectedProvider === "reefpose" && (
+                    <p className="annotation-helper">
+                      PyTorch{" "}
+                      {pytorchRuntime?.package_version ?? "runtime unknown"} ·{" "}
+                      {pytorchRuntime?.cuda_available
+                        ? `CUDA ready: ${pytorchRuntime.cuda_device_name ?? "device detected"}`
+                        : "CUDA unavailable; choose CPU or install a compatible runtime."}
+                    </p>
+                  )}
+                  {selectedDataset && (
+                    <p className="annotation-helper">
+                      {selectedDataset.name} · {selectedDataset.item_count}{" "}
+                      observations · schema revision{" "}
+                      {selectedDataset.pose_schema_revision} · hash{" "}
+                      {selectedDataset.pose_schema_content_hash.slice(0, 12)}…
+                    </p>
+                  )}
+                  {String(
+                    selectedNode.parameters?.initialization_mode ?? "random",
+                  ) === "registered_model" && (
+                    <label>
+                      Compatible checkpoint
+                      <select
+                        value={String(
+                          initialModelNode?.parameters?.model_id ?? "",
+                        )}
+                        onChange={(event) =>
+                          setConnectedInitialModel(event.target.value)
+                        }
+                        disabled={!initialModelNode}
+                      >
+                        <option value="">
+                          Choose an exact-schema checkpoint
+                        </option>
+                        {compatibleModels.map((model) => (
+                          <option key={model.id} value={model.id}>
+                            {model.display_name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {["epochs", "batch", "workers"].map((key) => (
+                    <label key={key}>
+                      {key === "epochs"
+                        ? "Epochs"
+                        : key === "batch"
+                          ? "Batch size"
+                          : "Data workers"}
+                      <input
+                        type="number"
+                        min={key === "workers" ? 0 : 1}
+                        value={Number(
+                          selectedTrainingConfig[key] ??
+                            (key === "epochs" ? 50 : key === "batch" ? 8 : 2),
+                        )}
+                        onChange={(event) =>
+                          setTrainingConfigParameter(
+                            key,
+                            Number(event.target.value),
+                          )
+                        }
+                      />
+                    </label>
+                  ))}
+                  {selectedProvider === "reefpose" ? (
+                    <>
+                      <label>
+                        Input height
+                        <input
+                          type="number"
+                          min={32}
+                          step={32}
+                          value={Number(
+                            selectedTrainingConfig.input_height ?? 256,
+                          )}
+                          onChange={(event) =>
+                            setTrainingConfigParameter(
+                              "input_height",
+                              Number(event.target.value),
+                            )
+                          }
+                        />
+                      </label>
+                      <label>
+                        Input width
+                        <input
+                          type="number"
+                          min={32}
+                          step={32}
+                          value={Number(
+                            selectedTrainingConfig.input_width ?? 256,
+                          )}
+                          onChange={(event) =>
+                            setTrainingConfigParameter(
+                              "input_width",
+                              Number(event.target.value),
+                            )
+                          }
+                        />
+                      </label>
+                      <label>
+                        Learning rate
+                        <input
+                          type="number"
+                          min={0.000001}
+                          step={0.0001}
+                          value={Number(
+                            selectedTrainingConfig.learning_rate ?? 0.0003,
+                          )}
+                          onChange={(event) =>
+                            setTrainingConfigParameter(
+                              "learning_rate",
+                              Number(event.target.value),
+                            )
+                          }
+                        />
+                      </label>
+                    </>
+                  ) : (
+                    <label>
+                      Image size
+                      <input
+                        type="number"
+                        min={32}
+                        step={32}
+                        value={Number(selectedTrainingConfig.imgsz ?? 640)}
+                        onChange={(event) =>
+                          setTrainingConfigParameter(
+                            "imgsz",
+                            Number(event.target.value),
+                          )
+                        }
+                      />
+                    </label>
+                  )}
                   <p className="annotation-helper">
                     From scratch uses the selected configuration and the frozen
                     dataset's landmark schema, without weights. Registered model
@@ -753,13 +1067,112 @@ export function WorkflowVisualEditor({
                 </div>
               )}
 
+              {selectedNode.node_type === "pose_model_evaluation" && (
+                <div className="workflow-parameter-grid">
+                  <label>
+                    Evaluation device
+                    <select
+                      value={String(selectedNode.parameters?.device ?? "auto")}
+                      onChange={(event) =>
+                        setSelectedParameter("device", event.target.value)
+                      }
+                    >
+                      <option value="auto">Automatic</option>
+                      <option value="cpu">CPU</option>
+                      <option value="cuda">CUDA</option>
+                    </select>
+                  </label>
+                  <label>
+                    PCK thresholds
+                    <input
+                      aria-label="PCK thresholds"
+                      value={String(
+                        (
+                          selectedNode.parameters?.pck_thresholds as
+                            number[] | undefined
+                        )?.join(", ") ?? "0.05, 0.1, 0.2",
+                      )}
+                      onChange={(event) =>
+                        setSelectedParameter(
+                          "pck_thresholds",
+                          event.target.value
+                            .split(",")
+                            .map((value) => Number(value.trim()))
+                            .filter((value) => Number.isFinite(value)),
+                        )
+                      }
+                    />
+                  </label>
+                  <label>
+                    Confidence thresholds
+                    <input
+                      aria-label="Confidence thresholds"
+                      value={String(
+                        (
+                          selectedNode.parameters?.confidence_thresholds as
+                            number[] | undefined
+                        )?.join(", ") ?? "0, 0.25, 0.5, 0.75, 0.9",
+                      )}
+                      onChange={(event) =>
+                        setSelectedParameter(
+                          "confidence_thresholds",
+                          event.target.value
+                            .split(",")
+                            .map((value) => Number(value.trim()))
+                            .filter((value) => Number.isFinite(value)),
+                        )
+                      }
+                    />
+                  </label>
+                  <label>
+                    Calibration bins
+                    <input
+                      type="number"
+                      min={1}
+                      max={1000}
+                      value={Number(
+                        selectedNode.parameters?.calibration_bins ?? 10,
+                      )}
+                      onChange={(event) =>
+                        setSelectedParameter(
+                          "calibration_bins",
+                          Number(event.target.value),
+                        )
+                      }
+                    />
+                  </label>
+                  <p className="annotation-helper">
+                    Connect one frozen verified pose dataset and one or more
+                    registered pose model nodes. Runtime schema, checkpoint, and
+                    leakage validation is enforced before execution.
+                  </p>
+                </div>
+              )}
+
               {parameterKeys.length > 0 && (
                 <div className="workflow-parameter-grid">
                   {parameterKeys
                     .filter(
                       (key) =>
                         selectedNode.node_type !== "pose_model_training" ||
-                        !["initialization_mode", "architecture"].includes(key),
+                        ![
+                          "provider_id",
+                          "initialization_mode",
+                          "architecture",
+                          "device",
+                          "precision",
+                          "training_config",
+                        ].includes(key),
+                    )
+                    .filter(
+                      (key) =>
+                        selectedNode.node_type !== "pose_model_evaluation" ||
+                        ![
+                          "device",
+                          "pck_thresholds",
+                          "confidence_thresholds",
+                          "calibration_bins",
+                        ].includes(key),
                     )
                     .map((key) => {
                       const fallback =

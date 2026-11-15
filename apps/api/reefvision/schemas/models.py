@@ -188,6 +188,8 @@ class RuntimeProviderStatusResponse(BaseModel):
     status: str
     supports_cpu: bool
     supports_cuda: bool
+    cuda_available: bool | None = None
+    cuda_device_name: str | None = None
     notes: list[str]
 
 
