@@ -36,6 +36,31 @@ No unmerged 1.1–1.5 branch is blended into this work. Existing
 graphs/runs, typed dimensions, provenance, explicit researcher-review gates
 and retries are preserved; this is inspector safety, **not** a workflow node.
 
+## Full-CI regression and pre-0037 stamp hardening (2026-11-15)
+
+Exact-head backend CI `43705800419` exposed two obsolete test expectations:
+they still required `incomplete_qc_schema_family` for a valid 0038
+review-event table without the later 0041 bulk registry. The test fixtures
+now distinguish legitimate staged QC schemas from interrupted migrations,
+including mixed scientific/QC inventories. The existing read-only inspector
+contract is unchanged for legitimate 0038–0041 stages.
+
+A separate real safety gap was identified: QC review events with a numeric
+0036-or-earlier stamp escaped the prior `0037`-only pre-creation guard, and
+bulk registries before 0037 also escaped the `0037`–`0040` guard.
+The inspector now checks **all four-digit numeric predecessor revisions**
+before 0038 (review events) or before 0041 (bulk requests). It does not infer
+a stage from a malformed, mixed or nonnumeric stamp. Eight database-backed
+cases cover legitimate QC stages, impossible pre-creation combinations,
+repeatable read-only inspections and byte-identical researcher data.
+A valid staged database is **never** automatically authorized for migration.
+
+This is a diagnostic/preflight correctness change, not a new scientific
+analysis or Workflow Builder node. Existing independently tested, executable
+saved `project_source -> qc_review_queue` graphs, typed evidence and
+researcher review gates are preserved. A successful lint/test CI result is
+required before claiming the new cases passed.
+
 ## Outstanding release gate
 
 Reconcile the 1.1/1.6 revision-number collision by an independently reviewed,
