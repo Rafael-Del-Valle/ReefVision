@@ -198,9 +198,8 @@ def _asset_inventory(
             digest = hashlib.sha256()
             with os.fdopen(descriptor, "rb") as stream:
                 opened = os.fstat(stream.fileno())
-                if (
-                    not stat.S_ISREG(opened.st_mode)
-                    or _asset_state(opened) != _asset_state(initial)
+                if not stat.S_ISREG(opened.st_mode) or _asset_state(opened) != _asset_state(
+                    initial
                 ):
                     raise ValueError("asset_changed_during_inspection")
                 for chunk in iter(lambda: stream.read(1024 * 1024), b""):
@@ -221,9 +220,7 @@ def _asset_inventory(
     return inventory, file_identities, file_states
 
 
-def _assert_asset_tree_unchanged(
-    root: Path, initial_states: dict[str, tuple[int, ...]]
-) -> None:
+def _assert_asset_tree_unchanged(root: Path, initial_states: dict[str, tuple[int, ...]]) -> None:
     """Reject a source or candidate tree changed after its hashing pass."""
     if root.is_symlink() or not root.is_dir():
         raise ValueError("asset_changed_after_inventory")
@@ -244,9 +241,8 @@ def _assert_asset_tree_unchanged(
                 raise ValueError("asset_symlink_not_allowed")
             info = path.lstat()
             relative_path = path.relative_to(root).as_posix()
-            if (
-                not stat.S_ISREG(info.st_mode)
-                or initial_states.get(relative_path) != _asset_state(info)
+            if not stat.S_ISREG(info.st_mode) or initial_states.get(relative_path) != _asset_state(
+                info
             ):
                 raise ValueError("asset_changed_after_inventory")
             observed.add(relative_path)
