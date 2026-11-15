@@ -86,14 +86,17 @@ def inspect(path: Path) -> dict:
             else []
         )
         inventory = {}
-        for name in sorted({name for family in FAMILIES.values() for name in family}):
+        for name in sorted({name for family in FAMILIES.values() for name in family} | set(SCIENCE_EXTENSIONS)):
             if objects.get(name) != "table":
                 inventory[name] = {"present": False}
                 continue
             columns = [row[1] for row in db.execute(f'PRAGMA table_info("{name}")')]
             count = db.execute(f'SELECT COUNT(*) FROM "{name}"').fetchone()[0]
             inventory[name] = {"present": True, "columns": columns, "rows": count}
-        scientific = any(inventory[name]["present"] for name in FAMILIES["scientific"])
+        scientific = any(
+            inventory[name]["present"]
+            for name in (*FAMILIES["scientific"], *SCIENCE_EXTENSIONS)
+        )
         qc = any(inventory[name]["present"] for name in FAMILIES["qc"])
         lineage = (
             "ambiguous"
@@ -151,6 +154,20 @@ def inspect(path: Path) -> dict:
             present = [name for name in names if inventory[name]["present"]]
             if present and len(present) != len(names):
                 warnings.append(f"incomplete_{family}_schema_family")
+        # Environmental 0040/0042 records are identifiable even when a
+        # partial restore has lost all 0038-0039 base scientific tables.
+        # Do not report an incomplete optional extension on a valid 0037 DB.
+        present_extensions = {name for name in SCIENCE_EXTENSIONS if inventory[name]["present"]}
+        if present_extensions and not any(
+            inventory[name]["present"] for name in FAMILIES["scientific"]
+        ):
+            warnings.append("scientific_extension_without_base_lineage")
+        analysis_pair = {
+            "environmental_analysis_definitions",
+            "environmental_analysis_results",
+        }
+        if present_extensions & analysis_pair and not analysis_pair <= present_extensions:
+            warnings.append("incomplete_environmental_analysis_schema_family")
         if lineage == "ambiguous":
             warnings.append("mixed_scientific_and_qc_lineage")
         if "0038" in revisions:
