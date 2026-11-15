@@ -740,6 +740,43 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
+    # Older saved workflows may lack an optional producer output summary.
+    # A legitimate consumer input must not conceal a forged sibling artifact
+    # owned by the consumer, even if both artifact checksums remain valid.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert producer is not None and consumer is not None
+        original_ids = producer.output_artifact_ids_json
+        sibling_ids = consumer.output_artifact_ids_json
+        assert isinstance(original_ids, list) and len(original_ids) == 1
+        assert isinstance(sibling_ids, list) and len(sibling_ids) == 1
+        producer.output_artifact_ids_json = [*original_ids, sibling_ids[0]]
+        producer.result_json = {
+            key: value
+            for key, value in dict(producer.result_json or {}).items()
+            if key != "outputs"
+        }
+        session.flush()
+        with pytest.raises(ConflictError, match="producer declares output owned by another node"):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+        with pytest.raises(ConflictError, match="producer declares output owned by another node"):
+            _input_artifacts(
+                session,
+                run_id=str(run["id"]),
+                step_node_id="images",
+                bindings=[
+                    WorkflowPlanInputBinding(
+                        target_port_id="project",
+                        source_node_id="project",
+                        source_port_id="project",
+                        data_type="project_reference",
+                    )
+                ],
+            )
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
     # This actually executed graph cannot safely reuse a succeeded node if
     # its registered adapter definition disappears (e.g. after an upgrade).
     # Its checksum-valid artifacts do not prove the missing port contracts.
