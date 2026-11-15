@@ -1259,17 +1259,24 @@ def mesh_surface_edge_traces(
         source_planar_centroid_mesh_units: list[float] | None = None
         calibrated_planar_centroid_m: list[float] | None = None
         if source_is_simple_planar_perimeter is True:
-            source_planar_centroid_mesh_units = _closed_loop_source_planar_centroid(positions)
+            source_planar_centroid_mesh_units = _closed_loop_source_planar_centroid(
+                positions
+            )
             if source_planar_centroid_mesh_units is None:
-                warnings.append("closed_surface_trace_source_planar_centroid_unrepresentable")
+                warnings.append(
+                    "closed_surface_trace_source_planar_centroid_unrepresentable"
+                )
             else:
                 calibrated_center = [
-                    coordinate * scale for coordinate in source_planar_centroid_mesh_units
+                    coordinate * scale
+                    for coordinate in source_planar_centroid_mesh_units
                 ]
                 if all(isfinite(value) for value in calibrated_center) and all(
                     calibrated != 0 or source == 0
                     for calibrated, source in zip(
-                        calibrated_center, source_planar_centroid_mesh_units, strict=True
+                        calibrated_center,
+                        source_planar_centroid_mesh_units,
+                        strict=True,
                     )
                 ):
                     calibrated_planar_centroid_m = calibrated_center
