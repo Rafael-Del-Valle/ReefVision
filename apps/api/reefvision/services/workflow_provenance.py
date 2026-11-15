@@ -198,15 +198,13 @@ def verify_succeeded_node_artifacts(
     # run-detail lineage validation. A changed adapter type must not reuse
     # artifacts produced under a different checksum-pinned graph node.
     graph_nodes = graph.graph_json.get("nodes")
-    matching_nodes = (
-        [
-            item
-            for item in graph_nodes
-            if isinstance(item, dict) and item.get("node_id") == node_run.node_id
-        ]
-        if isinstance(graph_nodes, list)
-        else []
-    )
+    if not isinstance(graph_nodes, list):
+        raise ConflictError("Succeeded workflow node graph has invalid nodes")
+    matching_nodes = [
+        item
+        for item in graph_nodes
+        if isinstance(item, dict) and item.get("node_id") == node_run.node_id
+    ]
     if len(matching_nodes) != 1 or matching_nodes[0].get("node_type") != node_run.node_type:
         raise ConflictError("Succeeded workflow node identity does not match saved graph")
 
