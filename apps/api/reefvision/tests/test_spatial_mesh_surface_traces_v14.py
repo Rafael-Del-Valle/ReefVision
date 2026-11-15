@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from itertools import pairwise
 from math import sqrt
 from typing import Any, cast
 
@@ -413,7 +414,8 @@ def test_reuse_fraction_withholds_overflowed_source_total() -> None:
     assert fractions is not None
     assert fractions[0] == 0.0
     assert fractions[-1] == 1.0
-    assert all(0 <= a < b <= 1 for a, b in zip(fractions, fractions[1:], strict=True))
+    assert all(0 <= a < b <= 1 for a, b in pairwise(fractions))
+    assert trace["source_arc_fraction_resolution_loss_segment_indices"] == []
     assert "surface_trace_source_length_unrepresentable" in trace["qc_warnings"]
     assert "surface_trace_reuse_fraction_unrepresentable" in trace["qc_warnings"]
     assert trace["human_review_verified"] is False
@@ -755,6 +757,7 @@ def test_source_arc_fractions_preserve_tiny_waypoint_underflow_and_scale(scale: 
         [0.0, 1e-250, 1.0], abs=0
     )
     assert "surface_trace_source_arc_fraction_resolution_loss" not in trace["qc_warnings"]
+    assert trace["source_arc_fraction_resolution_loss_segment_indices"] == []
     assert trace["human_review_verified"] is False
 
 
@@ -769,7 +772,25 @@ def test_source_arc_fraction_resolution_loss_is_explicit_not_fabricated_progress
     )[0]
     assert trace["source_segment_lengths_mesh_units"][0] > 0
     assert trace["source_cumulative_arc_length_fractions"] == [0.0, 0.0, 1.0]
+    assert trace["source_arc_fraction_resolution_loss_segment_indices"] == [0]
     assert "surface_trace_source_arc_fraction_resolution_loss" in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+
+
+@pytest.mark.parametrize("scale", [0.01, 2.0])
+def test_source_arc_fraction_localizes_late_positive_edge_roundoff(scale: float) -> None:
+    trace = mesh_surface_edge_traces(
+        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1e-17, 0.0)],
+        [[0, 1, 2]],
+        [[0, 1, 2]],
+        scale,
+        0.1,
+    )[0]
+    assert trace["source_segment_lengths_mesh_units"][1] > 0
+    assert trace["source_cumulative_arc_length_fractions"] == [0.0, 1.0, 1.0]
+    assert trace["source_arc_fraction_resolution_loss_segment_indices"] == [1]
+    assert "surface_trace_source_arc_fraction_resolution_loss" in trace["qc_warnings"]
+    assert "zero_length_edge_on_surface_trace" not in trace["qc_warnings"]
     assert trace["human_review_verified"] is False
 
 
@@ -798,6 +819,7 @@ def test_genuinely_zero_source_trace_retains_exact_zero_intervals() -> None:
     assert trace["reused_geometric_segment_source_length_mesh_units"] == 0.0
     assert trace["reused_geometric_segment_fraction_of_trace"] is None
     assert trace["source_cumulative_arc_length_fractions"] is None
+    assert trace["source_arc_fraction_resolution_loss_segment_indices"] == []
     assert "surface_trace_source_arc_fractions_undefined_zero_total" in trace["qc_warnings"]
     assert trace["segment_length_scale_only_intervals_m"] == [[0.0, 0.0]]
     assert trace["cumulative_length_scale_only_intervals_m"] == [
@@ -969,10 +991,23 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         len(fractions) == len(trace["vertex_indices"])
         and fractions[0] == 0.0
         and fractions[-1] == 1.0
-        and all(0 <= a <= b <= 1 for a, b in zip(fractions, fractions[1:], strict=True))
+        and all(0 <= a <= b <= 1 for a, b in pairwise(fractions))
     )
+    loss_indices = trace["source_arc_fraction_resolution_loss_segment_indices"]
+    assert all(0 <= index < trace["edge_count"] for index in loss_indices)
+    assert fractions is not None or loss_indices == []
+    if fractions is not None:
+        assert all(
+            trace["source_segment_lengths_mesh_units"][index] > 0
+            and fractions[index] == fractions[index + 1]
+            for index in loss_indices
+        )
     if case == "ordinary":
         assert fractions == pytest.approx([0.0, 1 / (1 + sqrt(2)), 1.0])
+        assert loss_indices == []
+    if case == "resolution_limited":
+        assert loss_indices == [1]
+        assert "surface_trace_source_arc_fraction_resolution_loss" in trace["qc_warnings"]
     assert all(
         0 <= earlier < later - 1 < len(trace["vertex_indices"])
         for earlier, later in trace["nonadjacent_coincident_waypoint_index_pairs"]
