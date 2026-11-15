@@ -178,6 +178,27 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
+    # The saved graph and planner did not request this producer parameter.
+    # Neither direct producer reuse nor consumer-only recovery may accept
+    # an unplanned input that could change scientific output on replay.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert producer is not None and consumer is not None
+        producer.parameters_json = {
+            **dict(producer.parameters_json or {}),
+            "unplanned_science_filter": "verified",
+        }
+        session.flush()
+        with pytest.raises(ConflictError, match="node has unplanned resolved parameters"):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=producer)
+        with pytest.raises(
+            ConflictError, match="input producer has unplanned resolved parameters"
+        ):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
     # The saved graph omitted the image-status filter, so Workflow Builder
     # materialized its registered default. Altering only that resolved value
     # would change the scientific image selection on recovery without changing
