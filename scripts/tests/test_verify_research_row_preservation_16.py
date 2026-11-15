@@ -785,5 +785,6 @@ def test_windows_ctime_handle_normalization_keeps_all_other_identity_checks() ->
     assert identity(first) == identity(opened)
     assert full_identity(first) != full_identity(opened)
     for key in ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_mode", "st_nlink"):
-        changed = SimpleNamespace(**{**fields, key: fields[key] + 1})
+        changed_value = stat.S_IFDIR if key == "st_mode" else fields[key] + 1
+        changed = SimpleNamespace(**{**fields, key: changed_value})
         assert identity(first) != identity(changed), key
