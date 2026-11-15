@@ -16,6 +16,7 @@ import hashlib
 import json
 import os
 import sqlite3
+import stat
 from contextlib import ExitStack
 from pathlib import Path
 
@@ -135,7 +136,21 @@ def _fingerprint(
     return rows, sha.hexdigest()
 
 
-def _asset_inventory(root: Path) -> tuple[dict[str, str], set[tuple[int, int]]]:
+def _asset_state(info: os.stat_result) -> tuple[int, int, int, int, int, int]:
+    """Identity and mutation-sensitive metadata for an offline regular file."""
+    return (
+        info.st_dev,
+        info.st_ino,
+        info.st_size,
+        info.st_mtime_ns,
+        info.st_ctime_ns,
+        stat.S_IFMT(info.st_mode),
+    )
+
+
+def _asset_inventory(
+    root: Path,
+) -> tuple[dict[str, str], set[tuple[int, int]], dict[str, tuple[int, ...]]]:
     """Hash regular research assets in bounded chunks without following symlinks.
 
     File names are used only for an in-process relative-path comparison and
@@ -149,6 +164,7 @@ def _asset_inventory(root: Path) -> tuple[dict[str, str], set[tuple[int, int]]]:
 
     inventory: dict[str, str] = {}
     file_identities: set[tuple[int, int]] = set()
+    file_states: dict[str, tuple[int, ...]] = {}
     for parent, directories, filenames in os.walk(
         root, topdown=True, followlinks=False, onerror=_on_walk_error
     ):
@@ -161,24 +177,80 @@ def _asset_inventory(root: Path) -> tuple[dict[str, str], set[tuple[int, int]]]:
             path = Path(parent) / filename
             if path.is_symlink():
                 raise ValueError("asset_symlink_not_allowed")
-            if not path.is_file():
+            initial = path.lstat()
+            if not stat.S_ISREG(initial.st_mode):
                 raise ValueError("asset_not_regular_file")
-            initial = path.stat()
+            # Open the checked path rather than following a symlink introduced
+            # after lstat. Windows lacks O_NOFOLLOW, so the descriptor/path
+            # identity and type comparisons below are mandatory there.
+            flags = (
+                os.O_RDONLY
+                | getattr(os, "O_BINARY", 0)
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_NONBLOCK", 0)
+            )
+            try:
+                descriptor = os.open(path, flags)
+            except OSError as exc:
+                if path.is_symlink():
+                    raise ValueError("asset_symlink_not_allowed") from exc
+                raise ValueError("asset_changed_during_inspection") from exc
             digest = hashlib.sha256()
-            with path.open("rb") as stream:
+            with os.fdopen(descriptor, "rb") as stream:
+                opened = os.fstat(stream.fileno())
+                if not stat.S_ISREG(opened.st_mode) or _asset_state(
+                    opened
+                ) != _asset_state(initial):
+                    raise ValueError("asset_changed_during_inspection")
                 for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                     digest.update(chunk)
-            final = path.stat()
-            if (initial.st_size, initial.st_mtime_ns, initial.st_ino) != (
-                final.st_size,
-                final.st_mtime_ns,
-                final.st_ino,
+                end_opened = os.fstat(stream.fileno())
+            final = path.lstat()
+            if (
+                not stat.S_ISREG(final.st_mode)
+                or _asset_state(initial) != _asset_state(end_opened)
+                or _asset_state(initial) != _asset_state(final)
             ):
                 raise ValueError("asset_changed_during_inspection")
-            inventory[path.relative_to(root).as_posix()] = digest.hexdigest()
+            relative_path = path.relative_to(root).as_posix()
+            inventory[relative_path] = digest.hexdigest()
+            file_states[relative_path] = _asset_state(final)
             if final.st_ino:
                 file_identities.add((final.st_dev, final.st_ino))
-    return inventory, file_identities
+    return inventory, file_identities, file_states
+
+
+def _assert_asset_tree_unchanged(
+    root: Path, initial_states: dict[str, tuple[int, ...]]
+) -> None:
+    """Reject a source or candidate tree changed after its hashing pass."""
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("asset_changed_after_inventory")
+
+    def _on_walk_error(exc: OSError) -> None:
+        raise ValueError("asset_changed_after_inventory") from exc
+
+    observed: set[str] = set()
+    for parent, directories, filenames in os.walk(
+        root, topdown=True, followlinks=False, onerror=_on_walk_error
+    ):
+        for directory in directories:
+            if (Path(parent) / directory).is_symlink():
+                raise ValueError("asset_symlink_not_allowed")
+        for filename in filenames:
+            path = Path(parent) / filename
+            if path.is_symlink():
+                raise ValueError("asset_symlink_not_allowed")
+            info = path.lstat()
+            relative_path = path.relative_to(root).as_posix()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or initial_states.get(relative_path) != _asset_state(info)
+            ):
+                raise ValueError("asset_changed_after_inventory")
+            observed.add(relative_path)
+    if observed != initial_states.keys():
+        raise ValueError("asset_changed_after_inventory")
 
 
 def _compare_assets(before_root: Path, after_root: Path) -> dict:
@@ -194,10 +266,15 @@ def _compare_assets(before_root: Path, after_root: Path) -> dict:
         or after_real in before_real.parents
     ):
         raise ValueError("asset_roots_must_be_independent")
-    baseline, baseline_ids = _asset_inventory(before_root)
+    baseline, baseline_ids, baseline_states = _asset_inventory(before_root)
     if not baseline:
         raise ValueError("no_research_assets_in_baseline")
-    candidate, candidate_ids = _asset_inventory(after_root)
+    candidate, candidate_ids, candidate_states = _asset_inventory(after_root)
+    # A baseline file can be rewritten while the candidate is being hashed.
+    # Check both trees once more before allowing even a preservation-only PASS.
+    # This is a bounded mutation detector, not a filesystem snapshot.
+    _assert_asset_tree_unchanged(before_root, baseline_states)
+    _assert_asset_tree_unchanged(after_root, candidate_states)
     if baseline_ids & candidate_ids:
         raise ValueError("asset_copies_share_hardlinks")
     missing = sum(path not in candidate for path in baseline)
