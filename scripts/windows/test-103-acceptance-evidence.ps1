@@ -10,7 +10,7 @@ $fixture = Join-Path ([System.IO.Path]::GetTempPath()) ("reefvision-103-evidence
 New-Item -ItemType Directory -Path $fixture -ErrorAction Stop | Out-Null
 try {
     $sample = Join-Path $fixture 'camera test artifact.msi'
-    $bytes = [byte[]](0, 1, 2, 127, 128, 255)
+    $bytes = [byte[]](208, 207, 17, 224, 161, 177, 26, 225, 0, 1, 2, 127, 128, 255)
     [System.IO.File]::WriteAllBytes($sample, $bytes)
     $sha = '0123456789abcdef0123456789abcdef01234567'
     $raw = & $collector -CandidateSha $sha.ToUpperInvariant() -MsiPath $sample
@@ -20,7 +20,7 @@ try {
     $expectedHash = (Get-FileHash -LiteralPath $sample -Algorithm SHA256).Hash.ToLowerInvariant()
     $msi = @($record.artifacts | Where-Object { $_.kind -eq 'msi' })
     $cab = @($record.artifacts | Where-Object { $_.kind -eq 'cab' })
-    if ($msi.Count -ne 1 -or $msi[0].status -ne 'hashed' -or $msi[0].sha256 -cne $expectedHash -or $msi[0].bytes -ne $bytes.Length) {
+    if ($msi.Count -ne 1 -or $msi[0].status -ne 'hashed' -or $msi[0].headerCheck -ne 'magic_only' -or $msi[0].sha256 -cne $expectedHash -or $msi[0].bytes -ne $bytes.Length) {
         throw 'MSI artifact evidence does not match the input bytes.'
     }
     if ($cab.Count -ne 1 -or $cab[0].status -ne 'not_provided') { throw 'Missing CAB was not labeled as unprovided.' }
@@ -29,12 +29,12 @@ try {
     }
     # Both installer artifact kinds must be independently hashed; neither implies install success.
     $cabSample = Join-Path $fixture 'camera cabinet.cab'
-    $cabBytes = [byte[]](255, 0, 17, 34, 51)
+    $cabBytes = [byte[]](77, 83, 67, 70, 255, 0, 17, 34, 51)
     [System.IO.File]::WriteAllBytes($cabSample, $cabBytes)
     $withCab = (& $collector -CandidateSha $sha -MsiPath $sample -CabPath $cabSample | Out-String | ConvertFrom-Json)
     $cabEvidence = @($withCab.artifacts | Where-Object { $_.kind -eq 'cab' })
     $expectedCabHash = (Get-FileHash -LiteralPath $cabSample -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($cabEvidence.Count -ne 1 -or $cabEvidence[0].status -ne 'hashed' -or
+    if ($cabEvidence.Count -ne 1 -or $cabEvidence[0].status -ne 'hashed' -or $cabEvidence[0].headerCheck -ne 'magic_only' -or
         $cabEvidence[0].sha256 -cne $expectedCabHash -or $cabEvidence[0].bytes -ne $cabBytes.Length) {
         throw 'CAB artifact evidence does not match the input bytes.'
     }
@@ -64,7 +64,7 @@ try {
     # A changed binary must produce different evidence; this protects against
     # accidentally reusing a stale hash or hashing the wrong artifact path.
     $originalHash = $msi[0].sha256
-    [System.IO.File]::WriteAllBytes($sample, [byte[]](0, 1, 2, 127, 128, 254))
+    [System.IO.File]::WriteAllBytes($sample, [byte[]](208, 207, 17, 224, 161, 177, 26, 225, 0, 1, 2, 127, 128, 254))
     $changed = (& $collector -CandidateSha $sha -MsiPath $sample | Out-String | ConvertFrom-Json)
     $changedMsi = @($changed.artifacts | Where-Object { $_.kind -eq 'msi' })
     $changedHash = (Get-FileHash -LiteralPath $sample -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -138,6 +138,26 @@ try {
         } catch { $mislabeledRejected = $true }
         if (-not $mislabeledRejected) { throw "Arbitrary binary was incorrectly accepted as $artifactKind evidence." }
     }
+    # Renaming an unrelated executable or truncated binary to .MSI/.CAB
+    # must not yield a supposedly hashed installer artifact. These samples
+    # have valid extensions but invalid container signatures.
+    $invalidHeaders = @(
+        @{ argument = 'MsiPath'; name = 'renamed-executable.msi'; bytes = [byte[]](77, 90, 0, 0, 0, 0, 0, 0) }
+        @{ argument = 'MsiPath'; name = 'truncated-installer.msi'; bytes = [byte[]](208, 207, 17) }
+        @{ argument = 'CabPath'; name = 'renamed-executable.cab'; bytes = [byte[]](77, 90, 0, 0, 0) }
+        @{ argument = 'CabPath'; name = 'truncated-cabinet.cab'; bytes = [byte[]](77, 83, 67) }
+    )
+    foreach ($invalidHeader in $invalidHeaders) {
+        $invalidPath = Join-Path $fixture $invalidHeader.name
+        [System.IO.File]::WriteAllBytes($invalidPath, $invalidHeader.bytes)
+        $arguments = @{ CandidateSha = $sha }
+        $arguments[$invalidHeader.argument] = $invalidPath
+        $headerRejected = $false
+        try { $null = & $collector @arguments 2>&1 } catch { $headerRejected = $true }
+        if (-not $headerRejected) {
+            throw "Invalid installer signature was incorrectly accepted: $($invalidHeader.name)"
+        }
+    }
     $directoryRejected = $false
     try { $null = & $collector -CandidateSha $sha -CabPath $fixture 2>&1 } catch { $directoryRejected = $true }
     if (-not $directoryRejected) { throw 'Directory was incorrectly accepted as a CAB artifact.' }
@@ -168,7 +188,7 @@ try {
         Remove-Item Function:\Get-Command -ErrorAction SilentlyContinue
         $env:PATH = $oldPath
     }
-    Write-Output 'PASS: SHA validation, stable MSI/CAB handle hashes, mutable-writer rejection, linked-path checks where supported, safe GPU discovery, and evidence limitations.'
+    Write-Output 'PASS: SHA validation, MSI/CAB header checks, stable handle hashes, mutable-writer rejection, linked-path checks where supported, safe GPU discovery, and evidence limitations.'
 } finally {
     Remove-Item -LiteralPath $fixture -Recurse -Force -ErrorAction SilentlyContinue
 }

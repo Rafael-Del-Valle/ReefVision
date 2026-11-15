@@ -50,6 +50,24 @@ function Get-ArtifactEvidence([string]$Path, [string]$Kind) {
     )
     try {
         $bytes = $stream.Length
+        # Validate the actual installer container signature, not the extension
+        # alone. This is only a magic-byte check; it is NOT MSI/CAB structure,
+        # Authenticode, install, or WebView2 verification. Read from the same
+        # locked handle that will be hashed to prevent header/hash races.
+        $expectedMagic = if ($Kind -eq 'msi') {
+            [byte[]](0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1)
+        } else {
+            [byte[]](0x4D, 0x53, 0x43, 0x46)
+        }
+        if ($bytes -lt $expectedMagic.Length) {
+            throw "$Kind artifact is too short for an installer container header."
+        }
+        foreach ($expectedByte in $expectedMagic) {
+            if ($stream.ReadByte() -ne [int]$expectedByte) {
+                throw "$Kind artifact does not have the expected installer container header."
+            }
+        }
+        $stream.Position = 0
         $hasher = [System.Security.Cryptography.SHA256]::Create()
         try {
             $sha256 = ([BitConverter]::ToString($hasher.ComputeHash($stream))).Replace('-', '').ToLowerInvariant()
@@ -62,6 +80,7 @@ function Get-ArtifactEvidence([string]$Path, [string]$Kind) {
     return [pscustomobject]@{
         kind = $Kind
         status = 'hashed'
+        headerCheck = 'magic_only'
         path = $file.FullName
         bytes = $bytes
         sha256 = $sha256
@@ -119,6 +138,7 @@ $os = Get-CimInstance Win32_OperatingSystem
     nvidia = $gpu
     limitations = @(
         'Read-only inventory; does not prove installation, GUI, training, or scientific acceptance.',
+        'MSI/CAB magic-byte checks do not prove package structure, signature trust, or installer validity.',
         'WebView2 registry detection is advisory; absence does not prove runtime is unavailable.',
         'GPU inventory uses trusted Windows driver paths only; missing or failed nvidia-smi is not GPU acceptance.',
         'No file contents or scientific datasets are uploaded.'
