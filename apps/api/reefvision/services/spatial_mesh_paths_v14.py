@@ -587,13 +587,22 @@ def mesh_surface_edge_traces(
 
     traces: list[dict[str, Any]] = []
     for vertices in vertex_paths:
+        # A closed surface loop explicitly repeats only its initial vertex at
+        # the last waypoint. Repeating any intermediate index remains invalid.
+        is_closed_surface_loop = (
+            isinstance(vertices, list) and len(vertices) >= 4 and vertices[0] == vertices[-1]
+        )
+        distinct_vertices = vertices[:-1] if is_closed_surface_loop else vertices
         if (
             not isinstance(vertices, list)
             or not 2 <= len(vertices) <= 128
             or any(type(i) is not int or i < 0 or i >= len(points) for i in vertices)
-            or len(set(vertices)) != len(vertices)
+            or len(set(distinct_vertices)) != len(distinct_vertices)
         ):
-            raise ValueError("Surface traces require 2-128 distinct existing vertex indices")
+            raise ValueError(
+                "Surface traces require distinct existing indices, except one closing "
+                "return after three distinct vertices (2-128 waypoints)"
+            )
         edges = [(min(a, b), max(a, b)) for a, b in pairwise(vertices)]
         if any(edge not in incidence for edge in edges):
             raise ValueError("Consecutive surface trace vertices must share a triangle edge")
@@ -664,7 +673,15 @@ def mesh_surface_edge_traces(
             trace_adjacency[first][second] = source_length
             trace_adjacency[second][first] = source_length
         turn_angles_deg = _route_turn_angles(points, vertices, trace_adjacency)
-        interior_turn_angles = turn_angles_deg[1:-1]
+        if is_closed_surface_loop:
+            # Measure the return-to-start turn once, at waypoint zero; the
+            # duplicated final waypoint has no independent anatomical turn.
+            turn_angles_deg[0] = _route_turn_angles(
+                points, [vertices[-2], vertices[0], vertices[1]], trace_adjacency
+            )[1]
+            interior_turn_angles = turn_angles_deg[:-1]
+        else:
+            interior_turn_angles = turn_angles_deg[1:-1]
         valid_turn_angles = [angle for angle in interior_turn_angles if angle is not None]
         maximum_turn_angle_deg = max(valid_turn_angles, default=None)
         total_absolute_geometric_turn_deg = (
@@ -826,6 +843,8 @@ def mesh_surface_edge_traces(
             and edge_orientations[edge][0] == edge_orientations[edge][1]
         ]
         warnings = ["caller_selected_surface_trace_not_anatomical_centerline"]
+        if is_closed_surface_loop:
+            warnings.append("closed_surface_trace_not_verified_anatomical_contour")
         if source_trace_length_mesh_units is None:
             warnings.append("surface_trace_source_length_unrepresentable")
         if source_cumulative_arc_length_fractions is None:
@@ -869,6 +888,9 @@ def mesh_surface_edge_traces(
             for later in range(2, len(positions))
             for earlier in range(later - 1)
             if positions[earlier] == positions[later]
+            and not (
+                is_closed_surface_loop and earlier == 0 and later == len(positions) - 1
+            )
         ]
         if nonadjacent_coincident_waypoint_index_pairs:
             warnings.append("nonadjacent_coincident_surface_trace_vertices")
@@ -952,6 +974,7 @@ def mesh_surface_edge_traces(
                 "trace_type": "caller_selected_mesh_surface_edges",
                 "biological_validation_status": "not_verified_anatomical_centerline",
                 "human_review_verified": False,
+                "is_closed_surface_loop": is_closed_surface_loop,
                 "vertex_indices": list(vertices),
                 "nonadjacent_coincident_waypoint_index_pairs": (
                     nonadjacent_coincident_waypoint_index_pairs
