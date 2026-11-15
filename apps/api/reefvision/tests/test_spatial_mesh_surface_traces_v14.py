@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from itertools import pairwise
-from math import sqrt
+from math import pi, sqrt
 from typing import Any, cast
 
 import pytest
@@ -494,6 +494,11 @@ def test_simple_planar_footprint_is_scale_qualified_and_order_invariant(
     assert trace["closed_loop_planar_enclosed_area_scale_only_interval_m2"] == pytest.approx(
         [0.0000405, 0.0000605]
     )
+    # Independent source-polygon reference for a right isosceles triangle.
+    # Compactness is 4*pi*A/P^2, independent of calibration and path winding.
+    assert trace["closed_loop_source_planar_isoperimetric_quotient"] == pytest.approx(
+        2 * pi / (2 + sqrt(2)) ** 2
+    )
     assert trace["human_review_verified"] is False
 
 
@@ -504,6 +509,10 @@ def test_planar_footprint_non_xy_plane_and_full_scale_uncertainty() -> None:
     assert trace["closed_loop_planar_enclosed_area_m2"] == pytest.approx(0.0003)
     assert trace["closed_loop_planar_enclosed_area_scale_only_interval_m2"] == pytest.approx(
         [0.0, 0.0012]
+    )
+    # The non-XY triangle has area 3 and source perimeter 5 + sqrt(13).
+    assert trace["closed_loop_source_planar_isoperimetric_quotient"] == pytest.approx(
+        12 * pi / (5 + sqrt(13)) ** 2
     )
     assert trace["human_review_verified"] is False
 
@@ -524,6 +533,7 @@ def test_non_simple_or_open_loops_never_have_planar_footprint(
     assert trace["closed_loop_source_planar_enclosed_area_mesh_units2"] is None
     assert trace["closed_loop_planar_enclosed_area_m2"] is None
     assert trace["closed_loop_planar_enclosed_area_scale_only_interval_m2"] is None
+    assert trace["closed_loop_source_planar_isoperimetric_quotient"] is None
 
 
 def test_planar_area_underflow_is_unknown_not_numeric_zero() -> None:
@@ -532,6 +542,7 @@ def test_planar_area_underflow_is_unknown_not_numeric_zero() -> None:
     assert source["closed_loop_source_is_simple_planar_perimeter"] is True
     assert source["closed_loop_source_planar_enclosed_area_mesh_units2"] is None
     assert source["closed_loop_planar_enclosed_area_m2"] is None
+    assert source["closed_loop_source_planar_isoperimetric_quotient"] is None
     assert "closed_surface_trace_source_planar_area_unrepresentable" in source["qc_warnings"]
 
     ordinary = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)]
@@ -1494,6 +1505,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert "closed_loop_planar_enclosed_area_m2" in trace
     assert "closed_loop_source_planar_enclosed_area_mesh_units2" in trace
     assert "closed_loop_planar_enclosed_area_scale_only_interval_m2" in trace
+    assert "closed_loop_source_planar_isoperimetric_quotient" in trace
     assert len(trace["source_segment_lengths_mesh_units"]) == trace["edge_count"]
     fractions = trace["source_cumulative_arc_length_fractions"]
     assert fractions is None or (
@@ -1561,6 +1573,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert trace["turn_angles_deg"][-1] is None
         if case == "noncoplanar_closed_loop":
             assert trace["closed_loop_planar_enclosed_area_m2"] is None
+            assert trace["closed_loop_source_planar_isoperimetric_quotient"] is None
             assert trace["closed_loop_source_exact_coplanarity"] is False
             assert trace["closed_loop_source_noncoplanar_waypoint_offsets"] == [3]
             assert trace["closed_loop_source_proper_crossing_segment_pairs"] is None
@@ -1571,6 +1584,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             assert "closed_surface_trace_exact_source_noncoplanarity" in trace["qc_warnings"]
         elif case == "contact_overlap_closed_loop":
             assert trace["closed_loop_planar_enclosed_area_m2"] is None
+            assert trace["closed_loop_source_planar_isoperimetric_quotient"] is None
             assert trace["closed_loop_source_exact_coplanarity"] is True
             assert trace["closed_loop_source_proper_crossing_segment_pairs"] == []
             assert trace["closed_loop_source_touching_segment_pairs"] == [[0, 3], [0, 5]]
@@ -1581,6 +1595,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             assert "closed_surface_trace_source_nonadjacent_segment_contact" in trace["qc_warnings"]
         elif case == "proper_crossing_closed_loop":
             assert trace["closed_loop_planar_enclosed_area_m2"] is None
+            assert trace["closed_loop_source_planar_isoperimetric_quotient"] is None
             assert trace["closed_loop_source_exact_coplanarity"] is True
             assert trace["closed_loop_source_proper_crossing_segment_pairs"] == [[0, 2]]
             assert trace["closed_loop_source_touching_segment_pairs"] == []
@@ -1607,6 +1622,14 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             assert trace["closed_loop_planar_enclosed_area_m2"] == pytest.approx(
                 expected_source_area * 0.0001
             )
+            expected_compactness = (
+                12 * pi / (5 + sqrt(13)) ** 2
+                if case == "non_xy_planar_closed_loop"
+                else 2 * pi / (2 + sqrt(2)) ** 2
+            )
+            assert trace["closed_loop_source_planar_isoperimetric_quotient"] == pytest.approx(
+                expected_compactness
+            )
             if case == "non_xy_planar_closed_loop":
                 assert trace[
                     "closed_loop_planar_enclosed_area_scale_only_interval_m2"
@@ -1629,6 +1652,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert trace["closed_loop_source_local_backtrack_waypoint_offsets"] == []
         assert trace["closed_loop_source_planar_enclosed_area_mesh_units2"] is None
         assert trace["closed_loop_planar_enclosed_area_m2"] is None
+        assert trace["closed_loop_source_planar_isoperimetric_quotient"] is None
         assert trace["turn_angles_deg"][0] is None
         assert trace["turn_angles_deg"][-1] is None
     if case == "ordinary":
