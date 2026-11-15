@@ -491,6 +491,12 @@ def test_simple_planar_footprint_is_scale_qualified_and_order_invariant(
     assert trace["closed_loop_source_is_simple_planar_perimeter"] is True
     assert trace["closed_loop_source_planar_enclosed_area_mesh_units2"] == pytest.approx(0.5)
     assert trace["closed_loop_planar_enclosed_area_m2"] == pytest.approx(0.00005)
+    assert trace["closed_loop_source_planar_centroid_mesh_units"] == pytest.approx(
+        [1 / 3, 1 / 3, 0.0]
+    )
+    assert trace["closed_loop_planar_centroid_m"] == pytest.approx(
+        [0.01 / 3, 0.01 / 3, 0.0]
+    )
     assert trace["closed_loop_planar_enclosed_area_scale_only_interval_m2"] == pytest.approx(
         [0.0000405, 0.0000605]
     )
@@ -531,6 +537,12 @@ def test_planar_footprint_non_xy_plane_and_full_scale_uncertainty() -> None:
     assert trace["closed_loop_source_is_simple_planar_perimeter"] is True
     assert trace["closed_loop_source_planar_enclosed_area_mesh_units2"] == pytest.approx(3.0)
     assert trace["closed_loop_planar_enclosed_area_m2"] == pytest.approx(0.0003)
+    assert trace["closed_loop_source_planar_centroid_mesh_units"] == pytest.approx(
+        [0.0, 2 / 3, 1.0]
+    )
+    assert trace["closed_loop_planar_centroid_m"] == pytest.approx(
+        [0.0, 0.02 / 3, 0.01]
+    )
     assert trace["closed_loop_planar_enclosed_area_scale_only_interval_m2"] == pytest.approx(
         [0.0, 0.0012]
     )
@@ -555,9 +567,7 @@ def test_planar_footprint_non_xy_plane_and_full_scale_uncertainty() -> None:
     assert trace["closed_loop_source_planar_chord_to_equivalent_diameter_ratio"] == pytest.approx(
         sqrt(13) / source_diameter
     )
-    assert trace["closed_loop_planar_maximum_vertex_chord_m"] == pytest.approx(
-        0.01 * sqrt(13)
-    )
+    assert trace["closed_loop_planar_maximum_vertex_chord_m"] == pytest.approx(0.01 * sqrt(13))
     assert trace["closed_loop_planar_maximum_vertex_chord_scale_only_interval_m"] == (
         pytest.approx([0.0, 0.02 * sqrt(13)])
     )
@@ -579,6 +589,8 @@ def test_non_simple_or_open_loops_never_have_planar_footprint(
     trace = measure_mesh_preview(**params)["surface_edge_traces"][0]
     assert trace["closed_loop_source_planar_enclosed_area_mesh_units2"] is None
     assert trace["closed_loop_planar_enclosed_area_m2"] is None
+    assert trace["closed_loop_planar_centroid_m"] is None
+    assert trace["closed_loop_source_planar_centroid_mesh_units"] is None
     assert trace["closed_loop_planar_enclosed_area_scale_only_interval_m2"] is None
     assert trace["closed_loop_source_planar_isoperimetric_quotient"] is None
     assert trace["closed_loop_source_planar_equivalent_diameter_mesh_units"] is None
@@ -644,6 +656,11 @@ def test_planar_area_underflow_is_unknown_not_numeric_zero() -> None:
     source = mesh_surface_edge_traces(vertices, [[0, 1, 2]], [[0, 1, 2, 0]], 1.0, 0.1)[0]
     assert source["closed_loop_source_is_simple_planar_perimeter"] is True
     assert source["closed_loop_source_planar_enclosed_area_mesh_units2"] is None
+    # Positive linear coordinates remain measurable when their squared
+    # source footprint is too small for a binary64 area.
+    assert source["closed_loop_source_planar_centroid_mesh_units"] == pytest.approx(
+        [1e-200 / 3, 1e-200 / 3, 0.0], rel=1e-12, abs=0.0
+    )
     assert source["closed_loop_planar_enclosed_area_m2"] is None
     assert source["closed_loop_source_planar_isoperimetric_quotient"] is None
     assert source["closed_loop_source_planar_equivalent_diameter_mesh_units"] is None
@@ -1644,6 +1661,23 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert "closed_loop_source_planar_enclosed_area_mesh_units2" in trace
     assert "closed_loop_planar_enclosed_area_scale_only_interval_m2" in trace
     assert "closed_loop_source_planar_isoperimetric_quotient" in trace
+    assert "closed_loop_source_planar_centroid_mesh_units" in trace
+    assert "closed_loop_planar_centroid_m" in trace
+    if case in (
+        "closed_loop",
+        "closed_loop_reverse",
+        "closed_loop_rotated",
+        "closed_loop_max_uncertainty",
+    ):
+        assert trace["closed_loop_source_planar_centroid_mesh_units"] == pytest.approx(
+            [1 / 3, 1 / 3, 0.0]
+        )
+    elif case == "non_xy_planar_closed_loop":
+        assert trace["closed_loop_source_planar_centroid_mesh_units"] == pytest.approx(
+            [0.0, 2 / 3, 1.0]
+        )
+    else:
+        assert trace["closed_loop_source_planar_centroid_mesh_units"] is None
     assert "closed_loop_source_planar_maximum_vertex_chord_mesh_units" in trace
     assert "closed_loop_source_planar_maximum_vertex_chord_waypoint_offsets" in trace
     assert "closed_loop_planar_maximum_vertex_chord_m" in trace
