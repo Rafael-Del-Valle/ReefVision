@@ -6,6 +6,14 @@ import json
 import sqlite3
 from pathlib import Path
 
+# 1.1 added these in revisions 0040 and 0042. They are optional at earlier
+# legitimate revisions, so do not add them to the all-or-none base family.
+SCIENCE_EXTENSIONS = (
+    "environmental_event_definitions",
+    "environmental_analysis_definitions",
+    "environmental_analysis_results",
+)
+
 FAMILIES = {
     "scientific": (
         "scientific_records",
