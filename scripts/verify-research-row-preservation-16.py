@@ -136,6 +136,31 @@ def _fingerprint(
     return rows, sha.hexdigest()
 
 
+
+def _protected_autoincrement_sequences(connection: sqlite3.Connection) -> dict[str, list[object]]:
+    """Read allocation history for protected AUTOINCREMENT tables, if present.
+
+    sqlite_sequence is SQLite bookkeeping rather than an ordinary scientific
+    table. Equal existing row values alone do not prove the next allocated
+    identifier is preserved, particularly after a highest-numbered row was
+    deleted. Only protect counters belonging to our explicitly scoped tables.
+    """
+    present = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'"
+    ).fetchone()
+    if present is None:
+        return {}
+    placeholders = ", ".join("?" for _ in PROTECTED_TABLES)
+    rows = connection.execute(
+        f"SELECT name, seq FROM sqlite_sequence WHERE name IN ({placeholders}) ORDER BY rowid",
+        PROTECTED_TABLES,
+    )
+    counters: dict[str, list[object]] = {}
+    for name, sequence in rows:
+        counters.setdefault(name, []).append(sequence)
+    return counters
+
+
 def _asset_state(info: os.stat_result) -> tuple[int, int, int, int, int, int, int]:
     """Identity and mutation-sensitive metadata for an offline regular file."""
     return (
@@ -317,6 +342,8 @@ def verify(
     with ExitStack() as stack:
         old = _open_snapshot(before, stack)
         new = _open_snapshot(after, stack)
+        old_sequences = _protected_autoincrement_sequences(old)
+        new_sequences = _protected_autoincrement_sequences(new)
         tables = []
         problems = []
         covered = 0
@@ -351,6 +378,14 @@ def verify(
                     )
                     if old_count != new_count or old_sha != new_sha:
                         item["status"] = "changed_records"
+            # AUTOINCREMENT history affects identifiers of future observations,
+            # even when all current protected rows are byte-for-byte unchanged.
+            # Do not print the source/candidate sequence numbers or IDs.
+            if (
+                item["status"] == "preserved"
+                and old_sequences.get(table, []) != new_sequences.get(table, [])
+            ):
+                item["status"] = "changed_autoincrement_sequence"
             if item["status"] != "preserved":
                 problems.append(table + ":" + item["status"])
             tables.append(item)
