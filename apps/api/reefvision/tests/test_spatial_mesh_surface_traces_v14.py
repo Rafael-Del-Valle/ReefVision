@@ -994,6 +994,28 @@ def test_direct_trace_calibration_rejects_coercion_and_overflow(
         )
 
 
+@pytest.mark.parametrize("scale", [0.01, 2.0])
+def test_direct_closed_trace_detects_exact_adjacent_edge_backtrack(scale: float) -> None:
+    # A deliberately selected loop doubles back along an adjacent edge, a
+    # case skipped by the nonadjacent segment-intersection audit. It cannot
+    # qualify as a simple planar perimeter or a verified coral contour.
+    traces = mesh_surface_edge_traces(
+        [(0, 0, 0), (2, 0, 0), (1, 0, 0), (1, 2, 0), (0, 2, 0)],
+        [[0, 1, 3], [1, 2, 3], [0, 3, 4]],
+        [[0, 1, 2, 3, 4, 0]],
+        scale,
+        0.1,
+    )
+    assert traces is not None
+    trace = traces[0]
+    assert trace["closed_loop_source_exact_coplanarity"] is True
+    assert trace["closed_loop_source_local_backtrack_waypoint_offsets"] == [1]
+    assert trace["closed_loop_source_is_simple_planar_perimeter"] is False
+    assert "closed_surface_trace_source_adjacent_backtrack" in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+    assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
+
+
 def test_direct_trace_identifies_duplicate_faces_without_overriding_mesh_rejection() -> None:
     # The full preview must reject duplicated triangle geometry rather than
     # saving a misleading measurement. Direct trace QC remains descriptive.
@@ -1456,23 +1478,25 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             assert trace["closed_loop_source_proper_crossing_segment_pairs"] is None
             assert trace["closed_loop_source_touching_segment_pairs"] is None
             assert trace["closed_loop_source_collinear_overlap_segment_pairs"] is None
+            assert trace["closed_loop_source_is_simple_planar_perimeter"] is None
+            assert trace["closed_loop_source_local_backtrack_waypoint_offsets"] == []
             assert "closed_surface_trace_exact_source_noncoplanarity" in trace["qc_warnings"]
         elif case == "contact_overlap_closed_loop":
             assert trace["closed_loop_source_exact_coplanarity"] is True
             assert trace["closed_loop_source_proper_crossing_segment_pairs"] == []
             assert trace["closed_loop_source_touching_segment_pairs"] == [[0, 3], [0, 5]]
             assert trace["closed_loop_source_collinear_overlap_segment_pairs"] == [[0, 4]]
-            assert (
-                "closed_surface_trace_source_collinear_segment_overlap" in trace["qc_warnings"]
-            )
-            assert (
-                "closed_surface_trace_source_nonadjacent_segment_contact" in trace["qc_warnings"]
-            )
+            assert trace["closed_loop_source_is_simple_planar_perimeter"] is False
+            assert trace["closed_loop_source_local_backtrack_waypoint_offsets"] == []
+            assert "closed_surface_trace_source_collinear_segment_overlap" in trace["qc_warnings"]
+            assert "closed_surface_trace_source_nonadjacent_segment_contact" in trace["qc_warnings"]
         elif case == "proper_crossing_closed_loop":
             assert trace["closed_loop_source_exact_coplanarity"] is True
             assert trace["closed_loop_source_proper_crossing_segment_pairs"] == [[0, 2]]
             assert trace["closed_loop_source_touching_segment_pairs"] == []
             assert trace["closed_loop_source_collinear_overlap_segment_pairs"] == []
+            assert trace["closed_loop_source_is_simple_planar_perimeter"] is False
+            assert trace["closed_loop_source_local_backtrack_waypoint_offsets"] == []
             assert "closed_surface_trace_source_proper_self_intersection" in trace["qc_warnings"]
         else:
             expected_closing_turn = 135.0 if case == "closed_loop_rotated" else 90.0
@@ -1483,6 +1507,8 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             assert trace["closed_loop_source_proper_crossing_segment_pairs"] == []
             assert trace["closed_loop_source_touching_segment_pairs"] == []
             assert trace["closed_loop_source_collinear_overlap_segment_pairs"] == []
+            assert trace["closed_loop_source_is_simple_planar_perimeter"] is True
+            assert trace["closed_loop_source_local_backtrack_waypoint_offsets"] == []
         assert trace["nonadjacent_coincident_waypoint_index_pairs"] == []
         assert "closed_surface_trace_not_verified_anatomical_contour" in trace["qc_warnings"]
         assert trace["human_review_verified"] is False
@@ -1493,6 +1519,8 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert trace["closed_loop_source_proper_crossing_segment_pairs"] is None
         assert trace["closed_loop_source_touching_segment_pairs"] is None
         assert trace["closed_loop_source_collinear_overlap_segment_pairs"] is None
+        assert trace["closed_loop_source_is_simple_planar_perimeter"] is None
+        assert trace["closed_loop_source_local_backtrack_waypoint_offsets"] == []
         assert trace["turn_angles_deg"][0] is None
         assert trace["turn_angles_deg"][-1] is None
     if case == "ordinary":
