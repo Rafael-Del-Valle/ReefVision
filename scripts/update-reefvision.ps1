@@ -232,70 +232,11 @@ function Test-ReefVisionInstalledBackendBundle {
     return Test-Path (Join-Path $InstallDirectory "backend\reefvision-api\reefvision-api.exe") -PathType Leaf
 }
 
-function Sync-ReefVisionPortableInstall {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$RepoPath,
-        [Parameter(Mandatory = $true)]
-        [string]$ExpectedVersion,
-        [Parameter(Mandatory = $true)]
-        [string]$InstallDirectory
-    )
-
-    $artifacts = Get-ReefVisionReleaseArtifacts -RepoPath $RepoPath -ExpectedVersion $ExpectedVersion
-    $normalizedInstallDirectory = [System.IO.Path]::GetFullPath($InstallDirectory).TrimEnd("\")
-    $allowedRoots = @(
-        (Join-Path $env:LOCALAPPDATA "ReefVision"),
-        (Join-Path $env:LOCALAPPDATA "Programs\ReefVision")
-    ) |
-        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
-        ForEach-Object { [System.IO.Path]::GetFullPath($_).TrimEnd("\") }
-
-    $allowed = $false
-    foreach ($root in $allowedRoots) {
-        if ($normalizedInstallDirectory -eq $root) {
-            $allowed = $true
-            break
-        }
-    }
-    if (-not $allowed) {
-        throw "Refusing to repair a portable ReefVision install outside the approved user locations: $normalizedInstallDirectory"
-    }
-
-    New-Item -ItemType Directory -Path $normalizedInstallDirectory -Force | Out-Null
-    $desktopTarget = Join-Path $normalizedInstallDirectory "reefvision-desktop.exe"
-    $apiTarget = Join-Path $normalizedInstallDirectory "reefvision-api.exe"
-    $backendTarget = Join-Path $normalizedInstallDirectory "backend"
-
-    Copy-Item -LiteralPath $artifacts.desktop_executable -Destination $desktopTarget -Force
-    Copy-Item -LiteralPath $artifacts.api_executable -Destination $apiTarget -Force
-    if (Test-Path $backendTarget -PathType Container) {
-        Get-ChildItem -LiteralPath $backendTarget -Force | Remove-Item -Recurse -Force
-    }
-    else {
-        New-Item -ItemType Directory -Path $backendTarget -Force | Out-Null
-    }
-    Get-ChildItem -LiteralPath $artifacts.backend_directory -Force | ForEach-Object {
-        Copy-Item -LiteralPath $_.FullName -Destination $backendTarget -Recurse -Force
-    }
-
-    $installedVersion = Get-ReefVisionExecutableVersion -ExecutablePath $desktopTarget
-    if ($installedVersion -ne $ExpectedVersion) {
-        throw "The repaired ReefVision desktop executable version is '$installedVersion', expected '$ExpectedVersion'."
-    }
-    if (-not (Test-ReefVisionInstalledBackendBundle -InstallDirectory $normalizedInstallDirectory)) {
-        throw "The packaged ReefVision backend bundle is still missing after the repair step: $(Join-Path $normalizedInstallDirectory 'backend\reefvision-api\reefvision-api.exe')"
-    }
-
-    Set-ReefVisionInstalledDesktopPath -ExecutablePath $desktopTarget
-    return [pscustomobject]@{
-        install_directory = $normalizedInstallDirectory
-        desktop_executable = $desktopTarget
-        api_executable = $apiTarget
-        backend_directory = $backendTarget
-        installed_version = $installedVersion
-    }
-}
+# Portable/backend copying is deliberately not supported by the 1.6 MSI
+# updater. Older local repairs deleted arbitrary contents of an existing
+# backend directory without verifying ownership of each file. Keep all
+# existing research files intact: only the separately verified, MSI-managed
+# Windows Installer path may change installed program files.
 
 $showHelp = $false
 $showStatus = $false
