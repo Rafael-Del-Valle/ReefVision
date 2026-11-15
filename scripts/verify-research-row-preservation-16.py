@@ -136,7 +136,6 @@ def _fingerprint(
     return rows, sha.hexdigest()
 
 
-
 def _protected_autoincrement_sequences(
     connection: sqlite3.Connection,
 ) -> dict[str, list[object]]:
@@ -383,9 +382,8 @@ def verify(
             # AUTOINCREMENT history affects identifiers of future observations,
             # even when all current protected rows are byte-for-byte unchanged.
             # Do not print the source/candidate sequence numbers or IDs.
-            if (
-                item["status"] == "preserved"
-                and old_sequences.get(table, []) != new_sequences.get(table, [])
+            if item["status"] == "preserved" and old_sequences.get(table, []) != new_sequences.get(
+                table, []
             ):
                 item["status"] = "changed_autoincrement_sequence"
             if item["status"] != "preserved":
