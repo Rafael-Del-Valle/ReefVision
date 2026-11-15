@@ -812,9 +812,13 @@ def mesh_surface_edge_traces(
         # Distinct parsed vertex indices can refer to exactly the same XYZ.
         # This makes a selected open-by-index trace return to an earlier
         # location without containing a repeated index or a zero-length edge.
-        if any(
-            positions[i] == positions[j] for i in range(2, len(positions)) for j in range(i - 1)
-        ):
+        nonadjacent_coincident_waypoint_index_pairs = [
+            [earlier, later]
+            for later in range(2, len(positions))
+            for earlier in range(later - 1)
+            if positions[earlier] == positions[later]
+        ]
+        if nonadjacent_coincident_waypoint_index_pairs:
             warnings.append("nonadjacent_coincident_surface_trace_vertices")
         # Separate imported vertex IDs may describe the same geometric edge.
         # Report every positive-length repeated segment (including a reversed
@@ -890,6 +894,9 @@ def mesh_surface_edge_traces(
                 "biological_validation_status": "not_verified_anatomical_centerline",
                 "human_review_verified": False,
                 "vertex_indices": list(vertices),
+                "nonadjacent_coincident_waypoint_index_pairs": (
+                    nonadjacent_coincident_waypoint_index_pairs
+                ),
                 "vertices_in_source_frame_m": calibrated_vertices,
                 "edge_count": len(edges),
                 "segment_lengths_m": segment_lengths,
