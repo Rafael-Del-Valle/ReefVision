@@ -152,7 +152,7 @@ def test_log_tail_rejects_in_place_mutation_during_read(
 ) -> None:
     """Reject stale loss snapshots even when the file inode never changes."""
     log = tmp_path / "training.log"
-    original = b"epoch=4\\ntrain/box_loss=0.25\\ntrain/cls_loss=0.30\\n"
+    original = b"epoch=4\ntrain/box_loss=0.25\ntrain/cls_loss=0.30\n"
     log.write_bytes(original)
     real_fstat = os.fstat
     real_stat = Path.stat
