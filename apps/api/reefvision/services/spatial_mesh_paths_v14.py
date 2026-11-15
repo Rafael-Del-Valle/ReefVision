@@ -1190,7 +1190,54 @@ def mesh_surface_edge_traces(
         source_planar_equivalent_diameter_mesh_units: float | None = None
         calibrated_planar_equivalent_diameter_m: float | None = None
         planar_equivalent_diameter_scale_interval_m: list[float] | None = None
+        # Maximum straight-line span between caller-selected vertices of an
+        # exactly planar, geometrically simple polygon. This is a provisional
+        # polygon dimension, not a coral branch diameter or anatomical width.
+        # Evaluate in source coordinates, before calibrated display rounding.
+        source_planar_maximum_vertex_chord_mesh_units: float | None = None
+        source_planar_maximum_vertex_chord_waypoint_offsets: list[int] | None = None
+        calibrated_planar_maximum_vertex_chord_m: float | None = None
+        planar_maximum_vertex_chord_scale_interval_m: list[float] | None = None
         if source_is_simple_planar_perimeter is True:
+            # The repeated terminal waypoint is the same source vertex, not
+            # an independent candidate. Maximal polygon separation occurs at
+            # vertices, even when the polygon is concave. A tied maximum uses
+            # the first pair in the submitted order for reproducible provenance.
+            unique_waypoint_count = len(positions) - 1
+            maximum_source_chord, maximum_pair = max(
+                (
+                    (dist(positions[earlier], positions[later]), [earlier, later])
+                    for earlier in range(unique_waypoint_count)
+                    for later in range(earlier + 1, unique_waypoint_count)
+                ),
+                key=lambda candidate: candidate[0],
+            )
+            if isfinite(maximum_source_chord) and maximum_source_chord > 0:
+                source_planar_maximum_vertex_chord_mesh_units = maximum_source_chord
+                source_planar_maximum_vertex_chord_waypoint_offsets = maximum_pair
+                calibrated_chord = maximum_source_chord * scale
+                if isfinite(calibrated_chord) and calibrated_chord > 0:
+                    calibrated_planar_maximum_vertex_chord_m = calibrated_chord
+                    if scale_uncertainty is not None:
+                        lower = calibrated_chord * (1 - scale_uncertainty)
+                        upper = calibrated_chord * (1 + scale_uncertainty)
+                        if (
+                            isfinite(lower)
+                            and isfinite(upper)
+                            and (lower > 0 or scale_uncertainty == 1)
+                            and upper > 0
+                        ):
+                            planar_maximum_vertex_chord_scale_interval_m = [lower, upper]
+                        else:
+                            warnings.append(
+                                "closed_surface_trace_planar_maximum_chord_interval_unrepresentable"
+                            )
+                else:
+                    warnings.append(
+                        "closed_surface_trace_calibrated_planar_maximum_chord_unrepresentable"
+                    )
+            else:
+                warnings.append("closed_surface_trace_source_planar_maximum_chord_unrepresentable")
             source_planar_area_units2 = _closed_loop_source_enclosed_planar_area(positions)
             if source_planar_area_units2 is None:
                 warnings.append("closed_surface_trace_source_planar_area_unrepresentable")
@@ -1309,6 +1356,18 @@ def mesh_surface_edge_traces(
                 ),
                 "closed_loop_source_planar_isoperimetric_quotient": (
                     source_planar_isoperimetric_quotient
+                ),
+                "closed_loop_source_planar_maximum_vertex_chord_mesh_units": (
+                    source_planar_maximum_vertex_chord_mesh_units
+                ),
+                "closed_loop_source_planar_maximum_vertex_chord_waypoint_offsets": (
+                    source_planar_maximum_vertex_chord_waypoint_offsets
+                ),
+                "closed_loop_planar_maximum_vertex_chord_m": (
+                    calibrated_planar_maximum_vertex_chord_m
+                ),
+                "closed_loop_planar_maximum_vertex_chord_scale_only_interval_m": (
+                    planar_maximum_vertex_chord_scale_interval_m
                 ),
                 "closed_loop_source_planar_equivalent_diameter_mesh_units": (
                     source_planar_equivalent_diameter_mesh_units
