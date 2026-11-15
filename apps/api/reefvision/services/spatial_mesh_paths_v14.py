@@ -1185,11 +1185,44 @@ def mesh_surface_edge_traces(
         # A scale-independent shape descriptor for an *unverified* source
         # polygon. Never treat it as organism condition or an anatomical index.
         source_planar_isoperimetric_quotient: float | None = None
+        # Circle with the same provisional source-plane footprint. These are
+        # geometric descriptors, never verified coral branch or polyp widths.
+        source_planar_equivalent_diameter_mesh_units: float | None = None
+        calibrated_planar_equivalent_diameter_m: float | None = None
+        planar_equivalent_diameter_scale_interval_m: list[float] | None = None
         if source_is_simple_planar_perimeter is True:
             source_planar_area_units2 = _closed_loop_source_enclosed_planar_area(positions)
             if source_planar_area_units2 is None:
                 warnings.append("closed_surface_trace_source_planar_area_unrepresentable")
             else:
+                # Use sqrt(A)/sqrt(pi) instead of sqrt(A/pi): division by pi
+                # can underflow for a positive, representable source area.
+                # A linear diameter can remain representable even when its
+                # calibrated squared area underflows binary64.
+                diameter = 2 * sqrt(source_planar_area_units2) / sqrt(pi)
+                if isfinite(diameter) and diameter > 0:
+                    source_planar_equivalent_diameter_mesh_units = diameter
+                    calibrated_diameter = diameter * scale
+                    if isfinite(calibrated_diameter) and calibrated_diameter > 0:
+                        calibrated_planar_equivalent_diameter_m = calibrated_diameter
+                        if scale_uncertainty is not None:
+                            lower = calibrated_diameter * (1 - scale_uncertainty)
+                            upper = calibrated_diameter * (1 + scale_uncertainty)
+                            if (
+                                isfinite(lower)
+                                and isfinite(upper)
+                                and (lower > 0 or scale_uncertainty == 1)
+                                and upper > 0
+                            ):
+                                planar_equivalent_diameter_scale_interval_m = [lower, upper]
+                            else:
+                                warnings.append(
+                                    "closed_surface_trace_planar_diameter_interval_unrepresentable"
+                                )
+                    else:
+                        warnings.append("closed_surface_trace_calibrated_planar_diameter_unrepresentable")
+                else:
+                    warnings.append("closed_surface_trace_source_planar_diameter_unrepresentable")
                 area_m2 = source_planar_area_units2 * scale * scale
                 if isfinite(area_m2) and area_m2 > 0:
                     calibrated_planar_area_m2 = area_m2
@@ -1274,6 +1307,15 @@ def mesh_surface_edge_traces(
                 ),
                 "closed_loop_source_planar_isoperimetric_quotient": (
                     source_planar_isoperimetric_quotient
+                ),
+                "closed_loop_source_planar_equivalent_diameter_mesh_units": (
+                    source_planar_equivalent_diameter_mesh_units
+                ),
+                "closed_loop_planar_equivalent_diameter_m": (
+                    calibrated_planar_equivalent_diameter_m
+                ),
+                "closed_loop_planar_equivalent_diameter_scale_only_interval_m": (
+                    planar_equivalent_diameter_scale_interval_m
                 ),
                 "vertex_indices": list(vertices),
                 "nonadjacent_coincident_waypoint_index_pairs": (
