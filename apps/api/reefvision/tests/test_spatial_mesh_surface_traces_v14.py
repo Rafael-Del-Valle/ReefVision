@@ -580,10 +580,14 @@ def test_planar_area_underflow_is_unknown_not_numeric_zero() -> None:
     # A linear dimension can still be represented when its square cannot.
     source_diameter = sqrt(2 / pi)
     assert calibrated["closed_loop_planar_equivalent_diameter_m"] == pytest.approx(
-        source_diameter * 1e-200
+        source_diameter * 1e-200, rel=1e-12, abs=0.0
     )
     assert calibrated["closed_loop_planar_equivalent_diameter_scale_only_interval_m"] == (
-        pytest.approx([source_diameter * 0.9e-200, source_diameter * 1.1e-200])
+        pytest.approx(
+            [source_diameter * 0.9e-200, source_diameter * 1.1e-200],
+            rel=1e-12,
+            abs=0.0,
+        )
     )
     assert (
         "closed_surface_trace_calibrated_planar_area_unrepresentable" in calibrated["qc_warnings"]
