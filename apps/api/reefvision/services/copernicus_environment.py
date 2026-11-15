@@ -132,6 +132,16 @@ def parse_copernicus(
     coordinate_resolution = raw.get("coordinate_resolution", {})
     if not isinstance(dataset_metadata, dict) or not isinstance(coordinate_resolution, dict):
         raise ValidationError("Copernicus provider metadata must be JSON objects")
+    # Resolution is scientific provenance, not arbitrary provider decoration.
+    # A zero, negative, nonfinite or coerced string/bool axis spacing would
+    # fabricate grid sampling precision or an invalid temporal resolution.
+    supported_axes = {"time", "depth", "latitude", "longitude"}
+    if set(coordinate_resolution) - supported_axes or any(
+        not _finite_number(value) or value <= 0 for value in coordinate_resolution.values()
+    ):
+        raise ValidationError(
+            "Copernicus coordinate resolutions require positive finite numeric known axes"
+        )
     records = []
     missing = 0
     seen = set()
