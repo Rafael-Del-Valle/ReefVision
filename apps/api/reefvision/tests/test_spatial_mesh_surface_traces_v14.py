@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from math import sqrt
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
@@ -46,6 +46,14 @@ INCONSISTENT_WINDING_PARAMS = {
     **PARAMS,
     "vertices": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "faces": [[0, 1, 2], [0, 1, 3]],
+    "surface_trace_vertex_paths": [[0, 1]],
+}
+# Three nonduplicate triangular faces meet at the selected indexed edge,
+# so the face-incidence count must expose the actual nonmanifold segment.
+NONMANIFOLD_EDGE_PARAMS = {
+    **PARAMS,
+    "vertices": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1]],
+    "faces": [[0, 1, 2], [1, 0, 3], [0, 1, 4]],
     "surface_trace_vertex_paths": [[0, 1]],
 }
 # Each indexed edge has a positive length and no vertex ID repeats, yet
@@ -146,6 +154,34 @@ SEGMENT_UNDERFLOW_PREVIEW_PARAMS = {
     "surface_path_vertex_pairs": None,
     "surface_trace_vertex_paths": [[0, 1]],
 }
+
+
+@pytest.mark.parametrize(
+    ("params", "counts", "boundary", "nonmanifold", "duplicate", "winding"),
+    [
+        (PARAMS, [1, 1], [0, 1], [], [], []),
+        (DUPLICATE_FACE_PARAMS, [2], [], [], [0], []),
+        (INCONSISTENT_WINDING_PARAMS, [2], [], [], [], [0]),
+        (NONMANIFOLD_EDGE_PARAMS, [3], [], [0], [], []),
+    ],
+)
+def test_selected_trace_locates_indexed_face_topology_for_review(
+    params: dict[str, Any],
+    counts: list[int],
+    boundary: list[int],
+    nonmanifold: list[int],
+    duplicate: list[int],
+    winding: list[int],
+) -> None:
+    trace = measure_mesh_preview(**params)["surface_edge_traces"][0]
+    assert trace["mesh_edge_face_incidence_counts"] == counts
+    assert trace["open_boundary_segment_indices"] == boundary
+    assert trace["nonmanifold_segment_indices"] == nonmanifold
+    assert trace["duplicate_triangle_segment_indices"] == duplicate
+    assert trace["inconsistent_winding_segment_indices"] == winding
+    assert len(counts) == trace["edge_count"]
+    assert trace["human_review_verified"] is False
+    assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
 
 
 def test_trace_follows_selected_edges_not_the_shortest_route() -> None:
@@ -634,6 +670,8 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
         "ordinary",
         "resolution_limited",
         "inconsistent_winding",
+        "duplicate_face",
+        "nonmanifold",
         "coincident_nonadjacent",
         "reverse_turn",
         "reused_geometric_segment",
@@ -654,6 +692,8 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "ordinary": PARAMS,
         "resolution_limited": RESOLUTION_LIMITED_PARAMS,
         "inconsistent_winding": INCONSISTENT_WINDING_PARAMS,
+        "duplicate_face": DUPLICATE_FACE_PARAMS,
+        "nonmanifold": NONMANIFOLD_EDGE_PARAMS,
         "coincident_nonadjacent": COINCIDENT_NONADJACENT_PARAMS,
         "reverse_turn": REVERSE_TURN_PARAMS,
         "reused_geometric_segment": REUSED_GEOMETRIC_SEGMENT_PARAMS,
@@ -712,6 +752,17 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert "endpoint_chord_length_m" in trace
     assert "geometric_detour_ratio" in trace
     assert len(trace["source_segment_lengths_mesh_units"]) == trace["edge_count"]
+    assert len(trace["mesh_edge_face_incidence_counts"]) == trace["edge_count"]
+    assert all(
+        0 <= index < trace["edge_count"]
+        for field in (
+            "open_boundary_segment_indices",
+            "nonmanifold_segment_indices",
+            "duplicate_triangle_segment_indices",
+            "inconsistent_winding_segment_indices",
+        )
+        for index in trace[field]
+    )
     assert "source_endpoint_chord_mesh_units" in trace
     assert "source_trace_length_mesh_units" in trace
     assert len(trace["turn_angles_deg"]) == len(trace["vertex_indices"])
@@ -743,10 +794,17 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             in artifact["surface_edge_traces"][0]["qc_warnings"]
         )
     if case == "inconsistent_winding":
-        assert (
-            "inconsistent_winding_edge_on_surface_trace"
-            in artifact["surface_edge_traces"][0]["qc_warnings"]
-        )
+        assert trace["mesh_edge_face_incidence_counts"] == [2]
+        assert trace["inconsistent_winding_segment_indices"] == [0]
+        assert "inconsistent_winding_edge_on_surface_trace" in trace["qc_warnings"]
+    if case == "duplicate_face":
+        assert trace["mesh_edge_face_incidence_counts"] == [2]
+        assert trace["duplicate_triangle_segment_indices"] == [0]
+        assert "duplicate_triangle_on_surface_trace" in trace["qc_warnings"]
+    if case == "nonmanifold":
+        assert trace["mesh_edge_face_incidence_counts"] == [3]
+        assert trace["nonmanifold_segment_indices"] == [0]
+        assert "nonmanifold_edge_on_surface_trace" in trace["qc_warnings"]
     if case == "segment_underflow":
         assert trace["source_segment_lengths_mesh_units"] == pytest.approx([1e-250], abs=0)
         assert trace["segment_lengths_m"] == [0.0]
