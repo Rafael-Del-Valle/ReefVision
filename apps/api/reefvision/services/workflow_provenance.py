@@ -293,7 +293,9 @@ def verify_succeeded_node_artifacts(
             port.port_id: set(port.accepted_types) for port in producer_definition.output_ports
         }
         if artifact.data_type not in producer_types.get(artifact.producer_port_id, set()):
-            raise ConflictError("Succeeded workflow input producer output type does not match registry")
+            raise ConflictError(
+                "Succeeded workflow input producer output type does not match registry"
+            )
 
     for artifact in outputs:
         if artifact.producer_node_run_id != node_run.id:
