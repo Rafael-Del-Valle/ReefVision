@@ -31,9 +31,13 @@ It **does not** stamp, reconcile, drop, or transform researcher records.
 The independent `scripts/inspect-alembic-lineage.py` read-only inventory
 includes the late tables in its scientific lineage classification and
 reports incomplete environmental analysis pairs or an extension surviving
-without any base scientific table. These are *optional* tables for legitimate
-earlier 1.1 revisions, so the inventory does not require them in a healthy
-0037–0039 database. A warning is a refusal signal, never authorization
+without any base scientific table. It also detects analysis tables from 0042
+without the preceding 0040 `environmental_event_definitions` table. Even a
+complete 0042 analysis pair and a plausible 0042 stamp are not proof of
+uninterrupted migration history when that predecessor is missing.
+These are *optional* tables for legitimate earlier 1.1 revisions, so the
+inventory does not require later tables in a healthy 0037–0039 database or
+require analysis tables at 0040. A warning is a refusal signal, never authorization
 to run an upgrade. Sensitive observation payloads are not included in the
 JSON inventory.
 
@@ -45,6 +49,16 @@ biological observations after repeated read-only rejection, and desktop
 startup refusal before Alembic begins. A separate standard-library
 CLI regression checks partial-restore classification, strict refusal,
 row counts without private values, and byte-for-byte SQLite retention.
+
+
+The independent strict CLI regression also covers 0042 partial restores with
+only analysis definitions, only results, and the complete analysis pair but no
+0040 predecessor. It verifies exact database bytes, retained observation
+payloads, and fail-closed status. Positive 0039, 0040, and 0042 stage fixtures
+protect genuine incremental migrations from false warnings. The previously
+failing exact-head CI formatter gate in the inspector was corrected in the same
+iteration. These diagnostics **never authorize an upgrade**, even on a clean
+database.
 
 This is a **fail-closed safety fix**, not the still-required data-preserving
 1.1/1.6 Alembic reconciliation. No 1.1 branch, stored workflow, scientific
