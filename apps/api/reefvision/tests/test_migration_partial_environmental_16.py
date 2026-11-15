@@ -27,10 +27,12 @@ def _partial_science(engine: object, revision: str | None, table: str) -> None:
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE biological_observations (id TEXT, note TEXT)"))
         connection.execute(
-            text("INSERT INTO biological_observations VALUES ('coral-1', 'preserve tissue')"))
+            text("INSERT INTO biological_observations VALUES ('coral-1', 'preserve tissue')")
+        )
         if revision is not None:
             connection.execute(
-                text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
+                text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+            )
             connection.execute(
                 text("INSERT INTO alembic_version VALUES (:revision)"),
                 {"revision": revision},
