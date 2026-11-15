@@ -478,7 +478,6 @@ def test_trace_follows_selected_edges_not_the_shortest_route() -> None:
     assert result["measurement_status"] == "caller_supplied_unverified"
 
 
-
 @pytest.mark.parametrize(
     "path",
     [[0, 1, 2, 0], [0, 2, 1, 0], [1, 2, 0, 1]],
@@ -536,15 +535,13 @@ def test_planar_area_underflow_is_unknown_not_numeric_zero() -> None:
     assert "closed_surface_trace_source_planar_area_unrepresentable" in source["qc_warnings"]
 
     ordinary = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)]
-    calibrated = mesh_surface_edge_traces(
-        ordinary, [[0, 1, 2]], [[0, 1, 2, 0]], 1e-200, 0.1
-    )[0]
+    calibrated = mesh_surface_edge_traces(ordinary, [[0, 1, 2]], [[0, 1, 2, 0]], 1e-200, 0.1)[0]
     assert calibrated["closed_loop_source_planar_enclosed_area_mesh_units2"] == 0.5
     assert calibrated["closed_loop_planar_enclosed_area_m2"] is None
     assert calibrated["closed_loop_planar_enclosed_area_scale_only_interval_m2"] is None
-    assert "closed_surface_trace_calibrated_planar_area_unrepresentable" in calibrated[
-        "qc_warnings"
-    ]
+    assert (
+        "closed_surface_trace_calibrated_planar_area_unrepresentable" in calibrated["qc_warnings"]
+    )
 
 
 @pytest.mark.parametrize("scale", [0.01, 0.02])
