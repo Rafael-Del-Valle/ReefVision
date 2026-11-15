@@ -985,3 +985,28 @@ Workflow Builder adapter, including positive parity for incomplete but
 consistent legacy counts. Persisted graph parity for complete source
 previews remains separately covered. This is reconstruction-integrity QC,
 not proof of verified specimen identity or biological growth.
+
+
+## Geometric nonmanifold seams hidden by split mesh vertices
+
+A caller-selected surface trace now records `split_vertex_nonmanifold_segment_indices`
+when **more than two triangle face edges** share the same positive-length
+source-frame XYZ segment but the selected indexed edge itself has only one or
+two incident faces. The warning
+`split_vertex_hidden_nonmanifold_on_surface_trace` distinguishes this from
+`nonmanifold_edge_on_surface_trace`, which already identifies indexed edges
+incident to more than two triangles. This catches nonmanifold junctions hidden
+by separate vertex IDs in an OBJ/PLY/GLB reconstruction. Zero-length edges are
+excluded from this particular signal, rather than treated as meaningful seams.
+
+The existing `geometric_edge_face_incidence_counts`,
+`mesh_edge_face_incidence_counts`, and `split_vertex_seam_segment_indices`
+remain available for independent review. **Nothing is welded or repaired.**
+Exact XYZ equality is a geometric diagnostic, not proof that the imported
+coordinate frame, registration, specimen identity, or coral anatomy is valid.
+The selected edge length, scale-only bounds, source identity, and
+`human_review_verified: false` remain unchanged. Synthetic examples cover
+one and two indexed incident faces with a third split-face edge, scale
+invariance, standalone API measurement, and a persisted executable typed
+Workflow Builder graph with complete artifact/provenance parity. Independent
+biological validation and installed-GUI/GPU acceptance remain outstanding.
