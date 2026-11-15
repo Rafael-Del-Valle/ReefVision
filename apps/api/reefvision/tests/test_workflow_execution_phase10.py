@@ -303,6 +303,26 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.commit()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
+    # Interrupted recovery may reuse a succeeded node before the full-run
+    # lineage check. Neither node can occupy step three of a two-node graph.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        assert producer is not None
+        producer.execution_order = 3
+        session.flush()
+        with pytest.raises(ConflictError, match="execution order exceeds saved graph"):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=producer)
+        session.rollback()
+    with app.state.session_factory() as session:
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert consumer is not None
+        consumer.execution_order = 3
+        session.flush()
+        with pytest.raises(ConflictError, match="execution order exceeds saved graph"):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
     # The completed image-collection node cannot consume its own output.
     # That output has a valid checksum and belongs to the same run, so
     # artifact integrity alone cannot detect the falsified input lineage.
