@@ -548,6 +548,27 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
+    # An upstream producer can have a valid consumed artifact while its
+    # saved result declares a forged second artifact that was never produced.
+    # Direct consumer recovery must reject the entire altered declaration.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert producer is not None and consumer is not None
+        original_result = dict(producer.result_json or {})
+        summary = original_result.get("outputs")
+        assert isinstance(summary, list) and len(summary) == 1
+        producer.result_json = {
+            **original_result,
+            "outputs": [*summary, {**summary[0], "artifact_id": "forged-producer-output"}],
+        }
+        session.flush()
+        error = "producer output summary does not match declared outputs"
+        with pytest.raises(ConflictError, match=error):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
     # This actually executed graph cannot safely reuse a succeeded node if
     # its registered adapter definition disappears (e.g. after an upgrade).
     # Its checksum-valid artifacts do not prove the missing port contracts.
