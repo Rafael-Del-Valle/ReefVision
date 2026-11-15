@@ -434,10 +434,20 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
     # The consumer cannot rely on the producer's separate verification call.
     with app.state.session_factory() as session:
         consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
         upstream = session.get(WorkflowArtifact, artifacts["project_reference"]["id"])
-        assert consumer is not None and upstream is not None
+        assert consumer is not None and producer is not None and upstream is not None
         assert upstream.data_type == "project_reference"
+        producer_result = dict(producer.result_json or {})
+        summary = producer_result.get("outputs")
+        assert isinstance(summary, list) and len(summary) == 1
         upstream.data_type = "image_collection"
+        # Keep the producer declaration internally consistent to isolate the
+        # consumer's own input-port contract in this regression.
+        producer.result_json = {
+            **producer_result,
+            "outputs": [{**summary[0], "data_type": "image_collection"}],
+        }
         session.flush()
         with pytest.raises(ConflictError, match="input type does not match registry"):
             verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
