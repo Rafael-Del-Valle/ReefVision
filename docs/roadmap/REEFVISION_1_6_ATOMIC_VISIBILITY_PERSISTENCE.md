@@ -49,3 +49,30 @@ The new regression is deterministic and does not claim to simulate live
 two-process contention. Full backend pytest/Ruff/mypy, frontend tests and
 Windows installed-GUI acceptance remain required. The independent 1.1/1.6
 Alembic revision-0038 conflict is unchanged and remains a release blocker.
+
+## Consistent visibility GET snapshots (2026-11-15)
+
+Class-visibility GET must also be consistent under concurrent local edits.
+SQLite's legacy deferred SELECT behavior can otherwise produce a response
+whose class inventory and personal hidden-class settings were read before an
+independent editor's commit, but whose shared project defaults were read
+*after* that commit. This is display state, not biological observation data,
+but inconsistent local layer visibility can still mislead a researcher.
+
+`ClassVisibilityService.get_bundle` now starts an explicit SQLite read
+transaction before its first project/class/scope query, unless the caller
+already has an active DBAPI transaction. Existing transactions remain owned
+by their caller. No write lock, schema migration, model change, cloud
+communication, or data mutation is introduced. On SQLite WAL databases an
+independent writer can commit while a bundle is read; the bundle retains its
+original coherent snapshot, and a subsequent GET observes the new state.
+
+`test_visibility_bundle_uses_one_snapshot_across_concurrent_scope_updates`
+forces a separate writer to commit a new project default between personal
+preference and project-default reads on a real SQLite WAL database. It checks
+the first GET returns the earlier defaults, the later GET sees the new
+defaults, and neither GET modifies research records. The test is deterministic
+database-level evidence, not an installed-Windows GUI or multiprocessing
+benchmark. Existing saved, typed executable QC Workflow Builder nodes and
+researcher-approval gates are unchanged; per-editor visibility is deliberately
+not injected into scientific workflow results.
