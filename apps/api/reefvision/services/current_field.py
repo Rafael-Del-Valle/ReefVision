@@ -135,6 +135,20 @@ class CurrentFieldService:
             )
         snapshot = [record.model_dump(mode="json") for record in records]
         first = records[0]
+        methodological_notes = [
+            "Streamlines describe a frozen Eulerian current field; "
+            "they are not organism trajectories.",
+            "Bilinear interpolation requires four QC-compatible corners "
+            "and never extrapolates.",
+            "All source records share one UTC, depth, dataset/model, and cache identity.",
+            "Input velocity uncertainty is not propagated into streamline position "
+            "or length; outputs are deterministic estimates, not uncertainty bounds.",
+        ]
+        if any(record.qc == "unassessed" for record in records):
+            methodological_notes.append(
+                "At least one input current record has unassessed QC; "
+                "this streamline is exploratory and not QC-validated."
+            )
         return CurrentFieldStreamlineResponse(
             algorithm_version=ALGORITHM_VERSION,
             project_id=project_id,
@@ -148,11 +162,5 @@ class CurrentFieldService:
             longitudes=longitudes,
             input_sha256=content_hash(snapshot),
             streamlines=streamlines,
-            methodological_notes=[
-                "Streamlines describe a frozen Eulerian current field; "
-                "they are not organism trajectories.",
-                "Bilinear interpolation requires four QC-compatible corners "
-                "and never extrapolates.",
-                "All source records share one UTC, depth, dataset/model, and cache identity.",
-            ],
+            methodological_notes=methodological_notes,
         )
