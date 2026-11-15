@@ -741,7 +741,7 @@ def test_windows_native_junctions_block_research_asset_preservation(
             check=False,
         )
         if command.returncode:
-            pytest.skip("Windows runner cannot create NTFS junction fixture")
+            raise AssertionError("Windows NTFS junction fixture creation failed")
         before_bytes, after_bytes = before.read_bytes(), after.read_bytes()
         code, report = _run(before, after, original, candidate)
         assert code == 2
