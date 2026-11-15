@@ -192,6 +192,8 @@ def _compare_assets(before_root: Path, after_root: Path) -> dict:
     ):
         raise ValueError("asset_roots_must_be_independent")
     baseline = _asset_inventory(before_root)
+    if not baseline:
+        raise ValueError("no_research_assets_in_baseline")
     candidate = _asset_inventory(after_root)
     missing = sum(path not in candidate for path in baseline)
     changed = sum(
