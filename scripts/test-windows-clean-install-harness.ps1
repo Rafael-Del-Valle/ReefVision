@@ -212,10 +212,17 @@ $upgradeAfterInstallOffset = $acceptanceSource.IndexOf('$retainedResearchAfterIn
 $upgradeAfterReplayOffset = $acceptanceSource.IndexOf('$retainedResearchAfterUpgrade = Get-ReefVisionResearchFileSnapshot', [System.StringComparison]::Ordinal)
 $upgradeStageOffset = $acceptanceSource.IndexOf('$report.upgrade_install = New-ReefVisionEvidenceResult -Status ''PASS''', [System.StringComparison]::Ordinal)
 $upgradeFinalOffset = $acceptanceSource.IndexOf('$report.upgrade = New-ReefVisionEvidenceResult -Status ''PASS''', [System.StringComparison]::Ordinal)
+$postUpgradeSchemaOffset = $acceptanceSource.IndexOf('$report.post_upgrade_migration = [ordered]@{', [System.StringComparison]::Ordinal)
+$upgradedSchemaValidationOffset = $acceptanceSource.IndexOf('if (-not [string]::Equals($upgradedDatabase, $expectedDatabase', [System.StringComparison]::Ordinal)
+$restartMilestoneOffset = $acceptanceSource.IndexOf('$report.restart = New-ReefVisionEvidenceResult -Status ''PASS''', [System.StringComparison]::Ordinal)
 Assert-True ($upgradeBeforeOffset -gt 0 -and $upgradeBeforeOffset -lt $upgradeInstallOffset -and $upgradeInstallOffset -lt $upgradeAfterInstallOffset -and $upgradeAfterInstallOffset -lt $upgradeAfterReplayOffset -and $upgradeAfterReplayOffset -lt $retentionUninstallOffset) 'Upgrade must verify research assets before installer, after installer, and after workflow replay before uninstall.'
 Assert-True ($acceptanceSource.Contains('Assert-ReefVisionResearchFileSnapshotRetained -Before $retainedResearchBeforeUpgrade -After $retainedResearchAfterInstall')) 'MSI upgrade must preserve every research file before application migration.'
 Assert-True ($upgradeStageOffset -gt $upgradeAfterInstallOffset -and $upgradeStageOffset -lt $upgradeAfterReplayOffset) 'Recorded upgrade_install PASS must follow pre-migration byte verification and precede scientific replay.'
 Assert-True ($upgradeFinalOffset -gt $upgradeAfterReplayOffset) 'Final upgrade PASS must follow post-migration scientific-file verification, not just msiexec.'
+Assert-True ($postUpgradeSchemaOffset -gt $upgradedSchemaValidationOffset -and $postUpgradeSchemaOffset -lt $restartMilestoneOffset) 'Target MSI schema evidence must be recorded after validating installed API/database and before restart PASS.'
+Assert-True ($acceptanceSource.Contains('application_version = [string]$upgradedVersion.application_version')) 'Post-upgrade migration evidence must bind the target installed app version.'
+Assert-True ($acceptanceSource.Contains('current_revision = [string]$upgradedMigration.current_schema_revision')) 'Post-upgrade migration evidence must record the target schema revision.'
+Assert-True ($acceptanceSource.Contains('database_path_is_isolated = [string]::Equals(')) 'Post-upgrade migration evidence must bind the installed database to disposable research storage.'
 Assert-True ($acceptanceSource.Contains('Assert-ReefVisionResearchFileSnapshotRetained -Before $retainedResearchBeforeUpgrade -After $retainedResearchAfterUpgrade -AllowSqliteChanges')) 'MSI upgrade must preserve non-SQLite scientific assets after migrated desktop workflow replay.'
 Assert-True ($acceptanceSource.Contains('$report.uninstall.status -eq ''PASS'' -and $report.data_retention.status -eq ''PASS''')) 'Disposable cleanup must not erase evidence following research-retention failure.'
 Assert-True ($acceptanceSource.Contains('$null -eq $report.failure_reason)')) 'Disposable cleanup must preserve evidence on any acceptance error.'
