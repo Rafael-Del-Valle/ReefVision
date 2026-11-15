@@ -210,6 +210,26 @@ def verify_succeeded_node_artifacts(
     if len(matching_nodes) != 1 or matching_nodes[0].get("node_type") != node_run.node_type:
         raise ConflictError("Succeeded workflow node identity does not match saved graph")
 
+    # Direct recovery can reuse a consumer without independently replaying its
+    # producers. Bind each persisted upstream node type to the frozen graph so
+    # altered adapter identities cannot pass through checksum-valid inputs.
+    for artifact in inputs:
+        producer = session.get(WorkflowNodeRun, artifact.producer_node_run_id)
+        if producer is None:
+            raise ConflictError("Succeeded workflow input producer is missing")
+        producer_matches = [
+            saved
+            for saved in graph_nodes
+            if isinstance(saved, dict) and saved.get("node_id") == producer.node_id
+        ]
+        if (
+            len(producer_matches) != 1
+            or producer_matches[0].get("node_type") != producer.node_type
+        ):
+            raise ConflictError(
+                "Succeeded workflow input producer identity does not match saved graph"
+            )
+
     # Direct interrupted-run recovery must honor frozen scientific inputs,
     # including the verified pose dataset's pinned manifest checksum.
     saved_parameters = matching_nodes[0].get("parameters", {})
