@@ -364,6 +364,23 @@ def test_upgrade_asset_inventory_fails_closed_without_changing_evidence(
     assert (before_assets / "original.mp4").read_bytes() == original_asset_bytes
 
 
+def test_empty_asset_baseline_cannot_claim_preservation(tmp_path: Path) -> None:
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    _seed(before)
+    shutil.copyfile(before, after)
+    before_assets = tmp_path / "empty-original"
+    after_assets = tmp_path / "candidate"
+    before_assets.mkdir()
+    after_assets.mkdir()
+    (after_assets / "new-video.mp4").write_bytes(b"new")
+    code, report = _run(before, after, before_assets, after_assets)
+    assert code == 2
+    assert report["status"] == "HOLD"
+    assert "no_research_assets_in_baseline" in report["problems"]
+    assert "new-video.mp4" not in json.dumps(report)
+
+
 @pytest.mark.parametrize("case", ["unpaired", "same_root", "nested_root"])
 def test_upgrade_asset_inventory_rejects_unsafe_scope(tmp_path: Path, case: str) -> None:
     before = tmp_path / "before.sqlite"
