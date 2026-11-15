@@ -1057,7 +1057,6 @@ class WorkflowExecutionService:
                     WorkflowArtifact.workflow_run_id == run_id,
                     WorkflowArtifact.producer_node_run_id == node_run.id,
                     WorkflowArtifact.producer_port_id == specification.port_id,
-                    WorkflowArtifact.data_type == specification.data_type,
                 )
                 .order_by(
                     WorkflowArtifact.created_at,
@@ -1072,7 +1071,13 @@ class WorkflowExecutionService:
             # coercion but is not a valid persisted scientific artifact.
             verify_workflow_artifact(candidate, expected_run_id=run_id)
 
-            if candidate.payload_sha256 == checksum:
+            # A single output port has one persisted typed artifact.
+            # Deduplication must not create a second record by changing
+            # the data type while keeping the same producer and port.
+            if (
+                candidate.data_type == specification.data_type
+                and candidate.payload_sha256 == checksum
+            ):
                 return candidate
 
         if existing:
