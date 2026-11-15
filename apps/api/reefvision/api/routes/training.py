@@ -398,7 +398,10 @@ def get_training_log_tail(
     settings: Settings = request.app.state.settings
     return _training_log_tail(
         run.logs_path,
-        settings.resolved_data_dir,
+        # Pass the configured path without resolving it here. A disconnected
+        # data drive must be handled by the bounded read-only helper, rather
+        # than raising before its unavailable-snapshot fallback can run.
+        settings.data_dir,
         finalized=getattr(run, "status", None) in {"completed", "failed", "cancelled"},
     )
 
