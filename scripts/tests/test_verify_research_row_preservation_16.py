@@ -458,9 +458,7 @@ def test_asset_scan_detects_hardlink_added_after_hashing(
                 pytest.skip("filesystem does not expose reliable link counts")
         return snapshot
 
-    monkeypatch.setitem(
-        compare.__globals__, "_asset_inventory", create_alias_after_candidate_scan
-    )
+    monkeypatch.setitem(compare.__globals__, "_asset_inventory", create_alias_after_candidate_scan)
     with pytest.raises(ValueError, match="asset_changed_after_inventory") as error:
         compare(baseline, candidate)
     assert "observation.raw" not in str(error.value)
@@ -593,3 +591,74 @@ def test_asset_scan_rejects_symlink_swap_between_lstat_and_open(
     assert swapped
     assert "external-research.raw" not in str(error.value)
     assert external.read_bytes() == b"private unrelated research"
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "UPDATE sqlite_sequence SET seq = 2 WHERE name = 'scientific_records'",
+        "DELETE FROM sqlite_sequence WHERE name = 'scientific_records'",
+        "INSERT INTO sqlite_sequence (name, seq) VALUES ('scientific_records', 3)",
+    ],
+)
+def test_autoincrement_allocation_history_is_preserved(
+    tmp_path: Path, mutation: str
+) -> None:
+    """A migration must not reuse an old scientific identifier after deletion."""
+    before = tmp_path / "original.sqlite"
+    after = tmp_path / "migrated.sqlite"
+    with sqlite3.connect(before) as connection:
+        connection.execute(
+            "CREATE TABLE scientific_records "
+            "(id INTEGER PRIMARY KEY AUTOINCREMENT, species TEXT NOT NULL)"
+        )
+        connection.executemany(
+            "INSERT INTO scientific_records (species) VALUES (?)",
+            [("Swiftia",), ("Thesea",), ("Muricea",)],
+        )
+        connection.execute("DELETE FROM scientific_records WHERE id = 3")
+    shutil.copyfile(before, after)
+    with sqlite3.connect(after) as connection:
+        connection.execute(mutation)
+    original_bytes, candidate_bytes = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+    assert code == 2
+    assert report["status"] == "HOLD"
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    assert "scientific_records:changed_autoincrement_sequence" in report["problems"]
+    assert next(
+        item for item in report["tables"] if item["table"] == "scientific_records"
+    )["status"] == "changed_autoincrement_sequence"
+    assert "Swiftia" not in json.dumps(report)
+    assert before.read_bytes() == original_bytes
+    assert after.read_bytes() == candidate_bytes
+
+
+def test_additive_science_schema_preserves_autoincrement_counter(tmp_path: Path) -> None:
+    """An allowed additive migration leaves historical allocation intact."""
+    before = tmp_path / "original.sqlite"
+    after = tmp_path / "migrated.sqlite"
+    with sqlite3.connect(before) as connection:
+        connection.execute(
+            "CREATE TABLE scientific_records "
+            "(id INTEGER PRIMARY KEY AUTOINCREMENT, species TEXT NOT NULL)"
+        )
+        connection.execute(
+            "INSERT INTO scientific_records (species) VALUES ('Swiftia')"
+        )
+    shutil.copyfile(before, after)
+    with sqlite3.connect(after) as connection:
+        connection.execute(
+            "ALTER TABLE scientific_records ADD COLUMN verified_note TEXT"
+        )
+    original_bytes, candidate_bytes = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+    assert code == 0
+    assert report["status"] == "PASS_PRESERVATION_ONLY"
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    assert report["protected_tables_examined"] == 1
+    assert report["problems"] == []
+    assert before.read_bytes() == original_bytes
+    assert after.read_bytes() == candidate_bytes
