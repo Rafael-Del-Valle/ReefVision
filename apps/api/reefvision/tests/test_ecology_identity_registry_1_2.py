@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any, cast
 
 import pytest
@@ -445,6 +446,14 @@ def test_corrupt_latest_lineage_fails_closed_in_api_and_saved_workflow(
     # Simulate an invalid external import bypassing service-level revisions.
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
+        latest_recorded = max(
+            row.created_at
+            for row in session.scalars(
+                select(EcologyIdentityRevision).where(
+                    EcologyIdentityRevision.project_id == project_id
+                )
+            )
+        )
         session.add(
             EcologyIdentityRevision(
                 project_id=project_id,
@@ -452,6 +461,7 @@ def test_corrupt_latest_lineage_fails_closed_in_api_and_saved_workflow(
                 revision=2,
                 kind="individual",
                 reason="Simulated malformed external identity import",
+                created_at=latest_recorded + timedelta(microseconds=1),
             )
         )
         session.commit()
