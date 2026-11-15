@@ -232,7 +232,6 @@ def test_selected_trace_locates_indexed_face_topology_for_review(
     assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
 
 
-
 def test_duplicate_face_qc_is_direct_engine_only_and_preview_rejects_it(
     client: TestClient,
 ) -> None:
