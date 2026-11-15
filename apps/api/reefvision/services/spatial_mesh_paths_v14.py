@@ -720,7 +720,9 @@ def mesh_surface_edge_traces(
         # meaningful intermediate positions when calibrated lengths underflow
         # or the unscaled source total exceeds binary64's numeric range.
         # These fractions are not homologous anatomical landmarks.
-        exact_source_total = sum((Fraction(length) for length in source_lengths), Fraction(0))
+        exact_source_total = sum(
+            (Fraction(length) for length in source_lengths), Fraction(0)
+        )
         source_cumulative_arc_length_fractions: list[float] | None = None
         if exact_source_total > 0:
             source_cumulative_arc_length_fractions = [0.0]
