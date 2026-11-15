@@ -224,6 +224,11 @@ def verify_succeeded_node_artifacts(
     if len(matching_nodes) != 1 or matching_nodes[0].get("node_type") != node_run.node_type:
         raise ConflictError("Succeeded workflow node identity does not match saved graph")
 
+    # Resolve one registry snapshot for both direct and upstream recovery.
+    from reefvision.services.workflow_graphs import workflow_node_registry
+
+    registry = workflow_node_registry()
+
     # Direct recovery can reuse a consumer without independently replaying its
     # producers. Bind each persisted upstream node type to the frozen graph so
     # altered adapter identities cannot pass through checksum-valid inputs.
@@ -257,6 +262,19 @@ def verify_succeeded_node_artifacts(
             raise ConflictError(
                 "Succeeded workflow input producer parameters do not match saved graph"
             )
+        # A consumer may be recovered without replaying the producer. Verify
+        # upstream resolved optional defaults as well as graph-specified values.
+        # The producer contract's absence is rejected by the port check below.
+        producer_definition = registry.get(producer.node_type)
+        if producer_definition is not None and isinstance(producer_parameters, dict) and any(
+            key not in frozen_parameters
+            and key in producer_parameters
+            and producer_parameters[key] != default
+            for key, default in producer_definition.optional_parameters.items()
+        ):
+            raise ConflictError(
+                "Succeeded workflow input producer resolved defaults differ from saved plan"
+            )
 
     # Direct interrupted-run recovery must honor frozen scientific inputs,
     # including the verified pose dataset's pinned manifest checksum.
@@ -275,9 +293,6 @@ def verify_succeeded_node_artifacts(
     # The payload SHA does not cover a saved artifact's declared type. Even
     # if a corrupted result summary is rewritten to agree with the artifact,
     # recovery must honor the registered typed output-port contract.
-    from reefvision.services.workflow_graphs import workflow_node_registry
-
-    registry = workflow_node_registry()
     definition = registry.get(node_run.node_type)
     if definition is None:
         # A missing adapter definition makes the saved port contract unknowable.
