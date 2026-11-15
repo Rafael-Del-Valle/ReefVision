@@ -157,18 +157,14 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
             workflow_graphs,
             "workflow_node_registry",
             lambda: {
-                key: value
-                for key, value in original_registry().items()
-                if key != "project_source"
+                key: value for key, value in original_registry().items() if key != "project_source"
             },
         )
         with app.state.session_factory() as session:
             consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
             assert consumer is not None
             with pytest.raises(ConflictError, match="input producer type is not registered"):
-                verify_succeeded_node_artifacts(
-                    session, run_id=str(run["id"]), node_run=consumer
-                )
+                verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
     # This executed two-node graph has a real producer -> consumer edge.
