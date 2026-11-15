@@ -206,7 +206,9 @@ def _asset_mismatch_fields(first: os.stat_result, second: os.stat_result) -> str
     labels = ("device", "inode", "size", "mtime", "type", "links")
     return ",".join(
         label
-        for label, a, b in zip(labels, _asset_handle_state(first), _asset_handle_state(second))
+        for label, a, b in zip(
+            labels, _asset_handle_state(first), _asset_handle_state(second), strict=True
+        )
         if a != b
     )
 
