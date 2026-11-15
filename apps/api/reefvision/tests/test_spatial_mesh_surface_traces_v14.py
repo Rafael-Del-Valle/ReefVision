@@ -409,6 +409,11 @@ def test_reuse_fraction_withholds_overflowed_source_total() -> None:
     assert trace["source_trace_length_mesh_units"] is None
     assert trace["reused_geometric_segment_source_length_mesh_units"] == pytest.approx(1e308)
     assert trace["reused_geometric_segment_fraction_of_trace"] is None
+    fractions = trace["source_cumulative_arc_length_fractions"]
+    assert fractions is not None
+    assert fractions[0] == 0.0
+    assert fractions[-1] == 1.0
+    assert all(0 <= a < b <= 1 for a, b in zip(fractions, fractions[1:], strict=True))
     assert "surface_trace_source_length_unrepresentable" in trace["qc_warnings"]
     assert "surface_trace_reuse_fraction_unrepresentable" in trace["qc_warnings"]
     assert trace["human_review_verified"] is False
@@ -435,9 +440,7 @@ def test_direct_trace_geometric_keys_preserve_list_and_tuple_xyz(
     assert points == original_points
     assert trace["geometric_edge_face_incidence_counts"] == [2, 1]
     assert trace["split_vertex_seam_segment_indices"] == [0]
-    assert trace["split_vertex_winding_segment_indices"] == (
-        [0] if conflicting_winding else []
-    )
+    assert trace["split_vertex_winding_segment_indices"] == ([0] if conflicting_winding else [])
     assert trace["human_review_verified"] is False
     assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
 
@@ -739,6 +742,37 @@ def test_source_geometry_survives_positive_segment_calibration_underflow() -> No
     assert trace["human_review_verified"] is False
 
 
+@pytest.mark.parametrize("scale", [1e-100, 0.01, 2.0])
+def test_source_arc_fractions_preserve_tiny_waypoint_underflow_and_scale(scale: float) -> None:
+    trace = mesh_surface_edge_traces(
+        [(0.0, 0.0, 0.0), (1e-250, 0.0, 0.0), (1e-250, 1.0, 0.0)],
+        [[0, 1, 2]],
+        [[0, 1, 2]],
+        scale,
+        0.1,
+    )[0]
+    assert trace["source_cumulative_arc_length_fractions"] == pytest.approx(
+        [0.0, 1e-250, 1.0], abs=0
+    )
+    assert "surface_trace_source_arc_fraction_resolution_loss" not in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+
+
+def test_source_arc_fraction_resolution_loss_is_explicit_not_fabricated_progress() -> None:
+    smallest = float.fromhex("0x0.0000000000001p-1022")
+    trace = mesh_surface_edge_traces(
+        [(0.0, 0.0, 0.0), (smallest, 0.0, 0.0), (smallest, 1e10, 0.0)],
+        [[0, 1, 2]],
+        [[0, 1, 2]],
+        1e-10,
+        None,
+    )[0]
+    assert trace["source_segment_lengths_mesh_units"][0] > 0
+    assert trace["source_cumulative_arc_length_fractions"] == [0.0, 0.0, 1.0]
+    assert "surface_trace_source_arc_fraction_resolution_loss" in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+
+
 def test_trace_underflow_uncertainty_matches_api_without_false_zero_bounds() -> None:
     trace = measure_mesh_preview(**SEGMENT_UNDERFLOW_PREVIEW_PARAMS)["surface_edge_traces"][0]
     assert trace["source_segment_lengths_mesh_units"] == pytest.approx([1e-250], abs=0)
@@ -763,6 +797,8 @@ def test_genuinely_zero_source_trace_retains_exact_zero_intervals() -> None:
     assert trace["source_segment_lengths_mesh_units"] == [0.0]
     assert trace["reused_geometric_segment_source_length_mesh_units"] == 0.0
     assert trace["reused_geometric_segment_fraction_of_trace"] is None
+    assert trace["source_cumulative_arc_length_fractions"] is None
+    assert "surface_trace_source_arc_fractions_undefined_zero_total" in trace["qc_warnings"]
     assert trace["segment_length_scale_only_intervals_m"] == [[0.0, 0.0]]
     assert trace["cumulative_length_scale_only_intervals_m"] == [
         [0.0, 0.0],
@@ -928,6 +964,15 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert "endpoint_chord_length_m" in trace
     assert "geometric_detour_ratio" in trace
     assert len(trace["source_segment_lengths_mesh_units"]) == trace["edge_count"]
+    fractions = trace["source_cumulative_arc_length_fractions"]
+    assert fractions is None or (
+        len(fractions) == len(trace["vertex_indices"])
+        and fractions[0] == 0.0
+        and fractions[-1] == 1.0
+        and all(0 <= a <= b <= 1 for a, b in zip(fractions, fractions[1:], strict=True))
+    )
+    if case == "ordinary":
+        assert fractions == pytest.approx([0.0, 1 / (1 + sqrt(2)), 1.0])
     assert all(
         0 <= earlier < later - 1 < len(trace["vertex_indices"])
         for earlier, later in trace["nonadjacent_coincident_waypoint_index_pairs"]
