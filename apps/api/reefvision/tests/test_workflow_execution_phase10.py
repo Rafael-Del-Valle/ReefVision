@@ -146,6 +146,22 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
     assert artifacts["image_collection"]["payload_json"]["count"] == 2
     assert all(len(item["payload_sha256"]) == 64 for item in payload["artifacts"])
 
+    # The saved graph omitted the image-status filter, so Workflow Builder
+    # materialized its registered default. Altering only that resolved value
+    # would change the scientific image selection on recovery without changing
+    # the checksum-pinned graph or any already-produced artifact.
+    with app.state.session_factory() as session:
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert consumer is not None
+        original_parameters = dict(consumer.parameters_json or {})
+        assert original_parameters["annotation_status"] is None
+        consumer.parameters_json = {**original_parameters, "annotation_status": "verified"}
+        session.flush()
+        with pytest.raises(ConflictError, match="resolved defaults differ from saved plan"):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
     # The actual completed producer -> consumer workflow must not be reused
     # when the producer's registered output contract disappears after an
     # upgrade. A consumer-only registry check would miss that adapter drift.
