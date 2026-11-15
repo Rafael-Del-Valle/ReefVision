@@ -142,6 +142,63 @@ def test_log_tail_allows_worker_append_during_read(
     assert log.read_bytes() == original + appended
 
 
+@pytest.mark.parametrize("mutation", ["truncate", "overwrite"])
+@pytest.mark.parametrize("identity_check", ["open_handle", "path"])
+def test_log_tail_rejects_in_place_mutation_during_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+    identity_check: str,
+) -> None:
+    """Reject stale loss snapshots even when the file inode never changes."""
+    log = tmp_path / "training.log"
+    original = b"epoch=4\\ntrain/box_loss=0.25\\ntrain/cls_loss=0.30\\n"
+    log.write_bytes(original)
+    real_fstat = os.fstat
+    real_stat = Path.stat
+    fstat_calls = 0
+
+    def changed_identity(identity: os.stat_result) -> SimpleNamespace:
+        return SimpleNamespace(
+            st_dev=identity.st_dev,
+            st_ino=identity.st_ino,
+            st_nlink=identity.st_nlink,
+            st_size=identity.st_size - 1 if mutation == "truncate" else identity.st_size,
+            st_mtime_ns=(
+                identity.st_mtime_ns + 1_000_000_000
+                if mutation == "overwrite"
+                else identity.st_mtime_ns
+            ),
+        )
+
+    def fstat_after_read(fd: int) -> os.stat_result | SimpleNamespace:
+        nonlocal fstat_calls
+        fstat_calls += 1
+        identity = real_fstat(fd)
+        if fstat_calls == 2 and identity_check == "open_handle":
+            return changed_identity(identity)
+        return identity
+
+    def stat_after_read(
+        path: Path, *args: object, **kwargs: object
+    ) -> os.stat_result | SimpleNamespace:
+        identity = real_stat(path, *args, **kwargs)
+        if path == log and fstat_calls >= 2 and identity_check == "path":
+            return changed_identity(identity)
+        return identity
+
+    # Simulated stat changes are deterministic and portable on Windows, where
+    # opening a second write handle while a reader is active may be disallowed.
+    # Neither the production reader nor this regression modifies the log.
+    monkeypatch.setattr(training_routes.os, "fstat", fstat_after_read)
+    monkeypatch.setattr(Path, "stat", stat_after_read)
+    with pytest.raises(HTTPException) as error:
+        training_routes._training_log_tail("training.log", tmp_path)
+    assert error.value.status_code == 403
+    assert fstat_calls == 2
+    assert log.read_bytes() == original
+
+
 def test_log_tail_rejects_in_root_hardlink_to_unrelated_scientific_file(
     tmp_path: Path,
 ) -> None:

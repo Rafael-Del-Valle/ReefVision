@@ -341,6 +341,23 @@ def _training_log_tail(
                 != (opened_identity.st_dev, opened_identity.st_ino)
                 or (current_identity.st_dev, current_identity.st_ino)
                 != (opened_identity.st_dev, opened_identity.st_ino)
+                # In-place truncation keeps the inode but invalidates a
+                # bounded snapshot; never present mixed or stale loss values.
+                or read_finished.st_size < size
+                or current_identity.st_size < size
+                # A same-length rewrite can also preserve the inode. Compare
+                # modification times only when no append occurred since open,
+                # so ordinary live worker appends remain observable.
+                or (
+                    size == opened_identity.st_size
+                    and read_finished.st_size == size
+                    and read_finished.st_mtime_ns != opened_identity.st_mtime_ns
+                )
+                or (
+                    size == opened_identity.st_size
+                    and current_identity.st_size == size
+                    and current_identity.st_mtime_ns != opened_identity.st_mtime_ns
+                )
             ):
                 raise HTTPException(status_code=403, detail="Training log changed during read")
     except OSError:
