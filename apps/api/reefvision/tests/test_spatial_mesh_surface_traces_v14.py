@@ -334,6 +334,7 @@ def test_duplicate_face_qc_is_direct_engine_only_and_preview_rejects_it(
         for artifact in detail.json()["artifacts"]
     )
 
+
 @pytest.mark.parametrize("scale", [0.01, 1.0])
 @pytest.mark.parametrize("conflicting", [False, True])
 def test_split_vertex_seam_reports_hidden_winding_conflict_only_when_present(
