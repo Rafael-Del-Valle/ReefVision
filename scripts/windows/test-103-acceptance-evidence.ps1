@@ -71,6 +71,62 @@ try {
     if ($changedMsi.Count -ne 1 -or $changedMsi[0].sha256 -cne $changedHash -or $changedMsi[0].sha256 -ceq $originalHash) {
         throw 'Modified MSI bytes did not invalidate the previous evidence hash.'
     }
+    # An in-progress installer must never be reported as a stable artifact.
+    # Holding a write-capable handle simulates a packaging process that has
+    # not finished. The collector's read-only handle must fail closed on
+    # Windows rather than hashing concurrently mutable bytes.
+    $writer = [System.IO.File]::Open(
+        $sample,
+        [System.IO.FileMode]::Open,
+        [System.IO.FileAccess]::ReadWrite,
+        [System.IO.FileShare]::ReadWrite
+    )
+    try {
+        $mutableRejected = $false
+        try { $null = & $collector -CandidateSha $sha -MsiPath $sample 2>&1 }
+        catch { $mutableRejected = $true }
+        if (-not $mutableRejected) {
+            throw 'A mutable, writer-open MSI was incorrectly accepted as stable evidence.'
+        }
+    } finally {
+        $writer.Dispose()
+    }
+    $afterWriter = (& $collector -CandidateSha $sha -MsiPath $sample | Out-String | ConvertFrom-Json)
+    if (@($afterWriter.artifacts | Where-Object { $_.kind -eq 'msi' -and $_.status -eq 'hashed' }).Count -ne 1) {
+        throw 'Completed MSI could not be read after its writer closed.'
+    }
+    # Where Windows allows disposable symlink creation, reject both file
+    # aliases and linked parent directories; never inspect linked targets.
+    $fileLink = Join-Path $fixture 'linked installer.msi'
+    $linkCreated = $false
+    try {
+        $null = New-Item -ItemType SymbolicLink -Path $fileLink -Target $sample -ErrorAction Stop
+        $linkCreated = $true
+    } catch {
+        Write-Output "SKIP: Windows symlink privilege unavailable: $($_.Exception.GetType().Name)"
+    }
+    if ($linkCreated) {
+        $linkedRejected = $false
+        try { $null = & $collector -CandidateSha $sha -MsiPath $fileLink 2>&1 }
+        catch { $linkedRejected = $true }
+        if (-not $linkedRejected) { throw 'Symlinked MSI incorrectly accepted as source artifact.' }
+    }
+    $folderLink = Join-Path $fixture 'linked folder'
+    $folderLinkCreated = $false
+    try {
+        $null = New-Item -ItemType SymbolicLink -Path $folderLink -Target $fixture -ErrorAction Stop
+        $folderLinkCreated = $true
+    } catch {
+        Write-Output "SKIP: Windows directory symlink privilege unavailable: $($_.Exception.GetType().Name)"
+    }
+    if ($folderLinkCreated) {
+        $linkedParentRejected = $false
+        try { $null = & $collector -CandidateSha $sha -MsiPath (Join-Path $folderLink 'camera test artifact.msi') 2>&1 }
+        catch { $linkedParentRejected = $true }
+        if (-not $linkedParentRejected) {
+            throw 'MSI through a symlinked parent directory incorrectly passed artifact acceptance.'
+        }
+    }
     # An arbitrary binary must not be mislabeled as a verified MSI/CAB.
     $wrongExtension = Join-Path $fixture 'not-an-installer.bin'
     [System.IO.File]::WriteAllBytes($wrongExtension, [byte[]](1, 2, 3))
@@ -112,7 +168,7 @@ try {
         Remove-Item Function:\Get-Command -ErrorAction SilentlyContinue
         $env:PATH = $oldPath
     }
-    Write-Output 'PASS: SHA validation, MSI/CAB hashes, missing artifacts, mutation-sensitive hashes, safe GPU executable discovery, directory rejection, and evidence limitations.'
+    Write-Output 'PASS: SHA validation, stable MSI/CAB handle hashes, mutable-writer rejection, linked-path checks where supported, safe GPU discovery, and evidence limitations.'
 } finally {
     Remove-Item -LiteralPath $fixture -Recurse -Force -ErrorAction SilentlyContinue
 }

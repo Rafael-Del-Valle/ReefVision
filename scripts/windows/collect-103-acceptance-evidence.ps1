@@ -15,9 +15,23 @@ function Get-ArtifactEvidence([string]$Path, [string]$Kind) {
     if ([string]::IsNullOrWhiteSpace($Path)) {
         return [pscustomobject]@{ kind = $Kind; status = 'not_provided' }
     }
-    $resolved = Resolve-Path -LiteralPath $Path -ErrorAction Stop
-    $file = Get-Item -LiteralPath $resolved.Path -ErrorAction Stop
+    $file = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
     if ($file.PSIsContainer) { throw "$Kind path is a directory." }
+    # Do not follow installer symlinks or junction parents into another build
+    # directory. The approved evidence path must identify a regular file.
+    if (($file.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "$Kind artifact must not be a symbolic link or reparse point."
+    }
+    $ancestor = Split-Path -Path $file.FullName -Parent
+    while ($ancestor) {
+        $directory = Get-Item -LiteralPath $ancestor -Force -ErrorAction Stop
+        if (($directory.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "$Kind artifact path must not traverse a junction or symbolic link."
+        }
+        $parent = Split-Path -Path $ancestor -Parent
+        if (-not $parent -or $parent -eq $ancestor) { break }
+        $ancestor = $parent
+    }
     # Do not label an arbitrary file as an installer artifact merely because it
     # was supplied in the MSI/CAB argument. This is an extension check, not
     # signature verification or proof of a successful installer build.
@@ -25,12 +39,32 @@ function Get-ArtifactEvidence([string]$Path, [string]$Kind) {
     if (-not [string]::Equals($file.Extension, $expectedExtension, [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "$Kind artifact must have the $expectedExtension extension."
     }
+    # Hash and count bytes from the SAME open read-only handle. Deny
+    # concurrent writers/deleters on Windows: a file still being built must
+    # fail evidence collection, not yield a mixed or stale SHA-256/size pair.
+    $stream = [System.IO.File]::Open(
+        $file.FullName,
+        [System.IO.FileMode]::Open,
+        [System.IO.FileAccess]::Read,
+        [System.IO.FileShare]::Read
+    )
+    try {
+        $bytes = $stream.Length
+        $hasher = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            $sha256 = ([BitConverter]::ToString($hasher.ComputeHash($stream))).Replace('-', '').ToLowerInvariant()
+        } finally {
+            $hasher.Dispose()
+        }
+    } finally {
+        $stream.Dispose()
+    }
     return [pscustomobject]@{
         kind = $Kind
         status = 'hashed'
         path = $file.FullName
-        bytes = $file.Length
-        sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        bytes = $bytes
+        sha256 = $sha256
     }
 }
 $webviewPaths = @(
