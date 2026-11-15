@@ -154,8 +154,17 @@ def verify_succeeded_node_artifacts(
         # A checksum-valid artifact on the expected port is not necessarily
         # one the upstream node actually published. Recovery must reject
         # undeclared producer outputs before reusing saved scientific inputs.
-        if artifact.id not in _artifact_ids(producer.output_artifact_ids_json, field="output IDs"):
+        declared_ids = _artifact_ids(producer.output_artifact_ids_json, field="output IDs")
+        if artifact.id not in declared_ids:
             raise ConflictError("Succeeded workflow node input is not a declared producer output")
+        # Historical producers may omit an output summary. Even then, a
+        # consumer-only recovery must reject forged sibling output ownership.
+        for declared_id in declared_ids:
+            published = _artifact_by_id(session, declared_id, run_id=run_id)
+            if published.producer_node_run_id != producer.id:
+                raise ConflictError(
+                    "Succeeded workflow input producer declares output owned by another node"
+                )
         # A checksum-valid input can still contradict the producer's saved
         # result summary. Direct consumer recovery must check that evidence
         # even when the upstream node is not being independently replayed.
@@ -168,7 +177,6 @@ def verify_succeeded_node_artifacts(
                 raise ConflictError("Succeeded workflow producer output summary is invalid")
             # Check the entire producer declaration, not just the artifact
             # consumed by this node. Forged extra records invalidate lineage.
-            declared_ids = _artifact_ids(producer.output_artifact_ids_json, field="output IDs")
             summary_ids = [
                 item.get("artifact_id")
                 for item in producer_outputs
