@@ -37,6 +37,11 @@ def test_streamline_preview_uses_one_compatible_scientific_record_slice(
                             "dataset_id": "fixture-v1",
                             "acquired_at": datetime(2026, 1, 2, tzinfo=UTC).isoformat(),
                             "method": "test",
+                            "processing_parameters": (
+                                {"smoothing_radius_m": 10, "grid_revision": "r1"}
+                                if variable == "current_eastward_velocity"
+                                else {"grid_revision": "r1", "smoothing_radius_m": 10}
+                            ),
                         },
                     }
                 )
@@ -122,6 +127,7 @@ def test_streamline_preview_uses_one_compatible_scientific_record_slice(
         ("provenance.dataset_id", "different grid", "share UTC"),
         ("provenance.model_version", "v2", "share UTC"),
         ("provenance.method", "interpolated from another sensor", "method"),
+        ("provenance.processing_parameters", {"smoothing_radius_m": 500}, "processing"),
         ("provenance.spatial_resolution_m", 1000.0, "resolution"),
         ("provenance.temporal_resolution_s", 3600.0, "resolution"),
         ("qc", "suspect", "Suspect or rejected"),

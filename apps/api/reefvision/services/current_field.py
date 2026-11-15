@@ -38,6 +38,7 @@ class CurrentFieldService:
             provenance.dataset_id,
             provenance.model_version,
             provenance.method,
+            content_hash(provenance.processing_parameters),
             provenance.spatial_resolution_m,
             provenance.temporal_resolution_s,
             record.environmental_cache_key,
@@ -63,7 +64,8 @@ class CurrentFieldService:
         if len({self._identity(record) for record in records}) != 1:
             raise ValidationError(
                 "Current components must share UTC, depth, source, dataset, "
-                "model, method, spatial/temporal resolution, and cache identity"
+                "model, method, processing parameters, spatial/temporal resolution, "
+                "and cache identity"
             )
         if any(record.variable not in {EAST, NORTH} for record in records):
             raise ValidationError(
