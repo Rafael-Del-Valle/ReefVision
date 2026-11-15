@@ -146,6 +146,31 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
     assert artifacts["image_collection"]["payload_json"]["count"] == 2
     assert all(len(item["payload_sha256"]) == 64 for item in payload["artifacts"])
 
+    # The actual completed producer -> consumer workflow must not be reused
+    # when the producer's registered output contract disappears after an
+    # upgrade. A consumer-only registry check would miss that adapter drift.
+    from reefvision.services import workflow_graphs
+
+    original_registry = workflow_graphs.workflow_node_registry
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            workflow_graphs,
+            "workflow_node_registry",
+            lambda: {
+                key: value
+                for key, value in original_registry().items()
+                if key != "project_source"
+            },
+        )
+        with app.state.session_factory() as session:
+            consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+            assert consumer is not None
+            with pytest.raises(ConflictError, match="input producer type is not registered"):
+                verify_succeeded_node_artifacts(
+                    session, run_id=str(run["id"]), node_run=consumer
+                )
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
     # This executed two-node graph has a real producer -> consumer edge.
     # Reversing both saved positions remains contiguous but must invalidate
     # run detail and exported scientific provenance until restored.
