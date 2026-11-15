@@ -120,6 +120,79 @@ def test_additive_schema_and_new_qc_table_preserve_original_record_projection(
     assert after.read_bytes() == new_bytes
 
 
+@pytest.mark.parametrize("storage", ["VIRTUAL", "STORED"])
+@pytest.mark.parametrize("candidate", ["changed_expression", "removed_column"])
+def test_generated_scientific_column_preserved(
+    tmp_path: Path, storage: str, candidate: str
+) -> None:
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+
+    def create(path: Path, expression: str | None) -> None:
+        generated = (
+            f", length_mm REAL GENERATED ALWAYS AS ({expression}) {storage}"
+            if expression is not None
+            else ""
+        )
+        with sqlite3.connect(path) as connection:
+            connection.execute(
+                "CREATE TABLE scientific_records "
+                f"(id TEXT PRIMARY KEY, raw_length_mm REAL NOT NULL{generated})"
+            )
+            connection.execute(
+                "INSERT INTO scientific_records (id, raw_length_mm) VALUES (?, ?)",
+                ("coral-1", 3.5),
+            )
+
+    create(before, "raw_length_mm * 2.0")
+    create(
+        after,
+        "raw_length_mm * 3.0" if candidate == "changed_expression" else None,
+    )
+    original = before.read_bytes()
+    upgraded = after.read_bytes()
+    code, report = _run(before, after)
+    assert code == 2
+    assert report["status"] == "HOLD"
+    expected = "changed_records" if candidate == "changed_expression" else "removed_columns"
+    assert any(
+        item["table"] == "scientific_records" and item["status"] == expected
+        for item in report["tables"]
+    )
+    assert report["upgrade_authorized"] is False
+    assert "coral-1" not in json.dumps(report)
+    assert before.read_bytes() == original
+    assert after.read_bytes() == upgraded
+
+
+@pytest.mark.parametrize("storage", ["VIRTUAL", "STORED"])
+def test_new_generated_column_does_not_modify_original_science(
+    tmp_path: Path, storage: str
+) -> None:
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    with sqlite3.connect(before) as connection:
+        connection.execute(
+            "CREATE TABLE scientific_records (id INTEGER PRIMARY KEY, raw_length_mm REAL)"
+        )
+        connection.execute("INSERT INTO scientific_records VALUES (1, 3.5)")
+    with sqlite3.connect(after) as connection:
+        connection.execute(
+            "CREATE TABLE scientific_records (id INTEGER PRIMARY KEY, raw_length_mm REAL, "
+            f"length_mm REAL GENERATED ALWAYS AS (raw_length_mm * 2.0) {storage})"
+        )
+        connection.execute("INSERT INTO scientific_records (id, raw_length_mm) VALUES (1, 3.5)")
+    original, upgraded = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+    assert code == 0
+    assert report["status"] == "PASS_PRESERVATION_ONLY"
+    assert report["protected_tables_examined"] == 1
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    assert before.read_bytes() == original
+    assert after.read_bytes() == upgraded
+
+
 def test_no_pk_uses_canonical_column_order_for_record_preservation(tmp_path: Path) -> None:
     before = tmp_path / "before.sqlite"
     after = tmp_path / "after.sqlite"
