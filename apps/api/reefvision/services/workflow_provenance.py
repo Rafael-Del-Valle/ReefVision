@@ -289,9 +289,7 @@ def verify_succeeded_node_artifacts(
     # Check only defaults actually persisted, preserving older runs that did
     # not record a subsequently introduced optional parameter.
     if isinstance(node_parameters, dict) and any(
-        key not in saved_parameters
-        and key in node_parameters
-        and node_parameters[key] != default
+        key not in saved_parameters and key in node_parameters and node_parameters[key] != default
         for key, default in definition.optional_parameters.items()
     ):
         raise ConflictError("Succeeded workflow node resolved defaults differ from saved plan")
