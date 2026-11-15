@@ -1033,3 +1033,44 @@ against the standalone API. `human_review_verified` stays false;
 independent contour annotation, specimen-level repeatability,
 installed Windows GUI, and physical GPU validation remain separate
 release requirements.
+
+### Maximum source-planar selected-vertex chord (provisional extent)
+
+A geometrically simple, exactly source-planar, caller-selected closed
+mesh-edge contour now reports the largest pairwise straight-line distance
+between its distinct source vertices:
+`closed_loop_source_planar_maximum_vertex_chord_mesh_units`,
+`closed_loop_source_planar_maximum_vertex_chord_waypoint_offsets`,
+`closed_loop_planar_maximum_vertex_chord_m`, and
+`closed_loop_planar_maximum_vertex_chord_scale_only_interval_m`.
+The closing duplicate of the first waypoint is excluded. Waypoint offsets
+refer to the submitted trace, not canonicalized biological landmarks; ties
+select the first maximizing pair in that submitted order. The numerical span
+is unchanged by reversing direction, rotating the starting waypoint, or
+changing only the shared positive calibration, except for the expected
+linear scaling of the meter value and its uncertainty interval.
+
+For a simple planar polygon, its greatest straight-line separation is
+attained by a pair of vertices, so this is a bounded, geometrically
+interpretable selected-contour dimension. It is **not** a verified organism
+length, coral branch width, Feret minimum width, anatomical diameter, or
+reconstructed three-dimensional tissue surface. Source coordinates, rather
+than rounded viewer coordinates, determine both the selected pair and span.
+An open, noncoplanar, intersecting, or otherwise nonsimple trace returns
+`null` for all four fields. A nonrepresentable positive source span is
+withheld with
+`closed_surface_trace_source_planar_maximum_chord_unrepresentable`;
+calibrated span or interval overflow/underflow is separately reported
+without replacing an unknown physical measurement with zero or infinity.
+Absent scale-uncertainty evidence gives a `null` interval, not a
+zero-uncertainty claim.
+
+Analytical right-triangle references (including a triangle embedded in the
+YZ plane), reversed and rotated waypoint cases, full 100% scale uncertainty,
+non-simple and nonplanar rejection, and tiny linear measurements independently
+check this diagnostic. A saved, typed, executable Workflow Builder regression
+requires its persisted measurement artifact and provenance to equal the
+standalone project-scoped API result. These synthetic tests do **not**
+satisfy held-out coral annotation, independent calibration, installed Windows
+GUI, physical GPU or release-readiness acceptance. The output remains
+`human_review_verified: false`.
