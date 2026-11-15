@@ -266,6 +266,4 @@ def test_qc_table_stages_reject_all_pre_creation_stamps_without_data_changes(
         assert first["inventory"][table]["rows"] == 1
     assert path.read_bytes() == original
     with sqlite3.connect(path) as db:
-        assert db.execute("SELECT note FROM coral_sentinel").fetchone() == (
-            "original observation",
-        )
+        assert db.execute("SELECT note FROM coral_sentinel").fetchone() == ("original observation",)
