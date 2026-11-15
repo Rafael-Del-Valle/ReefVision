@@ -244,7 +244,8 @@ def verify_succeeded_node_artifacts(
     # recovery must honor the registered typed output-port contract.
     from reefvision.services.workflow_graphs import workflow_node_registry
 
-    definition = workflow_node_registry().get(node_run.node_type)
+    registry = workflow_node_registry()
+    definition = registry.get(node_run.node_type)
     if definition is None:
         # A missing adapter definition makes the saved port contract unknowable.
         # Do not silently waive type validation while recovering offline runs.
@@ -279,6 +280,20 @@ def verify_succeeded_node_artifacts(
     for edge, artifact in zip(incoming_edges, inputs, strict=True):
         if artifact.data_type not in accepted_inputs.get(edge.get("target_port_id"), set()):
             raise ConflictError("Succeeded workflow node input type does not match registry")
+
+    # Direct recovery must check the upstream adapter contract, not only the
+    # consumer's accepted input type. A removed or changed producer adapter
+    # makes a checksum-valid saved input unsafe to reuse after an upgrade.
+    for artifact in inputs:
+        producer = session.get(WorkflowNodeRun, artifact.producer_node_run_id)
+        producer_definition = registry.get(producer.node_type) if producer else None
+        if producer_definition is None:
+            raise ConflictError("Succeeded workflow input producer type is not registered")
+        producer_types = {
+            port.port_id: set(port.accepted_types) for port in producer_definition.output_ports
+        }
+        if artifact.data_type not in producer_types.get(artifact.producer_port_id, set()):
+            raise ConflictError("Succeeded workflow input producer output type does not match registry")
 
     for artifact in outputs:
         if artifact.producer_node_run_id != node_run.id:
