@@ -46,6 +46,7 @@ def good_report() -> dict:
             "expected_revision": "0040",
             "database_path_is_isolated": True,
         },
+        "upgrade_install": {"status": "SKIPPED", "detail": "SkipUpgrade requested"},
         "upgrade": {"status": "SKIPPED", "detail": "SkipUpgrade requested"},
         "sam2_live": {"status": "SKIPPED"},
         "confidence_review": {"status": "SKIPPED"},
@@ -160,6 +161,7 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                     MODULE.validate_report(good_report(), expected_version=version)
                 report = good_report()
                 report["reefvision_version"] = "2.0.0"
+                report["upgrade_install"] = pass_evidence()
                 report["upgrade"] = pass_evidence()
                 report["previous_installer_path"] = "C:/previous.msi"
                 report["previous_installer_sha256"] = "b" * 64
@@ -177,6 +179,7 @@ class AcceptanceEvidenceTests(unittest.TestCase):
     def test_upgrade_requires_real_higher_version_and_previous_installer(self) -> None:
         report = good_report()
         report["reefvision_version"] = "1.0.3"
+        report["upgrade_install"] = pass_evidence()
         report["upgrade"] = pass_evidence()
         report["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
         report["previous_installer_sha256"] = "b" * 64
@@ -227,6 +230,7 @@ class AcceptanceEvidenceTests(unittest.TestCase):
 
         upgraded = good_report()
         upgraded["reefvision_version"] = "1.0.3"
+        upgraded["upgrade_install"] = pass_evidence()
         upgraded["upgrade"] = pass_evidence()
         upgraded["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
         upgraded["previous_installer_sha256"] = "b" * 64
@@ -246,6 +250,7 @@ class AcceptanceEvidenceTests(unittest.TestCase):
             report["reefvision_version"] = "1.0.3"
             report["installer_path"] = str(target)
             report["installer_sha256"] = hashlib.sha256(target.read_bytes()).hexdigest()
+            report["upgrade_install"] = pass_evidence()
             report["upgrade"] = pass_evidence()
             report["previous_installer_path"] = str(previous)
             report["previous_installer_version"] = "1.0.2"
@@ -321,20 +326,88 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                 report[gate]["timestamp_utc"] = f"2026-10-25T02:{minute:02d}:00Z"
         MODULE.validate_report(report, expected_version="1.0.2")
 
-    def test_real_upgrade_evidence_must_precede_restart(self) -> None:
+    def test_real_upgrade_install_must_precede_restart(self) -> None:
         report = good_report()
         report["reefvision_version"] = "1.0.3"
+        report["upgrade_install"] = pass_evidence()
         report["upgrade"] = pass_evidence()
         report["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
         report["previous_installer_sha256"] = "b" * 64
         report["previous_installer_version"] = "1.0.2"
         MODULE.validate_report(report, expected_version="1.0.3", expected_upgrade="passed")
-        report["upgrade"]["timestamp_utc"] = "2026-10-25T02:12:00Z"
+        report["upgrade_install"]["timestamp_utc"] = "2026-10-25T02:12:00Z"
         report["restart"]["timestamp_utc"] = "2026-10-25T02:08:00Z"
         with self.assertRaisesRegex(
             MODULE.AcceptanceEvidenceError, "causal order invalid"
         ):
             MODULE.validate_report(report, expected_version="1.0.3", expected_upgrade="passed")
+
+    def test_upgrade_install_and_final_science_gate_have_distinct_times(self) -> None:
+        # Matches the *actual* PowerShell harness: the MSI and byte-retention
+        # check finish before restart, but the final upgraded-science verdict
+        # cannot PASS until the installed QC workflow has run and assets have
+        # been verified again after application migration.
+        report = good_report()
+        report["reefvision_version"] = "1.0.3"
+        report["upgrade_install"] = pass_evidence()
+        report["upgrade"] = pass_evidence()
+        report["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
+        report["previous_installer_sha256"] = "b" * 64
+        report["previous_installer_version"] = "1.0.2"
+        milestones = {
+            "upgrade_install": "02:11:00",
+            "class_visibility_persistence": "02:12:00",
+            "restart": "02:13:00",
+            "project_persistence": "02:13:00",
+            "qc_review_coordination": "02:14:00",
+            "qc_workflow_persistence": "02:15:00",
+            "qc_workflow_replay": "02:16:00",
+            "project_exchange": "02:17:00",
+            "upgrade": "02:18:00",
+            "uninstall": "02:19:00",
+            "data_retention": "02:19:01",
+        }
+        for gate, clock in milestones.items():
+            report[gate]["timestamp_utc"] = f"2026-10-25T{clock}Z"
+        MODULE.validate_report(report, expected_version="1.0.3", expected_upgrade="passed")
+
+        for gate, when in (
+            ("upgrade_install", "02:09:00"),  # Before initial install
+            ("upgrade_install", "02:14:00"),  # After app restart
+            ("upgrade", "02:16:30"),  # Before saved workflow export
+            ("upgrade", "02:19:30"),  # After uninstall
+        ):
+            with self.subTest(gate=gate, when=when):
+                invalid = copy.deepcopy(report)
+                invalid[gate]["timestamp_utc"] = f"2026-10-25T{when}Z"
+                with self.assertRaisesRegex(
+                    MODULE.AcceptanceEvidenceError, "causal order invalid"
+                ):
+                    MODULE.validate_report(
+                        invalid, expected_version="1.0.3", expected_upgrade="passed"
+                    )
+        for invalid_gate in (
+            None,
+            {"status": "SKIPPED", "detail": "previous installer not supplied"},
+            {"status": "PASS", "detail": "pre-migration assets checked"},
+        ):
+            invalid = copy.deepcopy(report)
+            if invalid_gate is None:
+                del invalid["upgrade_install"]
+            else:
+                invalid["upgrade_install"] = invalid_gate
+            with self.assertRaises(MODULE.AcceptanceEvidenceError):
+                MODULE.validate_report(
+                    invalid, expected_version="1.0.3", expected_upgrade="passed"
+                )
+
+    def test_skipped_upgrade_cannot_claim_installer_upgrade_stage(self) -> None:
+        report = good_report()
+        report["upgrade_install"] = pass_evidence()
+        with self.assertRaisesRegex(
+            MODULE.AcceptanceEvidenceError, "must not claim real upgrade installation"
+        ):
+            MODULE.validate_report(report, expected_version="1.0.2")
 
 
 if __name__ == "__main__":

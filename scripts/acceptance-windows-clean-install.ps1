@@ -89,6 +89,7 @@ $report = [ordered]@{
     qc_workflow_replay = New-ReefVisionEvidenceResult
     restart = New-ReefVisionEvidenceResult
     project_exchange = New-ReefVisionEvidenceResult
+    upgrade_install = if ($SkipUpgrade) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'SkipUpgrade requested' } elseif (-not $PreviousInstallerPath) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'previous installer not supplied' } else { New-ReefVisionEvidenceResult }
     upgrade = if ($SkipUpgrade) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'SkipUpgrade requested' } elseif (-not $PreviousInstallerPath) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'previous installer not supplied' } else { New-ReefVisionEvidenceResult }
     uninstall = if ($SkipUninstall) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'SkipUninstall requested' } else { New-ReefVisionEvidenceResult }
     data_retention = New-ReefVisionEvidenceResult
@@ -556,6 +557,7 @@ try {
         Run-Msi -Action Install -PackageOrProduct $InstallerPath -LogName 'upgrade.log' -TargetRoot $InstallRoot | Out-Null
         $retainedResearchAfterInstall = Get-ReefVisionResearchFileSnapshot -DataRoot $DataRoot
         $upgradePreMigrationCount = Assert-ReefVisionResearchFileSnapshotRetained -Before $retainedResearchBeforeUpgrade -After $retainedResearchAfterInstall
+        $report.upgrade_install = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "MSI $PreviousProductVersion -> $ProductVersion installed; $upgradePreMigrationCount research files retained byte-for-byte before application migration."
         # msiexec exit 0 alone does not prove the newer desktop was installed.
         # Keep upgrade unaccepted until the restarted API, registry, scientist
         # workflow, and post-migration stable asset retention are checked.

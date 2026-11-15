@@ -160,7 +160,15 @@ def _verify_causal_gate_order(report: dict[str, Any], *, expected_upgrade: str) 
     """Reject a PASS report whose install/review/restart/uninstall order is impossible."""
     pairs = CAUSAL_GATE_ORDER
     if expected_upgrade == "passed":
-        pairs += (("upgrade", "restart"),)
+        # upgrade_install is recorded after the MSI and pre-migration file check.
+        # The final upgrade PASS is deliberately delayed until after persisted
+        # QC workflow replay and post-migration science-file retention.
+        pairs += (
+            ("install", "upgrade_install"),
+            ("upgrade_install", "restart"),
+            ("project_exchange", "upgrade"),
+            ("upgrade", "uninstall"),
+        )
     for before, after in pairs:
         before_at = _utc(report[before]["timestamp_utc"], f"{before}.timestamp_utc")
         after_at = _utc(report[after]["timestamp_utc"], f"{after}.timestamp_utc")
@@ -218,6 +226,11 @@ def validate_report(
     upgrade = _status(report, "upgrade")
     _require(expected_upgrade in {"passed", "skipped"}, "Unknown expected upgrade policy")
     if expected_upgrade == "passed":
+        _require(
+            _status(report, "upgrade_install") == "PASS",
+            "Real MSI installation and pre-migration asset retention did not PASS",
+        )
+        _verified_pass(report, "upgrade_install", started=start, completed=end)
         _require(upgrade == "PASS", "Real MSI upgrade did not PASS")
         _verified_pass(report, "upgrade", started=start, completed=end)
         previous_path = report.get("previous_installer_path")
@@ -250,6 +263,14 @@ def validate_report(
                 "Previous MSI hash differs from report",
             )
     else:
+        _require(
+            _status(report, "upgrade_install") == "SKIPPED",
+            "Clean-install-only report must not claim real upgrade installation",
+        )
+        _require(
+            report["upgrade_install"].get("detail") in {"SkipUpgrade requested", "previous installer not supplied"},
+            "Upgrade-install skip lacks explicit reason",
+        )
         _require(upgrade == "SKIPPED", "Clean-install-only report must not claim upgrade acceptance")
         _require(
             report["upgrade"].get("detail") in {"SkipUpgrade requested", "previous installer not supplied"},

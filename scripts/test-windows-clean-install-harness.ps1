@@ -210,8 +210,12 @@ $upgradeBeforeOffset = $acceptanceSource.IndexOf('$retainedResearchBeforeUpgrade
 $upgradeInstallOffset = $acceptanceSource.IndexOf("Run-Msi -Action Install -PackageOrProduct `$InstallerPath -LogName 'upgrade.log'", [System.StringComparison]::Ordinal)
 $upgradeAfterInstallOffset = $acceptanceSource.IndexOf('$retainedResearchAfterInstall = Get-ReefVisionResearchFileSnapshot', [System.StringComparison]::Ordinal)
 $upgradeAfterReplayOffset = $acceptanceSource.IndexOf('$retainedResearchAfterUpgrade = Get-ReefVisionResearchFileSnapshot', [System.StringComparison]::Ordinal)
+$upgradeStageOffset = $acceptanceSource.IndexOf('$report.upgrade_install = New-ReefVisionEvidenceResult -Status ''PASS''', [System.StringComparison]::Ordinal)
+$upgradeFinalOffset = $acceptanceSource.IndexOf('$report.upgrade = New-ReefVisionEvidenceResult -Status ''PASS''', [System.StringComparison]::Ordinal)
 Assert-True ($upgradeBeforeOffset -gt 0 -and $upgradeBeforeOffset -lt $upgradeInstallOffset -and $upgradeInstallOffset -lt $upgradeAfterInstallOffset -and $upgradeAfterInstallOffset -lt $upgradeAfterReplayOffset -and $upgradeAfterReplayOffset -lt $retentionUninstallOffset) 'Upgrade must verify research assets before installer, after installer, and after workflow replay before uninstall.'
 Assert-True ($acceptanceSource.Contains('Assert-ReefVisionResearchFileSnapshotRetained -Before $retainedResearchBeforeUpgrade -After $retainedResearchAfterInstall')) 'MSI upgrade must preserve every research file before application migration.'
+Assert-True ($upgradeStageOffset -gt $upgradeAfterInstallOffset -and $upgradeStageOffset -lt $upgradeAfterReplayOffset) 'Recorded upgrade_install PASS must follow pre-migration byte verification and precede scientific replay.'
+Assert-True ($upgradeFinalOffset -gt $upgradeAfterReplayOffset) 'Final upgrade PASS must follow post-migration scientific-file verification, not just msiexec.'
 Assert-True ($acceptanceSource.Contains('Assert-ReefVisionResearchFileSnapshotRetained -Before $retainedResearchBeforeUpgrade -After $retainedResearchAfterUpgrade -AllowSqliteChanges')) 'MSI upgrade must preserve non-SQLite scientific assets after migrated desktop workflow replay.'
 Assert-True ($acceptanceSource.Contains('$report.uninstall.status -eq ''PASS'' -and $report.data_retention.status -eq ''PASS''')) 'Disposable cleanup must not erase evidence following research-retention failure.'
 Assert-True ($acceptanceSource.Contains('$null -eq $report.failure_reason)')) 'Disposable cleanup must preserve evidence on any acceptance error.'

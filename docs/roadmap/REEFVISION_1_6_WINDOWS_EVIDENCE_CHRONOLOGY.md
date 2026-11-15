@@ -19,9 +19,17 @@ The verifier now checks milestone dependencies from the actual installed
 harness, without inferring a test pass from a filename or synthetic report.
 Required gates follow install -> shortcut -> first launch -> connectivity,
 restart -> persistence/review -> saved workflow execution/replay -> project
-exchange -> uninstall -> byte-for-byte data-retention validation. When
-real upgrade acceptance is explicitly requested, upgrade must precede the
-post-upgrade restart. All required PASS timestamps must also remain within
+exchange -> uninstall -> byte-for-byte data-retention validation. When a real upgrade is requested, the harness now records two distinct
+milestones: `upgrade_install` is a PASS only after MSI installation and
+pre-migration research-byte retention (before restarting the installed app),
+while final `upgrade` remains NOT RUN until the restarted app executes QC,
+replays its saved Workflow Builder graph, exports the project, and verifies
+post-migration research-byte retention. Final `upgrade=PASS` must occur after
+project exchange and before uninstall. The earlier check incorrectly required
+final upgrade PASS before restart, a chronological contradiction with the
+native PowerShell harness. Skipped upgrades cannot claim the install stage.
+Older reports without `upgrade_install` are not new upgrade-acceptance
+evidence; no historical research artifacts are modified. All required PASS timestamps must also remain within
 the recorded UTC run window. Equal timestamps are allowed for clock
 granularity; local files, research assets, review decisions and database
 records remain unchanged.
@@ -42,3 +50,17 @@ The verifier also continues checking class visibility, QC coordination and
 saved-workflow persistence/replay PASS gates, isolating this work from
 1.7/revised 1.8 modalities. Exact-head CI and Windows installed-GUI
 acceptance remain required before a version-completion notification.
+
+
+## Native-harness phase reconciliation (2026-11-14)
+
+The independent verifier and the native installer harness now distinguish the
+**pre-restart installer stage** from the **post-replay scientific approval**. The
+standard-library tests exercise realistic phase ordering, missing/falsely
+skipped installer evidence, and forged before-install/after-uninstall times.
+The native PowerShell harness regression checks that the installed-stage PASS
+is recorded only after the pre-migration snapshot comparison and the final
+upgrade PASS only after the post-migration snapshot. These checks protect the
+evidence policy but are not proof that a real MSI upgrade has run. Full
+Windows installer, GUI, backward-compatible Alembic lineage and biological
+acceptance remain blocked pending independent execution.
