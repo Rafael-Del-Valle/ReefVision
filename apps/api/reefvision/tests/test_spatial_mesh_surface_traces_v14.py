@@ -96,6 +96,24 @@ REUSED_GEOMETRIC_SEGMENT_PARAMS = {
 }
 
 
+# Two separately indexed triangles share the same physical XYZ edge. An
+# OBJ/PLY/GLB split-vertex seam must remain provisional and detectable
+# without welding distinct source IDs or fabricating mesh connectivity.
+GEOMETRIC_SEAM_PARAMS = {
+    **PARAMS,
+    "vertices": [
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, -1, 0],
+    ],
+    "faces": [[0, 1, 2], [4, 3, 5]],
+    "surface_trace_vertex_paths": [[0, 1, 2]],
+}
+
+
 # Source endpoints are separated by one representable binary64 step, but
 # independently scaling their absolute coordinates erases that separation.
 # The full mesh has positive area, so API and persisted graph can execute.
@@ -275,13 +293,11 @@ def test_seam_vertex_aliases_cannot_hide_reused_surface_trace_segment(
 
 @pytest.mark.parametrize("scale", [0.0001, 0.01, 2.0])
 def test_reused_geometric_segment_fraction_is_calibration_invariant(scale: float) -> None:
-    trace = measure_mesh_preview(
-        **{**REUSED_GEOMETRIC_SEGMENT_PARAMS, "meters_per_unit": scale}
-    )["surface_edge_traces"][0]
+    trace = measure_mesh_preview(**{**REUSED_GEOMETRIC_SEGMENT_PARAMS, "meters_per_unit": scale})[
+        "surface_edge_traces"
+    ][0]
     assert trace["reused_geometric_segment_source_length_mesh_units"] == pytest.approx(1.0)
-    assert trace["reused_geometric_segment_fraction_of_trace"] == pytest.approx(
-        1.0 / (3 + sqrt(2))
-    )
+    assert trace["reused_geometric_segment_fraction_of_trace"] == pytest.approx(1.0 / (3 + sqrt(2)))
     assert trace["human_review_verified"] is False
 
 
@@ -309,13 +325,35 @@ def test_reuse_fraction_withholds_overflowed_source_total() -> None:
     )[0]
     assert trace["length_m"] == pytest.approx(3 + sqrt(2))
     assert trace["source_trace_length_mesh_units"] is None
-    assert trace["reused_geometric_segment_source_length_mesh_units"] == pytest.approx(
-        1e308
-    )
+    assert trace["reused_geometric_segment_source_length_mesh_units"] == pytest.approx(1e308)
     assert trace["reused_geometric_segment_fraction_of_trace"] is None
     assert "surface_trace_source_length_unrepresentable" in trace["qc_warnings"]
     assert "surface_trace_reuse_fraction_unrepresentable" in trace["qc_warnings"]
     assert trace["human_review_verified"] is False
+
+
+@pytest.mark.parametrize("scale", [0.001, 0.01, 3.0])
+def test_split_vertex_geometric_seam_is_localized_without_welding(scale: float) -> None:
+    params = {**GEOMETRIC_SEAM_PARAMS, "meters_per_unit": scale}
+    trace = measure_mesh_preview(**params)["surface_edge_traces"][0]
+    assert trace["vertex_indices"] == [0, 1, 2]
+    assert trace["mesh_edge_face_incidence_counts"] == [1, 1]
+    assert trace["geometric_edge_face_incidence_counts"] == [2, 1]
+    assert trace["split_vertex_seam_segment_indices"] == [0]
+    assert trace["open_boundary_segment_indices"] == [0, 1]
+    assert "split_vertex_geometric_seam_on_surface_trace" in trace["qc_warnings"]
+    assert trace["length_m"] == pytest.approx(2 * scale)
+    assert trace["human_review_verified"] is False
+    assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
+
+
+def test_shared_indexed_edge_does_not_false_flag_split_vertex_seam() -> None:
+    trace = measure_mesh_preview(**INCONSISTENT_WINDING_PARAMS)["surface_edge_traces"][0]
+    assert trace["mesh_edge_face_incidence_counts"] == [2]
+    assert trace["geometric_edge_face_incidence_counts"] == [2]
+    assert trace["split_vertex_seam_segment_indices"] == []
+    assert "split_vertex_geometric_seam_on_surface_trace" not in trace["qc_warnings"]
+    assert "inconsistent_winding_edge_on_surface_trace" in trace["qc_warnings"]
 
 
 def test_coincident_trace_endpoints_have_unknown_detour_not_infinity() -> None:
@@ -672,6 +710,7 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
         "inconsistent_winding",
         "duplicate_face",
         "nonmanifold",
+        "geometric_seam",
         "coincident_nonadjacent",
         "reverse_turn",
         "reused_geometric_segment",
@@ -694,6 +733,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "inconsistent_winding": INCONSISTENT_WINDING_PARAMS,
         "duplicate_face": DUPLICATE_FACE_PARAMS,
         "nonmanifold": NONMANIFOLD_EDGE_PARAMS,
+        "geometric_seam": GEOMETRIC_SEAM_PARAMS,
         "coincident_nonadjacent": COINCIDENT_NONADJACENT_PARAMS,
         "reverse_turn": REVERSE_TURN_PARAMS,
         "reused_geometric_segment": REUSED_GEOMETRIC_SEGMENT_PARAMS,
@@ -753,6 +793,15 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert "geometric_detour_ratio" in trace
     assert len(trace["source_segment_lengths_mesh_units"]) == trace["edge_count"]
     assert len(trace["mesh_edge_face_incidence_counts"]) == trace["edge_count"]
+    assert len(trace["geometric_edge_face_incidence_counts"]) == trace["edge_count"]
+    assert all(
+        geometric >= indexed
+        for indexed, geometric in zip(
+            trace["mesh_edge_face_incidence_counts"],
+            trace["geometric_edge_face_incidence_counts"],
+            strict=True,
+        )
+    )
     assert all(
         0 <= index < trace["edge_count"]
         for field in (
@@ -760,6 +809,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             "nonmanifold_segment_indices",
             "duplicate_triangle_segment_indices",
             "inconsistent_winding_segment_indices",
+            "split_vertex_seam_segment_indices",
         )
         for index in trace[field]
     )
@@ -801,6 +851,12 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert trace["mesh_edge_face_incidence_counts"] == [2]
         assert trace["duplicate_triangle_segment_indices"] == [0]
         assert "duplicate_triangle_on_surface_trace" in trace["qc_warnings"]
+    if case == "geometric_seam":
+        assert trace["mesh_edge_face_incidence_counts"] == [1, 1]
+        assert trace["geometric_edge_face_incidence_counts"] == [2, 1]
+        assert trace["split_vertex_seam_segment_indices"] == [0]
+        assert "split_vertex_geometric_seam_on_surface_trace" in trace["qc_warnings"]
+        assert trace["human_review_verified"] is False
     if case == "nonmanifold":
         assert trace["mesh_edge_face_incidence_counts"] == [3]
         assert trace["nonmanifold_segment_indices"] == [0]
