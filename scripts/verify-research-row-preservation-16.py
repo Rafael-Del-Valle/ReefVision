@@ -279,7 +279,9 @@ def _compare_assets(before_root: Path, after_root: Path) -> dict:
     # edit through that undisclosed alias would change supposedly independent
     # original or candidate data. Require a single filesystem link per file;
     # link-count changes during either scan are caught by _asset_state.
-    if any(state[-1] != 1 for state in (*baseline_states.values(), *candidate_states.values())):
+    if any(
+        state[-1] != 1 for state in (*baseline_states.values(), *candidate_states.values())
+    ):
         raise ValueError("asset_hardlinks_not_independent")
     missing = sum(path not in candidate for path in baseline)
     changed = sum(
