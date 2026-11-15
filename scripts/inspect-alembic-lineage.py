@@ -155,13 +155,28 @@ def inspect(path: Path) -> dict:
         # four-table family; inspect each stage independently.
         science_base = FAMILIES["scientific"][:2]
         science_metrics = FAMILIES["scientific"][2:]
-        for family, names in FAMILIES.items():
-            stages = (science_base, science_metrics) if family == "scientific" else (names,)
-            if any(
-                0 < sum(inventory[name]["present"] for name in stage) < len(stage)
-                for stage in stages
-            ):
-                warnings.append(f"incomplete_{family}_schema_family")
+        # Each QC migration stage is independent: 0038 creates the review
+        # events, and 0041 later creates the bulk request registry. A 0038,
+        # 0039, or 0040 QC database legitimately has no bulk table.
+        if any(
+            0 < sum(inventory[name]["present"] for name in stage) < len(stage)
+            for stage in (science_base, science_metrics)
+        ):
+            warnings.append("incomplete_scientific_schema_family")
+        qc_events_present = inventory["review_queue_item_events"]["present"]
+        qc_bulk_present = inventory["review_queue_bulk_requests"]["present"]
+        if qc_bulk_present and not qc_events_present:
+            warnings.append("qc_bulk_registry_without_review_events")
+        # A surviving later-stage table with an earlier stamp is an
+        # interrupted DDL/restore, not evidence that the migration finished.
+        if qc_events_present and "0037" in revisions:
+            warnings.append("qc_events_before_revision_0038")
+        if qc_bulk_present and any(
+            revision in revisions for revision in ("0037", "0038", "0039", "0040")
+        ):
+            warnings.append("qc_bulk_registry_before_revision_0041")
+        if qc_events_present and not qc_bulk_present and "0041" in revisions:
+            warnings.append("qc_0041_missing_bulk_registry")
         metric_present = any(inventory[name]["present"] for name in science_metrics)
         metric_complete = all(inventory[name]["present"] for name in science_metrics)
         if metric_present and not all(inventory[name]["present"] for name in science_base):
