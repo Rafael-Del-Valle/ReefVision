@@ -6,8 +6,15 @@ from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_scientific_project_exchange import export_archive, import_archive
 
 
+@pytest.mark.parametrize(
+    ("qc", "uncertainty"),
+    [
+        ("accepted", None),
+        ("unassessed", {"value": 0.05, "kind": "standard_deviation"}),
+    ],
+)
 def test_streamline_preview_uses_one_compatible_scientific_record_slice(
-    client, test_settings
+    client, test_settings, qc, uncertainty
 ) -> None:
     project = create_project(client, "Current streamline")
     records = []
@@ -31,7 +38,8 @@ def test_streamline_preview_uses_one_compatible_scientific_record_slice(
                         },
                         "depth_m": 0,
                         "depth_reference": "sea_surface",
-                        "qc": "accepted",
+                        "qc": qc,
+                        "uncertainty": uncertainty,
                         "provenance": {
                             "source": "synthetic current fixture",
                             "dataset_id": "fixture-v1",
@@ -72,7 +80,10 @@ def test_streamline_preview_uses_one_compatible_scientific_record_slice(
     assert result["streamlines"][0]["termination"] == "max_steps"
     assert len(result["source_record_ids"]) == 8
     assert len(result["input_sha256"]) == 64
-    assert "not organism trajectories" in " ".join(result["methodological_notes"])
+    notes = " ".join(result["methodological_notes"])
+    assert "not organism trajectories" in notes
+    assert "uncertainty is not propagated" in notes
+    assert ("unassessed QC" in notes) == (qc == "unassessed")
 
     saved = client.post(
         f"/api/v1/projects/{project['id']}/environment/analyses/current-streamline",
@@ -83,6 +94,9 @@ def test_streamline_preview_uses_one_compatible_scientific_record_slice(
     assert body["definition"]["analysis_kind"] == "current_streamline"
     assert body["result"]["source_record_ids"] == ids
     assert body["result"]["payload"]["input_sha256"] == result["input_sha256"]
+    assert body["result"]["payload"]["methodological_notes"] == result[
+        "methodological_notes"
+    ]
     validation = client.get(
         f"/api/v1/projects/{project['id']}/environment/analyses/results/"
         f"{body['result']['id']}/validation"
@@ -108,6 +122,7 @@ def test_streamline_preview_uses_one_compatible_scientific_record_slice(
     assert len(portable) == 1
     assert portable[0]["id"] != body["result"]["id"]
     assert set(portable[0]["source_record_ids"]).isdisjoint(ids)
+    assert portable[0]["payload"]["methodological_notes"] == result["methodological_notes"]
     imported_validation = client.get(
         f"/api/v1/projects/{imported_project_id}/environment/analyses/results/"
         f"{portable[0]['id']}/validation"
