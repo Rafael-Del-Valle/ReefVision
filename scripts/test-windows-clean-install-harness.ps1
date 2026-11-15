@@ -88,53 +88,7 @@ Assert-True ((Invoke-ReefVisionWindowClose -ProcessId 0) -eq 0) 'PID-zero window
 # API/WebView2 startup but fail clean shutdown on both fresh and upgrade paths.
 # Require the OS main-window close path first; native PID-scoped WM_CLOSE is a
 # last resort, and neither path may force-kill the installed application.
-Assert-True ($acceptanceScript -match '(?m)^\s*Start-Process -FilePath \(Join-Path \$InstallRoot ''ReefVision\.exe''\) -WorkingDirectory \$InstallRoot -PassThru\s*
-Assert-True ($acceptanceScript.Contains('Invoke-ReefVisionWindowClose -ProcessId $Process.Id')) 'Acceptance shutdown must enumerate hidden native windows, not MainWindowHandle.'
-Assert-True (-not $acceptanceScript.Contains('$Process.MainWindowHandle')) 'Hidden desktop acceptance must not depend on MainWindowHandle.'
-Assert-True (-not $acceptanceScript.Contains('Stop-Process -Force')) 'Acceptance must not mask a failed graceful shutdown with a forced kill.'
-
-# Guard the packaged acceptance request against retired project templates and
-# legacy model catalog selectors. Production API supports blank projects only.
-Assert-True ($acceptanceScript.Contains("template='blank'")) 'Acceptance project must use the supported blank template.'
-Assert-True (-not $acceptanceScript.Contains("template='octocoral'")) 'Retired octocoral template must not be used.'
-Assert-True ($acceptanceScript.Contains('"$api/projects/$projectId/classes"')) 'Blank acceptance project must seed a label class explicitly.'
-Assert-True ($acceptanceScript.Contains("selection_kind -eq 'builtin_architecture'")) 'Catalog selection_kind must match the current API.'
-Assert-True (-not $acceptanceScript.Contains("selection_kind -eq 'architecture'")) 'Legacy architecture selection kind must not be used.'
-Assert-True ($acceptanceScript.Contains('external_annotation_imports = New-ReefVisionEvidenceResult')) 'Installed backend COCO/YOLO evidence must be reported.'
-Assert-True ($acceptanceScript.Contains('function Import-AcceptanceAnnotations')) 'Windows acceptance must use a real multipart annotation import.'
-Assert-True ($acceptanceScript.Contains('cocoResult.boxes_imported -ne 1')) 'COCO imported box acceptance is missing.'
-Assert-True ($acceptanceScript.Contains('yoloResult.boxes_imported -ne 1')) 'YOLO imported box acceptance is missing.'
-Assert-True ($acceptanceScript.Contains('LiveSam2Acceptance')) 'Live SAM mode must be declared.'
-Assert-True ($acceptanceScript.Contains("HF_HUB_OFFLINE'] = '0'")) 'Opt-in live SAM must allow a real network download.'
-Assert-True ($acceptanceScript.Contains('samAcceptedMaskId')) 'Live SAM acceptance must validate mask preservation.'
-Assert-True ($acceptanceScript.Contains("'api.log', 'api.log.1'")) 'Failed SAM2 acceptance must archive API logs, not only startup backend.log.'
-Assert-True ($acceptanceScript.Contains('api.log.tail.log') -or $acceptanceScript.Contains('$logName.tail.log')) 'SAM2 API log archive name must match the uploaded *.log evidence pattern.'
-Assert-True ($acceptanceScript -match 'Stop-AcceptanceDesktop\s+\$desktop\s*\r?\n\s*\$projectChecksum\s*=\s*\(Get-FileHash\s+-LiteralPath\s+\(Join-Path\s+\$DataRoot\s+''reefvision\.db''\)') 'Desktop shutdown must occur before hashing reefvision.db.'
-Assert-True ($acceptanceScript -match 'Where-Object\s+FullName\s+-eq\s+''reefvision-exchange-manifest\.json''') 'Project Exchange validation does not require the canonical manifest name.'
-Assert-True ($acceptanceScript -notmatch 'Where-Object\s+FullName\s+-eq\s+''manifest\.json''') 'Project Exchange validation still accepts the incorrect manifest.json name.'
-
-$reportPath = Join-Path $env:TEMP ('reefvision-evidence-' + [guid]::NewGuid().ToString('N') + '.json')
-$report = [ordered]@{ upgrade = New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'previous installer not supplied'; failure_reason = $null }
-Write-ReefVisionEvidenceReport -Report $report -Path $reportPath
-$roundTrip = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
-Assert-True ($roundTrip.upgrade.status -eq 'SKIPPED') 'Report did not preserve skip semantics.'
-Assert-True ($null -eq $roundTrip.failure_reason) 'Report did not preserve an empty failure reason.'
-Remove-Item -LiteralPath $reportPath -Force
-
-$cleanupRoot = Join-Path $Root ('.artifacts\harness-cleanup-' + [guid]::NewGuid().ToString('N'))
-$ownedRun = Join-Path $cleanupRoot 'owned-run'
-$foreign = Join-Path $cleanupRoot 'foreign'
-New-Item -ItemType Directory -Path $ownedRun,$foreign -Force | Out-Null
-Set-Content -LiteralPath (Join-Path $ownedRun '.reefvision-acceptance-run') -Value 'owned'
-if (-not (Test-ReefVisionPathWithin -Path $ownedRun -Parent (Join-Path $Root '.artifacts'))) { throw 'Unsafe harness test cleanup path.' }
-Remove-Item -LiteralPath $ownedRun -Recurse -Force
-Assert-True (-not (Test-Path $ownedRun)) 'Owned run was not removed.'
-Assert-True (Test-Path $foreign) 'Cleanup crossed the owned-run boundary.'
-if (-not (Test-ReefVisionPathWithin -Path $cleanupRoot -Parent (Join-Path $Root '.artifacts'))) { throw 'Unsafe harness test cleanup root.' }
-Remove-Item -LiteralPath $cleanupRoot -Recurse -Force
-
-Write-Host "Windows clean-install harness unit tests passed: $passed assertions." -ForegroundColor Green
-) 'MSI acceptance must launch a normal GUI window, not a hidden desktop.'
+Assert-True ($acceptanceScript -match '(?m)^\s*Start-Process -FilePath \(Join-Path \$InstallRoot ''ReefVision\.exe''\) -WorkingDirectory \$InstallRoot -PassThru\s*$') 'MSI acceptance must launch a normal GUI window, not a hidden desktop.'
 Assert-True ($acceptanceScript.Contains('$Process.CloseMainWindow()')) 'MSI acceptance must request the normal Tauri main-window close.'
 Assert-True ($acceptanceScript.Contains('if (-not $closedByMainWindow)')) 'Native close fallback must only execute when the main-window request is unavailable.'
 
