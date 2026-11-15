@@ -488,7 +488,15 @@ def mesh_edge_paths(
     return results
 
 
-_SourceEdge = tuple[tuple[float, float, float], tuple[float, float, float]]
+_SourcePoint = tuple[float, float, float]
+_SourceEdge = tuple[_SourcePoint, _SourcePoint]
+
+
+def _source_xyz(point: _SourcePoint) -> _SourcePoint:
+    """Use a fixed-width hashable XYZ key for tuple and list source vertices."""
+    # The direct engine accepts validated three-coordinate lists as well as
+    # tuples. tuple(point) loses the fixed-length type needed by mesh QC maps.
+    return (point[0], point[1], point[2])
 
 
 def mesh_surface_edge_traces(
@@ -571,7 +579,7 @@ def mesh_surface_edge_traces(
         for a, b in edges_in_face:
             edge = (min(a, b), max(a, b))
             incidence[edge] += 1
-            source_a, source_b = tuple(points[a]), tuple(points[b])
+            source_a, source_b = _source_xyz(points[a]), _source_xyz(points[b])
             geometric_edge = (source_a, source_b) if source_a <= source_b else (source_b, source_a)
             geometric_incidence[geometric_edge] += 1
             geometric_orientations.setdefault(geometric_edge, []).append(source_a < source_b)
@@ -710,7 +718,7 @@ def mesh_surface_edge_traces(
         # Counts use original indexed faces, not spatially welded vertices;
         # they cannot certify an anatomical coral branch or clean reconstruction.
         face_incidence_counts = [incidence[edge] for edge in edges]
-        positions = [tuple(points[index]) for index in vertices]
+        positions = [_source_xyz(points[index]) for index in vertices]
         geometric_face_incidence_counts = [
             geometric_incidence[(start, end) if start <= end else (end, start)]
             for start, end in pairwise(positions)
