@@ -33,6 +33,10 @@ def inspect(path: Path) -> dict:
     uri = resolved_path.as_uri() + "?mode=ro"
     with sqlite3.connect(uri, uri=True) as db:
         db.execute("PRAGMA query_only=ON")
+        # Pin one SQLite read transaction before the first integrity probe.
+        # Without BEGIN, each subsequent SELECT can see a different WAL
+        # commit (revision stamp, schema and scientific counts may disagree).
+        db.execute("BEGIN")
         # A corrupt snapshot must not be considered a valid migration candidate.
         # quick_check(1) is bounded in reported errors; it does not repair data.
         integrity_result = db.execute("PRAGMA quick_check(1)").fetchone()

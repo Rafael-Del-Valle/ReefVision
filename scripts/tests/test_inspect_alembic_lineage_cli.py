@@ -890,9 +890,7 @@ def test_scientific_extension_migration_stamp_is_stage_aware_and_read_only(
     """Never mistake future scientific DDL for completed earlier migrations."""
     database = tmp_path / "stale-scientific-stamp.sqlite"
     with sqlite3.connect(database) as connection:
-        connection.execute(
-            "CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)"
-        )
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
         connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
         for table in (
             "scientific_records",
@@ -902,9 +900,7 @@ def test_scientific_extension_migration_stamp_is_stage_aware_and_read_only(
             *extensions,
         ):
             connection.execute(f'CREATE TABLE "{table}" (id INTEGER PRIMARY KEY, note TEXT)')
-            connection.execute(
-                f'INSERT INTO "{table}" VALUES (1, ?)', ("scientific-preserve",)
-            )
+            connection.execute(f'INSERT INTO "{table}" VALUES (1, ?)', ("scientific-preserve",))
         connection.execute("CREATE TABLE biological_sentinel (note TEXT)")
         connection.execute("INSERT INTO biological_sentinel VALUES ('coral-preserve')")
     original_bytes = database.read_bytes()

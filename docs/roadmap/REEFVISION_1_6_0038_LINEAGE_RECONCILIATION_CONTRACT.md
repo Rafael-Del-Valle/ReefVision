@@ -36,3 +36,9 @@ Both branches independently assign the same revision identifiers to different DD
 ## Current evidence boundary
 
 Source files and branch divergence were inspected through the GitHub connector on 2026-11-11. Local Git clone failed with `Could not resolve host: github.com`; this document has **not** been validated by repository pytest, Ruff, mypy, CI or native Windows acceptance. No cross-version migration or branch merge is authorized here.
+
+## Coherent read-only evidence under concurrent local WAL activity (2026-11-15)
+
+The lightweight `scripts/inspect-alembic-lineage.py` now opens one explicit read transaction **before** SQLite integrity, Alembic stamp, scientific/QC table inventory, and row-count checks. Python's `with sqlite3.connect(...)` alone does not pin a snapshot for successive read statements. A second local writer could otherwise commit an environmental schema migration between integrity checks and stamp/table reads, producing a report assembled from different committed versions. The inspector still opens `mode=ro`, sets `query_only`, checks WAL/SHM/journal sidecars, emits `upgrade_authorized: false`, and never performs a migration.
+
+A deterministic disposable-WAL regression injects a separate writer's 0039→0042 schema/stamp commit immediately after the first integrity probe. The in-progress read-only inspection must report only the original 0039 schema and stamp, while a subsequent inspection observes the complete 0042 schema. The biological sentinel is preserved. This proves consistency *within* one inspection, not immutability of a live WAL database; active-sidecar warnings continue to require a consistent external snapshot and researcher approval before any upgrade.
