@@ -164,3 +164,34 @@ exercise absent, unrelated, similarly named, and exact product registrations
 without modifying actual installation keys. Native Windows CI must pass before
 this is accepted; this does not substitute for a real MSI upgrade/rollback or
 installed-GUI validation.
+
+## Dormant portable-backend deletion removed (2026-11-15)
+
+**Scope audit:** The current 1.6 updater already selects the locally pinned,
+verified MSI/CAB payload and delegates installation/rollback to Windows
+Installer. Its Windows preflight rejected the old `$portableSync = ...` call,
+but an unused `Sync-ReefVisionPortableInstall` function remained in the actual
+command script. That helper used `Remove-Item -Recurse -Force` on **every item**
+under an existing `backend` directory, without an ownership manifest or a
+per-file protection check. A directory at an allowed user location does not
+prove that its children are disposable program files.
+
+**Implementation:** Removed the dormant direct portable-repair helper rather
+than attempting to infer file ownership and delete unknown files. No active
+call site relied on the helper; MSI-managed installation, cached hash/source
+provenance checks, `--install-only`, `--dry-run`, `--build-only`, command
+configuration and rollback ownership are unchanged. No scientific data,
+SQLite schemas, Workflow Builder nodes, models or assets were modified.
+
+**Regression:** The existing Windows MSI preflight now fails if the updater
+reintroduces the legacy function or a direct `Remove-Item` invocation. It
+continues verifying the pinned MSI identity, source provenance and the
+existing no-portable-overwrite call-site contract. These are code-contract
+checks, not proof of an installed Windows GUI; no local Windows PowerShell was
+available in the present execution environment.
+
+**Release HOLD:** Complete exact-head Windows CI, independently reconcile
+1.1/1.6 Alembic-0038 lineage, test a real MSI/CAB clean install and upgrade
+with backup and rollback, verify the installed GUI and executable saved QC
+workflows on representative biological data, and obtain explicit researcher
+approval before any release.
