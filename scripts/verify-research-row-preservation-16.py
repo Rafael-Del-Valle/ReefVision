@@ -126,9 +126,7 @@ def _fingerprint(
     ordered = ", ".join(_quote(column) for column in order_by)
     sha = hashlib.sha256()
     rows = 0
-    for row in connection.execute(
-        f"SELECT {projected} FROM {_quote(table)} ORDER BY {ordered}"
-    ):
+    for row in connection.execute(f"SELECT {projected} FROM {_quote(table)} ORDER BY {ordered}"):
         encoded = _encode_row(row)
         sha.update(len(encoded).to_bytes(8, "big"))
         sha.update(encoded)
