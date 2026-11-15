@@ -23,6 +23,26 @@ def test_missing_log_does_not_fabricate_output(tmp_path: Path) -> None:
     }
 
 
+@pytest.mark.parametrize("unsafe_name", ["invalid\\0.log", "invalid\\0.txt"])
+def test_malformed_persisted_log_path_is_unavailable_not_server_error(
+    tmp_path: Path, unsafe_name: str
+) -> None:
+    """A corrupt database log path must not crash the read-only run monitor."""
+    genuine = tmp_path / "training.log"
+    original = b"epoch=4\\ntrain/box_loss=0.25\\n"
+    genuine.write_bytes(original)
+
+    # A NUL is rejected by lstat/resolve as ValueError, not OSError.
+    assert training_routes._training_log_tail(unsafe_name, tmp_path) == {
+        "available": False,
+        "text": "",
+    }
+    assert training_routes._training_log_tail(
+        str(tmp_path / unsafe_name), tmp_path
+    ) == {"available": False, "text": ""}
+    assert genuine.read_bytes() == original
+
+
 def test_log_tail_is_bounded_and_read_only(tmp_path: Path) -> None:
     log = tmp_path / "training.log"
     original = b"earlier epochs\n" + b"x" * 20000 + b"\ntrain/box_loss=0.25\n"
