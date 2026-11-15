@@ -503,9 +503,7 @@ def test_0042_analysis_requires_0040_event_predecessor(
             connection.execute(f"CREATE TABLE {name} (id INTEGER PRIMARY KEY)")
         for name in retained_tables:
             connection.execute(f"CREATE TABLE {name} (id INTEGER PRIMARY KEY, note TEXT)")
-            connection.execute(
-                f"INSERT INTO {name} (id, note) VALUES (1, 'research-keep')"
-            )
+            connection.execute(f"INSERT INTO {name} (id, note) VALUES (1, 'research-keep')")
         connection.execute("CREATE TABLE biological_sentinel (id INTEGER PRIMARY KEY, note TEXT)")
         connection.execute("INSERT INTO biological_sentinel VALUES (1, 'biological-keep')")
     before = database.read_bytes()
@@ -526,9 +524,7 @@ def test_0042_analysis_requires_0040_event_predecessor(
     assert database.read_bytes() == before
     with sqlite3.connect(database) as connection:
         for name in retained_tables:
-            assert connection.execute(f"SELECT note FROM {name}").fetchone() == (
-                "research-keep",
-            )
+            assert connection.execute(f"SELECT note FROM {name}").fetchone() == ("research-keep",)
         assert connection.execute("SELECT note FROM biological_sentinel").fetchone() == (
             "biological-keep",
         )
