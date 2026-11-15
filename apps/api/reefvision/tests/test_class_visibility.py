@@ -715,3 +715,101 @@ def test_visibility_save_locks_class_inventory_until_commit(
             assert persisted.description == "Independent writer resumed after commit"
 
     Base.metadata.drop_all(app.state.engine)
+
+
+def test_visibility_bundle_uses_one_snapshot_across_concurrent_scope_updates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A writer between the two visibility queries must not mix revisions.
+
+    SQLite WAL permits a second local editor to commit while the first editor
+    reads an older snapshot. A fresh GET should then observe the new revision.
+    """
+    settings = Settings(
+        env="test",
+        data_dir=tmp_path / "visibility-snapshot",
+        database_url=f"sqlite:///{(tmp_path / 'visibility-snapshot.db').as_posix()}",
+        web_origin="http://testserver",
+        background_worker_enabled=False,
+    )
+    app = create_app(settings)
+    with app.state.engine.connect() as connection:
+        assert connection.exec_driver_sql("PRAGMA journal_mode=WAL").scalar() == "wal"
+    Base.metadata.create_all(app.state.engine)
+
+    with TestClient(app) as client:
+        project = create_project(client, name="Concurrent visibility bundle")
+        first = create_label_class(
+            client, project["id"], class_index=0, name="Swiftia Open", display_color="#C74343"
+        )
+        second = create_label_class(
+            client, project["id"], class_index=1, name="Swiftia Closed", display_color="#326EA8"
+        )
+        preference_path = (
+            f"/api/v1/projects/{project['id']}/class-visibility/preferences/annotations"
+        )
+        default_path = f"/api/v1/projects/{project['id']}/class-visibility/defaults/annotations"
+        bundle_path = f"/api/v1/projects/{project['id']}/class-visibility"
+        assert client.put(
+            preference_path, json={"hidden_class_ids": [first["id"]]}
+        ).status_code == 200
+        assert client.put(
+            default_path, json={"hidden_class_ids": [first["id"]]}
+        ).status_code == 200
+
+        original_list = ClassVisibilityPreferenceRepository.list_for_project_user
+        writer_commits: list[bool] = []
+
+        def interleaved_list(
+            repository: ClassVisibilityPreferenceRepository,
+            project_id: str,
+            user_identity: str,
+        ) -> list[ClassVisibilityPreference]:
+            preferences = original_list(repository, project_id, user_identity)
+            # The bundle has already read project classes and personal scope.
+            # The competing SQLite writer changes ONLY the shared default.
+            # Without a pinned snapshot, the next SELECT sees this new value
+            # and incorrectly combines two different committed revisions.
+            with Session(app.state.engine) as writer:
+                writer.execute(
+                    update(ProjectClassVisibilityDefault)
+                    .where(
+                        ProjectClassVisibilityDefault.project_id == project_id,
+                        ProjectClassVisibilityDefault.layer_type == "annotations",
+                    )
+                    .values(hidden_class_ids_json=[second["id"]])
+                )
+                writer.commit()
+            writer_commits.append(True)
+            return preferences
+
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                ClassVisibilityPreferenceRepository,
+                "list_for_project_user",
+                interleaved_list,
+            )
+            snapshot = client.get(bundle_path)
+        assert snapshot.status_code == 200, snapshot.text
+        assert writer_commits == [True]
+        old_bundle = snapshot.json()
+        assert old_bundle["user_preferences"]["annotations"]["hidden_class_ids"] == [
+            first["id"]
+        ]
+        assert old_bundle["project_defaults"]["annotations"]["hidden_class_ids"] == [
+            first["id"]
+        ]
+        assert old_bundle["user_preferences"]["annotations"]["saved"] is True
+        assert old_bundle["project_defaults"]["annotations"]["saved"] is True
+
+        # The next independent request is not frozen at the previous snapshot.
+        current = client.get(bundle_path)
+        assert current.status_code == 200, current.text
+        assert current.json()["user_preferences"]["annotations"]["hidden_class_ids"] == [
+            first["id"]
+        ]
+        assert current.json()["project_defaults"]["annotations"]["hidden_class_ids"] == [
+            second["id"]
+        ]
+
+    Base.metadata.drop_all(app.state.engine)
