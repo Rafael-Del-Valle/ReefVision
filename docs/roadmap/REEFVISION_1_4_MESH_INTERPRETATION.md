@@ -1078,7 +1078,15 @@ contains `surface_trace_source_arc_fractions_undefined_zero_total`. If a
 positive source segment is too small for a distinct adjacent binary64 fraction,
 QC contains `surface_trace_source_arc_fraction_resolution_loss`: equal
 displayed fractions must **not** be interpreted as evidence of zero edge
-length. Existing raw source lengths, scaled measurements, uncertainties,
+length. The new `source_arc_fraction_resolution_loss_segment_indices` array
+identifies exactly which positive-length source segments suffer this displayed
+precision loss (zero-based indices aligned with `source_segment_lengths_mesh_units`).
+Both early subnormal segments and late segments rounded against a large prefix
+are localized, without confusing genuine zero-length edges with numeric loss.
+The array is empty when no collapse occurs or the total is exactly zero, with
+the latter case separately distinguished by the undefined-fractions QC code.
+It does not supply missing numerical precision or validate biological anatomy.
+Existing raw source lengths, scaled measurements, uncertainties,
 reconstruction QC, provenance, and `human_review_verified: false` remain
 unchanged. Synthetic tests cover scale invariance, tiny calibration,
 subnormal precision limits, source-length overflow and zero-length traces;
