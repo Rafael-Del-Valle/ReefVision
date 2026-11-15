@@ -283,6 +283,19 @@ def verify_succeeded_node_artifacts(
         # A missing adapter definition makes the saved port contract unknowable.
         # Do not silently waive type validation while recovering offline runs.
         raise ConflictError("Succeeded workflow node type is not registered for artifact reuse")
+    # Workflow planning materializes omitted optional defaults before execution.
+    # A changed filter default on the saved node would alter the selected
+    # scientific inputs even though the graph digest and artifacts still match.
+    # Check only defaults actually persisted, preserving older runs that did
+    # not record a subsequently introduced optional parameter.
+    if isinstance(node_parameters, dict) and any(
+        key not in saved_parameters
+        and key in node_parameters
+        and node_parameters[key] != default
+        for key, default in definition.optional_parameters.items()
+    ):
+        raise ConflictError("Succeeded workflow node resolved defaults differ from saved plan")
+
     declared_types = {port.port_id: set(port.accepted_types) for port in definition.output_ports}
     for artifact in outputs:
         if artifact.data_type not in declared_types.get(artifact.producer_port_id, set()):
