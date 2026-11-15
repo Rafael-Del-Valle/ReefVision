@@ -874,3 +874,34 @@ topology nor certifies anatomical contour simplicity, coral area, branch
 centerlines, calibration adequacy, organism identity, or biological growth.
 `human_review_verified` remains false. Installed Windows GUI, physical
 GPU, and independent biological validation are separate release gates.
+
+### Conservative simple-planar-perimeter audit (source geometry only)
+
+The selected closed mesh-edge trace now reports
+`closed_loop_source_is_simple_planar_perimeter`: `true` only when the
+submitted source coordinates are exactly coplanar, every source edge is
+nonzero, and the existing nonadjacent crossing, contact, overlap, repeated
+geometric-edge and coincident-waypoint audits are clear. The new exact
+rational adjacent-edge backtrack audit prevents a path that reverses over
+its immediately preceding edge from being classified as simple. Such
+waypoints are reported as zero-based
+`closed_loop_source_local_backtrack_waypoint_offsets` and produce
+`closed_surface_trace_source_adjacent_backtrack` QC.
+
+A self-intersecting, touching, overlapping, or degenerate assessable
+planar loop reports `false`. Open, noncoplanar, or source-plane-undefined
+traces report `null` (unassessable), not `false` or a misleading clean
+result. Winding direction, loop start offset, and common positive
+calibration scales do not change simplicity, although reported waypoint
+offsets follow the original source order. No polygon area is inferred or
+certified: source-planar simplicity is **not** evidence of an anatomical
+coral contour, projected tissue area, branch length, calibration accuracy,
+or biological condition. All measurements retain their original
+calibration/provenance and `human_review_verified: false`.
+
+Synthetic two-scale direct-engine tests cover an exact adjacent reversal.
+Existing planar, nonplanar, crossing, touching and overlapping fixtures
+also exercise the flag through the standalone API and persisted typed
+Workflow Builder graph, requiring complete measurement and provenance
+parity. These are not independent biological, Windows installed-GUI, or
+physical GPU release validations.
