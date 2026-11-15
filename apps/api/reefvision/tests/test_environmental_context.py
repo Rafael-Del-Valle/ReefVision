@@ -507,6 +507,7 @@ def test_threshold_samples_exclude_superseded_noaa_evidence(client):
     )
     assert previous["environmental_snapshot_current"] is False
 
+
 @pytest.mark.parametrize("duplicate_value", ["21.0", ""])
 def test_noaa_duplicate_timestamp_rejected_without_persisting(client, duplicate_value):
     """Repeated times, including missing-value rows, are not independent samples."""
@@ -527,10 +528,7 @@ def test_noaa_duplicate_timestamp_rejected_without_persisting(client, duplicate_
         EnvironmentalContextService(session, http=http).import_noaa(
             project["id"], NOAAImportRequest(station_id="8665530", day="2026-04-03")
         )
-    assert (
-        client.get(f"/api/v1/projects/{project['id']}/scientific-records").json()["total"]
-        == 0
-    )
+    assert client.get(f"/api/v1/projects/{project['id']}/scientific-records").json()["total"] == 0
 
 
 def test_noaa_duplicate_timestamp_refresh_keeps_prior_offline_snapshot(client):
@@ -549,21 +547,16 @@ def test_noaa_duplicate_timestamp_refresh_keeps_prior_offline_snapshot(client):
             transport=httpx.MockTransport(lambda _: httpx.Response(200, json=raw))
         ) as http,
     ):
-        original = EnvironmentalContextService(
-            session, http=http, now=baseline_time
-        ).import_noaa(project["id"], request)
+        original = EnvironmentalContextService(session, http=http, now=baseline_time).import_noaa(
+            project["id"], request
+        )
         raw["data"].append(dict(raw["data"][0]))
         service = EnvironmentalContextService(
             session, http=http, now=baseline_time + timedelta(days=2)
         )
         with pytest.raises(ValidationError, match="Duplicate NOAA sample timestamp"):
             service.import_noaa(project["id"], request)
-        offline = service.import_noaa(
-            project["id"], request.model_copy(update={"offline": True})
-        )
+        offline = service.import_noaa(project["id"], request.model_copy(update={"offline": True}))
     assert offline.cache_status == "stale_offline"
     assert [item.id for item in offline.items] == [item.id for item in original.items]
-    assert (
-        client.get(f"/api/v1/projects/{project['id']}/scientific-records").json()["total"]
-        == 2
-    )
+    assert client.get(f"/api/v1/projects/{project['id']}/scientific-records").json()["total"] == 2

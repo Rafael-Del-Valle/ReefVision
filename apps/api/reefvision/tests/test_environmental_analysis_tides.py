@@ -291,11 +291,10 @@ def test_noaa_tide_expired_refresh_failure_preserves_offline_cache(client: TestC
     assert cached.cache_status == "stale_offline"
     assert cached.items[0].id == predicted.items[0].id
 
+
 @pytest.mark.parametrize("product", ["predictions", "water_level"])
 @pytest.mark.parametrize("duplicate_value", ["0.75", ""])
-def test_noaa_tide_duplicate_timestamp_never_persists(
-    client: TestClient, product, duplicate_value
-):
+def test_noaa_tide_duplicate_timestamp_never_persists(client: TestClient, product, duplicate_value):
     """A repeated UTC station/product/datum timestamp is not a second sample."""
     project = create_project(client, "Duplicate NOAA tide")
     raw = prediction_fixture() if product == "predictions" else observation_fixture()
@@ -317,7 +316,4 @@ def test_noaa_tide_duplicate_timestamp_never_persists(
                 datum="MLLW",
             ),
         )
-    assert (
-        client.get(f"/api/v1/projects/{project['id']}/scientific-records").json()["total"]
-        == 0
-    )
+    assert client.get(f"/api/v1/projects/{project['id']}/scientific-records").json()["total"] == 0
