@@ -469,6 +469,81 @@ def test_trace_follows_selected_edges_not_the_shortest_route() -> None:
     assert result["measurement_status"] == "caller_supplied_unverified"
 
 
+
+@pytest.mark.parametrize(
+    "path",
+    [[0, 1, 2, 0], [0, 2, 1, 0], [1, 2, 0, 1]],
+)
+def test_simple_planar_footprint_is_scale_qualified_and_order_invariant(
+    path: list[int],
+) -> None:
+    # A planar footprint is not 3D mesh surface area or a coral section.
+    params = {**CLOSED_LOOP_PARAMS, "surface_trace_vertex_paths": [path]}
+    trace = measure_mesh_preview(**params)["surface_edge_traces"][0]
+    assert trace["closed_loop_source_is_simple_planar_perimeter"] is True
+    assert trace["closed_loop_source_planar_enclosed_area_mesh_units2"] == pytest.approx(0.5)
+    assert trace["closed_loop_planar_enclosed_area_m2"] == pytest.approx(0.00005)
+    assert trace["closed_loop_planar_enclosed_area_scale_only_interval_m2"] == pytest.approx(
+        [0.0000405, 0.0000605]
+    )
+    assert trace["human_review_verified"] is False
+
+
+def test_planar_footprint_non_xy_plane_and_full_scale_uncertainty() -> None:
+    params = {
+        **CLOSED_LOOP_PARAMS,
+        "vertices": [[0, 0, 0], [0, 2, 0], [0, 0, 3]],
+        "surface_trace_vertex_paths": [[0, 1, 2, 0]],
+        "relative_scale_uncertainty": 1.0,
+    }
+    trace = measure_mesh_preview(**params)["surface_edge_traces"][0]
+    assert trace["closed_loop_source_is_simple_planar_perimeter"] is True
+    assert trace["closed_loop_source_planar_enclosed_area_mesh_units2"] == pytest.approx(3.0)
+    assert trace["closed_loop_planar_enclosed_area_m2"] == pytest.approx(0.0003)
+    assert trace["closed_loop_planar_enclosed_area_scale_only_interval_m2"] == pytest.approx(
+        [0.0, 0.0012]
+    )
+    assert trace["human_review_verified"] is False
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        PARAMS,
+        NONCOPLANAR_CLOSED_LOOP_PARAMS,
+        PROPER_CROSSING_CLOSED_LOOP_PARAMS,
+        CONTACT_OVERLAP_CLOSED_LOOP_PARAMS,
+    ],
+)
+def test_non_simple_or_open_loops_never_have_planar_footprint(
+    params: dict[str, Any],
+) -> None:
+    trace = measure_mesh_preview(**params)["surface_edge_traces"][0]
+    assert trace["closed_loop_source_planar_enclosed_area_mesh_units2"] is None
+    assert trace["closed_loop_planar_enclosed_area_m2"] is None
+    assert trace["closed_loop_planar_enclosed_area_scale_only_interval_m2"] is None
+
+
+def test_planar_area_underflow_is_unknown_not_numeric_zero() -> None:
+    vertices = [(0.0, 0.0, 0.0), (1e-200, 0.0, 0.0), (0.0, 1e-200, 0.0)]
+    source = mesh_surface_edge_traces(vertices, [[0, 1, 2]], [[0, 1, 2, 0]], 1.0, 0.1)[0]
+    assert source["closed_loop_source_is_simple_planar_perimeter"] is True
+    assert source["closed_loop_source_planar_enclosed_area_mesh_units2"] is None
+    assert source["closed_loop_planar_enclosed_area_m2"] is None
+    assert "closed_surface_trace_source_planar_area_unrepresentable" in source["qc_warnings"]
+
+    ordinary = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)]
+    calibrated = mesh_surface_edge_traces(
+        ordinary, [[0, 1, 2]], [[0, 1, 2, 0]], 1e-200, 0.1
+    )[0]
+    assert calibrated["closed_loop_source_planar_enclosed_area_mesh_units2"] == 0.5
+    assert calibrated["closed_loop_planar_enclosed_area_m2"] is None
+    assert calibrated["closed_loop_planar_enclosed_area_scale_only_interval_m2"] is None
+    assert "closed_surface_trace_calibrated_planar_area_unrepresentable" in calibrated[
+        "qc_warnings"
+    ]
+
+
 @pytest.mark.parametrize("scale", [0.01, 0.02])
 def test_closed_surface_loop_measures_perimeter_once_with_a_unique_closure_turn(
     scale: float,
