@@ -33,6 +33,15 @@ CLOSED_LOOP_PARAMS = {
     "surface_trace_vertex_paths": [[0, 1, 2, 0]],
 }
 
+# A closed triangle in the YZ plane checks a 3D footprint, not just XY.
+NON_XY_PLANAR_CLOSED_LOOP_PARAMS = {
+    **CLOSED_LOOP_PARAMS,
+    "vertices": [[0, 0, 0], [0, 2, 0], [0, 0, 3]],
+    "surface_trace_vertex_paths": [[0, 1, 2, 0]],
+    "relative_scale_uncertainty": 1.0,
+}
+
+
 # Four noncoplanar source waypoints form a valid closed tetrahedral edge loop.
 # Its perimeter remains measurable, but it must never imply a planar contour
 # or a scientifically verified coral cross-sectional area.
@@ -490,13 +499,7 @@ def test_simple_planar_footprint_is_scale_qualified_and_order_invariant(
 
 
 def test_planar_footprint_non_xy_plane_and_full_scale_uncertainty() -> None:
-    params = {
-        **CLOSED_LOOP_PARAMS,
-        "vertices": [[0, 0, 0], [0, 2, 0], [0, 0, 3]],
-        "surface_trace_vertex_paths": [[0, 1, 2, 0]],
-        "relative_scale_uncertainty": 1.0,
-    }
-    trace = measure_mesh_preview(**params)["surface_edge_traces"][0]
+    trace = measure_mesh_preview(**NON_XY_PLANAR_CLOSED_LOOP_PARAMS)["surface_edge_traces"][0]
     assert trace["closed_loop_source_is_simple_planar_perimeter"] is True
     assert trace["closed_loop_source_planar_enclosed_area_mesh_units2"] == pytest.approx(3.0)
     assert trace["closed_loop_planar_enclosed_area_m2"] == pytest.approx(0.0003)
@@ -1383,6 +1386,7 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
         "closed_loop_reverse",
         "closed_loop_rotated",
         "closed_loop_max_uncertainty",
+        "non_xy_planar_closed_loop",
         "noncoplanar_closed_loop",
         "proper_crossing_closed_loop",
         "contact_overlap_closed_loop",
@@ -1423,6 +1427,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             **CLOSED_LOOP_PARAMS,
             "relative_scale_uncertainty": 1.0,
         },
+        "non_xy_planar_closed_loop": NON_XY_PLANAR_CLOSED_LOOP_PARAMS,
         "noncoplanar_closed_loop": NONCOPLANAR_CLOSED_LOOP_PARAMS,
         "proper_crossing_closed_loop": PROPER_CROSSING_CLOSED_LOOP_PARAMS,
         "contact_overlap_closed_loop": CONTACT_OVERLAP_CLOSED_LOOP_PARAMS,
@@ -1550,6 +1555,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "closed_loop_reverse",
         "closed_loop_rotated",
         "closed_loop_max_uncertainty",
+        "non_xy_planar_closed_loop",
         "noncoplanar_closed_loop",
         "proper_crossing_closed_loop",
         "contact_overlap_closed_loop",
@@ -1586,9 +1592,10 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             assert trace["closed_loop_source_local_backtrack_waypoint_offsets"] == []
             assert "closed_surface_trace_source_proper_self_intersection" in trace["qc_warnings"]
         else:
-            expected_closing_turn = 135.0 if case == "closed_loop_rotated" else 90.0
-            assert trace["turn_angles_deg"][0] == pytest.approx(expected_closing_turn)
-            assert trace["total_absolute_geometric_turn_deg"] == pytest.approx(360.0)
+            if case != "non_xy_planar_closed_loop":
+                expected_closing_turn = 135.0 if case == "closed_loop_rotated" else 90.0
+                assert trace["turn_angles_deg"][0] == pytest.approx(expected_closing_turn)
+                assert trace["total_absolute_geometric_turn_deg"] == pytest.approx(360.0)
             assert trace["closed_loop_source_exact_coplanarity"] is True
             assert trace["closed_loop_source_noncoplanar_waypoint_offsets"] == []
             assert trace["closed_loop_source_proper_crossing_segment_pairs"] == []
@@ -1596,8 +1603,17 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             assert trace["closed_loop_source_collinear_overlap_segment_pairs"] == []
             assert trace["closed_loop_source_is_simple_planar_perimeter"] is True
             assert trace["closed_loop_source_local_backtrack_waypoint_offsets"] == []
-            assert trace["closed_loop_source_planar_enclosed_area_mesh_units2"] == 0.5
-            assert trace["closed_loop_planar_enclosed_area_m2"] == pytest.approx(0.00005)
+            expected_source_area = 3.0 if case == "non_xy_planar_closed_loop" else 0.5
+            assert trace["closed_loop_source_planar_enclosed_area_mesh_units2"] == (
+                expected_source_area
+            )
+            assert trace["closed_loop_planar_enclosed_area_m2"] == pytest.approx(
+                expected_source_area * 0.0001
+            )
+            if case == "non_xy_planar_closed_loop":
+                assert trace[
+                    "closed_loop_planar_enclosed_area_scale_only_interval_m2"
+                ] == pytest.approx([0.0, 0.0012])
             if case == "closed_loop_max_uncertainty":
                 assert trace[
                     "closed_loop_planar_enclosed_area_scale_only_interval_m2"
