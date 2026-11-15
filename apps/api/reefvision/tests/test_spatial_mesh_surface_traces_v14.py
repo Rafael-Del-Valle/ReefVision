@@ -257,6 +257,47 @@ def test_duplicate_face_qc_is_direct_engine_only_and_preview_rejects_it(
     assert response.status_code == 400
     assert "Duplicate triangles would double-count surface area" in response.text
 
+    # The persisted, typed workflow must fail closed on the same invalid mesh.
+    # It may save its parameters as a reproducible request, but must neither
+    # claim successful analysis nor emit a double-counted area artifact.
+    graph = {
+        "graph_id": "rejected-duplicate-triangle-preview-v14",
+        "name": "Duplicate-face scientific validation regression",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "mesh",
+                "node_type": "mesh_surface_preview",
+                "parameters": params,
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "project-to-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    base = f"/api/v1/projects/{project_id}"
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    ) is False
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert not any(
+        artifact["data_type"] == "mesh_measurement_preview"
+        for artifact in detail.json()["artifacts"]
+    )
+
 
 @pytest.mark.parametrize("scale", [0.01, 1.0])
 @pytest.mark.parametrize("conflicting", [False, True])
