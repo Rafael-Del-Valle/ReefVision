@@ -207,6 +207,22 @@ def inspect(path: Path) -> dict:
             "environmental_event_definitions" not in present_extensions
         ):
             warnings.append("environmental_analysis_without_event_definitions")
+        # The 1.1 environmental stages have distinct Alembic revision
+        # boundaries. Complete-looking extension tables with an earlier stamp
+        # can be a partial restore, not successful migrated research data.
+        # Only use scientific-only lineage here: the 1.6 QC branch reuses
+        # numeric revision names for unrelated schema operations.
+        if lineage == "scientific" and len(revisions) == 1:
+            revision = revisions[0]
+            if (
+                revision in {"0037", "0038", "0039"}
+                and "environmental_event_definitions" in present_extensions
+            ):
+                warnings.append("environmental_event_before_revision_0040")
+            if revision in {"0037", "0038", "0039", "0040", "0041"} and (
+                present_extensions & analysis_pair
+            ):
+                warnings.append("environmental_analysis_before_revision_0042")
         if lineage == "ambiguous":
             warnings.append("mixed_scientific_and_qc_lineage")
         if "0038" in revisions:
