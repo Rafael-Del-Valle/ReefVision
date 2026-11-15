@@ -73,6 +73,7 @@ def parse_noaa(
         raise ValidationError("NOAA reports unavailable observations for this station and day")
     records = []
     missing = 0
+    seen_timestamps: set[datetime] = set()
     try:
         metadata = raw["metadata"]
         if str(metadata["id"]) != request.station_id:
@@ -84,6 +85,9 @@ def parse_noaa(
             timestamp = datetime.strptime(item["t"], "%Y-%m-%d %H:%M").replace(tzinfo=UTC)
             if timestamp.date() != request.day:
                 raise ValueError("NOAA response time lies outside the requested day")
+            if timestamp in seen_timestamps:
+                raise ValueError("Duplicate NOAA sample timestamp")
+            seen_timestamps.add(timestamp)
             if item.get("v") in (None, ""):
                 missing += 1
                 continue
@@ -139,6 +143,7 @@ def parse_noaa_tides(
         raise ValidationError("NOAA reports unavailable tidal data for this station and day")
     records = []
     missing = 0
+    seen_timestamps: set[datetime] = set()
     try:
         metadata = raw["metadata"]
         if str(metadata["id"]) != request.station_id:
@@ -151,6 +156,9 @@ def parse_noaa_tides(
             timestamp = datetime.strptime(item["t"], "%Y-%m-%d %H:%M").replace(tzinfo=UTC)
             if timestamp.date() != request.day:
                 raise ValueError("NOAA tidal response time lies outside the requested day")
+            if timestamp in seen_timestamps:
+                raise ValueError("Duplicate NOAA sample timestamp")
+            seen_timestamps.add(timestamp)
             if item.get("v") in (None, ""):
                 missing += 1
                 continue

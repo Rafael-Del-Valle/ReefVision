@@ -506,3 +506,64 @@ def test_threshold_samples_exclude_superseded_noaa_evidence(client):
         item for item in history.json()["items"] if item["id"] == str(original.items[0].id)
     )
     assert previous["environmental_snapshot_current"] is False
+
+@pytest.mark.parametrize("duplicate_value", ["21.0", ""])
+def test_noaa_duplicate_timestamp_rejected_without_persisting(client, duplicate_value):
+    """Repeated times, including missing-value rows, are not independent samples."""
+    from reefvision.domain.errors import ValidationError
+    from reefvision.schemas.environmental_context import NOAAImportRequest
+    from reefvision.services.environmental_context import EnvironmentalContextService
+
+    project = create_project(client, "Duplicate NOAA temperature")
+    raw = noaa_fixture()
+    raw["data"].append({"t": raw["data"][0]["t"], "v": duplicate_value, "f": "0,0,0"})
+    with (
+        client.app.state.session_factory() as session,
+        httpx.Client(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=raw))
+        ) as http,
+        pytest.raises(ValidationError, match="Duplicate NOAA sample timestamp"),
+    ):
+        EnvironmentalContextService(session, http=http).import_noaa(
+            project["id"], NOAAImportRequest(station_id="8665530", day="2026-04-03")
+        )
+    assert (
+        client.get(f"/api/v1/projects/{project['id']}/scientific-records").json()["total"]
+        == 0
+    )
+
+
+def test_noaa_duplicate_timestamp_refresh_keeps_prior_offline_snapshot(client):
+    """Invalid provider correction must not replace good cached evidence."""
+    from reefvision.domain.errors import ValidationError
+    from reefvision.schemas.environmental_context import NOAAImportRequest
+    from reefvision.services.environmental_context import EnvironmentalContextService
+
+    project = create_project(client, "NOAA duplicate refresh")
+    request = NOAAImportRequest(station_id="8665530", day="2026-04-03")
+    raw = noaa_fixture()
+    baseline_time = datetime(2026, 4, 4, tzinfo=UTC)
+    with (
+        client.app.state.session_factory() as session,
+        httpx.Client(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=raw))
+        ) as http,
+    ):
+        original = EnvironmentalContextService(
+            session, http=http, now=baseline_time
+        ).import_noaa(project["id"], request)
+        raw["data"].append(dict(raw["data"][0]))
+        service = EnvironmentalContextService(
+            session, http=http, now=baseline_time + timedelta(days=2)
+        )
+        with pytest.raises(ValidationError, match="Duplicate NOAA sample timestamp"):
+            service.import_noaa(project["id"], request)
+        offline = service.import_noaa(
+            project["id"], request.model_copy(update={"offline": True})
+        )
+    assert offline.cache_status == "stale_offline"
+    assert [item.id for item in offline.items] == [item.id for item in original.items]
+    assert (
+        client.get(f"/api/v1/projects/{project['id']}/scientific-records").json()["total"]
+        == 2
+    )
