@@ -190,12 +190,23 @@ def _asset_state(info: os.stat_result) -> tuple[int, int, int, int, int, int, in
     )
 
 
+def _asset_handle_state(info: os.stat_result) -> tuple[int, ...]:
+    """Compare path/handle identity excluding Windows creation-time discrepancies.
+
+    Windows may report differing ctime through lstat and fstat for the same
+    file, even when inode, contents and timestamps are stable. Compare ctime
+    within each metadata source instead: path before/after, handle before/after.
+    """
+    values = _asset_state(info)
+    return values[:4] + values[5:]
+
+
 def _asset_mismatch_fields(first: os.stat_result, second: os.stat_result) -> str:
-    """Identify differing metadata categories without exposing research paths or values."""
-    labels = ("device", "inode", "size", "mtime", "ctime", "type", "links")
+    """Identify differing identity fields without exposing research paths or values."""
+    labels = ("device", "inode", "size", "mtime", "type", "links")
     return ",".join(
         label
-        for label, a, b in zip(labels, _asset_state(first), _asset_state(second))
+        for label, a, b in zip(labels, _asset_handle_state(first), _asset_handle_state(second))
         if a != b
     )
 
@@ -266,7 +277,7 @@ def _asset_inventory(
                 if (
                     not stat.S_ISREG(opened.st_mode)
                     or _is_unsafe_asset_link(path, opened)
-                    or _asset_state(opened) != _asset_state(initial)
+                    or _asset_handle_state(opened) != _asset_handle_state(initial)
                 ):
                     raise ValueError(
                         "asset_changed_during_inspection:"
@@ -279,14 +290,17 @@ def _asset_inventory(
             if (
                 not stat.S_ISREG(final.st_mode)
                 or _is_unsafe_asset_link(path, final)
-                or _asset_state(initial) != _asset_state(end_opened)
+                or _asset_handle_state(initial) != _asset_handle_state(end_opened)
                 or _asset_state(initial) != _asset_state(final)
+                or _asset_state(opened) != _asset_state(end_opened)
             ):
                 raise ValueError(
                     "asset_changed_during_inspection:"
                     + _asset_mismatch_fields(initial, end_opened)
                     + ":"
                     + _asset_mismatch_fields(initial, final)
+                    + ":"
+                    + _asset_mismatch_fields(opened, end_opened)
                 )
             relative_path = path.relative_to(root).as_posix()
             inventory[relative_path] = digest.hexdigest()
