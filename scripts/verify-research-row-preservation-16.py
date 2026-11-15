@@ -3,8 +3,9 @@
 
 This is NOT a migrator, schema compatibility proof, or automatic release approval.
 Compare an offline *before* database to its upgraded *after* copy. All existing
-columns and rows in protected scientific, review, class, and workflow tables
-must be identical; added columns and new tables are allowed, but changed rows
+columns and rows (including SQLite generated-column values) in protected
+scientific, review, class, and workflow tables must be identical; added columns
+and new tables are allowed, but changed rows
 and new rows in preexisting tables require independent researcher review.
 """
 
@@ -85,9 +86,16 @@ def _table_columns(
         return None
     if exists[0] != "table":
         raise ValueError("protected_name_not_a_table")
-    info = list(connection.execute(f"PRAGMA table_info({_quote(table)})"))
+    # table_info silently omits VIRTUAL/STORED generated columns. They can
+    # contain measured or interpreted scientific values that must survive a
+    # migration, even if every ordinary source column remains byte-identical.
+    info = list(connection.execute(f"PRAGMA table_xinfo({_quote(table)})"))
     if not info:
-        raise ValueError("protected_table_has_no_ordinary_columns")
+        raise ValueError("protected_table_has_no_columns")
+    if any(row[6] == 1 for row in info):
+        # Hidden virtual-table fields have implementation-specific behavior;
+        # do not issue a preservation PASS for an unsupported table type.
+        raise ValueError("protected_virtual_table_not_supported")
     columns = [row[1] for row in info]
     primary_key = [row[1] for row in sorted(info, key=lambda row: row[5]) if row[5]]
     return columns, primary_key
