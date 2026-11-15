@@ -173,11 +173,22 @@ def inspect(path: Path) -> dict:
             warnings.append("qc_bulk_registry_without_review_events")
         # A surviving later-stage table with an earlier stamp is an
         # interrupted DDL/restore, not evidence that the migration finished.
-        if qc_events_present and "0037" in revisions:
+        # Some legacy backups carry stamps earlier than 0037. The QC event
+        # table was first introduced in 0038, and bulk requests in 0041:
+        # reject *every* earlier numeric stage, not just the immediate prior
+        # stamps. Do not interpret malformed/non-numeric stamps as a stage.
+        stamped_revision = revisions[0] if len(revisions) == 1 else None
+        numeric_revision = (
+            int(stamped_revision)
+            if isinstance(stamped_revision, str)
+            and len(stamped_revision) == 4
+            and stamped_revision.isascii()
+            and stamped_revision.isdecimal()
+            else None
+        )
+        if qc_events_present and numeric_revision is not None and numeric_revision < 38:
             warnings.append("qc_events_before_revision_0038")
-        if qc_bulk_present and any(
-            revision in revisions for revision in ("0037", "0038", "0039", "0040")
-        ):
+        if qc_bulk_present and numeric_revision is not None and numeric_revision < 41:
             warnings.append("qc_bulk_registry_before_revision_0041")
         if qc_events_present and not qc_bulk_present and "0041" in revisions:
             warnings.append("qc_0041_missing_bulk_registry")
