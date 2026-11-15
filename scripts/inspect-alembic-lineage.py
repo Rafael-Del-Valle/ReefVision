@@ -86,7 +86,9 @@ def inspect(path: Path) -> dict:
             else []
         )
         inventory = {}
-        for name in sorted({name for family in FAMILIES.values() for name in family} | set(SCIENCE_EXTENSIONS)):
+        names = set(SCIENCE_EXTENSIONS)
+        names.update(name for family in FAMILIES.values() for name in family)
+        for name in sorted(names):
             if objects.get(name) != "table":
                 inventory[name] = {"present": False}
                 continue
