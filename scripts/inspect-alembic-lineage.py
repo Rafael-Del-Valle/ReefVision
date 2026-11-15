@@ -96,8 +96,7 @@ def inspect(path: Path) -> dict:
             count = db.execute(f'SELECT COUNT(*) FROM "{name}"').fetchone()[0]
             inventory[name] = {"present": True, "columns": columns, "rows": count}
         scientific = any(
-            inventory[name]["present"]
-            for name in (*FAMILIES["scientific"], *SCIENCE_EXTENSIONS)
+            inventory[name]["present"] for name in (*FAMILIES["scientific"], *SCIENCE_EXTENSIONS)
         )
         qc = any(inventory[name]["present"] for name in FAMILIES["qc"])
         lineage = (
@@ -170,6 +169,14 @@ def inspect(path: Path) -> dict:
         }
         if present_extensions & analysis_pair and not analysis_pair <= present_extensions:
             warnings.append("incomplete_environmental_analysis_schema_family")
+        # The real 1.1 Alembic lineage creates event definitions at 0040,
+        # before either analysis table at 0042. A complete analysis pair
+        # without its predecessor is still an interrupted/foreign schema.
+        # Do not infer that an apparently valid 0042 stamp repairs it.
+        if present_extensions & analysis_pair and (
+            "environmental_event_definitions" not in present_extensions
+        ):
+            warnings.append("environmental_analysis_without_event_definitions")
         if lineage == "ambiguous":
             warnings.append("mixed_scientific_and_qc_lineage")
         if "0038" in revisions:
