@@ -344,6 +344,7 @@ try {
         current_revision = [string]$migrationPayload.current_schema_revision
         expected_revision = [string]$migrationPayload.expected_schema_revision
         database_path_is_isolated = $databaseIsIsolated
+        timestamp_utc = [DateTime]::UtcNow.ToString('o')
     }
     if (-not $databaseIsIsolated) {
         throw 'Packaged API database path escapes the disposable acceptance data root; refusing project writes.'

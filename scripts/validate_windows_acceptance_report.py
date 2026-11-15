@@ -332,6 +332,20 @@ def validate_report(
         )
 
     _verify_causal_gate_order(report, expected_upgrade=expected_upgrade)
+    # Unlike the post-upgrade observation, the initial version/schema check
+    # previously had no time provenance. A valid-looking report could splice
+    # initial migration metadata captured outside this installed MSI launch.
+    observed_at = _utc(migration.get("timestamp_utc"), "migration.timestamp_utc")
+    _require(
+        start <= observed_at <= end,
+        "Initial migration observation falls outside the acceptance run",
+    )
+    installed_at = _utc(report["install"]["timestamp_utc"], "install.timestamp_utc")
+    launched_at = _utc(report["first_launch"]["timestamp_utc"], "first_launch.timestamp_utc")
+    _require(
+        installed_at <= observed_at <= launched_at,
+        "Initial migration observation must follow MSI install and precede first-launch PASS",
+    )
 
 
 def main() -> int:

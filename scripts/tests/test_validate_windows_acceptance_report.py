@@ -57,6 +57,7 @@ def good_report() -> dict:
             "current_revision": "0040",
             "expected_revision": "0040",
             "database_path_is_isolated": True,
+            "timestamp_utc": "2026-10-25T02:10:00Z",
         },
         "post_upgrade_migration": None,
         "upgrade_install": {"status": "SKIPPED", "detail": "SkipUpgrade requested"},
@@ -446,7 +447,43 @@ class AcceptanceEvidenceTests(unittest.TestCase):
         for minute, gate in enumerate(sequence, start=1):
             if gate != "upgrade":
                 report[gate]["timestamp_utc"] = f"2026-10-25T02:{minute:02d}:00Z"
+        report["migration"]["timestamp_utc"] = "2026-10-25T02:03:00Z"
         MODULE.validate_report(report, expected_version="1.0.2")
+
+
+    def test_initial_migration_observation_is_causally_bound_to_msi_launch(self) -> None:
+        report = good_report()
+        MODULE.validate_report(report, expected_version="1.0.2")
+        invalid_times = (
+            None,
+            "not-a-timestamp",
+            "2026-10-25T01:59:59Z",
+            "2026-10-25T02:20:01Z",
+            "2026-10-25T02:09:59Z",
+            "2026-10-25T02:10:01Z",
+            "2026-10-25T02:10:00-05:00",
+        )
+        for observed in invalid_times:
+            with self.subTest(observed=observed):
+                altered = copy.deepcopy(report)
+                altered["migration"]["timestamp_utc"] = observed
+                with self.assertRaises(MODULE.AcceptanceEvidenceError):
+                    MODULE.validate_report(altered, expected_version="1.0.2")
+
+        # A legitimate upgrade initially launches the previous MSI. Its
+        # initial schema observation still must belong to that same install.
+        upgrade = good_report()
+        upgrade["reefvision_version"] = "1.0.3"
+        upgrade["upgrade_install"] = pass_evidence()
+        upgrade["upgrade"] = pass_evidence()
+        upgrade["post_upgrade_migration"] = upgraded_migration_evidence("1.0.3")
+        upgrade["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
+        upgrade["previous_installer_sha256"] = "b" * 64
+        upgrade["previous_installer_version"] = "1.0.2"
+        MODULE.validate_report(upgrade, expected_version="1.0.3", expected_upgrade="passed")
+        upgrade["migration"].pop("timestamp_utc")
+        with self.assertRaises(MODULE.AcceptanceEvidenceError):
+            MODULE.validate_report(upgrade, expected_version="1.0.3", expected_upgrade="passed")
 
     def test_real_upgrade_install_must_precede_restart(self) -> None:
         report = good_report()

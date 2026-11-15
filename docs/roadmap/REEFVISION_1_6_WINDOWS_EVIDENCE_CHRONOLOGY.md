@@ -132,3 +132,25 @@ This only strengthens **disposable installed-app evidence**. It neither runs
 an actual upgrade/rollback nor establishes 1.1/1.6 Alembic reconciliation,
 interactive GUI correctness, or release approval. The existing saved,
 executable, typed QC Workflow Builder and researcher-review gates are unchanged.
+
+## Initial migration observation chronology (2026-11-15)
+
+The packaged first-launch API version and Alembic revision were already bound
+to the installed MSI and disposable database, but their snapshot lacked a
+timestamp. An otherwise internally consistent report could splice a stale
+migration observation into a later installed-acceptance run. The native
+PowerShell harness now records `migration.timestamp_utc` immediately after
+the initial version and schema probes, before it records `first_launch=PASS`.
+The independent validator rejects absent, malformed, non-UTC, out-of-run,
+before-install and after-first-launch observations. This applies both to clean
+installs and to the previous-version first launch in an approved MSI upgrade;
+the existing separately dated post-upgrade target migration remains required.
+Python fixtures exercise positive cases, malformed/stale/out-of-sequence values
+and upgrade parity; the Windows prepackage source contract verifies the
+observation is emitted in the correct harness phase.
+
+This is evidence integrity only. It does not attest a real installed GUI, prove
+rollback, reconcile the conflicting 1.1/1.6 Alembic 0038 histories, modify user
+assets, or authorize a release. Native Windows, representative biological
+datasets, saved executable QC Workflow Builder and explicit researcher
+approval are still release gates.

@@ -212,6 +212,10 @@ $upgradeAfterInstallOffset = $acceptanceSource.IndexOf('$retainedResearchAfterIn
 $upgradeAfterReplayOffset = $acceptanceSource.IndexOf('$retainedResearchAfterUpgrade = Get-ReefVisionResearchFileSnapshot', [System.StringComparison]::Ordinal)
 $upgradeStageOffset = $acceptanceSource.IndexOf('$report.upgrade_install = New-ReefVisionEvidenceResult -Status ''PASS''', [System.StringComparison]::Ordinal)
 $upgradeFinalOffset = $acceptanceSource.IndexOf('$report.upgrade = New-ReefVisionEvidenceResult -Status ''PASS''', [System.StringComparison]::Ordinal)
+$initialMigrationOffset = $acceptanceSource.IndexOf('$report.migration = [ordered]@{', [System.StringComparison]::Ordinal)
+$initialObservationOffset = $acceptanceSource.IndexOf("timestamp_utc = [DateTime]::UtcNow.ToString('o')", $initialMigrationOffset, [System.StringComparison]::Ordinal)
+$initialLaunchOffset = $acceptanceSource.IndexOf('$report.first_launch = New-ReefVisionEvidenceResult -Status ''PASS''', [System.StringComparison]::Ordinal)
+Assert-True ($initialMigrationOffset -gt 0 -and $initialObservationOffset -gt $initialMigrationOffset -and $initialObservationOffset -lt $initialLaunchOffset) 'Initial packaged migration observation must be captured before first-launch PASS.'
 $postUpgradeSchemaOffset = $acceptanceSource.IndexOf('$report.post_upgrade_migration = [ordered]@{', [System.StringComparison]::Ordinal)
 $upgradedSchemaValidationOffset = $acceptanceSource.IndexOf('if (-not [string]::Equals($upgradedDatabase, $expectedDatabase', [System.StringComparison]::Ordinal)
 $restartMilestoneOffset = $acceptanceSource.IndexOf('$report.restart = New-ReefVisionEvidenceResult -Status ''PASS''', [System.StringComparison]::Ordinal)
