@@ -165,6 +165,7 @@ def _input_artifacts(
 ) -> tuple[dict[str, list[WorkflowArtifact]], list[str]]:
     inputs: dict[str, list[WorkflowArtifact]] = {}
     artifact_ids: list[str] = []
+    verified_producers: set[str] = set()
     for binding in bindings:
         target_port_id = str(binding.target_port_id)
         source_node_id = str(binding.source_node_id)
@@ -178,6 +179,12 @@ def _input_artifacts(
         )
         if producer is None or producer.status != "succeeded":
             raise RuntimeError(f"Node {step_node_id} requires unfinished producer {source_node_id}")
+        # A newly consumed producer can become inconsistent after its step
+        # commits. Verify its complete saved output contract, not only the
+        # digest of the artifact selected by this edge.
+        if producer.id not in verified_producers:
+            verify_succeeded_node_artifacts(session, run_id=run_id, node_run=producer)
+            verified_producers.add(producer.id)
         matches = list(
             session.scalars(
                 select(WorkflowArtifact).where(
