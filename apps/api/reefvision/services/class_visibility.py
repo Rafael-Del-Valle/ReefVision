@@ -99,9 +99,8 @@ class ClassVisibilityService:
         # preferences and shared defaults. A concurrent local editor must not
         # produce a mixed biological class-visibility bundle.
         connection = self.session.connection()
-        if (
-            connection.dialect.name == "sqlite"
-            and not connection.connection.driver_connection.in_transaction
+        if connection.dialect.name == "sqlite" and not getattr(
+            connection.connection.driver_connection, "in_transaction", False
         ):
             connection.exec_driver_sql("BEGIN")
         self._project(project_id)
