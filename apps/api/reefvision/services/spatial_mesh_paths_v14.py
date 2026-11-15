@@ -720,9 +720,7 @@ def mesh_surface_edge_traces(
         # meaningful intermediate positions when calibrated lengths underflow
         # or the unscaled source total exceeds binary64's numeric range.
         # These fractions are not homologous anatomical landmarks.
-        exact_source_total = sum(
-            (Fraction(length) for length in source_lengths), Fraction(0)
-        )
+        exact_source_total = sum((Fraction(length) for length in source_lengths), Fraction(0))
         source_cumulative_arc_length_fractions: list[float] | None = None
         if exact_source_total > 0:
             source_cumulative_arc_length_fractions = [0.0]
@@ -895,19 +893,26 @@ def mesh_surface_edge_traces(
         reused_source_length_mesh_units = (
             reused_source_length if isfinite(reused_source_length) else None
         )
+        # The fraction is dimensionless and can remain well-defined when
+        # source-frame mesh-unit sums overflow binary64. Accumulate the
+        # already-validated finite source edges as exact binary64 rationals.
+        # This is a trace-reuse audit, not corrected anatomical branch length.
+        exact_reused_source_length = Fraction(0)
+        for reused_length in reused_source_lengths:
+            exact_reused_source_length += Fraction(reused_length)
         reused_fraction = (
-            reused_source_length / source_trace_length
-            if reused_source_length_mesh_units is not None
-            and isfinite(source_trace_length)
-            and source_trace_length > 0
+            float(exact_reused_source_length / exact_source_total)
+            if exact_source_total > 0
             else None
         )
-        if reused_fraction is not None and not isfinite(reused_fraction):
-            reused_fraction = None
         if repeated_geometric_segment_index_pairs:
             warnings.append("surface_trace_reused_geometric_segment")
             if reused_fraction is None:
                 warnings.append("surface_trace_reuse_fraction_unrepresentable")
+            elif reused_fraction == 0.0:
+                # A genuinely reused positive edge may be too small to
+                # represent as a nonzero binary64 fraction of the entire trace.
+                warnings.append("surface_trace_reuse_fraction_resolution_loss")
         if segment_underflow:
             warnings.append("calibrated_surface_trace_segment_underflow")
         # A positive calibrated segment may disappear from cumulative distances
