@@ -737,3 +737,35 @@ so these direct-engine fixtures do **not** establish whole-preview support
 for arbitrary source magnitudes. Ratios remain provisional geometric detours,
 not anatomical branch length, biological condition, reidentification, or
 held-out scientific validation.
+
+
+### Explicit closed surface-edge loops (provisional)
+
+A scientist may now supply a bounded existing-edge trace such as
+`surface_trace_vertex_paths: [[0, 1, 2, 0]]` to measure the selected **closed
+surface perimeter**. Only the final waypoint may repeat the initial indexed
+vertex, and at least three distinct vertices are required. Interior index
+revisits, two-vertex backtracks, malformed faces, or nonexistent selected
+edges remain rejected. The original indexed geometry is never welded.
+
+`is_closed_surface_loop: true` distinguishes intentional endpoint closure
+from an open trace whose different indices happen to have coincident XYZ.
+The start/end return is not counted as an unexplained nonadjacent spatial
+revisit. The unique closing turn is reported at waypoint zero; the duplicated
+last waypoint has a null turn, so `total_absolute_geometric_turn_deg` counts
+each geometric corner **once**. Segment lengths, cumulative distances,
+scale-only uncertainty intervals, imported vertex indices, and calibration
+provenance retain their existing meaning. Zero endpoint chord and undefined
+detour ratio remain explicit: the loop's perimeter-to-chord ratio is not
+defined.
+
+The warning `closed_surface_trace_not_verified_anatomical_contour` is
+mandatory. Closure does **not** establish a polyp outline, coral branch
+cross-section, planarity, enclosed area/volume, organism identity, or
+independent biological measurement. Neither the area enclosed by the trace
+nor a biological contour is inferred. Scale intervals are calibration-only,
+not observer or shape uncertainty. The same measurement engine serves the
+standalone project-scoped API and executable typed persisted Workflow Builder
+graphs; synthetic tests check both paths, complete artifact/provenance parity,
+and invalid interior revisits. This is not held-out biological, Windows
+installed-GUI, or physical GPU acceptance evidence.
