@@ -712,6 +712,22 @@ def build_workflow_run_provenance(
 
     result = dict(run.result_json or {})
 
+    # Closeout also saves a flat artifact summary for run consumers. Verify it
+    # against the same persisted artifacts as the immutable provenance manifest,
+    # so edited result metadata cannot misrepresent checkpoint or dataset bytes.
+    # Older records without this optional summary remain readable.
+    if run.status == "succeeded" and "artifacts" in result:
+        expected_summary = [
+            {
+                "artifact_id": artifact.id,
+                "data_type": artifact.data_type,
+                "payload_sha256": artifact.payload_sha256,
+            }
+            for artifact in artifacts
+        ]
+        if not isinstance(result["artifacts"], list) or result["artifacts"] != expected_summary:
+            raise ConflictError("Succeeded workflow run artifact summary does not match saved artifacts")
+
     raw_history = result.get(
         "recovery_history",
         [],
