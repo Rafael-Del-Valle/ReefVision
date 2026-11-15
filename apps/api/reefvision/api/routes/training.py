@@ -274,7 +274,10 @@ def _training_log_tail(
         candidate = root / candidate
     try:
         path = candidate.resolve(strict=True)
-    except (OSError, RuntimeError):
+    except (OSError, RuntimeError, ValueError):
+        # A damaged persisted path can contain a NUL character. Path.resolve
+        # raises ValueError for it; the read-only observer must remain usable
+        # without changing or interrupting the underlying training job.
         return empty
     if not path.is_relative_to(root) or path.suffix.lower() not in {".log", ".txt"}:
         raise HTTPException(status_code=403, detail="Training log path is not permitted")
