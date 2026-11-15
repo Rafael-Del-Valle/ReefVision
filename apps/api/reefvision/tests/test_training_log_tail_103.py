@@ -52,7 +52,7 @@ def test_log_tail_filesystem_inspection_failure_is_unavailable(
 ) -> None:
     """A transient filesystem error cannot crash or modify a live training job."""
     log = tmp_path / "training.log"
-    original = b"train/box_loss=0.25\\ntrain/cls_loss=0.30\\n"
+    original = b"train/box_loss=0.25\ntrain/cls_loss=0.30\n"
     log.write_bytes(original)
     original_is_file = Path.is_file
 
@@ -79,7 +79,7 @@ def test_log_tail_resolution_failure_during_read_is_unavailable(
 ) -> None:
     """A path that becomes unresolvable after validation cannot leak metrics."""
     log = tmp_path / "training.log"
-    original = b"epoch=4\\ntrain/dfl_loss=0.10\\n"
+    original = b"epoch=4\ntrain/dfl_loss=0.10\n"
     log.write_bytes(original)
     original_resolve = Path.resolve
     log_checks = 0
