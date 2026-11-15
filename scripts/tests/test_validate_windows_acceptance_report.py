@@ -282,6 +282,60 @@ class AcceptanceEvidenceTests(unittest.TestCase):
         with self.assertRaises(MODULE.AcceptanceEvidenceError):
             MODULE.validate_report(report, expected_version="1.0.2")
 
+    def test_installed_acceptance_requires_causal_gate_timestamps(self) -> None:
+        # Every mandatory status may say PASS with a valid run-window time,
+        # but the observed events must still follow native installer order.
+        MODULE.validate_report(good_report(), expected_version="1.0.2")
+        for before, after in MODULE.CAUSAL_GATE_ORDER:
+            with self.subTest(before=before, after=after):
+                report = good_report()
+                report[before]["timestamp_utc"] = "2026-10-25T02:12:00Z"
+                report[after]["timestamp_utc"] = "2026-10-25T02:08:00Z"
+                with self.assertRaisesRegex(
+                    MODULE.AcceptanceEvidenceError, "causal order invalid"
+                ):
+                    MODULE.validate_report(report, expected_version="1.0.2")
+
+    def test_realistic_monotonic_installed_acceptance_evidence_passes(self) -> None:
+        report = good_report()
+        sequence = (
+            "install",
+            "shortcuts",
+            "first_launch",
+            "frontend_backend_connectivity",
+            "model_policy",
+            "external_annotation_imports",
+            "class_visibility_persistence",
+            "upgrade",
+            "restart",
+            "project_persistence",
+            "qc_review_coordination",
+            "qc_workflow_persistence",
+            "qc_workflow_replay",
+            "project_exchange",
+            "uninstall",
+            "data_retention",
+        )
+        for minute, gate in enumerate(sequence, start=1):
+            if gate != "upgrade":
+                report[gate]["timestamp_utc"] = f"2026-10-25T02:{minute:02d}:00Z"
+        MODULE.validate_report(report, expected_version="1.0.2")
+
+    def test_real_upgrade_evidence_must_precede_restart(self) -> None:
+        report = good_report()
+        report["reefvision_version"] = "1.0.3"
+        report["upgrade"] = pass_evidence()
+        report["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
+        report["previous_installer_sha256"] = "b" * 64
+        report["previous_installer_version"] = "1.0.2"
+        MODULE.validate_report(report, expected_version="1.0.3", expected_upgrade="passed")
+        report["upgrade"]["timestamp_utc"] = "2026-10-25T02:12:00Z"
+        report["restart"]["timestamp_utc"] = "2026-10-25T02:08:00Z"
+        with self.assertRaisesRegex(
+            MODULE.AcceptanceEvidenceError, "causal order invalid"
+        ):
+            MODULE.validate_report(report, expected_version="1.0.3", expected_upgrade="passed")
+
 
 if __name__ == "__main__":
     unittest.main()

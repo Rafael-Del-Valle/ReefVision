@@ -37,6 +37,26 @@ REQUIRED_PASS = (
     "data_retention",
 )
 OPTIONAL_APPROVAL_GATES = ("sam2_live", "confidence_review")
+# The native harness emits these PASS gates in causal order. Each timestamp
+# must describe when a milestone actually completed, not simply fall somewhere
+# inside the acceptance run. This prevents chronologically impossible reports
+# from satisfying a release gate even when every status says PASS.
+CAUSAL_GATE_ORDER = (
+    ("install", "shortcuts"),
+    ("shortcuts", "first_launch"),
+    ("first_launch", "frontend_backend_connectivity"),
+    ("frontend_backend_connectivity", "restart"),
+    ("model_policy", "restart"),
+    ("external_annotation_imports", "restart"),
+    ("class_visibility_persistence", "restart"),
+    ("restart", "project_persistence"),
+    ("restart", "qc_review_coordination"),
+    ("qc_review_coordination", "qc_workflow_persistence"),
+    ("qc_workflow_persistence", "qc_workflow_replay"),
+    ("qc_workflow_replay", "project_exchange"),
+    ("project_exchange", "uninstall"),
+    ("uninstall", "data_retention"),
+)
 MSI_VERSION = re.compile(r"\d{1,3}\.\d{1,3}\.\d{1,5}\Z")
 SHA256 = re.compile(r"[0-9a-fA-F]{64}\Z")
 ACCEPTANCE_RUN = re.compile(r"reefvision-clean-[0-9a-fA-F]{12}\Z")
@@ -136,6 +156,20 @@ def _verified_pass(
     )
 
 
+def _verify_causal_gate_order(report: dict[str, Any], *, expected_upgrade: str) -> None:
+    """Reject a PASS report whose install/review/restart/uninstall order is impossible."""
+    pairs = CAUSAL_GATE_ORDER
+    if expected_upgrade == "passed":
+        pairs += (("upgrade", "restart"),)
+    for before, after in pairs:
+        before_at = _utc(report[before]["timestamp_utc"], f"{before}.timestamp_utc")
+        after_at = _utc(report[after]["timestamp_utc"], f"{after}.timestamp_utc")
+        _require(
+            before_at <= after_at,
+            f"Installed acceptance causal order invalid: {before} must not follow {after}",
+        )
+
+
 def validate_report(
     report: dict[str, Any],
     *,
@@ -221,6 +255,8 @@ def validate_report(
             report["upgrade"].get("detail") in {"SkipUpgrade requested", "previous installer not supplied"},
             "Upgrade skip lacks explicit reason",
         )
+
+    _verify_causal_gate_order(report, expected_upgrade=expected_upgrade)
 
 
 def main() -> int:
