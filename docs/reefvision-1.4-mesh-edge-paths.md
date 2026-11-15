@@ -1,5 +1,59 @@
 # ReefVision 1.4 provisional mesh-edge paths
 
+## Conditional planar footprint for a scientist-selected closed mesh trace
+
+A closed surface-edge trace can now yield a **provisional planar enclosed
+footprint** only when the exact source-XYZ audit identifies a plane and the
+simple-perimeter check rules out nonadjacent crossings, contacts, overlapping or
+reused edges, coincident nonadjacent waypoints, adjacent backtracking and zero
+segments. Open paths, noncoplanar loops, undefined planes and non-simple loops
+retain **null** footprint fields rather than an arbitrary polygon area.
+
+Three fields preserve the distinction between coordinate geometry and
+calibrated science:
+
+- `closed_loop_source_planar_enclosed_area_mesh_units2`: unsigned enclosed
+  area in squared *imported source-coordinate units*, calculated using an
+  origin-translated exact-rational 3D vector shoelace before finite binary64
+  serialization. The result is insensitive to reversing the trace or choosing
+  a different start vertex and works for source planes not aligned with XY.
+- `closed_loop_planar_enclosed_area_m2`: that provisional footprint multiplied
+  by the **square** of the caller-supplied isotropic meters-per-unit scale.
+- `closed_loop_planar_enclosed_area_scale_only_interval_m2`: conditional
+  marginal bounds at scales `scale * (1 - u)` and `scale * (1 + u)`,
+  **squared** for the same shared relative scale uncertainty `u`. The bound
+  is not a statistical confidence interval. It is null when no relative scale
+  uncertainty is provided or when its positive bounds cannot be represented.
+
+Nonzero exact source area that rounds to zero or overflows on float conversion
+is reported as null with
+`closed_surface_trace_source_planar_area_unrepresentable`. A finite positive
+source footprint whose calibrated square-meter value underflows or overflows
+is likewise withheld with
+`closed_surface_trace_calibrated_planar_area_unrepresentable`; unresolved
+bounds use `closed_surface_trace_planar_area_interval_unrepresentable`.
+This prevents numerical zero from masquerading as an observed absence of
+area. All three values remain null when a trace is not a simple planar loop.
+
+**Do not interpret this as coral 3D surface area, measured biological
+cross-sectional area, a watertight-volume estimate, verified anatomical
+branch width, coral health, or a new identification.** It is only the planar
+region bounded by a researcher's chosen source-geometry polygon. The
+original OBJ/PLY/GLB mesh, explicit selected indices, calibration evidence,
+QC, full-resolution provenance and `human_review_verified: false` are
+preserved. Scientific acceptance requires independently inspected geometry,
+physical calibration, and a reviewer-confirmed biological contour.
+
+Synthetic tests cover triangle footprints, reversed/rotated winding,
+a non-XY source plane, maximum shared scale uncertainty, exclusion of
+crossing/contact/overlap/nonplanar/open selections, and source versus
+calibrated area underflow. Executable typed persisted `mesh_surface_preview`
+Workflow Builder fixtures compare the **complete** saved scientific result
+and provenance against the standalone project-scoped API. Tests do not
+replace field measurements, Windows MSI/CAB installed GUI checks, or GPU
+acceptance.
+
+
 ## Duplicate triangle exclusion versus direct topology diagnostics
 
 The direct `mesh_surface_edge_traces` measurement engine can identify
