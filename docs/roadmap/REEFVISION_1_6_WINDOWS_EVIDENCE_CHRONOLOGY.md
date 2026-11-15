@@ -108,3 +108,27 @@ Alembic-0038 collision or the migration itself; it is not proof of a physical
 MSI installation, interactive GUI exercise or rollback. The branch remains on
 release hold until native Windows, representative biological data and unified
 migration-lineage acceptance are independently verified.
+
+## Initial packaged API version bound to installed MSI (2026-11-15)
+
+The first-launch Windows harness previously checked the SQLite migration and
+isolated-data path without verifying that `/system/version` identified the
+**initial MSI actually installed**. A healthy but stale backend could pass
+those checks and proceed to write disposable research fixtures, misleadingly
+supporting clean-install evidence. This is distinct from the existing
+post-upgrade target-version check.
+
+Before the first project creation, the native acceptance harness now rejects
+an API version different from the target MSI for a clean install or the
+previous MSI for an explicitly approved upgrade. It records the observed
+`migration.application_version` in the machine-readable report. The independent
+report verifier requires this exact binding in both modes, including when the
+MSI's file hash was verified. The Windows prepackage unittest suite covers a
+valid clean install, a previous-version first launch during upgrade, and
+missing, mistyped or mismatched first-launch versions. Older reports without
+this evidence deliberately cannot support the upgraded acceptance contract.
+
+This only strengthens **disposable installed-app evidence**. It neither runs
+an actual upgrade/rollback nor establishes 1.1/1.6 Alembic reconciliation,
+interactive GUI correctness, or release approval. The existing saved,
+executable, typed QC Workflow Builder and researcher-review gates are unchanged.

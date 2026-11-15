@@ -208,6 +208,11 @@ def validate_report(
 
     migration = report.get("migration")
     _require(isinstance(migration, dict), "Missing packaged migration evidence")
+    _require(
+        isinstance(migration.get("application_version"), str)
+        and bool(migration["application_version"].strip()),
+        "Missing first-launch installed API version",
+    )
     _require(migration.get("schema_status") == "up_to_date", "Installed database is not migrated")
     _require(migration.get("database_path_is_isolated") is True, "Installed database is not isolated")
     _require(
@@ -281,6 +286,10 @@ def validate_report(
         _require(bool(report.get("previous_installer_version")), "Missing previous MSI version")
         previous_version = _msi_version(report["previous_installer_version"], "previous MSI version")
         _require(previous_version < target_version, "Target MSI is not newer than previous MSI")
+        _require(
+            migration["application_version"] == report["previous_installer_version"],
+            "Initial installed API version does not match previous MSI",
+        )
         # The CLI supplies --installer. In that mode, bind the upgrade claim to
         # both actual MSI files rather than trusting a path/version string.
         if installer is not None:
@@ -294,6 +303,10 @@ def validate_report(
                 "Previous MSI hash differs from report",
             )
     else:
+        _require(
+            migration["application_version"] == expected_version,
+            "Initial installed API version does not match target MSI",
+        )
         _require(
             report.get("post_upgrade_migration") is None,
             "Clean-install-only report must not claim a post-upgrade migration",

@@ -52,6 +52,7 @@ def good_report() -> dict:
             "C:/disposable/reefvision-acceptance/reefvision-clean-a1b2c3d4e5f6/data"
         ),
         "migration": {
+            "application_version": "1.0.2",
             "schema_status": "up_to_date",
             "current_revision": "0040",
             "expected_revision": "0040",
@@ -111,6 +112,37 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                 report["migration"][field] = value
                 with self.assertRaises(MODULE.AcceptanceEvidenceError):
                     MODULE.validate_report(report, expected_version="1.0.2")
+
+    def test_first_launch_backend_version_must_match_installed_msi(self) -> None:
+        clean = good_report()
+        MODULE.validate_report(clean, expected_version="1.0.2")
+        for version in (None, "", 123, "1.0.1", "1.0.3"):
+            with self.subTest(clean_install_api_version=version):
+                modified = copy.deepcopy(clean)
+                modified["migration"]["application_version"] = version
+                with self.assertRaises(MODULE.AcceptanceEvidenceError):
+                    MODULE.validate_report(modified, expected_version="1.0.2")
+
+        upgraded = good_report()
+        upgraded["reefvision_version"] = "1.0.3"
+        upgraded["upgrade_install"] = pass_evidence()
+        upgraded["upgrade"] = pass_evidence()
+        upgraded["post_upgrade_migration"] = upgraded_migration_evidence("1.0.3")
+        upgraded["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
+        upgraded["previous_installer_sha256"] = "b" * 64
+        upgraded["previous_installer_version"] = "1.0.2"
+        MODULE.validate_report(
+            upgraded, expected_version="1.0.3", expected_upgrade="passed"
+        )
+        # In upgrade mode the first installed API must be the previous MSI,
+        # not the new target. The target is verified separately after restart.
+        upgraded["migration"]["application_version"] = "1.0.3"
+        with self.assertRaisesRegex(
+            MODULE.AcceptanceEvidenceError, "Initial installed API version"
+        ):
+            MODULE.validate_report(
+                upgraded, expected_version="1.0.3", expected_upgrade="passed"
+            )
 
     def test_version_hash_and_time_contract(self) -> None:
         for field, value in (("reefvision_version", "1.0.1"), ("installer_sha256", ["a" * 64]), ("started_at_utc", "2026-10-25T02:00:00-05:00")):

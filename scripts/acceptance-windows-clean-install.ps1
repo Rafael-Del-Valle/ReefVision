@@ -316,6 +316,17 @@ try {
     Wait-BackendApiReady -ApiBaseUrl $api -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $versionPayload = Invoke-RestMethod "$api/system/version"
     $migrationPayload = Invoke-RestMethod "$api/system/migrations/status"
+    # A reachable API might belong to an older installed desktop. In a real
+    # upgrade the initial MSI is the previous version; otherwise it is the
+    # target MSI. Refuse all research writes until the actual packaged API
+    # agrees with the MSI that was installed on this disposable runner.
+    $expectedInitialVersion = if ($PreviousProductVersion) {
+        [string]$PreviousProductVersion
+    } else { [string]$ProductVersion }
+    $initialApplicationVersion = [string]$versionPayload.application_version
+    if ($initialApplicationVersion -cne $expectedInitialVersion) {
+        throw "Initial installed API version $initialApplicationVersion does not match installed MSI $expectedInitialVersion. Refusing project writes."
+    }
     # A healthy HTTP endpoint is not proof that the installed SQLite schema
     # was migrated. Verify both its revision and its disposable data boundary
     # before the first project write. Report only schema metadata, never rows.
@@ -328,6 +339,7 @@ try {
         [System.StringComparison]::OrdinalIgnoreCase
     )
     $report.migration = [ordered]@{
+        application_version = $initialApplicationVersion
         schema_status = [string]$migrationPayload.schema_status
         current_revision = [string]$migrationPayload.current_schema_revision
         expected_revision = [string]$migrationPayload.expected_schema_revision
