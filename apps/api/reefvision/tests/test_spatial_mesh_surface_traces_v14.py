@@ -1382,6 +1382,7 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
         "closed_loop",
         "closed_loop_reverse",
         "closed_loop_rotated",
+        "closed_loop_max_uncertainty",
         "noncoplanar_closed_loop",
         "proper_crossing_closed_loop",
         "contact_overlap_closed_loop",
@@ -1417,6 +1418,10 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "closed_loop_rotated": {
             **CLOSED_LOOP_PARAMS,
             "surface_trace_vertex_paths": [[1, 2, 0, 1]],
+        },
+        "closed_loop_max_uncertainty": {
+            **CLOSED_LOOP_PARAMS,
+            "relative_scale_uncertainty": 1.0,
         },
         "noncoplanar_closed_loop": NONCOPLANAR_CLOSED_LOOP_PARAMS,
         "proper_crossing_closed_loop": PROPER_CROSSING_CLOSED_LOOP_PARAMS,
@@ -1484,6 +1489,9 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert trace["human_review_verified"] is False
     assert "endpoint_chord_length_m" in trace
     assert "geometric_detour_ratio" in trace
+    assert "closed_loop_planar_enclosed_area_m2" in trace
+    assert "closed_loop_source_planar_enclosed_area_mesh_units2" in trace
+    assert "closed_loop_planar_enclosed_area_scale_only_interval_m2" in trace
     assert len(trace["source_segment_lengths_mesh_units"]) == trace["edge_count"]
     fractions = trace["source_cumulative_arc_length_fractions"]
     assert fractions is None or (
@@ -1541,6 +1549,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "closed_loop",
         "closed_loop_reverse",
         "closed_loop_rotated",
+        "closed_loop_max_uncertainty",
         "noncoplanar_closed_loop",
         "proper_crossing_closed_loop",
         "contact_overlap_closed_loop",
@@ -1548,6 +1557,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert trace["is_closed_surface_loop"] is True
         assert trace["turn_angles_deg"][-1] is None
         if case == "noncoplanar_closed_loop":
+            assert trace["closed_loop_planar_enclosed_area_m2"] is None
             assert trace["closed_loop_source_exact_coplanarity"] is False
             assert trace["closed_loop_source_noncoplanar_waypoint_offsets"] == [3]
             assert trace["closed_loop_source_proper_crossing_segment_pairs"] is None
@@ -1557,6 +1567,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             assert trace["closed_loop_source_local_backtrack_waypoint_offsets"] == []
             assert "closed_surface_trace_exact_source_noncoplanarity" in trace["qc_warnings"]
         elif case == "contact_overlap_closed_loop":
+            assert trace["closed_loop_planar_enclosed_area_m2"] is None
             assert trace["closed_loop_source_exact_coplanarity"] is True
             assert trace["closed_loop_source_proper_crossing_segment_pairs"] == []
             assert trace["closed_loop_source_touching_segment_pairs"] == [[0, 3], [0, 5]]
@@ -1566,6 +1577,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             assert "closed_surface_trace_source_collinear_segment_overlap" in trace["qc_warnings"]
             assert "closed_surface_trace_source_nonadjacent_segment_contact" in trace["qc_warnings"]
         elif case == "proper_crossing_closed_loop":
+            assert trace["closed_loop_planar_enclosed_area_m2"] is None
             assert trace["closed_loop_source_exact_coplanarity"] is True
             assert trace["closed_loop_source_proper_crossing_segment_pairs"] == [[0, 2]]
             assert trace["closed_loop_source_touching_segment_pairs"] == []
@@ -1584,6 +1596,12 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             assert trace["closed_loop_source_collinear_overlap_segment_pairs"] == []
             assert trace["closed_loop_source_is_simple_planar_perimeter"] is True
             assert trace["closed_loop_source_local_backtrack_waypoint_offsets"] == []
+            assert trace["closed_loop_source_planar_enclosed_area_mesh_units2"] == 0.5
+            assert trace["closed_loop_planar_enclosed_area_m2"] == pytest.approx(0.00005)
+            if case == "closed_loop_max_uncertainty":
+                assert trace[
+                    "closed_loop_planar_enclosed_area_scale_only_interval_m2"
+                ] == pytest.approx([0.0, 0.0002])
         assert trace["nonadjacent_coincident_waypoint_index_pairs"] == []
         assert "closed_surface_trace_not_verified_anatomical_contour" in trace["qc_warnings"]
         assert trace["human_review_verified"] is False
@@ -1596,6 +1614,8 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert trace["closed_loop_source_collinear_overlap_segment_pairs"] is None
         assert trace["closed_loop_source_is_simple_planar_perimeter"] is None
         assert trace["closed_loop_source_local_backtrack_waypoint_offsets"] == []
+        assert trace["closed_loop_source_planar_enclosed_area_mesh_units2"] is None
+        assert trace["closed_loop_planar_enclosed_area_m2"] is None
         assert trace["turn_angles_deg"][0] is None
         assert trace["turn_angles_deg"][-1] is None
     if case == "ordinary":
