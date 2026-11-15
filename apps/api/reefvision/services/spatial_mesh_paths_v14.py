@@ -546,6 +546,12 @@ def mesh_surface_edge_traces(
     # a seemingly contiguous scientist-selected trace topologically unreliable.
     # Match the topology audit used by shortest mesh-edge paths.
     incidence: Counter[tuple[int, int]] = Counter()
+    # Count original face-edge occurrences by exact source XYZ as well as
+    # indexed endpoints. This exposes coincident OBJ/PLY/GLB seams without
+    # welding the imported vertices or changing any measured edge.
+    geometric_incidence: Counter[
+        tuple[tuple[float, float, float], tuple[float, float, float]]
+    ] = Counter()
     edge_orientations: dict[tuple[int, int], list[bool]] = {}
     duplicate_face_edges: set[tuple[int, int]] = set()
     for face in faces:
@@ -563,6 +569,11 @@ def mesh_surface_edge_traces(
         for a, b in edges_in_face:
             edge = (min(a, b), max(a, b))
             incidence[edge] += 1
+            source_a, source_b = tuple(points[a]), tuple(points[b])
+            geometric_edge = (
+                (source_a, source_b) if source_a <= source_b else (source_b, source_a)
+            )
+            geometric_incidence[geometric_edge] += 1
             edge_orientations.setdefault(edge, []).append(a < b)
 
     traces: list[dict[str, Any]] = []
@@ -698,6 +709,26 @@ def mesh_surface_edge_traces(
         # Counts use original indexed faces, not spatially welded vertices;
         # they cannot certify an anatomical coral branch or clean reconstruction.
         face_incidence_counts = [incidence[edge] for edge in edges]
+        positions = [tuple(points[index]) for index in vertices]
+        geometric_face_incidence_counts = [
+            geometric_incidence[(start, end) if start <= end else (end, start)]
+            for start, end in pairwise(positions)
+        ]
+        # A selected indexed edge can be on an apparent open boundary even
+        # when a separate pair of IDs carries exactly the same source XYZ.
+        # Report the mismatch for inspection; do not automatically stitch.
+        split_vertex_seam_segment_indices = [
+            index
+            for index, (indexed, geometric, source_length) in enumerate(
+                zip(
+                    face_incidence_counts,
+                    geometric_face_incidence_counts,
+                    source_lengths,
+                    strict=True,
+                )
+            )
+            if source_length > 0 and geometric > indexed
+        ]
         open_boundary_segment_indices = [
             index for index, count in enumerate(face_incidence_counts) if count == 1
         ]
@@ -718,6 +749,8 @@ def mesh_surface_edge_traces(
             warnings.append("surface_trace_source_length_unrepresentable")
         if open_boundary_segment_indices:
             warnings.append("open_boundary_edge_on_surface_trace")
+        if split_vertex_seam_segment_indices:
+            warnings.append("split_vertex_geometric_seam_on_surface_trace")
         if nonmanifold_segment_indices:
             warnings.append("nonmanifold_edge_on_surface_trace")
         if duplicate_triangle_segment_indices:
@@ -742,7 +775,6 @@ def mesh_surface_edge_traces(
         # Distinct parsed vertex indices can refer to exactly the same XYZ.
         # This makes a selected open-by-index trace return to an earlier
         # location without containing a repeated index or a zero-length edge.
-        positions = [tuple(points[index]) for index in vertices]
         if any(
             positions[i] == positions[j] for i in range(2, len(positions)) for j in range(i - 1)
         ):
@@ -828,6 +860,8 @@ def mesh_surface_edge_traces(
                 "source_trace_length_mesh_units": source_trace_length_mesh_units,
                 "source_endpoint_chord_mesh_units": source_chord,
                 "mesh_edge_face_incidence_counts": face_incidence_counts,
+                "geometric_edge_face_incidence_counts": geometric_face_incidence_counts,
+                "split_vertex_seam_segment_indices": split_vertex_seam_segment_indices,
                 "open_boundary_segment_indices": open_boundary_segment_indices,
                 "nonmanifold_segment_indices": nonmanifold_segment_indices,
                 "duplicate_triangle_segment_indices": duplicate_triangle_segment_indices,
