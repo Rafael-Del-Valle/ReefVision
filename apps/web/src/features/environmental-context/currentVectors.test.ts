@@ -509,7 +509,7 @@ it.each([
   ["bidirectional isolate", "\u2066+SUM(1,1)"],
   ["UTF-8 BOM", "\uFEFF@SUM(1,1)"],
   ["embedded NUL prefix", "\u0000-1+2"],
-])("neutralizes %s before a CSV formula without rewriting scientific data", (_label, source) => {
+])("neutralizes %s before CSV formula", (_label, source) => {
   const east = component("current_eastward_velocity", -2, {
     provenance: { ...component("x", 0).provenance, source },
   });
@@ -524,8 +524,8 @@ it.each([
     fetchedAt: "2026-04-04T00:00:00Z",
     expiresAt: "2026-04-05T00:00:00Z",
   });
-  expect(csv).toContain('"' + "'" + source + '"');
-  expect(csv).toContain('"' + "'" + "\u200B=unsafe-cache-name" + '"');
+  expect(csv).toContain(`"'${source}"`);
+  expect(csv).toContain(`"'\u200B=unsafe-cache-name"`);
   expect(csv).toContain('"-2"');
   expect(csv).toContain('"-79.5"');
   expect(east.provenance.source).toBe(source);
