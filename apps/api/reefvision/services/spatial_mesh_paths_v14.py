@@ -10,9 +10,6 @@ from math import atan2, degrees, dist, fsum, hypot, isfinite
 from typing import Any
 
 
-_SourceEdge = tuple[tuple[float, float, float], tuple[float, float, float]]
-
-
 def _route_turn_angles(
     points: list[tuple[float, float, float]],
     route: list[int],
@@ -489,6 +486,9 @@ def mesh_edge_paths(
             }
         )
     return results
+
+
+_SourceEdge = tuple[tuple[float, float, float], tuple[float, float, float]]
 
 
 def mesh_surface_edge_traces(
