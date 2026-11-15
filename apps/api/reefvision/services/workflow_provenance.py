@@ -224,6 +224,21 @@ def verify_succeeded_node_artifacts(
             raise ConflictError(
                 "Succeeded workflow input producer identity does not match saved graph"
             )
+        # The consumer can be recovered without revalidating the upstream node.
+        # Honor its frozen dataset/adapter parameters before reusing its outputs.
+        frozen_parameters = producer_matches[0].get("parameters", {})
+        producer_parameters = producer.parameters_json
+        if producer_parameters is not None and not isinstance(producer_parameters, dict):
+            raise ConflictError("Succeeded workflow input producer parameters must be a JSON object")
+        if not isinstance(frozen_parameters, dict) or any(
+            not isinstance(producer_parameters, dict)
+            or key not in producer_parameters
+            or producer_parameters[key] != value
+            for key, value in frozen_parameters.items()
+        ):
+            raise ConflictError(
+                "Succeeded workflow input producer parameters do not match saved graph"
+            )
 
     # Direct interrupted-run recovery must honor frozen scientific inputs,
     # including the verified pose dataset's pinned manifest checksum.
