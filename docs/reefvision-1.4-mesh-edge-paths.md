@@ -1,5 +1,41 @@
 # ReefVision 1.4 provisional mesh-edge paths
 
+## Indexed triangle-edge topology along selected traces
+
+A selected surface trace now includes `mesh_edge_face_incidence_counts`,
+one original-mesh triangular-face count per traversed indexed edge. Four
+zero-based segment-index arrays localize the corresponding existing QC:
+`open_boundary_segment_indices` (one incident face),
+`nonmanifold_segment_indices` (more than two faces),
+`duplicate_triangle_segment_indices` (an indexed triangle duplicated in
+the source mesh), and `inconsistent_winding_segment_indices` (two incident
+faces that traverse the shared indexed edge in the same direction). The
+arrays align with `vertex_indices` and `segment_lengths_m`; for example,
+segment 0 connects trace waypoint indices 0 and 1.
+
+Before this change, a warning such as
+`nonmanifold_edge_on_surface_trace` identified the trace as suspect but
+not which portion needed inspection. Now a reviewer can locate that indexed
+edge in the full-resolution source mesh without deriving topology from
+decimated display triangles or making assumptions about the coral. Existing
+aggregate warning names, measured distances, scale-only uncertainty,
+calibration evidence, and `human_review_verified: false` are unchanged.
+
+These are **indexed mesh** counts, not a watertightness guarantee: imported
+OBJ/PLY/GLB seams with duplicated XYZ coordinates can separate faces into
+different vertex IDs, and an apparently ordinary incidence of two does not
+rule out poor reconstruction, self-intersection, or incorrect biological
+identity. No automatic repair, centerline certification, growth estimate,
+or species-condition interpretation is implied. Historical saved artifacts
+without the arrays remain unverified rather than presumed defect-free.
+
+Scientific regressions exercise boundary edges, a duplicated face,
+same-direction winding, and a three-face nonmanifold edge. The same fields
+are checked through the standalone mesh preview and executed, typed,
+persisted `mesh_surface_preview` Workflow Builder graphs, including
+measurement/provenance parity. Synthetic test coverage does not validate
+field reconstruction quality or native Windows GPU/installed-GUI behavior.
+
 ## Reused geometric edges in a scientist-selected trace
 
 Imported OBJ/PLY/GLB meshes can carry distinct indexed vertices at exactly
