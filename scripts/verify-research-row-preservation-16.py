@@ -282,8 +282,7 @@ def _asset_inventory(
                     or _asset_handle_state(opened) != _asset_handle_state(initial)
                 ):
                     raise ValueError(
-                        "asset_changed_during_inspection:"
-                        + _asset_mismatch_fields(initial, opened)
+                        "asset_changed_during_inspection:" + _asset_mismatch_fields(initial, opened)
                     )
                 for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                     digest.update(chunk)
@@ -334,10 +333,9 @@ def _assert_asset_tree_unchanged(
         if _is_unsafe_asset_link(directory, directory_info):
             raise ValueError("asset_symlink_not_allowed")
         directory_key = directory.relative_to(root).as_posix()
-        if (
-            not stat.S_ISDIR(directory_info.st_mode)
-            or initial_directories.get(directory_key) != _asset_state(directory_info)
-        ):
+        if not stat.S_ISDIR(directory_info.st_mode) or initial_directories.get(
+            directory_key
+        ) != _asset_state(directory_info):
             raise ValueError("asset_changed_after_inventory")
         observed_directories.add(directory_key)
         for child in directories:
