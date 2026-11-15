@@ -78,6 +78,7 @@ $report = [ordered]@{
     first_launch = New-ReefVisionEvidenceResult
     frontend_backend_connectivity = New-ReefVisionEvidenceResult
     migration = $null
+    post_upgrade_migration = $null
     model_policy = New-ReefVisionEvidenceResult
     sam2_live = if ($LiveSam2Acceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real SAM 2.1 packaged runtime acceptance not requested' }
     external_annotation_imports = New-ReefVisionEvidenceResult
@@ -607,6 +608,20 @@ try {
             $upgradedMigration.schema_status -ne 'up_to_date' -or
             $upgradedMigration.current_schema_revision -ne $upgradedMigration.expected_schema_revision) {
             throw 'MSI upgrade changed the isolated database boundary or left migrations incomplete.'
+        }
+        # Record the target application's schema separately from the initial
+        # (previous-MSI) launch. The independent verifier must not mistake
+        # a healthy old schema for a successfully migrated upgraded desktop.
+        $report.post_upgrade_migration = [ordered]@{
+            application_version = [string]$upgradedVersion.application_version
+            schema_status = [string]$upgradedMigration.schema_status
+            current_revision = [string]$upgradedMigration.current_schema_revision
+            expected_revision = [string]$upgradedMigration.expected_schema_revision
+            database_path_is_isolated = [string]::Equals(
+                $upgradedDatabase, $expectedDatabase,
+                [System.StringComparison]::OrdinalIgnoreCase
+            )
+            timestamp_utc = [DateTime]::UtcNow.ToString('o')
         }
         $report.upgrade = New-ReefVisionEvidenceResult -Status 'NOT RUN' -Detail "Verified version $PreviousProductVersion -> $ProductVersion through MSI, registry and packaged API; project and annotation retained; awaiting post-migration scientific-asset check."
     }
