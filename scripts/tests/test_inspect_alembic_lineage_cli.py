@@ -743,6 +743,7 @@ def test_broken_scientific_stage_dependencies_are_read_only_and_fail_closed(
             "coral-preserve",
         )
 
+
 @pytest.mark.parametrize(
     ("revision", "tables", "expected_warnings"),
     [
@@ -815,6 +816,115 @@ def test_qc_16_migration_stages_preserve_records_and_diagnose_interrupted_ddl(
             for table in tables:
                 assert connection.execute(f'SELECT note FROM "{table}"').fetchone() == (
                     "review-preserve",
+                )
+            assert connection.execute("SELECT note FROM biological_sentinel").fetchone() == (
+                "coral-preserve",
+            )
+
+
+@pytest.mark.parametrize(
+    ("revision", "extensions", "expected_warnings"),
+    [
+        (
+            "0038",
+            ("environmental_event_definitions",),
+            (
+                "environmental_event_before_revision_0040",
+                "revision_0038_requires_schema_lineage_reconciliation",
+            ),
+        ),
+        (
+            "0039",
+            ("environmental_event_definitions",),
+            ("environmental_event_before_revision_0040",),
+        ),
+        (
+            "0039",
+            (
+                "environmental_event_definitions",
+                "environmental_analysis_definitions",
+                "environmental_analysis_results",
+            ),
+            (
+                "environmental_event_before_revision_0040",
+                "environmental_analysis_before_revision_0042",
+            ),
+        ),
+        ("0040", ("environmental_event_definitions",), ()),
+        (
+            "0040",
+            (
+                "environmental_event_definitions",
+                "environmental_analysis_definitions",
+                "environmental_analysis_results",
+            ),
+            ("environmental_analysis_before_revision_0042",),
+        ),
+        ("0041", ("environmental_event_definitions",), ()),
+        (
+            "0041",
+            (
+                "environmental_event_definitions",
+                "environmental_analysis_definitions",
+                "environmental_analysis_results",
+            ),
+            ("environmental_analysis_before_revision_0042",),
+        ),
+        (
+            "0042",
+            (
+                "environmental_event_definitions",
+                "environmental_analysis_definitions",
+                "environmental_analysis_results",
+            ),
+            (),
+        ),
+    ],
+)
+def test_scientific_extension_migration_stamp_is_stage_aware_and_read_only(
+    tmp_path: Path,
+    revision: str,
+    extensions: tuple[str, ...],
+    expected_warnings: tuple[str, ...],
+) -> None:
+    """Never mistake future scientific DDL for completed earlier migrations."""
+    database = tmp_path / "stale-scientific-stamp.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)"
+        )
+        connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
+        for table in (
+            "scientific_records",
+            "environmental_cache_entries",
+            "computed_metric_definitions",
+            "computed_metric_results",
+            *extensions,
+        ):
+            connection.execute(f'CREATE TABLE "{table}" (id INTEGER PRIMARY KEY, note TEXT)')
+            connection.execute(
+                f'INSERT INTO "{table}" VALUES (1, ?)', ("scientific-preserve",)
+            )
+        connection.execute("CREATE TABLE biological_sentinel (note TEXT)")
+        connection.execute("INSERT INTO biological_sentinel VALUES ('coral-preserve')")
+    original_bytes = database.read_bytes()
+    for _ in range(2):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--fail-on-warning", str(database)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == (2 if expected_warnings else 0), result.stderr
+        report = json.loads(result.stdout)
+        assert report["warnings"] == list(expected_warnings)
+        assert report["lineage_hint"] == "scientific"
+        assert report["upgrade_authorized"] is False
+        assert database.read_bytes() == original_bytes
+        with sqlite3.connect(database) as connection:
+            for table in extensions:
+                assert connection.execute(f'SELECT note FROM "{table}"').fetchone() == (
+                    "scientific-preserve",
                 )
             assert connection.execute("SELECT note FROM biological_sentinel").fetchone() == (
                 "coral-preserve",
