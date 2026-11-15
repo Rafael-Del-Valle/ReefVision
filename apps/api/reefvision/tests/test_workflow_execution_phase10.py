@@ -411,6 +411,42 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
             == original_result["provenance_manifest"]
         )
 
+    # Run-level artifact shortcuts are used by readers of completed workflow
+    # results. They must not contradict the actual persisted/checksummed outputs,
+    # even while the separately frozen provenance manifest remains untouched.
+    with app.state.session_factory() as session:
+        saved_run = session.get(WorkflowRun, str(run["id"]))
+        assert saved_run is not None
+        saved_result = dict(saved_run.result_json or {})
+        artifact_summary = saved_result.get("artifacts")
+        assert isinstance(artifact_summary, list) and len(artifact_summary) == 2
+        saved_run.result_json = {
+            **saved_result,
+            "artifacts": [
+                {**artifact_summary[0], "payload_sha256": "0" * 64},
+                *artifact_summary[1:],
+            ],
+        }
+        session.commit()
+
+    mismatched_summary = client.get(f"/api/v1/workflow-runs/{run['id']}")
+    assert mismatched_summary.status_code == 409, mismatched_summary.text
+    assert mismatched_summary.json() == {
+        "detail": "Succeeded workflow run artifact summary does not match saved artifacts"
+    }
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="artifact summary does not match saved artifacts"),
+    ):
+        build_workflow_run_provenance(session, run_id=str(run["id"]))
+
+    with app.state.session_factory() as session:
+        saved_run = session.get(WorkflowRun, str(run["id"]))
+        assert saved_run is not None
+        saved_run.result_json = saved_result
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
     # The real executed graph has a frozen checksum. Changing only its edge
     # identity preserves producer/port bindings, but must not allow direct
     # succeeded-node reuse before whole-run provenance is inspected.
