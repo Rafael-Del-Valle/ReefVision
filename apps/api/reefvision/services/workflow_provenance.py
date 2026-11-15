@@ -182,17 +182,20 @@ def verify_succeeded_node_artifacts(
                 raise ConflictError(
                     "Succeeded workflow producer output summary does not match declared outputs"
                 )
-            matches = [
-                item
-                for item in producer_outputs
-                if isinstance(item, dict) and item.get("artifact_id") == artifact.id
-            ]
-            if len(matches) != 1 or (
-                matches[0].get("port_id") != artifact.producer_port_id
-                or matches[0].get("data_type") != artifact.data_type
-                or matches[0].get("payload_sha256") != artifact.payload_sha256
-            ):
-                raise ConflictError("Succeeded workflow input contradicts producer output summary")
+            # A direct consumer replay must validate all published outputs,
+            # not just the consumed one. A forged sibling declaration can
+            # otherwise claim a checksum-valid artifact owned by another node.
+            for declaration in producer_outputs:
+                published = _artifact_by_id(session, declaration["artifact_id"], run_id=run_id)
+                if (
+                    published.producer_node_run_id != producer.id
+                    or declaration.get("port_id") != published.producer_port_id
+                    or declaration.get("data_type") != published.data_type
+                    or declaration.get("payload_sha256") != published.payload_sha256
+                ):
+                    raise ConflictError(
+                        "Succeeded workflow input contradicts producer output summary"
+                    )
         actual_bindings.append((producer.node_id, artifact.producer_port_id))
 
     run = session.get(WorkflowRun, run_id)
