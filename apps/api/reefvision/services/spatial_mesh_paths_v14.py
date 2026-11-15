@@ -570,9 +570,7 @@ def mesh_surface_edge_traces(
             edge = (min(a, b), max(a, b))
             incidence[edge] += 1
             source_a, source_b = tuple(points[a]), tuple(points[b])
-            geometric_edge = (
-                (source_a, source_b) if source_a <= source_b else (source_b, source_a)
-            )
+            geometric_edge = (source_a, source_b) if source_a <= source_b else (source_b, source_a)
             geometric_incidence[geometric_edge] += 1
             edge_orientations.setdefault(edge, []).append(a < b)
 
@@ -729,6 +727,22 @@ def mesh_surface_edge_traces(
             )
             if source_length > 0 and geometric > indexed
         ]
+        # Split vertex IDs can conceal a nonmanifold geometric edge: three
+        # distinct faces use the same positive-length XYZ segment even though
+        # no indexed edge has more than two incident faces. Keep the original
+        # topology unchanged; exact coordinate equality is not registration.
+        split_vertex_nonmanifold_segment_indices = [
+            index
+            for index, (indexed, geometric, source_length) in enumerate(
+                zip(
+                    face_incidence_counts,
+                    geometric_face_incidence_counts,
+                    source_lengths,
+                    strict=True,
+                )
+            )
+            if source_length > 0 and indexed <= 2 and geometric > 2
+        ]
         open_boundary_segment_indices = [
             index for index, count in enumerate(face_incidence_counts) if count == 1
         ]
@@ -753,6 +767,8 @@ def mesh_surface_edge_traces(
             warnings.append("split_vertex_geometric_seam_on_surface_trace")
         if nonmanifold_segment_indices:
             warnings.append("nonmanifold_edge_on_surface_trace")
+        if split_vertex_nonmanifold_segment_indices:
+            warnings.append("split_vertex_hidden_nonmanifold_on_surface_trace")
         if duplicate_triangle_segment_indices:
             warnings.append("duplicate_triangle_on_surface_trace")
         if inconsistent_winding_segment_indices:
@@ -862,6 +878,9 @@ def mesh_surface_edge_traces(
                 "mesh_edge_face_incidence_counts": face_incidence_counts,
                 "geometric_edge_face_incidence_counts": geometric_face_incidence_counts,
                 "split_vertex_seam_segment_indices": split_vertex_seam_segment_indices,
+                "split_vertex_nonmanifold_segment_indices": (
+                    split_vertex_nonmanifold_segment_indices
+                ),
                 "open_boundary_segment_indices": open_boundary_segment_indices,
                 "nonmanifold_segment_indices": nonmanifold_segment_indices,
                 "duplicate_triangle_segment_indices": duplicate_triangle_segment_indices,
