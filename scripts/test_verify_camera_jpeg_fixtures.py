@@ -493,23 +493,19 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                     root = Path(directory)
                     bad = root / "broken_exif.JPG"
                     good = root / "healthy.JPEG"
-                    Image.new("RGB", (12, 8), (10, 40, 80)).save(
-                        bad, format="JPEG"
-                    )
-                    Image.new("RGB", (12, 8), (20, 50, 90)).save(
-                        good, format="JPEG"
-                    )
+                    Image.new("RGB", (12, 8), (10, 40, 80)).save(bad, format="JPEG")
+                    Image.new("RGB", (12, 8), (210, 50, 90)).save(good, format="JPEG")
                     originals = {p.name: p.read_bytes() for p in (bad, good)}
                     original_getexif = Image.Image.getexif
 
                     def selective_getexif(image):
-                        if Path(getattr(image, "filename", "")).name == bad.name:
+                        # Pillow clears filename when decoding an open stream.
+                        # Synthetic pixel values distinguish this bad fixture.
+                        if image.getpixel((0, 0))[0] < 100:
                             raise failure("malformed camera EXIF")
                         return original_getexif(image)
 
-                    with mock.patch.object(
-                        Image.Image, "getexif", selective_getexif
-                    ):
+                    with mock.patch.object(Image.Image, "getexif", selective_getexif):
                         records, errors = MODULE.inventory(root, verify_decode=True)
                     self.assertEqual(
                         errors,
@@ -521,8 +517,10 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                     self.assertNotIn("jpeg_display_width", by_path[bad.name])
                     self.assertTrue(by_path[good.name]["jpeg_decodable"])
                     self.assertEqual(
-                        (by_path[good.name]["jpeg_display_width"],
-                         by_path[good.name]["jpeg_display_height"]),
+                        (
+                            by_path[good.name]["jpeg_display_width"],
+                            by_path[good.name]["jpeg_display_height"],
+                        ),
                         (12, 8),
                     )
                     self.assertEqual(
