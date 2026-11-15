@@ -703,31 +703,35 @@ def _validate_aggregate_result(
     image_ids = [value for value in raw_image_ids if isinstance(value, str)]
     if image_ids != sorted(image_ids):
         raise ValidationError("Computed aggregate image inventory is not deterministic")
+    image_snapshots_by_id = {snapshot["image_id"]: snapshot for snapshot in image_snapshot}
     for snapshot in image_snapshot:
         image = images.get(snapshot["image_id"])
-        expected = (
-            {
-                "image_id": image["id"],
-                "sha256": image["sha256"],
-                "annotation_revision": image["annotation_revision"],
-                "annotation_status": image["annotation_status"],
-                "group_key": image.get("group_key"),
-            }
-            if image is not None
-            else None
-        )
         if (
             image is None
             or image.get("project_id") != project_id
+            or set(snapshot)
+            != {
+                "image_id",
+                "sha256",
+                "annotation_revision",
+                "annotation_status",
+                "group_key",
+            }
+            or snapshot.get("sha256") != image.get("sha256")
+            or snapshot.get("annotation_revision") != image.get("annotation_revision")
+            or snapshot.get("annotation_status") != "reviewed"
             or image.get("annotation_status") != "reviewed"
-            or snapshot != expected
         ):
             raise ValidationError("Computed aggregate image snapshot mismatch")
-        if config["grouping_level"] == "image_group_key" and not image.get("group_key"):
+        if config["grouping_level"] == "image_group_key" and not snapshot.get("group_key"):
             raise ValidationError("Computed aggregate group key is missing")
     observed_at = _utc(row["observed_at"])
-    expected_observed_at = max(_utc(images[image_id]["updated_at"]) for image_id in image_ids)
-    if _utc(payload["observed_at"]) != observed_at or observed_at != expected_observed_at:
+    earliest_valid_observation = max(_utc(images[image_id]["created_at"]) for image_id in image_ids)
+    if (
+        _utc(payload["observed_at"]) != observed_at
+        or observed_at < earliest_valid_observation
+        or observed_at > _utc(row["created_at"])
+    ):
         raise ValidationError("Computed aggregate observation timestamp mismatch")
 
     source_section = (
@@ -776,8 +780,8 @@ def _validate_aggregate_result(
 
     units: dict[str, list[str]] = defaultdict(list)
     for image_id in image_ids:
-        image = images[image_id]
-        unit_key = image_id if config["grouping_level"] == "image" else image["group_key"]
+        snapshot = image_snapshots_by_id[image_id]
+        unit_key = image_id if config["grouping_level"] == "image" else snapshot["group_key"]
         units[str(unit_key)].append(image_id)
     expected_groups = []
     for unit_key in sorted(units):
