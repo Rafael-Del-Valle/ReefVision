@@ -243,7 +243,6 @@ def test_invalid_provider_grid_never_persists_scientific_records(
     assert client.get(f"/api/v1/projects/{project['id']}/scientific-records").json()["total"] == 0
 
 
-
 def test_invalid_copernicus_resolution_refresh_keeps_prior_offline_snapshot(
     client, test_settings, monkeypatch
 ):
