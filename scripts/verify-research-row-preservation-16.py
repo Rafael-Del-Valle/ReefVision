@@ -202,8 +202,7 @@ def _compare_assets(before_root: Path, after_root: Path) -> dict:
         raise ValueError("asset_copies_share_hardlinks")
     missing = sum(path not in candidate for path in baseline)
     changed = sum(
-        path in candidate and candidate[path] != checksum
-        for path, checksum in baseline.items()
+        path in candidate and candidate[path] != checksum for path, checksum in baseline.items()
     )
     added = sum(path not in baseline for path in candidate)
     return {
