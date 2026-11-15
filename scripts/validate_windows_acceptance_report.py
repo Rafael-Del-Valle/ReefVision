@@ -276,6 +276,12 @@ def validate_report(
             report["upgrade"].get("detail") in {"SkipUpgrade requested", "previous installer not supplied"},
             "Upgrade skip lacks explicit reason",
         )
+        # The native harness chooses one skip policy for both stages at the
+        # start of the run. Conflicting reasons cannot describe one execution.
+        _require(
+            report["upgrade_install"]["detail"] == report["upgrade"]["detail"],
+            "Upgrade skip reasons disagree across installer and science gates",
+        )
 
     _verify_causal_gate_order(report, expected_upgrade=expected_upgrade)
 
