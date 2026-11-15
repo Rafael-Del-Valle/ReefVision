@@ -93,3 +93,19 @@ jobs:
         working-directory: apps/web
       - run: npm run build
         working-directory: apps/web
+
+  windows-research-preservation:
+    name: Verify 1.6 research preservation against native Windows junctions
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Lightweight filesystem/SQLite tests: no desktop build or model download.
+      - name: Install standalone test runner
+        shell: pwsh
+        run: python -m pip install pytest==8.3.5
+      - name: Reject real NTFS junctions and research-directory substitutions
+        shell: pwsh
+        run: python -m pytest scripts/tests/test_verify_research_row_preservation_16.py -v
