@@ -184,13 +184,16 @@ class ClassVisibilityService:
             self.preferences.upsert(
                 project_id, user_identity, resolved_layer_type, hidden_class_ids
             )
-        self.session.commit()
+        # Read this write's exact revision while our SQLite writer lock is still
+        # held. Reading after commit allows another editor to replace the record
+        # before this request builds its response, falsely acknowledging their
+        # hidden classes/revision as the result of our save.
         self.session.expire_all()
         preference = self.preferences.get(project_id, user_identity, resolved_layer_type)
         if preference is None:
             raise ConflictError("Visibility preference changed during save")
         self.session.refresh(preference)
-        return self._scope_state(
+        saved = self._scope_state(
             hidden_class_ids=preference.hidden_class_ids_json,
             valid_class_ids=valid_class_ids,
             saved=True,
@@ -198,6 +201,8 @@ class ClassVisibilityService:
             updated_by_identity=preference.user_identity,
             record_id=preference.id,
         )
+        self.session.commit()
+        return saved
 
     def reset_user_preference(
         self,
@@ -264,13 +269,14 @@ class ClassVisibilityService:
             self.project_defaults.upsert(
                 project_id, resolved_layer_type, hidden_class_ids, user_identity
             )
-        self.session.commit()
+        # Materialize our own committed candidate under the SQLite writer lock,
+        # not a newer editor's record loaded after releasing that lock.
         self.session.expire_all()
         project_default = self.project_defaults.get(project_id, resolved_layer_type)
         if project_default is None:
             raise ConflictError("Project visibility default changed during save")
         self.session.refresh(project_default)
-        return self._scope_state(
+        saved = self._scope_state(
             hidden_class_ids=project_default.hidden_class_ids_json,
             valid_class_ids=valid_class_ids,
             saved=True,
@@ -278,6 +284,8 @@ class ClassVisibilityService:
             updated_by_identity=project_default.updated_by_identity,
             record_id=project_default.id,
         )
+        self.session.commit()
+        return saved
 
     def reset_project_default(
         self,
