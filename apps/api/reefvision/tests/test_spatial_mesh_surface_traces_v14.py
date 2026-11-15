@@ -114,6 +114,15 @@ GEOMETRIC_SEAM_PARAMS = {
 }
 
 
+# These faces share a geometric edge only: original indices remain split.
+# Both wind that XYZ edge in the same direction, unlike the valid reversed
+# orientation in GEOMETRIC_SEAM_PARAMS. Neither is a reviewed anatomy label.
+GEOMETRIC_WINDING_SEAM_PARAMS = {
+    **GEOMETRIC_SEAM_PARAMS,
+    "faces": [[0, 1, 2], [3, 4, 5]],
+}
+
+
 # Three distinct triangles meet at one exact geometric XYZ edge, but use
 # different original vertex IDs. Indexed topology sees only one incident
 # face on the selected edge, concealing a geometric nonmanifold junction.
@@ -221,6 +230,31 @@ def test_selected_trace_locates_indexed_face_topology_for_review(
     assert len(counts) == trace["edge_count"]
     assert trace["human_review_verified"] is False
     assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
+
+
+@pytest.mark.parametrize("scale", [0.01, 1.0])
+@pytest.mark.parametrize("conflicting", [False, True])
+def test_split_vertex_seam_reports_hidden_winding_conflict_only_when_present(
+    scale: float, conflicting: bool
+) -> None:
+    params = {
+        **(GEOMETRIC_WINDING_SEAM_PARAMS if conflicting else GEOMETRIC_SEAM_PARAMS),
+        "meters_per_unit": scale,
+    }
+    preview = measure_mesh_preview(**params)
+    trace = preview["surface_edge_traces"][0]
+    assert trace["mesh_edge_face_incidence_counts"] == [1, 1]
+    assert trace["geometric_edge_face_incidence_counts"] == [2, 1]
+    assert trace["split_vertex_seam_segment_indices"] == [0]
+    assert trace["split_vertex_winding_segment_indices"] == ([0] if conflicting else [])
+    assert trace["inconsistent_winding_segment_indices"] == []
+    assert trace["split_vertex_nonmanifold_segment_indices"] == []
+    assert (
+        "split_vertex_hidden_winding_conflict_on_surface_trace" in trace["qc_warnings"]
+    ) is conflicting
+    assert preview["surface_area_m2"] == pytest.approx(scale * scale)
+    assert preview["provenance"]["calibration_verified"] is False
+    assert trace["human_review_verified"] is False
 
 
 @pytest.mark.parametrize("shared_indexed_edge", [False, True])
@@ -760,6 +794,7 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
         "duplicate_face",
         "nonmanifold",
         "geometric_seam",
+        "geometric_winding_seam",
         "geometric_nonmanifold_seam",
         "coincident_nonadjacent",
         "reverse_turn",
@@ -784,6 +819,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "duplicate_face": DUPLICATE_FACE_PARAMS,
         "nonmanifold": NONMANIFOLD_EDGE_PARAMS,
         "geometric_seam": GEOMETRIC_SEAM_PARAMS,
+        "geometric_winding_seam": GEOMETRIC_WINDING_SEAM_PARAMS,
         "geometric_nonmanifold_seam": GEOMETRIC_NONMANIFOLD_SEAM_PARAMS,
         "coincident_nonadjacent": COINCIDENT_NONADJACENT_PARAMS,
         "reverse_turn": REVERSE_TURN_PARAMS,
@@ -862,6 +898,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             "inconsistent_winding_segment_indices",
             "split_vertex_seam_segment_indices",
             "split_vertex_nonmanifold_segment_indices",
+            "split_vertex_winding_segment_indices",
         )
         for index in trace[field]
     )
@@ -909,6 +946,13 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert trace["geometric_edge_face_incidence_counts"] == [2, 1]
         assert trace["split_vertex_seam_segment_indices"] == [0]
         assert "split_vertex_geometric_seam_on_surface_trace" in trace["qc_warnings"]
+        assert trace["human_review_verified"] is False
+    if case == "geometric_winding_seam":
+        assert trace["mesh_edge_face_incidence_counts"] == [1, 1]
+        assert trace["geometric_edge_face_incidence_counts"] == [2, 1]
+        assert trace["split_vertex_winding_segment_indices"] == [0]
+        assert trace["inconsistent_winding_segment_indices"] == []
+        assert "split_vertex_hidden_winding_conflict_on_surface_trace" in trace["qc_warnings"]
         assert trace["human_review_verified"] is False
     if case == "geometric_nonmanifold_seam":
         assert trace["mesh_edge_face_incidence_counts"] == [1]
