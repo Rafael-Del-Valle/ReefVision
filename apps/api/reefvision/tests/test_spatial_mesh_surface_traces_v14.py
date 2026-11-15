@@ -342,7 +342,8 @@ def test_split_vertex_geometric_seam_is_localized_without_welding(scale: float) 
     assert trace["split_vertex_seam_segment_indices"] == [0]
     assert trace["open_boundary_segment_indices"] == [0, 1]
     assert "split_vertex_geometric_seam_on_surface_trace" in trace["qc_warnings"]
-    assert trace["length_m"] == pytest.approx(2 * scale)
+    assert trace["segment_lengths_m"] == pytest.approx([scale, sqrt(2) * scale])
+    assert trace["length_m"] == pytest.approx((1 + sqrt(2)) * scale)
     assert trace["human_review_verified"] is False
     assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
 
