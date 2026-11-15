@@ -227,6 +227,10 @@ def verify_succeeded_node_artifacts(
     graph_nodes = graph.graph_json.get("nodes")
     if not isinstance(graph_nodes, list):
         raise ConflictError("Succeeded workflow node graph has invalid nodes")
+    # Direct interrupted-run reuse bypasses run-wide contiguous-order checks.
+    # A saved step beyond the frozen graph cannot be a legitimate execution.
+    if node_run.execution_order > len(graph_nodes):
+        raise ConflictError("Succeeded workflow node execution order exceeds saved graph")
     matching_nodes = [
         item
         for item in graph_nodes
