@@ -523,9 +523,7 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         assert producer is not None and consumer is not None
         producer.parameters_json = cast(dict[str, object], ["not-a-parameter-object"])
         session.flush()
-        with pytest.raises(
-            ConflictError, match="input producer parameters must be a JSON object"
-        ):
+        with pytest.raises(ConflictError, match="input producer parameters must be a JSON object"):
             verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
