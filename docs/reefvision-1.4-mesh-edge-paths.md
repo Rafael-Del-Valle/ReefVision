@@ -496,7 +496,13 @@ edge, zero-length edge or calibrated underflow carries specific QC. Additionally
 belonging to repeated triangle records (including reversed duplicates) in
 the direct trace helper. The full standalone preview and saved workflow
 **reject duplicated triangle geometry without producing a measurement artifact**,
-so this warning does not authorize a duplicate-mesh result. By contrast,
+so this warning does not authorize a duplicate-mesh result. Synthetic rejection
+regressions separately exercise identical indexed triangles, reversed indexed
+triangles, and triangles with distinct vertex IDs but identical source XYZ
+geometry. Each must fail in the direct preview, project API, and executed,
+typed, persisted Workflow Builder graph; no invalid measurement artifact may
+survive a failed run. The lower-level trace helper still exposes provisional
+indexed/geometric incidence diagnostics, not an approved mesh measurement. By contrast,
 `inconsistent_winding_edge_on_surface_trace` flags a shared edge used
 in the same orientation by exactly two distinct triangles; that QC warning is
 preserved in both standalone and executed saved-workflow outputs. Neither finding
