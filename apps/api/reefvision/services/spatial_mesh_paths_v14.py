@@ -10,6 +10,9 @@ from math import atan2, degrees, dist, fsum, hypot, isfinite
 from typing import Any
 
 
+_SourceEdge = tuple[tuple[float, float, float], tuple[float, float, float]]
+
+
 def _route_turn_angles(
     points: list[tuple[float, float, float]],
     route: list[int],
@@ -549,9 +552,8 @@ def mesh_surface_edge_traces(
     # Count original face-edge occurrences by exact source XYZ as well as
     # indexed endpoints. This exposes coincident OBJ/PLY/GLB seams without
     # welding the imported vertices or changing any measured edge.
-    geometric_incidence: Counter[
-        tuple[tuple[float, float, float], tuple[float, float, float]]
-    ] = Counter()
+    geometric_incidence: Counter[_SourceEdge] = Counter()
+    geometric_orientations: dict[_SourceEdge, list[bool]] = {}
     edge_orientations: dict[tuple[int, int], list[bool]] = {}
     duplicate_face_edges: set[tuple[int, int]] = set()
     for face in faces:
@@ -572,6 +574,7 @@ def mesh_surface_edge_traces(
             source_a, source_b = tuple(points[a]), tuple(points[b])
             geometric_edge = (source_a, source_b) if source_a <= source_b else (source_b, source_a)
             geometric_incidence[geometric_edge] += 1
+            geometric_orientations.setdefault(geometric_edge, []).append(source_a < source_b)
             edge_orientations.setdefault(edge, []).append(a < b)
 
     traces: list[dict[str, Any]] = []
@@ -743,6 +746,22 @@ def mesh_surface_edge_traces(
             )
             if source_length > 0 and indexed <= 2 and geometric > 2
         ]
+        # Geometrically shared edges can also conceal winding errors when
+        # their separate vertex IDs make both indexed edges look like borders.
+        # Only two-face, positive-length seams have an unambiguous orientation
+        # comparison; nonmanifold junctions require independent inspection.
+        split_vertex_winding_segment_indices: list[int] = []
+        for index, (start, end) in enumerate(pairwise(positions)):
+            if (
+                source_lengths[index] == 0
+                or face_incidence_counts[index] != 1
+                or geometric_face_incidence_counts[index] != 2
+            ):
+                continue
+            source_edge = (start, end) if start <= end else (end, start)
+            first, second = geometric_orientations[source_edge]
+            if first == second:
+                split_vertex_winding_segment_indices.append(index)
         open_boundary_segment_indices = [
             index for index, count in enumerate(face_incidence_counts) if count == 1
         ]
@@ -769,6 +788,8 @@ def mesh_surface_edge_traces(
             warnings.append("nonmanifold_edge_on_surface_trace")
         if split_vertex_nonmanifold_segment_indices:
             warnings.append("split_vertex_hidden_nonmanifold_on_surface_trace")
+        if split_vertex_winding_segment_indices:
+            warnings.append("split_vertex_hidden_winding_conflict_on_surface_trace")
         if duplicate_triangle_segment_indices:
             warnings.append("duplicate_triangle_on_surface_trace")
         if inconsistent_winding_segment_indices:
@@ -881,6 +902,7 @@ def mesh_surface_edge_traces(
                 "split_vertex_nonmanifold_segment_indices": (
                     split_vertex_nonmanifold_segment_indices
                 ),
+                "split_vertex_winding_segment_indices": split_vertex_winding_segment_indices,
                 "open_boundary_segment_indices": open_boundary_segment_indices,
                 "nonmanifold_segment_indices": nonmanifold_segment_indices,
                 "duplicate_triangle_segment_indices": duplicate_triangle_segment_indices,
