@@ -59,8 +59,14 @@ PROPER_CROSSING_CLOSED_LOOP_PARAMS = {
 CONTACT_OVERLAP_CLOSED_LOOP_PARAMS = {
     **PARAMS,
     "vertices": [
-        [0, 0, 0], [4, 0, 0], [4, 2, 0], [1, 2, 0],
-        [1, 0, 0], [3, 0, 0], [3, -1, 0], [0, -1, 0],
+        [0, 0, 0],
+        [4, 0, 0],
+        [4, 2, 0],
+        [1, 2, 0],
+        [1, 0, 0],
+        [3, 0, 0],
+        [3, -1, 0],
+        [0, -1, 0],
     ],
     "faces": [[0, 1, 2], [2, 3, 4], [4, 5, 6], [6, 7, 0]],
     "surface_trace_vertex_paths": [[0, 1, 2, 3, 4, 5, 6, 7, 0]],
@@ -604,8 +610,9 @@ def test_closed_trace_reports_exact_collinear_overlap_and_nonadjacent_contacts(
     assert trace["closed_loop_source_proper_crossing_segment_pairs"] == []
     assert trace["closed_loop_source_collinear_overlap_segment_pairs"] == [[0, 4]]
     assert trace["closed_loop_source_touching_segment_pairs"] == [[0, 3], [0, 5]]
-    assert "closed_surface_trace_source_collinear_segment_overlap" in trace["qc_warnings"]
-    assert "closed_surface_trace_source_nonadjacent_segment_contact" in trace["qc_warnings"]
+    warnings = trace["qc_warnings"]
+    assert "closed_surface_trace_source_collinear_segment_overlap" in warnings
+    assert "closed_surface_trace_source_nonadjacent_segment_contact" in warnings
     assert trace["human_review_verified"] is False
     assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
 
@@ -1455,8 +1462,12 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             assert trace["closed_loop_source_proper_crossing_segment_pairs"] == []
             assert trace["closed_loop_source_touching_segment_pairs"] == [[0, 3], [0, 5]]
             assert trace["closed_loop_source_collinear_overlap_segment_pairs"] == [[0, 4]]
-            assert "closed_surface_trace_source_collinear_segment_overlap" in trace["qc_warnings"]
-            assert "closed_surface_trace_source_nonadjacent_segment_contact" in trace["qc_warnings"]
+            assert (
+                "closed_surface_trace_source_collinear_segment_overlap" in trace["qc_warnings"]
+            )
+            assert (
+                "closed_surface_trace_source_nonadjacent_segment_contact" in trace["qc_warnings"]
+            )
         elif case == "proper_crossing_closed_loop":
             assert trace["closed_loop_source_exact_coplanarity"] is True
             assert trace["closed_loop_source_proper_crossing_segment_pairs"] == [[0, 2]]
