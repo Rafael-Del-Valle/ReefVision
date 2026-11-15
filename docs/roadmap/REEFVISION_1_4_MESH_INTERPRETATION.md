@@ -1094,3 +1094,30 @@ standalone mesh previews and saved executable typed Workflow Builder runs
 persist identical complete measurement/provenance artifacts. Valid biological
 reidentification, matching trace topology, anatomical homology and longitudinal
 growth still require independent human validation.
+
+## Exact normalized repeated-edge reuse on extreme imported meshes
+
+The selected surface trace's `reused_geometric_segment_fraction_of_trace`
+is calculated from the **same finite source-coordinate edge lengths** as
+`source_cumulative_arc_length_fractions`, accumulated as exact binary64
+rational values before conversion of the dimensionless ratio back to float.
+A valid fraction can therefore remain available even when the sum of source
+mesh-unit lengths exceeds finite binary64 range and
+`source_trace_length_mesh_units` is null. A truly zero total source length
+still produces a null fraction; the original repeated-segment index pairs,
+mesh-unit lengths, geometry and calibration evidence remain unchanged.
+
+If an exact positive reuse fraction is too small to be represented as a
+positive binary64 number, the reported fraction is zero **with**
+`surface_trace_reuse_fraction_resolution_loss` QC. The existing repeated-edge
+index pairs and `surface_trace_reused_geometric_segment` warning still
+indicate positive geometric reuse. Neither zero due to numeric precision nor
+a finite reuse fraction certifies a corrected branch length or an anatomical
+centerline, and no repeated length is silently subtracted.
+
+Direct scientific tests exercise finite calibrated lengths with overflowed
+source totals and positive subnormal reuse rounded to zero. Standalone preview
+and persisted executable typed Workflow Builder analyses continue to share
+the same measurement engine and full artifact/provenance comparison tests.
+Human biological validation, registration, reconstruction quality,
+calibration uncertainty beyond scale, and installed-GUI/GPU gates remain open.
