@@ -213,9 +213,7 @@ def verify_succeeded_node_artifacts(
         # A missing adapter definition makes the saved port contract unknowable.
         # Do not silently waive type validation while recovering offline runs.
         raise ConflictError("Succeeded workflow node type is not registered for artifact reuse")
-    declared_types = {
-        port.port_id: set(port.accepted_types) for port in definition.output_ports
-    }
+    declared_types = {port.port_id: set(port.accepted_types) for port in definition.output_ports}
     for artifact in outputs:
         if artifact.data_type not in declared_types.get(artifact.producer_port_id, set()):
             raise ConflictError("Succeeded workflow node output type does not match registry")
@@ -236,9 +234,7 @@ def verify_succeeded_node_artifacts(
     # The artifact digest covers the payload but not its declared data type.
     # Recovery must honor the consumer's typed input-port contract as well
     # as the producer's output-port contract before reusing saved science.
-    accepted_inputs = {
-        port.port_id: set(port.accepted_types) for port in definition.input_ports
-    }
+    accepted_inputs = {port.port_id: set(port.accepted_types) for port in definition.input_ports}
     incoming_edges = [
         edge
         for edge in sorted(raw_edges, key=lambda edge: edge["edge_id"])
