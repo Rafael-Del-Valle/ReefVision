@@ -721,6 +721,16 @@ def mesh_surface_edge_traces(
         # or the unscaled source total exceeds binary64's numeric range.
         # These fractions are not homologous anatomical landmarks.
         exact_source_total = sum((Fraction(length) for length in source_lengths), Fraction(0))
+        # Compensated binary64 summation can overflow for an otherwise valid
+        # imported surface trace. A scale-independent detour ratio may still
+        # be finite because its source-frame endpoint chord is also large.
+        # Recover only this ratio from the exact finite edge-length inputs;
+        # keep the unrepresentable source total null and preserve all QC.
+        if detour_ratio is None and source_chord > 0 and not isfinite(source_trace_length):
+            try:
+                detour_ratio = float(exact_source_total / Fraction(source_chord))
+            except OverflowError:
+                detour_ratio = None
         source_cumulative_arc_length_fractions: list[float] | None = None
         if exact_source_total > 0:
             source_cumulative_arc_length_fractions = [0.0]
