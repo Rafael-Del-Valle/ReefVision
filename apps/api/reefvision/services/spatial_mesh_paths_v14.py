@@ -545,7 +545,8 @@ def _closed_loop_exact_source_coplanarity(
             normal[0] * (point[0] - origin[0])
             + normal[1] * (point[1] - origin[1])
             + normal[2] * (point[2] - origin[2])
-        ) != 0
+        )
+        != 0
     ]
     return not noncoplanar_offsets, noncoplanar_offsets
 
@@ -1011,9 +1012,7 @@ def mesh_surface_edge_traces(
             if proper_crossing_segment_pairs:
                 warnings.append("closed_surface_trace_source_proper_self_intersection")
             if touching_segment_pairs:
-                warnings.append(
-                    "closed_surface_trace_source_nonadjacent_segment_contact"
-                )
+                warnings.append("closed_surface_trace_source_nonadjacent_segment_contact")
             if overlapping_segment_pairs:
                 warnings.append("closed_surface_trace_source_collinear_segment_overlap")
         if source_trace_length_mesh_units is None:
@@ -1114,6 +1113,41 @@ def mesh_surface_edge_traces(
                 # A genuinely reused positive edge may be too small to
                 # represent as a nonzero binary64 fraction of the entire trace.
                 warnings.append("surface_trace_reuse_fraction_resolution_loss")
+        # An exact coplanarity predicate and nonadjacent intersection audit
+        # cannot alone certify a simple perimeter: two *adjacent* segments
+        # can reverse over the same line. Use rational source coordinates to
+        # detect that case without a distance/angle tolerance or mesh welding.
+        # This reports provisional geometry only, not a biological contour.
+        local_backtrack_waypoint_offsets: list[int] = []
+        source_is_simple_planar_perimeter: bool | None = None
+        if is_closed_surface_loop and source_exact_coplanarity is True:
+            exact_loop = [
+                tuple(Fraction(coordinate) for coordinate in point) for point in positions[:-1]
+            ]
+            for index, current in enumerate(exact_loop):
+                previous = exact_loop[index - 1]
+                following = exact_loop[(index + 1) % len(exact_loop)]
+                incoming = tuple(c - p for c, p in zip(current, previous, strict=True))
+                outgoing = tuple(n - c for n, c in zip(following, current, strict=True))
+                cross = (
+                    incoming[1] * outgoing[2] - incoming[2] * outgoing[1],
+                    incoming[2] * outgoing[0] - incoming[0] * outgoing[2],
+                    incoming[0] * outgoing[1] - incoming[1] * outgoing[0],
+                )
+                dot = sum(a * b for a, b in zip(incoming, outgoing, strict=True))
+                if not any(cross) and dot < 0:
+                    local_backtrack_waypoint_offsets.append(index)
+            source_is_simple_planar_perimeter = not (
+                proper_crossing_segment_pairs
+                or touching_segment_pairs
+                or overlapping_segment_pairs
+                or nonadjacent_coincident_waypoint_index_pairs
+                or repeated_geometric_segment_index_pairs
+                or local_backtrack_waypoint_offsets
+                or any(length == 0 for length in source_lengths)
+            )
+            if local_backtrack_waypoint_offsets:
+                warnings.append("closed_surface_trace_source_adjacent_backtrack")
         if segment_underflow:
             warnings.append("calibrated_surface_trace_segment_underflow")
         # A positive calibrated segment may disappear from cumulative distances
@@ -1148,12 +1182,14 @@ def mesh_surface_edge_traces(
                 "closed_loop_source_noncoplanar_waypoint_offsets": (
                     source_noncoplanar_waypoint_offsets
                 ),
-                "closed_loop_source_proper_crossing_segment_pairs": (
-                    proper_crossing_segment_pairs
-                ),
+                "closed_loop_source_proper_crossing_segment_pairs": (proper_crossing_segment_pairs),
                 "closed_loop_source_touching_segment_pairs": touching_segment_pairs,
-                "closed_loop_source_collinear_overlap_segment_pairs": (
-                    overlapping_segment_pairs
+                "closed_loop_source_collinear_overlap_segment_pairs": (overlapping_segment_pairs),
+                "closed_loop_source_local_backtrack_waypoint_offsets": (
+                    local_backtrack_waypoint_offsets
+                ),
+                "closed_loop_source_is_simple_planar_perimeter": (
+                    source_is_simple_planar_perimeter
                 ),
                 "vertex_indices": list(vertices),
                 "nonadjacent_coincident_waypoint_index_pairs": (
