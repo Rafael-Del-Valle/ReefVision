@@ -237,9 +237,16 @@ try {
     if ($updateScript.Contains('$installer = Get-ReefVisionFreshInstaller')) {
         throw 'Updater still selects the legacy NSIS installer.'
     }
-    if ($updateScript.Contains('$portableSync = Sync-ReefVisionPortableInstall')) {
-        throw 'Updater still overwrites portable backend files.'
+    # The legacy portable-sync helper was unused, but if invoked directly it
+    # recursively removed the contents of an unverified backend directory.
+    # No destructive portable-file operation belongs in the MSI-only command.
+    if ($updateScript.Contains('function Sync-ReefVisionPortableInstall')) {
+        throw 'Unsafe legacy portable-backend sync remains in the MSI updater.'
     }
+    if ($updateScript -match '(?i)\\bRemove-Item\\b') {
+        throw 'MSI updater contains a direct file-deletion command.'
+    }
+    $passed++
     if (-not $updateScript.Contains('$installer = Assert-ReefVisionCachedMsi') -or
         $updateScript.Contains('$installer = $latestInstaller')) {
         throw 'Install-only must use the pinned MSI path and digest, without a fallback.'
