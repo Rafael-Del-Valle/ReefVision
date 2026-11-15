@@ -392,6 +392,82 @@ def test_asset_copies_must_not_share_hardlinked_original_storage(tmp_path: Path)
     assert source.read_bytes() == baseline_bytes
 
 
+
+@pytest.mark.parametrize("linked_copy", ["baseline", "candidate"])
+def test_asset_preservation_rejects_unscanned_external_hardlink(
+    tmp_path: Path, linked_copy: str
+) -> None:
+    """Independent directory roots are insufficient if a third alias can edit media."""
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    _seed(before)
+    shutil.copyfile(before, after)
+    baseline = tmp_path / "baseline"
+    candidate = tmp_path / "candidate"
+    baseline.mkdir()
+    candidate.mkdir()
+    original = baseline / "private-field-video.raw"
+    upgraded = candidate / original.name
+    original.write_bytes(b"preserved biological observation")
+    upgraded.write_bytes(original.read_bytes())
+    linked = original if linked_copy == "baseline" else upgraded
+    outside = tmp_path / "unscanned-hardlink.raw"
+    try:
+        outside.hardlink_to(linked)
+    except (OSError, NotImplementedError):
+        pytest.skip("filesystem does not support hardlinks")
+    if linked.stat().st_nlink < 2:
+        pytest.skip("filesystem does not expose reliable link counts")
+    before_bytes, after_bytes = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after, baseline, candidate)
+    assert code == 2
+    assert report["status"] == "HOLD"
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    assert "asset_hardlinks_not_independent" in report["problems"]
+    assert "private-field-video.raw" not in json.dumps(report)
+    assert "unscanned-hardlink.raw" not in json.dumps(report)
+    assert before.read_bytes() == before_bytes
+    assert after.read_bytes() == after_bytes
+    assert outside.read_bytes() == original.read_bytes() == upgraded.read_bytes()
+
+
+def test_asset_scan_detects_hardlink_added_after_hashing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A late alias changes link count even if no file data or name changes."""
+    baseline = tmp_path / "baseline"
+    candidate = tmp_path / "candidate"
+    baseline.mkdir()
+    candidate.mkdir()
+    original = baseline / "observation.raw"
+    upgraded = candidate / "observation.raw"
+    original.write_bytes(b"original observation")
+    upgraded.write_bytes(b"original observation")
+    outside = tmp_path / "late-unscanned-alias.raw"
+    compare = runpy.run_path(str(SCRIPT))["_compare_assets"]
+    inventory = compare.__globals__["_asset_inventory"]
+
+    def create_alias_after_candidate_scan(root: Path) -> object:
+        snapshot = inventory(root)
+        if root == candidate:
+            try:
+                outside.hardlink_to(original)
+            except (OSError, NotImplementedError):
+                pytest.skip("filesystem does not support hardlinks")
+            if original.stat().st_nlink < 2:
+                pytest.skip("filesystem does not expose reliable link counts")
+        return snapshot
+
+    monkeypatch.setitem(
+        compare.__globals__, "_asset_inventory", create_alias_after_candidate_scan
+    )
+    with pytest.raises(ValueError, match="asset_changed_after_inventory") as error:
+        compare(baseline, candidate)
+    assert "observation.raw" not in str(error.value)
+    assert outside.read_bytes() == original.read_bytes() == upgraded.read_bytes()
+
+
 def test_empty_asset_baseline_cannot_claim_preservation(tmp_path: Path) -> None:
     before = tmp_path / "before.sqlite"
     after = tmp_path / "after.sqlite"
