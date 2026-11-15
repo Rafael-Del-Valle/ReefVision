@@ -94,9 +94,7 @@ def test_streamline_preview_uses_one_compatible_scientific_record_slice(
     assert body["definition"]["analysis_kind"] == "current_streamline"
     assert body["result"]["source_record_ids"] == ids
     assert body["result"]["payload"]["input_sha256"] == result["input_sha256"]
-    assert body["result"]["payload"]["methodological_notes"] == result[
-        "methodological_notes"
-    ]
+    assert body["result"]["payload"]["methodological_notes"] == result["methodological_notes"]
     validation = client.get(
         f"/api/v1/projects/{project['id']}/environment/analyses/results/"
         f"{body['result']['id']}/validation"
@@ -146,6 +144,7 @@ def test_streamline_preview_uses_one_compatible_scientific_record_slice(
         ("provenance.spatial_resolution_m", 1000.0, "resolution"),
         ("provenance.temporal_resolution_s", 3600.0, "resolution"),
         ("qc", "suspect", "Suspect or rejected"),
+        ("qc", "rejected", "Suspect or rejected"),
     ],
 )
 def test_streamline_preview_rejects_mixed_scientific_identity_or_qc(

@@ -138,8 +138,7 @@ class CurrentFieldService:
         methodological_notes = [
             "Streamlines describe a frozen Eulerian current field; "
             "they are not organism trajectories.",
-            "Bilinear interpolation requires four QC-compatible corners "
-            "and never extrapolates.",
+            "Bilinear interpolation requires four QC-compatible corners and never extrapolates.",
             "All source records share one UTC, depth, dataset/model, and cache identity.",
             "Input velocity uncertainty is not propagated into streamline position "
             "or length; outputs are deterministic estimates, not uncertainty bounds.",
