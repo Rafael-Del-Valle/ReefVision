@@ -93,6 +93,17 @@ class ClassVisibilityService:
         return ClassVisibilityScopeStateResponse(saved=False, hidden_class_ids=[])
 
     def get_bundle(self, project_id: str) -> ClassVisibilityBundleResponse:
+        # SQLite's legacy SELECT behavior can read each query from a different
+        # committed state without an explicit read transaction. Pin one
+        # snapshot BEFORE checking the project, its classes, personal
+        # preferences and shared defaults. A concurrent local editor must not
+        # produce a mixed biological class-visibility bundle.
+        connection = self.session.connection()
+        if (
+            connection.dialect.name == "sqlite"
+            and not connection.connection.driver_connection.in_transaction
+        ):
+            connection.exec_driver_sql("BEGIN")
         self._project(project_id)
         valid_class_ids = self._project_class_ids(project_id)
         user_identity = get_local_user_identity(self.settings)
