@@ -351,8 +351,14 @@ function currentCsvCell(value: string | number | null | undefined): string {
   // characters and neutralize spreadsheet formula injection without changing
   // numeric measurements (including negative coordinates and velocities).
   const raw = String(value);
+  // Spreadsheet applications may ignore leading invisible format and
+  // control characters before evaluating a formula. Keep the original
+  // provenance in the exported field, but prefix an inert text marker.
   const safe =
-    typeof value === "string" && /^\s*[=+@-]/.test(raw) ? "'" + raw : raw;
+    typeof value === "string" &&
+    /^[\s\p{Cc}\p{Cf}\p{Zl}\p{Zp}]*[=+@-]/u.test(raw)
+      ? "'" + raw
+      : raw;
   return '"' + safe.replaceAll('"', '""') + '"';
 }
 
