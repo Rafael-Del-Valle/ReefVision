@@ -544,6 +544,41 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
+    # Recovery can skip the producer's own validation. Simulate an adapter
+    # revision introducing a materialized optional source parameter, then
+    # tamper with that persisted default on this actually executed workflow.
+    # The consumer must not trust the unchanged graph and artifact checksums.
+    with monkeypatch.context() as patch:
+        registered = original_registry()
+        source_definition = registered["project_source"]
+        patch.setattr(
+            workflow_graphs,
+            "workflow_node_registry",
+            lambda: {
+                **registered,
+                "project_source": source_definition.model_copy(
+                    update={"optional_parameters": {"source_snapshot": "frozen"}}
+                ),
+            },
+        )
+        with app.state.session_factory() as session:
+            producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+            consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+            assert producer is not None and consumer is not None
+            producer.parameters_json = {
+                **(producer.parameters_json or {}),
+                "source_snapshot": "altered",
+            }
+            session.flush()
+            with pytest.raises(
+                ConflictError, match="input producer resolved defaults differ from saved plan"
+            ):
+                verify_succeeded_node_artifacts(
+                    session, run_id=str(run["id"]), node_run=consumer
+                )
+            session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
     # A direct consumer replay must also verify the producer's persisted
     # result declaration. Its payload checksum alone cannot reveal a changed
     # upstream output summary in this actually executed two-node workflow.
