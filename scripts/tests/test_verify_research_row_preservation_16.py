@@ -392,7 +392,6 @@ def test_asset_copies_must_not_share_hardlinked_original_storage(tmp_path: Path)
     assert source.read_bytes() == baseline_bytes
 
 
-
 @pytest.mark.parametrize("linked_copy", ["baseline", "candidate"])
 def test_asset_preservation_rejects_unscanned_external_hardlink(
     tmp_path: Path, linked_copy: str
