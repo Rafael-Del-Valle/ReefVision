@@ -96,12 +96,12 @@ def test_missing_revision_table_is_explicitly_reported(tmp_path):
     ("tables", "expected_warnings"),
     [
         (["scientific_records"], {"incomplete_scientific_schema_family"}),
-        (["review_queue_item_events"], {"incomplete_qc_schema_family"}),
+        # QC 0038 creates events; the 0041 bulk registry is not required yet.
+        (["review_queue_item_events"], set()),
         (
             ["scientific_records", "review_queue_item_events"],
             {
                 "incomplete_scientific_schema_family",
-                "incomplete_qc_schema_family",
                 "mixed_scientific_and_qc_lineage",
             },
         ),
@@ -213,3 +213,59 @@ def test_alembic_stamp_constraints_are_diagnosed_without_mutation(
     assert result["revision_rows"] == ["0038"]
     assert result["upgrade_authorized"] is False
     assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    ("revision", "tables", "expected_warnings"),
+    [
+        ("0036", ("review_queue_item_events",), {"qc_events_before_revision_0038"}),
+        (
+            "0036",
+            ("review_queue_bulk_requests",),
+            {"qc_bulk_registry_without_review_events", "qc_bulk_registry_before_revision_0041"},
+        ),
+        (
+            "0036",
+            ("review_queue_item_events", "review_queue_bulk_requests"),
+            {"qc_events_before_revision_0038", "qc_bulk_registry_before_revision_0041"},
+        ),
+        ("0037", ("review_queue_item_events",), {"qc_events_before_revision_0038"}),
+        (
+            "0038",
+            ("review_queue_item_events",),
+            {"revision_0038_requires_schema_lineage_reconciliation"},
+        ),
+        ("0039", ("review_queue_item_events",), set()),
+        ("0040", ("review_queue_item_events",), set()),
+        ("0041", ("review_queue_item_events", "review_queue_bulk_requests"), set()),
+    ],
+)
+def test_qc_table_stages_reject_all_pre_creation_stamps_without_data_changes(
+    tmp_path, revision, tables, expected_warnings
+):
+    """Preserve reviewer evidence across valid and impossible QC migration stages."""
+    path = tmp_path / "qc-history.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
+        db.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
+        for table in tables:
+            db.execute(f'CREATE TABLE "{table}" (id INTEGER PRIMARY KEY, evidence TEXT)')
+            db.execute(f'INSERT INTO "{table}" (evidence) VALUES (?)', ("reviewer decision",))
+        db.execute("CREATE TABLE coral_sentinel (note TEXT)")
+        db.execute("INSERT INTO coral_sentinel VALUES ('original observation')")
+        db.commit()
+
+    original = path.read_bytes()
+    first = module.inspect(path)
+    second = module.inspect(path)
+    assert set(first["warnings"]) == expected_warnings
+    assert second == first
+    assert first["lineage_hint"] == "qc"
+    assert first["upgrade_authorized"] is False
+    for table in tables:
+        assert first["inventory"][table]["rows"] == 1
+    assert path.read_bytes() == original
+    with sqlite3.connect(path) as db:
+        assert db.execute("SELECT note FROM coral_sentinel").fetchone() == (
+            "original observation",
+        )
