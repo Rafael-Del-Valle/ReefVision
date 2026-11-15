@@ -752,11 +752,9 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         assert isinstance(original_ids, list) and len(original_ids) == 1
         assert isinstance(sibling_ids, list) and len(sibling_ids) == 1
         producer.output_artifact_ids_json = [*original_ids, sibling_ids[0]]
-        producer.result_json = {
-            key: value
-            for key, value in dict(producer.result_json or {}).items()
-            if key != "outputs"
-        }
+        producer_result = dict(producer.result_json or {})
+        producer_result.pop("outputs", None)
+        producer.result_json = producer_result
         session.flush()
         with pytest.raises(ConflictError, match="producer declares output owned by another node"):
             verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
