@@ -5,6 +5,7 @@ By default this validates JPEG signatures and produces an integrity manifest.
 --verify-decode additionally asks Pillow to load every JPEG pixel stream, so
 syntactically marked but undecodable images fail acceptance. Neither mode
 proves installed WebView2 or GPU behavior. No originals are modified.
+Decoded ICC payload hashes identify bytes, not scientifically validated color calibration.
 Run against a backed-up, owner-approved fixture set.
 """
 from __future__ import annotations
@@ -266,6 +267,15 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                                 if orientation in (5, 6, 7, 8)
                                 else (decoded.width, decoded.height)
                             )
+                            # Real camera JPEGs can spread ICC payloads across
+                            # multiple APP2 segments. Fingerprint the assembled
+                            # bytes, never infer a calibrated color space from
+                            # their presence or alter the original capture.
+                            icc_profile = decoded.info.get("icc_profile")
+                            if icc_profile is not None and (
+                                not isinstance(icc_profile, bytes) or not icc_profile
+                            ):
+                                raise ValueError("invalid embedded ICC profile payload")
                             decoded_metadata = {
                                 "jpeg_pixel_width": decoded.width,
                                 "jpeg_pixel_height": decoded.height,
@@ -273,6 +283,15 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                                 "jpeg_display_height": display_height,
                                 "jpeg_color_mode": decoded.mode,
                                 "jpeg_exif_orientation": orientation,
+                                "jpeg_icc_profile_present": icc_profile is not None,
+                                "jpeg_icc_profile_bytes": (
+                                    len(icc_profile) if icc_profile is not None else 0
+                                ),
+                                "jpeg_icc_profile_sha256": (
+                                    hashlib.sha256(icc_profile).hexdigest()
+                                    if icc_profile is not None
+                                    else None
+                                ),
                             }
                         # Windows file identity/mtime can remain unchanged after
                         # a same-size in-place rewrite. Rehash the exact decoded

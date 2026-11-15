@@ -392,6 +392,53 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             for name, content in originals.items():
                 self.assertEqual((root / name).read_bytes(), content)
 
+    def test_opt_in_decode_records_multisegment_icc_payload_provenance(self) -> None:
+        """Fingerprint assembled ICC payloads without claiming calibrated camera color."""
+        import hashlib
+
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; ICC payload provenance unverified")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            # More than 64 KiB requires multiple JPEG APP2 ICC chunks. These
+            # synthetic bytes test preservation, NOT valid color calibration.
+            profiles = {
+                "profile_a.JPG": b"synthetic-profile-A:" + b"A" * 70_000,
+                "profile_b.JPEG": b"synthetic-profile-B:" + b"B" * 70_000,
+                "untagged.jpg": None,
+            }
+            originals = {}
+            for name, profile in profiles.items():
+                path = root / name
+                options = {"icc_profile": profile} if profile is not None else {}
+                Image.new("RGB", (12, 8), (30, 80, 140)).save(
+                    path, format="JPEG", **options
+                )
+                originals[name] = path.read_bytes()
+
+            records, errors = MODULE.inventory(root, verify_decode=True)
+            self.assertEqual(errors, [])
+            self.assertEqual(len(records), len(profiles))
+            by_path = {record["path"]: record for record in records}
+            for name, profile in profiles.items():
+                record = by_path[name]
+                self.assertTrue(record["jpeg_decodable"])
+                self.assertEqual(record["jpeg_icc_profile_present"], profile is not None)
+                self.assertEqual(
+                    record["jpeg_icc_profile_bytes"], len(profile) if profile else 0
+                )
+                self.assertEqual(
+                    record["jpeg_icc_profile_sha256"],
+                    hashlib.sha256(profile).hexdigest() if profile else None,
+                )
+                self.assertEqual((root / name).read_bytes(), originals[name])
+            self.assertNotEqual(
+                by_path["profile_a.JPG"]["jpeg_icc_profile_sha256"],
+                by_path["profile_b.JPEG"]["jpeg_icc_profile_sha256"],
+            )
+
     def test_opt_in_pixel_decode_reports_exif_display_geometry_for_all_orientations(self) -> None:
         """EXIF 5-8 transpose displayed axes; native pixels remain unchanged."""
         try:
