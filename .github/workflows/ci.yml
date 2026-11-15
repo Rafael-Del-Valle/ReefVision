@@ -106,6 +106,25 @@ jobs:
       - name: Install standalone test runner
         shell: pwsh
         run: python -m pip install pytest==8.3.5
+      - name: Inspect synthetic Windows file-handle identity metadata
+        shell: pwsh
+        run: |
+          @'
+          import os
+          import tempfile
+          from pathlib import Path
+          with tempfile.TemporaryDirectory() as folder:
+              path = Path(folder) / "synthetic-research.bin"
+              path.write_bytes(b"scientific fixture")
+              first = path.lstat()
+              fd = os.open(path, os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NONBLOCK", 0))
+              try:
+                  opened = os.fstat(fd)
+              finally:
+                  os.close(fd)
+              fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns", "st_mode", "st_nlink")
+              print("Windows file identity differences:", {key: (getattr(first, key), getattr(opened, key)) for key in fields if getattr(first, key) != getattr(opened, key)})
+          '@ | python -
       - name: Reject real NTFS junctions and research-directory substitutions
         shell: pwsh
         run: python -m pytest scripts/tests/test_verify_research_row_preservation_16.py -v
