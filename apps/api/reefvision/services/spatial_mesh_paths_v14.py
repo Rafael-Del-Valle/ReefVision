@@ -603,7 +603,11 @@ def _closed_loop_source_segment_intersections(
             if first_a == first_b == second_a == second_b == 0:
                 # Along a common line, strict interval intersection means
                 # positive-length overlap; equality is a point contact.
-                axis = 0 if projected[a][0] != projected[b][0] or projected[c][0] != projected[d][0] else 1
+                axis = (
+                    0
+                    if projected[a][0] != projected[b][0] or projected[c][0] != projected[d][0]
+                    else 1
+                )
                 lower = max(
                     min(projected[a][axis], projected[b][axis]),
                     min(projected[c][axis], projected[d][axis]),
@@ -1007,7 +1011,9 @@ def mesh_surface_edge_traces(
             if proper_crossing_segment_pairs:
                 warnings.append("closed_surface_trace_source_proper_self_intersection")
             if touching_segment_pairs:
-                warnings.append("closed_surface_trace_source_nonadjacent_segment_contact")
+                warnings.append(
+                    "closed_surface_trace_source_nonadjacent_segment_contact"
+                )
             if overlapping_segment_pairs:
                 warnings.append("closed_surface_trace_source_collinear_segment_overlap")
         if source_trace_length_mesh_units is None:
@@ -1142,9 +1148,13 @@ def mesh_surface_edge_traces(
                 "closed_loop_source_noncoplanar_waypoint_offsets": (
                     source_noncoplanar_waypoint_offsets
                 ),
-                "closed_loop_source_proper_crossing_segment_pairs": proper_crossing_segment_pairs,
+                "closed_loop_source_proper_crossing_segment_pairs": (
+                    proper_crossing_segment_pairs
+                ),
                 "closed_loop_source_touching_segment_pairs": touching_segment_pairs,
-                "closed_loop_source_collinear_overlap_segment_pairs": overlapping_segment_pairs,
+                "closed_loop_source_collinear_overlap_segment_pairs": (
+                    overlapping_segment_pairs
+                ),
                 "vertex_indices": list(vertices),
                 "nonadjacent_coincident_waypoint_index_pairs": (
                     nonadjacent_coincident_waypoint_index_pairs
