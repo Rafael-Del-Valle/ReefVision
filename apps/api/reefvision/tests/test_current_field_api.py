@@ -121,6 +121,9 @@ def test_streamline_preview_uses_one_compatible_scientific_record_slice(
         ("provenance.source", "different provider", "share UTC"),
         ("provenance.dataset_id", "different grid", "share UTC"),
         ("provenance.model_version", "v2", "share UTC"),
+        ("provenance.method", "interpolated from another sensor", "method"),
+        ("provenance.spatial_resolution_m", 1000.0, "resolution"),
+        ("provenance.temporal_resolution_s", 3600.0, "resolution"),
         ("qc", "suspect", "Suspect or rejected"),
     ],
 )
