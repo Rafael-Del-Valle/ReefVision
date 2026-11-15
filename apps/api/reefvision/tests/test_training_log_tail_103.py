@@ -702,6 +702,28 @@ def test_log_tail_strips_zero_width_controls_without_losing_scientific_units(
     assert log.read_bytes() == original
 
 
+def test_training_log_api_handles_corrupted_persisted_path(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A bad stored path cannot turn monitoring into a 500 or mutate a running job."""
+    looked_up: list[str] = []
+
+    def fake_service(_request: object, _session: object) -> SimpleNamespace:
+        def get_run(run_id: str) -> SimpleNamespace:
+            looked_up.append(run_id)
+            return SimpleNamespace(logs_path="broken\0.log", status="running")
+
+        return SimpleNamespace(get_run=get_run)
+
+    monkeypatch.setattr(training_routes, "service", fake_service)
+    response = client.get("/api/v1/training-runs/run-1/logs/tail")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json() == {"available": False, "text": ""}
+    assert looked_up == ["run-1"]
+
+
 def test_training_log_api_uses_persisted_run_path_only(
     client: TestClient,
     test_settings: Settings,
