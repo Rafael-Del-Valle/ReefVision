@@ -573,3 +573,172 @@ def test_legitimate_11_extension_stages_do_not_require_later_tables(
     assert report["lineage_hint"] == "scientific"
     assert report["upgrade_authorized"] is False
     assert database.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    ("revision", "tables", "expected_warnings"),
+    [
+        (
+            "0038",
+            ("scientific_records", "environmental_cache_entries"),
+            ("revision_0038_requires_schema_lineage_reconciliation",),
+        ),
+        (
+            "0039",
+            (
+                "scientific_records",
+                "environmental_cache_entries",
+                "computed_metric_definitions",
+                "computed_metric_results",
+            ),
+            (),
+        ),
+        (
+            "0040",
+            (
+                "scientific_records",
+                "environmental_cache_entries",
+                "computed_metric_definitions",
+                "computed_metric_results",
+                "environmental_event_definitions",
+            ),
+            (),
+        ),
+        (
+            "0042",
+            (
+                "scientific_records",
+                "environmental_cache_entries",
+                "computed_metric_definitions",
+                "computed_metric_results",
+                "environmental_event_definitions",
+                "environmental_analysis_definitions",
+                "environmental_analysis_results",
+            ),
+            (),
+        ),
+    ],
+)
+def test_scientific_11_revision_stages_are_not_false_partial_schemas(
+    tmp_path: Path, revision: str, tables: tuple[str, ...], expected_warnings: tuple[str, ...]
+) -> None:
+    database = tmp_path / "scientific-stage.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
+        connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
+        for name in tables:
+            connection.execute(f"CREATE TABLE {name} (id INTEGER PRIMARY KEY)")
+        connection.execute("CREATE TABLE biological_sentinel (id INTEGER, note TEXT)")
+        connection.execute("INSERT INTO biological_sentinel VALUES (1, 'coral-preserve')")
+    before = database.read_bytes()
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--fail-on-warning", str(database)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == (2 if expected_warnings else 0), result.stderr
+    report = json.loads(result.stdout)
+    assert report["warnings"] == list(expected_warnings)
+    assert report["lineage_hint"] == "scientific"
+    assert report["upgrade_authorized"] is False
+    assert database.read_bytes() == before
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT note FROM biological_sentinel").fetchone() == (
+            "coral-preserve",
+        )
+
+
+@pytest.mark.parametrize(
+    ("revision", "tables", "expected_warnings"),
+    [
+        (
+            "0038",
+            ("scientific_records",),
+            ("incomplete_scientific_schema_family",),
+        ),
+        (
+            "0039",
+            ("computed_metric_definitions",),
+            (
+                "incomplete_scientific_schema_family",
+                "computed_metrics_without_scientific_base",
+            ),
+        ),
+        (
+            "0039",
+            ("computed_metric_definitions", "computed_metric_results"),
+            ("computed_metrics_without_scientific_base",),
+        ),
+        (
+            "0040",
+            (
+                "scientific_records",
+                "environmental_cache_entries",
+                "environmental_event_definitions",
+            ),
+            ("environmental_event_without_computed_metrics",),
+        ),
+        (
+            "0042",
+            (
+                "scientific_records",
+                "environmental_cache_entries",
+                "environmental_event_definitions",
+                "environmental_analysis_definitions",
+                "environmental_analysis_results",
+            ),
+            (
+                "environmental_event_without_computed_metrics",
+                "environmental_analysis_without_computed_metrics",
+            ),
+        ),
+        (
+            "0042",
+            (
+                "scientific_records",
+                "environmental_cache_entries",
+                "environmental_analysis_definitions",
+                "environmental_analysis_results",
+            ),
+            (
+                "environmental_analysis_without_computed_metrics",
+                "environmental_analysis_without_event_definitions",
+            ),
+        ),
+    ],
+)
+def test_broken_scientific_stage_dependencies_are_read_only_and_fail_closed(
+    tmp_path: Path, revision: str, tables: tuple[str, ...], expected_warnings: tuple[str, ...]
+) -> None:
+    database = tmp_path / "broken-scientific-stage.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
+        connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
+        for name in tables:
+            connection.execute(f"CREATE TABLE {name} (id INTEGER PRIMARY KEY, note TEXT)")
+            connection.execute(f"INSERT INTO {name} VALUES (1, 'research-preserve')")
+        connection.execute("CREATE TABLE biological_sentinel (id INTEGER, note TEXT)")
+        connection.execute("INSERT INTO biological_sentinel VALUES (1, 'coral-preserve')")
+    before = database.read_bytes()
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--fail-on-warning", str(database)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2, result.stderr
+    report = json.loads(result.stdout)
+    for warning in expected_warnings:
+        assert warning in report["warnings"]
+    assert report["lineage_hint"] == "scientific"
+    assert report["upgrade_authorized"] is False
+    assert database.read_bytes() == before
+    with sqlite3.connect(database) as connection:
+        for name in tables:
+            assert connection.execute(f'SELECT note FROM "{name}"').fetchone() == (
+                "research-preserve",
+            )
+        assert connection.execute("SELECT note FROM biological_sentinel").fetchone() == (
+            "coral-preserve",
+        )

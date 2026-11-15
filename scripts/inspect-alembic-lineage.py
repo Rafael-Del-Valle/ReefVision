@@ -150,11 +150,22 @@ def inspect(path: Path) -> dict:
             )
         ):
             warnings.append("invalid_revision_marker_count_or_value")
-        # A single family marker is only a hint: partial migrations are not complete schemas.
+        # The 1.1 scientific tables arrive in separate 0038 and 0039
+        # migrations. A complete 0038 pair alone is NOT an interrupted
+        # four-table family; inspect each stage independently.
+        science_base = FAMILIES["scientific"][:2]
+        science_metrics = FAMILIES["scientific"][2:]
         for family, names in FAMILIES.items():
-            present = [name for name in names if inventory[name]["present"]]
-            if present and len(present) != len(names):
+            stages = (science_base, science_metrics) if family == "scientific" else (names,)
+            if any(
+                0 < sum(inventory[name]["present"] for name in stage) < len(stage)
+                for stage in stages
+            ):
                 warnings.append(f"incomplete_{family}_schema_family")
+        metric_present = any(inventory[name]["present"] for name in science_metrics)
+        metric_complete = all(inventory[name]["present"] for name in science_metrics)
+        if metric_present and not all(inventory[name]["present"] for name in science_base):
+            warnings.append("computed_metrics_without_scientific_base")
         # Environmental 0040/0042 records are identifiable even when a
         # partial restore has lost all 0038-0039 base scientific tables.
         # Do not report an incomplete optional extension on a valid 0037 DB.
@@ -173,6 +184,10 @@ def inspect(path: Path) -> dict:
         # before either analysis table at 0042. A complete analysis pair
         # without its predecessor is still an interrupted/foreign schema.
         # Do not infer that an apparently valid 0042 stamp repairs it.
+        if "environmental_event_definitions" in present_extensions and not metric_complete:
+            warnings.append("environmental_event_without_computed_metrics")
+        if present_extensions & analysis_pair and not metric_complete:
+            warnings.append("environmental_analysis_without_computed_metrics")
         if present_extensions & analysis_pair and (
             "environmental_event_definitions" not in present_extensions
         ):

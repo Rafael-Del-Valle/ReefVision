@@ -68,3 +68,30 @@ installed GUI, representative biological and environmental datasets, the
 executable saved QC Workflow Builder, and complete exact-head CI remain
 release-approval gates. Do not signal completion on the basis of this
 change alone.
+
+## 2026-11-15 — staged scientific lineage inventory correctness
+
+The 1.1 migration DAG creates two base scientific tables in **0038**, two
+computed-metric tables in **0039**, environmental event definitions in **0040**,
+and environmental-analysis definitions/results in **0042**. The diagnostic CLI
+previously treated the entire four-table 0038/0039 sequence as a single
+all-or-none family. Thus, a healthy scientific 0038 database was falsely
+reported as an interrupted scientific schema.
+
+The read-only inspector now verifies completeness of each actual migration
+pair separately, accepts the healthy 0038 table inventory without the
+`incomplete_scientific_schema_family` diagnosis, and checks that 0039 metrics
+have the 0038 base, and 0040/0042 records have metric predecessors.
+Existing 0042-to-0040 predecessor checks remain. This detects partial
+restores and avoids confusing a valid incremental stage with a corrupt one.
+The legitimate **0038** database still reports
+`revision_0038_requires_schema_lineage_reconciliation`: that collision
+remains an independent blocker. No status from the inspector authorizes an
+upgrade, and no migration stamp or scientific record is changed.
+
+The registered CI preflight suite includes four valid scientific stages and
+six missing-table/dependency scenarios, including byte-for-byte database
+retention and original coral observation payloads. This is an audit accuracy
+increment only, not a unified Alembic DAG, installed-GUI acceptance, or a
+release claim. Existing executable QC Workflow Builder graphs and human
+review requirements remain untouched.
