@@ -46,7 +46,12 @@ class LateScienceLineageInventoryTests(unittest.TestCase):
                             )
                         original = database.read_bytes()
                         result = subprocess.run(
-                            [sys.executable, str(SCRIPT), "--fail-on-warning", str(database)],
+                            [
+                                sys.executable,
+                                str(SCRIPT),
+                                "--fail-on-warning",
+                                str(database),
+                            ],
                             capture_output=True,
                             text=True,
                             check=False,
