@@ -841,3 +841,36 @@ scale-only perimeter interval, QC, and
 `human_review_verified: false` remain unmodified. These are **synthetic**
 mesh integrity checks, not held-out biological or installed-GUI/GPU
 acceptance.
+
+### Exact endpoint-contact and collinear-overlap audit for closed traces
+
+An exactly source-planar selected loop now reports two additional fields,
+`closed_loop_source_touching_segment_pairs` and
+`closed_loop_source_collinear_overlap_segment_pairs`. Both contain
+zero-based pairs of **nonadjacent** source-loop segment indices; the
+geometrically adjacent first and closing segments are excluded. Touching
+means the segments meet at a point, including one segment endpoint lying
+within another segment. Collinear overlap means the two segments share a
+**positive-length** portion of the same geometric line. A collinear single
+point is classified as touching, not as overlap. Both are distinct from the
+existing strict interior-to-interior proper crossing diagnostic.
+
+The implementation uses exact rational orientation, bounding-interval,
+and on-segment predicates after deterministic source-plane projection,
+without physical proximity thresholds or coordinate snapping. The three
+fields return `[]` only for an assessable exactly planar loop with no
+intersections of the corresponding type. They return `null` for an open
+loop, a noncoplanar loop, or an undefined source plane; an empty proper
+crossing list alone must **never** be read as a simple contour. Positive
+findings produce `closed_surface_trace_source_nonadjacent_segment_contact`
+or `closed_surface_trace_source_collinear_segment_overlap` QC warnings.
+
+Synthetic tests include positive-length coincident subsegments and
+nonadjacent endpoint-to-interior contacts at two calibration scales.
+The same case runs in a saved, typed, executable Workflow Builder graph,
+which must persist the exact same measurement and provenance as the
+standalone project-scoped API. This evidence neither changes source mesh
+topology nor certifies anatomical contour simplicity, coral area, branch
+centerlines, calibration adequacy, organism identity, or biological growth.
+`human_review_verified` remains false. Installed Windows GUI, physical
+GPU, and independent biological validation are separate release gates.
