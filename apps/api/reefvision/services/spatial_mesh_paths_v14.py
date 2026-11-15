@@ -6,7 +6,7 @@ from collections import Counter
 from fractions import Fraction
 from heapq import heappop, heappush
 from itertools import accumulate, pairwise
-from math import atan2, degrees, dist, fsum, hypot, isfinite
+from math import atan2, degrees, dist, fsum, hypot, isfinite, pi, sqrt
 from typing import Any
 
 
@@ -1182,6 +1182,9 @@ def mesh_surface_edge_traces(
         source_planar_area_units2: float | None = None
         calibrated_planar_area_m2: float | None = None
         planar_area_scale_interval_m2: list[float] | None = None
+        # A scale-independent shape descriptor for an *unverified* source
+        # polygon. Never treat it as organism condition or an anatomical index.
+        source_planar_isoperimetric_quotient: float | None = None
         if source_is_simple_planar_perimeter is True:
             source_planar_area_units2 = _closed_loop_source_enclosed_planar_area(positions)
             if source_planar_area_units2 is None:
@@ -1208,6 +1211,19 @@ def mesh_surface_edge_traces(
                             )
                 else:
                     warnings.append("closed_surface_trace_calibrated_planar_area_unrepresentable")
+                # The quotient 4*pi*A/P^2 uses source-coordinate area and
+                # perimeter, so it is independent of a shared positive scale.
+                # sqrt(A)/P avoids overflow in P^2 for large finite geometry.
+                # Do not serialize a rounded zero for a positive shape, or
+                # fabricate a value if the source perimeter was unrepresentable.
+                perimeter = source_trace_length_mesh_units
+                if perimeter is not None and perimeter > 0:
+                    radius_fraction = sqrt(source_planar_area_units2) / perimeter
+                    quotient = 4 * pi * (radius_fraction * radius_fraction)
+                    if isfinite(quotient) and 0 < quotient <= 1:
+                        source_planar_isoperimetric_quotient = quotient
+                if source_planar_isoperimetric_quotient is None:
+                    warnings.append("closed_surface_trace_planar_compactness_unrepresentable")
         if segment_underflow:
             warnings.append("calibrated_surface_trace_segment_underflow")
         # A positive calibrated segment may disappear from cumulative distances
@@ -1255,6 +1271,9 @@ def mesh_surface_edge_traces(
                 "closed_loop_planar_enclosed_area_m2": calibrated_planar_area_m2,
                 "closed_loop_planar_enclosed_area_scale_only_interval_m2": (
                     planar_area_scale_interval_m2
+                ),
+                "closed_loop_source_planar_isoperimetric_quotient": (
+                    source_planar_isoperimetric_quotient
                 ),
                 "vertex_indices": list(vertices),
                 "nonadjacent_coincident_waypoint_index_pairs": (
