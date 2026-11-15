@@ -14,6 +14,7 @@ from reefvision.schemas.project_exchange import (
     ProjectExchangeInspectionResponse,
     ProjectExchangeUnavailableAsset,
 )
+from reefvision.services.static_comparison import STATIC_COMPARISON_JOB
 from reefvision.storage.datasets import canonical_json_sha256
 
 FORMAT_NAME = "reefvision-project-exchange"
@@ -242,7 +243,10 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                     or project_rows[0].get("id") != project["id"]
                 ):
                     raise ValidationError("Exchange archive must identify one source project")
-                if not any(section_rows.get(name) for name in integration):
+                if not any(section_rows.get(name) for name in integration) and not any(
+                    row.get("job_type") == STATIC_COMPARISON_JOB
+                    for row in section_rows.get("jobs", [])
+                ):
                     raise ValidationError(
                         "Exchange 1.2 archive has no integrated scientific records"
                     )

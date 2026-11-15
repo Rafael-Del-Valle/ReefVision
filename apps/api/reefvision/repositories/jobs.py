@@ -25,8 +25,12 @@ class JobRepository:
             select(Job)
             .where(
                 Job.status == "queued",
-                # The executing workflow owns its scientific validation child.
-                (Job.job_type != "reefpose_validation")
+                # The executing workflow owns its validation and acquisition QC children.
+                (
+                    Job.job_type.notin_(
+                        ("reefpose_validation", "qc", "static_comparison", "temporal_reefpose")
+                    )
+                )
                 | (func.coalesce(Job.request_json["workflow_run_id"].as_string(), "") == ""),
             )
             .order_by(Job.created_at, Job.id)

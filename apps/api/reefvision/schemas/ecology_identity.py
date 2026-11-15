@@ -19,6 +19,11 @@ from reefvision.domain.experimental_unit_policy import (
     require_ecological_unit_id,
     require_ecological_unit_type,
 )
+from reefvision.schemas.ecology_study_assignment import (
+    EcologyStudyAssignmentCreate,
+    EcologyStudyAssignmentRead,
+    validate_study_assignments,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 
 Key = str
@@ -37,6 +42,7 @@ class EcologyIdentityFields(BaseModel):
     experimental_unit_type: str | None = Field(default=None, max_length=100)
     experimental_unit_id: str | None = Field(default=None, min_length=1, max_length=150)
     reason: str = Field(min_length=3, max_length=500)
+    study_assignment: EcologyStudyAssignmentCreate | None = None
 
     @field_validator("experimental_unit_type")
     @classmethod
@@ -84,6 +90,7 @@ class EcologyIdentityRow(BaseModel):
     experimental_unit_id: str | None
     reason: str
     created_at: datetime
+    study_assignment: EcologyStudyAssignmentRead | None = None
 
     @model_validator(mode="after")
     def require_recorded_design_integrity(self) -> EcologyIdentityRow:
@@ -102,7 +109,14 @@ class EcologyIdentityRow(BaseModel):
         require_ecological_unit_id(self.experimental_unit_id)
         if self.parent_colony_key is not None and self.kind != "fragment":
             raise ValueError("Only recorded fragments can reference a parent colony")
+        validate_study_assignments([(self, self.study_assignment)])
         return self
+
+
+def identity_study_fields(row: EcologyIdentityRow) -> dict[str, Any]:
+    if row.study_assignment is None:
+        return {}
+    return {"study_assignment": row.study_assignment.model_dump(mode="json")}
 
 
 class EcologyImageEvidenceCreate(BaseModel):
@@ -210,7 +224,11 @@ class EcologyCalibrationEvidenceRow(BaseModel):
 
 
 EcologyDesignChangedField = Literal[
-    "kind", "parent_colony_key", "experimental_unit_type", "experimental_unit_id"
+    "kind",
+    "parent_colony_key",
+    "experimental_unit_type",
+    "experimental_unit_id",
+    "study_assignment",
 ]
 
 
@@ -231,6 +249,8 @@ class EcologyDesignRevisionChange(BaseModel):
     previous_experimental_unit_id: str | None
     current_experimental_unit_type: str | None
     current_experimental_unit_id: str | None
+    previous_study_assignment: EcologyStudyAssignmentRead | None = None
+    current_study_assignment: EcologyStudyAssignmentRead | None = None
 
 
 class EcologyCrossUnitParentDetail(BaseModel):
@@ -323,6 +343,7 @@ class EcologyIdentityRegistryResponse(BaseModel):
         # A re-signed saved registry cannot split one physical tank/site into
         # apparent independent units by changing only identifier capitalization.
         require_unique_ecological_unit_spellings(self.identities)
+        validate_study_assignments((row, row.study_assignment) for row in self.identities)
         # Re-signed saved artifacts must not conceal case-only unit aliases
         # in superseded revisions, even when their latest snapshot is clean.
         require_unique_ecological_unit_spellings(self.identity_history)
@@ -428,6 +449,7 @@ class EcologyIdentityRegistryResponse(BaseModel):
                         "experimental_unit_id": row.experimental_unit_id,
                         "reason": row.reason,
                         "created_at": row.created_at.isoformat(),
+                        **identity_study_fields(row),
                     }
                     for row in self.identity_history
                 ]
@@ -472,6 +494,7 @@ class EcologyIdentityRegistryResponse(BaseModel):
                 "parent_colony_key": row.parent_colony_key,
                 "experimental_unit_type": row.experimental_unit_type,
                 "experimental_unit_id": row.experimental_unit_id,
+                **identity_study_fields(row),
             }
             for row in self.identities
         ]

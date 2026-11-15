@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from reefvision.db.base import Base
@@ -42,6 +43,7 @@ class EcologyIdentityRevision(Base):
     experimental_unit_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     experimental_unit_id: Mapped[str | None] = mapped_column(String(150), nullable=True)
     reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    study_assignment: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )

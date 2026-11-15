@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import json
 import zipfile
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
@@ -33,7 +33,12 @@ from reefvision.tests.test_pose_identity_tracking_api import (
     _track,
     _video,
 )
-from reefvision.tests.test_scientific_project_exchange import export_archive, import_archive
+from reefvision.tests.test_scientific_project_exchange import (
+    export_archive,
+    import_archive,
+    rewrite,
+)
+from reefvision.tests.test_workflow_connected_branch_preview_1_2 import _run
 
 
 def test_service_exposes_measurement_event_review_and_export_contracts() -> None:
@@ -475,7 +480,101 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
     assert evidence["source"]["measurements"][0]["id"] == gape_series["id"]
     assert evidence["source"]["measurements"][0]["run_id"] == measurement_run_id
 
-    imported = import_archive(client, export_archive(client, test_settings, project["id"]))
+    summary_url = f"/api/v1/projects/{project['id']}/ecology/event-summaries"
+    saved_summary = client.post(
+        summary_url,
+        json={
+            "name": "Reviewed gape",
+            "sessions": [
+                {
+                    "link_revision_id": evidence["id"],
+                    "event_run_id": event_run_id,
+                    "measurement_series_id": gape_series["id"],
+                },
+            ],
+            "reviewer": "fixture scientist",
+            "reason": "Selected an explicitly reviewed stationary session",
+            "confirm": True,
+        },
+    )
+    assert saved_summary.status_code == 201, saved_summary.text
+    event_report = saved_summary.json()
+    summary = event_report["snapshot"]["organisms"][0]
+    assert summary["confirmed_complete_count"] == 1
+    assert summary["valid_duration_s"] == pytest.approx(0.5)
+    assert summary["confirmed_events_per_minute"] == pytest.approx(120.0)
+    assert summary["organism_key"] == "reviewed-fish"
+    assert not event_report["stale_reasons"]
+    assert client.get(f"{summary_url}/{event_report['id']}/results.csv").status_code == 200
+    assert (
+        client.post(
+            summary_url,
+            json={
+                **event_report["snapshot"]["selection"],
+                "sessions": event_report["snapshot"]["selection"]["sessions"] * 2,
+            },
+        ).status_code
+        == 422
+    )
+    graph = {
+        "graph_id": "event-summary-replay",
+        "name": "Replay reviewed event summary",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "summary",
+                "node_type": "ecology_event_summary",
+                "parameters": {"summary_id": event_report["id"]},
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "summary-input",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "summary",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    workflow = _run(client, project["id"], graph)
+    assert workflow["run"]["status"] == "succeeded", workflow
+    artifact = next(
+        row["payload_json"]
+        for row in workflow["artifacts"]
+        if row["data_type"] == "reviewed_ecology_event_summary"
+    )
+    assert artifact["organisms"] == event_report["snapshot"]["organisms"]
+    assert artifact["content_sha256"] == event_report["content_sha256"]
+    graph["nodes"][1]["parameters"] = {"configuration": event_report["snapshot"]["selection"]}
+    recalculated = _run(client, project["id"], graph)
+    assert recalculated["run"]["status"] == "succeeded", recalculated
+    calculated_artifact = next(
+        row["payload_json"]
+        for row in recalculated["artifacts"]
+        if row["data_type"] == "reviewed_ecology_event_summary"
+    )
+    assert calculated_artifact["content_sha256"] == event_report["content_sha256"]
+    original = export_archive(client, test_settings, project["id"])
+
+    def inflate_effort(_manifest: dict[str, Any], sections: dict[str, Any]) -> None:
+        job = next(row for row in sections["jobs"] if row["id"] == event_report["id"])
+        stored = job["result_json"]
+        snapshot = stored["snapshot"]
+        observed = snapshot["sessions"][0]
+        observed["valid_intervals"][0]["end_time_s"] += 0.5
+        for row in [observed, *snapshot["organisms"], *snapshot["units"]]:
+            row["valid_duration_s"] = 1.0
+            row["confirmed_events_per_minute"] = 60.0
+        stored["content_sha256"] = canonical_json_sha256(snapshot)
+
+    rejected = client.post(
+        "/api/v1/exchange-packages/inspect",
+        files={"file": ("forged-effort.zip", rewrite(original, inflate_effort))},
+    ).json()
+    assert not rejected["compatible"], rejected
+    assert any("reviewed measurement effort" in error for error in rejected["errors"]), rejected
+    imported = import_archive(client, original)
     assert imported.status_code == 201, imported.text
     destination = imported.json()["project_id"]
     mapping = imported.json()["package"]["options_json"]["id_map"]
@@ -487,6 +586,13 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
     reopened_evidence = reopened_link.json()[0]
     assert reopened_evidence["status"] == "current", reopened_evidence["stale_reason"]
     assert reopened_evidence["source"]["events"][0]["id"] == mapping[confirmed_event["id"]]
+    restored = client.get(
+        f"/api/v1/projects/{destination}/ecology/event-summaries/{mapping[event_report['id']]}"
+    )
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["snapshot"] == event_report["snapshot"]
+    assert restored.json()["source_id_map"][confirmed_event["id"]] == mapping[confirmed_event["id"]]
+    assert restored.json()["stale_reasons"] == []
     target_event_export = client.get(f"/api/v1/pose-event-runs/{mapping[event_run_id]}/export")
     assert target_event_export.status_code == 200, target_event_export.text
 
@@ -512,6 +618,7 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
     assert stale_link["status"] == "stale"
     assert stale_link["source"] == evidence["source"]
     assert stale_link["source_sha256"] == evidence["source_sha256"]
+    assert client.get(f"{summary_url}/{event_report['id']}").json()["stale_reasons"]
     with client.app.state.session_factory() as session:
         measurement_run = session.get(PoseMeasurementRun, measurement_run_id)
         assert measurement_run is not None

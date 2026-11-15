@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
+from reefvision.db.models import PoseEventDetectionRun, PoseMeasurementRun
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.pose_biological_measurement import (
     BiologicalEventResponse,
@@ -42,17 +43,14 @@ def create_measurement_run(
     "/projects/{project_id}/pose-measurement-runs", response_model=list[MeasurementRunResponse]
 )
 def list_measurement_runs(project_id: str, session: DbSession) -> list[MeasurementRunResponse]:
-    return [
-        MeasurementRunResponse.model_validate(r)
-        for r in PoseBiologicalMeasurementService(session).measurement_runs(project_id)
-    ]
+    service = PoseBiologicalMeasurementService(session)
+    return [_measurement_read(service, row) for row in service.measurement_runs(project_id)]
 
 
 @router.get("/pose-measurement-runs/{run_id}", response_model=MeasurementRunResponse)
 def get_measurement_run(run_id: str, session: DbSession) -> MeasurementRunResponse:
-    return MeasurementRunResponse.model_validate(
-        PoseBiologicalMeasurementService(session)._measurement_run(run_id)
-    )
+    service = PoseBiologicalMeasurementService(session)
+    return _measurement_read(service, service._measurement_run(run_id))
 
 
 @router.get(
@@ -88,9 +86,8 @@ def create_event_run(
 
 @router.get("/pose-event-runs/{run_id}", response_model=EventDetectionRunResponse)
 def get_event_run(run_id: str, session: DbSession) -> EventDetectionRunResponse:
-    return EventDetectionRunResponse.model_validate(
-        PoseBiologicalMeasurementService(session)._event_run(run_id)
-    )
+    service = PoseBiologicalMeasurementService(session)
+    return _event_read(service, service._event_run(run_id))
 
 
 @router.get(
@@ -98,10 +95,8 @@ def get_event_run(run_id: str, session: DbSession) -> EventDetectionRunResponse:
     response_model=list[EventDetectionRunResponse],
 )
 def list_event_runs(project_id: str, session: DbSession) -> list[EventDetectionRunResponse]:
-    return [
-        EventDetectionRunResponse.model_validate(run)
-        for run in PoseBiologicalMeasurementService(session).event_runs(project_id)
-    ]
+    service = PoseBiologicalMeasurementService(session)
+    return [_event_read(service, row) for row in service.event_runs(project_id)]
 
 
 @router.get("/pose-event-runs/{run_id}/events", response_model=list[BiologicalEventResponse])
@@ -159,3 +154,27 @@ def export_events(
             },
         )
     return JSONResponse(service.export_json(run_id, reviewed_only=reviewed_only))
+
+
+def _measurement_read(
+    service: PoseBiologicalMeasurementService, row: PoseMeasurementRun
+) -> MeasurementRunResponse:
+    return MeasurementRunResponse.model_validate(row).model_copy(
+        update={
+            "source_stale": service.temporal_source_stale(row),
+            "pose_output_provenance": row.provenance_json.get("pose_output"),
+        }
+    )
+
+
+def _event_read(
+    service: PoseBiologicalMeasurementService, row: PoseEventDetectionRun
+) -> EventDetectionRunResponse:
+    return EventDetectionRunResponse.model_validate(row).model_copy(
+        update={
+            "source_stale": service.temporal_source_stale(
+                service._measurement_run(row.measurement_run_id)
+            ),
+            "pose_output_provenance": row.provenance_json.get("pose_output"),
+        }
+    )

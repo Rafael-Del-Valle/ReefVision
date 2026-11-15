@@ -6,6 +6,7 @@ import csv
 import io
 import json
 import zipfile
+from bisect import bisect_right
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import UTC, datetime
@@ -27,6 +28,7 @@ from reefvision.db.models import (
     PoseMeasurementRun,
     PoseMeasurementSample,
     PoseMeasurementSeries,
+    TemporalReefPoseRun,
     VideoAsset,
 )
 from reefvision.domain.errors import NotFoundError, ValidationError
@@ -54,6 +56,8 @@ from reefvision.schemas.pose_biological_measurement import (
     ManualEventCreateRequest,
     PoseMeasurementRunCreateRequest,
 )
+from reefvision.services.temporal_reefpose import TemporalReefPoseService
+from reefvision.services.temporal_reefpose_sources import TEMPORAL_METHOD
 from reefvision.storage.datasets import canonical_json_sha256
 
 
@@ -80,6 +84,32 @@ class PoseBiologicalMeasurementService:
         if run is None:
             raise NotFoundError("Biological event detection run not found")
         return run
+
+    def _reviewed_temporal_source(
+        self, source: PoseIdentityAssociationRun
+    ) -> dict[str, Any] | None:
+        if source.algorithm != TEMPORAL_METHOD:
+            return None
+        temporal = self.session.get(
+            TemporalReefPoseRun, source.parameters_json.get("temporal_run_id")
+        )
+        if (
+            temporal is None
+            or temporal.identity_run_id != source.id
+            or temporal.review_revision != source.revision
+            or TemporalReefPoseService(self.session).source_stale(temporal)
+        ):
+            raise ValidationError(
+                "Reviewed pose selection is stale. Refine and review current inputs."
+            )
+        return {
+            "method": source.algorithm,
+            "run_id": temporal.id,
+            "review_revision": temporal.review_revision,
+            "frame_model_sha256": source.parameters_json["frame_model_sha256"],
+            "temporal_model_sha256": source.parameters_json["temporal_model_sha256"],
+            "source_discontinuities": source.parameters_json.get("source_discontinuities", []),
+        }
 
     def _observation_manifest(
         self, source_run_id: str, identity_ids: set[str]
@@ -148,6 +178,7 @@ class PoseBiologicalMeasurementService:
             raise ValidationError("Identity run must be completed")
         if source.revision != payload.source_identity_run_revision:
             raise ValidationError("Identity run revision does not match")
+        temporal = self._reviewed_temporal_source(source)
         if video is None or video.project_id != project_id or video.id != source.video_id:
             raise ValidationError("Video does not match the identity run")
         identities = list(
@@ -192,6 +223,7 @@ class PoseBiologicalMeasurementService:
             "maximum_gap_s": payload.maximum_gap_s,
             "verification_mode": payload.verification_mode,
             "observations": self._observation_manifest(source.id, selected),
+            **({"pose_output": temporal} if temporal else {}),
             "schema": {
                 "id": source.pose_schema_id,
                 "revision": source.pose_schema_revision,
@@ -236,7 +268,10 @@ class PoseBiologicalMeasurementService:
                 "current": 0,
                 "total": len(selected) * len(definitions),
             },
-            provenance_json={"engine": "reefpose.measurement.v1"},
+            provenance_json={
+                "engine": "reefpose.measurement.v1",
+                **({"pose_output": temporal} if temporal else {}),
+            },
             verification_state=payload.verification_mode,
         )
         self.session.add(run)
@@ -263,6 +298,7 @@ class PoseBiologicalMeasurementService:
         video = self.session.get(VideoAsset, run.video_id)
         if source is None or video is None:
             raise ValidationError("Measurement source no longer exists")
+        temporal = self._reviewed_temporal_source(source)
         _, calibration_hash, _ = self._calibration(video)
         selected = set(run.input_manifest_json.get("identity_ids") or [])
         current_observations = self._observation_manifest(source.id, selected)
@@ -272,6 +308,7 @@ class PoseBiologicalMeasurementService:
             or video.sha256 != run.video_sha256
             or calibration_hash != run.calibration_sha256
             or current_observations != run.input_manifest_json.get("observations")
+            or temporal != run.input_manifest_json.get("pose_output")
         ):
             raise ValidationError("Measurement source provenance is stale")
         return source, video
@@ -289,6 +326,16 @@ class PoseBiologicalMeasurementService:
             raise ValidationError("Biological event source provenance is stale")
         return measurement
 
+    def temporal_source_stale(self, measurement: PoseMeasurementRun) -> bool:
+        """Expose stale temporal lineage while keeping historical results readable."""
+        if "pose_output" not in measurement.input_manifest_json:
+            return False
+        try:
+            self._validate_manifest(measurement)
+        except ValidationError:
+            return True
+        return False
+
     def execute_measurements(
         self,
         run_id: str,
@@ -297,7 +344,7 @@ class PoseBiologicalMeasurementService:
         progress: Callable[[int, int], None] | None = None,
     ) -> PoseMeasurementRun:
         run = self._measurement_run(run_id)
-        _source, video = self._validate_manifest(run)
+        source, video = self._validate_manifest(run)
         identity_ids = list(run.configuration_json.get("identity_ids") or [])
         observations = list(
             self.session.scalars(
@@ -322,28 +369,37 @@ class PoseBiologicalMeasurementService:
             if run.calibration_json
             else None
         )
-        domain = [
-            AnatomicalObservation(
-                o.id,
-                o.revision,
-                str(o.animal_identity_id),
-                o.frame_index,
-                float(o.time_s if o.time_s is not None else o.frame_index / video.fps),
-                o.coordinate_space,
-                o.association_confidence,
-                tuple(
-                    AnatomicalLandmark(
-                        str(p.get("landmark_id") or p.get("id")),
-                        p.get("x"),
-                        p.get("y"),
-                        p.get("confidence"),
-                        str(p.get("visibility") or p.get("status") or "visible"),
-                    )
-                    for p in o.landmarks_json
-                ),
+        domain = []
+        prior_frame = -1
+        boundaries = source.parameters_json.get("source_discontinuities", [])
+        for o in observations:
+            break_here = source.algorithm == TEMPORAL_METHOD and (
+                bisect_right(boundaries, prior_frame) != bisect_right(boundaries, o.frame_index)
+                or (prior_frame >= 0 and o.frame_index > prior_frame + 1)
             )
-            for o in observations
-        ]
+            domain.append(
+                AnatomicalObservation(
+                    o.id,
+                    o.revision,
+                    str(o.animal_identity_id),
+                    o.frame_index,
+                    float(o.time_s if o.time_s is not None else o.frame_index / video.fps),
+                    o.coordinate_space,
+                    o.association_confidence,
+                    tuple(
+                        AnatomicalLandmark(
+                            str(p.get("landmark_id") or p.get("id")),
+                            p.get("x"),
+                            p.get("y"),
+                            p.get("confidence"),
+                            str(p.get("visibility") or p.get("status") or "visible"),
+                        )
+                        for p in o.landmarks_json
+                    ),
+                    discontinuity=break_here,
+                )
+            )
+            prior_frame = o.frame_index
         outputs: list[tuple[str, dict[str, Any], Any]] = []
         total = len(identity_ids) * len(run.definitions_json)
         current = 0
@@ -415,6 +471,10 @@ class PoseBiologicalMeasurementService:
         measurement = self._measurement_run(payload.measurement_run_id)
         if measurement.project_id != project_id or measurement.status != "completed":
             raise ValidationError("Measurement run is not completed for this project")
+        # Temporal pose selections may change after measurement. Preserve the
+        # prior series and require a refreshed source for new analyses.
+        if "pose_output" in measurement.input_manifest_json:
+            self._validate_manifest(measurement)
         configuration = {"cycles": [cycle.model_dump(mode="json") for cycle in payload.cycles]}
         configuration_hash = canonical_package_hash(configuration)
         existing = self.session.scalar(
@@ -437,6 +497,11 @@ class PoseBiologicalMeasurementService:
             provenance_json={
                 "measurement_result_sha256": measurement.result_sha256,
                 "engine": "reefpose.events.v1",
+                **(
+                    {"pose_output": measurement.provenance_json["pose_output"]}
+                    if "pose_output" in measurement.provenance_json
+                    else {}
+                ),
             },
         )
         self.session.add(run)
@@ -491,6 +556,7 @@ class PoseBiologicalMeasurementService:
                     s.confidence,
                     s.valid,
                     series.animal_identity_id,
+                    discontinuity="source_discontinuity" in s.quality_flags_json,
                 )
                 for s in rows
             ]

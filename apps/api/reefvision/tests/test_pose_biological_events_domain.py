@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from reefvision.domain.pose_biological_events import (
@@ -64,6 +66,15 @@ def test_short_gap_preserves_cycle_without_interpolation_long_gap_yields_partial
     assert len(long.events) == 1
     assert long.events[0].cycle_state == "partial_gap"
     assert long.events[0].accepted is False
+
+
+def test_declared_discontinuity_cannot_complete_an_open_cycle() -> None:
+    signal = samples([1, 9, None, 2])
+    signal[2] = replace(signal[2], discontinuity=True)
+    result = detect_biological_events(signal, definition())
+    assert result.events[0].cycle_state == "partial_gap"
+    assert result.summary["confirmed_eligible_count"] == 0
+    assert result.summary["evaluated_duration_s"] == pytest.approx(0.1)
 
 
 def test_start_and_end_partials_and_low_confidence_are_never_confirmed() -> None:

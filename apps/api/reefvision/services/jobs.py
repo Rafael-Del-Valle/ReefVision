@@ -37,9 +37,11 @@ RUNNING_CANCELLABLE_JOB_TYPES = frozenset(
         "workflow_run",
         "pose_evaluation",
         "reefpose_validation",
+        "static_comparison",
         "pose_identity_tracking",
         "pose_biological_measurement",
         "pose_biological_event_detection",
+        "temporal_reefpose",
     }
 )
 
@@ -138,8 +140,14 @@ class JobService:
 
     def retry(self, job_id: str) -> Job:
         job = self.get(job_id)
-        if job.job_type == "reefpose_validation" and job.request_json.get("workflow_run_id"):
-            raise ConflictError("Retry scientific validation through its parent workflow")
+        if job.job_type in {"reefpose_validation", "static_comparison"} and job.request_json.get(
+            "workflow_run_id"
+        ):
+            raise ConflictError(
+                "Retry scientific comparison or validation through its parent workflow"
+            )
+        if job.job_type == "temporal_reefpose" and job.request_json.get("workflow_run_id"):
+            raise ConflictError("Retry temporal refinement jobs through their parent workflow")
         training_run = (
             self.session.scalar(select(TrainingRun).where(TrainingRun.job_id == job.id))
             if job.job_type == "training"
@@ -153,6 +161,7 @@ class JobService:
         )
         ordinary_retry = job.status == "failed" and job.job_type in {
             "reefpose_validation",
+            "static_comparison",
             "thumbnail",
             "inference",
             "sam_image_proposals",
@@ -164,7 +173,11 @@ class JobService:
             "workflow_run",
             "video_tracking",
         }
-        if not ordinary_retry and not native_training_retry:
+        temporal_retry = job.job_type == "temporal_reefpose" and job.status in {
+            "failed",
+            "cancelled",
+        }
+        if not ordinary_retry and not native_training_retry and not temporal_retry:
             raise ConflictError("Only supported failed background jobs can be retried")
         job.status = "queued"
         job.progress_current = 0

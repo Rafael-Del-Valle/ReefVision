@@ -19,7 +19,7 @@ from reefvision.services.system import SystemService
 
 _API_ROOT = Path(__file__).resolve().parents[2]
 _VERSIONS = _API_ROOT / "migrations" / "versions"
-_INTEGRATED_HEAD = "b12_integrated_0002"
+_INTEGRATED_HEAD = "b13_temporal_0001"
 _POSE_MIGRATIONS = (
     "0038_pose_anatomy_definitions.py",
     "0039_pose_evaluation_runs.py",
@@ -263,6 +263,25 @@ def test_merged_schema_downgrades_to_common_revision_and_upgrades_again(
     with engine.connect() as connection:
         assert connection.exec_driver_sql("SELECT id FROM projects").scalar_one() == _PROJECT_ID
 
+    command.upgrade(config, "head")
+    assert _read_heads(engine) == (_INTEGRATED_HEAD,)
+
+
+def test_temporal_migration_preserves_prior_scientific_tables(
+    migration_db: MigrationDatabase,
+) -> None:
+    _, config, engine = migration_db
+    prior = "b13_scientific_0001"
+    tables = {"temporal_reefpose_datasets", "temporal_reefpose_runs", "temporal_reefpose_frames"}
+    command.upgrade(config, prior)
+    _create_project(engine)
+    command.upgrade(config, "head")
+    assert tables <= set(inspect(engine).get_table_names())
+    command.downgrade(config, prior)
+    assert tables.isdisjoint(inspect(engine).get_table_names())
+    assert _read_heads(engine) == (prior,)
+    with engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT id FROM projects").scalar_one() == _PROJECT_ID
     command.upgrade(config, "head")
     assert _read_heads(engine) == (_INTEGRATED_HEAD,)
 

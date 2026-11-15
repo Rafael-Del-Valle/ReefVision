@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from reefvision.config import Settings
 from reefvision.db.models.ecology_analysis import EcologyAnalysisRecord
 from reefvision.services.ecology_analysis import EcologyAnalysisService
 from reefvision.storage.datasets import canonical_json_sha256
@@ -19,11 +20,12 @@ from reefvision.tests.test_ecology_calibration_evidence_1_2 import (
     _save_calibration,
 )
 from reefvision.tests.test_ecology_image_evidence_1_2 import _link, _register
+from reefvision.tests.test_scientific_project_exchange import export_archive, rewrite
 from reefvision.tests.test_workflow_connected_branch_preview_1_2 import _run
 
 
 def test_abundance_pins_reviewed_counts_separates_density_and_detects_staleness(
-    client: TestClient,
+    client: TestClient, test_settings: Settings
 ) -> None:
     project = create_project(client)
     project_id = project["id"]
@@ -63,6 +65,43 @@ def test_abundance_pins_reviewed_counts_separates_density_and_detects_staleness(
     row = analysis["snapshot"]["result"]["visits"][0]
     assert row["count"] == 0
     assert row["density_per_m2"] == 0
+    reports = f"/api/v1/projects/{project_id}/research-reports"
+    figure = client.post(
+        reports,
+        json={
+            "source_kind": "ecology",
+            "source_id": analysis["id"],
+            "figure": "sample_coverage",
+            "title": "Survey & reference <site>",
+            "style": "grayscale",
+        },
+    )
+    assert figure.status_code == 201, figure.text
+    figure_id = figure.json()["id"]
+    figure_svg = client.get(f"{reports}/{figure_id}/figure.svg")
+    assert figure_svg.status_code == 200
+    assert "Survey &amp; reference &lt;site&gt;" in figure_svg.text
+    assert client.get(f"{reports}/{figure_id}/table.csv").status_code == 200
+    assert (
+        client.get(f"{reports}/{figure_id}").json()["snapshot"]["source_sha256"]
+        == analysis["content_sha256"]
+    )
+    raw = export_archive(client, test_settings, project_id)
+
+    def forged_figure(_manifest, sections):
+        job = next(
+            row for row in sections["jobs"] if row["job_type"] == "research_publication_figure"
+        )
+        snapshot = job["result_json"]["snapshot"]
+        snapshot["series"][0]["points"][0]["y"] = 10.0
+        job["result_json"]["content_sha256"] = canonical_json_sha256(snapshot)
+
+    rejected = client.post(
+        "/api/v1/exchange-packages/inspect",
+        files={"file": ("forged-figure.zip", rewrite(raw, forged_figure))},
+    ).json()
+    assert not rejected["compatible"], rejected
+    assert any("does not replay" in error for error in rejected["errors"]), rejected
     assert client.get(f"{endpoint}/{analysis['id']}/results.csv").status_code == 200
     assert client.get(f"{endpoint}/{analysis['id']}/result.json").json() == analysis["snapshot"]
     missing = {
@@ -80,6 +119,25 @@ def test_abundance_pins_reviewed_counts_separates_density_and_detects_staleness(
     partial = with_missing.json()["snapshot"]["result"]["unit_summaries"][0]
     assert partial["excluded_sample_count"] == 1
     assert partial["density_per_m2"] is None
+    absent = {**missing, "observed_at": "2026-11-02T12:00:00Z"}
+    with_absent_date = client.post(
+        endpoint,
+        json={**payload, "selection": {**selection, "sources": [*selected_sources, absent]}},
+    )
+    assert with_absent_date.status_code == 201, with_absent_date.text
+    missing_figure = client.post(
+        reports,
+        json={
+            "source_kind": "ecology",
+            "source_id": with_absent_date.json()["id"],
+            "figure": "sample_coverage",
+            "title": "Coverage with an unsampled follow-up",
+        },
+    )
+    assert missing_figure.status_code == 201, missing_figure.text
+    included, excluded = missing_figure.json()["snapshot"]["series"]
+    assert [(point["y"], point["denominator"]) for point in included["points"]] == [(1, 1), (0, 1)]
+    assert [(point["y"], point["denominator"]) for point in excluded["points"]] == [(0, 1), (1, 1)]
 
     duplicate = client.post(
         endpoint,
@@ -109,6 +167,7 @@ def test_abundance_pins_reviewed_counts_separates_density_and_detects_staleness(
     historical = client.get(f"{endpoint}/{analysis['id']}").json()
     assert historical["stale"] is True
     assert historical["snapshot"] == analysis["snapshot"]
+    assert client.get(f"{reports}/{figure_id}").json()["stale"]
     recalculated = client.post(endpoint, json={**payload, "supersedes_id": analysis["id"]})
     assert recalculated.status_code == 201, recalculated.text
     fresh_row = recalculated.json()["snapshot"]["result"]["visits"][0]

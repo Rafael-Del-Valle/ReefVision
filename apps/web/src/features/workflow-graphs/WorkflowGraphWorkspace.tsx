@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { getModelHubBootstrap, type Project } from "../../api/client";
+import { getApiBaseUrl } from "../../runtime";
 import { getPoseTrainingDatasets } from "../video/poseActiveLearningApi";
 import {
   cancelWorkflowRunJob,
@@ -14,16 +15,117 @@ import {
   resumeWorkflowReviewNode,
   saveWorkflowGraph,
   validateWorkflowGraph,
+  type WorkflowArtifact,
 } from "./workflowGraphApi";
 import {
   createPoseArchitectureWorkflow,
   workflowTemplates,
 } from "./workflowTemplates";
 import { WorkflowVisualEditor } from "./WorkflowVisualEditor";
+import { scientificConfigurationIssue } from "./ScientificNodeControls";
 
 interface WorkflowGraphWorkspaceProps {
   project: Project;
   initialPoseArchitecture?: string | null;
+  onOpenScience?: (
+    view: "ecology" | "models" | "quality_control" | "video",
+  ) => void;
+}
+
+function ScienceArtifact({
+  artifact,
+  projectId,
+  onOpen,
+}: {
+  artifact: WorkflowArtifact;
+  projectId: string;
+  onOpen: WorkflowGraphWorkspaceProps["onOpenScience"];
+}) {
+  const data = artifact.payload_json;
+  const api = `${getApiBaseUrl()}/projects/${projectId}`;
+  if (artifact.data_type === "acquisition_quality_result")
+    return onOpen ? (
+      <button type="button" onClick={() => onOpen("quality_control")}>
+        Open Quality Control
+      </button>
+    ) : null;
+  if (artifact.data_type === "verified_ecology_analysis")
+    return onOpen ? (
+      <button type="button" onClick={() => onOpen("ecology")}>
+        Open reviewed analyses
+      </button>
+    ) : null;
+  if (
+    artifact.data_type === "reviewed_ecology_event_summary" &&
+    typeof data.summary_id === "string"
+  )
+    return (
+      <div className="button-row">
+        <span>
+          {Array.isArray(data.organisms) ? data.organisms.length : 0} organisms
+        </span>
+        <a
+          href={`${api}/ecology/event-summaries/${data.summary_id}/results.csv`}
+          download
+        >
+          Download event CSV
+        </a>
+        {onOpen && (
+          <button type="button" onClick={() => onOpen("ecology")}>
+            Open organism evidence
+          </button>
+        )}
+      </div>
+    );
+  if (
+    artifact.data_type === "research_report_figure" &&
+    typeof data.report_id === "string"
+  )
+    return (
+      <div className="button-row">
+        <a
+          href={`${api}/research-reports/${data.report_id}/figure.svg`}
+          download
+        >
+          Download figure
+        </a>
+        <a
+          href={`${api}/research-reports/${data.report_id}/table.csv`}
+          download
+        >
+          Download table
+        </a>
+        {onOpen && (
+          <button type="button" onClick={() => onOpen("ecology")}>
+            Open Research reports
+          </button>
+        )}
+      </div>
+    );
+  if (
+    artifact.data_type === "scientific_comparison_report" &&
+    typeof data.export_path === "string" &&
+    data.export_path.startsWith(`/projects/${projectId}/`)
+  )
+    return (
+      <div className="button-row">
+        <a href={`${getApiBaseUrl()}${data.export_path}?format=csv`} download>
+          Download comparison CSV
+        </a>
+        {onOpen && (
+          <button type="button" onClick={() => onOpen("models")}>
+            Open Model Hub comparisons
+          </button>
+        )}
+      </div>
+    );
+  if (artifact.data_type.startsWith("temporal_reefpose") && onOpen)
+    return (
+      <button type="button" onClick={() => onOpen("video")}>
+        Open temporal ReefPose
+      </button>
+    );
+  return null;
 }
 
 function statusIsActive(status: string | undefined): boolean {
@@ -54,6 +156,7 @@ function safeParseGraph(value: string): Record<string, unknown> | null {
 export function WorkflowGraphWorkspace({
   project,
   initialPoseArchitecture,
+  onOpenScience,
 }: WorkflowGraphWorkspaceProps) {
   const queryClient = useQueryClient();
   const [graphJson, setGraphJson] = useState(() =>
@@ -211,10 +314,15 @@ export function WorkflowGraphWorkspace({
       node.parameters?.provider_id === "reefpose" &&
       String(node.parameters?.device ?? "auto").startsWith("cuda"),
   );
+  const scienceIssue = graphNodes
+    .map((node) =>
+      scientificConfigurationIssue(node.node_type, node.parameters ?? {}),
+    )
+    .find(Boolean);
   const guiConfigurationIssue =
     reefposeCudaRequested && pytorchRuntime?.cuda_available === false
       ? "CUDA was selected for ReefPose, but the PyTorch runtime reports that CUDA is unavailable."
-      : null;
+      : (scienceIssue ?? null);
 
   return (
     <section className="feature-workspace">
@@ -369,6 +477,7 @@ export function WorkflowGraphWorkspace({
         <h4>Visual workflow editor</h4>
         {visualGraph ? (
           <WorkflowVisualEditor
+            projectId={project.id}
             graph={visualGraph}
             registry={registryQuery.data ?? []}
             plan={planMutation.data ?? null}
@@ -673,6 +782,11 @@ export function WorkflowGraphWorkspace({
                     <code>{artifact.data_type}</code> from{" "}
                     {artifact.producer_port_id} ·{" "}
                     <code>{shortHash(artifact.payload_sha256)}</code>
+                    <ScienceArtifact
+                      artifact={artifact}
+                      projectId={project.id}
+                      onOpen={onOpenScience}
+                    />
                     <details>
                       <summary>Inspect artifact</summary>
                       <pre>

@@ -107,7 +107,7 @@ type ProjectView =
   | "workflows"
   | "system";
 
-const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.2.0";
+const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.3.0";
 
 type ProjectTab = Exclude<ProjectView, "system">;
 
@@ -1053,8 +1053,10 @@ function ReefVisionMainApp() {
             )}
             {activeView === "workflows" && (
               <WorkflowGraphWorkspace
+                key={selectedProject.id}
                 project={selectedProject}
                 initialPoseArchitecture={poseArchitecture}
+                onOpenScience={setActiveView}
               />
             )}
             {activeView === "video" && (
@@ -1099,6 +1101,15 @@ function ReefVisionMainApp() {
                   setActiveView("training");
                 }}
                 onUsePoseModel={handlePoseModelSelect}
+                onOpenComparisonImage={(imageId) =>
+                  setEditorLaunch({
+                    imageId,
+                    returnLabel: "Back to count comparison",
+                    contextTitle: "Static comparison source",
+                    contextDescription:
+                      "The comparison counts and reviewed revisions come from the frozen dataset version.",
+                  })
+                }
               />
             )}
             {activeView === "training" && (

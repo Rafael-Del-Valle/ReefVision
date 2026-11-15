@@ -129,6 +129,8 @@ class MeasurementRunResponse(BaseModel):
     progress_json: dict[str, Any]
     verification_state: str
     result_sha256: str | None
+    source_stale: bool = False
+    pose_output_provenance: dict[str, Any] | None = None
 
 
 class EventDetectionRunResponse(BaseModel):
@@ -140,6 +142,8 @@ class EventDetectionRunResponse(BaseModel):
     status: str
     progress_json: dict[str, Any]
     result_sha256: str | None
+    source_stale: bool = False
+    pose_output_provenance: dict[str, Any] | None = None
 
 
 class MeasurementSeriesResponse(BaseModel):

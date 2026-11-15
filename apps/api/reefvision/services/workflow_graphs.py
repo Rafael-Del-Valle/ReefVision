@@ -192,6 +192,14 @@ _ACTIONS: dict[str, str] = {
     "ecology_coral_skeleton": "Extract coral segments from a project-owned verified mask.",
     "ecology_coral_growth": "Calculate 2D coral growth from reviewed correspondence.",
     "ecology_verified_analysis": "Recalculate a reviewed ecological analysis.",
+    "ecology_event_summary": "Calculate or replay an event summary from reviewed evidence.",
+    "scientific_comparison": "Calculate or replay agreement on frozen held-out evidence.",
+    "research_publication_figure": "Create or reopen a figure and table with its source.",
+    "image_acquisition_quality": "Measure acquisition quality and retain reviewable image flags.",
+    "temporal_reefpose_dataset": "Freeze or load a recording-group-split temporal pose dataset.",
+    "temporal_reefpose_training": "Train or replay a native temporal pose checkpoint.",
+    "temporal_reefpose_inference": "Refine video pose observations for explicit review.",
+    "temporal_reefpose_evaluation": "Compare frame and temporal pose on frozen test recordings.",
     "ecology_connected_branch_preview": (
         "Preview an attached coral centerline segment without changing saved geometry."
     ),

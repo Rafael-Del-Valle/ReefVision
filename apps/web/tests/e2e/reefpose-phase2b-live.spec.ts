@@ -14,7 +14,7 @@ test.describe("ReefPose Phase 2B live GUI", () => {
     test.setTimeout(180_000);
     await page.addInitScript(() => {
       window.localStorage.setItem(
-        "reefvision.onboarding.dismissed.1.2.0",
+        "reefvision.onboarding.dismissed.1.3.0",
         "true",
       );
     });

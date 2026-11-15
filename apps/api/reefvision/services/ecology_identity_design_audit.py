@@ -11,6 +11,7 @@ from reefvision.schemas.ecology_identity import (
     EcologyHistoricalParentAssignment,
     EcologyIdentityRow,
 )
+from reefvision.schemas.ecology_study_assignment import study_assignment_signature
 
 DESIGN_FIELDS: tuple[EcologyDesignChangedField, ...] = (
     "kind",
@@ -34,6 +35,10 @@ def derive_ecology_design_changes(
                 for field in DESIGN_FIELDS
                 if getattr(previous, field) != getattr(current, field)
             ]
+            if study_assignment_signature(previous.study_assignment) != study_assignment_signature(
+                current.study_assignment
+            ):
+                changed.append("study_assignment")
             if changed:
                 events.append(
                     EcologyDesignRevisionChange(
@@ -49,6 +54,12 @@ def derive_ecology_design_changes(
                         previous_experimental_unit_id=previous.experimental_unit_id,
                         current_experimental_unit_type=current.experimental_unit_type,
                         current_experimental_unit_id=current.experimental_unit_id,
+                        previous_study_assignment=(
+                            previous.study_assignment if "study_assignment" in changed else None
+                        ),
+                        current_study_assignment=(
+                            current.study_assignment if "study_assignment" in changed else None
+                        ),
                     )
                 )
         previous_by_key[current.organism_key] = current

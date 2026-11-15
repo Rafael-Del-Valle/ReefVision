@@ -535,6 +535,20 @@ export function BiologicalMovementPanel({
             : ""}
         </p>
       )}
+      {measurementRun?.source_stale && (
+        <p role="alert">
+          This measurement uses a historical pose review. Recalculate
+          measurements before detecting new events.
+        </p>
+      )}
+      {measurementRun?.pose_output_provenance && (
+        <details>
+          <summary>Measurement pose provenance</summary>
+          <pre>
+            {JSON.stringify(measurementRun.pose_output_provenance, null, 2)}
+          </pre>
+        </details>
+      )}
       {measurementRuns.length > 0 && (
         <label>
           Saved measurement run
@@ -705,6 +719,18 @@ export function BiologicalMovementPanel({
           {` Confirmed frequency: ${confirmedFrequency?.toFixed(3) ?? "not available"} Hz.`}
           {` Mean confirmed amplitude: ${meanConfirmedAmplitude?.toFixed(3) ?? "not available"}.`}
         </p>
+      )}
+      {eventRun?.source_stale && (
+        <p role="alert">
+          This event run uses a historical pose review. Its saved results remain
+          available.
+        </p>
+      )}
+      {eventRun?.pose_output_provenance && (
+        <details>
+          <summary>Event pose provenance</summary>
+          <pre>{JSON.stringify(eventRun.pose_output_provenance, null, 2)}</pre>
+        </details>
       )}
       {eventRuns.length > 0 && (
         <label>

@@ -6,10 +6,12 @@ from reefvision.schemas.workflow_graphs import (
     WorkflowNodeDefinitionResponse,
     WorkflowPortDefinition,
 )
+from reefvision.services.workflow_acquisition_quality import acquisition_quality_node
 from reefvision.services.workflow_coral_growth import coral_growth_node
 from reefvision.services.workflow_coral_skeleton import coral_skeleton_node
 from reefvision.services.workflow_depth_3d import register_video_depth_3d_adapter
 from reefvision.services.workflow_ecology_analysis import verified_ecology_analysis_node
+from reefvision.services.workflow_ecology_event_summary import event_summary_workflow_node
 from reefvision.services.workflow_metric_depth_3d import (
     register_video_metric_depth_3d_adapter,
 )
@@ -24,9 +26,12 @@ from reefvision.services.workflow_pose_training import (
     register_pose_training_workflow_adapter,
 )
 from reefvision.services.workflow_reefpose_validation import register_reefpose_validation_nodes
+from reefvision.services.workflow_research_reports import research_report_node
 from reefvision.services.workflow_results_packages import (
     register_results_package_workflow_adapter,
 )
+from reefvision.services.workflow_scientific_comparison import register_scientific_comparison_nodes
+from reefvision.services.workflow_temporal_reefpose import register_temporal_reefpose_nodes
 
 register_video_depth_3d_adapter()
 register_video_metric_depth_3d_adapter()
@@ -926,6 +931,11 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
     registry["ecology_coral_skeleton"] = coral_skeleton_node()
     registry["ecology_coral_growth"] = coral_growth_node()
     registry["ecology_verified_analysis"] = verified_ecology_analysis_node()
+    registry["ecology_event_summary"] = event_summary_workflow_node()
+    registry["research_publication_figure"] = research_report_node()
+    registry["image_acquisition_quality"] = acquisition_quality_node()
+    registry.update(register_scientific_comparison_nodes())
+    registry.update(register_temporal_reefpose_nodes())
 
     registry["ecology_connected_branch_preview"] = WorkflowNodeDefinitionResponse(
         node_type="ecology_connected_branch_preview",

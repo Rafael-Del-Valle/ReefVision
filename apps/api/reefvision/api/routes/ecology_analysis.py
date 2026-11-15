@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from io import StringIO
 from typing import Annotated
 from uuid import UUID
@@ -51,7 +52,11 @@ def get_verified_ecology_analysis(
     return EcologyAnalysisService(session).get(str(project_id), str(analysis_id))
 
 
-@router.get("/{analysis_id}/result.json", response_model=EcologyAnalysisSnapshot)
+@router.get(
+    "/{analysis_id}/result.json",
+    response_model=EcologyAnalysisSnapshot,
+    response_model_exclude_unset=True,
+)
 def download_verified_ecology_analysis(
     project_id: UUID, analysis_id: UUID, session: DbSession, response: Response
 ) -> EcologyAnalysisSnapshot:
@@ -123,6 +128,18 @@ def export_verified_ecology_analysis(
                 )
             )
     else:
+        scheduled = bool(snapshot.result.planned_sampling_effort)
+        schedule_columns = (
+            (
+                "row_type",
+                "experimental_unit_id",
+                "sampling_date",
+                "observed_organisms",
+                "missing_observations",
+            )
+            if scheduled
+            else ()
+        )
         writer.writerow(
             (
                 *base_header,
@@ -140,6 +157,7 @@ def export_verified_ecology_analysis(
                 "percent_change",
                 "change_per_day",
                 "exclusion",
+                *schedule_columns,
             )
         )
         for change in snapshot.result.changes:
@@ -160,6 +178,7 @@ def export_verified_ecology_analysis(
                     change.percent_change,
                     change.change_per_day,
                     None,
+                    *(("organism_change", None, None, None, None) if scheduled else ()),
                 )
             )
         for exclusion in snapshot.result.exclusions:
@@ -180,6 +199,21 @@ def export_verified_ecology_analysis(
                     None,
                     None,
                     _spreadsheet_text(exclusion.reason),
+                    *(("exclusion", None, None, None, None) if scheduled else ()),
+                )
+            )
+        for visit in snapshot.result.planned_sampling_date_coverage:
+            writer.writerow(
+                (
+                    *identifiers,
+                    None,
+                    visit.metric_name,
+                    *(None,) * 12,
+                    "scheduled_date",
+                    _spreadsheet_text(visit.experimental_unit_id),
+                    visit.sampling_date,
+                    json.dumps(visit.observed_organism_ids, ensure_ascii=False),
+                    json.dumps(visit.missing_organism_ids, ensure_ascii=False),
                 )
             )
     return Response(
