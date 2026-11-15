@@ -156,6 +156,27 @@ def verify_succeeded_node_artifacts(
         # undeclared producer outputs before reusing saved scientific inputs.
         if artifact.id not in _artifact_ids(producer.output_artifact_ids_json, field="output IDs"):
             raise ConflictError("Succeeded workflow node input is not a declared producer output")
+        # A checksum-valid input can still contradict the producer's saved
+        # result summary. Direct consumer recovery must check that evidence
+        # even when the upstream node is not being independently replayed.
+        producer_result = producer.result_json
+        if producer_result is not None and not isinstance(producer_result, dict):
+            raise ConflictError("Succeeded workflow producer result must be a JSON object")
+        if isinstance(producer_result, dict) and "outputs" in producer_result:
+            producer_outputs = producer_result["outputs"]
+            if not isinstance(producer_outputs, list):
+                raise ConflictError("Succeeded workflow producer output summary is invalid")
+            matches = [
+                item
+                for item in producer_outputs
+                if isinstance(item, dict) and item.get("artifact_id") == artifact.id
+            ]
+            if len(matches) != 1 or (
+                matches[0].get("port_id") != artifact.producer_port_id
+                or matches[0].get("data_type") != artifact.data_type
+                or matches[0].get("payload_sha256") != artifact.payload_sha256
+            ):
+                raise ConflictError("Succeeded workflow input contradicts producer output summary")
         actual_bindings.append((producer.node_id, artifact.producer_port_id))
 
     run = session.get(WorkflowRun, run_id)
