@@ -677,3 +677,29 @@ Synthetic direct-call regressions exercise both input representations and both
 opposing and conflicting split-vertex seam winding. Existing project-scoped
 standalone and executed typed persisted Workflow Builder comparison tests
 remain the acceptance route for saved artifact and provenance parity.
+
+
+### Source-frame detour ratios with overflowing total lengths
+
+A selected mesh trace may have individually representable finite XYZ edge
+lengths and a valid calibrated length, while the sum of its unscaled source
+edge lengths exceeds binary64 range. In that case
+`source_trace_length_mesh_units` remains **null** with
+`surface_trace_source_length_unrepresentable` QC, but the dimensionless
+`geometric_detour_ratio` can still be finite when the endpoint chord is
+also large. The shared measurement engine now recovers only that ratio using
+exact rational accumulation of the already-validated source edge lengths
+divided by the **source-frame** endpoint chord. The same common calibration
+cancels. Genuine division overflow or a zero source chord still produces a
+null ratio and explicit `surface_trace_detour_ratio_unrepresentable` or
+`surface_trace_zero_endpoint_chord` QC; no infinity is persisted.
+
+Synthetic direct-engine regressions cover recoverable sum overflow and a
+truly unrepresentable ratio; existing standalone preview and **executed,
+typed, persisted Workflow Builder** regressions verify shared-engine results
+and saved provenance parity for representable preview inputs. Extremely large
+meshes may independently fail whole-preview area or centroid numeric checks,
+so these direct-engine fixtures do **not** establish whole-preview support
+for arbitrary source magnitudes. Ratios remain provisional geometric detours,
+not anatomical branch length, biological condition, reidentification, or
+held-out scientific validation.
