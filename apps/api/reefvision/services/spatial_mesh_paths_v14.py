@@ -732,6 +732,20 @@ def mesh_surface_edge_traces(
                 source_cumulative_arc_length_fractions.append(
                     float(exact_source_prefix / exact_source_total)
                 )
+        # Locate positive source edges whose adjacent normalized waypoint
+        # positions coincide solely because the displayed fraction rounded.
+        # Genuine zero-length edges are reported by separate topology QC.
+        source_arc_fraction_resolution_loss_segment_indices = (
+            [
+                index
+                for index, source_length in enumerate(source_lengths)
+                if source_length > 0
+                and source_cumulative_arc_length_fractions[index]
+                == source_cumulative_arc_length_fractions[index + 1]
+            ]
+            if source_cumulative_arc_length_fractions is not None
+            else []
+        )
         # Preserve edge-by-edge topology behind aggregate scientific QC.
         # Counts use original indexed faces, not spatially welded vertices;
         # they cannot certify an anatomical coral branch or clean reconstruction.
@@ -808,12 +822,7 @@ def mesh_surface_edge_traces(
             warnings.append("surface_trace_source_length_unrepresentable")
         if source_cumulative_arc_length_fractions is None:
             warnings.append("surface_trace_source_arc_fractions_undefined_zero_total")
-        elif any(
-            source > 0
-            and source_cumulative_arc_length_fractions[index]
-            == source_cumulative_arc_length_fractions[index + 1]
-            for index, source in enumerate(source_lengths)
-        ):
+        elif source_arc_fraction_resolution_loss_segment_indices:
             warnings.append("surface_trace_source_arc_fraction_resolution_loss")
         if open_boundary_segment_indices:
             warnings.append("open_boundary_edge_on_surface_trace")
@@ -938,6 +947,9 @@ def mesh_surface_edge_traces(
                 "source_segment_lengths_mesh_units": source_lengths,
                 "source_trace_length_mesh_units": source_trace_length_mesh_units,
                 "source_cumulative_arc_length_fractions": source_cumulative_arc_length_fractions,
+                "source_arc_fraction_resolution_loss_segment_indices": (
+                    source_arc_fraction_resolution_loss_segment_indices
+                ),
                 "source_endpoint_chord_mesh_units": source_chord,
                 "mesh_edge_face_incidence_counts": face_incidence_counts,
                 "geometric_edge_face_incidence_counts": geometric_face_incidence_counts,
