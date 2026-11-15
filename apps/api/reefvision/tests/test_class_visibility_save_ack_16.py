@@ -58,9 +58,7 @@ def test_visibility_save_ack_is_pinned_to_own_write(
         )
 
     app = cast(FastAPI, client.app)
-    model = (
-        ClassVisibilityPreference if scope == "preferences" else ProjectClassVisibilityDefault
-    )
+    model = ClassVisibilityPreference if scope == "preferences" else ProjectClassVisibilityDefault
     real_commit = Session.commit
     competing_revisions: list[str] = []
 
