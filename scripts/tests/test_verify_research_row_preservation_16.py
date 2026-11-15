@@ -364,9 +364,7 @@ def test_upgrade_asset_inventory_fails_closed_without_changing_evidence(
     assert (before_assets / "original.mp4").read_bytes() == original_asset_bytes
 
 
-def test_asset_copies_must_not_share_hardlinked_original_storage(
-    tmp_path: Path,
-) -> None:
+def test_asset_copies_must_not_share_hardlinked_original_storage(tmp_path: Path) -> None:
     before = tmp_path / "before.sqlite"
     after = tmp_path / "after.sqlite"
     _seed(before)
@@ -434,9 +432,7 @@ def test_upgrade_asset_inventory_rejects_unsafe_scope(tmp_path: Path, case: str)
     assert (original / "one.jpg").read_bytes() == b"original"
 
 
-def test_database_only_preservation_does_not_claim_research_assets(
-    tmp_path: Path,
-) -> None:
+def test_database_only_preservation_does_not_claim_research_assets(tmp_path: Path) -> None:
     before = tmp_path / "before.sqlite"
     after = tmp_path / "after.sqlite"
     _seed(before)
