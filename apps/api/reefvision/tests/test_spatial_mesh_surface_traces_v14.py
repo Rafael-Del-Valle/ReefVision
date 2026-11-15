@@ -555,7 +555,6 @@ def test_planar_area_underflow_is_unknown_not_numeric_zero() -> None:
     )
 
 
-
 def test_planar_compactness_underflow_is_unknown_not_false_zero() -> None:
     # The area is representable but the area/perimeter² quotient is not.
     # Withholding a tiny positive value avoids a fabricated compactness of 0.
