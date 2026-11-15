@@ -1075,7 +1075,9 @@ class WorkflowExecutionService:
         # Check every existing record: returning the first matching checksum
         # could otherwise hide an ambiguous sibling on the same port.
         if len(existing) > 1:
-            raise ConflictError("Workflow node has ambiguous persisted artifacts for this output")
+            raise ConflictError(
+                "Workflow node has ambiguous persisted artifacts for this output"
+            )
         if existing:
             candidate = existing[0]
             if (
