@@ -1196,6 +1196,10 @@ def mesh_surface_edge_traces(
         # Evaluate in source coordinates, before calibrated display rounding.
         source_planar_maximum_vertex_chord_mesh_units: float | None = None
         source_planar_maximum_vertex_chord_waypoint_offsets: list[int] | None = None
+        # Dimensionless provisional outline elongation: maximum vertex chord
+        # divided by the equal-area circle diameter. Both inputs must be
+        # representable in original source coordinates; no anatomy is inferred.
+        source_planar_chord_to_equivalent_diameter_ratio: float | None = None
         calibrated_planar_maximum_vertex_chord_m: float | None = None
         planar_maximum_vertex_chord_scale_interval_m: list[float] | None = None
         if source_is_simple_planar_perimeter is True:
@@ -1249,6 +1253,14 @@ def mesh_surface_edge_traces(
                 diameter = 2 * sqrt(source_planar_area_units2) / sqrt(pi)
                 if isfinite(diameter) and diameter > 0:
                     source_planar_equivalent_diameter_mesh_units = diameter
+                    if source_planar_maximum_vertex_chord_mesh_units is not None:
+                        elongation = source_planar_maximum_vertex_chord_mesh_units / diameter
+                        if isfinite(elongation) and elongation > 0:
+                            source_planar_chord_to_equivalent_diameter_ratio = elongation
+                        else:
+                            warnings.append(
+                                "closed_surface_trace_planar_elongation_ratio_unrepresentable"
+                            )
                     calibrated_diameter = diameter * scale
                     if isfinite(calibrated_diameter) and calibrated_diameter > 0:
                         calibrated_planar_equivalent_diameter_m = calibrated_diameter
@@ -1362,6 +1374,9 @@ def mesh_surface_edge_traces(
                 ),
                 "closed_loop_source_planar_maximum_vertex_chord_waypoint_offsets": (
                     source_planar_maximum_vertex_chord_waypoint_offsets
+                ),
+                "closed_loop_source_planar_chord_to_equivalent_diameter_ratio": (
+                    source_planar_chord_to_equivalent_diameter_ratio
                 ),
                 "closed_loop_planar_maximum_vertex_chord_m": (
                     calibrated_planar_maximum_vertex_chord_m
