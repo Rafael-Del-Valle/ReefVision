@@ -767,5 +767,11 @@ nor a biological contour is inferred. Scale intervals are calibration-only,
 not observer or shape uncertainty. The same measurement engine serves the
 standalone project-scoped API and executable typed persisted Workflow Builder
 graphs; synthetic tests check both paths, complete artifact/provenance parity,
-and invalid interior revisits. This is not held-out biological, Windows
-installed-GUI, or physical GPU acceptance evidence.
+and invalid interior revisits. A separate metamorphic regression reverses the
+selected loop winding and rotates the starting vertex: each must preserve the
+same perimeter, scale-only interval, and one-turn-per-corner aggregate while
+its ordered vertex and angle arrays remain tied to the caller's chosen order.
+Both reversed and rotated cases also execute through saved typed workflows;
+neither transform establishes contour correspondence across biological samples.
+This is not held-out biological, Windows installed-GUI, or physical GPU
+acceptance evidence.
