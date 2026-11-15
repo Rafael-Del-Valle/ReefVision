@@ -140,13 +140,19 @@ class MeshPreviewRequest(BaseModel):
                     raise ValueError("Surface paths require two distinct nonnegative indices")
         if self.surface_trace_vertex_paths is not None:
             for vertices in self.surface_trace_vertex_paths:
+                # One explicit return to the initial vertex closes a trace.
+                # Interior revisits, two-vertex backtracks, and repeated
+                # intermediate indices remain invalid scientific selections.
+                is_closed = len(vertices) >= 4 and vertices[0] == vertices[-1]
+                distinct_vertices = vertices[:-1] if is_closed else vertices
                 if (
                     not 2 <= len(vertices) <= 128
                     or any(index < 0 for index in vertices)
-                    or len(set(vertices)) != len(vertices)
+                    or len(set(distinct_vertices)) != len(distinct_vertices)
                 ):
                     raise ValueError(
-                        "Surface traces require 2-128 distinct nonnegative vertex indices"
+                        "Surface traces require 2-128 distinct nonnegative indices, "
+                        "except one closing return after three distinct vertices"
                     )
         return self
 
