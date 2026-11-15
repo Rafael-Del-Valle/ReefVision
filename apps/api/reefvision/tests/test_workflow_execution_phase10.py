@@ -17,7 +17,10 @@ from reefvision.db.models import (
 from reefvision.domain.errors import ConflictError
 from reefvision.jobs.workflow import _input_artifacts, process_workflow_run_job
 from reefvision.schemas.workflow_graphs import WorkflowPlanInputBinding
-from reefvision.services.workflow_execution import WorkflowArtifactSpec, WorkflowExecutionService
+from reefvision.services.workflow_execution import (
+    WorkflowArtifactSpec,
+    WorkflowExecutionService,
+)
 from reefvision.services.workflow_provenance import (
     build_workflow_run_provenance,
     verify_succeeded_node_artifacts,
