@@ -514,6 +514,22 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
+    # Direct consumer replay must validate upstream parameters even when it
+    # does not separately inspect the producer's completed node. The artifacts
+    # and signed graph remain intact while only saved parameter JSON is broken.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        assert producer is not None and consumer is not None
+        producer.parameters_json = cast(dict[str, object], ["not-a-parameter-object"])
+        session.flush()
+        with pytest.raises(
+            ConflictError, match="input producer parameters must be a JSON object"
+        ):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
     # A direct consumer replay must also verify the producer's persisted
     # result declaration. Its payload checksum alone cannot reveal a changed
     # upstream output summary in this actually executed two-node workflow.
