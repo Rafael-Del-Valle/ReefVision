@@ -603,10 +603,30 @@ def test_selected_trace_flags_inconsistent_winding_without_false_duplicate() -> 
 def test_trace_flags_nonadjacent_spatially_coincident_vertices() -> None:
     trace = measure_mesh_preview(**COINCIDENT_NONADJACENT_PARAMS)["surface_edge_traces"][0]
     assert trace["vertex_indices"] == [0, 1, 2]
+    assert trace["nonadjacent_coincident_waypoint_index_pairs"] == [[0, 2]]
     assert trace["segment_lengths_m"] == pytest.approx([0.01, 0.01])
     assert trace["length_m"] == pytest.approx(0.02)
     assert "nonadjacent_coincident_surface_trace_vertices" in trace["qc_warnings"]
     assert "zero_length_edge_on_surface_trace" not in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+
+
+def test_coincident_waypoint_audit_ignores_adjacent_aliases_but_locates_distant_ones() -> None:
+    # A zero-length adjacent alias and two later nonadjacent aliases are
+    # distinct topological concerns. All pairs are waypoint offsets, not
+    # the original mesh vertex IDs or verified biological reidentifications.
+    traces = mesh_surface_edge_traces(
+        [(0, 0, 0), (0, 0, 0), (1, 0, 0), (0, 0, 0), (0, 1, 0)],
+        [[0, 1, 4], [1, 2, 4], [2, 3, 4]],
+        [[0, 1, 2, 3]],
+        0.01,
+        None,
+    )
+    assert traces is not None
+    trace = traces[0]
+    assert trace["nonadjacent_coincident_waypoint_index_pairs"] == [[0, 3], [1, 3]]
+    assert "nonadjacent_coincident_surface_trace_vertices" in trace["qc_warnings"]
+    assert "zero_length_edge_on_surface_trace" in trace["qc_warnings"]
     assert trace["human_review_verified"] is False
 
 
@@ -620,6 +640,7 @@ def test_trace_flags_full_geometric_reversal_without_repeated_vertices() -> None
     assert trace["turn_angles_deg"] == [None, 180.0, None]
     assert "surface_trace_180_degree_geometric_turn" in trace["qc_warnings"]
     assert "nonadjacent_coincident_surface_trace_vertices" not in trace["qc_warnings"]
+    assert trace["nonadjacent_coincident_waypoint_index_pairs"] == []
     assert "zero_length_edge_on_surface_trace" not in trace["qc_warnings"]
     assert trace["human_review_verified"] is False
     assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
@@ -879,6 +900,10 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert "endpoint_chord_length_m" in trace
     assert "geometric_detour_ratio" in trace
     assert len(trace["source_segment_lengths_mesh_units"]) == trace["edge_count"]
+    assert all(
+        0 <= earlier < later - 1 < len(trace["vertex_indices"])
+        for earlier, later in trace["nonadjacent_coincident_waypoint_index_pairs"]
+    )
     assert len(trace["mesh_edge_face_incidence_counts"]) == trace["edge_count"]
     assert len(trace["geometric_edge_face_incidence_counts"]) == trace["edge_count"]
     assert all(
@@ -908,6 +933,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert trace["turn_angles_deg"][0] is None
     assert trace["turn_angles_deg"][-1] is None
     if case == "ordinary":
+        assert trace["nonadjacent_coincident_waypoint_index_pairs"] == []
         assert trace["reused_geometric_segment_source_length_mesh_units"] == 0.0
         assert trace["reused_geometric_segment_fraction_of_trace"] == 0.0
         assert trace["repeated_geometric_segment_index_pairs"] == []
@@ -1006,6 +1032,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert "surface_trace_180_degree_geometric_turn" in trace["qc_warnings"]
         assert trace["human_review_verified"] is False
     if case == "coincident_nonadjacent":
+        assert trace["nonadjacent_coincident_waypoint_index_pairs"] == [[0, 2]]
         assert trace["geometric_detour_ratio"] is None
         assert "surface_trace_zero_endpoint_chord" in trace["qc_warnings"]
         assert (
