@@ -101,6 +101,7 @@ jobs:
           apps/api/reefvision/tests/test_review_queue_event_contention_16.py
           apps/api/reefvision/tests/test_model_install.py
           apps/api/reefvision/tests/test_bundled_models.py
+          scripts/tests/test_verify_research_row_preservation_16.py
 
       - name: Build MSI desktop installer with bundled checkpoints
         shell: pwsh
