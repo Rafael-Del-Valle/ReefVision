@@ -345,7 +345,13 @@ def measure_point_cloud_preview(
     if relative_scale_uncertainty is not None and envelope_volume is not None:
         lower = envelope_volume * (1 - relative_scale_uncertainty) ** 3
         upper = envelope_volume * (1 + relative_scale_uncertainty) ** 3
-        if envelope_volume > 0.0 and relative_scale_uncertainty < 1.0 and lower == 0.0:
+        # Quantized positive bounds may also become identical even when
+        # the caller supplied nonzero scale uncertainty. Never claim a
+        # precise zero-width confidence interval at float resolution.
+        if envelope_volume > 0.0 and (
+            (relative_scale_uncertainty < 1.0 and lower == 0.0)
+            or (relative_scale_uncertainty > 0.0 and lower == upper)
+        ):
             envelope_scale_interval_underflow = True
         else:
             envelope_scale_interval = [lower, upper]
