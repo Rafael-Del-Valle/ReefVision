@@ -159,8 +159,7 @@ def test_dimension_lower_scale_interval_underflow_is_explicit_and_workflow_safe(
             [0.0, 0.0],
         ]
         assert (
-            "dimension_uncertainty_interval_below_numeric_resolution"
-            not in valid["qc_warnings"]
+            "dimension_uncertainty_interval_below_numeric_resolution" not in valid["qc_warnings"]
         )
 
     project_id = str(create_project(client, f"Dimension lower interval {source_format}")["id"])
@@ -175,9 +174,9 @@ def test_dimension_lower_scale_interval_underflow_is_explicit_and_workflow_safe(
         params["points"] = points
     else:
         params["ply_text"] = (
-            "ply\\nformat ascii 1.0\\nelement vertex 2\\n"
-            "property double x\\nproperty double y\\nproperty double z\\n"
-            "end_header\\n0 0 0\\n1 0 0\\n"
+            "ply\nformat ascii 1.0\nelement vertex 2\n"
+            "property double x\nproperty double y\nproperty double z\n"
+            "end_header\n0 0 0\n1 0 0\n"
         )
     response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert response.status_code == 200, response.text
