@@ -86,6 +86,85 @@ Assert-True ($registrations[0].DisplayName -eq 'ReefVision') 'Registration filte
 $registrationFixtures += [pscustomobject]@{ DisplayName = 'ReefVision 1.0.0' }
 Assert-True (@(Get-ReefVisionInstalledRegistrations).Count -eq 2) 'Multiple registration results were not preserved as an array.'
 
+# Historical profiles must be verified and staged through real contained files.
+# A source-text assertion would not catch copying a backup into the live profile,
+# accepting a changed asset, or traversing outside the fixture root.
+$lineageRoot = Join-Path $Root ('.artifacts\lineage-harness-' + [guid]::NewGuid().ToString('N'))
+$lineageProfile = Join-Path $lineageRoot 'draft-1.4-0038'
+$lineageAsset = Join-Path $lineageProfile 'projects\lineage-acceptance\assets\reef.obj'
+$lineageDatabase = Join-Path $lineageProfile 'reefvision.db'
+$lineageBackup = Join-Path $lineageRoot 'draft-1.4-0038.pre-upgrade.db'
+$lineageManifest = Join-Path $lineageRoot 'manifest.json'
+$lineageVerification = Join-Path $lineageRoot 'verification.json'
+New-Item -ItemType Directory -Path (Split-Path -Parent $lineageAsset) -Force | Out-Null
+[IO.File]::WriteAllBytes($lineageDatabase, [Text.Encoding]::UTF8.GetBytes('profile-database'))
+[IO.File]::WriteAllBytes($lineageBackup, [Text.Encoding]::UTF8.GetBytes('verified-backup'))
+[IO.File]::WriteAllBytes($lineageAsset, [Text.Encoding]::UTF8.GetBytes('v 0 0 0'))
+$lineageRecordId = '04f9c44e-d30e-494f-ab1e-9aa3b4db02e9'
+$lineageProjectId = '507af087-ff80-458f-9470-9b3bdc980a5b'
+$lineageManifestValue = [ordered]@{
+    schema_version = 'reefvision-windows-lineage-fixtures-1'
+    fixture_kind = 'synthetic_engineering'
+    profiles = @([ordered]@{
+        name = 'draft-1.4-0038'
+        revision = '0038'
+        project_id = $lineageProjectId
+        database = 'draft-1.4-0038/reefvision.db'
+        database_sha256 = (Get-FileHash -LiteralPath $lineageDatabase -Algorithm SHA256).Hash.ToLowerInvariant()
+        backup = 'draft-1.4-0038.pre-upgrade.db'
+        backup_sha256 = (Get-FileHash -LiteralPath $lineageBackup -Algorithm SHA256).Hash.ToLowerInvariant()
+        records = @([ordered]@{kind='spatial_source_asset';id=$lineageRecordId;sha256=(Get-FileHash -LiteralPath $lineageAsset -Algorithm SHA256).Hash.ToLowerInvariant()})
+        source_files = @([ordered]@{path='draft-1.4-0038/projects/lineage-acceptance/assets/reef.obj';sha256=(Get-FileHash -LiteralPath $lineageAsset -Algorithm SHA256).Hash.ToLowerInvariant()})
+    })
+}
+$lineageManifestValue | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $lineageManifest -Encoding utf8
+[ordered]@{profile='draft-1.4-0038';status='verified';revision='0038';project_id=$lineageProjectId;record_ids=@($lineageRecordId)} |
+    ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $lineageVerification -Encoding utf8
+try {
+    $fixture = Read-ReefVisionLineageFixture -ManifestPath $lineageManifest -ProfileName 'draft-1.4-0038' -VerificationPath $lineageVerification
+    Assert-True ($fixture.revision -eq '0038') 'Lineage revision was not read from the verified manifest.'
+    Assert-True ($fixture.project_id -eq $lineageProjectId) 'Lineage project ID changed during preflight.'
+    Assert-True (@($fixture.record_ids).Count -eq 1 -and $fixture.record_ids[0] -eq $lineageRecordId) 'Lineage record IDs did not match independent verification.'
+
+    $stagedRoot = Join-Path $lineageRoot 'staged-live'
+    New-Item -ItemType Directory -Path $stagedRoot -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $stagedRoot '.reefvision-clean-install-acceptance') -Value 'owned'
+    $staged = Copy-ReefVisionLineageProfile -Fixture $fixture -DataRoot $stagedRoot
+    Assert-True ([Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($staged.database)) -eq 'profile-database') 'Live lineage staging did not use the declared profile database.'
+    Assert-True (-not (Test-Path (Join-Path $stagedRoot 'draft-1.4-0038.pre-upgrade.db'))) 'Pre-upgrade backup was copied into the live data profile.'
+    Assert-True ([Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes((Join-Path $stagedRoot 'projects\lineage-acceptance\assets\reef.obj'))) -eq 'v 0 0 0') 'Lineage source asset was not staged with its managed relative path.'
+    Assert-Throws { Copy-ReefVisionLineageProfile -Fixture $fixture -DataRoot $stagedRoot | Out-Null } 'Lineage staging must not overwrite an existing live database.'
+
+    $restoreRoot = Join-Path $lineageRoot 'staged-restore'
+    New-Item -ItemType Directory -Path $restoreRoot -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $restoreRoot '.reefvision-clean-install-acceptance') -Value 'owned'
+    $restored = Copy-ReefVisionLineageProfile -Fixture $fixture -DataRoot $restoreRoot -UseBackup
+    Assert-True ([Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($restored.database)) -eq 'verified-backup') 'Separate restore profile did not use the verified pre-upgrade backup.'
+
+    [IO.File]::WriteAllBytes($lineageDatabase, [Text.Encoding]::UTF8.GetBytes('tampered-database'))
+    Assert-Throws { Read-ReefVisionLineageFixture -ManifestPath $lineageManifest -ProfileName 'draft-1.4-0038' -VerificationPath $lineageVerification | Out-Null } 'Changed lineage database bytes must fail before desktop launch.'
+    [IO.File]::WriteAllBytes($lineageDatabase, [Text.Encoding]::UTF8.GetBytes('profile-database'))
+
+    [ordered]@{profile='draft-1.4-0038';status='verified';revision='0038';project_id=$lineageProjectId;record_ids=@('different-record')} |
+        ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $lineageVerification -Encoding utf8
+    Assert-Throws { Read-ReefVisionLineageFixture -ManifestPath $lineageManifest -ProfileName 'draft-1.4-0038' -VerificationPath $lineageVerification | Out-Null } 'Verification record IDs must match the fixture manifest.'
+    [ordered]@{profile='draft-1.4-0038';status='verified';revision='0038';project_id=$lineageProjectId;record_ids=@($lineageRecordId)} |
+        ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $lineageVerification -Encoding utf8
+
+    [IO.File]::WriteAllBytes($lineageAsset, [Text.Encoding]::UTF8.GetBytes('tampered'))
+    Assert-Throws { Read-ReefVisionLineageFixture -ManifestPath $lineageManifest -ProfileName 'draft-1.4-0038' -VerificationPath $lineageVerification | Out-Null } 'Changed lineage source bytes must fail preflight.'
+    [IO.File]::WriteAllBytes($lineageAsset, [Text.Encoding]::UTF8.GetBytes('v 0 0 0'))
+
+    $unsafeManifest = Join-Path $lineageRoot 'unsafe-manifest.json'
+    $unsafe = $lineageManifestValue | ConvertTo-Json -Depth 12 | ConvertFrom-Json
+    $unsafe.profiles[0].database = '../outside.db'
+    $unsafe | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $unsafeManifest -Encoding utf8
+    Assert-Throws { Read-ReefVisionLineageFixture -ManifestPath $unsafeManifest -ProfileName 'draft-1.4-0038' -VerificationPath $lineageVerification | Out-Null } 'Lineage paths outside the fixture root must fail preflight.'
+} finally {
+    if (-not (Test-ReefVisionPathWithin -Path $lineageRoot -Parent (Join-Path $Root '.artifacts'))) { throw 'Unsafe lineage harness cleanup path.' }
+    Remove-Item -LiteralPath $lineageRoot -Recurse -Force
+}
+
 # Real pixel decoding is required: HTTP success and byte length alone do not
 # establish that an installed camera JPEG is viewable in the original frame.
 Add-Type -AssemblyName System.Drawing
@@ -133,7 +212,37 @@ $parseErrors = $null
     [ref]$parseErrors
 )
 Assert-True (@($parseErrors).Count -eq 0) "Windows acceptance PowerShell syntax invalid: $($parseErrors -join '; ')"
+$acceptanceParameterNames = @($parseTokens | Out-Null)
+$acceptanceAst = [System.Management.Automation.Language.Parser]::ParseFile(
+    $acceptancePath,
+    [ref]$parseTokens,
+    [ref]$parseErrors
+)
+$acceptanceParameterNames = @($acceptanceAst.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath })
+foreach ($lineageParameter in @(
+    'LineageManifestPath',
+    'LineageProfile',
+    'LineageVerificationPath',
+    'ExpectedInitialSchemaRevision',
+    'VerifyPreviousInstallerRejectsUpgradedProfile'
+)) {
+    Assert-True ($acceptanceParameterNames -contains $lineageParameter) "Installed lineage CLI is missing -$lineageParameter."
+}
 $acceptanceScript = Get-Content -LiteralPath $acceptancePath -Raw
+foreach ($lineageContract in @(
+    'lineage_preflight',
+    'lineage_initial_evidence',
+    'lineage_final_evidence',
+    'lineage_exchange_roundtrip',
+    'lineage_restore',
+    'historical_schema_rejection',
+    'Assert-AcceptanceLineageEvidence',
+    'Import-AcceptanceExchange',
+    'Assert-HistoricalDesktopRejectsProfile',
+    'Copy-ReefVisionLineageProfile -Fixture $LineageFixture -DataRoot $RestoreDataRoot -UseBackup'
+)) {
+    Assert-True ($acceptanceScript.Contains($lineageContract)) "Installed lineage acceptance is missing contract: $lineageContract"
+}
 Assert-True ($acceptanceScript.Contains('[void]$view.Execute()')) 'MSI ProductVersion extraction must suppress COM Execute output.'
 Assert-True ($acceptanceScript.Contains('[void]$view.Close()')) 'MSI ProductVersion extraction must suppress COM Close output.'
 # Guard the packaged acceptance request against retired project templates and
