@@ -284,8 +284,28 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                             # Some exporters store these tags in IFD0; prefer
                             # the standard nested Exif IFD when available.
                             exif_ifd = exif.get_ifd(34665)
-                            exif_pixel_width = exif_ifd.get(40962, exif.get(40962))
-                            exif_pixel_height = exif_ifd.get(40963, exif.get(40963))
+                            ifd0_width = exif.get(40962)
+                            ifd0_height = exif.get(40963)
+                            exif_pixel_width = exif_ifd.get(40962, ifd0_width)
+                            exif_pixel_height = exif_ifd.get(40963, ifd0_height)
+                            # Some exporters leave stale pixel dimensions in
+                            # IFD0 while writing corrected values into Exif IFD.
+                            # Preferring Exif IFD must not silently conceal
+                            # contradictory provenance even when its values
+                            # match the decoded raster.
+                            exif_ifd0_conflict = any(
+                                nested is not None
+                                and top_level is not None
+                                and (
+                                    type(nested) is not int
+                                    or type(top_level) is not int
+                                    or nested != top_level
+                                )
+                                for nested, top_level in (
+                                    (exif_ifd.get(40962), ifd0_width),
+                                    (exif_ifd.get(40963), ifd0_height),
+                                )
+                            )
                             # Absence of these optional EXIF tags is not
                             # evidence of consistency. Report conflicts as
                             # scientific QC errors, not JPEG decode failures.
@@ -301,6 +321,7 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                                     and exif_pixel_height > 0
                                     and (exif_pixel_width, exif_pixel_height)
                                     == (decoded.width, decoded.height)
+                                    and not exif_ifd0_conflict
                                 )
                             decoded_metadata = {
                                 "jpeg_pixel_width": decoded.width,
@@ -334,6 +355,7 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                                 "jpeg_exif_dimensions_match_raster": (
                                     exif_dimensions_match_raster
                                 ),
+                                "jpeg_exif_ifd0_dimension_conflict": exif_ifd0_conflict,
                                 "jpeg_icc_profile_present": icc_profile is not None,
                                 "jpeg_icc_profile_bytes": (
                                     len(icc_profile) if icc_profile is not None else 0
@@ -367,7 +389,12 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                     errors.append(f"JPEG fixture changed during decoding: {relative}")
                 else:
                     decoded_ok = True
-                    if decoded_metadata["jpeg_exif_dimensions_match_raster"] is False:
+                    if decoded_metadata["jpeg_exif_ifd0_dimension_conflict"]:
+                        errors.append(
+                            "conflicting EXIF pixel dimensions between IFD0 and Exif IFD: "
+                            f"{relative}"
+                        )
+                    elif decoded_metadata["jpeg_exif_dimensions_match_raster"] is False:
                         errors.append(
                             "EXIF pixel dimensions inconsistent with JPEG raster: "
                             f"{relative}"
