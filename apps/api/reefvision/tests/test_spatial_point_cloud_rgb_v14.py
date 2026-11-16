@@ -151,6 +151,7 @@ def test_coincident_point_indices_have_explicit_chord_qc() -> None:
     assert result["qc_warnings"] == [
         "duplicate_points_present",
         "coincident_selected_chord_endpoints",
+        "source_point_cloud_affine_dimension_below_3",
     ]
     coincident, distinct = result["selected_point_chords"]
     assert coincident["point_indices"] == [0, 1]
