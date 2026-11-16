@@ -200,9 +200,7 @@ def inspect(path: Path) -> dict:
         # This check also covers older numeric revisions, matching the
         # existing QC stage-order checks without trusting the Alembic stamp.
         if numeric_revision is not None:
-            if numeric_revision < 38 and any(
-                inventory[name]["present"] for name in science_base
-            ):
+            if numeric_revision < 38 and any(inventory[name]["present"] for name in science_base):
                 warnings.append("scientific_base_before_revision_0038")
             if numeric_revision < 39 and metric_present:
                 warnings.append("computed_metrics_before_revision_0039")
