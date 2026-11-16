@@ -431,7 +431,9 @@ class WorkflowExecutionService:
                 WorkflowArtifactSpec(
                     port_id=str(output["port_id"]),
                     data_type=str(output["data_type"]),
-                    payload=dict(output["payload"]),
+                    # Keep the adapter's original JSON shape for publication validation.
+                    # dict() would silently convert malformed arrays of key/value pairs.
+                    payload=output["payload"],
                 )
                 for output in outputs
             ]
