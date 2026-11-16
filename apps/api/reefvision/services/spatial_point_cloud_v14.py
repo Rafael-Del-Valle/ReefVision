@@ -347,7 +347,7 @@ def measure_point_cloud_preview(
         upper = envelope_volume * (1 + relative_scale_uncertainty) ** 3
         # Quantized positive bounds may also become identical even when
         # the caller supplied nonzero scale uncertainty. Never claim a
-        # precise zero-width confidence interval at float resolution.
+        # precise zero-width scale-uncertainty interval at float resolution.
         if envelope_volume > 0.0 and (
             (relative_scale_uncertainty < 1.0 and lower == 0.0)
             or (relative_scale_uncertainty > 0.0 and lower == upper)
