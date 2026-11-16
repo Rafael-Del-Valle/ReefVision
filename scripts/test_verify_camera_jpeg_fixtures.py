@@ -595,6 +595,62 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                     )
                     self.assertEqual(photo.read_bytes(), original)
 
+    def test_conflicting_ifd0_and_exif_ifd_dimensions_fail_qc_read_only(self) -> None:
+        """A corrected Exif IFD must not hide contradictory IFD0 camera geometry."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; duplicate EXIF dimensions unverified")
+
+        cases = (
+            ("consistent_dual_tags", (12, 8), False),
+            ("stale_ifd0_width", (13, 8), True),
+            ("stale_ifd0_height", (12, 9), True),
+            ("stale_ifd0_both", (13, 9), True),
+        )
+        for label, ifd0_dimensions, expected_conflict in cases:
+            with self.subTest(case=label):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    photo = root / f"{label}.JPG"
+                    exif = Image.Exif()
+                    exif[40962], exif[40963] = ifd0_dimensions
+                    exif.get_ifd(34665).update({40962: 12, 40963: 8})
+                    Image.new("RGB", (12, 8), (35, 60, 85)).save(
+                        photo, format="JPEG", exif=exif
+                    )
+                    original = photo.read_bytes()
+
+                    records, errors = MODULE.inventory(root, verify_decode=True)
+                    self.assertEqual(len(records), 1)
+                    record = records[0]
+                    self.assertTrue(record["jpeg_decodable"])
+                    # The preferred Exif IFD is individually correct, but an
+                    # additional contradictory metadata source fails QC.
+                    self.assertEqual(record["jpeg_exif_pixel_width"], 12)
+                    self.assertEqual(record["jpeg_exif_pixel_height"], 8)
+                    self.assertEqual(
+                        record["jpeg_exif_ifd0_dimension_conflict"],
+                        expected_conflict,
+                    )
+                    self.assertEqual(
+                        record["jpeg_exif_dimensions_match_raster"],
+                        not expected_conflict,
+                    )
+                    self.assertEqual(
+                        errors,
+                        [
+                            "conflicting EXIF pixel dimensions between IFD0 and Exif IFD: "
+                            f"{photo.name}"
+                        ]
+                        if expected_conflict
+                        else [],
+                    )
+                    self.assertEqual(
+                        json.loads(json.dumps(records))[0]["jpeg_decodable"], True
+                    )
+                    self.assertEqual(photo.read_bytes(), original)
+
     def test_malformed_exif_pixel_dimensions_have_json_safe_qc_evidence(self) -> None:
         """Noninteger camera EXIF dimensions cannot crash the inventory manifest."""
         try:
