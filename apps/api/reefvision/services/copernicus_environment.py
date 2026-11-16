@@ -145,6 +145,10 @@ def parse_copernicus(
     records = []
     missing = 0
     seen = set()
+    # Every requested variable must cover the same coordinate cells. Missing
+    # ocean values are represented by explicit nulls, not silently omitted
+    # grid positions that would bias current/temperature comparisons.
+    grid_cells: dict[str, set[tuple[datetime, float, float, float]]] = {}
     for sample in samples:
         try:
             if not isinstance(sample, dict):
@@ -172,10 +176,12 @@ def parse_copernicus(
                 and request.minimum_depth <= sample["depth_m"] <= request.maximum_depth
             ):
                 raise ValueError("Sample outside requested extent, time or depth")
-            identity = (variable, time, sample["depth_m"], sample["latitude"], sample["longitude"])
+            cell = (time, sample["depth_m"], sample["latitude"], sample["longitude"])
+            identity = (variable, *cell)
             if identity in seen:
                 raise ValueError("Duplicate grid sample")
             seen.add(identity)
+            grid_cells.setdefault(variable, set()).add(cell)
             if sample["value"] is None:
                 missing += 1
                 continue
@@ -220,6 +226,14 @@ def parse_copernicus(
             )
         except (KeyError, TypeError, ValueError, SchemaError) as exc:
             raise ValidationError(f"Invalid Copernicus grid sample: {exc}") from exc
+    if set(grid_cells) != set(request.variables):
+        raise ValidationError("Copernicus response omitted a requested grid variable")
+    reference_cells = next(iter(grid_cells.values()))
+    if any(cells != reference_cells for cells in grid_cells.values()):
+        raise ValidationError(
+            "Copernicus response has incomplete variable grid coverage; "
+            "explicit nulls are required for missing model values"
+        )
     if not records:
         raise ValidationError("Copernicus subset contains no available ocean values")
     return records, missing
