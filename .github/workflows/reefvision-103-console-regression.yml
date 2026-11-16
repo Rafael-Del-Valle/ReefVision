@@ -9,6 +9,10 @@ on:
     paths:
       - .github/workflows/reefvision-103-console-regression.yml
       - apps/web/src-tauri/src/main.rs
+      # A sanitized backend tail feeds this embedded external observer.
+      # Exercise the Windows consumer whenever its source changes.
+      - apps/api/reefvision/api/routes/training.py
+      - apps/api/reefvision/tests/test_training_log_tail_103.py
       - scripts/test-training-console-readonly.ps1
       - scripts/test-training-console-sanitizer.ps1
   workflow_dispatch:
