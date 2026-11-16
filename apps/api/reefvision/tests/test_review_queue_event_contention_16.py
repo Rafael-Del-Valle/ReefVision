@@ -401,11 +401,7 @@ def test_assignment_history_preserves_append_order_despite_clock_changes(
     assert queue.status_code == 200, queue.text
     project_id = queue.json()["project_id"]
     assigned_time = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
-    unassigned_time = (
-        datetime(2026, 11, 14, 12, 0, tzinfo=UTC)
-        if clock_rollback
-        else assigned_time
-    )
+    unassigned_time = datetime(2026, 11, 14, 12, 0, tzinfo=UTC) if clock_rollback else assigned_time
     # Force UUID lexical ordering to disagree with append ordering too.
     assigned_id = "ffffffff-ffff-4fff-8fff-ffffffffffff"
     unassigned_id = "00000000-0000-4000-8000-000000000000"
