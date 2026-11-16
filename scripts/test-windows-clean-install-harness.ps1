@@ -24,10 +24,13 @@ $machineNativeWebview2 = "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\$webview2I
 $userWebview2 = "HKCU:\Software\Microsoft\EdgeUpdate\Clients\$webview2Id"
 $script:fakeWebview2Values = @{}
 $script:deniedWebview2Path = ''
+$script:observedWebview2Sources = @()
 $readFakeWebview2Registry = {
-    param([string]$Path)
-    if ($Path -ceq $script:deniedWebview2Path) { throw 'Registry access unavailable' }
-    return $script:fakeWebview2Values[$Path]
+    param($Source)
+    # Never access the host registry. Capture the requested explicit view.
+    $script:observedWebview2Sources += $Source
+    if ($Source.path -ceq $script:deniedWebview2Path) { throw 'Registry access unavailable' }
+    return $script:fakeWebview2Values[$Source.path]
 }
 $emptyWebview2 = Get-ReefVisionWebView2RuntimeInfo -ReadRegistryValue $readFakeWebview2Registry
 Assert-True (-not $emptyWebview2.detected -and $emptyWebview2.registrations.Count -eq 0) 'Missing WebView2 registry entries were misreported as installed.'
@@ -49,8 +52,18 @@ Assert-True ($invalidWebview2.evidence_scope -match 'interactive GUI unverified'
 $script:fakeWebview2Values = @{}
 $script:fakeWebview2Values[$machineWebview2] = '152.0.4321.8'
 $script:fakeWebview2Values[$machineNativeWebview2] = '152.0.4567.9'
+$script:observedWebview2Sources = @()
 $machineViews = Get-ReefVisionWebView2RuntimeInfo -ReadRegistryValue $readFakeWebview2Registry
 Assert-True ($machineViews.detected -and $machineViews.registrations.Count -eq 2) 'Both machine registry views must remain independently observable.'
+Assert-True ($script:observedWebview2Sources.Count -eq 3) 'WebView2 inventory must inspect both machine views and the user registration independently.'
+$source32 = $script:observedWebview2Sources[0]
+$source64 = $script:observedWebview2Sources[1]
+$sourceUser = $script:observedWebview2Sources[2]
+$expectedSubkey = "SOFTWARE\Microsoft\EdgeUpdate\Clients\$webview2Id"
+Assert-True ($source32.hive -eq [Microsoft.Win32.RegistryHive]::LocalMachine -and $source32.view -eq [Microsoft.Win32.RegistryView]::Registry32) 'WOW6432Node must be read through the explicit 32-bit machine registry view.'
+Assert-True ($source64.hive -eq [Microsoft.Win32.RegistryHive]::LocalMachine -and $source64.view -eq [Microsoft.Win32.RegistryView]::Registry64) 'Native machine registration must be read through the explicit 64-bit registry view even under a 32-bit host process.'
+Assert-True ($sourceUser.hive -eq [Microsoft.Win32.RegistryHive]::CurrentUser -and $sourceUser.view -eq [Microsoft.Win32.RegistryView]::Default) 'Per-user registration must use the current-user hive.'
+Assert-True (@($script:observedWebview2Sources | Where-Object { $_.subkey -cne $expectedSubkey }).Count -eq 0) 'Registry inventory attempted to read a non-canonical WebView2 subkey.'
 Assert-True ($machineViews.registrations[0].scope -ceq 'machine-32' -and $machineViews.registrations[0].version -ceq '152.0.4321.8') 'WOW6432Node was mislabeled as the 64-bit registry view.'
 Assert-True ($machineViews.registrations[1].scope -ceq 'machine-64' -and $machineViews.registrations[1].version -ceq '152.0.4567.9') 'Native machine SOFTWARE was mislabeled as the 32-bit registry view.'
 $script:fakeWebview2Values = @{}

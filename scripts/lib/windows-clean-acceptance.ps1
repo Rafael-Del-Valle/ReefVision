@@ -7,25 +7,59 @@ Set-StrictMode -Version Latest
 function Get-ReefVisionWebView2RuntimeInfo {
     param(
         [scriptblock]$ReadRegistryValue = {
-            param([string]$Path)
-            $entry = Get-ItemProperty -LiteralPath $Path -Name 'pv' -ErrorAction Stop
-            return $entry.pv
+            param($Source)
+            # Explicit registry views matter even when acceptance is launched
+            # from 32-bit PowerShell on a 64-bit Windows installation. The
+            # Registry:: provider would redirect native HKLM:\SOFTWARE.
+            $baseKey = [Microsoft.Win32.RegistryKey]::OpenBaseKey($Source.hive, $Source.view)
+            try {
+                $key = $baseKey.OpenSubKey([string]$Source.subkey, $false)
+                if ($null -eq $key) { return $null }
+                try {
+                    return $key.GetValue(
+                        'pv', $null,
+                        [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames
+                    )
+                } finally {
+                    $key.Dispose()
+                }
+            } finally {
+                $baseKey.Dispose()
+            }
         }
     )
     $id = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
-    # On 64-bit Windows WOW6432Node is the 32-bit registry view; native
-    # HKLM:\SOFTWARE is the 64-bit view. Scope labels describe registry views,
-    # not the architecture of the installed WebView2 executable. A sentinel in
-    # either machine view must not conceal a valid per-user runtime.
+    # Machine scopes identify independent 32-bit/64-bit *registry views*,
+    # not executable architecture. Keep the familiar provider paths solely
+    # as diagnostic identifiers for injected, fully mocked readers.
+    $subkey = "SOFTWARE\Microsoft\EdgeUpdate\Clients\$id"
     $locations = @(
-        @{ scope = 'machine-32'; path = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$id" },
-        @{ scope = 'machine-64'; path = "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\$id" },
-        @{ scope = 'user'; path = "HKCU:\Software\Microsoft\EdgeUpdate\Clients\$id" }
+        @{
+            scope = 'machine-32'
+            path = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$id"
+            hive = [Microsoft.Win32.RegistryHive]::LocalMachine
+            view = [Microsoft.Win32.RegistryView]::Registry32
+            subkey = $subkey
+        }
+        @{
+            scope = 'machine-64'
+            path = "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\$id"
+            hive = [Microsoft.Win32.RegistryHive]::LocalMachine
+            view = [Microsoft.Win32.RegistryView]::Registry64
+            subkey = $subkey
+        }
+        @{
+            scope = 'user'
+            path = "HKCU:\Software\Microsoft\EdgeUpdate\Clients\$id"
+            hive = [Microsoft.Win32.RegistryHive]::CurrentUser
+            view = [Microsoft.Win32.RegistryView]::Default
+            subkey = $subkey
+        }
     )
     $registrations = @()
     foreach ($location in $locations) {
         try {
-            $raw = & $ReadRegistryValue ([string]$location.path)
+            $raw = & $ReadRegistryValue $location
         } catch {
             # The user may not have access to a registry view; a diagnostic
             # inventory must never abort the disposable installer test.
