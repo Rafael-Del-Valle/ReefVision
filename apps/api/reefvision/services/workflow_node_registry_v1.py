@@ -1,4 +1,4 @@
-"""ReefVision 1.0 workflow-node registry extensions."""
+"""ReefVision workflow-node registry extensions."""
 
 from __future__ import annotations
 
@@ -6,7 +6,12 @@ from reefvision.schemas.workflow_graphs import (
     WorkflowNodeDefinitionResponse,
     WorkflowPortDefinition,
 )
+from reefvision.services.workflow_acquisition_quality import acquisition_quality_node
+from reefvision.services.workflow_coral_growth import coral_growth_node
+from reefvision.services.workflow_coral_skeleton import coral_skeleton_node
 from reefvision.services.workflow_depth_3d import register_video_depth_3d_adapter
+from reefvision.services.workflow_ecology_analysis import verified_ecology_analysis_node
+from reefvision.services.workflow_ecology_event_summary import event_summary_workflow_node
 from reefvision.services.workflow_metric_depth_3d import (
     register_video_metric_depth_3d_adapter,
 )
@@ -14,24 +19,34 @@ from reefvision.services.workflow_node_registry import (
     workflow_node_registry as base_workflow_node_registry,
 )
 from reefvision.services.workflow_pose import register_pose_workflow_adapters
+from reefvision.services.workflow_pose_evaluation import (
+    register_pose_evaluation_workflow_adapter,
+)
 from reefvision.services.workflow_pose_training import (
     register_pose_training_workflow_adapter,
 )
+from reefvision.services.workflow_reefpose_validation import register_reefpose_validation_nodes
+from reefvision.services.workflow_research_reports import research_report_node
 from reefvision.services.workflow_results_packages import (
     register_results_package_workflow_adapter,
 )
+from reefvision.services.workflow_scientific_comparison import register_scientific_comparison_nodes
+from reefvision.services.workflow_temporal_reefpose import register_temporal_reefpose_nodes
 
 register_video_depth_3d_adapter()
 register_video_metric_depth_3d_adapter()
 register_pose_workflow_adapters()
+register_pose_evaluation_workflow_adapter()
 register_pose_training_workflow_adapter()
 register_results_package_workflow_adapter()
+_REEFPOSE_VALIDATION_NODES = register_reefpose_validation_nodes()
 
 
 def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
     """Return the M10 registry plus ReefVision 1.0 completion nodes."""
 
     registry = dict(base_workflow_node_registry())
+    registry.update(_REEFPOSE_VALIDATION_NODES)
     registry["video_depth_3d_analytics"] = WorkflowNodeDefinitionResponse(
         node_type="video_depth_3d_analytics",
         display_name="Metric Depth 3D Trajectories",
@@ -181,6 +196,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 optional_parameters={
                     "device": "auto",
                     "confidence": 0.25,
+                    "allow_zero_detections": False,
                 },
                 execution_state="executable_pose_workflow",
                 executable=True,
@@ -237,6 +253,241 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                         "corrections remain canonical persisted state."
                     ),
                 ],
+            ),
+            "pose_identity_association": WorkflowNodeDefinitionResponse(
+                node_type="pose_identity_association",
+                display_name="Associate Individuals",
+                category="Pose",
+                description=(
+                    "Link pose instances into stable animal identities with deterministic, "
+                    "auditable association scores."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="poses",
+                        display_name="Pose tracks",
+                        accepted_types=["pose_tracks"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="tracks",
+                        display_name="Identity tracks",
+                        accepted_types=["pose_identity_tracks"],
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={
+                    "max_gap_frames": 5,
+                    "max_normalized_distance": 1.5,
+                    "acceptance_threshold": 0.75,
+                    "low_confidence_threshold": 0.6,
+                },
+                execution_state="executable_pose_workflow",
+                executable=True,
+                implementation_notes=[
+                    "Uses canonical pose VideoTrack detections without rewriting provider output.",
+                    "Persists every candidate score, threshold, and selected decision.",
+                ],
+            ),
+            "pose_identity_review_gate": WorkflowNodeDefinitionResponse(
+                node_type="pose_identity_review_gate",
+                display_name="Review Animal Identities",
+                category="Human review",
+                description=(
+                    "Pause until current animal identity observations have explicit scientist "
+                    "acceptance, rejection, or correction."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="tracks",
+                        display_name="Identity tracks",
+                        accepted_types=["pose_identity_tracks"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="tracks",
+                        display_name="Reviewed identity tracks",
+                        accepted_types=["reviewed_pose_identity_tracks"],
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={},
+                execution_state="pausable_review_gate",
+                executable=True,
+                implementation_notes=[
+                    "Model identity is never promoted to verified truth without human review."
+                ],
+            ),
+            "pose_identity_evaluation": WorkflowNodeDefinitionResponse(
+                node_type="pose_identity_evaluation",
+                display_name="Evaluate Identity Tracking",
+                category="Scientific analysis",
+                description=(
+                    "Compute IDF1, identity precision/recall, switches, fragmentation, and "
+                    "coverage against immutable verified identity truth."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="tracks",
+                        display_name="Reviewed identity tracks",
+                        accepted_types=["reviewed_pose_identity_tracks"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="evaluation",
+                        display_name="Identity evaluation",
+                        accepted_types=["pose_identity_evaluation"],
+                    )
+                ],
+                required_parameters=["truth_dataset_id"],
+                optional_parameters={"spatial_iou_threshold": 0.5},
+                execution_state="executable_pose_workflow",
+                executable=True,
+                implementation_notes=[
+                    "Identity metrics remain separate from landmark-localization metrics."
+                ],
+            ),
+            "pose_identity_export": WorkflowNodeDefinitionResponse(
+                node_type="pose_identity_export",
+                display_name="Export Identity Results",
+                category="Export",
+                description=(
+                    "Export corrected identity observations and evaluation provenance as a "
+                    "managed JSON or CSV artifact."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="evaluation",
+                        display_name="Identity evaluation",
+                        accepted_types=["pose_identity_evaluation"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="package",
+                        display_name="Identity package",
+                        accepted_types=["pose_identity_package"],
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={"format": "json"},
+                execution_state="executable_pose_workflow",
+                executable=True,
+                implementation_notes=[
+                    "Export provenance retains run revision, truth hash, and workflow identity."
+                ],
+            ),
+            "anatomical_measurement": WorkflowNodeDefinitionResponse(
+                node_type="anatomical_measurement",
+                display_name="Measure Anatomy",
+                category="Scientific analysis",
+                description=(
+                    "Calculate reproducible anatomical time series for reviewed animal identities."
+                ),
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="tracks",
+                        display_name="Reviewed identity tracks",
+                        accepted_types=["reviewed_pose_identity_tracks"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="measurements",
+                        display_name="Anatomical measurements",
+                        accepted_types=["pose_measurement_series"],
+                    )
+                ],
+                required_parameters=["definitions"],
+                optional_parameters={"maximum_gap_s": 0.25},
+                execution_state="executable_pose_workflow",
+                executable=True,
+                implementation_notes=[
+                    "Executes the canonical asynchronous Phase 5 measurement job.",
+                    "Retains identity revision, schema, calibration, and video provenance.",
+                ],
+            ),
+            "biological_event_detection": WorkflowNodeDefinitionResponse(
+                node_type="biological_event_detection",
+                display_name="Detect Biological Events",
+                category="Scientific analysis",
+                description="Detect deterministic hysteresis cycles in anatomical time series.",
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="measurements",
+                        display_name="Anatomical measurements",
+                        accepted_types=["pose_measurement_series"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="events",
+                        display_name="Event candidates",
+                        accepted_types=["pose_event_candidates"],
+                    )
+                ],
+                required_parameters=["cycles"],
+                optional_parameters={},
+                execution_state="executable_pose_workflow",
+                executable=True,
+                implementation_notes=[
+                    "Partial, rejected, and unreviewed candidates remain diagnostic only."
+                ],
+            ),
+            "biological_event_review_gate": WorkflowNodeDefinitionResponse(
+                node_type="biological_event_review_gate",
+                display_name="Review Biological Events",
+                category="Human review",
+                description="Pause until every retained event candidate has scientist disposition.",
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="events",
+                        display_name="Event candidates",
+                        accepted_types=["pose_event_candidates"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="events",
+                        display_name="Reviewed biological events",
+                        accepted_types=["reviewed_pose_events"],
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={},
+                execution_state="pausable_review_gate",
+                executable=True,
+                implementation_notes=[
+                    "Approval never promotes partial, rejected, or removed cycles to confirmed."
+                ],
+            ),
+            "biological_movement_export": WorkflowNodeDefinitionResponse(
+                node_type="biological_movement_export",
+                display_name="Export Biological Movement",
+                category="Export",
+                description="Export scientist-reviewed measurement and event provenance.",
+                input_ports=[
+                    WorkflowPortDefinition(
+                        port_id="events",
+                        display_name="Reviewed biological events",
+                        accepted_types=["reviewed_pose_events"],
+                    )
+                ],
+                output_ports=[
+                    WorkflowPortDefinition(
+                        port_id="package",
+                        display_name="Biological movement package",
+                        accepted_types=["biological_movement_package"],
+                    )
+                ],
+                required_parameters=[],
+                optional_parameters={"format": "json"},
+                execution_state="executable_pose_workflow",
+                executable=True,
+                implementation_notes=["Reviewed exports reject stale upstream provenance."],
             ),
             "pose_review_gate": WorkflowNodeDefinitionResponse(
                 node_type="pose_review_gate",
@@ -506,8 +757,8 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         display_name="Train Pose Model",
         category="Training",
         description=(
-            "Train a YOLO11 pose architecture or continue a registered model from an immutable, "
-            "scientist-verified ReefVision pose dataset."
+            "Train native ReefPose-S or YOLO11 pose, or continue a provider-matched registered "
+            "model from an immutable, scientist-verified ReefVision pose dataset."
         ),
         input_ports=[
             WorkflowPortDefinition(
@@ -539,6 +790,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
         ],
         required_parameters=[],
         optional_parameters={
+            "provider_id": "ultralytics",
             "initialization_mode": None,
             "architecture": "yolo11n-pose.yaml",
             "run_name": "workflow-pose-retrain",
@@ -581,6 +833,51 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 "Execution produces the normal ReefVision training_result "
                 "artifact so Results Package integration remains shared."
             ),
+        ],
+    )
+
+    registry["pose_model_evaluation"] = WorkflowNodeDefinitionResponse(
+        node_type="pose_model_evaluation",
+        display_name="Evaluate Pose Models",
+        category="Scientific analysis",
+        description=(
+            "Compare registered pose models on one immutable scientist-verified pose dataset."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="dataset",
+                display_name="Frozen verified pose dataset",
+                accepted_types=["pose_training_dataset"],
+            ),
+            WorkflowPortDefinition(
+                port_id="models",
+                display_name="Registered pose models",
+                accepted_types=["model_reference"],
+                multiple=True,
+            ),
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="comparison",
+                display_name="Pose evaluation comparison",
+                accepted_types=["pose_evaluation_comparison"],
+                required=False,
+            )
+        ],
+        required_parameters=[],
+        optional_parameters={
+            "device": "auto",
+            "pck_thresholds": [0.05, 0.1, 0.2],
+            "calibration_threshold": 0.1,
+            "calibration_bins": 10,
+            "confidence_thresholds": [0.0, 0.25, 0.5, 0.75, 0.9],
+            "oks_sigmas": None,
+        },
+        execution_state="executable_pose_evaluation",
+        executable=True,
+        implementation_notes=[
+            "Executes the production asynchronous comparison worker and preserves its report hash.",
+            "Provider exclusions and unavailable metrics remain explicit in the output artifact.",
         ],
     )
 
@@ -628,6 +925,295 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                 "The generated package is immediately verified before "
                 "a workflow artifact is emitted."
             ),
+        ],
+    )
+
+    registry["ecology_coral_skeleton"] = coral_skeleton_node()
+    registry["ecology_coral_growth"] = coral_growth_node()
+    registry["ecology_verified_analysis"] = verified_ecology_analysis_node()
+    registry["ecology_event_summary"] = event_summary_workflow_node()
+    registry["research_publication_figure"] = research_report_node()
+    registry["image_acquisition_quality"] = acquisition_quality_node()
+    registry.update(register_scientific_comparison_nodes())
+    registry.update(register_temporal_reefpose_nodes())
+
+    registry["ecology_connected_branch_preview"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_connected_branch_preview",
+        display_name="Preview Connected Coral Branch",
+        category="Scientific analysis",
+        description=(
+            "Preview a connected centerline segment from a saved skeleton revision. "
+            "A current calibration can add 2D lengths. Every preview requires review."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="project",
+                display_name="Project",
+                accepted_types=["project_reference"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="preview",
+                display_name="Unverified connected branch proposal",
+                accepted_types=["connected_branch_preview"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=["analysis_id", "edit_id", "points"],
+        optional_parameters={},
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Uses the same persisted, checksum-checked skeleton as the standalone API.",
+            "Requires exact pixel attachment; no bridge, snap, or accepted edit is created.",
+            "Rejects a source image from another project.",
+            "Persists source revision SHA-256, pixel geometry, and scientist review gate.",
+            "When calibrated, preserves the calibration SHA-256 and 2D edge and total lengths.",
+            "Cannot enter verified-dataset ports without independent review.",
+        ],
+    )
+
+    registry["ecology_identity_registry_source"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_identity_registry_source",
+        display_name="Project Ecological Identity Registry",
+        category="Scientific analysis",
+        description=(
+            "Read project-owned versioned organism/colony registrations; "
+            "scientist verification of biological identity remains required."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="project",
+                display_name="Project",
+                accepted_types=["project_reference"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="registry",
+                display_name="Unverified identity registry snapshot",
+                accepted_types=["ecology_identity_registry"],
+                required=False,
+                multiple=True,
+            ),
+            WorkflowPortDefinition(
+                port_id="measurement_candidates",
+                display_name="Source-linked projected measurement candidates (unverified)",
+                accepted_types=["ecology_measurement_candidates"],
+                required=False,
+                multiple=True,
+            ),
+            WorkflowPortDefinition(
+                port_id="candidate_report",
+                display_name="Unverified ecological QC and effort report",
+                accepted_types=["ecology_candidate_report"],
+                required=False,
+                multiple=True,
+            ),
+        ],
+        required_parameters=[],
+        optional_parameters={},
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Persists typed identity, annotation and frozen calibration source evidence.",
+            "Calibration changes invalidate unverified saved-workflow registry artifacts.",
+            "Registry metadata is not evidence of verified annotation or organism identity.",
+            "Projected box/mask candidates remain unverified and require biological review.",
+            "Review gate prevents direct promotion into verified-dataset ports.",
+        ],
+    )
+
+    registry["ecology_population_csv_export"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_population_csv_export",
+        display_name="Export Ecological Population Summary CSV",
+        category="Scientific analysis",
+        description=(
+            "Export QC-eligible declared-unit means and excluded-unit reasons "
+            "without claiming biological independence or verified growth."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="candidates",
+                display_name="Unverified ecological measurement candidates",
+                accepted_types=["ecology_measurement_candidates"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="csv",
+                display_name="Unverified unit and population summary CSV",
+                accepted_types=["ecology_population_csv"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=[],
+        optional_parameters={},
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Rechecks source fingerprints and all derived QC, endpoints and unit means.",
+            "Exports excluded units with blank means and zero contributing replicates.",
+            "Never asserts independent samples, verified growth or statistical inference.",
+            "Persists the same CSV and provenance as the standalone endpoint.",
+            "Cannot feed verified-dataset ports without an independent review gate.",
+        ],
+    )
+
+    registry["ecology_measurement_csv_export"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_measurement_csv_export",
+        display_name="Export Ecological Source Measurements CSV",
+        category="Scientific analysis",
+        description=(
+            "Export each source-linked projected measurement with QC and provenance; "
+            "never promote unverified geometry to biological growth."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="candidates",
+                display_name="Unverified calibrated measurement candidates",
+                accepted_types=["ecology_measurement_candidates"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="csv",
+                display_name="Unverified source-level CSV with fingerprint and QC",
+                accepted_types=["ecology_measurement_csv"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=[],
+        optional_parameters={},
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Rechecks the same candidate fingerprint, QC and derived summaries as the API.",
+            "Persists CSV text and its source fingerprint in the workflow artifact.",
+            "Source-linked geometry is unverified; scientist review remains required.",
+            "Cannot connect to verified-dataset ports or promote biological growth.",
+        ],
+    )
+
+    registry["ecology_longitudinal_analysis"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_longitudinal_analysis",
+        display_name="Exploratory Longitudinal Ecology",
+        category="Scientific analysis",
+        description=(
+            "Compare first and final organism-level observations without treating "
+            "unverified caller-supplied measurements as research truth."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="project",
+                display_name="Project",
+                accepted_types=["project_reference"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="analysis",
+                display_name="Unverified longitudinal analysis",
+                accepted_types=["longitudinal_analysis"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=["observations"],
+        optional_parameters={
+            "experimental_unit_type": None,
+            "expected_organism_ids_by_unit": None,
+            "expected_sampling_dates_by_unit": None,
+        },
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Reuses the standalone ecological longitudinal calculation service.",
+            "Observations are caller-supplied and are not verified against project records.",
+            "Workflow artifacts persist source IDs and an explicit unverified evidence level.",
+            "Do not treat this output as verified or use it to infer significance or survival.",
+            "Optional caller-declared organism rosters expose completely unobserved specimens; "
+            "they do not establish mortality or authenticated study membership.",
+            "Caller-declared sampling calendars exclude incomplete planned visits; "
+            "missing visits are not evidence of mortality or biological absence.",
+            "Verified ecological reporting requires a future review and lineage gate.",
+        ],
+    )
+
+    registry["ecology_paired_count_comparison"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_paired_count_comparison",
+        display_name="Exploratory Human-Model Count Comparison",
+        category="Scientific analysis",
+        description=(
+            "Compare paired human-model counts with explicit unverified source "
+            "provenance and descriptive experimental-unit summaries."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="project",
+                display_name="Project",
+                accepted_types=["project_reference"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="comparison",
+                display_name="Unverified paired count comparison",
+                accepted_types=["paired_count_comparison"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=["pairs", "reference_kind"],
+        optional_parameters={"experimental_unit_type": None},
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Reuses the standalone comparison domain service.",
+            "Neither the human nor model source is authenticated to project records.",
+            "No ICC, limits of agreement or statistical significance are inferred.",
+            "Experimental-unit summaries are descriptive, not independent hypothesis tests.",
+            "This unverified output cannot feed verified dataset creation directly.",
+        ],
+    )
+
+    registry["ecology_paired_count_csv_export"] = WorkflowNodeDefinitionResponse(
+        node_type="ecology_paired_count_csv_export",
+        display_name="Export Unverified Human-Model Count CSV",
+        category="Scientific analysis",
+        description=(
+            "Export paired image rows, declared biological-unit summaries and "
+            "source provenance without asserting independent replication."
+        ),
+        input_ports=[
+            WorkflowPortDefinition(
+                port_id="comparison",
+                display_name="Unverified paired human-model comparison",
+                accepted_types=["paired_count_comparison"],
+            )
+        ],
+        output_ports=[
+            WorkflowPortDefinition(
+                port_id="csv",
+                display_name="Unverified paired-count CSV",
+                accepted_types=["paired_count_comparison_csv"],
+                required=False,
+                multiple=True,
+            )
+        ],
+        required_parameters=[],
+        optional_parameters={},
+        execution_state="executable",
+        executable=True,
+        implementation_notes=[
+            "Revalidates the current typed comparison result before export.",
+            "Persists CSV, source IDs, SHA-256 and unverified review restrictions.",
+            "No ICC, limits of agreement, significance or verified replication.",
+            "Cannot feed verified-dataset ports without separate source review.",
         ],
     )
 

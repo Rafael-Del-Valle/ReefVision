@@ -1,7 +1,10 @@
 param(
     [Parameter(Mandatory = $true)][string]$InstallerPath,
     [Parameter(Mandatory = $true)][string]$AcceptanceRoot,
+    [string]$ExpectedVersion = '',
+    [string]$ExpectedSchemaRevision = '',
     [string]$PreviousInstallerPath = '',
+    [string]$CameraFixturePath = '',
     [switch]$PreviousInstallerSupportsIsolatedAcceptance,
     [switch]$DisposableTest,
     [switch]$PlanOnly,
@@ -27,6 +30,15 @@ if ($PreviousInstallerPath) {
     $PreviousInstallerPath = (Resolve-Path -LiteralPath $PreviousInstallerPath).Path
     if ([System.IO.Path]::GetExtension($PreviousInstallerPath) -ine '.msi') { throw 'PreviousInstallerPath must identify an MSI.' }
 }
+if ($CameraFixturePath) {
+    $CameraFixturePath = (Resolve-Path -LiteralPath $CameraFixturePath).Path
+    if ([System.IO.Path]::GetExtension($CameraFixturePath) -notin @('.jpg', '.jpeg', '.jpe', '.jfif', '.jfi', '.jif')) {
+        throw 'CameraFixturePath must identify a JPEG camera image (.jpg/.jpeg or a recognized JPEG alias).'
+    }
+    if (-not (Test-Path -LiteralPath $CameraFixturePath -PathType Leaf)) {
+        throw 'CameraFixturePath must identify an existing file.'
+    }
+}
 if ($PreviousInstallerPath -and -not $PreviousInstallerSupportsIsolatedAcceptance) {
     throw 'A previous MSI may be exercised only when -PreviousInstallerSupportsIsolatedAcceptance confirms that it honors the marker-gated acceptance data root. This prevents an older desktop from touching normal ReefVision user data.'
 }
@@ -39,8 +51,33 @@ $DataRoot = Join-Path $RunRoot 'data'
 $EvidenceRoot = Join-Path $RepositoryRoot ".artifacts\windows-clean-acceptance-$Token"
 $ReportPath = Join-Path $EvidenceRoot 'report.json'
 $InstallerHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash
-$Version = (New-Object -ComObject WindowsInstaller.Installer).OpenDatabase($InstallerPath, 0).OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductVersion'")
-$Version.Execute(); $VersionRecord = $Version.Fetch(); $ProductVersion = $VersionRecord.StringData(1)
+function Get-AcceptanceMsiProperty([string]$Path, [string]$Name) {
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    $database = $installer.OpenDatabase($Path, 0)
+    $query = 'SELECT `Value` FROM `Property` WHERE `Property`=''{0}''' -f $Name
+    $view = $database.OpenView($query)
+    try {
+        [void]$view.Execute()
+        $record = $view.Fetch()
+        if ($null -eq $record) { throw "MSI has no $Name." }
+        $value = [string]$record.StringData(1)
+        if ($Name -eq 'ProductVersion') { return ConvertTo-ReefVisionVersionString $value }
+        return $value
+    } finally {
+        [void]$view.Close()
+    }
+}
+$ProductVersion = Get-AcceptanceMsiProperty -Path $InstallerPath -Name 'ProductVersion'
+if ($ExpectedVersion -and $ProductVersion -ne $ExpectedVersion) {
+    throw "MSI ProductVersion $ProductVersion does not match $ExpectedVersion."
+}
+if ($PreviousInstallerPath -and -not $SkipUpgrade) {
+    $previousProductVersion = Get-AcceptanceMsiProperty -Path $PreviousInstallerPath -Name 'ProductVersion'
+    if ([version]$previousProductVersion -ge [version]$ProductVersion) { throw 'Upgrade requires an earlier MSI version.' }
+    $upgradeCode = Get-AcceptanceMsiProperty -Path $InstallerPath -Name 'UpgradeCode'
+    $previousUpgradeCode = Get-AcceptanceMsiProperty -Path $PreviousInstallerPath -Name 'UpgradeCode'
+    if ($upgradeCode -ne $previousUpgradeCode) { throw 'Earlier and candidate MSI UpgradeCode values differ.' }
+}
 
 $report = [ordered]@{
     schema_version = 'reefvision-windows-clean-acceptance-1'
@@ -59,9 +96,12 @@ $report = [ordered]@{
     shortcuts = New-ReefVisionEvidenceResult
     first_launch = New-ReefVisionEvidenceResult
     frontend_backend_connectivity = New-ReefVisionEvidenceResult
+    webview2 = New-ReefVisionEvidenceResult
+    schema_migration = New-ReefVisionEvidenceResult
     model_policy = New-ReefVisionEvidenceResult
     sam2_live = if ($LiveSam2Acceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real SAM 2.1 packaged runtime acceptance not requested' }
     external_annotation_imports = New-ReefVisionEvidenceResult
+    camera_jpeg = if ($CameraFixturePath) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real camera JPEG fixture not supplied' }
     confidence_review = if ($LiveSam2Acceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real pending prediction review not requested' }
     project_persistence = New-ReefVisionEvidenceResult
     restart = New-ReefVisionEvidenceResult
@@ -73,6 +113,32 @@ $report = [ordered]@{
 }
 
 function Save-Report { Write-ReefVisionEvidenceReport -Report $report -Path $ReportPath }
+
+function Assert-AcceptancePackagedBackend([string]$Api, [string]$ExpectedAppVersion, [string]$ExpectedRevision) {
+    $versionPayload = Invoke-RestMethod "$Api/system/version"
+    $appVersion = ConvertTo-ReefVisionVersionString ([string]$versionPayload.application_version)
+    if ($appVersion -ne $ExpectedAppVersion) {
+        throw "Packaged API version $($versionPayload.application_version) does not match $ExpectedAppVersion."
+    }
+    $migration = Invoke-RestMethod "$Api/system/migrations/status"
+    if (-not $migration.database_exists -or $migration.schema_status -ne 'up_to_date' -or
+        ($ExpectedRevision -and $migration.current_schema_revision -ne $ExpectedRevision)) {
+        throw "Unexpected packaged database migration status: $($migration | ConvertTo-Json -Compress)"
+    }
+    return $migration
+}
+
+function Wait-AcceptanceWebView2([int]$DesktopProcessId) {
+    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    do {
+        $webview = Get-CimInstance -ClassName Win32_Process -Filter "Name = 'msedgewebview2.exe' AND ParentProcessId = $DesktopProcessId" |
+            Select-Object -First 1
+        if ($webview) { return $webview.ProcessId }
+        Start-Sleep -Milliseconds 500
+    } while ([DateTime]::UtcNow -lt $deadline)
+    throw 'No WebView2 browser process was observed under the installed desktop.'
+}
+
 function Run-Msi([string]$Action, [string]$PackageOrProduct, [string]$LogName, [string]$TargetRoot = '') {
     $log = Join-Path $EvidenceRoot $LogName
     $arguments = New-ReefVisionMsiArguments -Action $Action -PackageOrProduct $PackageOrProduct -InstallRoot $TargetRoot -LogPath $log
@@ -146,7 +212,8 @@ function Import-AcceptanceImage(
     [string]$Url,
     [byte[]]$ImageBytes = $null,
     [string]$Filename = 'acceptance.png',
-    [string]$RelativePath = 'synthetic/acceptance.png'
+    [string]$RelativePath = 'synthetic/acceptance.png',
+    [string]$ContentType = 'image/png'
 ) {
     Add-Type -AssemblyName System.Net.Http
     $png = if ($null -ne $ImageBytes) { $ImageBytes } else { [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=') }
@@ -154,7 +221,7 @@ function Import-AcceptanceImage(
     $form = New-Object System.Net.Http.MultipartFormDataContent
     try {
         $file = New-Object System.Net.Http.ByteArrayContent -ArgumentList (,$png)
-        $file.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse('image/png')
+        $file.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse($ContentType)
         $form.Add($file, 'files', $Filename)
         $form.Add((New-Object System.Net.Http.StringContent($RelativePath)), 'relative_paths')
         $response = $client.PostAsync($Url, $form).GetAwaiter().GetResult()
@@ -250,10 +317,16 @@ try {
     $desktop = Start-AcceptanceDesktop
     $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $api = "http://127.0.0.1:$port/api/v1"
-    $versionPayload = Invoke-RestMethod "$api/system/version"
-    $migrationPayload = Invoke-RestMethod "$api/system/migrations/status"
-    $report.first_launch = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop and packaged backend started; database initialized; API version $($versionPayload.application_version)"
-    $report.frontend_backend_connectivity = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop-published loopback API responded; migration status: $($migrationPayload.schema_status)"
+    $initialVersion = Get-AcceptanceMsiProperty -Path $initialInstaller -Name 'ProductVersion'
+    $initialRevision = if ($initialInstaller -eq $InstallerPath) { $ExpectedSchemaRevision } else { '' }
+    $migrationPayload = Assert-AcceptancePackagedBackend -Api $api -ExpectedAppVersion $initialVersion -ExpectedRevision $initialRevision
+    $report.first_launch = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop and packaged backend started; database initialized; API version $initialVersion"
+    $report.frontend_backend_connectivity = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Desktop-published loopback API responded.'
+    $webviewPid = Wait-AcceptanceWebView2 -DesktopProcessId $desktop.Id
+    $report.webview2 = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "WebView2 browser PID $webviewPid started under the desktop."
+    if ($initialRevision) {
+        $report.schema_migration = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Packaged database reached $($migrationPayload.current_schema_revision)."
+    }
 
     # Project templates were intentionally reduced to 'blank' in 1.0.
     # The acceptance fixture must explicitly create its class instead of
@@ -278,6 +351,63 @@ try {
     $report.model_policy = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "$($Architectures.Count) architectures; zero pretrained/downloadable models; zero cached weights; isolated provider caches."
     $import = Import-AcceptanceImage "$api/projects/$projectId/imports/images"
     $imageId = $import.successful[0].image_id
+    if ($CameraFixturePath) {
+        # Optional physical acceptance fixture: only the disposable installed
+        # backend receives the camera file. Never rewrite or EXIF-transpose it.
+        # This is backend evidence, not a substitute for interactive WebView2 QA.
+        $cameraHashBefore = (Get-FileHash -LiteralPath $CameraFixturePath -Algorithm SHA256).Hash
+        $cameraBytes = [System.IO.File]::ReadAllBytes($CameraFixturePath)
+        $cameraName = [System.IO.Path]::GetFileName($CameraFixturePath)
+        $cameraImport = Import-AcceptanceImage -Url "$api/projects/$projectId/imports/images" -ImageBytes $cameraBytes -Filename $cameraName -RelativePath "camera/$cameraName" -ContentType 'image/jpeg'
+        if (@($cameraImport.successful).Count -ne 1) {
+            throw "Real camera JPEG did not import exactly once: $($cameraImport | ConvertTo-Json -Depth 5 -Compress)"
+        }
+        $cameraId = $cameraImport.successful[0].image_id
+        $cameraMetadata = Invoke-RestMethod "$api/images/$cameraId"
+        if ($cameraMetadata.media_type -ne 'image/jpeg' -or $cameraMetadata.width_px -le 0 -or $cameraMetadata.height_px -le 0) {
+            throw 'Real camera JPEG lost its media type or source-pixel dimensions.'
+        }
+        # Validate the decoded source raster against the API's scientific pixel frame.
+        $null = Assert-ReefVisionCameraRaster -Bytes $cameraBytes -ContentType 'image/jpeg' -ExpectedWidth ([int]$cameraMetadata.width_px) -ExpectedHeight ([int]$cameraMetadata.height_px)
+        $cameraHttp = [System.Net.Http.HttpClient]::new()
+        try {
+            $storedBytes = $cameraHttp.GetByteArrayAsync("$api/images/$cameraId/content").GetAwaiter().GetResult()
+            $sha = [System.Security.Cryptography.SHA256]::Create()
+            try {
+                $storedHash = [BitConverter]::ToString($sha.ComputeHash([byte[]]$storedBytes)).Replace('-', '')
+            } finally { $sha.Dispose() }
+            if ($storedHash -cne $cameraHashBefore) {
+                throw 'Installed backend modified the original camera JPEG bytes.'
+            }
+            $displayResponse = $cameraHttp.GetAsync("$api/images/$cameraId/display").GetAwaiter().GetResult()
+            try {
+                if (-not $displayResponse.IsSuccessStatusCode) { throw 'Real camera JPEG display endpoint failed.' }
+                $displayType = [string]$displayResponse.Content.Headers.ContentType.MediaType
+                if ($displayType -notin @('image/jpeg', 'image/png')) {
+                    throw "Real camera JPEG display has an unsupported content type: $displayType"
+                }
+                $displayBytes = $displayResponse.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
+                if ($displayBytes.Length -eq 0) { throw 'Real camera JPEG display returned no pixels.' }
+                # A nonempty HTTP response is insufficient: verify decodable pixels,
+                # the declared media type, and unchanged annotation coordinates.
+                $null = Assert-ReefVisionCameraRaster -Bytes ([byte[]]$displayBytes) -ContentType $displayType -ExpectedWidth ([int]$cameraMetadata.width_px) -ExpectedHeight ([int]$cameraMetadata.height_px)
+                $orientation = $null
+                $exifProperty = $cameraMetadata.metadata_json.PSObject.Properties['exif']
+                if ($null -ne $exifProperty -and $null -ne $exifProperty.Value) {
+                    $orientationProperty = $exifProperty.Value.PSObject.Properties['Orientation']
+                    if ($null -ne $orientationProperty) { $orientation = $orientationProperty.Value }
+                }
+                if ($null -ne $orientation -and [string]$orientation -ne '1' -and $displayType -ne 'image/png') {
+                    throw 'EXIF-oriented camera JPEG must use an unrotated PNG display rendition.'
+                }
+            } finally { $displayResponse.Dispose() }
+        } finally { $cameraHttp.Dispose() }
+        if ((Get-FileHash -LiteralPath $CameraFixturePath -Algorithm SHA256).Hash -cne $cameraHashBefore) {
+            throw 'Camera acceptance modified the original fixture on disk.'
+        }
+        # Do not mark the camera acceptance PASS until it survives desktop restart.
+        # A successful initial import alone does not establish durable media storage.
+    }
     $session = Invoke-RestMethod "$api/images/$imageId/annotations"
     $annotationId = [guid]::NewGuid().ToString()
     $annotationBody = @{
@@ -441,21 +571,61 @@ try {
 
     if ($PreviousInstallerPath -and -not $SkipUpgrade) {
         Run-Msi -Action Install -PackageOrProduct $InstallerPath -LogName 'upgrade.log' -TargetRoot $InstallRoot | Out-Null
-        $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Previous installer upgraded to current installer.'
     }
 
     $desktop = Start-AcceptanceDesktop
     $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $api = "http://127.0.0.1:$port/api/v1"
+    $finalMigration = Assert-AcceptancePackagedBackend -Api $api -ExpectedAppVersion $ProductVersion -ExpectedRevision $ExpectedSchemaRevision
+    $report.schema_migration = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Packaged database reached $($finalMigration.current_schema_revision)."
     $persisted = Invoke-RestMethod "$api/projects/$projectId"
     if ($persisted.id -ne $projectId) { throw 'Project ID changed across restart.' }
     $persistedAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"
     if (-not ($persistedAnnotations.annotations | Where-Object id -eq $annotationId)) { throw 'Acceptance annotation did not persist across restart.' }
+    if ($CameraFixturePath) {
+        # Validate media persistence independently of the in-memory import response.
+        # This also covers an MSI upgrade when a previous installer was supplied.
+        $persistedCamera = Invoke-RestMethod "$api/images/$cameraId"
+        if ($persistedCamera.media_type -ne 'image/jpeg' -or
+            [int]$persistedCamera.width_px -ne [int]$cameraMetadata.width_px -or
+            [int]$persistedCamera.height_px -ne [int]$cameraMetadata.height_px) {
+            throw 'Camera metadata changed or disappeared after packaged desktop restart.'
+        }
+        $cameraRestartHttp = [System.Net.Http.HttpClient]::new()
+        try {
+            $persistedCameraBytes = $cameraRestartHttp.GetByteArrayAsync("$api/images/$cameraId/content").GetAwaiter().GetResult()
+            $restartSha = [System.Security.Cryptography.SHA256]::Create()
+            try {
+                $persistedHash = [BitConverter]::ToString($restartSha.ComputeHash([byte[]]$persistedCameraBytes)).Replace('-', '')
+            } finally { $restartSha.Dispose() }
+            if ($persistedHash -cne $cameraHashBefore) {
+                throw 'Camera JPEG original bytes changed or disappeared after desktop restart.'
+            }
+            $restartDisplayResponse = $cameraRestartHttp.GetAsync("$api/images/$cameraId/display").GetAwaiter().GetResult()
+            try {
+                if (-not $restartDisplayResponse.IsSuccessStatusCode) {
+                    throw 'Camera JPEG display endpoint failed after desktop restart.'
+                }
+                $restartDisplayType = [string]$restartDisplayResponse.Content.Headers.ContentType.MediaType
+                $restartDisplayBytes = $restartDisplayResponse.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
+                $null = Assert-ReefVisionCameraRaster -Bytes ([byte[]]$restartDisplayBytes) -ContentType $restartDisplayType -ExpectedWidth ([int]$cameraMetadata.width_px) -ExpectedHeight ([int]$cameraMetadata.height_px)
+                Assert-ReefVisionStableCameraDisplay -InitialBytes ([byte[]]$displayBytes) -RestartBytes ([byte[]]$restartDisplayBytes) -InitialContentType $displayType -RestartContentType $restartDisplayType
+            } finally { $restartDisplayResponse.Dispose() }
+        } finally { $cameraRestartHttp.Dispose() }
+        if ((Get-FileHash -LiteralPath $CameraFixturePath -Algorithm SHA256).Hash -cne $cameraHashBefore) {
+            throw 'Camera fixture changed on disk during restart acceptance.'
+        }
+        $report.camera_jpeg = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed backend accepted and persisted $cameraName ($($cameraMetadata.width_px)x$($cameraMetadata.height_px)) across desktop restart; original SHA256 $cameraHashBefore unchanged; display decoded as $restartDisplayType and display SHA-256 unchanged across restart. GUI/WebView2 acceptance remains manual."
+    }
     if ($LiveSam2Acceptance) {
         $persistedSamSession = Invoke-RestMethod "$api/images/$samImageId/annotations"
         if (-not ($persistedSamSession.mask_annotations | Where-Object id -eq $samAcceptedMaskId)) {
             throw 'Accepted SAM 2.1 mask did not persist across packaged Windows desktop restart.'
         }
+    }
+    if ($PreviousInstallerPath -and -not $SkipUpgrade) {
+        $null = Wait-AcceptanceWebView2 -DesktopProcessId $desktop.Id
+        $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Upgraded from $initialVersion to $ProductVersion; WebView2, database and existing project verified."
     }
     $report.restart = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Desktop and backend restarted cleanly.'
     $report.project_persistence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Project $projectId, image $imageId, and annotation $annotationId persisted; pre-restart database SHA-256 $projectChecksum"
@@ -474,8 +644,7 @@ try {
     Stop-AcceptanceDesktop $desktop
 
     if (-not $SkipUninstall) {
-        $installer = New-Object -ComObject WindowsInstaller.Installer
-        $database = $installer.OpenDatabase($InstallerPath, 0); $view = $database.OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductCode'"); $view.Execute(); $productCode = $view.Fetch().StringData(1)
+        $productCode = Get-AcceptanceMsiProperty -Path $InstallerPath -Name 'ProductCode'
         Run-Msi -Action Uninstall -PackageOrProduct $productCode -LogName 'uninstall.log' | Out-Null
         if (Test-Path (Join-Path $InstallRoot 'ReefVision.exe')) { throw 'ReefVision.exe remains after uninstall.' }
         if (@($shortcutCandidates | Where-Object { Test-Path -LiteralPath $_ }).Count -gt 0) { throw 'A ReefVision shortcut remains after uninstall.' }

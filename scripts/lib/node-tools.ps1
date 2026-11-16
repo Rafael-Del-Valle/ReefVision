@@ -128,6 +128,7 @@ function Ensure-ReefVisionNodeTools {
         [switch]$AllowInstall,
         [switch]$NonInteractive,
         [int]$MinimumNodeMajor = 22,
+        [int]$MaximumNodeMajor = 24,
         [int]$MinimumNpmMajor = 10
     )
 
@@ -155,6 +156,9 @@ After installation, close and reopen the terminal before starting ReefVision.
 
     if ($nodeMajor -lt $MinimumNodeMajor) {
         throw "Node.js $MinimumNodeMajor or newer is required. Found major version $nodeMajor at '$($tools.Node)'. Install a current LTS release and rerun setup."
+    }
+    if ($nodeMajor -gt $MaximumNodeMajor) {
+        throw "ReefVision supports Node.js LTS majors $MinimumNodeMajor through $MaximumNodeMajor. Found major version $nodeMajor at '$($tools.Node)'. Install Node.js 22 or 24 and rerun setup."
     }
     if ($npmMajor -lt $MinimumNpmMajor) {
         throw "npm $MinimumNpmMajor or newer is required. Found major version $npmMajor at '$($tools.Npm)'. Update Node.js/npm and rerun setup."

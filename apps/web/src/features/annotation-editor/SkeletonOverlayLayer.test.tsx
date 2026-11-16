@@ -66,12 +66,9 @@ it("is non-interactive in view mode while still drawing the skeleton", () => {
       ]}
       nodes={[
         {
-          id: "endpoint-0001",
           kind: "endpoint",
           x: 2,
           y: 2,
-          source_pixel_count: 1,
-          external_connection_count: 1,
         },
       ]}
       addedPixels={[{ x: 4, y: 2 }]}
@@ -86,4 +83,37 @@ it("is non-interactive in view mode while still drawing the skeleton", () => {
   expect(context.fillRect).toHaveBeenCalled();
   fireEvent.pointerDown(canvas, { clientX: 5, clientY: 5 });
   expect(onPixelClick).not.toHaveBeenCalled();
+});
+
+it("draws the proposed branch and accepts waypoints only in draw mode", () => {
+  const onPixelClick = vi.fn();
+  const props = {
+    width: 20,
+    height: 10,
+    pixels: [{ x: 2, y: 2 }],
+    nodes: [],
+    addedPixels: [],
+    removedPixels: [],
+    branchPixels: [{ x: 6, y: 5 }],
+    onPixelClick,
+  };
+  const { rerender } = render(
+    <SkeletonOverlayLayer {...props} editMode="branch" />,
+  );
+  const canvas = screen.getByTestId("skeleton-overlay");
+  vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+    left: 10,
+    top: 20,
+    width: 40,
+    height: 20,
+  } as DOMRect);
+
+  fireEvent.pointerDown(canvas, { button: 0, clientX: 22, clientY: 30 });
+  expect(onPixelClick).toHaveBeenCalledWith({ x: 6, y: 5 });
+  expect(context.fillRect).toHaveBeenCalledWith(6, 5, 1, 1);
+  expect(canvas).toHaveStyle({ cursor: "crosshair" });
+
+  rerender(<SkeletonOverlayLayer {...props} editMode="view" />);
+  fireEvent.pointerDown(canvas, { button: 0, clientX: 22, clientY: 30 });
+  expect(onPixelClick).toHaveBeenCalledOnce();
 });

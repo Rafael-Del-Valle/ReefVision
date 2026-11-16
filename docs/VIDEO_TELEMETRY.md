@@ -57,14 +57,20 @@ projection, GIS export, calibration, or changes to YOLO/ByteTrack results.
 Samples use SRT cue start times (seconds), decimal GPS degrees, meters, degrees,
 m/s, and shutter exposure seconds. Missing/invalid optional values stay `None`.
 Explicit frame counters retain their source numbering; SRT block numbers are
-never assumed to be video frame indices. Wall-clock strings are ignored.
+never assumed to be video frame indices. Recognized DJI wall-clock strings are
+retained as timezone-naive source evidence. ReefVision derives absolute UTC only
+when the researcher supplies both an explicit UTC offset and independent timezone
+evidence; an SRT wall clock alone is never assumed to be UTC.
 
 `TelemetrySource.sample_for_frame(index, fps)` uses zero-based index / FPS.
 Nearest lookup sorts samples once, uses binary search, chooses the earlier
 timestamp on ties, and returns the signed delta (sample time minus request time)
 and absolute error. Out-of-range requests clamp to the nearest endpoint. Gaps
 are not interpolated; optional `max_delta_s` rejects stale matches. This assumes
-constant FPS; variable-frame-rate callers should use `sample_for_time` with PTS.
+constant FPS. Variable-frame-rate track keyframes may persist explicit presentation
+timestamps; interpolation, speed, telemetry matching, and georeferencing then use
+those timestamps rather than deriving time from frame index/FPS. Partial or
+non-monotonic PTS evidence is rejected.
 
 Pairing searches only siblings, matching filename stems and `.srt`
 case-insensitively; unrelated files are ignored. Ambiguous pairs are rejected.

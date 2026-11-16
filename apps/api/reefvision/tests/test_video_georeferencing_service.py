@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -103,6 +104,7 @@ def _source(
     roll: float | None = 0.0,
     pitch: float = -90.0,
     digital_zoom_ratio: float = 1.0,
+    wall_clock: datetime | None = None,
 ) -> IndexedTelemetrySource:
     return IndexedTelemetrySource(
         [
@@ -116,9 +118,77 @@ def _source(
                 gimbal_pitch_deg=pitch,
                 gimbal_roll_deg=roll,
                 digital_zoom_ratio=digital_zoom_ratio,
+                wall_clock=wall_clock,
             )
         ]
     )
+
+
+def test_georeference_detection_uses_explicit_pts_and_evidence_gated_srt_utc(
+    service_context: ServiceContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings, factory, video_id = service_context
+    with factory() as session:
+        video = session.get(VideoAsset, video_id)
+        assert video is not None
+        video.metadata_json = {
+            **dict(video.metadata_json or {}),
+            "telemetry": {
+                "found": True,
+                "available": True,
+                "source_type": "dji_srt",
+                "source_path": "fixture.srt",
+                "path_kind": "managed",
+                "sample_count": 1,
+                "wall_clock_sample_count": 1,
+                "utc_offset_minutes": -300,
+                "utc_offset_evidence": "Field log confirms EST (UTC-05:00)",
+                "content_sha256": "1" * 64,
+            },
+        }
+        session.commit()
+
+        service = VideoGeoreferencingService(session, settings)
+        source = _source(wall_clock=datetime(2026, 1, 16, 15, 49, 54))
+        monkeypatch.setattr(service.video_assets, "telemetry_source", lambda _: source)
+        observation = service.georeference_detection(
+            video_id,
+            frame_index=1,
+            frame_time_s=0.05,
+            bbox=BoundingBoxPixels(x_min=490, y_min=390, x_max=510, y_max=410),
+        )
+
+    assert observation.timestamp.source == "video_pts"
+    assert observation.timestamp.frame_time_s == pytest.approx(0.05)
+    assert observation.timestamp.utc == datetime(2026, 1, 16, 20, 49, 54, 50000, tzinfo=UTC)
+    assert observation.telemetry.telemetry_utc == datetime(2026, 1, 16, 20, 49, 54, tzinfo=UTC)
+    assert observation.telemetry.field_provenance is not None
+    assert observation.telemetry.field_provenance["srt_utc_offset_minutes"] == -300
+    assert (
+        observation.telemetry.field_provenance["srt_utc_offset_evidence"]
+        == "Field log confirms EST (UTC-05:00)"
+    )
+
+
+def test_georeference_detection_does_not_invent_utc_without_offset_evidence(
+    service_context: ServiceContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings, factory, video_id = service_context
+    with factory() as session:
+        service = VideoGeoreferencingService(session, settings)
+        source = _source(wall_clock=datetime(2026, 1, 16, 15, 49, 54))
+        monkeypatch.setattr(service.video_assets, "telemetry_source", lambda _: source)
+        observation = service.georeference_detection(
+            video_id,
+            frame_index=0,
+            bbox=BoundingBoxPixels(x_min=490, y_min=390, x_max=510, y_max=410),
+        )
+
+    assert observation.timestamp.utc is None
+    assert observation.timestamp.source == "frame_index_fps"
+    assert observation.telemetry.telemetry_utc is None
 
 
 def _source_for_video(

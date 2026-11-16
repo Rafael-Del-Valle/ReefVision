@@ -7,7 +7,7 @@ from pathlib import Path
 
 from reefvision import __version__
 
-EXPECTED_VERSION = "1.0.2"
+EXPECTED_VERSION = "1.3.0"
 
 
 def test_authoritative_version_sources_match_release_line() -> None:
@@ -65,3 +65,34 @@ def test_authoritative_version_sources_match_release_line() -> None:
 
     assert authoritative_versions
     assert set(authoritative_versions.values()) == {EXPECTED_VERSION}
+
+
+def test_desktop_build_and_rust_guard_stage_the_candidate_version() -> None:
+    root = Path(__file__).resolve().parents[4]
+    tauri_dir = root / "apps" / "web" / "src-tauri"
+    config = json.loads((tauri_dir / "tauri.conf.json").read_text(encoding="utf-8"))
+    version = config["version"]
+    staging = f"release-{version}"
+    assert config["bundle"]["resources"] == {
+        f"../../../.desktop/{staging}/backend/": "backend/",
+        f"../../../.desktop/{staging}/bundled-models/": "bundled-models/",
+    }
+    for path in (
+        tauri_dir / "build.rs",
+        root / "scripts" / "build-desktop.ps1",
+        root / "scripts" / "build-desktop-backend.ps1",
+    ):
+        release_paths = re.findall(r"release-\d+\.\d+\.\d+", path.read_text(encoding="utf-8"))
+        assert set(release_paths) == {staging}, path
+
+
+def test_web_tooling_supports_only_the_verified_node_lts_range() -> None:
+    root = Path(__file__).resolve().parents[4]
+    web_package = json.loads((root / "apps" / "web" / "package.json").read_text(encoding="utf-8"))
+    node_tools = (root / "scripts" / "lib" / "node-tools.ps1").read_text(encoding="utf-8")
+    workflow = (root / ".github" / "workflows" / "build-desktop.yml").read_text(encoding="utf-8")
+
+    assert web_package["engines"]["node"] == ">=22 <25"
+    assert "[int]$MaximumNodeMajor = 24" in node_tools
+    assert "$nodeMajor -gt $MaximumNodeMajor" in node_tools
+    assert 'node-version: "22"' in workflow

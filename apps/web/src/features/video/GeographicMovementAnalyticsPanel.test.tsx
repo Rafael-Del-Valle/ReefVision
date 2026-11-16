@@ -109,7 +109,7 @@ describe("GeographicMovementAnalyticsPanel", () => {
     ).toBeInTheDocument();
 
     expect(
-      screen.getByText("No persisted geographic observations for this track."),
+      screen.getByText("No fresh geographic observations for this track."),
     ).toBeInTheDocument();
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -201,6 +201,7 @@ describe("GeographicMovementAnalyticsPanel", () => {
           end_location: coordinate,
           distance_m: 5,
           speed_m_s: null,
+          initial_bearing_deg: null,
           cumulative_distance_m: 5,
           speed_valid: false,
           invalid_reason: "non_positive_elapsed_time",
@@ -266,6 +267,7 @@ describe("Task 16G panel synchronization", () => {
     end_location: coordinate,
     distance_m: 5,
     speed_m_s: 5,
+    initial_bearing_deg: 90,
     cumulative_distance_m: 5,
     speed_valid: true,
     invalid_reason: null,
@@ -314,6 +316,67 @@ describe("Task 16G panel synchronization", () => {
     ).toBeNull();
   });
 
+  it.each([
+    [0, "0.00°"],
+    [90.1234, "90.12°"],
+    [null, "Unavailable"],
+  ])(
+    "shows backend initial bearing %s with its convention",
+    (bearing, expected) => {
+      render(
+        <GeographicMovementAnalyticsPanel
+          state={successState({
+            ...data,
+            segments: [{ ...segment, initial_bearing_deg: bearing }],
+          })}
+          onReload={vi.fn()}
+        />,
+      );
+
+      const table = screen.getByRole("table", {
+        name: "Geographic trajectory segments",
+      });
+      const headings = within(table).getAllByRole("columnheader");
+      const bearingColumn = headings.findIndex(
+        (heading) => heading.textContent === "Initial bearing",
+      );
+      expect(bearingColumn).toBeGreaterThanOrEqual(0);
+      expect(
+        within(table).getAllByRole("cell")[bearingColumn],
+      ).toHaveTextContent(String(expected));
+      expect(
+        screen.getByText(/clockwise from true north/i),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/organism orientation/i)).toBeInTheDocument();
+    },
+  );
+
+  it("shows propagated one-sigma uncertainty and the independence limitation", () => {
+    render(
+      <GeographicMovementAnalyticsPanel
+        state={successState({
+          ...data,
+          segments: [
+            {
+              ...segment,
+              distance_standard_uncertainty_m: 0.5,
+              bearing_standard_uncertainty_deg: 1.25,
+              uncertainty_method: "independent_isotropic_first_order",
+              uncertainty_unavailable_reason: null,
+            },
+          ],
+        })}
+        onReload={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("0.50 m (1σ)")).toBeInTheDocument();
+    expect(screen.getByText("1.25 ° (1σ)")).toBeInTheDocument();
+    expect(
+      screen.getByText(/shared or unknown correlation/i),
+    ).toBeInTheDocument();
+  });
+
   it("seeks to the persisted endpoint without reloading analytics", () => {
     const onFrameSelect = vi.fn();
     const onReload = vi.fn();
@@ -351,5 +414,61 @@ describe("Task 16G panel synchronization", () => {
     expect(
       screen.queryByRole("button", { name: /Seek to frame/ }),
     ).not.toBeInTheDocument();
+  });
+
+  it("persists an explicit pairwise measurement without trajectory claims", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          result_id: "pair-result",
+          definition_id: "pair-definition",
+          result_sha256: "a".repeat(64),
+          measurement: {
+            content_sha256: "b".repeat(64),
+            distance_m: 12.345,
+            initial_bearing_deg: 90,
+            bearing_unavailable_reason: null,
+            signed_time_delta_s: 2,
+            time_basis: "utc",
+            distance_standard_uncertainty_m: 0.5,
+            bearing_standard_uncertainty_deg: 1,
+            uncertainty_method: "independent_isotropic_first_order",
+            uncertainty_unavailable_reason: null,
+            methodological_notes: [],
+          },
+        }),
+        { status: 201, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    render(
+      <GeographicMovementAnalyticsPanel
+        projectId="project-1"
+        state={successState(analytics())}
+        onReload={vi.fn()}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Start observation ID"), {
+      target: { value: "start-1" },
+    });
+    fireEvent.change(screen.getByLabelText("End observation ID"), {
+      target: { value: "end-1" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Calculate and persist pair" }),
+    );
+
+    const result = await screen.findByRole("region", {
+      name: "Pairwise geographic result",
+    });
+    expect(result).toHaveTextContent("12.35 m");
+    expect(result).toHaveTextContent("90.00°");
+    expect(screen.getByText(/endpoint displacement only/i)).toBeInTheDocument();
+    expect(result).toHaveTextContent("pair-result");
+    const request = JSON.parse(String(fetch.mock.calls[0][1]?.body));
+    expect(request).toMatchObject({
+      start_observation_id: "start-1",
+      end_observation_id: "end-1",
+    });
+    fetch.mockRestore();
   });
 });

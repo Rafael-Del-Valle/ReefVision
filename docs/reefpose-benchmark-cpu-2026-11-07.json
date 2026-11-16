@@ -1,0 +1,58 @@
+{
+  "biological_accuracy_validated": false,
+  "configuration": {
+    "amp_requested": false,
+    "batch_size": 1,
+    "device": "cpu",
+    "inference_iterations": 10,
+    "model": {
+      "base_channels": 32,
+      "fpn_channels": null,
+      "heatmap_stride": 4,
+      "input_channels": 3,
+      "input_height": 256,
+      "input_width": 256,
+      "num_keypoints": 8
+    },
+    "seed": 1337,
+    "training_steps": 5,
+    "warmup_iterations": 3
+  },
+  "inference": {
+    "batch_size": 1,
+    "images_per_second": 201.8680872820139,
+    "iterations": 10,
+    "mean_latency_ms": 4.95372999994288,
+    "p50_latency_ms": 4.919899999549671,
+    "p95_latency_ms": 5.140000000210421,
+    "peak_gpu_memory_bytes": 0
+  },
+  "model": {
+    "architecture": "reefpose-s",
+    "architecture_version": "1",
+    "parameter_count": 2622704,
+    "trainable_parameter_count": 2622704
+  },
+  "runtime": {
+    "amp_enabled": false,
+    "cuda_version": "12.8",
+    "cudnn_version": 91900,
+    "device": "cpu",
+    "device_name": "AMD64 Family 26 Model 8 Stepping 1, AuthenticAMD",
+    "device_type": "cpu",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "python_version": "3.12.10",
+    "torch_version": "2.11.0+cu128"
+  },
+  "schema_version": "reefpose-benchmark-0001",
+  "synthetic_fixture": true,
+  "training": {
+    "batch_size": 1,
+    "final_synthetic_loss": 0.23420649766921997,
+    "images_per_second": 36.88158797364302,
+    "peak_gpu_memory_bytes": 0,
+    "steps": 5,
+    "steps_per_second": 36.88158797364302
+  },
+  "validation_notice": "Synthetic tensors validate engineering performance only; real labeled animal data is required for biological accuracy evaluation."
+}

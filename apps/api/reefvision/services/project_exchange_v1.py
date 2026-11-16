@@ -8,6 +8,7 @@ objects required to reproduce 1.0 workflows.
 from __future__ import annotations
 
 import json
+import shutil
 import zipfile
 from collections.abc import Mapping, Sequence
 from hashlib import sha256
@@ -33,6 +34,7 @@ from reefvision.db.models import (
     MaskAnnotationEvent,
     Project,
     ProjectClassVisibilityDefault,
+    ProjectExchangePackage,
     SkeletonAnalysisRevision,
     TrainingDraft,
     VideoAsset,
@@ -64,6 +66,13 @@ from reefvision.db.models.pose_training_dataset import (
 )
 from reefvision.schemas.project_exchange import ProjectExchangePackageResponse
 from reefvision.services.project_exchange import MANIFEST_NAME, ProjectExchangeService
+from reefvision.services.project_exchange_integrated import (
+    FORMAT_VERSION as INTEGRATED_FORMAT_VERSION,
+)
+from reefvision.services.project_exchange_integrated import (
+    has_integrated_records,
+    integrated_records,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -127,6 +136,11 @@ def _parent_first_review_queues(records: Sequence[Base]) -> list[Base]:
 
 class ProjectExchangeV1Service(ProjectExchangeService):
     """Project exchange service with executable-workflow provenance included."""
+
+    def _format_version(self, project_id: str) -> str:
+        if has_integrated_records(self.session, project_id):
+            return INTEGRATED_FORMAT_VERSION
+        return super()._format_version(project_id)
 
     def _records(self, project: Project) -> dict[str, Sequence[Base]]:
         sections = super()._records(project)
@@ -500,6 +514,9 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             }
         )
 
+        integrated = integrated_records(self.session, project.id)
+        if any(integrated.values()):
+            sections.update(integrated)
         return sections
 
     def _telemetry_sidecars(
@@ -665,6 +682,22 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             "existing_projects_must_not_be_overwritten": True,
             "source_ids_are_preserved_in_import_provenance": True,
         }
+        if package.format_version == INTEGRATED_FORMAT_VERSION:
+            parent = self.session.scalar(
+                select(ProjectExchangePackage)
+                .where(
+                    ProjectExchangePackage.project_id == project.id,
+                    ProjectExchangePackage.direction == "import",
+                )
+                .order_by(ProjectExchangePackage.created_at.desc())
+                .limit(1)
+            )
+            if parent is not None:
+                source = parent.options_json
+                manifest["origin"] = {
+                    "manifest_sha256": parent.manifest_sha256,
+                    "id_map": source.get("origin_id_map") or source.get("id_map", {}),
+                }
 
         archive_path = resolve_managed_project_path(self.settings, package.archive_path)
         temporary = archive_path.with_suffix(archive_path.suffix + ".manifest.part")
@@ -677,7 +710,11 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                 for info in source_archive.infolist():
                     if info.filename == MANIFEST_NAME:
                         continue
-                    target_archive.writestr(info, source_archive.read(info.filename))
+                    with (
+                        source_archive.open(info) as incoming,
+                        target_archive.open(info, "w", force_zip64=True) as outgoing,
+                    ):
+                        shutil.copyfileobj(incoming, outgoing)
                 for descriptor, source_path in telemetry_sidecars:
                     target_archive.write(
                         source_path,
