@@ -321,3 +321,32 @@ reviewed, tested unified migration graph covering all installed lineages.
 **Evidence scope:** migration source inspection and read-only diagnostic
 specification only. No installed database, Windows MSI, or executable test
 was run as part of this documentation update. Release HOLD remains in force.
+
+## 2026-11-16 — unsupported single Alembic revision preflight
+
+The 1.6 desktop guard already rejected multiple heads, empty stamps, and
+partially retained 1.1 scientific tables. It did **not** reject a *single*
+unrecognized stamp when the known scientific tables were absent. For example,
+a damaged 1.1 revision-0042 backup with missing 0038–0042 tables could appear
+to be a safe pre-review 1.6 starting point. The desktop must not try Alembic
+upgrade against an unrecognized lineage even if only the version table remains.
+
+The read-only guard now accepts only packaged pre-review revision IDs
+`0001`–`0037`, including the historical `53ba400993db` video/mask
+migration between `0014` and `0015`. It still accepts a genuinely empty,
+unversioned installation and the existing validated 1.6 review lineage
+`0038`–`0041`; all other single-stamp candidates fail closed without
+touching user records. Known scientific-table collisions retain their more
+specific refusal reason.
+
+`test_migration_unknown_single_stamp_16.py` adds read-only SQLite cases
+for foreign/future, malformed and near-miss revision IDs, both with and
+without a biological sentinel; it tests historical valid revisions and
+ensures desktop startup never invokes Alembic upgrade on unsupported
+single-stamp databases. This is a **migration safety preflight**, not a
+research computation; it does not add a redundant Workflow Builder node.
+Existing typed, saved, executable QC workflows, audit/retry provenance and
+human-review gates are unchanged. This does not reconcile the 1.1/1.6
+revision-0038 collision, authorize a migration, or validate a real Windows
+installation. Exact-head CI, independent representative copied-database
+validation and researcher approval are still required.
