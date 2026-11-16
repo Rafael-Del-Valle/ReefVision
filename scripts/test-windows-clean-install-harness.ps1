@@ -20,6 +20,7 @@ function Assert-Throws([scriptblock]$Action, [string]$Message) {
 # Mock every registry access; no host registry data or keys are modified.
 $webview2Id = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
 $machineWebview2 = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$webview2Id"
+$machineNativeWebview2 = "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\$webview2Id"
 $userWebview2 = "HKCU:\Software\Microsoft\EdgeUpdate\Clients\$webview2Id"
 $script:fakeWebview2Values = @{}
 $script:deniedWebview2Path = ''
@@ -43,6 +44,16 @@ $script:fakeWebview2Values[$userWebview2] = '152.0.1234.56;malformed'
 $invalidWebview2 = Get-ReefVisionWebView2RuntimeInfo -ReadRegistryValue $readFakeWebview2Registry
 Assert-True (-not $invalidWebview2.detected) 'Malformed WebView2 registry version was accepted.'
 Assert-True ($invalidWebview2.evidence_scope -match 'interactive GUI unverified') 'Registry detection was mislabeled as physical WebView2 acceptance.'
+# WOW6432Node is the 32-bit registry view on 64-bit Windows. Verify that
+# different machine-view versions retain their exact, independent provenance.
+$script:fakeWebview2Values = @{}
+$script:fakeWebview2Values[$machineWebview2] = '152.0.4321.8'
+$script:fakeWebview2Values[$machineNativeWebview2] = '152.0.4567.9'
+$machineViews = Get-ReefVisionWebView2RuntimeInfo -ReadRegistryValue $readFakeWebview2Registry
+Assert-True ($machineViews.detected -and $machineViews.registrations.Count -eq 2) 'Both machine registry views must remain independently observable.'
+Assert-True ($machineViews.registrations[0].scope -ceq 'machine-32' -and $machineViews.registrations[0].version -ceq '152.0.4321.8') 'WOW6432Node was mislabeled as the 64-bit registry view.'
+Assert-True ($machineViews.registrations[1].scope -ceq 'machine-64' -and $machineViews.registrations[1].version -ceq '152.0.4567.9') 'Native machine SOFTWARE was mislabeled as the 32-bit registry view.'
+$script:fakeWebview2Values = @{}
 
 $defaultData = Join-Path $env:APPDATA 'org.reefvision.desktop'
 $OldConfig = $env:REEFVISION_CONFIG_DIR
