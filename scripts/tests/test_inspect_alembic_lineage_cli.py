@@ -1021,3 +1021,133 @@ def test_11_scientific_tables_cannot_precede_their_revision(
             assert connection.execute("SELECT note FROM biological_sentinel").fetchone() == (
                 "coral-keep",
             )
+
+
+@pytest.mark.parametrize(
+    ("variant", "mismatch"),
+    [
+        ("canonical", False),
+        ("additional_nonunique_index", False),
+        ("partial_unique_replaces_request_constraint", True),
+        ("additional_unique_actor", True),
+        ("additional_partial_unique_actor", True),
+    ],
+)
+def test_0038_qc_structural_audit_rejects_unreviewed_unique_index_semantics(
+    tmp_path: Path, variant: str, mismatch: bool
+) -> None:
+    """A column-matching QC table can still lose reviewer idempotency guarantees."""
+    database = tmp_path / "review-events.sqlite"
+    has_request_constraint = variant != "partial_unique_replaces_request_constraint"
+    request_constraint = (
+        ", CONSTRAINT uq_review_queue_item_event_request "
+        "UNIQUE (review_queue_item_id, client_request_id)"
+        if has_request_constraint
+        else ""
+    )
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
+        connection.execute("INSERT INTO alembic_version VALUES ('0039')")
+        connection.execute("CREATE TABLE projects (id TEXT NOT NULL PRIMARY KEY)")
+        connection.execute(
+            "CREATE TABLE review_queues (id TEXT NOT NULL PRIMARY KEY, project_id TEXT NOT NULL)"
+        )
+        connection.execute(
+            "CREATE TABLE review_queue_items "
+            "(id TEXT NOT NULL PRIMARY KEY, project_id TEXT NOT NULL, "
+            "review_queue_id TEXT NOT NULL)"
+        )
+        connection.execute(
+            "CREATE TABLE review_queue_item_events ("
+            "id VARCHAR(36) NOT NULL PRIMARY KEY, "
+            "review_queue_id VARCHAR(36) NOT NULL "
+            "REFERENCES review_queues(id) ON DELETE CASCADE, "
+            "review_queue_item_id VARCHAR(36) NOT NULL "
+            "REFERENCES review_queue_items(id) ON DELETE CASCADE, "
+            "project_id VARCHAR(36) NOT NULL "
+            "REFERENCES projects(id) ON DELETE CASCADE, "
+            "client_request_id VARCHAR(36) NOT NULL, "
+            "event_type VARCHAR(20) NOT NULL, "
+            "actor VARCHAR(100) NOT NULL, "
+            "comment TEXT, assignee VARCHAR(100), created_at DATETIME NOT NULL"
+            f"{request_constraint}, "
+            "CONSTRAINT ck_review_queue_item_event_type "
+            "CHECK (event_type IN ('comment', 'assign', 'unassign')))"
+        )
+        connection.execute(
+            "CREATE INDEX ix_review_queue_item_events_item_created "
+            "ON review_queue_item_events (review_queue_item_id, created_at)"
+        )
+        connection.execute(
+            "CREATE INDEX ix_review_queue_item_events_queue_created "
+            "ON review_queue_item_events (review_queue_id, created_at)"
+        )
+        if variant == "partial_unique_replaces_request_constraint":
+            connection.execute(
+                "CREATE UNIQUE INDEX only_one_reviewer_request "
+                "ON review_queue_item_events (review_queue_item_id, client_request_id) "
+                "WHERE actor = 'researcher-a'"
+            )
+        elif variant == "additional_unique_actor":
+            connection.execute(
+                "CREATE UNIQUE INDEX unreviewed_actor_limit "
+                "ON review_queue_item_events (actor)"
+            )
+        elif variant == "additional_partial_unique_actor":
+            connection.execute(
+                "CREATE UNIQUE INDEX unreviewed_partial_actor_limit "
+                "ON review_queue_item_events (actor) WHERE event_type = 'comment'"
+            )
+        elif variant == "additional_nonunique_index":
+            connection.execute(
+                "CREATE INDEX benign_actor_lookup ON review_queue_item_events (actor)"
+            )
+        connection.execute("INSERT INTO projects VALUES ('project')")
+        connection.execute("INSERT INTO review_queues VALUES ('queue', 'project')")
+        connection.execute(
+            "INSERT INTO review_queue_items VALUES ('item', 'project', 'queue')"
+        )
+        connection.execute(
+            "INSERT INTO review_queue_item_events "
+            "(id, review_queue_id, review_queue_item_id, project_id, "
+            "client_request_id, event_type, actor, comment, created_at) "
+            "VALUES ('event', 'queue', 'item', 'project', "
+            "'request', 'comment', 'researcher-a', 'private coral review', "
+            "'2026-11-16T00:00:00Z')"
+        )
+        connection.execute("CREATE TABLE biological_sentinel (note TEXT NOT NULL)")
+        connection.execute(
+            "INSERT INTO biological_sentinel VALUES ('private original coral observation')"
+        )
+    original = database.read_bytes()
+    expected_warning = "lineage_table_contract_mismatch_review_queue_item_events"
+    for _ in range(2):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--verify-structural-contracts",
+                "--fail-on-warning",
+                str(database),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert completed.returncode == (2 if mismatch else 0), completed.stderr
+        report = json.loads(completed.stdout)
+        assert report["upgrade_authorized"] is False
+        assert report["structural_contracts"]["review_queue_item_events"] == (
+            "mismatch" if mismatch else "matches"
+        )
+        assert (expected_warning in report["warnings"]) is mismatch
+        assert "private coral review" not in completed.stdout
+        assert "private original coral observation" not in completed.stdout
+        assert database.read_bytes() == original
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT comment FROM review_queue_item_events"
+        ).fetchone() == ("private coral review",)
+        assert connection.execute(
+            "SELECT note FROM biological_sentinel"
+        ).fetchone() == ("private original coral observation",)

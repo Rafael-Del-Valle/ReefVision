@@ -166,11 +166,27 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
         return False
 
     indexes = set()
+    nonprimary_unique_indexes = set()
+    has_partial_unique = False
     for index in db.execute(f"PRAGMA index_list({quoted})"):
         index_name = '"' + index[1].replace('"', '""') + '"'
         columns_in_index = tuple(row[2] for row in db.execute(f"PRAGMA index_info({index_name})"))
         indexes.add((columns_in_index, bool(index[2])))
-    return contract["indexes"] <= indexes
+        if index[2] and index[3] != "pk":
+            # A partial replacement of the QC idempotency constraint can
+            # admit duplicate review requests for excluded researchers.
+            # Unexpected UNIQUE indexes can also prevent otherwise valid
+            # biological observations or reviewer events. Require review.
+            nonprimary_unique_indexes.add(columns_in_index)
+            has_partial_unique |= bool(index[4])
+    required_unique_indexes = {
+        columns for columns, unique in contract["indexes"] if unique
+    }
+    return (
+        contract["indexes"] <= indexes
+        and not has_partial_unique
+        and nonprimary_unique_indexes == required_unique_indexes
+    )
 
 
 def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:

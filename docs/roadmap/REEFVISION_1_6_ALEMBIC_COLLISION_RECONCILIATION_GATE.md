@@ -45,3 +45,28 @@ reader locks can change without implying biological-data modification.
 
 ## Exit criteria
 Document the approved cross-track migration graph, a reproducible fixture matrix with before/after checksums and evidence, exact-head CI and local Windows results, explicit residual risks, and researcher approval in issue #76 and PR #77. Until then, **1.6 release HOLD; 1.7 and revised 1.8 remain isolated**. No merge, tag, release, paid hosting, model-weight download or research-asset deletion is authorized.
+
+## Unique-index semantics in the revision-0038 structural audit
+
+The optional read-only `--verify-structural-contracts` inspector checks the
+QC review-event idempotency uniqueness constraint and the scientific-record
+table's known indexes. Column names and foreign keys alone are insufficient:
+a **partial** UNIQUE index over `(review_queue_item_id, client_request_id)`
+would allow duplicate requests outside its predicate, while an unexpected
+UNIQUE index (for example on reviewer identity) can prohibit legitimate
+append-only events. The inspector now requires the complete set of non-primary
+UNIQUE index columns to match the original migration contract, rejects all
+partial UNIQUE indexes on these two reviewed tables, permits benign additional
+nonunique lookup indexes, and leaves normal primary-key uniqueness intact.
+A mismatch produces `lineage_table_contract_mismatch_review_queue_item_events`
+or the corresponding scientific-table warning under the existing strict gate.
+
+Five CLI regressions check canonical QC, harmless lookup indexes, a partial
+replacement of request uniqueness and two unexpected UNIQUE constraints.
+They use disposable SQLite databases, preserve a populated reviewer event and
+biological observation byte-for-byte, emit no confidential note values, and
+never authorize upgrade or researcher approval. **This improves diagnostic
+evidence only**: it does not reconcile the independently colliding 1.1/1.6
+Alembic-0038 histories, mutate a database, or bypass saved Workflow Builder
+human review. Full exact-head CI and native Windows installed/upgrade/rollback
+validation remain required before release.
