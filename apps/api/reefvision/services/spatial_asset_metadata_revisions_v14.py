@@ -59,6 +59,25 @@ class SpatialAssetMetadataRevisionService:
             or row.revision <= 0
         ):
             raise ValidationError("Spatial asset metadata source binding is inconsistent")
+        # A self-consistent content hash alone does not prove revision ancestry.
+        # Check the immediate predecessor before exposing a purported history.
+        if row.revision == 1:
+            if row.previous_revision_id is not None:
+                raise ValidationError("Spatial asset metadata revision ancestry is inconsistent")
+        else:
+            if row.previous_revision_id is None:
+                raise ValidationError("Spatial asset metadata revision ancestry is inconsistent")
+            predecessor = self.session.get(
+                SpatialAssetMetadataRevision, row.previous_revision_id
+            )
+            if (
+                predecessor is None
+                or predecessor.project_id != project_id
+                or predecessor.spatial_source_asset_id != asset_id
+                or predecessor.source_sha256 != source.sha256
+                or predecessor.revision != row.revision - 1
+            ):
+                raise ValidationError("Spatial asset metadata revision ancestry is inconsistent")
         try:
             payload = SpatialAssetMetadataRevisionCreate.model_validate(
                 {
