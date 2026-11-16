@@ -181,6 +181,23 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
                     payload=original["payload_json"],
                 ),
             )
+        # Even an identical persisted artifact must honor the typed output
+        # contract. A retyped, SHA-valid artifact on a registered port cannot
+        # be reused merely because its checksum and requested type agree.
+        existing_artifact = session.get(WorkflowArtifact, original["id"])
+        assert existing_artifact is not None
+        existing_artifact.data_type = "image_collection"
+        session.flush()
+        with pytest.raises(ConflictError, match="output type does not match registry"):
+            WorkflowExecutionService(session).persist_artifact(
+                run_id=str(run["id"]),
+                node_run=producer,
+                specification=WorkflowArtifactSpec(
+                    port_id=original["producer_port_id"],
+                    data_type="image_collection",
+                    payload=original["payload_json"],
+                ),
+            )
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
