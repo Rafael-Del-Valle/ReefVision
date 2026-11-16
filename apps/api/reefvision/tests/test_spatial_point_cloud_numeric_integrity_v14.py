@@ -407,6 +407,7 @@ def test_selected_chord_subresolution_separation_fails_without_workflow_artifact
         for artifact in detail.json()["artifacts"]
     )
 
+
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
 @pytest.mark.parametrize("sign", [-1, 1])
 def test_calibrated_subnormal_centroid_survives_averaging_in_saved_workflow(
@@ -434,19 +435,22 @@ def test_calibrated_subnormal_centroid_survives_averaging_in_saved_workflow(
             "property double x\nproperty double y\nproperty double z\n"
             f"end_header\n{token} 0 0\n0 0 0\n0 0 0\n"
         )
-    direct = measure_point_cloud_preview(points=points, **{
-        "meters_per_unit": scale,
-        "calibration_method": params["calibration_method"],
-        "calibration_evidence": params["calibration_evidence"],
-        "relative_scale_uncertainty": 0.1,
-    })
+    direct = measure_point_cloud_preview(
+        points=points,
+        meters_per_unit=scale,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic subnormal arithmetic; scale unverified",
+        relative_scale_uncertainty=0.1,
+    )
     assert direct["arithmetic_centroid_in_source_frame_m"][0] == expected_x
     assert direct["arithmetic_centroid_in_source_frame_m"][1:] == [0.0, 0.0]
     assert direct["arithmetic_centroid_in_source_frame_scale_interval_m"][0] is not None
     assert direct["provenance"]["calibration_verified"] is False
     assert direct["branch_length_m"] is None
 
-    project_id = str(create_project(client, f"Subnormal centroid {source_format} {sign}")["id"])
+    project_id = str(
+        create_project(client, f"Subnormal centroid {source_format} {sign}")["id"]
+    )
     base = f"/api/v1/projects/{project_id}"
     standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert standalone.status_code == 200, standalone.text
@@ -464,13 +468,15 @@ def test_calibrated_subnormal_centroid_survives_averaging_in_saved_workflow(
             {"node_id": "project", "node_type": "project_source"},
             {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
         ],
-        "edges": [{
-            "edge_id": "project-cloud",
-            "source_node_id": "project",
-            "source_port_id": "project",
-            "target_node_id": "cloud",
-            "target_port_id": "project",
-        }],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
     }
     plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
