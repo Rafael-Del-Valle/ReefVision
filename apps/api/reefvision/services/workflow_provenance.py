@@ -36,7 +36,12 @@ def canonical_workflow_artifact_sha256(payload: dict[str, Any]) -> str:
     seen: set[int] = set()
     while pending:
         item = pending.pop()
-        if not isinstance(item, (dict, list, tuple)) or id(item) in seen:
+        # A tuple is silently encoded as an array by Python's JSON encoder.
+        # Adapters must supply explicit JSON arrays rather than changing
+        # scientific data structure while freezing a signed artifact.
+        if isinstance(item, tuple):
+            raise ValueError("Workflow artifact payload must use JSON arrays, not tuples")
+        if not isinstance(item, (dict, list)) or id(item) in seen:
             continue
         seen.add(id(item))
         if isinstance(item, dict):
