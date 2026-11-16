@@ -180,6 +180,22 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert payload["project_id"] == project_id
     assert payload["dataset_id"] == dataset_id
     assert payload["manifest_sha256"] == dataset["manifest_sha256"]
+    # A real saved Workflow Builder producer must not sign non-standard JSON
+    # NaN measurements, even when the port and dataset lineage are valid.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        assert producer is not None
+        with pytest.raises(ValidationError, match="finite JSON values"):
+            WorkflowExecutionService(session).persist_artifact(
+                run_id=str(queued.json()["id"]),
+                node_run=producer,
+                specification=WorkflowArtifactSpec(
+                    port_id=outputs[0]["producer_port_id"],
+                    data_type=outputs[0]["data_type"],
+                    payload={**payload, "measurements": {"confidence": float("nan")}},
+                ),
+            )
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
     # Both executions are genuine saved Workflow Builder runs referencing
     # this reviewed frozen dataset. Their identical output contracts must
     # not allow the first node to write an artifact into the second run.
@@ -806,6 +822,30 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         artifact.payload_json = original_payload
         session.commit()
     assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").status_code == 200
+
+    # A persisted non-finite number is not portable scientific JSON. Even
+    # re-signing the original canonical digest must not make it readable.
+    with app.state.session_factory() as session:
+        artifact = session.get(WorkflowArtifact, outputs[0]["id"])
+        assert artifact is not None
+        artifact.payload_json = {
+            **original_payload,
+            "measurements": {"confidence": float("inf")},
+        }
+        artifact.payload_sha256 = canonical_json_sha256(artifact.payload_json)
+        session.commit()
+
+    nonfinite_detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert nonfinite_detail.status_code == 409, nonfinite_detail.text
+    assert "finite JSON values" in nonfinite_detail.json()["detail"]
+
+    with app.state.session_factory() as session:
+        artifact = session.get(WorkflowArtifact, outputs[0]["id"])
+        assert artifact is not None
+        artifact.payload_json = original_payload
+        artifact.payload_sha256 = outputs[0]["payload_sha256"]
+        session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
 
     # Deduplication must reject an artifact whose JSON object was replaced by
     # a list of key/value pairs, even when dict() recreates the same digest.
