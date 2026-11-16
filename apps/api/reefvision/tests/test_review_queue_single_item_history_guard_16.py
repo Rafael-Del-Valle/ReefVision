@@ -92,12 +92,15 @@ def test_single_item_triage_rejects_corrupt_existing_history(
 
     restored = client.post(f"{route}/{action}", json=payload)
     assert restored.status_code == 200, restored.text
-    assert restored.json()["review_state"] == {
-        "start": "in_progress",
-        "skip": "skipped",
-        "return": "pending",
-        "complete": "completed",
-    }[action]
+    assert (
+        restored.json()["review_state"]
+        == {
+            "start": "in_progress",
+            "skip": "skipped",
+            "return": "pending",
+            "complete": "completed",
+        }[action]
+    )
     history = client.get(event_url)
     assert history.status_code == 200, history.text
     assert history.json()["total"] == total_before + 1
