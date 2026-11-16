@@ -3,7 +3,10 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import * as api from "../../api/client";
-import { ScientificNodeControls } from "./ScientificNodeControls";
+import {
+  hasScientificNodeControls,
+  ScientificNodeControls,
+} from "./ScientificNodeControls";
 
 const comparison = {
   id: "comparison",
@@ -72,4 +75,96 @@ it("uses the standalone acquisition contract and validates clipping bands", asyn
   expect(screen.getByRole("status").textContent).toContain(
     '"dark_luma_max":252',
   );
+});
+
+it("configures a project-owned mesh measurement from the guided workspace", async () => {
+  vi.spyOn(api, "request").mockResolvedValue([
+    {
+      id: "mesh-asset",
+      project_id: "local-study",
+      original_filename: "colony.obj",
+      source_format: "obj",
+      parse_status: "succeeded",
+    },
+  ] as never);
+
+  expect(hasScientificNodeControls("mesh_surface_preview")).toBe(true);
+  renderControls("mesh_surface_preview");
+  await screen.findByRole("option", { name: "colony.obj · OBJ · parsed" });
+  fireEvent.change(screen.getByLabelText("Project 3D original"), {
+    target: { value: "mesh-asset" },
+  });
+  fireEvent.change(screen.getByLabelText("Meters per source unit"), {
+    target: { value: "0.001" },
+  });
+  fireEvent.change(screen.getByLabelText("Calibration evidence"), {
+    target: { value: "Scale bar measured in the source reconstruction" },
+  });
+
+  expect(screen.getByRole("status").textContent).toContain(
+    '"asset_id":"mesh-asset"',
+  );
+  expect(screen.getByRole("status").textContent).toContain(
+    '"meters_per_unit":0.001',
+  );
+  expect(screen.getByText(/Surface routes are geometric paths/)).toBeVisible();
+});
+
+it("keeps point-cloud measurements distinct from surface and branch claims", async () => {
+  vi.spyOn(api, "request").mockResolvedValue([
+    {
+      id: "cloud-asset",
+      project_id: "local-study",
+      original_filename: "survey.ply",
+      source_format: "ply",
+      parse_status: "succeeded",
+    },
+  ] as never);
+
+  expect(hasScientificNodeControls("point_cloud_preview")).toBe(true);
+  renderControls("point_cloud_preview");
+  await screen.findByRole("option", { name: "survey.ply · PLY · parsed" });
+  expect(
+    screen.getByText(
+      /does not infer surface area, volume, or anatomical branch length/,
+    ),
+  ).toBeVisible();
+  fireEvent.click(screen.getByLabelText("Preserve measured chord endpoints"));
+  expect(screen.getByRole("status").textContent).toContain(
+    '"preserve_measured_chord_endpoints_in_preview":true',
+  );
+});
+
+it("guides registration and correspondence review for longitudinal comparison", () => {
+  expect(hasScientificNodeControls("mesh_longitudinal_comparison")).toBe(true);
+  renderControls("mesh_longitudinal_comparison");
+
+  fireEvent.change(screen.getByLabelText("Registration source frame"), {
+    target: { value: "survey-2025" },
+  });
+  fireEvent.change(screen.getByLabelText("Registration target frame"), {
+    target: { value: "survey-2026" },
+  });
+  fireEvent.change(screen.getByLabelText("Registration evidence note"), {
+    target: { value: "Six surveyed control correspondences" },
+  });
+  fireEvent.change(screen.getByLabelText("Earlier observation ID"), {
+    target: { value: "obs-before" },
+  });
+  fireEvent.change(screen.getByLabelText("Later observation ID"), {
+    target: { value: "obs-after" },
+  });
+  fireEvent.change(screen.getByLabelText("Matching observer"), {
+    target: { value: "observer-a" },
+  });
+  fireEvent.change(screen.getByLabelText("Correspondence evidence note"), {
+    target: { value: "Tag and morphology agree" },
+  });
+
+  const output = screen.getByRole("status").textContent ?? "";
+  expect(output).toContain('"source_frame_id":"survey-2025"');
+  expect(output).toContain('"before_observation_id":"obs-before"');
+  expect(
+    screen.getByText(/Supporting review is durable audit evidence/),
+  ).toBeVisible();
 });

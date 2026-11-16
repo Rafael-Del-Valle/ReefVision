@@ -21,6 +21,9 @@ const scientificNodes = new Set([
   "research_publication_figure",
   "image_acquisition_quality",
   "ecology_verified_analysis",
+  "mesh_surface_preview",
+  "point_cloud_preview",
+  "mesh_longitudinal_comparison",
 ]);
 
 export const hasScientificNodeControls = (nodeType: string) =>
@@ -37,6 +40,8 @@ const ids = (value: unknown) =>
   Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
     : [];
+const finiteNumber = (value: unknown, fallback: number) =>
+  typeof value === "number" && Number.isFinite(value) ? value : fallback;
 
 export function scientificConfigurationIssue(
   nodeType: string,
@@ -987,6 +992,432 @@ const savedLabels: Record<string, string> = {
   report: "Saved research figure",
 };
 
+type SpatialAssetChoice = {
+  id: string;
+  project_id: string;
+  original_filename: string;
+  source_format: string;
+  parse_status: string;
+};
+
+function SpatialMeasurementFields({
+  base,
+  kind,
+  parameters,
+  onChange,
+}: {
+  base: string;
+  kind: "mesh" | "point_cloud";
+  parameters: Parameters;
+  onChange: (value: Parameters) => void;
+}) {
+  const assets = useQuery({
+    queryKey: ["guided-science", base, "spatial-assets", kind],
+    queryFn: ({ signal }) =>
+      request<SpatialAssetChoice[]>(`${base}/spatial/assets`, { signal }),
+  });
+  const update = (delta: Parameters) =>
+    onChange({
+      ...parameters,
+      meters_per_unit: finiteNumber(parameters.meters_per_unit, 1),
+      calibration_method: string(parameters.calibration_method) || "other",
+      calibration_evidence: string(parameters.calibration_evidence),
+      ...delta,
+    });
+  const uncertainty = parameters.relative_scale_uncertainty;
+  return (
+    <fieldset>
+      <legend>
+        {kind === "mesh"
+          ? "Guided 3D geometric measurement"
+          : "Guided 3D point-cloud measurement"}
+      </legend>
+      <p>
+        Choose an immutable project original. Scale and calibration evidence
+        remain provisional until the project review contract verifies them.
+      </p>
+      {assets.isPending && <p role="status">Loading project 3D originals…</p>}
+      {assets.error && <p role="alert">{assets.error.message}</p>}
+      <SourceSelect
+        label="Project 3D original"
+        value={string(parameters.asset_id)}
+        options={(assets.data ?? []).map((asset) => ({
+          id: asset.id,
+          label: `${asset.original_filename} · ${asset.source_format.toUpperCase()} · ${
+            asset.parse_status === "succeeded"
+              ? "parsed"
+              : asset.parse_status.replaceAll("_", " ")
+          }`,
+          unavailable:
+            asset.project_id !== base.split("/").at(-1) ||
+            asset.parse_status !== "succeeded",
+        }))}
+        onChange={(asset_id) => update({ asset_id })}
+      />
+      <label>
+        Meters per source unit
+        <input
+          type="number"
+          min={Number.MIN_VALUE}
+          step="any"
+          value={finiteNumber(parameters.meters_per_unit, 1)}
+          onChange={(event) =>
+            update({ meters_per_unit: event.target.valueAsNumber })
+          }
+        />
+      </label>
+      <label>
+        Calibration method
+        <select
+          value={string(parameters.calibration_method) || "other"}
+          onChange={(event) =>
+            update({ calibration_method: event.target.value })
+          }
+        >
+          <option value="ruler">Ruler or scale bar</option>
+          <option value="photogrammetry_control">Photogrammetry control</option>
+          <option value="instrument">Calibrated instrument</option>
+          <option value="other">Other / not yet classified</option>
+        </select>
+      </label>
+      <label>
+        Calibration evidence
+        <textarea
+          maxLength={2000}
+          value={string(parameters.calibration_evidence)}
+          onChange={(event) =>
+            update({ calibration_evidence: event.target.value })
+          }
+        />
+      </label>
+      <label>
+        Relative scale uncertainty (0 to 1)
+        <input
+          type="number"
+          min={0}
+          max={1}
+          step={0.001}
+          value={typeof uncertainty === "number" ? uncertainty : ""}
+          onChange={(event) =>
+            update({
+              relative_scale_uncertainty:
+                event.target.value === "" ? null : event.target.valueAsNumber,
+            })
+          }
+        />
+      </label>
+      {(["specimen_id", "observation_id", "coordinate_frame_id"] as const).map(
+        (field) => (
+          <label key={field}>
+            {
+              {
+                specimen_id: "Provisional specimen ID",
+                observation_id: "Observation ID",
+                coordinate_frame_id: "Coordinate frame ID",
+              }[field]
+            }
+            <input
+              value={string(parameters[field])}
+              onChange={(event) =>
+                update({ [field]: event.target.value || null })
+              }
+            />
+          </label>
+        ),
+      )}
+      {kind === "point_cloud" && (
+        <label className="toggle-row">
+          <input
+            type="checkbox"
+            checked={
+              parameters.preserve_measured_chord_endpoints_in_preview === true
+            }
+            onChange={(event) =>
+              update({
+                preserve_measured_chord_endpoints_in_preview:
+                  event.target.checked,
+              })
+            }
+          />
+          Preserve measured chord endpoints
+        </label>
+      )}
+      <p className="annotation-helper">
+        {kind === "mesh"
+          ? "Surface routes are geometric paths, not verified anatomical branch lengths. Configure vertex routes under Advanced parameter JSON only when exact indices are known."
+          : "A point cloud reports extents and selected chords; it does not infer surface area, volume, or anatomical branch length."}
+      </p>
+    </fieldset>
+  );
+}
+
+function SpatialLongitudinalFields({
+  parameters,
+  onChange,
+}: {
+  parameters: Parameters;
+  onChange: (value: Parameters) => void;
+}) {
+  const registration = object(parameters.registration_evidence);
+  const correspondence = object(parameters.reidentification_evidence);
+  const updateRegistration = (delta: Parameters) =>
+    onChange({
+      ...parameters,
+      registration_evidence: {
+        method: "landmark",
+        rms_residual_m: 0,
+        correspondence_count: 3,
+        ...registration,
+        ...delta,
+      },
+    });
+  const updateCorrespondence = (delta: Parameters) =>
+    onChange({
+      ...parameters,
+      reidentification_evidence: {
+        method: "visual_morphology",
+        ...correspondence,
+        ...delta,
+      },
+    });
+  return (
+    <fieldset>
+      <legend>Guided longitudinal 3D evidence</legend>
+      <p>
+        Connect the earlier and later mesh measurements, then record
+        registration and organism correspondence separately. Empty review
+        decisions remain explicitly unresolved.
+      </p>
+      <fieldset>
+        <legend>Registration review</legend>
+        <label>
+          Registration source frame
+          <input
+            value={string(registration.source_frame_id)}
+            onChange={(event) =>
+              updateRegistration({ source_frame_id: event.target.value })
+            }
+          />
+        </label>
+        <label>
+          Registration target frame
+          <input
+            value={string(registration.target_frame_id)}
+            onChange={(event) =>
+              updateRegistration({ target_frame_id: event.target.value })
+            }
+          />
+        </label>
+        <label>
+          Registration method
+          <select
+            value={string(registration.method) || "landmark"}
+            onChange={(event) =>
+              updateRegistration({ method: event.target.value })
+            }
+          >
+            <option value="landmark">Landmarks</option>
+            <option value="icp">Iterative closest point</option>
+            <option value="survey_control">Survey control</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+        <label>
+          RMS residual (meters)
+          <input
+            type="number"
+            min={0}
+            step="any"
+            value={finiteNumber(registration.rms_residual_m, 0)}
+            onChange={(event) =>
+              updateRegistration({ rms_residual_m: event.target.valueAsNumber })
+            }
+          />
+        </label>
+        <label>
+          Correspondence count
+          <input
+            type="number"
+            min={3}
+            step={1}
+            value={finiteNumber(registration.correspondence_count, 3)}
+            onChange={(event) =>
+              updateRegistration({
+                correspondence_count: event.target.valueAsNumber,
+              })
+            }
+          />
+        </label>
+        <label>
+          Registration evidence note
+          <textarea
+            maxLength={2000}
+            value={string(registration.evidence_note)}
+            onChange={(event) =>
+              updateRegistration({ evidence_note: event.target.value })
+            }
+          />
+        </label>
+        <label>
+          Independent registration decision
+          <select
+            value={string(registration.independent_review_decision)}
+            onChange={(event) =>
+              updateRegistration({
+                independent_review_decision: event.target.value || null,
+              })
+            }
+          >
+            <option value="">Unresolved / no independent review</option>
+            <option value="supports_alignment">
+              Accepted: supports alignment
+            </option>
+            <option value="disputes_alignment">
+              Rejected: disputes alignment
+            </option>
+            <option value="inconclusive">Disputed / inconclusive</option>
+          </select>
+        </label>
+        <label>
+          Registration operator
+          <input
+            value={string(registration.registration_operator_id)}
+            onChange={(event) =>
+              updateRegistration({
+                registration_operator_id: event.target.value || null,
+              })
+            }
+          />
+        </label>
+        <label>
+          Independent registration reviewer
+          <input
+            value={string(registration.independent_reviewer_id)}
+            onChange={(event) =>
+              updateRegistration({
+                independent_reviewer_id: event.target.value || null,
+              })
+            }
+          />
+        </label>
+        <label>
+          Independent registration review note
+          <textarea
+            maxLength={2000}
+            value={string(registration.independent_review_note)}
+            onChange={(event) =>
+              updateRegistration({
+                independent_review_note: event.target.value || null,
+              })
+            }
+          />
+        </label>
+      </fieldset>
+      <fieldset>
+        <legend>Organism correspondence</legend>
+        <label>
+          Earlier observation ID
+          <input
+            value={string(correspondence.before_observation_id)}
+            onChange={(event) =>
+              updateCorrespondence({
+                before_observation_id: event.target.value,
+              })
+            }
+          />
+        </label>
+        <label>
+          Later observation ID
+          <input
+            value={string(correspondence.after_observation_id)}
+            onChange={(event) =>
+              updateCorrespondence({ after_observation_id: event.target.value })
+            }
+          />
+        </label>
+        <label>
+          Matching method
+          <select
+            value={string(correspondence.method) || "visual_morphology"}
+            onChange={(event) =>
+              updateCorrespondence({ method: event.target.value })
+            }
+          >
+            <option value="visual_morphology">Visual morphology</option>
+            <option value="survey_tag">Survey tag</option>
+            <option value="photo_match">Photo match</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+        <label>
+          Matching observer
+          <input
+            value={string(correspondence.observer_id)}
+            onChange={(event) =>
+              updateCorrespondence({ observer_id: event.target.value })
+            }
+          />
+        </label>
+        <label>
+          Correspondence evidence note
+          <textarea
+            maxLength={2000}
+            value={string(correspondence.evidence_note)}
+            onChange={(event) =>
+              updateCorrespondence({ evidence_note: event.target.value })
+            }
+          />
+        </label>
+        <label>
+          Independent correspondence decision
+          <select
+            value={string(correspondence.independent_review_decision)}
+            onChange={(event) =>
+              updateCorrespondence({
+                independent_review_decision: event.target.value || null,
+              })
+            }
+          >
+            <option value="">Unresolved / no independent review</option>
+            <option value="supports_match">Accepted: supports match</option>
+            <option value="disputes_match">Rejected: disputes match</option>
+            <option value="inconclusive">Disputed / inconclusive</option>
+          </select>
+        </label>
+        <label>
+          Independent correspondence reviewer
+          <input
+            value={string(correspondence.independent_reviewer_id)}
+            onChange={(event) =>
+              updateCorrespondence({
+                independent_reviewer_id: event.target.value || null,
+              })
+            }
+          />
+        </label>
+        <label>
+          Independent correspondence review note
+          <textarea
+            maxLength={2000}
+            value={string(correspondence.independent_review_note)}
+            onChange={(event) =>
+              updateCorrespondence({
+                independent_review_note: event.target.value || null,
+              })
+            }
+          />
+        </label>
+      </fieldset>
+      <p className="annotation-helper">
+        Supporting review is durable audit evidence in the saved workflow. It
+        does not authenticate reviewer authority or turn geometric change into a
+        biological condition claim. Use Advanced parameter JSON for exact
+        transforms, source hashes, timestamps, and uncertainty bounds.
+      </p>
+    </fieldset>
+  );
+}
+
 export function ScientificNodeControls({
   nodeType,
   projectId,
@@ -999,6 +1430,19 @@ export function ScientificNodeControls({
   onChange: (value: Parameters) => void;
 }) {
   const base = `/projects/${projectId}`;
+  if (nodeType === "mesh_surface_preview" || nodeType === "point_cloud_preview")
+    return (
+      <SpatialMeasurementFields
+        base={base}
+        kind={nodeType === "mesh_surface_preview" ? "mesh" : "point_cloud"}
+        parameters={parameters}
+        onChange={onChange}
+      />
+    );
+  if (nodeType === "mesh_longitudinal_comparison")
+    return (
+      <SpatialLongitudinalFields parameters={parameters} onChange={onChange} />
+    );
   if (nodeType === "image_acquisition_quality")
     return (
       <AcquisitionFields

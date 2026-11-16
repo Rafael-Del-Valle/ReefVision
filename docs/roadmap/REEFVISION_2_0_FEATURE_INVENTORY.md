@@ -9,10 +9,10 @@ Candidate target: `2.0`
 
 | Status | Count |
 | --- | ---: |
-| blocked | 8 |
+| blocked | 11 |
 | explicitly_deferred | 4 |
-| in_progress | 40 |
-| verified | 24 |
+| in_progress | 36 |
+| verified | 25 |
 
 ## Features
 
@@ -46,13 +46,13 @@ Candidate target: `2.0`
 | 1.3 | Reviewed study, treatment, site, tank, and sampling-unit assignments | verified | Research → Organisms & ecology → Study assignments |
 | 1.3 | Frozen temporal ReefPose datasets and checkpoint training | verified | Models & AI → Training → Temporal ReefPose |
 | 1.3 | Temporal ReefPose refinement and explicit frame review | verified | Video & automation → Video & tracking → Native temporal ReefPose |
-| 1.4 | Reviewed 3D organism matching across acquisitions | in_progress | 3D scientific task → Organism correspondence |
+| 1.4 | Reviewed 3D organism matching across acquisitions | blocked | 3D scientific task → Organism correspondence |
 | 1.4 | Anatomical coral branch-length measurement | blocked | 3D scientific task → Measurements → Anatomical branch length |
 | 1.4 | Reviewed biological-condition measurements | blocked | 3D/scientific task → Condition review |
-| 1.4 | Reviewed extents, dimensions, area, surface paths, and conditional volume | in_progress | 3D scientific task → Measurements |
+| 1.4 | Reviewed extents, dimensions, area, surface paths, and conditional volume | verified | 3D scientific task → Measurements |
 | 1.4 | Validated 1.3 to 1.4 ancestry, migration, exchange, and rollback | in_progress | Installed upgrade and Project menu → Backup / Exchange |
-| 1.4 | Reviewed longitudinal 3D change | in_progress | 3D scientific task → Longitudinal comparison |
-| 1.4 | Reviewed 3D registration transforms and calibration evidence | in_progress | 3D scientific task → Registration review |
+| 1.4 | Reviewed longitudinal 3D change | blocked | 3D scientific task → Longitudinal comparison |
+| 1.4 | Reviewed 3D registration transforms and calibration evidence | blocked | 3D scientific task → Registration review |
 | 1.4 | Representative 3D field validation | blocked | Known synthetic geometry is reported separately. |
 | 1.4 | Bounded OBJ/PLY/GLB mesh and point-cloud preview | in_progress | Open project → Video & automation → Workflow builder → Project-owned 3D originals |
 | 1.4 | Persistent versioned 3D project assets | in_progress | Open project → Video & automation → Workflow builder → Project-owned 3D originals → Import 3D original |
@@ -664,19 +664,20 @@ Evidence:
 ### rv14-3d-organism-matching: Reviewed 3D organism matching across acquisitions
 
 - Target: `1.4`
-- Status: `in_progress`
+- Status: `blocked`
 - Dependencies: `rv12-organism-identity`, `rv14-registration-transforms`
 - Entry point: 3D scientific task → Organism correspondence
 - Workflow Builder: `required`
+- Missing input: Representative repeated 3D acquisitions with independently labeled specimen identities, authorized observer/reviewer/adjudicator roles, an ambiguity protocol, and preregistered false-match and missed-match thresholds.
 
 Acceptance checks:
 
-- **in_progress** — Review accepted, rejected, disputed, and unresolved specimen correspondences before longitudinal comparison. (`rv14-3d-organism-matching-check`)
+- **blocked** — Review accepted, rejected, disputed, and unresolved specimen correspondences before longitudinal comparison. (`rv14-3d-organism-matching-check`)
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Synthetic correspondence tests bind project, specimen, observations, times, original assets, source bytes and parsed geometry; they enforce independent reviewers, chronology, and supporting/disputing/inconclusive outcomes. — `apps/api/reefvision/tests/test_spatial_mesh_reidentification_geometry_binding_v14.py` (`rv14-matching-binding-source`)
+- `browser`: Workflow Builder exposes observation-pair evidence, method, observer, accepted/rejected/disputed/unresolved outcomes, and separate independent-review attribution. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-matching-guided-ui`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -726,19 +727,20 @@ Evidence:
 ### rv14-geometric-measurements: Reviewed extents, dimensions, area, surface paths, and conditional volume
 
 - Target: `1.4`
-- Status: `in_progress`
+- Status: `verified`
 - Dependencies: `rv14-versioned-spatial-assets`
 - Entry point: 3D scientific task → Measurements
 - Workflow Builder: `required`
 
 Acceptance checks:
 
-- **in_progress** — Match known geometry and scale exponents, report topology/QC/uncertainty, and withhold invalid area or volume claims. (`rv14-geometric-measurements-check`)
+- **verified** — Match known geometry and scale exponents, report topology/QC/uncertainty, and withhold invalid area or volume claims. (`rv14-geometric-measurements-check`)
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Deterministic mesh fixtures cover calibrated scale exponents, extents, surface area, topology, conditional enclosed volume, uncertainty intervals, paths, numerical integrity, and explicit withhold reasons. — `apps/api/reefvision/tests/test_spatial_mesh_primitives_v14.py` (`rv14-geometric-known-fixtures`)
+- `source`: Calibration review and source bindings reject stale, mismatched, self-reviewed, or altered measurement evidence while preserving unverified status. — `apps/api/reefvision/tests/test_spatial_mesh_calibration_review_v14.py` (`rv14-geometric-review-binding`)
+- `browser`: Workflow Builder exposes a project-owned original picker, scale, calibration evidence, uncertainty, specimen/observation/frame context, and an explicit warning that geometric routes are not anatomical branch lengths. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-geometric-guided-ui`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -767,19 +769,20 @@ Evidence:
 ### rv14-longitudinal-3d-change: Reviewed longitudinal 3D change
 
 - Target: `1.4`
-- Status: `in_progress`
+- Status: `blocked`
 - Dependencies: `rv14-geometric-measurements`, `rv14-3d-organism-matching`
 - Entry point: 3D scientific task → Longitudinal comparison
 - Workflow Builder: `required`
+- Missing input: The representative paired acquisitions, independent registration controls, independently labeled organism correspondences, authorized review/adjudication roles, and preregistered longitudinal error and repeatability thresholds required by the two blocked dependencies.
 
 Acceptance checks:
 
-- **in_progress** — Report change only for reviewed correspondence, compatible frames/units, and pinned measurement revisions with propagated uncertainty. (`rv14-longitudinal-3d-change-check`)
+- **blocked** — Report change only for reviewed correspondence, compatible frames/units, and pinned measurement revisions with propagated uncertainty. (`rv14-longitudinal-3d-change-check`)
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Deterministic comparisons enforce observation chronology, source and calibration fingerprints, frame and registration evidence, specimen correspondence, conservative scale-uncertainty intervals, topology QC, and stale review-bundle rejection. — `apps/api/reefvision/tests/test_spatial_mesh_longitudinal_v14.py` (`rv14-longitudinal-source`)
+- `browser`: Saved Workflow Builder graphs provide contextual registration and organism-correspondence controls while preserving exact transforms, hashes, times and uncertainty in the same node's advanced controls. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-longitudinal-guided-ui`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -787,19 +790,20 @@ Evidence:
 ### rv14-registration-transforms: Reviewed 3D registration transforms and calibration evidence
 
 - Target: `1.4`
-- Status: `in_progress`
+- Status: `blocked`
 - Dependencies: `rv14-versioned-spatial-assets`
 - Entry point: 3D scientific task → Registration review
 - Workflow Builder: `required`
+- Missing input: Representative paired 3D acquisitions with independently measured control correspondences and scale evidence, an authorized independent registration reviewer/adjudicator, and preregistered residual and alignment-error thresholds.
 
 Acceptance checks:
 
-- **in_progress** — Review transform direction, frame, units, residuals, correspondences, uncertainty, and reject stale or incompatible evidence. (`rv14-registration-transforms-check`)
+- **blocked** — Review transform direction, frame, units, residuals, correspondences, uncertainty, and reject stale or incompatible evidence. (`rv14-registration-transforms-check`)
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Synthetic registration tests validate rigid source-to-target transforms, residual and correspondence metadata, calibration/source/geometry bindings, review independence and chronology, uncertainty bounds, and stale-evidence rejection. — `apps/api/reefvision/tests/test_spatial_mesh_registration_geometry_binding_v14.py` (`rv14-registration-binding-source`)
+- `browser`: Workflow Builder exposes frames, method, residual, correspondence count, evidence note, and accepted/rejected/disputed/unresolved review states with separate operator and reviewer attribution. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-registration-guided-ui`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
