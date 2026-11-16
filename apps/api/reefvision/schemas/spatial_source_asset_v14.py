@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class SpatialSourceParseSummary(BaseModel):
@@ -22,6 +22,30 @@ class SpatialSourceParseSummary(BaseModel):
     calibration_verified: Literal[False] = False
     specimen_identity_verified: Literal[False] = False
 
+    @model_validator(mode="after")
+    def validate_structural_counts_and_qc(self) -> SpatialSourceParseSummary:
+        """Reject internally contradictory or falsely verified parse summaries."""
+        if self.source_kind_resolved == "mesh":
+            if (
+                self.vertex_count is None
+                or self.face_count is None
+                or self.point_count is not None
+            ):
+                raise ValueError("Mesh parse must have only vertex and face counts")
+        elif (
+            self.point_count is None
+            or self.vertex_count is not None
+            or self.face_count is not None
+        ):
+            raise ValueError("Point-cloud parse must have only a point count")
+        required_warnings = {
+            "physical_calibration_not_applied",
+            "structural_parse_unreviewed",
+        }
+        if not required_warnings.issubset(self.qc_warnings):
+            raise ValueError("Structural parse must retain unverified calibration QC")
+        return self
+
 
 class SpatialSourceParseResult(SpatialSourceParseSummary):
     project_id: str
@@ -29,6 +53,12 @@ class SpatialSourceParseResult(SpatialSourceParseSummary):
     source_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_format: Literal["obj", "ply", "glb"]
     content_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def validate_format_kind(self) -> SpatialSourceParseResult:
+        if self.source_format in {"obj", "glb"} and self.source_kind_resolved != "mesh":
+            raise ValueError("OBJ/GLB structural parses must resolve as meshes")
+        return self
 
 
 class SpatialSourceAssetResponse(BaseModel):
