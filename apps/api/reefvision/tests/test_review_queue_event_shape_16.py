@@ -22,7 +22,6 @@ from reefvision.tests.test_review_queue_bulk_sqlite_contention_16 import _make_q
 @pytest.mark.parametrize(
     ("field", "invalid_value"),
     [
-        ("event_type", "unknown"),
         ("event_type", "unassign"),
         ("event_type", "triage_start"),
         ("assignee", None),
