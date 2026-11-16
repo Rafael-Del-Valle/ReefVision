@@ -103,6 +103,66 @@ def test_detects_modified_science_qc_class_and_workflow_evidence(
     assert after.read_bytes() == modified
 
 
+def test_rebuilt_qc_history_cannot_silently_reorder_review_actions(tmp_path: Path) -> None:
+    """Identical UUID-keyed rows may have different SQLite append chronology."""
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    _seed(before)
+    shutil.copyfile(before, after)
+    baseline_code, baseline_report = _run(before, after)
+    assert baseline_code == 0
+    assert baseline_report["status"] == "PASS_PRESERVATION_ONLY"
+
+    with sqlite3.connect(after) as connection:
+        rows = connection.execute(
+            'SELECT id, payload, note FROM review_queue_item_events ORDER BY id'
+        ).fetchall()
+        connection.execute("DELETE FROM review_queue_item_events")
+        connection.executemany(
+            'INSERT INTO review_queue_item_events (id, payload, note) VALUES (?, ?, ?)', rows
+        )
+        assert connection.execute(
+            'SELECT id FROM review_queue_item_events ORDER BY rowid'
+        ).fetchall() == [("a",), ("z",)]
+    old_bytes, candidate_bytes = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+    assert code == 2
+    assert report["status"] == "HOLD"
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    assert any(
+        item["table"] == "review_queue_item_events"
+        and item["status"] == "changed_review_event_append_order"
+        and item["baseline_sha256"] == item["candidate_sha256"]
+        for item in report["tables"]
+    )
+    assert "coral α; private record" not in json.dumps(report)
+    assert before.read_bytes() == old_bytes
+    assert after.read_bytes() == candidate_bytes
+
+
+def test_qc_history_rowid_alias_shadowing_requires_review(tmp_path: Path) -> None:
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    _seed(before)
+    shutil.copyfile(before, after)
+    with sqlite3.connect(after) as connection:
+        connection.execute("ALTER TABLE review_queue_item_events ADD COLUMN rowid INTEGER")
+    original, candidate = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+    assert code == 2
+    assert report["status"] == "HOLD"
+    assert any(
+        item["table"] == "review_queue_item_events"
+        and item["status"] == "ambiguous_review_event_rowid"
+        for item in report["tables"]
+    )
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    assert before.read_bytes() == original
+    assert after.read_bytes() == candidate
+
+
 def test_additive_schema_and_new_qc_table_preserve_original_record_projection(
     tmp_path: Path,
 ) -> None:

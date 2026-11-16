@@ -60,3 +60,32 @@ The offline asset verifier now refuses Windows directory junctions and other fil
 Both baseline and candidate scans now inventory directory identities and mutation-sensitive metadata, including empty subdirectories, and compare those identities during the second pass. A directory removed or substituted after initial hashing therefore produces a conservative HOLD even when no tracked file changed. Existing individual-file identity/hash checks, hardlink independence, typed SQLite preservation, and reviewer approval remain unchanged. The verifier does not follow or clean any rejected path, and diagnostics do not reveal private media filenames.
 
 Regression coverage includes portable simulated reparse attributes, a deterministic empty-directory substitution between scanning passes, and four *real* Windows junction cases (original/candidate root and nested folder) in the existing Windows preflight suite. Passing these synthetic tests does not prove all Windows/network filesystem behaviors or establish an atomic snapshot. Representative copied research data and native installed desktop acceptance are still mandatory. The independent 1.1/1.6 revision-0038 migration collision remains unresolved; release HOLD.
+
+
+## QC event append-order preservation (2026-11-15)
+
+The 1.6 SQLite review history and assignee calculation use append rowid rather than
+mutable workstation timestamps: a clock rollback must not resurrect an older reviewer
+assignment. Existing reviewer events have UUID text primary keys, not a durable
+integer sequence. A migration or import can rewrite identical events in a different
+physical order; the existing row-value checksum would pass even though the current
+assignee and paginated human audit history could change. This is a scientific
+provenance/coordination risk, not an annotation-value change.
+
+For the pre-existing review_queue_item_events table, the preservation-only gate now
+also checks the UUID-to-SQLite-rowid mapping across independently copied databases.
+A reordered mapping yields changed_review_event_append_order and **HOLD**, even
+when every original event value and per-table row SHA-256 is identical. An explicitly
+named rowid, _rowid_ or oid column shadows SQLite's implicit identity and
+produces ambiguous_review_event_rowid with HOLD rather than false assurance.
+The report includes only a status, counts and digests, not private event IDs,
+actor names or biological data. The guard never updates the database, claims a
+cross-platform durable event sequence or approves a migration. Immutable reviewer
+actions and saved executable QC Workflow Builder artifacts remain unchanged.
+
+Two isolated SQLite regression cases rebuild reviewer events in reverse insertion
+order with identical record values and add a shadowing rowid alias. Both must HOLD,
+while an unchanged independent copied database still passes preservation-only.
+These are synthetic acceptance checks; the 1.1/1.6 Alembic-0038 collision,
+representative research data, native Windows MSI/CAB installation and installed
+GUI still require separate independent acceptance and researcher approval.

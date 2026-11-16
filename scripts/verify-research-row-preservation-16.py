@@ -458,6 +458,22 @@ def verify(
                     )
                     if old_count != new_count or old_sha != new_sha:
                         item["status"] = "changed_records"
+            # The 1.6 reviewer-history API interprets SQLite rowid as the
+            # append chronology for assignment/unassignment, including clock
+            # rollbacks. Rebuilding a UUID-primary-key table can preserve all
+            # logical row values while changing that chronology. Inspect the
+            # id -> rowid mapping, never disclosing individual reviewer IDs.
+            if table == "review_queue_item_events" and item["status"] == "preserved":
+                # A new explicitly named rowid/_rowid_/oid column would shadow
+                # the SQLite pseudocolumn and make this evidence ambiguous.
+                aliases = {"rowid", "_rowid_", "oid"}
+                if any(column.lower() in aliases for column in (*old_columns, *new_columns)):
+                    item["status"] = "ambiguous_review_event_rowid"
+                else:
+                    _, old_order_sha = _fingerprint(old, table, ["id", "rowid"], ["id"])
+                    _, new_order_sha = _fingerprint(new, table, ["id", "rowid"], ["id"])
+                    if old_order_sha != new_order_sha:
+                        item["status"] = "changed_review_event_append_order"
             # AUTOINCREMENT history affects identifiers of future observations,
             # even when all current protected rows are byte-for-byte unchanged.
             # Do not print the source/candidate sequence numbers or IDs.
