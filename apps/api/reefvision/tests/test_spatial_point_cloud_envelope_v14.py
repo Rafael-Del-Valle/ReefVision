@@ -122,9 +122,9 @@ def test_subnormal_envelope_is_unknown_with_saved_workflow_parity(
         if source_format == "xyz"
         else {
             "ply_text": (
-                "ply\\nformat ascii 1.0\\nelement vertex 2\\n"
-                "property double x\\nproperty double y\\nproperty double z\\n"
-                "end_header\\n0 0 0\\n1 1 1\\n"
+                "ply\nformat ascii 1.0\nelement vertex 2\n"
+                "property double x\nproperty double y\nproperty double z\n"
+                "end_header\n0 0 0\n1 1 1\n"
             )
         }
     )
