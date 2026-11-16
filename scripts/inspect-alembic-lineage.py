@@ -50,46 +50,90 @@ FAMILIES = {
 # post-0038 scientific metrics and QC registry require separate reconciliation.
 _POST_0037_TABLE_CONTRACTS = {
     "scientific_records": {
-        "columns": frozenset({
-            "id", "project_id", "variable", "source_kind", "observed_at", "image_id",
-            "video_id", "track_id", "model_run_id", "payload_json", "content_sha256",
-            "created_at",
-        }),
-        "required": frozenset({
-            "id", "project_id", "variable", "source_kind", "observed_at",
-            "payload_json", "content_sha256", "created_at",
-        }),
-        "foreign_keys": frozenset({
-            ("project_id", "projects", "id", "CASCADE"),
-            ("image_id", "images", "id", "RESTRICT"),
-            ("video_id", "videos", "id", "RESTRICT"),
-            ("track_id", "video_tracks", "id", "RESTRICT"),
-            ("model_run_id", "jobs", "id", "RESTRICT"),
-        }),
-        "indexes": frozenset({
-            (("project_id", "variable", "observed_at"), False),
-        }),
+        "columns": frozenset(
+            {
+                "id",
+                "project_id",
+                "variable",
+                "source_kind",
+                "observed_at",
+                "image_id",
+                "video_id",
+                "track_id",
+                "model_run_id",
+                "payload_json",
+                "content_sha256",
+                "created_at",
+            }
+        ),
+        "required": frozenset(
+            {
+                "id",
+                "project_id",
+                "variable",
+                "source_kind",
+                "observed_at",
+                "payload_json",
+                "content_sha256",
+                "created_at",
+            }
+        ),
+        "foreign_keys": frozenset(
+            {
+                ("project_id", "projects", "id", "CASCADE"),
+                ("image_id", "images", "id", "RESTRICT"),
+                ("video_id", "videos", "id", "RESTRICT"),
+                ("track_id", "video_tracks", "id", "RESTRICT"),
+                ("model_run_id", "jobs", "id", "RESTRICT"),
+            }
+        ),
+        "indexes": frozenset(
+            {
+                (("project_id", "variable", "observed_at"), False),
+            }
+        ),
     },
     "review_queue_item_events": {
-        "columns": frozenset({
-            "id", "review_queue_id", "review_queue_item_id", "project_id",
-            "client_request_id", "event_type", "actor", "comment", "assignee",
-            "created_at",
-        }),
-        "required": frozenset({
-            "id", "review_queue_id", "review_queue_item_id", "project_id",
-            "client_request_id", "event_type", "actor", "created_at",
-        }),
-        "foreign_keys": frozenset({
-            ("review_queue_id", "review_queues", "id", "CASCADE"),
-            ("review_queue_item_id", "review_queue_items", "id", "CASCADE"),
-            ("project_id", "projects", "id", "CASCADE"),
-        }),
-        "indexes": frozenset({
-            (("review_queue_item_id", "client_request_id"), True),
-            (("review_queue_item_id", "created_at"), False),
-            (("review_queue_id", "created_at"), False),
-        }),
+        "columns": frozenset(
+            {
+                "id",
+                "review_queue_id",
+                "review_queue_item_id",
+                "project_id",
+                "client_request_id",
+                "event_type",
+                "actor",
+                "comment",
+                "assignee",
+                "created_at",
+            }
+        ),
+        "required": frozenset(
+            {
+                "id",
+                "review_queue_id",
+                "review_queue_item_id",
+                "project_id",
+                "client_request_id",
+                "event_type",
+                "actor",
+                "created_at",
+            }
+        ),
+        "foreign_keys": frozenset(
+            {
+                ("review_queue_id", "review_queues", "id", "CASCADE"),
+                ("review_queue_item_id", "review_queue_items", "id", "CASCADE"),
+                ("project_id", "projects", "id", "CASCADE"),
+            }
+        ),
+        "indexes": frozenset(
+            {
+                (("review_queue_item_id", "client_request_id"), True),
+                (("review_queue_item_id", "created_at"), False),
+                (("review_queue_id", "created_at"), False),
+            }
+        ),
     },
 }
 
@@ -117,18 +161,14 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
     # Both source migrations declare only single-column foreign keys.
     if any(row[1] != 0 for row in foreign_key_rows):
         return False
-    foreign_keys = {
-        (row[3], row[2], row[4], row[6].upper()) for row in foreign_key_rows
-    }
+    foreign_keys = {(row[3], row[2], row[4], row[6].upper()) for row in foreign_key_rows}
     if foreign_keys != contract["foreign_keys"]:
         return False
 
     indexes = set()
     for index in db.execute(f"PRAGMA index_list({quoted})"):
         index_name = '"' + index[1].replace('"', '""') + '"'
-        columns_in_index = tuple(
-            row[2] for row in db.execute(f"PRAGMA index_info({index_name})")
-        )
+        columns_in_index = tuple(row[2] for row in db.execute(f"PRAGMA index_info({index_name})"))
         indexes.add((columns_in_index, bool(index[2])))
     return contract["indexes"] <= indexes
 
