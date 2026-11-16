@@ -441,11 +441,7 @@ def measure_point_cloud_preview(
         "branch_length_m": None,
         "qc_warnings": (
             (["duplicate_points_present"] if unique_count < len(vertices) else [])
-            + (
-                ["envelope_volume_below_numeric_resolution"]
-                if envelope_volume_underflow
-                else []
-            )
+            + (["envelope_volume_below_numeric_resolution"] if envelope_volume_underflow else [])
             + (["preview_omits_axis_extrema"] if preview_omitted_axis_extrema else [])
             + (["preview_omits_selected_chord_endpoints"] if omitted_chord_endpoints else [])
             + (["repeated_selected_point_pairs"] if repeated_selected_point_pairs else [])
