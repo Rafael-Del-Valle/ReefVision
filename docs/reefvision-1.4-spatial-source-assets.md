@@ -551,3 +551,28 @@ precedence; persisted, typed, executable Workflow Builder tests require the
 same malformed imports to fail without publishing a mesh measurement artifact.
 These bounds protect numeric interpretation and resource use, but do not
 verify physical scale, specimen identity, or biological measurements.
+
+## Background structural-parse semantic integrity (unverified evidence)
+
+The versioned `spatial-source-parse-0001` background result now rejects internally
+contradictory scientific metadata even if someone rewrites the stored JSON and
+recomputes its **unkeyed** content SHA-256. A mesh result requires positive
+vertex and face counts and no point-cloud count; a point-cloud result requires
+a positive point count and no mesh counts. OBJ and GLB cannot resolve as
+point clouds. Both result kinds must retain
+`physical_calibration_not_applied` and `structural_parse_unreviewed` QC.
+These checks live in the shared schema consumed by project asset reads and
+Project Exchange validation. Invalid stored results produce an explicit
+integrity error on project detail/list APIs instead of a server exception or
+a misleading preview summary. Regression cases replace the counts, kind or
+QC flags, recompute the JSON digest, and assert fail-closed reads while the
+original source bytes remain independently retrievable and unchanged.
+
+A passing parse is **only structural source-unit metadata**. Its content
+digest is not a digital signature and does not prove that the numbers were
+produced by the authorized parser. Calibration, specimen identity, source
+acquisition quality, coral morphology and human review remain unverified.
+Mesh and point-cloud measurements continue to use the independent
+standalone and executable typed persisted Workflow Builder paths; this
+metadata guard must not be mistaken for workflow validation or release
+acceptance.
