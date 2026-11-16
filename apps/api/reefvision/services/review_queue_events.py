@@ -28,9 +28,19 @@ def assert_review_event_action_integrity(session: Session, item_ids: list[str]) 
     """
     if not item_ids:
         return
-    # SQLite's default TRIM strips only spaces, not imported tab/newline-only
-    # reviewer labels or skip reasons. These are also empty human evidence.
-    whitespace = " \t\n\r\f\v"
+    # SQLite's default TRIM strips only ASCII spaces, while Python's
+    # str.strip() (used on incoming review actions) also recognizes Unicode
+    # whitespace. Imported or restored NBSP/EM SPACE-only labels, comments,
+    # assignees and skip reasons must obey that same evidence contract.
+    # Explicitly enumerate exactly the Unicode White_Space code points that
+    # Python recognizes; SQLite TRIM accepts these characters as its second
+    # argument. Do not normalize/modify any persisted reviewer history.
+    whitespace = (
+        " \t\n\r\f\v\x1c\x1d\x1e\x1f\x85"
+        "\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005"
+        "\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f"
+        "\u205f\u3000"
+    )
     invalid_event_id = session.scalar(
         select(ReviewQueueItemEvent.id)
         .where(
