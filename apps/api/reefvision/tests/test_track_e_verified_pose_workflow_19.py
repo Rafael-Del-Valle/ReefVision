@@ -428,6 +428,21 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert failed["run"]["status"] == "failed"
     assert "payload must be a JSON object" in failed["run"]["error_message"]
     assert failed["artifacts"] == []
+    # A failed saved pose workflow remains audit evidence. JSON arrays of pairs
+    # cannot impersonate its persisted result object on either read path.
+    with app.state.session_factory() as session:
+        failed_node = session.get(WorkflowNodeRun, failed["nodes"][0]["id"])
+        assert failed_node is not None
+        original_failed_result = failed_node.result_json
+        assert isinstance(original_failed_result, dict)
+        failed_node.result_json = list(original_failed_result.items())
+        session.flush()
+        with pytest.raises(ConflictError, match="Workflow node result must be a JSON object"):
+            WorkflowExecutionService(session).get_run_detail(str(malformed_queued.json()["id"]))
+        with pytest.raises(ConflictError, match="Workflow node result must be a JSON object"):
+            build_workflow_run_provenance(session, run_id=str(malformed_queued.json()["id"]))
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{malformed_queued.json()['id']}").json() == failed
     # A real queued execution failed at its saved frozen-pose adapter. It must
     # remain terminal: a direct retry cannot retroactively add a valid output.
     with app.state.session_factory() as session:
