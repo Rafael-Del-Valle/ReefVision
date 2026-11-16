@@ -527,6 +527,59 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                         {p.name: p.read_bytes() for p in (bad, good)}, originals
                     )
 
+    def test_opt_in_decode_checks_exif_pixel_dimensions_against_native_raster(self) -> None:
+        """Camera EXIF dimensions must not silently disagree with JPEG pixels."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; EXIF raster dimensions unverified")
+
+        cases = (
+            ("matching", 12, 8, True, False),
+            ("stale_crop", 13, 8, False, False),
+            ("missing_axis", 12, None, False, False),
+            ("zero_axis", 0, 8, False, False),
+            ("no_dimensions", None, None, True, False),
+            ("ifd0_export", 12, 8, True, True),
+        )
+        for label, width, height, expected_ok, use_ifd0 in cases:
+            with self.subTest(case=label):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    photo = root / f"{label}.JpEg"
+                    exif = Image.Exif()
+                    exif[274] = 6  # Native 12x8 raster displays as 8x12.
+                    dimensions = exif if use_ifd0 else exif.get_ifd(34665)
+                    if width is not None:
+                        dimensions[40962] = width
+                    if height is not None:
+                        dimensions[40963] = height
+                    Image.new("RGB", (12, 8), (15, 40, 90)).save(
+                        photo, format="JPEG", exif=exif
+                    )
+                    original = photo.read_bytes()
+
+                    records, errors = MODULE.inventory(root, verify_decode=True)
+                    self.assertEqual(len(records), 1)
+                    record = records[0]
+                    self.assertEqual(record["jpeg_decodable"], expected_ok)
+                    if expected_ok:
+                        self.assertEqual(errors, [])
+                        self.assertEqual(record["jpeg_exif_pixel_width"], width)
+                        self.assertEqual(record["jpeg_exif_pixel_height"], height)
+                        self.assertEqual(
+                            (record["jpeg_display_width"], record["jpeg_display_height"]),
+                            (8, 12),
+                        )
+                    else:
+                        self.assertEqual(
+                            errors,
+                            [f"JPEG decode failed: {photo.name}: ValueError"],
+                        )
+                        self.assertNotIn("jpeg_pixel_width", record)
+                        self.assertNotIn("jpeg_display_width", record)
+                    self.assertEqual(photo.read_bytes(), original)
+
     def test_invalid_exif_orientation_fails_geometry_qc_read_only(self) -> None:
         """Do not invent display dimensions for malformed camera EXIF."""
         try:
