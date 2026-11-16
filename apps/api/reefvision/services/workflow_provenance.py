@@ -179,6 +179,20 @@ def verify_succeeded_node_artifacts(
         for artifact_id in output_ids
     ]
 
+    # Interrupted-run recovery can reuse this node before run-wide artifact
+    # ownership checks. Reject even checksum-valid rows attributed to this
+    # producer but omitted from its published output IDs.
+    persisted_output_ids = set(
+        session.scalars(
+            select(WorkflowArtifact.id).where(
+                WorkflowArtifact.workflow_run_id == run_id,
+                WorkflowArtifact.producer_node_run_id == node_run.id,
+            )
+        )
+    )
+    if persisted_output_ids != set(output_ids):
+        raise ConflictError("Succeeded workflow node has undeclared persisted outputs")
+
     # A producer output port is a single typed artifact identity. An altered
     # database row with a second, independently checksummed artifact on the
     # same port must never be reused as legitimate scientific output.
