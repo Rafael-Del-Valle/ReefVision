@@ -280,15 +280,9 @@ def _safe_terminal_log_text(payload: bytes) -> str:
         for control in controls:
             value = control.group()
             if value != "\x08" and value.endswith("m"):
-                before_sgr = re.sub(
-                    rf"(?:{sgr})+$", "", record[: control.start()]
-                )
-                after_sgr = re.sub(
-                    rf"^(?:{sgr})+", "", record[control.end() :]
-                )
-                if token_character(before_sgr[-1:]) and token_character(
-                    after_sgr[:1]
-                ):
+                before_sgr = re.sub(rf"(?:{sgr})+$", "", record[: control.start()])
+                after_sgr = re.sub(rf"^(?:{sgr})+", "", record[control.end() :])
+                if token_character(before_sgr[-1:]) and token_character(after_sgr[:1]):
                     return "[terminal-edited training log record omitted]"
                 continue
             before = record[: control.start()]
