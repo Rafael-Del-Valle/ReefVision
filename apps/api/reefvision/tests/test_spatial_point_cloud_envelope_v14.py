@@ -398,3 +398,96 @@ def test_positive_chord_lower_interval_underflow_is_unresolved_in_saved_workflow
         if item["data_type"] == "point_cloud_measurement_preview"
     )
     assert artifact["payload_json"] == expected
+
+@pytest.mark.parametrize("source_format", ["xyz", "ply"])
+def test_representable_mixed_scale_envelope_not_lost_to_intermediate_underflow(
+    client: TestClient, source_format: str
+) -> None:
+    """Small axes and a large third axis yield a representable positive envelope."""
+    points = [[0.0, 0.0, 0.0], [1e-170, 1e-155, 1e9]]
+    assert (1e-170 * 1e-155) * 1e9 == 0.0
+    direct = measure_point_cloud_preview(
+        points=points,
+        meters_per_unit=1.0,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic mixed-scale envelope; unverified",
+        relative_scale_uncertainty=0.1,
+    )
+    volume = direct["axis_aligned_bounding_box_envelope_volume_m3"]
+    assert volume is not None and volume > 0.0
+    assert volume == pytest.approx(1e-316, rel=1e-6, abs=0)
+    interval = direct["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"]
+    assert interval == pytest.approx([volume * 0.9**3, volume * 1.1**3], abs=0)
+    assert "envelope_volume_below_numeric_resolution" not in direct["qc_warnings"]
+    assert "envelope_uncertainty_interval_below_numeric_resolution" not in direct[
+        "qc_warnings"
+    ]
+    assert direct["surface_area_m2"] is None
+    assert direct["branch_length_m"] is None
+    assert direct["provenance"]["calibration_verified"] is False
+
+    geometry = (
+        {"points": points}
+        if source_format == "xyz"
+        else {
+            "ply_text": (
+                "ply\\nformat ascii 1.0\\nelement vertex 2\\n"
+                "property double x\\nproperty double y\\nproperty double z\\n"
+                "end_header\\n0 0 0\\n1e-170 1e-155 1e9\\n"
+            )
+        }
+    )
+    params = {
+        **geometry,
+        "meters_per_unit": 1.0,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic mixed-scale envelope; unverified",
+        "relative_scale_uncertainty": 0.1,
+    }
+    project_id = str(create_project(client, f"Mixed-scale envelope {source_format}")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert response.status_code == 200, response.text
+    expected = response.json()
+    assert expected["axis_aligned_bounding_box_envelope_volume_m3"] == volume
+    assert expected["qc_warnings"] == direct["qc_warnings"]
+
+    graph = {
+        "graph_id": f"representable-mixed-scale-envelope-{source_format}",
+        "name": "Preserve representable bounding envelope",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item for item in detail.json()["artifacts"]
+        if item["data_type"] == "point_cloud_measurement_preview"
+    )
+    assert artifact["payload_json"] == expected
+    assert len(artifact["payload_sha256"]) == 64
+    assert artifact["payload_json"]["measurement_status"] == "caller_supplied_unverified"
+    assert artifact["payload_json"]["provenance"]["calibration_verified"] is False
