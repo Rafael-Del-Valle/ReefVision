@@ -293,8 +293,7 @@ def measure_point_cloud_preview(
                             chord_m * (1 - relative_scale_uncertainty),
                             chord_m * (1 + relative_scale_uncertainty),
                         ]
-                        if relative_scale_uncertainty is not None
-                        and not chord_interval_underflow
+                        if relative_scale_uncertainty is not None and not chord_interval_underflow
                         else None
                     ),
                     "scale_uncertainty_m": (
@@ -304,6 +303,21 @@ def measure_point_cloud_preview(
                     ),
                 }
             )
+    # A positive calibrated extent with positive lower scale factor must not
+    # claim zero lower uncertainty solely because floating-point precision
+    # cannot represent the product. A truly planar axis stays [0, 0].
+    dimension_scale_interval_underflow = False
+    dimension_scale_intervals: list[list[float] | None] | None = None
+    if relative_scale_uncertainty is not None:
+        dimension_scale_intervals = []
+        for dimension in dimensions:
+            lower = dimension * (1 - relative_scale_uncertainty)
+            upper = dimension * (1 + relative_scale_uncertainty)
+            if dimension > 0.0 and relative_scale_uncertainty < 1.0 and lower == 0.0:
+                dimension_scale_interval_underflow = True
+                dimension_scale_intervals.append(None)
+            else:
+                dimension_scale_intervals.append([lower, upper])
     centroid = [sum(p[axis] for p in vertices) / len(vertices) * scale for axis in range(3)]
     diagonal = dist((0.0, 0.0, 0.0), dimensions)
     envelope_volume: float | None = dimensions[0] * dimensions[1] * dimensions[2]
@@ -435,6 +449,7 @@ def measure_point_cloud_preview(
             "coincident_endpoint_chords": coincident_selected_chord_count,
         },
         "axis_aligned_dimensions_m": dimensions,
+        "axis_aligned_dimension_scale_interval_m": dimension_scale_intervals,
         "axis_aligned_min_in_source_frame_m": bounds_min,
         "axis_aligned_max_in_source_frame_m": bounds_max,
         "axis_aligned_min_in_source_frame_scale_interval_m": coordinate_scale_intervals(bounds_min),
@@ -460,6 +475,11 @@ def measure_point_cloud_preview(
         "branch_length_m": None,
         "qc_warnings": (
             (["duplicate_points_present"] if unique_count < len(vertices) else [])
+            + (
+                ["dimension_uncertainty_interval_below_numeric_resolution"]
+                if dimension_scale_interval_underflow
+                else []
+            )
             + (["envelope_volume_below_numeric_resolution"] if envelope_volume_underflow else [])
             + (
                 ["envelope_uncertainty_interval_below_numeric_resolution"]

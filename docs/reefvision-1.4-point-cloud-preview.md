@@ -10,6 +10,21 @@ Outputs include point count, duplicate-point QC, calibrated global-axis extents 
 
 **Envelope interval numerical resolution (November 2026):** A positive, representable three-dimensional bounding-box envelope can have a lower scale-only uncertainty bound that rounds to floating-point zero even though the lower scale factor is strictly positive. In this case, the nominal envelope remains available, but `axis_aligned_bounding_box_envelope_volume_scale_interval_m3` is `null` and `envelope_uncertainty_interval_below_numeric_resolution` is added to `qc_warnings`; zero must not be reported as a physically supported lower bound. This is distinct from `envelope_volume_below_numeric_resolution`, which indicates an unrepresentable **nominal** positive volume. A relative scale uncertainty of exactly 1.0 has a mathematically valid zero lower scale factor and retains its zero lower bound; ordinary representable intervals remain unchanged. Direct-service, XYZ/ASCII-PLY standalone API, and executable persisted Workflow Builder regression cases guard parity and provisional calibration. No coral tissue volume, physical measurement uncertainty, or biological verification is inferred.
 
+**Dimension uncertainty interval numerical resolution (November 16, 2026):** The
+optional `axis_aligned_dimension_scale_interval_m` reports lower/upper
+scale-only uncertainty bounds for each source-axis extent (or `null` when
+uncertainty is absent). If an axis has a positive calibrated nominal extent
+but a mathematically positive lower scale factor rounds its lower bound to
+zero, only that axis interval is `null`, with
+`dimension_uncertainty_interval_below_numeric_resolution` in `qc_warnings`.
+The nominal dimensions, other unaffected axis intervals and calibration
+provenance remain available. An actually zero source-axis extent retains
+`[0, 0]`; 100% relative scale uncertainty retains a genuinely zero lower
+bound. XYZ/ASCII PLY standalone, direct-service and saved executable
+Workflow Builder regression cases require identical provisional artifacts.
+These are numerical limits of scale propagation, not physical measurement
+accuracy, verified coral morphology or anatomical branch lengths.
+
 **Selected-chord uncertainty interval resolution (November 2026):** When a provisional, positive calibrated source-index chord has positive lower scale factor but its lower uncertainty distance rounds to zero, the nominal `chord_distance_m` is retained, `chord_distance_scale_interval_m` is `null`, and per-chord/top-level `chord_uncertainty_interval_below_numeric_resolution` / `selected_chord_uncertainty_interval_below_numeric_resolution` warnings identify the missing numeric precision. A relative uncertainty of exactly 1.0 retains a mathematically valid zero lower bound. XYZ and ASCII PLY standalone endpoints and executable persisted Workflow Builder regressions require identical artifacts. This does not establish independently verified calibration, organism identity, or anatomical branch length.
 
 **Selected-chord precision guard:** A full point cloud can retain its calibrated axis extents while a pair of very close selected source points becomes numerically indistinguishable. Point-chord measurement now fails closed when distinct source endpoints produce zero calibrated separation or identical calibrated XYZ coordinates; truly coincident source XYZ still retains a zero-length chord with its explicit QC warning. This applies to standalone XYZ/ASCII-PLY requests and persisted typed Workflow Builder runs; a failed run must save no point-cloud measurement artifact. Positive controls retain representable subnormal chord lengths. This checks floating-point representability, not measurement accuracy, biological anatomy or field calibration.

@@ -297,6 +297,7 @@ def test_envelope_scale_interval_retains_representable_and_true_zero_bounds(
     assert bounds[1] > 0.0
     assert "envelope_uncertainty_interval_below_numeric_resolution" not in result["qc_warnings"]
 
+
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
 def test_positive_chord_lower_interval_underflow_is_unresolved_in_saved_workflow(
     client: TestClient, source_format: str
@@ -337,8 +338,7 @@ def test_positive_chord_lower_interval_underflow_is_unresolved_in_saved_workflow
         assert interval is not None
         assert (interval[0] == 0.0) is zero_lower_bound
         assert (
-            "chord_uncertainty_interval_below_numeric_resolution"
-            not in valid_chord["qc_warnings"]
+            "chord_uncertainty_interval_below_numeric_resolution" not in valid_chord["qc_warnings"]
         )
 
     project_id = str(create_project(client, f"Chord interval boundary {source_format}")["id"])
