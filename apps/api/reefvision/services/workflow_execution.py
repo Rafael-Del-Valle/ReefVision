@@ -50,6 +50,7 @@ from reefvision.services.workflow_datasets import create_workflow_dataset_versio
 from reefvision.services.workflow_graphs import WorkflowGraphService
 from reefvision.services.workflow_provenance import (
     build_workflow_run_provenance,
+    canonical_workflow_artifact_sha256,
     verify_completed_run_artifact_ownership,
     verify_succeeded_node_artifacts,
     verify_workflow_artifact,
@@ -1037,7 +1038,7 @@ class WorkflowExecutionService:
 
     @staticmethod
     def artifact_checksum(payload: dict[str, Any]) -> str:
-        return canonical_json_sha256(payload)
+        return canonical_workflow_artifact_sha256(payload)
 
     def persist_artifact(
         self,
@@ -1074,7 +1075,10 @@ class WorkflowExecutionService:
         if not isinstance(specification.payload, dict):
             raise ValidationError("Workflow artifact payload must be a JSON object")
 
-        checksum = self.artifact_checksum(specification.payload)
+        try:
+            checksum = self.artifact_checksum(specification.payload)
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
 
         existing = list(
             self.session.scalars(
