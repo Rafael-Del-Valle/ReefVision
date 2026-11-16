@@ -2071,6 +2071,116 @@ describe("AnnotationEditor", () => {
     ).toHaveLength(0);
   });
 
+
+  it.each([
+    {
+      action: "Copy Current Visibility to Project Defaults",
+      route: "defaults",
+      method: "PUT",
+      hasDefault: true,
+    },
+    {
+      action: "Apply Project Defaults to My Preferences",
+      route: "preferences",
+      method: "PUT",
+      hasDefault: true,
+    },
+    {
+      action: "Apply Project Defaults to My Preferences",
+      route: "preferences",
+      method: "DELETE",
+      hasDefault: false,
+    },
+  ])(
+    "preserves the observed record identity when $action sends $method",
+    async ({ action, route, method, hasDefault }) => {
+      let visibilityReads = 0;
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async (input, init) => {
+          const url = String(input);
+          if (
+            url.endsWith(`/images/${session.image.id}/annotations`) &&
+            (!init?.method || init.method === "GET")
+          ) {
+            return jsonResponse(session);
+          }
+          if (
+            url.endsWith(`/projects/${project.id}/class-visibility`) &&
+            (!init?.method || init.method === "GET")
+          ) {
+            visibilityReads += 1;
+            return jsonResponse(
+              buildVisibilityBundle({
+                userPreferences: { annotations: ["class-1"] },
+                ...(hasDefault
+                  ? { projectDefaults: { annotations: ["class-2"] } }
+                  : {}),
+              }),
+            );
+          }
+          if (
+            url.includes(
+              `/projects/${project.id}/class-visibility/${route}/annotations`,
+            ) &&
+            init?.method === method
+          ) {
+            // Simulate the server rejecting an ABA replacement of the same
+            // timestamp with a different record ID (HTTP 409).
+            return jsonResponse(
+              { detail: "Visibility changed in another editor." },
+              409,
+            );
+          }
+          const shared = handleDefaultEditorRequests(url, init);
+          if (shared) return shared;
+          throw new Error(
+            `Unhandled request: ${init?.method ?? "GET"} ${url}`,
+          );
+        });
+
+      renderEditor();
+      await screen.findByRole("heading", {
+        name: session.image.original_filename,
+      });
+      const button = screen.getByRole("button", { name: action });
+      await waitFor(() => expect(button).not.toBeDisabled());
+      await userEvent.click(button);
+      await waitFor(() =>
+        expect(
+          fetchMock.mock.calls.some(
+            ([request, init]) =>
+              String(request).includes(
+                `/projects/${project.id}/class-visibility/${route}/annotations`,
+              ) && init?.method === method,
+          ),
+        ).toBe(true),
+      );
+
+      const writes = fetchMock.mock.calls.filter(
+        ([request, init]) =>
+          String(request).includes(
+            `/projects/${project.id}/class-visibility/${route}/annotations`,
+          ) && init?.method === method,
+      );
+      expect(writes).toHaveLength(1);
+      if (method === "PUT") {
+        expect(JSON.parse(String(writes[0][1]?.body))).toMatchObject({
+          expected_updated_at: "2026-07-10T00:00:00Z",
+          expected_record_id: "row-annotations",
+        });
+      } else {
+        expect(decodeURIComponent(String(writes[0][0]))).toContain(
+          "expected_record_id=row-annotations",
+        );
+      }
+      await waitFor(() => expect(visibilityReads).toBeGreaterThan(1));
+      expect(screen.getByTestId("class-visibility-status")).toHaveTextContent(
+        "Visibility changed in another editor.",
+      );
+    },
+  );
+
   it("waits for a project visibility identity before enabling persistent controls", async () => {
     let resolveVisibility: (response: Response) => void = () => {
       throw new Error("The visibility request was not started");

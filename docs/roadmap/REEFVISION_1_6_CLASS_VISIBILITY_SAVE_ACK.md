@@ -33,3 +33,29 @@ installed Windows multi-editor GUI tests. Other 1.6 release holds remain:
 independent 1.1/1.6 migration-history reconciliation, representative research
 data and saved-workflow validation, MSI/CAB install/upgrade/rollback and
 installed-GUI validation, and explicit researcher approval.
+
+## Convenience-action identity parity (2026-11-16)
+
+The editor's ordinary **Save as My Preference**, **Save as Project Default**
+and explicit reset actions already sent both the observed UTC revision and the
+persistent record ID. Three convenience paths did not: copying the current
+visibility into project defaults, applying a saved default to personal
+preferences, and applying an absent project default (deleting a saved personal
+preference). Their timestamp-only precondition could match a distinct,
+recreated record with the same timestamp, defeating the existing database
+record-ID anti-ABA protection.
+
+All three paths now pass the originating scope's `expected_record_id` along
+with `expected_updated_at`. No locally hidden class is silently promoted to
+a verified biological observation. The UI still surfaces HTTP 409 and reloads
+authoritative visibility state if another editor has replaced the record.
+
+Three parameterized component regression cases exercise the actual controls,
+including both the conditional PUT and conditional DELETE HTTP paths, verify
+the record ID is transmitted, and require failed conditional requests to
+refetch instead of falsely acknowledging a successful update. The backend's
+existing database-backed identity/revision tests remain in force. No data
+migration, model download, new Workflow Builder node, or scientific asset
+change is needed for these display-only preferences. Release remains HOLD
+pending native Windows GUI/installer, cross-version migration, representative
+science and complete exact-head CI checks.

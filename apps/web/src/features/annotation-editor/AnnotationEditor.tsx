@@ -1715,10 +1715,12 @@ export function AnnotationEditor({
       target: "project_default",
       hiddenClassIds: currentLayerVisibility.hiddenClassIds,
       expectedUpdatedAt: currentLayerVisibility.projectDefault.updated_at,
+      expectedRecordId: currentLayerVisibility.projectDefault.record_id,
     });
   }, [
     currentLayerVisibility.hiddenClassIds,
     currentLayerVisibility.projectDefault.updated_at,
+    currentLayerVisibility.projectDefault.record_id,
     selectedVisibilityLayer,
     project.id,
     visibilityMutation,
@@ -1734,6 +1736,7 @@ export function AnnotationEditor({
           layerType: selectedVisibilityLayer,
           target: "my_preference",
           expectedUpdatedAt: preference.updated_at,
+          expectedRecordId: preference.record_id,
         });
       } else if (!preference.saved) {
         clearSessionVisibilityOverride(selectedVisibilityLayer);
@@ -1750,6 +1753,7 @@ export function AnnotationEditor({
       target: "my_preference",
       hiddenClassIds: currentLayerVisibility.projectDefault.hidden_class_ids,
       expectedUpdatedAt: currentLayerVisibility.userPreference.updated_at,
+      expectedRecordId: currentLayerVisibility.userPreference.record_id,
     });
   }, [
     clearSessionVisibilityOverride,
