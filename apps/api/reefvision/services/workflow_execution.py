@@ -1067,7 +1067,6 @@ class WorkflowExecutionService:
         if specification.data_type not in accepted_types:
             raise ConflictError("Workflow artifact output type does not match registry")
 
-
         checksum = self.artifact_checksum(specification.payload)
 
         existing = list(
@@ -1106,7 +1105,6 @@ class WorkflowExecutionService:
             raise ConflictError(
                 "Workflow node already persisted a different artifact for this output"
             )
-
 
         artifact = WorkflowArtifact(
             workflow_run_id=run_id,
