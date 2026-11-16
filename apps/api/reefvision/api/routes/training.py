@@ -276,12 +276,16 @@ def _safe_terminal_log_text(payload: bytes) -> str:
         # token can splice two numbers (0.25 + SGR + 99 -> 0.2599).
         # Ignore adjacent SGRs when checking the printed neighbors so a
         # sequence of color resets cannot hide the join.
-        sgr = r"(?:\x1b\[|\x9b)[0-?]*[ -/]*m"
+        # Trim adjacent CSI controls when finding *printed* token neighbors.
+        # A legitimate leading clear (ESC[2J) followed by an SGR color should
+        # not look like the literal token "J" adjoining the colored epoch.
+        # Cursor/erase edits are still rejected by their own branch below.
+        csi = r"(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]"
         for control in controls:
             value = control.group()
             if value != "\x08" and value.endswith("m"):
-                before_sgr = re.sub(rf"(?:{sgr})+$", "", record[: control.start()])
-                after_sgr = re.sub(rf"^(?:{sgr})+", "", record[control.end() :])
+                before_sgr = re.sub(rf"(?:{csi})+$", "", record[: control.start()])
+                after_sgr = re.sub(rf"^(?:{csi})+", "", record[control.end() :])
                 if token_character(before_sgr[-1:]) and token_character(after_sgr[:1]):
                     return "[terminal-edited training log record omitted]"
                 continue
