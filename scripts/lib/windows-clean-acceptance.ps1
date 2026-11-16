@@ -57,12 +57,15 @@ function Get-ReefVisionWebView2RuntimeInfo {
         }
     )
     $registrations = @()
+    $unreadableScopes = @()
     foreach ($location in $locations) {
         try {
             $raw = & $ReadRegistryValue $location
         } catch {
-            # The user may not have access to a registry view; a diagnostic
-            # inventory must never abort the disposable installer test.
+            # Do not conflate an inaccessible registry view with an absent
+            # WebView2 registration. Record the scope without exposing private
+            # registry data, and leave installed-GUI acceptance unverified.
+            $unreadableScopes += [string]$location.scope
             continue
         }
         if ($null -eq $raw) { continue }
@@ -79,6 +82,8 @@ function Get-ReefVisionWebView2RuntimeInfo {
     return [ordered]@{
         detected = ($registrations.Count -gt 0)
         registrations = @($registrations)
+        inspection_complete = ($unreadableScopes.Count -eq 0)
+        unreadable_scopes = @($unreadableScopes)
         evidence_scope = 'registry only; interactive GUI unverified'
     }
 }
