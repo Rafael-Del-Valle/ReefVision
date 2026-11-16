@@ -257,9 +257,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
             )
             is False
         )
-    malformed_detail = client.get(
-        f"/api/v1/workflow-runs/{malformed_queued.json()['id']}"
-    )
+    malformed_detail = client.get(f"/api/v1/workflow-runs/{malformed_queued.json()['id']}")
     assert malformed_detail.status_code == 200, malformed_detail.text
     failed = malformed_detail.json()
     assert failed["run"]["status"] == "failed"
