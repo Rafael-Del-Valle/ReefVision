@@ -77,3 +77,36 @@ previous skip), tests provenance reassignment to a different real queue, and
 verifies recovery only after restoring the disposable fixture. It also checks
 saved-workflow and standalone parity, unchanged annotations and review gates.
 No migration, new workflow node, new model provider or researcher asset change.
+
+## Unicode whitespace parity for imported QC evidence (2026-11-16)
+
+The user-facing event schema normalizes manual actor, comment and assignee
+labels with Python `str.strip()`, which recognizes non-ASCII whitespace.
+SQLite `TRIM` strips ASCII spaces by default and the previous integrity
+guard explicitly covered only ASCII whitespace. This allowed restored or
+externally modified audit evidence consisting solely of non-breaking spaces,
+EM SPACE, narrow no-break space or ideographic space to pass as a meaningful
+human label, assignment or skip reason even though a newly submitted equivalent
+would be rejected.
+
+The existing read-only, shared event-shape guard now supplies SQLite `TRIM`
+the complete whitespace set recognized by Python `str.isspace()`. This is
+a bounded SQL preflight; it does not scan events into Python, change user data
+or loosen review permissions. It runs before paged history, new event writes,
+all four single-item review transitions, bulk triage and registered bulk
+idempotent replay. Historical legitimate text and immutable workflow runs
+remain untouched. No new Workflow Builder node is warranted because standalone
+queues and saved, typed, executable QC Workflow Builder queues already share
+the same review service.
+
+Eight new disposable SQLite API regressions cover two queue origins,
+Unicode-only actor/comment/assignee values, a registered bulk skip-reason
+replay, HTTP 409/no private labels, no extra reviewer history or transition,
+and safe retry only after test-only restoration. Independent SQLite checks
+demonstrated that the former TRIM set misses these strings and the revised
+set rejects them; this is not a claim that full repository tests passed.
+
+**Release HOLD** continues until complete exact-head backend/frontend/E2E,
+migration/research data and saved-workflow scientific acceptance, coordinated
+1.1/1.6 revision-0038 reconciliation and real installed-Windows MSI/CAB
+upgrade/rollback and GUI validation, plus explicit researcher approval.
