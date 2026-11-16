@@ -95,7 +95,12 @@ def test_import_queues_background_structural_parse_without_claiming_calibration(
         {"vertex_count": None},
         {"qc_warnings": ["open_mesh_surface_not_enclosed"]},
     ],
-    ids=["obj-falsely-point-cloud", "mesh-with-points", "mesh-without-vertices", "qc-removed"],
+    ids=[
+        "obj-falsely-point-cloud",
+        "mesh-with-points",
+        "mesh-without-vertices",
+        "qc-removed",
+    ],
 )
 def test_rehashed_contradictory_parse_evidence_fails_closed(
     client: TestClient, overrides: dict[str, object]
@@ -113,7 +118,9 @@ def test_rehashed_contradictory_parse_evidence_fails_closed(
         job = session.get(Job, asset["parse_job_id"])
         assert job is not None and job.result_json is not None
         altered = {**job.result_json, **overrides}
-        content = {key: value for key, value in altered.items() if key != "content_sha256"}
+        content = {
+            key: value for key, value in altered.items() if key != "content_sha256"
+        }
         altered["content_sha256"] = canonical_json_sha256(content)
         job.result_json = altered
         session.commit()
