@@ -933,15 +933,20 @@ try {
     # The sidecar initially writes backend.log, but FastAPI create_app()
     # switches the rotating logger to api.log. Capture both logs and rotated
     # files: SAM2 stage timings and inference exceptions land in api.log.
-    foreach ($logName in @('backend.log', 'api.log', 'api.log.1', 'api.log.2')) {
-        $sourceLog = Join-Path (Join-Path $DataRoot 'logs') $logName
-        if (Test-Path -LiteralPath $sourceLog -PathType Leaf) {
-            try {
-                $evidenceName = "$logName.tail.log"
-                Get-Content -LiteralPath $sourceLog -Tail 500 -ErrorAction Stop |
-                    Set-Content -LiteralPath (Join-Path $EvidenceRoot $evidenceName) -Encoding utf8 -ErrorAction Stop
-            } catch {
-                Write-Warning "Could not archive $logName tail: $($_.Exception.Message)"
+    foreach ($profileLogs in @(
+        [pscustomobject]@{root=$DataRoot;prefix='live'},
+        [pscustomobject]@{root=$RestoreDataRoot;prefix='restore'}
+    )) {
+        foreach ($logName in @('backend.log', 'api.log', 'api.log.1', 'api.log.2')) {
+            $sourceLog = Join-Path (Join-Path $profileLogs.root 'logs') $logName
+            if (Test-Path -LiteralPath $sourceLog -PathType Leaf) {
+                try {
+                    $evidenceName = "$($profileLogs.prefix).$logName.tail.log"
+                    Get-Content -LiteralPath $sourceLog -Tail 500 -ErrorAction Stop |
+                        Set-Content -LiteralPath (Join-Path $EvidenceRoot $evidenceName) -Encoding utf8 -ErrorAction Stop
+                } catch {
+                    Write-Warning "Could not archive $($profileLogs.prefix) $logName tail: $($_.Exception.Message)"
+                }
             }
         }
     }

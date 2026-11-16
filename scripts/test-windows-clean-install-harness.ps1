@@ -295,6 +295,24 @@ Assert-True ($acceptanceScript -match 'Stop-AcceptanceDesktop\s+\$desktop\s*\r?\
 Assert-True ($acceptanceScript -match 'Where-Object\s+FullName\s+-eq\s+''reefvision-exchange-manifest\.json''') 'Project Exchange validation does not require the canonical manifest name.'
 Assert-True ($acceptanceScript -notmatch 'Where-Object\s+FullName\s+-eq\s+''manifest\.json''') 'Project Exchange validation still accepts the incorrect manifest.json name.'
 
+$desktopWorkflowPath = Join-Path $Root '.github\workflows\build-desktop.yml'
+$desktopWorkflow = Get-Content -LiteralPath $desktopWorkflowPath -Raw
+foreach ($profileName in @('validated-1.3', 'draft-1.4-0038', 'draft-1.4-0039')) {
+    Assert-True ($desktopWorkflow.Contains("profile: $profileName")) "Windows lineage matrix is missing $profileName."
+}
+foreach ($workflowContract in @(
+    'windows-lineage-acceptance:',
+    'python scripts/create_windows_lineage_fixtures.py',
+    'python scripts/verify_windows_lineage_fixture.py',
+    "-SourceCommit `$env:SOURCE_COMMIT -RequireProvenance",
+    'gh run download 43648296842',
+    'f56b577323c31f60b69251e1bb29e91b384d0d04',
+    "-Version '1.3.0' -ExpectedFilename 'ReefVision_1.3.0_x64_en-US.msi'",
+    'VerifyPreviousInstallerRejectsUpgradedProfile = $true'
+)) {
+    Assert-True ($desktopWorkflow.Contains($workflowContract)) "Windows lineage workflow is missing contract: $workflowContract"
+}
+
 $reportPath = Join-Path $Root ('.artifacts\reefvision-evidence-' + [guid]::NewGuid().ToString('N') + '.json')
 $report = [ordered]@{ upgrade = New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'previous installer not supplied'; failure_reason = $null }
 Write-ReefVisionEvidenceReport -Report $report -Path $reportPath
