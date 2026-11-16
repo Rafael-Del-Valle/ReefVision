@@ -168,6 +168,19 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
                     payload=original["payload_json"],
                 ),
             )
+        # A distinct, undeclared port previously bypassed the same-port
+        # collision guard. Publication must enforce the registered typed
+        # output contract, even for an otherwise valid artifact payload.
+        with pytest.raises(ConflictError, match="output type does not match registry"):
+            WorkflowExecutionService(session).persist_artifact(
+                run_id=str(run["id"]),
+                node_run=producer,
+                specification=WorkflowArtifactSpec(
+                    port_id="unplanned-output",
+                    data_type="project_reference",
+                    payload=original["payload_json"],
+                ),
+            )
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
