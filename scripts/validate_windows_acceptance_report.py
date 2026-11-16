@@ -45,6 +45,9 @@ CAUSAL_GATE_ORDER = (
     ("install", "shortcuts"),
     ("shortcuts", "first_launch"),
     ("first_launch", "frontend_backend_connectivity"),
+    ("frontend_backend_connectivity", "model_policy"),
+    ("model_policy", "external_annotation_imports"),
+    ("external_annotation_imports", "class_visibility_persistence"),
     ("frontend_backend_connectivity", "restart"),
     ("model_policy", "restart"),
     ("external_annotation_imports", "restart"),
@@ -165,6 +168,9 @@ def _verify_causal_gate_order(report: dict[str, Any], *, expected_upgrade: str) 
         # QC workflow replay and post-migration science-file retention.
         pairs += (
             ("install", "upgrade_install"),
+            ("external_annotation_imports", "upgrade_install"),
+            ("upgrade_install", "class_visibility_persistence"),
+            ("class_visibility_persistence", "post_upgrade_migration"),
             ("upgrade_install", "post_upgrade_migration"),
             ("post_upgrade_migration", "restart"),
             ("project_exchange", "upgrade"),
