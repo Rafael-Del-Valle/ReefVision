@@ -209,7 +209,8 @@ def test_positive_envelope_uncertainty_lower_bound_underflow_is_unknown(
     assert volume * 0.5**3 == 0.0
     assert direct["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"] is None
     assert (
-        "envelope_uncertainty_interval_below_numeric_resolution" in direct["qc_warnings"]
+        "envelope_uncertainty_interval_below_numeric_resolution"
+        in direct["qc_warnings"]
     )
     assert "envelope_volume_below_numeric_resolution" not in direct["qc_warnings"]
     assert direct["measurement_status"] == "caller_supplied_unverified"
@@ -234,7 +235,10 @@ def test_positive_envelope_uncertainty_lower_bound_underflow_is_unknown(
     assert response.status_code == 200, response.text
     expected = response.json()
     assert expected["axis_aligned_bounding_box_envelope_volume_m3"] == volume
-    assert expected["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"] is None
+    assert (
+        expected["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"]
+        is None
+    )
     assert expected["qc_warnings"] == direct["qc_warnings"]
     assert expected["provenance"]["calibration_verified"] is False
 
@@ -243,7 +247,11 @@ def test_positive_envelope_uncertainty_lower_bound_underflow_is_unknown(
         "name": "Do not invent a zero lower uncertainty bound",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
-            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+            {
+                "node_id": "cloud",
+                "node_type": "point_cloud_preview",
+                "parameters": params,
+            },
         ],
         "edges": [
             {
@@ -257,7 +265,9 @@ def test_positive_envelope_uncertainty_lower_bound_underflow_is_unknown(
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    run = client.post(
+        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+    )
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert process_workflow_run_job(
@@ -281,7 +291,7 @@ def test_positive_envelope_uncertainty_lower_bound_underflow_is_unknown(
 def test_envelope_scale_interval_retains_representable_and_true_zero_bounds(
     scale: float, uncertainty: float, lower_is_exact_zero: bool
 ) -> None:
-    """Known physical zero at 100% uncertainty is not numeric underflow."""
+    """A zero lower scale factor is valid, not floating-point precision loss."""
     result = measure_point_cloud_preview(
         points=[[0, 0, 0], [1, 1, 1]],
         meters_per_unit=scale,
