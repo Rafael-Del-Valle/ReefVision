@@ -960,6 +960,7 @@ Evidence:
 - Dependencies: `rv13-temporal-dataset-training`
 - Entry point: Models & AI → Providers
 - Workflow Builder: `required`
+- Missing input: An exact-SHA Windows installer artifact and installed-app acceptance run for the 1.5 branch.
 
 Acceptance checks:
 
@@ -967,8 +968,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Strict inspect-only manifest discovery, API exposure, failure isolation, and metadata-only Workflow Builder snapshots are covered by backend tests on the 1.5 branch. — `docs/superpowers/plans/2026-11-16-reefvision-1-5-provider-foundations.md` (`rv15-provider-foundations-src`)
+- `browser`: The tested user path is Home → open project → Models & AI → Providers; local manifests remain non-executable and unavailable records remain visible. — `apps/web/src/features/advanced-providers/AdvancedProviderWorkspace.test.tsx` (`rv15-provider-foundations-ui`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
