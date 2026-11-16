@@ -208,6 +208,18 @@ def test_verified_pose_dataset_persists_workflow_lineage(
                     payload={**payload, "counts_by_frame": {0: 3}},
                 ),
             )
+        # Python serializes tuples as JSON arrays. Require deliberate arrays
+        # for pose coordinates so publication never silently changes their type.
+        with pytest.raises(ValidationError, match="JSON arrays, not tuples"):
+            WorkflowExecutionService(session).persist_artifact(
+                run_id=str(queued.json()["id"]),
+                node_run=producer,
+                specification=WorkflowArtifactSpec(
+                    port_id=outputs[0]["producer_port_id"],
+                    data_type=outputs[0]["data_type"],
+                    payload={**payload, "keypoints": [(12.5, 4.0)]},
+                ),
+            )
     assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
     # Both executions are genuine saved Workflow Builder runs referencing
     # this reviewed frozen dataset. Their identical output contracts must
