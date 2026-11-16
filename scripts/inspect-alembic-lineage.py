@@ -178,9 +178,7 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
             # UNIQUE constraint using NOCASE may merge distinct reviewer
             # idempotency tokens while still passing a column-only inventory.
             # The original migrations use ordinary ascending BINARY keys.
-            key_rows = [
-                row for row in db.execute(f"PRAGMA index_xinfo({index_name})") if row[5]
-            ]
+            key_rows = [row for row in db.execute(f"PRAGMA index_xinfo({index_name})") if row[5]]
             if len(key_rows) != len(columns_in_index) or any(
                 row[3] != 0 or row[4] != "BINARY" for row in key_rows
             ):
