@@ -9,7 +9,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from reefvision.db.models import ReviewQueue, ReviewQueueItem
-from reefvision.services.workflow_review_queue_integrity import validate_saved_queue_snapshot
+from reefvision.services.workflow_review_queue_integrity import (
+    validate_saved_queue_snapshot,
+)
 from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
     _frozen_graph,
     _run_frozen_graph,
@@ -23,7 +25,7 @@ def test_frozen_confidence_filter_fails_before_any_queue_or_review_write(
     project_id, _, version_id, _ = _study(client)
     url = f"/api/v1/dataset-versions/{version_id}/review-queues"
     invalid = client.post(url, json={"review_below_confidence": 0.5})
-    assert invalid.status_code == 422, invalid.text
+    assert invalid.status_code == 400, invalid.text
     assert "do not snapshot pending predictions" in invalid.text
     listing = client.get(url)
     assert listing.status_code == 200, listing.text
@@ -82,9 +84,7 @@ def test_saved_frozen_graph_plan_rejects_inapplicable_confidence_gate(
         queue = session.get(ReviewQueue, output["queue_id"])
         assert queue is not None
         items = session.scalars(
-            select(ReviewQueueItem).where(
-                ReviewQueueItem.review_queue_id == queue.id
-            )
+            select(ReviewQueueItem).where(ReviewQueueItem.review_queue_id == queue.id)
         ).all()
         assert len(items) == 1
         assert items[0].review_state == "pending"
