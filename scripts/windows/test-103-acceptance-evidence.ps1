@@ -27,6 +27,10 @@ try {
     $expectedRuntime = Get-ReefVisionWebView2RuntimeInfo
     $reportedRegistrations = @($record.webview2 | Where-Object { $null -ne $_ })
     $expectedRegistrations = @($expectedRuntime.registrations | Where-Object { $null -ne $_ })
+    if ($record.webview2Inspection.complete -ne $expectedRuntime.inspection_complete -or
+        ((@($record.webview2Inspection.unreadableScopes) -join ',') -cne (@($expectedRuntime.unreadable_scopes) -join ','))) {
+        throw 'Evidence collector lost registry access failures or misreported inspection completeness.'
+    }
     if ($reportedRegistrations.Count -ne $expectedRegistrations.Count) {
         throw 'Evidence collector and installed-app harness disagree about WebView2 registrations.'
     }
@@ -46,6 +50,9 @@ try {
             $matches[0].registryPath -cne $pathsByScope[[string]$expectedEntry.scope]) {
             throw 'WebView2 runtime evidence lost its canonical registry location, view, or version.'
         }
+    }
+    if (-not @($record.limitations | Where-Object { $_ -match 'incomplete WebView2 registry inspection' }).Count) {
+        throw 'Incomplete WebView2 inventory must not be mistaken for runtime absence.'
     }
     if (-not @($record.limitations | Where-Object { $_ -match 'WebView2 registry detection is advisory' }).Count) {
         throw 'Registry detection must not imply installed GUI acceptance.'
