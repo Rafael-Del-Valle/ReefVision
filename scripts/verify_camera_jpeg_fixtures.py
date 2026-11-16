@@ -286,7 +286,10 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                             exif_ifd = exif.get_ifd(34665) if exif.get(34665) is not None else {}
                             exif_pixel_width = exif_ifd.get(40962, exif.get(40962))
                             exif_pixel_height = exif_ifd.get(40963, exif.get(40963))
-                            if exif_pixel_width is not None or exif_pixel_height is not None:
+                            if (
+                                exif_pixel_width is not None
+                                or exif_pixel_height is not None
+                            ):
                                 if (
                                     type(exif_pixel_width) is not int
                                     or type(exif_pixel_height) is not int
@@ -295,7 +298,9 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                                     or (exif_pixel_width, exif_pixel_height)
                                     != (decoded.width, decoded.height)
                                 ):
-                                    raise ValueError("EXIF pixel dimensions conflict with JPEG raster")
+                                    raise ValueError(
+                                        "EXIF pixel dimensions conflict with JPEG raster"
+                                    )
                             decoded_metadata = {
                                 "jpeg_pixel_width": decoded.width,
                                 "jpeg_pixel_height": decoded.height,
