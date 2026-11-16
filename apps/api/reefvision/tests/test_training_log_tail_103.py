@@ -643,6 +643,34 @@ def test_log_tail_quarantines_terminal_strings_inside_loss_tokens(
     assert log.read_bytes() == original
 
 
+@pytest.mark.parametrize(
+    "spliced_record",
+    [
+        b"train/box_loss=0.25\x1b[31m99",
+        b"train/cls_loss=0.\x1b[0m30",
+        b"train/dfl_loss=0.1\x1b[0m\x1b[32m0",
+        b"train/bo\x1b[35mx_loss=0.25",
+        b"train/box_loss=0.25\x9b31m99",
+    ],
+)
+def test_log_tail_quarantines_sgr_spliced_loss_tokens(
+    tmp_path: Path, spliced_record: bytes
+) -> None:
+    """Color controls inside tokens must not fabricate numeric losses."""
+    log = tmp_path / "training.log"
+    original = spliced_record + b"\ntrain/cls_loss=\x1b[32m0.31\x1b[0m\n"
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": (
+            "[terminal-edited training log record omitted]\n"
+            "train/cls_loss=0.31\n"
+        ),
+    }
+    assert log.read_bytes() == original
+
+
 def test_log_tail_strips_terminal_control_sequences(tmp_path: Path) -> None:
     log = tmp_path / "training.log"
     original = (
