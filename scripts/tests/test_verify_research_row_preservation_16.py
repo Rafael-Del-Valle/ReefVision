@@ -136,7 +136,7 @@ def test_rebuilt_qc_history_cannot_silently_reorder_review_actions(tmp_path: Pat
         and item["baseline_sha256"] == item["candidate_sha256"]
         for item in report["tables"]
     )
-    assert "coral α; private record" not in json.dumps(report)
+    assert "coral \u03b1; private record" not in json.dumps(report)
     assert before.read_bytes() == old_bytes
     assert after.read_bytes() == candidate_bytes
 
