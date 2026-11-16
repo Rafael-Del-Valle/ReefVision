@@ -10,6 +10,10 @@ from sqlalchemy.orm import Session
 from reefvision.config import Settings
 from reefvision.db.models import ModelRegistration, Project
 from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.ml.local_provider_manifests import (
+    LocalProviderManifestRecord,
+    discover_local_provider_manifests,
+)
 from reefvision.ml.provider_hub import list_model_providers
 from reefvision.schemas.advanced_providers import (
     AdvancedProviderManifestResponse,
@@ -299,6 +303,16 @@ class AdvancedProviderService:
             raise NotFoundError("Advanced provider manifest not found")
         return profile
 
+    def _local_manifest_records(self) -> list[LocalProviderManifestRecord]:
+        built_in_ids = {
+            *(profile.provider_id for profile in _PROFILES),
+            *(descriptor.provider_id for descriptor in list_model_providers(self.settings)),
+        }
+        return discover_local_provider_manifests(
+            self.settings,
+            built_in_ids=built_in_ids,
+        )
+
     def manifests(self) -> list[AdvancedProviderManifestResponse]:
         descriptors = {item.provider_id: item for item in list_model_providers(self.settings)}
         results: list[AdvancedProviderManifestResponse] = []
@@ -328,6 +342,57 @@ class AdvancedProviderService:
                     recommended_devices=list(profile.recommended_devices),
                     known_limitations=list(profile.known_limitations),
                     integration_notes=list(profile.integration_notes),
+                    availability_status=maturity,
+                    availability_reason=(descriptor.availability_reason if descriptor else None),
+                )
+            )
+        for record in self._local_manifest_records():
+            manifest = record.manifest
+            availability_status = (
+                manifest.availability.status if manifest is not None else record.discovery_status
+            )
+            availability_reason = (
+                manifest.availability.reason
+                if manifest is not None
+                else "; ".join(record.errors) or "Manifest discovery failed"
+            )
+            errors = list(record.errors)
+            inspect_only = (
+                "Local provider manifests are inspect-only in ReefVision 1.5; "
+                "no provider code was loaded."
+            )
+            results.append(
+                AdvancedProviderManifestResponse(
+                    provider_id=record.record_id,
+                    display_name=(
+                        manifest.display_name
+                        if manifest is not None
+                        else f"Unavailable local manifest: {record.source_filename}"
+                    ),
+                    maturity=availability_status,
+                    execution_supported=False,
+                    execution_surface="blocked",
+                    supported_tasks=(list(manifest.supported_tasks) if manifest else []),
+                    prompt_fields_by_task=(
+                        {task: [] for task in manifest.supported_tasks} if manifest else {}
+                    ),
+                    output_contracts_by_task=(
+                        {task: [] for task in manifest.supported_tasks} if manifest else {}
+                    ),
+                    required_model_extensions=[],
+                    required_packages=[],
+                    recommended_devices=[],
+                    known_limitations=[inspect_only, *errors],
+                    integration_notes=(list(manifest.notes) if manifest else []),
+                    source_kind="local_manifest",
+                    manifest_version=(manifest.manifest_version if manifest else None),
+                    declared_capabilities=(list(manifest.capabilities) if manifest else []),
+                    availability_status=availability_status,
+                    availability_reason=availability_reason,
+                    source_filename=record.source_filename,
+                    source_sha256=record.source_sha256,
+                    discovery_status=record.discovery_status,
+                    discovery_errors=errors,
                 )
             )
         return results
@@ -339,6 +404,43 @@ class AdvancedProviderService:
         request: AdvancedProviderPreflightRequest,
     ) -> AdvancedProviderPreflightResponse:
         self._project(project_id)
+        local_record = next(
+            (
+                record
+                for record in self._local_manifest_records()
+                if record.record_id == provider_id
+            ),
+            None,
+        )
+        if local_record is not None:
+            manifest = local_record.manifest
+            local_availability_status = (
+                manifest.availability.status
+                if manifest is not None
+                else local_record.discovery_status
+            )
+            local_blockers = [
+                "Local provider manifests are inspect-only in ReefVision 1.5 and cannot execute"
+            ]
+            if manifest is not None and request.task not in manifest.supported_tasks:
+                local_blockers.append("The local manifest does not declare the requested task")
+            local_blockers.extend(local_record.errors)
+            return AdvancedProviderPreflightResponse(
+                provider_id=provider_id,
+                task=request.task,
+                ready=False,
+                execution_supported=False,
+                execution_surface="blocked",
+                availability_status=local_availability_status,
+                blockers=local_blockers,
+                warnings=(list(manifest.notes) if manifest else []),
+                required_prompt_fields=[],
+                provided_prompt_fields=sorted(request.prompt_fields),
+                missing_prompt_fields=[],
+                output_contract=[],
+                selected_model_id=None,
+                selected_device=request.device,
+            )
         profile = self._profile(provider_id)
         execution_surface = self._execution_surface(provider_id)
 
