@@ -181,6 +181,38 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert payload["project_id"] == project_id
     assert payload["dataset_id"] == dataset_id
     assert payload["manifest_sha256"] == dataset["manifest_sha256"]
+    # Reusing an unchanged artifact from a signed run is idempotent only
+    # while the entire frozen workflow closeout still matches persisted science.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        persisted_run = session.get(WorkflowRun, run["run"]["id"])
+        assert producer is not None and persisted_run is not None
+        service = WorkflowExecutionService(session)
+        specification = WorkflowArtifactSpec(
+            port_id=outputs[0]["producer_port_id"],
+            data_type=outputs[0]["data_type"],
+            payload=payload,
+        )
+        assert (
+            service.persist_artifact(
+                run_id=run["run"]["id"],
+                node_run=producer,
+                specification=specification,
+            ).id
+            == outputs[0]["id"]
+        )
+        original_result = dict(persisted_run.result_json or {})
+        assert "provenance_sha256" in original_result
+        persisted_run.result_json = {**original_result, "provenance_sha256": "0" * 64}
+        session.flush()
+        with pytest.raises(ConflictError, match="saved provenance"):
+            service.persist_artifact(
+                run_id=run["run"]["id"],
+                node_run=producer,
+                specification=specification,
+            )
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
     # A real saved Workflow Builder producer must not sign non-standard JSON
     # NaN measurements, even when the port and dataset lineage are valid.
     with app.state.session_factory() as session:

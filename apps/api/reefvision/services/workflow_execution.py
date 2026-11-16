@@ -1121,6 +1121,10 @@ class WorkflowExecutionService:
                 candidate.data_type == specification.data_type
                 and candidate.payload_sha256 == checksum
             ):
+                # Idempotent reads of a completed scientific run must honor
+                # its frozen closeout, not just the artifact payload digest.
+                if self._run(run_id).status == "succeeded":
+                    build_workflow_run_provenance(self.session, run_id=run_id)
                 return candidate
             raise ConflictError(
                 "Workflow node already persisted a different artifact for this output"
