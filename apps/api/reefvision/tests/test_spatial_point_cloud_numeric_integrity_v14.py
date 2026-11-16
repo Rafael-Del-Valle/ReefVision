@@ -646,13 +646,12 @@ def test_unresolved_chord_scale_delta_is_not_false_zero_in_saved_workflow(
         "chord_uncertainty_interval_below_numeric_resolution" in chord["qc_warnings"]
     ) is unresolved
     assert (
-        "selected_chord_uncertainty_interval_below_numeric_resolution"
-        in direct["qc_warnings"]
+        "selected_chord_uncertainty_interval_below_numeric_resolution" in direct["qc_warnings"]
     ) is unresolved
     assert (chord["chord_distance_scale_interval_m"] is None) is unresolved
     assert direct["provenance"]["calibration_verified"] is False
 
-    project_id = str(create_project(client, f"Subnormal chord delta {source_format}"))
+    project_id = str(create_project(client, f"Subnormal chord delta {source_format}")["id"])
     base = f"/api/v1/projects/{project_id}"
     standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert standalone.status_code == 200, standalone.text
