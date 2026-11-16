@@ -111,6 +111,23 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 "do not stamp, drop, or recreate existing tables."
             )
         return
+    # An unreviewed trigger attached to Alembic's revision table may run
+    # arbitrary SQL when an upgrade writes its version stamp, including
+    # changing or deleting preserved biological observations. A valid-looking
+    # revision string/column layout is not evidence that stamp writes are safe.
+    # Inspect only; do not drop triggers or attempt an automatic repair.
+    if connection.dialect.name == "sqlite":
+        version_trigger_count = connection.exec_driver_sql(
+            "SELECT COUNT(*) FROM sqlite_master "
+            "WHERE type = 'trigger' AND tbl_name = 'alembic_version' COLLATE NOCASE"
+        ).scalar()
+        if version_trigger_count:
+            raise RuntimeError(
+                "Unsafe ReefVision Alembic version-table trigger: revision "
+                "stamping could execute unreviewed SQL against research data. "
+                "Preserve the database and reconcile provenance from a reviewed "
+                "backup without running migrations, stamping or deleting records."
+            )
     # Preserve row multiplicity: two identical stamps are still an invalid
     # Alembic state and must not be hidden by set deduplication.
     version_columns = {column["name"] for column in inspector.get_columns("alembic_version")}

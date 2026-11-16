@@ -87,6 +87,17 @@ def inspect(path: Path) -> dict:
         # table_info hides SQLite generated and virtual-table hidden columns.
         # Use xinfo so a forged Alembic table cannot pass as single-column
         # canonical merely because its extra columns are hidden from table_info.
+        # Alembic UPDATE/INSERT/DELETE may execute arbitrary SQLite triggers
+        # attached to the revision table. Count them without exposing SQL or
+        # trigger names (which may themselves contain private research terms).
+        version_trigger_count = (
+            db.execute(
+                "SELECT COUNT(*) FROM sqlite_master "
+                "WHERE type = 'trigger' AND tbl_name = 'alembic_version' COLLATE NOCASE"
+            ).fetchone()[0]
+            if version_table_present
+            else 0
+        )
         version_table_info = (
             list(db.execute('PRAGMA table_xinfo("alembic_version")'))
             if version_table_present
@@ -164,6 +175,8 @@ def inspect(path: Path) -> dict:
         ):
             if sidecars_before[suffix] or sidecars_after[suffix]:
                 warnings.append(warning)
+        if version_trigger_count:
+            warnings.append("alembic_version_triggers_require_review")
         if not version_table_present:
             warnings.append("missing_alembic_version_table")
         else:
@@ -300,6 +313,7 @@ def inspect(path: Path) -> dict:
             # SQLite permits BLOB/INTEGER revision cells despite Alembic expecting TEXT.
             # Keep the report JSON-safe without exposing arbitrary binary payloads.
             "revision_rows": [value if isinstance(value, str) else None for value in revisions],
+            "alembic_version_trigger_count": version_trigger_count,
             "canonical_alembic_stamp_constraints": canonical_stamp_constraints,
             "lineage_hint": lineage,
             "upgrade_authorized": False,

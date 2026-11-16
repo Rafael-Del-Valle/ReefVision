@@ -238,13 +238,8 @@ def test_generated_alembic_columns_cannot_masquerade_as_canonical(
             "(version_num TEXT NOT NULL PRIMARY KEY" + generated_column + ")"
         )
         db.execute("INSERT INTO alembic_version (version_num) VALUES ('0039')")
-        db.execute(
-            "CREATE TABLE review_queue_item_events "
-            "(id INTEGER PRIMARY KEY, note TEXT)"
-        )
-        db.execute(
-            "INSERT INTO review_queue_item_events VALUES (1, 'private coral observation')"
-        )
+        db.execute("CREATE TABLE review_queue_item_events (id INTEGER PRIMARY KEY, note TEXT)")
+        db.execute("INSERT INTO review_queue_item_events VALUES (1, 'private coral observation')")
         db.commit()
 
     original = path.read_bytes()
