@@ -15,6 +15,7 @@ from reefvision.db.models.reefpose_validation import ReefPoseHeldoutLock
 from reefvision.desktop import run_pending_migrations
 from reefvision.jobs.backups import process_backup_job
 from reefvision.jobs.restores import process_restore_job
+from reefvision.jobs.spatial_source_parse_v14 import process_spatial_source_parse_job
 from reefvision.jobs.worker import process_next_thumbnail_job
 from reefvision.main import create_app
 from reefvision.schemas.backups import (
@@ -63,18 +64,43 @@ def _scientific_snapshot(database: Path, project_id: str) -> tuple[object, ...]:
             "SELECT * FROM reefpose_heldout_locks WHERE project_id = ?", (project_id,)
         ).fetchall()
 
-    spatial_sources = connection.execute(
-        "SELECT * FROM spatial_source_assets WHERE project_id = ?", (project_id,)
-    ).fetchall()
-    spatial_revisions = connection.execute(
-        "SELECT * FROM spatial_asset_metadata_revisions WHERE project_id = ? ORDER BY revision",
-        (project_id,),
-    ).fetchall()
+        spatial_sources = connection.execute(
+            "SELECT * FROM spatial_source_assets WHERE project_id = ?", (project_id,)
+        ).fetchall()
+        spatial_revisions = connection.execute(
+            "SELECT * FROM spatial_asset_metadata_revisions WHERE project_id = ? ORDER BY revision",
+            (project_id,),
+        ).fetchall()
+        spatial_parse_receipts = connection.execute(
+            "SELECT request_json, result_json, status FROM jobs "
+            "WHERE project_id = ? AND job_type = 'spatial_source_parse'",
+            (project_id,),
+        ).fetchall()
 
     assert tuple(
-        map(len, (records, identities, references, locks, spatial_sources, spatial_revisions))
-    ) == (1, 2, 1, 1, 1, 1)
-    return records, identities, references, locks, spatial_sources, spatial_revisions
+        map(
+            len,
+            (
+                records,
+                identities,
+                references,
+                locks,
+                spatial_sources,
+                spatial_revisions,
+                spatial_parse_receipts,
+            ),
+        )
+    ) == (1, 2, 1, 1, 1, 1, 1)
+    assert spatial_parse_receipts[0][2] == "succeeded"
+    return (
+        records,
+        identities,
+        references,
+        locks,
+        spatial_sources,
+        spatial_revisions,
+        spatial_parse_receipts,
+    )
 
 
 def test_verified_backup_restores_rows_from_all_integrated_histories(
@@ -152,6 +178,24 @@ def test_verified_backup_restores_rows_from_all_integrated_histories(
     )
     assert revision.status_code == 201, revision.text
     assert revision.json()["calibration_verified"] is False
+
+    # Original imports queue durable structural parsing. Backup creation is
+    # intentionally blocked while that job is pending, so complete it first.
+    parse_job_id = imported.json()["parse_job_id"]
+    assert isinstance(parse_job_id, str)
+    assert imported.json()["parse_status"] == "queued"
+    assert process_spatial_source_parse_job(test_settings, factory, parse_job_id)
+    parsed = migrated_client.get(
+        f"/api/v1/projects/{project_id}/spatial/assets/{imported.json()['id']}"
+    )
+    assert parsed.status_code == 200, parsed.text
+    assert parsed.json()["parse_status"] == "succeeded"
+    summary = parsed.json()["parse_summary"]
+    assert summary["source_kind_resolved"] == "mesh"
+    assert summary["vertex_count"] == 3
+    assert summary["face_count"] == 1
+    assert summary["calibration_verified"] is False
+    assert "structural_parse_unreviewed" in summary["qc_warnings"]
 
     response = migrated_client.post("/api/v1/backups", json={"notes": "Integrated record backup"})
     assert response.status_code == 201, response.text
