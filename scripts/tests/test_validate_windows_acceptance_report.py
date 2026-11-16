@@ -396,6 +396,9 @@ class AcceptanceEvidenceTests(unittest.TestCase):
 
     def test_optional_live_pass_and_real_upgrade_need_run_evidence(self) -> None:
         report = good_report()
+        report["live_sam2_requested"] = True
+        report["approved_checkpoint_download"] = True
+        report["confidence_review"] = pass_evidence()
         report["sam2_live"] = pass_evidence()
         MODULE.validate_report(report, expected_version="1.0.2")
         report["sam2_live"]["timestamp_utc"] = "2026-10-24T02:10:00Z"

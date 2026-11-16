@@ -208,7 +208,7 @@ def validate_report(
     _require(report.get("schema_version") == "reefvision-windows-clean-acceptance-1", "Unknown evidence schema")
     _require(report.get("plan_only") is False, "Plan-only evidence is not installed acceptance")
     for flag in ("live_sam2_requested", "approved_checkpoint_download"):
-        _require(type(report.get(flag)) is bool, f"Missing explicit {flag} evidence flag")
+        _require(isinstance(report.get(flag), bool), f"Missing explicit {flag} evidence flag")
     _require(report.get("failure_reason") is None, "Acceptance report records a failure")
     _isolated_acceptance_root(report)
     start = _utc(report.get("started_at_utc"), "started_at_utc")
