@@ -208,7 +208,9 @@ def test_positive_envelope_uncertainty_lower_bound_underflow_is_unknown(
     assert volume is not None and volume > 0.0
     assert volume * 0.5**3 == 0.0
     assert direct["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"] is None
-    assert "envelope_uncertainty_interval_below_numeric_resolution" in direct["qc_warnings"]
+    assert (
+        "envelope_uncertainty_interval_below_numeric_resolution" in direct["qc_warnings"]
+    )
     assert "envelope_volume_below_numeric_resolution" not in direct["qc_warnings"]
     assert direct["measurement_status"] == "caller_supplied_unverified"
 
@@ -224,9 +226,9 @@ def test_positive_envelope_uncertainty_lower_bound_underflow_is_unknown(
         params["points"] = points
     else:
         params["ply_text"] = (
-            "ply\\nformat ascii 1.0\\nelement vertex 2\\n"
-            "property double x\\nproperty double y\\nproperty double z\\n"
-            "end_header\\n0 0 0\\n1 1 1\\n"
+            "ply\nformat ascii 1.0\nelement vertex 2\n"
+            "property double x\nproperty double y\nproperty double z\n"
+            "end_header\n0 0 0\n1 1 1\n"
         )
     response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert response.status_code == 200, response.text
@@ -291,4 +293,7 @@ def test_envelope_scale_interval_retains_representable_and_true_zero_bounds(
     assert bounds is not None
     assert (bounds[0] == 0.0) is lower_is_exact_zero
     assert bounds[1] > 0.0
-    assert "envelope_uncertainty_interval_below_numeric_resolution" not in result["qc_warnings"]
+    assert (
+        "envelope_uncertainty_interval_below_numeric_resolution"
+        not in result["qc_warnings"]
+    )
