@@ -668,7 +668,6 @@ def test_log_tail_quarantines_sgr_spliced_loss_tokens(
     assert log.read_bytes() == original
 
 
-
 @pytest.mark.parametrize(
     "spliced_record",
     [
@@ -691,6 +690,7 @@ def test_log_tail_quarantines_invisible_unicode_loss_splices(
         "text": "[terminal-edited training log record omitted]\ntrain/box_loss=0.22\n",
     }
     assert log.read_bytes() == original
+
 
 def test_log_tail_preserves_leading_clear_before_colored_epoch_and_loss(tmp_path: Path) -> None:
     """A leading CSI clear must not be mistaken for a loss-token splice."""
