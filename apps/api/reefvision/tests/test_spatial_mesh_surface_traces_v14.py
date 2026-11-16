@@ -623,7 +623,8 @@ def test_concave_planar_centroid_can_be_outside_filled_perimeter(
     }
     trace = measure_mesh_preview(**params)["surface_edge_traces"][0]
     assert trace["closed_loop_source_is_simple_planar_perimeter"] is True
-    assert trace["closed_loop_source_planar_enclosed_area_mesh_units2"] == pytest.approx(10.0)
+    source_area = trace["closed_loop_source_planar_enclosed_area_mesh_units2"]
+    assert source_area == pytest.approx(10.0)
     assert trace["closed_loop_source_planar_centroid_mesh_units"] == pytest.approx(
         [2.0, 1.7, 0.0]
     )
@@ -631,7 +632,9 @@ def test_concave_planar_centroid_can_be_outside_filled_perimeter(
         [2 * scale, 1.7 * scale, 0.0]
     )
     assert trace["closed_loop_source_planar_centroid_inside_or_on_perimeter"] is False
-    assert "closed_surface_trace_source_planar_centroid_outside_perimeter" in trace["qc_warnings"]
+    assert "closed_surface_trace_source_planar_centroid_outside_perimeter" in (
+        trace["qc_warnings"]
+    )
     assert trace["human_review_verified"] is False
 
 
@@ -1732,6 +1735,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert "closed_loop_source_planar_isoperimetric_quotient" in trace
     assert "closed_loop_source_planar_centroid_mesh_units" in trace
     assert "closed_loop_source_planar_centroid_inside_or_on_perimeter" in trace
+    inside = trace["closed_loop_source_planar_centroid_inside_or_on_perimeter"]
     assert "closed_loop_planar_centroid_m" in trace
     if case in (
         "closed_loop",
@@ -1742,20 +1746,20 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert trace["closed_loop_source_planar_centroid_mesh_units"] == pytest.approx(
             [1 / 3, 1 / 3, 0.0]
         )
-        assert trace["closed_loop_source_planar_centroid_inside_or_on_perimeter"] is True
+        assert inside is True
     elif case == "non_xy_planar_closed_loop":
         assert trace["closed_loop_source_planar_centroid_mesh_units"] == pytest.approx(
             [0.0, 2 / 3, 1.0]
         )
-        assert trace["closed_loop_source_planar_centroid_inside_or_on_perimeter"] is True
+        assert inside is True
     elif case.startswith("concave_u"):
         assert trace["closed_loop_source_planar_centroid_mesh_units"] == pytest.approx(
             [2.0, 1.7, 0.0]
         )
-        assert trace["closed_loop_source_planar_centroid_inside_or_on_perimeter"] is False
+        assert inside is False
     else:
         assert trace["closed_loop_source_planar_centroid_mesh_units"] is None
-        assert trace["closed_loop_source_planar_centroid_inside_or_on_perimeter"] is None
+        assert inside is None
     assert "closed_loop_source_planar_maximum_vertex_chord_mesh_units" in trace
     assert "closed_loop_source_planar_maximum_vertex_chord_waypoint_offsets" in trace
     assert "closed_loop_planar_maximum_vertex_chord_m" in trace
