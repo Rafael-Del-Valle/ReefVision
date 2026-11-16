@@ -103,13 +103,14 @@ def _windows_path(value: Any, label: str) -> PureWindowsPath:
     # extended/device namespaces, and alternate data streams cannot establish
     # the disposable directory boundary used by the native harness.
     _require(re.fullmatch(r"[A-Za-z]:", path.drive) is not None, f"{label} must use a local drive")
+    # PureWindowsPath parses text that Win32 refuses to open. Superscript
+    # digits also count as reserved COM/LPT device numbers on Windows.
     for part in path.parts[1:]:
         _require(
             not part.endswith((" ", "."))
-            # Win32 rejects these characters in ordinary file and directory
-            # names even though PureWindowsPath can represent them. The three
-            # superscript digits are also reserved in COM/LPT device names.
-            and not any(character in '< >:"|?*'.replace(" ", "") or ord(character) < 32 for character in part)
+            and not any(
+                character in '<>:"|?*' or ord(character) < 32 for character in part
+            )
             and WINDOWS_RESERVED_NAME.fullmatch(part) is None,
             f"{label} contains an unsafe Windows path component",
         )
