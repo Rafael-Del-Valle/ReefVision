@@ -424,6 +424,48 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                 ):
                     MODULE.validate_report(report, expected_version="1.0.2")
 
+    def test_pre_restart_scientific_probes_follow_installed_api(self) -> None:
+        # The old policy accepted these spliced timestamps because each probe
+        # individually preceded restart. They are not the harness execution
+        # order and cannot substantiate one coherent installed desktop run.
+        report = good_report()
+        moments = {
+            "install": "02:06:00",
+            "shortcuts": "02:07:00",
+            "first_launch": "02:08:00",
+            "frontend_backend_connectivity": "02:10:00",
+            "model_policy": "02:10:00",
+            "external_annotation_imports": "02:10:00",
+            "class_visibility_persistence": "02:10:00",
+            "restart": "02:14:00",
+            "project_persistence": "02:14:00",
+            "qc_review_coordination": "02:15:00",
+            "qc_workflow_persistence": "02:16:00",
+            "qc_workflow_replay": "02:17:00",
+            "project_exchange": "02:18:00",
+            "uninstall": "02:19:00",
+            "data_retention": "02:19:00",
+        }
+        for gate, clock in moments.items():
+            report[gate]["timestamp_utc"] = f"2026-10-25T{clock}Z"
+        report["migration"]["timestamp_utc"] = "2026-10-25T02:08:00Z"
+        MODULE.validate_report(report, expected_version="1.0.2")
+
+        for before, after in (
+            ("frontend_backend_connectivity", "model_policy"),
+            ("model_policy", "external_annotation_imports"),
+            ("external_annotation_imports", "class_visibility_persistence"),
+        ):
+            with self.subTest(before=before, after=after):
+                altered = copy.deepcopy(report)
+                altered[before]["timestamp_utc"] = "2026-10-25T02:11:00Z"
+                altered[after]["timestamp_utc"] = "2026-10-25T02:09:00Z"
+                with self.assertRaisesRegex(
+                    MODULE.AcceptanceEvidenceError,
+                    f"{before} must not follow {after}",
+                ):
+                    MODULE.validate_report(altered, expected_version="1.0.2")
+
     def test_realistic_monotonic_installed_acceptance_evidence_passes(self) -> None:
         report = good_report()
         sequence = (
@@ -550,6 +592,40 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                     MODULE.validate_report(
                         invalid, expected_version="1.0.3", expected_upgrade="passed"
                     )
+        # These timestamps individually fit the upgrade run but contradict
+        # the installed harness: imports precede MSI upgrade, visibility is
+        # tested on that upgraded installation, then schema is re-observed.
+        for gate, clock, before, after in (
+            (
+                "external_annotation_imports",
+                "02:11:30",
+                "external_annotation_imports",
+                "upgrade_install",
+            ),
+            (
+                "upgrade_install",
+                "02:12:15",
+                "upgrade_install",
+                "class_visibility_persistence",
+            ),
+            (
+                "class_visibility_persistence",
+                "02:12:45",
+                "class_visibility_persistence",
+                "post_upgrade_migration",
+            ),
+        ):
+            with self.subTest(gate=gate):
+                invalid = copy.deepcopy(report)
+                invalid[gate]["timestamp_utc"] = f"2026-10-25T{clock}Z"
+                with self.assertRaisesRegex(
+                    MODULE.AcceptanceEvidenceError,
+                    f"{before} must not follow {after}",
+                ):
+                    MODULE.validate_report(
+                        invalid, expected_version="1.0.3", expected_upgrade="passed"
+                    )
+
         for invalid_gate in (
             None,
             {"status": "SKIPPED", "detail": "previous installer not supplied"},
