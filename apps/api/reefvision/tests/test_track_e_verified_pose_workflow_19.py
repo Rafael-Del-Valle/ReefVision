@@ -221,6 +221,27 @@ def test_verified_pose_dataset_persists_workflow_lineage(
                 ),
             )
     assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
+    # A completed, checksum-signed scientific execution must not recreate an
+    # output that was deleted after closeout. Exercise the actual frozen-pose
+    # dataset producer, and roll back the simulated loss of the artifact.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        published = session.get(WorkflowArtifact, outputs[0]["id"])
+        assert producer is not None and published is not None
+        session.delete(published)
+        session.flush()
+        with pytest.raises(ConflictError, match="Succeeded workflow run artifacts are immutable"):
+            WorkflowExecutionService(session).persist_artifact(
+                run_id=str(queued.json()["id"]),
+                node_run=producer,
+                specification=WorkflowArtifactSpec(
+                    port_id=outputs[0]["producer_port_id"],
+                    data_type=outputs[0]["data_type"],
+                    payload=payload,
+                ),
+            )
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
     # A completed, real frozen-pose workflow cannot be recovered if a
     # second checksummed artifact has been attached to the same output port.
     # Exercise direct recovery with both declared outputs and a matching
