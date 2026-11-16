@@ -513,3 +513,23 @@ anatomy or surface area. Capture noise can turn an otherwise planar specimen
 into exact rank 3; interpret this as source-coordinate QC only. Synthetic
 XYZ and ASCII PLY direct, standalone API and repeated executable persisted
 Workflow Builder tests verify identical rank and QC provenance.
+
+
+## Positive bounding envelope of a lower-dimensional point set (November 16, 2026)
+
+The source-coordinate affine-rank diagnostic now also emits
+`positive_bounding_envelope_for_lower_dimensional_source` **only** when a
+rank-0/1/2 point set nevertheless has a strictly positive, representable
+axis-aligned 3D bounding-envelope volume. A tilted line or plane may span
+nonzero X/Y/Z extents, so the bounding envelope remains a mathematically
+valid box measurement, but that number is **not** occupied volume, coral
+biomass, tissue volume, or a reconstructed surface. True zero envelopes and
+rank-3 scans do not receive this specific warning. The existing general
+`source_point_cloud_affine_dimension_below_3` warning remains independent.
+
+The XYZ and ASCII PLY synthetic affine-rank cases assert the new diagnostic
+across the direct measurement service, standalone API, typed executable
+Workflow Builder plan, and twice-executed persisted workflow artifacts.
+Provenance remains explicitly caller-supplied and unverified; discrete exact
+rank reflects imported floating-point coordinates and can be sensitive to
+capture noise, so no biological or registration inference is authorized.

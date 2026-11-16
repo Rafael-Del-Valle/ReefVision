@@ -715,6 +715,7 @@ def test_unresolved_chord_scale_delta_is_not_false_zero_in_saved_workflow(
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
 
+
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
 @pytest.mark.parametrize(
     ("points", "expected_rank"),
@@ -753,9 +754,12 @@ def test_exact_source_affine_dimension_standalone_and_persisted_workflow(
         relative_scale_uncertainty=0.05,
     )
     assert direct["source_affine_dimension"] == expected_rank
-    assert (
-        "source_point_cloud_affine_dimension_below_3" in direct["qc_warnings"]
-    ) is (expected_rank < 3)
+    assert ("source_point_cloud_affine_dimension_below_3" in direct["qc_warnings"]) is (
+        expected_rank < 3
+    )
+    assert ("positive_bounding_envelope_for_lower_dimensional_source" in direct["qc_warnings"]) is (
+        expected_rank in (1, 2)
+    )
     if expected_rank in (1, 2):
         assert all(extent > 0 for extent in direct["axis_aligned_dimensions_m"])
         assert direct["axis_aligned_bounding_box_envelope_volume_m3"] > 0
@@ -763,15 +767,16 @@ def test_exact_source_affine_dimension_standalone_and_persisted_workflow(
     assert direct["surface_area_m2"] is None
     assert direct["branch_length_m"] is None
 
-    project_id = str(
-        create_project(client, f"Affine rank {source_format} {expected_rank}")["id"]
-    )
+    project_id = str(create_project(client, f"Affine rank {source_format} {expected_rank}")["id"])
     base = f"/api/v1/projects/{project_id}"
     standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     assert expected["source_affine_dimension"] == expected_rank
     assert expected["qc_warnings"] == direct["qc_warnings"]
+    assert ("positive_bounding_envelope_for_lower_dimensional_source" in expected["qc_warnings"]) is (
+        expected_rank in (1, 2)
+    )
     graph = {
         "graph_id": f"affine-rank-{source_format}-{expected_rank}-v14",
         "name": "Source affine dimension without a surface claim",
@@ -795,9 +800,7 @@ def test_exact_source_affine_dimension_standalone_and_persisted_workflow(
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
     for _ in range(2):
-        run = client.post(
-            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-        )
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
         app = cast(FastAPI, client.app)
         assert process_workflow_run_job(
@@ -814,6 +817,9 @@ def test_exact_source_affine_dimension_standalone_and_persisted_workflow(
         assert all(artifact[key] == value for key, value in expected.items())
         assert artifact["project_id"] == project_id
         assert artifact["source_affine_dimension"] == expected_rank
+        assert ("positive_bounding_envelope_for_lower_dimensional_source" in artifact["qc_warnings"]) is (
+            expected_rank in (1, 2)
+        )
         assert artifact["measurement_status"] == "caller_supplied_unverified"
         assert artifact["provenance"]["calibration_verified"] is False
 

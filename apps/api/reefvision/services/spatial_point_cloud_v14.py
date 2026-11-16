@@ -453,6 +453,12 @@ def measure_point_cloud_preview(
 
     unique_count = len(set(vertices))
     source_affine_dimension = _source_affine_dimension(vertices)
+    # Even a tilted line or plane can span a positive axis-aligned 3D box.
+    # Keep the mathematically valid envelope but explicitly prohibit readers
+    # from confusing its positive volume with occupied three-dimensional space.
+    positive_envelope_for_lower_dimensional_source = (
+        source_affine_dimension < 3 and envelope_volume is not None and envelope_volume > 0.0
+    )
     geometry_hash = hashlib.sha256(
         json.dumps(sorted(vertices), separators=(",", ":")).encode("utf-8")
     ).hexdigest()
@@ -618,6 +624,11 @@ def measure_point_cloud_preview(
             + (
                 ["source_point_cloud_affine_dimension_below_3"]
                 if source_affine_dimension < 3
+                else []
+            )
+            + (
+                ["positive_bounding_envelope_for_lower_dimensional_source"]
+                if positive_envelope_for_lower_dimensional_source
                 else []
             )
         ),
