@@ -210,6 +210,8 @@ def test_unbounded_or_ambiguous_requests_rejected(patch):
         "boolean_time_resolution",
         "nonfinite_longitude_resolution",
         "unknown_resolution_axis",
+        "missing_grid_variable",
+        "unequal_grid_coverage",
     ],
 )
 def test_invalid_provider_grid_never_persists_scientific_records(
@@ -265,6 +267,14 @@ def test_invalid_provider_grid_never_persists_scientific_records(
         raw["coordinate_resolution"]["longitude"] = float("inf")
     elif damage == "unknown_resolution_axis":
         raw["coordinate_resolution"]["vertical_datum"] = 1.0
+    elif damage == "missing_grid_variable":
+        raw["samples"] = [
+            sample for sample in raw["samples"] if sample["variable"] != "vo"
+        ]
+    elif damage == "unequal_grid_coverage":
+        extra_cell = deepcopy(raw["samples"][0])
+        extra_cell["latitude"] = 32.6
+        raw["samples"].append(extra_cell)
     else:
         raw["dataset_version"] = "different"
     with client.app.state.session_factory() as session, pytest.raises(ValidationError):
@@ -272,6 +282,23 @@ def test_invalid_provider_grid_never_persists_scientific_records(
             project["id"], request()
         )
     assert client.get(f"/api/v1/projects/{project['id']}/scientific-records").json()["total"] == 0
+
+
+def test_null_ocean_value_is_missing_data_not_an_omitted_grid_cell(
+    client, test_settings, monkeypatch
+):
+    """Explicit nulls preserve model-grid coverage without fabricating measurements."""
+    project = create_project(client)
+    raw = raw_fixture(monkeypatch)
+    raw["samples"][0]["value"] = None
+    with client.app.state.session_factory() as session:
+        result = CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: deepcopy(raw)
+        ).acquire(project["id"], request())
+    assert result.skipped_missing == 1
+    assert len(result.items) == 3
+    assert "current_eastward_velocity" not in {item.variable for item in result.items}
+    assert all(item.qc == "unassessed" for item in result.items)
 
 
 def test_invalid_copernicus_resolution_refresh_keeps_prior_offline_snapshot(
