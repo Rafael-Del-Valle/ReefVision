@@ -25,6 +25,9 @@ const asset: SpatialSourceAsset = {
   measurement_status: "source_unreviewed",
   calibration_verified: false,
   specimen_identity_verified: false,
+  parse_job_id: "parse-job-1",
+  parse_status: "queued",
+  parse_summary: null,
 };
 
 const calibration = {

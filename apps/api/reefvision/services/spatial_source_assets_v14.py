@@ -14,19 +14,31 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
-from reefvision.db.models import Project, SpatialSourceAsset
+from reefvision.db.models import Job, Project, SpatialSourceAsset
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.schemas.spatial_mesh_preview_v14 import MeshPreviewRequest
 from reefvision.schemas.spatial_point_cloud_v14 import PointCloudPreviewRequest
+from reefvision.schemas.spatial_source_asset_v14 import (
+    SpatialSourceAssetResponse,
+    SpatialSourceParseResult,
+    SpatialSourceParseSummary,
+)
 from reefvision.services.spatial_mesh_surface_v14 import preview_from_request
 from reefvision.services.spatial_point_cloud_v14 import (
     MAX_PLY_BYTES,
     preview_point_cloud_from_request,
 )
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
 MAX_BYTES = 8 * 1024 * 1024
 KINDS = {"obj": "mesh", "glb": "mesh", "ply": "mesh_or_point_cloud"}
+SPATIAL_PARSE_JOB = "spatial_source_parse"
+SPATIAL_PARSE_SCHEMA = "spatial-source-parse-0001"
+
+
+def spatial_source_parse_result_content(result: SpatialSourceParseResult) -> dict[str, Any]:
+    return result.model_dump(mode="json", exclude={"content_sha256"})
 
 
 def _safe_original_filename(name: str | None) -> bool:
@@ -72,6 +84,85 @@ class SpatialSourceAssetService:
         )
         return list(self.session.scalars(query))
 
+    def _parse_deduplication_key(self, asset: SpatialSourceAsset) -> str:
+        return sha256(
+            (
+                f"{SPATIAL_PARSE_SCHEMA}\0{asset.project_id}\0{asset.id}\0"
+                f"{asset.sha256}\0{asset.source_format}"
+            ).encode()
+        ).hexdigest()
+
+    def _new_parse_job(self, asset: SpatialSourceAsset) -> Job:
+        return Job(
+            project_id=asset.project_id,
+            job_type=SPATIAL_PARSE_JOB,
+            deduplication_key=self._parse_deduplication_key(asset),
+            status="queued",
+            progress_current=0,
+            progress_total=1,
+            request_json={
+                "schema_version": SPATIAL_PARSE_SCHEMA,
+                "project_id": asset.project_id,
+                "spatial_source_asset_id": asset.id,
+                "expected_source_sha256": asset.sha256,
+                "source_format": asset.source_format,
+                "managed_path": asset.managed_path,
+                "size_bytes": asset.size_bytes,
+            },
+        )
+
+    def latest_parse_job(self, asset: SpatialSourceAsset) -> Job | None:
+        return self.session.scalar(
+            select(Job)
+            .where(
+                Job.project_id == asset.project_id,
+                Job.job_type == SPATIAL_PARSE_JOB,
+                Job.request_json["spatial_source_asset_id"].as_string() == asset.id,
+            )
+            .order_by(Job.created_at.desc(), Job.id.desc())
+            .limit(1)
+        )
+
+    def ensure_parse_job(self, asset: SpatialSourceAsset) -> Job:
+        existing = self.latest_parse_job(asset)
+        if existing is not None:
+            return existing
+        job = self._new_parse_job(asset)
+        self.session.add(job)
+        self.session.commit()
+        self.session.refresh(job)
+        return job
+
+    def response(self, asset: SpatialSourceAsset) -> SpatialSourceAssetResponse:
+        job = self.latest_parse_job(asset)
+        summary: SpatialSourceParseSummary | None = None
+        if job is not None and job.status == "succeeded" and job.result_json is not None:
+            result = SpatialSourceParseResult.model_validate(job.result_json)
+            if (
+                result.project_id != asset.project_id
+                or result.spatial_source_asset_id != asset.id
+                or result.source_sha256 != asset.sha256
+                or result.source_format != asset.source_format
+                or canonical_json_sha256(spatial_source_parse_result_content(result))
+                != result.content_sha256
+            ):
+                raise ValidationError("Spatial source parse result failed integrity validation")
+            summary = SpatialSourceParseSummary.model_validate(
+                {key: getattr(result, key) for key in SpatialSourceParseSummary.model_fields}
+            )
+        return SpatialSourceAssetResponse.model_validate(
+            {
+                **{
+                    field: getattr(asset, field)
+                    for field in SpatialSourceAssetResponse.model_fields
+                    if hasattr(asset, field)
+                },
+                "parse_job_id": None if job is None else job.id,
+                "parse_status": "not_queued" if job is None else job.status,
+                "parse_summary": summary,
+            }
+        )
+
     def import_source(
         self, project_id: str, filename: str | None, stream: BinaryIO
     ) -> SpatialSourceAsset:
@@ -103,6 +194,7 @@ class SpatialSourceAssetService:
                 raise ValidationError(
                     "Identical spatial bytes already exist under a different original filename"
                 )
+            self.ensure_parse_job(existing)
             return existing
         asset_id = str(uuid4())
         relative = f"{project.storage_root}/spatial/originals/{asset_id}.{source_format}"
@@ -121,6 +213,7 @@ class SpatialSourceAssetService:
             size_bytes=len(data),
         )
         self.session.add(asset)
+        self.session.add(self._new_parse_job(asset))
         try:
             self.session.commit()
         except Exception:

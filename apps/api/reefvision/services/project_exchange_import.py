@@ -63,6 +63,7 @@ from reefvision.schemas.spatial_asset_metadata_revision_v14 import (
     SpatialAssetMetadataRevisionCreate,
 )
 from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvidence
+from reefvision.schemas.spatial_source_asset_v14 import SpatialSourceParseResult
 from reefvision.services.project_exchange_acquisition import validate_acquisition_exchange
 from reefvision.services.project_exchange_comparison import restore_comparison_jobs
 from reefvision.services.project_exchange_computed import (
@@ -122,6 +123,10 @@ from reefvision.services.spatial_asset_metadata_revisions_v14 import (
 )
 from reefvision.services.spatial_calibration_review_v14 import (
     canonical_spatial_calibration_review_evidence,
+)
+from reefvision.services.spatial_source_assets_v14 import (
+    SPATIAL_PARSE_JOB,
+    spatial_source_parse_result_content,
 )
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
@@ -636,15 +641,30 @@ def import_project_exchange(
                         # A UUID-looking group value must remain literal across exchange.
                         values["group_key"] = row.get("group_key")
 
-                    if integrated and section_name == "jobs":
-                        remap_phase6_job(row, values, id_map)
-                        remap_event_summary_archive_job(row, values, id_map)
-                        remap_report_archive_job(row, values, id_map)
+                    if section_name == "jobs":
+                        if integrated:
+                            remap_phase6_job(row, values, id_map)
+                            remap_event_summary_archive_job(row, values, id_map)
+                            remap_report_archive_job(row, values, id_map)
                         # Imported history never starts local work on its own.
                         if values["status"] in {"queued", "running"}:
                             values["status"] = "cancelled"
                             values["error_message"] = "Interrupted by project exchange"
                         values["deduplication_key"] = None
+                        if row.get("job_type") == SPATIAL_PARSE_JOB:
+                            parse_request = values["request_json"]
+                            parse_request["managed_path"] = (
+                                f"{project.storage_root}/spatial/originals/"
+                                f"{parse_request['spatial_source_asset_id']}."
+                                f"{parse_request['source_format']}"
+                            )
+                            if values["status"] == "succeeded":
+                                parse_result = SpatialSourceParseResult.model_validate(
+                                    values["result_json"]
+                                )
+                                values["result_json"]["content_sha256"] = canonical_json_sha256(
+                                    spatial_source_parse_result_content(parse_result)
+                                )
 
                     if section_name == "dataset_versions":
                         old_parent = row.get("parent_version_id")

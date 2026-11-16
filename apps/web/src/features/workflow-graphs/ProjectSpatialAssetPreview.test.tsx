@@ -43,6 +43,24 @@ const asset: SpatialSourceAsset = {
   measurement_status: "source_unreviewed",
   calibration_verified: false,
   specimen_identity_verified: false,
+  parse_job_id: "parse-job-1",
+  parse_status: "succeeded",
+  parse_summary: {
+    schema_version: "spatial-source-parse-0001",
+    source_kind_resolved: "mesh",
+    vertex_count: 3,
+    face_count: 1,
+    point_count: null,
+    geometry_sha256: "d".repeat(64),
+    qc_warnings: [
+      "open_mesh_surface_not_enclosed",
+      "physical_calibration_not_applied",
+      "structural_parse_unreviewed",
+    ],
+    calibration_applied: false,
+    calibration_verified: false,
+    specimen_identity_verified: false,
+  },
 };
 
 beforeEach(() => {
@@ -81,6 +99,24 @@ beforeEach(() => {
 });
 
 describe("ProjectSpatialAssetPreview", () => {
+  it("shows bounded background parse status without claiming calibration", async () => {
+    render(<ProjectSpatialAssetPreview projectId="reef-project" />);
+    await screen.findByRole("option", { name: /colony.ply/ });
+    fireEvent.change(screen.getByLabelText("Project 3D source"), {
+      target: { value: "asset-1" },
+    });
+
+    expect(
+      await screen.findByText("Structural parse: Succeeded"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/No physical calibration was applied/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/open mesh surface not enclosed/),
+    ).toBeInTheDocument();
+  });
+
   it("saves an immutable unit and coordinate-frame metadata revision", async () => {
     render(<ProjectSpatialAssetPreview projectId="reef-project" />);
     await screen.findByRole("option", { name: /colony.ply/ });

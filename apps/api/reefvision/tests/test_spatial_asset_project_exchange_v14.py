@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from reefvision.config import Settings
 from reefvision.jobs.project_exchange import process_project_exchange_export_job
+from reefvision.jobs.spatial_source_parse_v14 import process_spatial_source_parse_job
 from reefvision.tests.test_annotations import create_project
 
 OBJ = b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
@@ -75,6 +76,29 @@ def _tamper_metadata_frame_with_consistent_section_checksum(
     return target.getvalue()
 
 
+def _tamper_parse_geometry_with_consistent_section_checksum(archive_bytes: bytes) -> bytes:
+    source = io.BytesIO(archive_bytes)
+    target = io.BytesIO()
+    with zipfile.ZipFile(source, "r") as incoming:
+        members = {info.filename: incoming.read(info) for info in incoming.infolist()}
+    manifest_name = "reefvision-exchange-manifest.json"
+    manifest = json.loads(members[manifest_name])
+    section = manifest["sections"]["jobs"]
+    rows = [json.loads(line) for line in members[section["path"]].splitlines()]
+    parse_job = next(row for row in rows if row["job_type"] == "spatial_source_parse")
+    parse_job["result_json"]["geometry_sha256"] = "0" * 64
+    records = "".join(
+        json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n" for row in rows
+    ).encode()
+    members[section["path"]] = records
+    section["sha256"] = sha256(records).hexdigest()
+    members[manifest_name] = json.dumps(manifest, indent=2, sort_keys=True).encode()
+    with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED) as outgoing:
+        for name, payload in members.items():
+            outgoing.writestr(name, payload)
+    return target.getvalue()
+
+
 def test_spatial_original_and_review_round_trip_and_reject_tampering(
     client: TestClient,
     test_settings: Settings,
@@ -87,6 +111,12 @@ def test_spatial_original_and_review_round_trip_and_reject_tampering(
     )
     assert imported.status_code == 201, imported.text
     asset = imported.json()
+    app = cast(FastAPI, client.app)
+    assert process_spatial_source_parse_job(
+        test_settings,
+        app.state.session_factory,
+        asset["parse_job_id"],
+    )
 
     preview = client.post(
         f"{base}/spatial/mesh-preview",
@@ -179,7 +209,6 @@ def test_spatial_original_and_review_round_trip_and_reject_tampering(
         },
     )
     assert created.status_code == 202, created.text
-    app = cast(FastAPI, client.app)
     assert process_project_exchange_export_job(
         test_settings,
         app.state.session_factory,
@@ -214,6 +243,9 @@ def test_spatial_original_and_review_round_trip_and_reject_tampering(
     restored_asset = restored_assets.json()[0]
     assert restored_asset["id"] != asset["id"]
     assert restored_asset["sha256"] == asset["sha256"]
+    assert restored_asset["parse_status"] == "succeeded"
+    assert restored_asset["parse_summary"]["source_kind_resolved"] == "mesh"
+    assert restored_asset["parse_summary"]["geometry_sha256"]
     restored_content = client.get(
         f"/api/v1/projects/{restored_project_id}/spatial/assets/{restored_asset['id']}/content"
     )
@@ -320,6 +352,23 @@ def test_spatial_original_and_review_round_trip_and_reject_tampering(
         },
     )
     assert rejected_metadata_import.status_code == 400, rejected_metadata_import.text
+
+    altered_parse = _tamper_parse_geometry_with_consistent_section_checksum(archive_bytes)
+    parse_inspection = client.post(
+        "/api/v1/exchange-packages/inspect",
+        files={"file": ("altered-parse.reefvision.zip", altered_parse, "application/zip")},
+    )
+    assert parse_inspection.status_code == 200, parse_inspection.text
+    assert parse_inspection.json()["compatible"] is False
+    assert any(
+        "parse result failed integrity" in error.lower()
+        for error in parse_inspection.json()["errors"]
+    )
+    rejected_parse_import = client.post(
+        "/api/v1/exchange-packages/import",
+        files={"file": ("altered-parse.reefvision.zip", altered_parse, "application/zip")},
+    )
+    assert rejected_parse_import.status_code == 400, rejected_parse_import.text
 
 
 def test_spatial_project_exchange_requires_original_media(

@@ -21,6 +21,19 @@ interface ProjectSpatialAssetPreviewProps {
   projectId: string;
 }
 
+function displayParseStatus(
+  status: SpatialSourceAsset["parse_status"],
+): string {
+  return status
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function displayQcWarning(warning: string): string {
+  return warning.replaceAll("_", " ");
+}
+
 /** Project changes must never reuse another project's asset selection or preview. */
 export function ProjectSpatialAssetPreview({
   projectId,
@@ -417,6 +430,44 @@ function ProjectSpatialAssetPreviewSession({
             calibration remain unreviewed; mesh edges and point chords are not
             anatomical branch lengths.
           </p>
+          <section
+            className="panel-card"
+            aria-label="3D structural parse status"
+          >
+            <h5>
+              Structural parse: {displayParseStatus(selected.parse_status)}
+            </h5>
+            {selected.parse_status === "succeeded" && selected.parse_summary ? (
+              <>
+                <p className="muted-copy">
+                  Parsed as{" "}
+                  {selected.parse_summary.source_kind_resolved.replaceAll(
+                    "_",
+                    " ",
+                  )}
+                  {selected.parse_summary.vertex_count !== null
+                    ? ` with ${selected.parse_summary.vertex_count} vertices and ${selected.parse_summary.face_count ?? 0} faces`
+                    : ` with ${selected.parse_summary.point_count ?? 0} points`}
+                  . No physical calibration was applied; the parse is unreviewed
+                  and does not establish specimen identity.
+                </p>
+                {selected.parse_summary.qc_warnings.length > 0 && (
+                  <p className="muted-copy">
+                    Parse QC:{" "}
+                    {selected.parse_summary.qc_warnings
+                      .map(displayQcWarning)
+                      .join(", ")}
+                    .
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="muted-copy">
+                Parsing runs in the local background. Reopen this workspace to
+                refresh its status before scientific preview or review.
+              </p>
+            )}
+          </section>
           <section
             className="panel-card"
             aria-label="3D asset metadata revisions"

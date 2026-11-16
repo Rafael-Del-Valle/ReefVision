@@ -44,8 +44,9 @@ def import_spatial_source(
     session: DbSession,
     file: Annotated[UploadFile, File()],
 ) -> SpatialSourceAssetResponse:
-    record = _service(request, session).import_source(project_id, file.filename, file.file)
-    return SpatialSourceAssetResponse.model_validate(record)
+    service = _service(request, session)
+    record = service.import_source(project_id, file.filename, file.file)
+    return service.response(record)
 
 
 @router.get(
@@ -55,10 +56,8 @@ def import_spatial_source(
 def list_spatial_sources(
     project_id: str, request: Request, session: DbSession
 ) -> list[SpatialSourceAssetResponse]:
-    return [
-        SpatialSourceAssetResponse.model_validate(record)
-        for record in _service(request, session).list(project_id)
-    ]
+    service = _service(request, session)
+    return [service.response(record) for record in service.list(project_id)]
 
 
 @router.get(
@@ -68,9 +67,8 @@ def list_spatial_sources(
 def get_spatial_source(
     project_id: str, asset_id: str, request: Request, session: DbSession
 ) -> SpatialSourceAssetResponse:
-    return SpatialSourceAssetResponse.model_validate(
-        _service(request, session).get(project_id, asset_id)
-    )
+    service = _service(request, session)
+    return service.response(service.get(project_id, asset_id))
 
 
 @router.get("/projects/{project_id}/spatial/assets/{asset_id}/content")

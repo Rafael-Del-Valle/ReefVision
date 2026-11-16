@@ -40,6 +40,7 @@ from reefvision.jobs.quality_control import process_quality_control_job
 from reefvision.jobs.reefpose_validation import process_reefpose_validation_job
 from reefvision.jobs.restores import process_restore_job
 from reefvision.jobs.sam_image_proposals import process_sam_image_proposals_job
+from reefvision.jobs.spatial_source_parse_v14 import process_spatial_source_parse_job
 from reefvision.jobs.static_comparison import process_static_comparison_job
 from reefvision.jobs.training import recover_training_run
 from reefvision.jobs.training_dispatch import process_task_aware_training_job
@@ -746,6 +747,8 @@ def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session
             return process_video_metric_depth_job(settings, factory, job_id)
         if job_type == "project_exchange_export":
             return process_project_exchange_export_job(settings, factory, job_id)
+        if job_type == "spatial_source_parse":
+            return process_spatial_source_parse_job(settings, factory, job_id)
         if job_type == "workflow_run":
             return process_workflow_run_job(settings, factory, job_id)
         if job_type == "pose_evaluation":

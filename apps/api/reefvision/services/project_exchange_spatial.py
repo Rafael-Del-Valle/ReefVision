@@ -11,11 +11,17 @@ from reefvision.schemas.spatial_asset_metadata_revision_v14 import (
     SpatialAssetMetadataRevisionCreate,
 )
 from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvidence
+from reefvision.schemas.spatial_source_asset_v14 import SpatialSourceParseResult
 from reefvision.services.spatial_asset_metadata_revisions_v14 import (
     spatial_asset_metadata_content,
 )
 from reefvision.services.spatial_calibration_review_v14 import (
     canonical_spatial_calibration_review_evidence,
+)
+from reefvision.services.spatial_source_assets_v14 import (
+    SPATIAL_PARSE_JOB,
+    SPATIAL_PARSE_SCHEMA,
+    spatial_source_parse_result_content,
 )
 from reefvision.storage.datasets import canonical_json_sha256
 
@@ -124,3 +130,38 @@ def validate_spatial_exchange_records(
             expected_previous = None if index == 1 else ordered[index - 2]["id"]
             if row["revision"] != index or row.get("previous_revision_id") != expected_previous:
                 raise ValidationError("Spatial asset metadata revision chain is invalid")
+
+    for row in sections.get("jobs", []):
+        if row.get("job_type") != SPATIAL_PARSE_JOB:
+            continue
+        request = row.get("request_json")
+        asset_id = request.get("spatial_source_asset_id") if isinstance(request, dict) else None
+        asset = assets.get(str(asset_id))
+        if (
+            row.get("project_id") != project_id
+            or not isinstance(request, dict)
+            or request.get("schema_version") != SPATIAL_PARSE_SCHEMA
+            or request.get("project_id") != project_id
+            or asset is None
+            or request.get("expected_source_sha256") != asset.get("sha256")
+            or request.get("source_format") != asset.get("source_format")
+            or request.get("size_bytes") != asset.get("size_bytes")
+        ):
+            raise ValidationError("Spatial source parse job binding is invalid")
+        result_json = row.get("result_json")
+        if row.get("status") == "succeeded":
+            try:
+                result = SpatialSourceParseResult.model_validate(result_json)
+            except (PydanticValidationError, ValueError) as exc:
+                raise ValidationError("Spatial source parse result is invalid") from exc
+            if (
+                result.project_id != project_id
+                or result.spatial_source_asset_id != asset_id
+                or result.source_sha256 != asset.get("sha256")
+                or result.source_format != asset.get("source_format")
+                or canonical_json_sha256(spatial_source_parse_result_content(result))
+                != result.content_sha256
+            ):
+                raise ValidationError("Spatial source parse result failed integrity validation")
+        elif result_json is not None:
+            raise ValidationError("Incomplete spatial source parse job cannot carry a result")

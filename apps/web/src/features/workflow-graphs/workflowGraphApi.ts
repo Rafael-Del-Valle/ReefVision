@@ -273,6 +273,27 @@ export interface SpatialSourceAsset {
   measurement_status: "source_unreviewed";
   calibration_verified: false;
   specimen_identity_verified: false;
+  parse_job_id: string | null;
+  parse_status:
+    | "not_queued"
+    | "queued"
+    | "running"
+    | "succeeded"
+    | "failed"
+    | "cancel_requested"
+    | "cancelled";
+  parse_summary: {
+    schema_version: "spatial-source-parse-0001";
+    source_kind_resolved: "mesh" | "point_cloud";
+    vertex_count: number | null;
+    face_count: number | null;
+    point_count: number | null;
+    geometry_sha256: string;
+    qc_warnings: string[];
+    calibration_applied: false;
+    calibration_verified: false;
+    specimen_identity_verified: false;
+  } | null;
 }
 
 export type SpatialCoordinateUnit =
