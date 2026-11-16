@@ -230,9 +230,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         assert producer is not None and published is not None
         session.delete(published)
         session.flush()
-        with pytest.raises(
-            ConflictError, match="Succeeded workflow run artifacts are immutable"
-        ):
+        with pytest.raises(ConflictError, match="Succeeded workflow run artifacts are immutable"):
             WorkflowExecutionService(session).persist_artifact(
                 run_id=str(queued.json()["id"]),
                 node_run=producer,
