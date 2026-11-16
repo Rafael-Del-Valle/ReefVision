@@ -337,7 +337,7 @@ def test_corrupt_bulk_reason_or_actor_blocks_history_and_keyed_replay(
     assert restored.json()["requires_researcher_review"] is True
 
 
-@pytest.mark.parametrize("saved_workflow"), [False, True])
+@pytest.mark.parametrize("saved_workflow", [False, True])
 @pytest.mark.parametrize(
     ("event_type", "field", "blank_value"),
     [
