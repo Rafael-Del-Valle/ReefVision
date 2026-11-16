@@ -179,6 +179,12 @@ def verify_succeeded_node_artifacts(
         for artifact_id in output_ids
     ]
 
+    # A producer output port is a single typed artifact identity. An altered
+    # database row with a second, independently checksummed artifact on the
+    # same port must never be reused as legitimate scientific output.
+    if len({artifact.producer_port_id for artifact in outputs}) != len(outputs):
+        raise ConflictError("Succeeded workflow node has multiple artifacts for one output port")
+
     # The planner saves input artifact IDs in edge-ID order. Comparing only
     # counts allows two valid inputs to be swapped between different target
     # ports without changing any artifact checksum or producer identity.
