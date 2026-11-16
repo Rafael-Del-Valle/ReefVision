@@ -56,3 +56,18 @@ transaction before relabeling a proven draft-spatial head:
 Installed Windows upgrade, Project Exchange, and verified pre-upgrade backup
 rollback remain open until an installer built from the final candidate SHA and
 representative 1.3/legacy-draft-1.4 profiles are available.
+
+## Metadata ancestry integrity
+
+Metadata revision reads now validate immediate ancestry in addition to each
+revision's canonical content digest. Revision 1 must have no predecessor;
+subsequent revisions must point to the immediately preceding revision of the
+same project, source asset, and original SHA-256. Both individual reads and
+paginated reads reject broken history. Regression tests tamper with predecessor
+bindings and recompute otherwise valid per-row digests, verifying fail-closed
+behavior. The original mesh and append-only API remain unchanged.
+
+The digest is an integrity check, **not a cryptographic signature**. Coordinated
+rewriting of a complete history by a database administrator is outside this
+check's threat model; do not equate this with authenticated human review or
+scientifically verified calibration.
