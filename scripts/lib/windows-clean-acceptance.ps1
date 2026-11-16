@@ -13,11 +13,13 @@ function Get-ReefVisionWebView2RuntimeInfo {
         }
     )
     $id = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
-    # Probe both machine views to support 32- and 64-bit acceptance hosts.
-    # An invalid HKLM sentinel must not conceal a valid per-user runtime.
+    # On 64-bit Windows WOW6432Node is the 32-bit registry view; native
+    # HKLM:\SOFTWARE is the 64-bit view. Scope labels describe registry views,
+    # not the architecture of the installed WebView2 executable. A sentinel in
+    # either machine view must not conceal a valid per-user runtime.
     $locations = @(
-        @{ scope = 'machine-64'; path = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$id" },
-        @{ scope = 'machine-32'; path = "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\$id" },
+        @{ scope = 'machine-32'; path = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$id" },
+        @{ scope = 'machine-64'; path = "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\$id" },
         @{ scope = 'user'; path = "HKCU:\Software\Microsoft\EdgeUpdate\Clients\$id" }
     )
     $registrations = @()
