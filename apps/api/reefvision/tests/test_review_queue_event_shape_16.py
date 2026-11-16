@@ -335,7 +335,9 @@ def test_corrupt_bulk_reason_or_actor_blocks_history_and_keyed_replay(
     assert restored.status_code == 200, restored.text
     assert restored.json()["changed_count"] == 0
     assert restored.json()["requires_researcher_review"] is True
-@pytest.mark.parametrize("saved_workflow", [False, True])
+
+
+@pytest.mark.parametrize("saved_workflow"), [False, True])
 @pytest.mark.parametrize(
     ("event_type", "field", "blank_value"),
     [
@@ -377,9 +379,7 @@ def test_unicode_whitespace_only_history_blocks_all_coordination_paths(
 
     # The corrupted event may be outside the requested history page.
     history = client.get(history_url, params={"page": 1000, "page_size": 1})
-    manual = client.post(
-        history_url, json={**payload, "client_request_id": str(uuid4())}
-    )
+    manual = client.post(history_url, json={**payload, "client_request_id": str(uuid4())})
     bulk = client.post(
         f"/api/v1/review-queues/{queue_id}/items/bulk",
         json={"item_ids": item_ids, "action": "start", "actor": "researcher"},
@@ -408,9 +408,10 @@ def test_unicode_whitespace_only_history_blocks_all_coordination_paths(
     assert restored.json()["requires_researcher_review"] is True
     items = client.get(f"/api/v1/review-queues/{queue_id}/items")
     assert items.status_code == 200, items.text
-    assert next(
-        item["review_state"] for item in items.json()["items"] if item["id"] == item_id
-    ) == "pending"
+    assert (
+        next(item["review_state"] for item in items.json()["items"] if item["id"] == item_id)
+        == "pending"
+    )
 
 
 @pytest.mark.parametrize("saved_workflow", [False, True])
@@ -444,9 +445,7 @@ def test_unicode_blank_skip_reason_blocks_registered_bulk_retry(
         event.comment = "\u00a0\u3000"
         session.commit()
 
-    history = client.get(
-        f"/api/v1/review-queues/{queue_id}/items/{item_id}/events"
-    )
+    history = client.get(f"/api/v1/review-queues/{queue_id}/items/{item_id}/events")
     replay = client.post(url, json=payload)
     single = client.post(f"/api/v1/review-queue-items/{item_id}/return")
     for response in (history, replay, single):
