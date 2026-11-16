@@ -402,6 +402,22 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert failed["run"]["status"] == "failed"
     assert "payload must be a JSON object" in failed["run"]["error_message"]
     assert failed["artifacts"] == []
+    # A real queued execution failed at its saved frozen-pose adapter. It must
+    # remain terminal: a direct retry cannot retroactively add a valid output.
+    with app.state.session_factory() as session:
+        failed_node = session.get(WorkflowNodeRun, failed["nodes"][0]["id"])
+        assert failed_node is not None
+        with pytest.raises(ConflictError, match="Failed or cancelled workflow run artifacts"):
+            WorkflowExecutionService(session).persist_artifact(
+                run_id=str(malformed_queued.json()["id"]),
+                node_run=failed_node,
+                specification=WorkflowArtifactSpec(
+                    port_id=outputs[0]["producer_port_id"],
+                    data_type=outputs[0]["data_type"],
+                    payload=payload,
+                ),
+            )
+    assert client.get(f"/api/v1/workflow-runs/{malformed_queued.json()['id']}").json() == failed
     assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
 
     # Saved workflow artifacts must preserve active-learning source lineage,

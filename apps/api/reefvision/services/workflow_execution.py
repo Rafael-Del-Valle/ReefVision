@@ -1089,6 +1089,13 @@ class WorkflowExecutionService:
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
 
+        # Failed and cancelled runs are terminal scientific records. A direct
+        # adapter retry must not publish or reuse their outputs, even if an
+        # identical artifact was persisted before the run failed.
+        run_status = self._run(run_id).status
+        if run_status in {"failed", "cancelled"}:
+            raise ConflictError("Failed or cancelled workflow run artifacts are immutable")
+
         existing = list(
             self.session.scalars(
                 select(WorkflowArtifact)
@@ -1123,7 +1130,7 @@ class WorkflowExecutionService:
             ):
                 # Idempotent reads of a completed scientific run must honor
                 # its frozen closeout, not just the artifact payload digest.
-                if self._run(run_id).status == "succeeded":
+                if run_status == "succeeded":
                     build_workflow_run_provenance(self.session, run_id=run_id)
                 return candidate
             raise ConflictError(
@@ -1133,7 +1140,7 @@ class WorkflowExecutionService:
         # A completed run's saved provenance is immutable. Interrupted-node
         # retries may reuse an identical existing artifact above, but must not
         # recreate a missing output after a run was signed as succeeded.
-        if self._run(run_id).status == "succeeded":
+        if run_status == "succeeded":
             raise ConflictError("Succeeded workflow run artifacts are immutable")
 
         artifact = WorkflowArtifact(
