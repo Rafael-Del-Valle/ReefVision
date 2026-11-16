@@ -757,9 +757,8 @@ def test_exact_source_affine_dimension_standalone_and_persisted_workflow(
     assert ("source_point_cloud_affine_dimension_below_3" in direct["qc_warnings"]) is (
         expected_rank < 3
     )
-    assert ("positive_bounding_envelope_for_lower_dimensional_source" in direct["qc_warnings"]) is (
-        expected_rank in (1, 2)
-    )
+    envelope_warning = "positive_bounding_envelope_for_lower_dimensional_source"
+    assert (envelope_warning in direct["qc_warnings"]) is (expected_rank in (1, 2))
     if expected_rank in (1, 2):
         assert all(extent > 0 for extent in direct["axis_aligned_dimensions_m"])
         assert direct["axis_aligned_bounding_box_envelope_volume_m3"] > 0
@@ -774,9 +773,7 @@ def test_exact_source_affine_dimension_standalone_and_persisted_workflow(
     expected = standalone.json()
     assert expected["source_affine_dimension"] == expected_rank
     assert expected["qc_warnings"] == direct["qc_warnings"]
-    assert ("positive_bounding_envelope_for_lower_dimensional_source" in expected["qc_warnings"]) is (
-        expected_rank in (1, 2)
-    )
+    assert (envelope_warning in expected["qc_warnings"]) is (expected_rank in (1, 2))
     graph = {
         "graph_id": f"affine-rank-{source_format}-{expected_rank}-v14",
         "name": "Source affine dimension without a surface claim",
@@ -817,9 +814,7 @@ def test_exact_source_affine_dimension_standalone_and_persisted_workflow(
         assert all(artifact[key] == value for key, value in expected.items())
         assert artifact["project_id"] == project_id
         assert artifact["source_affine_dimension"] == expected_rank
-        assert ("positive_bounding_envelope_for_lower_dimensional_source" in artifact["qc_warnings"]) is (
-            expected_rank in (1, 2)
-        )
+        assert (envelope_warning in artifact["qc_warnings"]) is (expected_rank in (1, 2))
         assert artifact["measurement_status"] == "caller_supplied_unverified"
         assert artifact["provenance"]["calibration_verified"] is False
 
