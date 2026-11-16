@@ -109,7 +109,7 @@ def _seed_database(database: Path, revision: str) -> tuple[list[SeedRecord], lis
                     ]()
             connection.exec_driver_sql("UPDATE alembic_version SET version_num = ?", (revision,))
             media = b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
-            asset_path = "projects/lineage-acceptance/assets/reef.obj"
+            asset_path = f"projects/lineage-acceptance/spatial/originals/{_ASSET}.obj"
             asset = database.parent / asset_path
             asset.parent.mkdir(parents=True)
             asset.write_bytes(media)

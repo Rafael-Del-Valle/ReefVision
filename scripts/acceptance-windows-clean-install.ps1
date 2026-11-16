@@ -35,7 +35,7 @@ if ($PreviousInstallerPath) {
     $PreviousInstallerPath = (Resolve-Path -LiteralPath $PreviousInstallerPath).Path
     if ([System.IO.Path]::GetExtension($PreviousInstallerPath) -ine '.msi') { throw 'PreviousInstallerPath must identify an MSI.' }
 }
-$lineageArguments = @($LineageManifestPath, $LineageProfile, $LineageVerificationPath) | Where-Object { $_ }
+$lineageArguments = @(@($LineageManifestPath, $LineageProfile, $LineageVerificationPath) | Where-Object { $_ })
 if ($lineageArguments.Count -notin @(0, 3)) {
     throw 'Lineage acceptance requires -LineageManifestPath, -LineageProfile, and -LineageVerificationPath together.'
 }
@@ -354,31 +354,36 @@ function Assert-AcceptanceLineageEvidence(
     if (-not $AllowRemappedIds -and [string]$project.id -cne [string]$Fixture.project_id) {
         throw 'Lineage project ID changed while opening the historical profile.'
     }
-    $scientificResponse = Invoke-RestMethod "$Api/projects/$ProjectId/scientific-records?limit=500"
-    $scientific = @($scientificResponse.items)
-    $assetsResponse = Invoke-RestMethod "$Api/projects/$ProjectId/spatial/assets"
-    $assets = @($assetsResponse)
+    $scientific = @()
+    $assets = @()
+    if (@($Fixture.records | Where-Object kind -eq 'scientific_record').Count -gt 0) {
+        $scientificResponse = Invoke-RestMethod "$Api/projects/$ProjectId/scientific-records?limit=500"
+        $scientific = @($scientificResponse.items)
+    }
+    if (@($Fixture.records | Where-Object kind -in @('spatial_source_asset', 'spatial_calibration_review')).Count -gt 0) {
+        $assets = @(Invoke-RestMethod "$Api/projects/$ProjectId/spatial/assets")
+    }
     $observed = @()
     foreach ($record in @($Fixture.records)) {
         $kind = [string]$record.kind
         $expectedId = [string]$record.id
         $expectedHash = [string]$record.sha256
         if ($kind -eq 'scientific_record') {
-            $matches = if ($AllowRemappedIds) {
+            $matches = @(if ($AllowRemappedIds) {
                 @($scientific | Where-Object { $_.content_sha256 -ceq $expectedHash })
             } else {
                 @($scientific | Where-Object { [string]$_.id -ceq $expectedId -and $_.content_sha256 -ceq $expectedHash })
-            }
+            })
             if ($matches.Count -ne 1) { throw "Expected one preserved scientific record with SHA-256 $expectedHash; found $($matches.Count)." }
             $observed += [pscustomobject]@{kind=$kind;original_id=$expectedId;current_id=[string]$matches[0].id;sha256=$expectedHash;evidence=$null;asset_id=$null}
             continue
         }
         if ($kind -eq 'spatial_source_asset') {
-            $matches = if ($AllowRemappedIds) {
+            $matches = @(if ($AllowRemappedIds) {
                 @($assets | Where-Object { $_.sha256 -ceq $expectedHash })
             } else {
                 @($assets | Where-Object { [string]$_.id -ceq $expectedId -and $_.sha256 -ceq $expectedHash })
-            }
+            })
             if ($matches.Count -ne 1) { throw "Expected one preserved spatial source with SHA-256 $expectedHash; found $($matches.Count)." }
             $actualContentHash = Get-AcceptanceContentSha256 "$Api/projects/$ProjectId/spatial/assets/$($matches[0].id)/content"
             if ($actualContentHash -cne $expectedHash) { throw 'Spatial source API content does not match its immutable source hash.' }

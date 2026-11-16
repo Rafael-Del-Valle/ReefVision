@@ -12,7 +12,11 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import URL
+from sqlalchemy import URL, create_engine
+from sqlalchemy.orm import Session
+
+from reefvision.config import Settings
+from reefvision.services.spatial_source_assets_v14 import SpatialSourceAssetService
 
 _REPO = Path(__file__).resolve().parents[4]
 _GENERATOR = _REPO / "scripts" / "create_windows_lineage_fixtures.py"
@@ -201,3 +205,29 @@ def test_windows_lineage_generator_refuses_to_overwrite(generated_fixtures: Path
     assert repeated.returncode != 0
     assert "already exists" in repeated.stderr
     assert (generated_fixtures / "manifest.json").read_bytes() == prior
+
+
+@pytest.mark.parametrize("name", ("draft-1.4-0038", "draft-1.4-0039"))
+def test_migrated_fixture_mesh_opens_through_production_source_service(
+    generated_fixtures: Path, name: str
+) -> None:
+    profile = generated_fixtures / name
+    url = URL.create("sqlite", database=str(profile / "reefvision.db"))
+    config = Config(str(_REPO / "apps" / "api" / "alembic.ini"))
+    config.attributes["configure_logger"] = False
+    config.set_main_option("sqlalchemy.url", url.render_as_string().replace("%", "%%"))
+    command.upgrade(config, "head")
+    engine = create_engine(url)
+    try:
+        with Session(engine) as session:
+            service = SpatialSourceAssetService(session, Settings(data_dir=profile))
+            content = service.read_verified(_PROJECT, _ASSET)
+            assert hashlib.sha256(content).hexdigest() == next(
+                entry["source_files"][0]["sha256"]
+                for entry in json.loads((generated_fixtures / "manifest.json").read_text())[
+                    "profiles"
+                ]
+                if entry["name"] == name
+            )
+    finally:
+        engine.dispose()
