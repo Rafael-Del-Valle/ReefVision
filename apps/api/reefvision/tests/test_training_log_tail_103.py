@@ -923,26 +923,31 @@ def test_log_tail_strips_bidi_spoofing(tmp_path: Path) -> None:
     assert log.read_bytes() == original
 
 
-def test_log_tail_strips_zero_width_controls_without_losing_scientific_units(
+def test_log_tail_quarantines_embedded_zero_width_controls_without_losing_scientific_units(
     tmp_path: Path,
 ) -> None:
-    """Invisible Unicode must not split or disguise actual persisted loss labels."""
+    """An invisible edit in a loss label invalidates that display record, not later data."""
     log = tmp_path / "training.log"
     original = (
         "train/box\u200b_loss=0.25\n"
         "train/cls\u2060_loss=0.30\n"
         "train/dfl\u2028_loss=0.10\u2029\n"
         "sensor=24 °C; scale=10 µm\n"
+        "train/box_loss=0.21\n"
     ).encode("utf-8")
     log.write_bytes(original)
 
+    # Removing these zero-width and Unicode separator characters would create
+    # seemingly genuine loss labels that never existed in the source file.
+    # Preserve the adjacent scientific units and the next genuine loss instead.
     assert training_routes._training_log_tail("training.log", tmp_path) == {
         "available": True,
         "text": (
-            "train/box_loss=0.25\n"
-            "train/cls_loss=0.30\n"
-            "train/dfl_loss=0.10\n"
+            "[terminal-edited training log record omitted]\n"
+            "[terminal-edited training log record omitted]\n"
+            "[terminal-edited training log record omitted]\n"
             "sensor=24 °C; scale=10 µm\n"
+            "train/box_loss=0.21\n"
         ),
     }
     assert log.read_bytes() == original
