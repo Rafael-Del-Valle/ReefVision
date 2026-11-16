@@ -282,6 +282,7 @@ Assert-True ($acceptanceScript.Contains("HF_HUB_OFFLINE'] = '0'")) 'Opt-in live 
 Assert-True ($acceptanceScript.Contains('samAcceptedMaskId')) 'Live SAM acceptance must validate mask preservation.'
 Assert-True ($acceptanceScript.Contains("'api.log', 'api.log.1'")) 'Failed SAM2 acceptance must archive API logs, not only startup backend.log.'
 Assert-True ($acceptanceScript.Contains('api.log.tail.log') -or $acceptanceScript.Contains('$logName.tail.log')) 'SAM2 API log archive name must match the uploaded *.log evidence pattern.'
+Assert-True ($acceptanceScript.Contains("prefix='live'") -and $acceptanceScript.Contains("prefix='restore'")) 'Installed lineage evidence must retain separate live and restored-profile log tails.'
 $initialVersionCheck = '$initialVersion = Get-AcceptanceMsiProperty -Path $initialInstaller -Name ''ProductVersion'''
 $initialBackendCheck = 'Assert-AcceptancePackagedBackend -Api $api -ExpectedAppVersion $initialVersion -ExpectedRevision $initialRevision'
 $finalBackendCheck = 'Assert-AcceptancePackagedBackend -Api $api -ExpectedAppVersion $ProductVersion -ExpectedRevision $ExpectedSchemaRevision'
