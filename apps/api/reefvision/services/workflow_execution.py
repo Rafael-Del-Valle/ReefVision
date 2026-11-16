@@ -1095,6 +1095,11 @@ class WorkflowExecutionService:
         run_status = self._run(run_id).status
         if run_status in {"failed", "cancelled"}:
             raise ConflictError("Failed or cancelled workflow run artifacts are immutable")
+        # A node can fail before its parent run reaches a terminal state.
+        # Direct adapter retries must not publish or reuse output after that
+        # failure, even while the workflow itself still says "running".
+        if node_run.status in {"failed", "cancelled"}:
+            raise ConflictError("Failed or cancelled workflow node artifacts are immutable")
 
         existing = list(
             self.session.scalars(
