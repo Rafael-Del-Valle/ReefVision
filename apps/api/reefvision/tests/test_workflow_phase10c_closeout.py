@@ -451,7 +451,7 @@ def test_recovered_workflow_refuses_ambiguous_saved_producer_output(
         assert run is not None and producer is not None and consumer is not None
         assert original is not None
         assert run.status == "failed"
-        assert "ambiguous saved output" in (run.error_message or "")
+        assert "undeclared persisted outputs" in (run.error_message or "")
         assert producer.status == "succeeded"
         assert producer.output_artifact_ids_json == [original_id]
         assert consumer.status == "pending"

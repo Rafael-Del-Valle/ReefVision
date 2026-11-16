@@ -356,7 +356,7 @@ def test_review_rejects_undeclared_disagreement_before_active_learning_handoff(
         json={"reviewed_by": "scientist", "note": "Review approved."},
     )
     assert rejected.status_code == 409, rejected.text
-    assert "disagreement outputs are ambiguous" in rejected.json()["detail"]
+    assert "undeclared persisted outputs" in rejected.json()["detail"]
     with app.state.session_factory() as session:
         review = session.get(WorkflowNodeRun, review_id)
         assert review is not None

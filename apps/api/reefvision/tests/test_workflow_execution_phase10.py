@@ -846,8 +846,9 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.flush()
         with pytest.raises(ConflictError, match="producer declares output owned by another node"):
             verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
-        # Input resolution validates the producer port contract before artifact ownership.
-        with pytest.raises(ConflictError, match="output type does not match registry"):
+        # The producer-wide persisted-output check rejects the forged
+        # owner state before the per-binding port checks are reached.
+        with pytest.raises(ConflictError, match="undeclared persisted outputs"):
             _input_artifacts(
                 session,
                 run_id=str(run["id"]),

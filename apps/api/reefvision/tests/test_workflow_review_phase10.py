@@ -418,7 +418,7 @@ def test_review_resume_rejects_undeclared_and_ambiguous_same_port_outputs(
     approval = {"reviewed_by": "scientist", "note": "Consensus checked."}
     undeclared = client.post(endpoint, json=approval)
     assert undeclared.status_code == 409, undeclared.text
-    assert "not a declared producer output" in undeclared.text
+    assert "undeclared persisted outputs" in undeclared.text
 
     with app.state.session_factory() as session:
         review_node = session.get(WorkflowNodeRun, review_node_id)
@@ -428,7 +428,7 @@ def test_review_resume_rejects_undeclared_and_ambiguous_same_port_outputs(
 
     ambiguous = client.post(endpoint, json=approval)
     assert ambiguous.status_code == 409, ambiguous.text
-    assert "producer output is ambiguous" in ambiguous.text
+    assert "undeclared persisted outputs" in ambiguous.text
 
     with app.state.session_factory() as session:
         run = session.get(WorkflowRun, run_id)
