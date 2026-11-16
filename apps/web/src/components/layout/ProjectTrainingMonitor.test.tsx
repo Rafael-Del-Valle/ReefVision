@@ -331,9 +331,7 @@ describe("ProjectTrainingMonitor", () => {
 
     const mapRow = screen.getByText("metrics mAP50(B)").closest("div");
     expect(mapRow).toHaveTextContent("0.81");
-    expect(mapRow).toHaveTextContent(
-      "summary; epoch association unverified",
-    );
+    expect(mapRow).toHaveTextContent("summary; epoch association unverified");
     // These are observation/source labels, not verified epoch associations;
     // monitoring never mutates the training run or its persisted loss history.
     expect(api.cancelTrainingRun).not.toHaveBeenCalled();
