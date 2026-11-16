@@ -256,7 +256,8 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                                 raise ValueError("decoded format is not JPEG")
                             decoded.load()
                             # Native camera pixels are not EXIF-transposed.
-                            orientation = decoded.getexif().get(274)
+                            exif = decoded.getexif()
+                            orientation = exif.get(274)
                             if orientation is not None and (
                                 not isinstance(orientation, int)
                                 or orientation not in range(1, 9)
@@ -276,6 +277,25 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                                 not isinstance(icc_profile, bytes) or not icc_profile
                             ):
                                 raise ValueError("invalid embedded ICC profile payload")
+                            # EXIF PixelXDimension/PixelYDimension describe
+                            # native raster axes, not orientation-corrected
+                            # display dimensions. A stale value after cropping
+                            # or recompression invalidates camera geometry QC.
+                            # Some exporters store these tags in IFD0; prefer
+                            # the standard nested Exif IFD when available.
+                            exif_ifd = exif.get_ifd(34665) if exif.get(34665) is not None else {}
+                            exif_pixel_width = exif_ifd.get(40962, exif.get(40962))
+                            exif_pixel_height = exif_ifd.get(40963, exif.get(40963))
+                            if exif_pixel_width is not None or exif_pixel_height is not None:
+                                if (
+                                    type(exif_pixel_width) is not int
+                                    or type(exif_pixel_height) is not int
+                                    or exif_pixel_width <= 0
+                                    or exif_pixel_height <= 0
+                                    or (exif_pixel_width, exif_pixel_height)
+                                    != (decoded.width, decoded.height)
+                                ):
+                                    raise ValueError("EXIF pixel dimensions conflict with JPEG raster")
                             decoded_metadata = {
                                 "jpeg_pixel_width": decoded.width,
                                 "jpeg_pixel_height": decoded.height,
@@ -283,6 +303,8 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                                 "jpeg_display_height": display_height,
                                 "jpeg_color_mode": decoded.mode,
                                 "jpeg_exif_orientation": orientation,
+                                "jpeg_exif_pixel_width": exif_pixel_width,
+                                "jpeg_exif_pixel_height": exif_pixel_height,
                                 "jpeg_icc_profile_present": icc_profile is not None,
                                 "jpeg_icc_profile_bytes": (
                                     len(icc_profile) if icc_profile is not None else 0
