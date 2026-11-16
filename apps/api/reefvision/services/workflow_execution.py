@@ -1126,6 +1126,12 @@ class WorkflowExecutionService:
                 "Workflow node already persisted a different artifact for this output"
             )
 
+        # A completed run's saved provenance is immutable. Interrupted-node
+        # retries may reuse an identical existing artifact above, but must not
+        # recreate a missing output after a run was signed as succeeded.
+        if self._run(run_id).status == "succeeded":
+            raise ConflictError("Succeeded workflow run artifacts are immutable")
+
         artifact = WorkflowArtifact(
             workflow_run_id=run_id,
             producer_node_run_id=node_run.id,
