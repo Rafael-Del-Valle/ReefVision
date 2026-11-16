@@ -193,6 +193,18 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     with app.state.session_factory() as session:
         original_node = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
         assert original_node is not None
+        # Exercise the completed saved workflow, not a fabricated node: even
+        # an adapter-produced list of pairs must not become signed output.
+        with pytest.raises(ValidationError, match="payload must be a JSON object"):
+            WorkflowExecutionService(session).persist_artifact(
+                run_id=str(queued.json()["id"]),
+                node_run=original_node,
+                specification=WorkflowArtifactSpec(
+                    port_id=outputs[0]["producer_port_id"],
+                    data_type=outputs[0]["data_type"],
+                    payload=cast(dict[str, str], [("dataset_id", dataset_id)]),
+                ),
+            )
         with pytest.raises(ConflictError, match="producer belongs to a different workflow run"):
             WorkflowExecutionService(session).persist_artifact(
                 run_id=alternate_run_id,
