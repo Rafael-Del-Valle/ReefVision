@@ -600,3 +600,102 @@ def test_subnormal_diagonal_uncertainty_is_not_false_zero_in_saved_workflow(
     assert artifact["project_id"] == project_id
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
+
+@pytest.mark.parametrize("source_format", ["xyz", "ply"])
+@pytest.mark.parametrize(
+    ("uncertainty", "expected_delta"),
+    [(0.0, 0.0), (0.25, None), (1.0, 5e-324)],
+)
+def test_unresolved_chord_scale_delta_is_not_false_zero_in_saved_workflow(
+    client: TestClient,
+    source_format: str,
+    uncertainty: float,
+    expected_delta: float | None,
+) -> None:
+    """An unresolved subnormal chord interval must not advertise exact scale."""
+    points = [[0.0, 0.0, 0.0], [5e-324, 0.0, 0.0]]
+    params: dict[str, Any] = {
+        "meters_per_unit": 1.0,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic, unverified subnormal chord scale",
+        "relative_scale_uncertainty": uncertainty,
+        "point_index_pairs": [[0, 1]],
+    }
+    if source_format == "xyz":
+        params["points"] = points
+    else:
+        params["ply_text"] = (
+            "ply\\nformat ascii 1.0\\nelement vertex 2\\n"
+            "property double x\\nproperty double y\\nproperty double z\\n"
+            "end_header\\n0 0 0\\n5e-324 0 0\\n"
+        )
+    direct = measure_point_cloud_preview(
+        points=points,
+        meters_per_unit=1.0,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic, unverified subnormal chord scale",
+        relative_scale_uncertainty=uncertainty,
+        point_index_pairs=[[0, 1]],
+    )
+    chord = direct["selected_point_chords"][0]
+    assert chord["chord_distance_m"] == 5e-324
+    assert chord["scale_uncertainty_m"] == expected_delta
+    unresolved = expected_delta is None
+    assert (
+        "chord_uncertainty_interval_below_numeric_resolution" in chord["qc_warnings"]
+    ) is unresolved
+    assert (
+        "selected_chord_uncertainty_interval_below_numeric_resolution"
+        in direct["qc_warnings"]
+    ) is unresolved
+    assert (chord["chord_distance_scale_interval_m"] is None) is unresolved
+    assert direct["provenance"]["calibration_verified"] is False
+
+    project_id = str(create_project(client, f"Subnormal chord delta {source_format}"))
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    assert expected["selected_point_chords"] == direct["selected_point_chords"]
+    assert expected["qc_warnings"] == direct["qc_warnings"]
+
+    graph = {
+        "graph_id": f"subnormal-chord-delta-{source_format}-{uncertainty}-v14",
+        "name": "Review provisional chord scale uncertainty",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "point_cloud_measurement_preview"
+    )
+    for key, value in expected.items():
+        assert artifact[key] == value
+    assert artifact["measurement_status"] == "caller_supplied_unverified"
+    assert artifact["provenance"]["calibration_verified"] is False
