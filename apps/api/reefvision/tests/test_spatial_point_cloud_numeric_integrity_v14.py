@@ -570,8 +570,9 @@ def test_subnormal_diagonal_uncertainty_is_not_false_zero_in_saved_workflow(
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     assert expected["axis_aligned_bounding_box_diagonal_scale_interval_m"] == expected_interval
-    assert expected["axis_aligned_dimension_scale_uncertainty_m"] == (
-        direct["axis_aligned_dimension_scale_uncertainty_m"]
+    assert (
+        expected["axis_aligned_dimension_scale_uncertainty_m"]
+        == (direct["axis_aligned_dimension_scale_uncertainty_m"])
     )
     graph = {
         "graph_id": f"subnormal-diagonal-{source_format}-{relative_uncertainty}-v14",
@@ -762,7 +763,9 @@ def test_exact_source_affine_dimension_standalone_and_persisted_workflow(
     assert direct["surface_area_m2"] is None
     assert direct["branch_length_m"] is None
 
-    project_id = str(create_project(client, f"Affine rank {source_format} {expected_rank}")["id"])
+    project_id = str(
+        create_project(client, f"Affine rank {source_format} {expected_rank}")["id"]
+    )
     base = f"/api/v1/projects/{project_id}"
     standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert standalone.status_code == 200, standalone.text
