@@ -301,14 +301,19 @@ def measure_point_cloud_preview(
     )
     if envelope_volume_underflow:
         envelope_volume = None
-    envelope_scale_interval = (
-        [
-            envelope_volume * (1 - relative_scale_uncertainty) ** 3,
-            envelope_volume * (1 + relative_scale_uncertainty) ** 3,
-        ]
-        if relative_scale_uncertainty is not None and envelope_volume is not None
-        else None
-    )
+    # A positive envelope with a nonzero lower scale factor must not acquire
+    # a zero lower bound solely from subnormal floating-point rounding. Treat
+    # the uncertainty interval as unrepresentable rather than claiming a
+    # physically possible zero-volume lower limit.
+    envelope_scale_interval_underflow = False
+    envelope_scale_interval: list[float] | None = None
+    if relative_scale_uncertainty is not None and envelope_volume is not None:
+        lower = envelope_volume * (1 - relative_scale_uncertainty) ** 3
+        upper = envelope_volume * (1 + relative_scale_uncertainty) ** 3
+        if envelope_volume > 0.0 and relative_scale_uncertainty < 1.0 and lower == 0.0:
+            envelope_scale_interval_underflow = True
+        else:
+            envelope_scale_interval = [lower, upper]
 
     def coordinate_scale_intervals(bounds: list[float]) -> list[list[float]] | None:
         if relative_scale_uncertainty is None:
@@ -441,9 +446,10 @@ def measure_point_cloud_preview(
         "branch_length_m": None,
         "qc_warnings": (
             (["duplicate_points_present"] if unique_count < len(vertices) else [])
+            + (["envelope_volume_below_numeric_resolution"] if envelope_volume_underflow else [])
             + (
-                ["envelope_volume_below_numeric_resolution"]
-                if envelope_volume_underflow
+                ["envelope_uncertainty_interval_below_numeric_resolution"]
+                if envelope_scale_interval_underflow
                 else []
             )
             + (["preview_omits_axis_extrema"] if preview_omitted_axis_extrema else [])
