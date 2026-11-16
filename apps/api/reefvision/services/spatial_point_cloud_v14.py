@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC
-from math import dist, isfinite
+from math import dist, fsum, isfinite
 from re import fullmatch
 from typing import Any
 
@@ -331,7 +331,14 @@ def measure_point_cloud_preview(
                 dimension_scale_intervals.append(None)
             else:
                 dimension_scale_intervals.append([lower, upper])
-    centroid = [sum(p[axis] for p in vertices) / len(vertices) * scale for axis in range(3)]
+    # Divide only after calibration and compensated summation: dividing a
+    # positive subnormal source mean first can round it to zero even when its
+    # calibrated centroid is representable. A point centroid is not a tissue
+    # centroid or a verified organism position.
+    centroid = [
+        fsum(point[axis] * scale for point in vertices) / len(vertices)
+        for axis in range(3)
+    ]
     diagonal = dist((0.0, 0.0, 0.0), dimensions)
     # Multiply larger extents first: multiplying two tiny axes before a
     # large third axis can underflow to zero even when the final positive
