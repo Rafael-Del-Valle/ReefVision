@@ -275,6 +275,18 @@ _PROFILES: tuple[_AdvancedProviderProfile, ...] = (
 )
 
 
+def discover_advanced_local_provider_manifests(
+    settings: Settings,
+) -> list[LocalProviderManifestRecord]:
+    """Use the full built-in catalog as the local-manifest collision boundary."""
+
+    built_in_ids = {
+        *(profile.provider_id for profile in _PROFILES),
+        *(descriptor.provider_id for descriptor in list_model_providers(settings)),
+    }
+    return discover_local_provider_manifests(settings, built_in_ids=built_in_ids)
+
+
 class AdvancedProviderService:
     def __init__(self, session: Session, settings: Settings) -> None:
         self.session = session
@@ -304,14 +316,7 @@ class AdvancedProviderService:
         return profile
 
     def _local_manifest_records(self) -> list[LocalProviderManifestRecord]:
-        built_in_ids = {
-            *(profile.provider_id for profile in _PROFILES),
-            *(descriptor.provider_id for descriptor in list_model_providers(self.settings)),
-        }
-        return discover_local_provider_manifests(
-            self.settings,
-            built_in_ids=built_in_ids,
-        )
+        return discover_advanced_local_provider_manifests(self.settings)
 
     def manifests(self) -> list[AdvancedProviderManifestResponse]:
         descriptors = {item.provider_id: item for item in list_model_providers(self.settings)}
