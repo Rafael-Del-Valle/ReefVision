@@ -42,3 +42,39 @@ Source files and branch divergence were inspected through the GitHub connector o
 The lightweight `scripts/inspect-alembic-lineage.py` now opens one explicit read transaction **before** SQLite integrity, Alembic stamp, scientific/QC table inventory, and row-count checks. Python's `with sqlite3.connect(...)` alone does not pin a snapshot for successive read statements. A second local writer could otherwise commit an environmental schema migration between integrity checks and stamp/table reads, producing a report assembled from different committed versions. The inspector still opens `mode=ro`, sets `query_only`, checks WAL/SHM/journal sidecars, emits `upgrade_authorized: false`, and never performs a migration.
 
 A deterministic disposable-WAL regression injects a separate writer's 0039→0042 schema/stamp commit immediately after the first integrity probe. The in-progress read-only inspection must report only the original 0039 schema and stamp, while a subsequent inspection observes the complete 0042 schema. The biological sentinel is preserved. This proves consistency *within* one inspection, not immutability of a live WAL database; active-sidecar warnings continue to require a consistent external snapshot and researcher approval before any upgrade.
+
+
+## Opt-in read-only 0038 structural evidence (2026-11-16)
+
+The existing inspector at scripts/inspect-alembic-lineage.py can now check
+two **source-audited** table contracts for the colliding revision-0038
+branches without modifying an SQLite research database. Run against a
+separately verified, quiescent copy, never the only working database:
+
+    python scripts/inspect-alembic-lineage.py RESEARCH-COPY.sqlite --verify-structural-contracts --fail-on-warning
+
+The optional flag checks scientific_records (1.1) and
+review_queue_item_events (1.6) against their independently inspected
+migration-source column sets, non-null fields, primary key, foreign-key
+targets/delete policies and required index/UNIQUE column sets. The JSON
+structural_contracts field reports only matches, mismatch, or absent for
+these **fixed known table names**. A mismatch emits
+lineage_table_contract_mismatch_<known-table> and fails strict mode.
+No column contents, review notes, trigger SQL, raw index names or row IDs
+are disclosed by this new structural check.
+
+This is an **opt-in diagnostic**, not an integrated migration. Without the
+flag, existing historical inspector behavior is preserved and
+structural_contracts is empty. Positive shape matches alone cannot
+distinguish independently applied revision IDs or prove that all recorded
+rows, CHECK constraints, SQLite collation/affinities, workflow references,
+0039 computed metrics, 0040/0042 environmental extensions or 0041 QC
+registry are compatible. These remain separate acceptance gates. The
+inspector still sets upgrade_authorized: false, and 0038 still carries
+the explicit reconciliation warning even when the table shape matches.
+
+Ten disposable populated-database regressions cover positive controls,
+missing/extra/generated columns, wrong FK delete policies, missing
+indexes/UNIQUE and nullable reviewer attribution; a strict CLI regression
+checks JSON redaction, exit code and unchanged database bytes. Full exact-head
+backend CI and Windows installed-GUI acceptance must be checked separately.
