@@ -25,7 +25,7 @@ from reefvision.schemas.backups import (
 from reefvision.tests.test_connected_branch_preview_api_1_2 import _save_calibrated_analysis
 from reefvision.tests.test_reviewed_coral_graph_1_2 import post
 
-_INTEGRATED_HEAD = "b14_integration_0001"
+_INTEGRATED_HEAD = "b14_spatial_0040"
 
 
 @pytest.fixture
@@ -63,8 +63,18 @@ def _scientific_snapshot(database: Path, project_id: str) -> tuple[object, ...]:
             "SELECT * FROM reefpose_heldout_locks WHERE project_id = ?", (project_id,)
         ).fetchall()
 
-    assert tuple(map(len, (records, identities, references, locks))) == (1, 2, 1, 1)
-    return records, identities, references, locks
+    spatial_sources = connection.execute(
+        "SELECT * FROM spatial_source_assets WHERE project_id = ?", (project_id,)
+    ).fetchall()
+    spatial_revisions = connection.execute(
+        "SELECT * FROM spatial_asset_metadata_revisions WHERE project_id = ? ORDER BY revision",
+        (project_id,),
+    ).fetchall()
+
+    assert tuple(
+        map(len, (records, identities, references, locks, spatial_sources, spatial_revisions))
+    ) == (1, 2, 1, 1, 1, 1)
+    return records, identities, references, locks, spatial_sources, spatial_revisions
 
 
 def test_verified_backup_restores_rows_from_all_integrated_histories(
@@ -118,6 +128,30 @@ def test_verified_backup_restores_rows_from_all_integrated_histories(
                 ),
             ]
         )
+
+    # Preserve newly introduced 1.4 original-geometry and append-only metadata
+    # records through the same verified backup/restore used by earlier science.
+    imported = migrated_client.post(
+        f"/api/v1/projects/{project_id}/spatial/assets",
+        files={
+            "file": (
+                "backup-coral.obj",
+                b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n",
+                "application/octet-stream",
+            )
+        },
+    )
+    assert imported.status_code == 201, imported.text
+    revision = migrated_client.post(
+        f"/api/v1/projects/{project_id}/spatial/assets/{imported.json()['id']}/metadata-revisions",
+        json={
+            "coordinate_unit": "unknown",
+            "review_state": "unreviewed",
+            "created_by_identity": "local_researcher",
+        },
+    )
+    assert revision.status_code == 201, revision.text
+    assert revision.json()["calibration_verified"] is False
 
     response = migrated_client.post("/api/v1/backups", json={"notes": "Integrated record backup"})
     assert response.status_code == 201, response.text

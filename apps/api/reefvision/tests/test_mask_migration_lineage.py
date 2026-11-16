@@ -9,7 +9,10 @@ def test_mask_migrations_retain_the_common_lineage() -> None:
     config = Config(str(api_root / "alembic.ini"))
     scripts = ScriptDirectory.from_config(config)
 
-    assert scripts.get_heads() == ["b14_integration_0001"]
+    assert scripts.get_heads() == ["b14_spatial_0040"]
+    spatial_metadata = scripts.get_revision("b14_spatial_0040")
+    assert spatial_metadata is not None
+    assert spatial_metadata.down_revision == "b14_integration_0001"
     integration = scripts.get_revision("b14_integration_0001")
     assert integration is not None
     assert set(integration.down_revision) == {"b13_temporal_0001", "spatial_0039"}
