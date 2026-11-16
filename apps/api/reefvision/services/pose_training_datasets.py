@@ -135,7 +135,9 @@ def frozen_pose_item_fingerprints_match(
                 # digest even if someone re-signs the item and manifest.
                 or not isinstance(model.get("checkpoint_sha256"), str)
                 or len(model["checkpoint_sha256"]) != 64
-                or any(char not in "0123456789abcdef" for char in model["checkpoint_sha256"])
+                or any(
+                    char not in "0123456789abcdef" for char in model["checkpoint_sha256"]
+                )
                 for model in row.source_models_json
             )
             or not isinstance(row.source_job_ids_json, list)
