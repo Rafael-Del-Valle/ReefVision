@@ -20,14 +20,8 @@ from reefvision.tests.review_lineage_fixture_16 import (
 _EXTRA_COLUMNS = {
     "valid": "",
     "ordinary": ", unexpected_note TEXT",
-    "virtual": (
-        ", derived_actor TEXT GENERATED ALWAYS AS "
-        "(actor || '_derived') VIRTUAL"
-    ),
-    "stored": (
-        ", derived_actor TEXT GENERATED ALWAYS AS "
-        "(actor || '_derived') STORED"
-    ),
+    "virtual": (", derived_actor TEXT GENERATED ALWAYS AS (actor || '_derived') VIRTUAL"),
+    "stored": (", derived_actor TEXT GENERATED ALWAYS AS (actor || '_derived') STORED"),
 }
 
 
@@ -36,9 +30,7 @@ def _build_database(path: Path, revision: str, target: str, variant: str) -> Non
     try:
         with engine.begin() as connection:
             connection.execute(text("PRAGMA foreign_keys=ON"))
-            connection.execute(
-                text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
-            )
+            connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
             connection.execute(
                 text("INSERT INTO alembic_version VALUES (:revision)"),
                 {"revision": revision},
@@ -130,28 +122,26 @@ def test_stamped_qc_rejects_unexpected_columns_without_mutating_research(
                     assert_compatible_revision_0038(connection)
                 else:
                     expected = (
-                        "unexpected review columns"
-                        if target == "event"
-                        else "unexpected columns"
+                        "unexpected review columns" if target == "event" else "unexpected columns"
                     )
                     with pytest.raises(RuntimeError, match=expected) as error:
                         assert_compatible_revision_0038(connection)
                     assert "PRIVATE_" not in str(error.value)
-                assert connection.scalar(
-                    text("SELECT note FROM observations")
-                ) == "PRIVATE_CORAL_OBSERVATION"
+                assert (
+                    connection.scalar(text("SELECT note FROM observations"))
+                    == "PRIVATE_CORAL_OBSERVATION"
+                )
                 assert connection.execute(
-                    text(
-                        "SELECT id, actor, comment FROM review_queue_item_events"
-                    )
+                    text("SELECT id, actor, comment FROM review_queue_item_events")
                 ).one() == ("event-1", "researcher", "PRIVATE_REVIEW_NOTE")
                 if revision == "0041":
-                    assert connection.scalar(
-                        text("SELECT id FROM review_queue_bulk_requests")
-                    ) == "bulk-1"
-                assert connection.scalar(
-                    text("SELECT version_num FROM alembic_version")
-                ) == revision
+                    assert (
+                        connection.scalar(text("SELECT id FROM review_queue_bulk_requests"))
+                        == "bulk-1"
+                    )
+                assert (
+                    connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+                )
     finally:
         engine.dispose()
 
