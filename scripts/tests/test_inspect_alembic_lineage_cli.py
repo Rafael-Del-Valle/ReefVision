@@ -158,7 +158,7 @@ def test_sqlite_integrity_preflight_reports_clean_database(tmp_path: Path) -> No
     database = tmp_path / "clean.sqlite"
     with sqlite3.connect(database) as connection:
         connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
-        connection.execute("INSERT INTO alembic_version VALUES ('0037')")
+        connection.execute("INSERT INTO alembic_version VALUES ('0039')")
         for name in (
             "scientific_records",
             "environmental_cache_entries",
@@ -185,7 +185,7 @@ def test_full_integrity_preflight_preserves_indexed_research_data(tmp_path: Path
     database = tmp_path / "indexed.sqlite"
     with sqlite3.connect(database) as connection:
         connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
-        connection.execute("INSERT INTO alembic_version VALUES ('0037')")
+        connection.execute("INSERT INTO alembic_version VALUES ('0039')")
         for name in (
             "scientific_records",
             "environmental_cache_entries",
