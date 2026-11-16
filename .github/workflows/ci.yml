@@ -33,6 +33,9 @@ jobs:
         run: |
           python -m ruff check scripts/inspect-alembic-lineage.py scripts/tests/test_inspect_alembic_lineage_cli.py scripts/tests/test_live_wal_preflight_16.py scripts/tests/test_inspect_alembic_sidecar_boundaries_16.py
           python -m ruff format --check scripts/inspect-alembic-lineage.py scripts/tests/test_inspect_alembic_lineage_cli.py scripts/tests/test_live_wal_preflight_16.py scripts/tests/test_inspect_alembic_sidecar_boundaries_16.py
+      - name: Show Alembic preflight Ruff formatting diff on failure
+        if: failure()
+        run: python -m ruff format --diff scripts/inspect-alembic-lineage.py
       - name: Test read-only Alembic lineage preflight (strict and informational)
         run: python -m pytest scripts/tests/test_inspect_alembic_lineage_cli.py scripts/tests/test_live_wal_preflight_16.py scripts/tests/test_inspect_alembic_sidecar_boundaries_16.py -v
       - name: Lint and test non-destructive Alembic collision audit
