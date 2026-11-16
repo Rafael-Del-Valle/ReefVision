@@ -714,3 +714,123 @@ def test_unresolved_chord_scale_delta_is_not_false_zero_in_saved_workflow(
         assert artifact[key] == value
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
+
+@pytest.mark.parametrize("source_format", ["xyz", "ply"])
+@pytest.mark.parametrize(
+    ("points", "expected_rank"),
+    [
+        ([[0, 0, 0], [0, 0, 0]], 0),
+        ([[0, 0, 0], [1, 1, 1], [2, 2, 2]], 1),
+        ([[0, 0, 0], [1, 0, 1], [0, 1, 1], [1, 1, 2]], 2),
+        ([[0, 0, 0], [1, 0, 1], [0, 1, 1], [0, 0, 1]], 3),
+    ],
+)
+def test_exact_source_affine_dimension_standalone_and_persisted_workflow(
+    client: TestClient, source_format: str, points: list[list[int]], expected_rank: int
+) -> None:
+    """A tilted flat cloud can occupy a 3D box without occupying its volume."""
+    params: dict[str, Any] = {
+        "meters_per_unit": 0.1,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic affine-rank QC, physical scale unverified",
+        "relative_scale_uncertainty": 0.05,
+    }
+    if source_format == "xyz":
+        params["points"] = points
+    else:
+        params["ply_text"] = (
+            "ply\nformat ascii 1.0\n"
+            f"element vertex {len(points)}\n"
+            "property double x\nproperty double y\nproperty double z\n"
+            "end_header\n"
+            + "".join(" ".join(str(value) for value in point) + "\n" for point in points)
+        )
+    direct = measure_point_cloud_preview(
+        points=points,
+        meters_per_unit=0.1,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic affine-rank QC, physical scale unverified",
+        relative_scale_uncertainty=0.05,
+    )
+    assert direct["source_affine_dimension"] == expected_rank
+    assert (
+        "source_point_cloud_affine_dimension_below_3" in direct["qc_warnings"]
+    ) is (expected_rank < 3)
+    if expected_rank in (1, 2):
+        assert all(extent > 0 for extent in direct["axis_aligned_dimensions_m"])
+        assert direct["axis_aligned_bounding_box_envelope_volume_m3"] > 0
+    assert direct["provenance"]["calibration_verified"] is False
+    assert direct["surface_area_m2"] is None
+    assert direct["branch_length_m"] is None
+
+    project_id = str(
+        create_project(client, f"Affine rank {source_format} {expected_rank}")["id"]
+    )
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    assert expected["source_affine_dimension"] == expected_rank
+    assert expected["qc_warnings"] == direct["qc_warnings"]
+    graph = {
+        "graph_id": f"affine-rank-{source_format}-{expected_rank}-v14",
+        "name": "Source affine dimension without a surface claim",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    for _ in range(2):
+        run = client.post(
+            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+        )
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item["payload_json"]
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "point_cloud_measurement_preview"
+        )
+        assert all(artifact[key] == value for key, value in expected.items())
+        assert artifact["project_id"] == project_id
+        assert artifact["source_affine_dimension"] == expected_rank
+        assert artifact["measurement_status"] == "caller_supplied_unverified"
+        assert artifact["provenance"]["calibration_verified"] is False
+
+
+def test_exact_affine_rank_does_not_round_almost_planar_source_to_flat() -> None:
+    """Assess exact binary-float geometry without a guessed tolerance."""
+    result = measure_point_cloud_preview(
+        points=[
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 1.0],
+            [0.0, 1.0, 1.0],
+            [1.0, 1.0, 2.000000000000001],
+        ],
+        meters_per_unit=0.01,
+        calibration_method="instrument",
+        calibration_evidence="Near-planar synthetic numerical control; unverified",
+    )
+    assert result["source_affine_dimension"] == 3
+    assert "source_point_cloud_affine_dimension_below_3" not in result["qc_warnings"]
+    assert result["provenance"]["calibration_verified"] is False

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC
+from fractions import Fraction
 from math import dist, fsum, isfinite
 from re import fullmatch
 from typing import Any
@@ -26,6 +27,42 @@ def _scale_interval_unresolved(
         (uncertainty < 1.0 and (lower == 0.0 or upper == 0.0))
         or (uncertainty > 0.0 and lower == upper)
     )
+
+
+def _source_affine_dimension(vertices: list[tuple[float, float, float]]) -> int:
+    """Exact imported-coordinate affine rank, not verified organism dimensions.
+
+    Convert finite binary floats to rational values before differencing to
+    avoid underflow of near-collinear/near-planar spatial predicates.
+    """
+    origin = tuple(Fraction(value) for value in vertices[0])
+    direction: tuple[Fraction, Fraction, Fraction] | None = None
+    normal: tuple[Fraction, Fraction, Fraction] | None = None
+    for vertex in vertices[1:]:
+        vector = (
+            Fraction(vertex[0]) - origin[0],
+            Fraction(vertex[1]) - origin[1],
+            Fraction(vertex[2]) - origin[2],
+        )
+        if not any(vector):
+            continue
+        if direction is None:
+            direction = vector
+            continue
+        if normal is None:
+            candidate = (
+                direction[1] * vector[2] - direction[2] * vector[1],
+                direction[2] * vector[0] - direction[0] * vector[2],
+                direction[0] * vector[1] - direction[1] * vector[0],
+            )
+            if any(candidate):
+                normal = candidate
+            continue
+        if sum(normal[axis] * vector[axis] for axis in range(3)) != 0:
+            return 3
+    if normal is not None:
+        return 2
+    return 1 if direction is not None else 0
 
 
 def parse_ascii_ply_points(
@@ -415,6 +452,7 @@ def measure_point_cloud_preview(
         return intervals
 
     unique_count = len(set(vertices))
+    source_affine_dimension = _source_affine_dimension(vertices)
     geometry_hash = hashlib.sha256(
         json.dumps(sorted(vertices), separators=(",", ":")).encode("utf-8")
     ).hexdigest()
@@ -479,6 +517,7 @@ def measure_point_cloud_preview(
         "schema_version": "point-cloud-preview-0001",
         "point_count": len(vertices),
         "unique_point_count": unique_count,
+        "source_affine_dimension": source_affine_dimension,
         "preview_point_indices": preview_indices,
         "preview_extrema_source_indices": extrema_indices,
         "preview_sampling_strategy": (
@@ -574,6 +613,11 @@ def measure_point_cloud_preview(
             + (
                 ["repeated_selected_endpoint_geometry"]
                 if repeated_selected_endpoint_geometry
+                else []
+            )
+            + (
+                ["source_point_cloud_affine_dimension_below_3"]
+                if source_affine_dimension < 3
                 else []
             )
         ),

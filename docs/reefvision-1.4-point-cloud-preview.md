@@ -498,3 +498,18 @@ provisional persisted artifacts from executable typed Workflow Builder graphs.
 An axis-aligned diagonal is **not** measured coral branch length, and no
 calibration, coordinate-frame registration, specimen identity, or biological
 condition is independently verified.
+
+**Exact source affine dimension (November 16, 2026):** `source_affine_dimension`
+is 0 for coincident points, 1 for collinear samples, 2 for planar samples,
+and 3 for affinely three-dimensional imported source-coordinate samples.
+Exact rational predicates on the finite binary-float coordinates avoid
+guessing a planarity threshold or silently losing subnormal geometry.
+Lower-dimensional clouds emit `source_point_cloud_affine_dimension_below_3`.
+A tilted straight line or plane can have positive global-axis XYZ spans and
+a positive 3D *bounding-envelope* volume without occupying three-dimensional
+volume. A rank of 3 does **not** validate watertightness, inferred coral
+tissue volume, reconstruction accuracy, physical calibration, biological
+anatomy or surface area. Capture noise can turn an otherwise planar specimen
+into exact rank 3; interpret this as source-coordinate QC only. Synthetic
+XYZ and ASCII PLY direct, standalone API and repeated executable persisted
+Workflow Builder tests verify identical rank and QC provenance.
