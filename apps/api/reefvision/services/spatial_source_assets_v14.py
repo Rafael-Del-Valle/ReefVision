@@ -137,7 +137,12 @@ class SpatialSourceAssetService:
         job = self.latest_parse_job(asset)
         summary: SpatialSourceParseSummary | None = None
         if job is not None and job.status == "succeeded" and job.result_json is not None:
-            result = SpatialSourceParseResult.model_validate(job.result_json)
+            try:
+                result = SpatialSourceParseResult.model_validate(job.result_json)
+            except (PydanticValidationError, ValueError) as exc:
+                raise ValidationError(
+                    "Spatial source parse result failed integrity validation"
+                ) from exc
             if (
                 result.project_id != asset.project_id
                 or result.spatial_source_asset_id != asset.id
