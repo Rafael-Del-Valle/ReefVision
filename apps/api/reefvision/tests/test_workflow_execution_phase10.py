@@ -132,18 +132,34 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         )
         assert pending_producer is not None
         assert pending_producer.status == "pending"
+        specification = WorkflowArtifactSpec(
+            port_id="project",
+            data_type="project_reference",
+            payload={"project_id": project["id"]},
+        )
         with pytest.raises(
             ConflictError, match="publication requires a running workflow and node"
         ):
             WorkflowExecutionService(session).persist_artifact(
                 run_id=str(run["id"]),
                 node_run=pending_producer,
-                specification=WorkflowArtifactSpec(
-                    port_id="project",
-                    data_type="project_reference",
-                    payload={"project_id": project["id"]},
-                ),
+                specification=specification,
             )
+        # A run can be active while its next node is still pending; neither
+        # state allows prepublication or a hidden persisted artifact.
+        queued_record = session.get(WorkflowRun, str(run["id"]))
+        assert queued_record is not None
+        queued_record.status = "running"
+        session.flush()
+        with pytest.raises(
+            ConflictError, match="publication requires a running workflow and node"
+        ):
+            WorkflowExecutionService(session).persist_artifact(
+                run_id=str(run["id"]),
+                node_run=pending_producer,
+                specification=specification,
+            )
+        session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json()["artifacts"] == []
 
     assert (
