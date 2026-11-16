@@ -311,7 +311,9 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                                 "jpeg_exif_orientation": orientation,
                                 "jpeg_exif_pixel_width": exif_pixel_width,
                                 "jpeg_exif_pixel_height": exif_pixel_height,
-                                "jpeg_exif_dimensions_match_raster": exif_dimensions_match_raster,
+                                "jpeg_exif_dimensions_match_raster": (
+                                    exif_dimensions_match_raster
+                                ),
                                 "jpeg_icc_profile_present": icc_profile is not None,
                                 "jpeg_icc_profile_bytes": (
                                     len(icc_profile) if icc_profile is not None else 0
@@ -347,7 +349,8 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                     decoded_ok = True
                     if decoded_metadata["jpeg_exif_dimensions_match_raster"] is False:
                         errors.append(
-                            f"EXIF pixel dimensions inconsistent with JPEG raster: {relative}"
+                            "EXIF pixel dimensions inconsistent with JPEG raster: "
+                            f"{relative}"
                         )
             except ImportError:
                 errors.append(f"Pillow JPEG decoder unavailable: {relative}")
