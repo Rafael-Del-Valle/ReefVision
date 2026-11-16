@@ -235,6 +235,7 @@ def _safe_terminal_log_text(payload: bytes) -> str:
         return chr(byte) if 0x80 <= byte <= 0x9F else "\ufffd"
 
     text = re.sub(r"[\udc80-\udcff]", normalize_invalid_byte, text)
+
     # Strip entire OSC (title/hyperlink), DCS, SOS, PM, and APC strings.
     # Removing just ESC would expose their printable payload as fake log data.
     # A truncated terminal string is discarded through the end of the tail.
