@@ -293,12 +293,20 @@ def measure_point_cloud_preview(
     centroid = [sum(p[axis] for p in vertices) / len(vertices) * scale for axis in range(3)]
     diagonal = dist((0.0, 0.0, 0.0), dimensions)
     envelope_volume = dimensions[0] * dimensions[1] * dimensions[2]
+    # Three representable dimensions may still have a product too small for
+    # floating point. Report this as unknown rather than falsely claiming a
+    # zero-volume (planar) cloud. Keep the independently valid dimensions.
+    envelope_volume_underflow = (
+        all(dimension > 0.0 for dimension in dimensions) and envelope_volume == 0.0
+    )
+    if envelope_volume_underflow:
+        envelope_volume = None
     envelope_scale_interval = (
         [
             envelope_volume * (1 - relative_scale_uncertainty) ** 3,
             envelope_volume * (1 + relative_scale_uncertainty) ** 3,
         ]
-        if relative_scale_uncertainty is not None
+        if relative_scale_uncertainty is not None and envelope_volume is not None
         else None
     )
 
@@ -433,6 +441,11 @@ def measure_point_cloud_preview(
         "branch_length_m": None,
         "qc_warnings": (
             (["duplicate_points_present"] if unique_count < len(vertices) else [])
+            + (
+                ["envelope_volume_below_numeric_resolution"]
+                if envelope_volume_underflow
+                else []
+            )
             + (["preview_omits_axis_extrema"] if preview_omitted_axis_extrema else [])
             + (["preview_omits_selected_chord_endpoints"] if omitted_chord_endpoints else [])
             + (["repeated_selected_point_pairs"] if repeated_selected_point_pairs else [])
