@@ -97,6 +97,37 @@ def test_copernicus_worker_uses_bounded_pinned_requests_and_preserves_grid_metad
     assert raw["dataset_metadata"]["title"].startswith("SYNTHETIC")
 
 
+@pytest.mark.parametrize("invalid_provider_value", [False, True])
+def test_worker_closes_original_provider_dataset_after_subset_load(
+    monkeypatch, invalid_provider_value
+):
+    """Loading an xarray variable subset must not orphan the provider's close handle."""
+    original = dataset()
+    closed = []
+    original.set_close(lambda: closed.append("provider"))
+    if invalid_provider_value:
+        # This fails *after* selecting and loading the subset, so cleanup must
+        # also work when a remote dataset returns an unusable value.
+        original["uo"].values[0, 0, 0, 0] = np.inf
+
+    def open_dataset(**_kwargs):
+        return original
+
+    monkeypatch.setitem(
+        sys.modules,
+        "copernicusmarine",
+        SimpleNamespace(open_dataset=open_dataset, __version__="synthetic-test"),
+    )
+    payload = request().model_dump(mode="json", exclude={"offline", "refresh"})
+    if invalid_provider_value:
+        with pytest.raises(ValueError, match="Infinite provider value"):
+            read_dataset(payload, "fixture-user", "fixture-password")
+    else:
+        result = read_dataset(payload, "fixture-user", "fixture-password")
+        assert len(result["samples"]) == 4
+    assert closed == ["provider"]
+
+
 def test_modeled_copernicus_samples_refresh_and_reopen_offline(client, test_settings, monkeypatch):
     project = create_project(client)
     raw = raw_fixture(monkeypatch)
