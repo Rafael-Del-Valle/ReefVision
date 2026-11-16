@@ -223,13 +223,10 @@ def measure_point_cloud_preview(
             if endpoints[0] != endpoints[1] and (
                 chord_m == 0.0
                 or all(
-                    left * scale == right * scale
-                    for left, right in zip(*endpoints, strict=True)
+                    left * scale == right * scale for left, right in zip(*endpoints, strict=True)
                 )
             ):
-                raise ValueError(
-                    "Distinct selected chord endpoints collapse after calibration"
-                )
+                raise ValueError("Distinct selected chord endpoints collapse after calibration")
             # Different indices can still identify identical XYZ coordinates.
             # Flag a zero-length chord instead of implying biological structure.
             chord_qc_warnings: list[str] = []

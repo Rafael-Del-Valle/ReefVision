@@ -364,9 +364,7 @@ def test_selected_chord_subresolution_separation_fails_without_workflow_artifact
             point_index_pairs=[[0, 1]],
         )
 
-    project_id = str(
-        create_project(client, f"Unresolvable chord {source_format}")["id"]
-    )
+    project_id = str(create_project(client, f"Unresolvable chord {source_format}")["id"])
     base = f"/api/v1/projects/{project_id}"
     standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert standalone.status_code == 400, standalone.text
@@ -395,9 +393,7 @@ def test_selected_chord_subresolution_separation_fails_without_workflow_artifact
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert not process_workflow_run_job(
