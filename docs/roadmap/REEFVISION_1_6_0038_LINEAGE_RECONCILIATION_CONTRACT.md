@@ -67,7 +67,7 @@ This is an **opt-in diagnostic**, not an integrated migration. Without the
 flag, existing historical inspector behavior is preserved and
 structural_contracts is empty. Positive shape matches alone cannot
 distinguish independently applied revision IDs or prove that all recorded
-rows, CHECK constraints, SQLite collation/affinities, workflow references,
+rows, CHECK constraints, column type affinities, workflow references,
 0039 computed metrics, 0040/0042 environmental extensions or 0041 QC
 registry are compatible. These remain separate acceptance gates. The
 inspector still sets upgrade_authorized: false, and 0038 still carries
@@ -78,3 +78,25 @@ missing/extra/generated columns, wrong FK delete policies, missing
 indexes/UNIQUE and nullable reviewer attribution; a strict CLI regression
 checks JSON redaction, exit code and unchanged database bytes. Full exact-head
 backend CI and Windows installed-GUI acceptance must be checked separately.
+
+## Unique-index semantics beyond column names (2026-11-16)
+
+The optional 0038 structural audit now checks SQLite `PRAGMA index_xinfo`
+for every UNIQUE key, including the primary key. In addition to matching
+the expected columns and rejecting partial or extra UNIQUE indexes, it
+requires the migration's ordinary ascending, BINARY-collated key semantics.
+`PRAGMA index_info` alone hides collation and sort flags: a restored
+review-event UNIQUE constraint on the expected columns but with
+`client_request_id COLLATE NOCASE` would silently collapse distinct
+case-sensitive reviewer idempotency tokens, while a DESC constraint would
+not match the migration's declared key order. Both are flagged as
+`lineage_table_contract_mismatch_review_queue_item_events` without
+revealing request values, researcher identities, or SQL definitions.
+
+Disposable regression scenarios retain valid uniqueness and unrelated
+nonunique lookup indexes, and reject NOCASE, DESC, and combined changes
+to the reviewer request-key UNIQUE. Repeated read-only strict inspection
+must preserve review and biological sentinel rows and database bytes.
+This check does **not** validate arbitrary CHECK clauses, SQLite type
+affinities, row-level provenance, or compatibility with the 1.1 migration
+branch; no upgrade is authorized.
