@@ -9,14 +9,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProjectSpatialAssetPreview } from "./ProjectSpatialAssetPreview";
 import {
+  createSpatialAssetMetadataRevision,
   importProjectSpatialAsset,
+  listSpatialAssetMetadataRevisions,
   listProjectSpatialAssets,
   previewProjectSpatialAsset,
 } from "./workflowGraphApi";
 import type { SpatialSourceAsset } from "./workflowGraphApi";
 
 vi.mock("./workflowGraphApi", () => ({
+  createSpatialAssetMetadataRevision: vi.fn(),
   importProjectSpatialAsset: vi.fn(),
+  listSpatialAssetMetadataRevisions: vi.fn(),
   listProjectSpatialAssets: vi.fn(),
   previewProjectSpatialAsset: vi.fn(),
 }));
@@ -42,16 +46,76 @@ const asset: SpatialSourceAsset = {
 };
 
 beforeEach(() => {
+  vi.mocked(createSpatialAssetMetadataRevision).mockReset();
   vi.mocked(listProjectSpatialAssets).mockReset();
+  vi.mocked(listSpatialAssetMetadataRevisions).mockReset();
   vi.mocked(importProjectSpatialAsset).mockReset();
   vi.mocked(previewProjectSpatialAsset).mockReset();
   vi.mocked(listProjectSpatialAssets).mockResolvedValue([asset]);
+  vi.mocked(listSpatialAssetMetadataRevisions).mockResolvedValue([]);
+  vi.mocked(createSpatialAssetMetadataRevision).mockResolvedValue({
+    id: "metadata-1",
+    project_id: "reef-project",
+    spatial_source_asset_id: "asset-1",
+    previous_revision_id: null,
+    revision: 1,
+    source_sha256: asset.sha256,
+    coordinate_unit: "millimeter",
+    meters_per_unit: 0.001,
+    coordinate_frame_id: "survey-frame-A",
+    transform_to_project_frame: null,
+    calibration_evidence: "Unverified ruler reconstruction scale",
+    review_state: "unreviewed",
+    reviewed_by_identity: null,
+    review_note: null,
+    created_by_identity: "local_user",
+    content_sha256: "c".repeat(64),
+    created_at: "2026-11-15T00:00:00Z",
+    reviewer_authenticated: false,
+    calibration_verified: false,
+    transform_verified: false,
+  });
   vi.mocked(previewProjectSpatialAsset).mockResolvedValue({
     measurement_status: "caller_supplied_unverified",
   });
 });
 
 describe("ProjectSpatialAssetPreview", () => {
+  it("saves an immutable unit and coordinate-frame metadata revision", async () => {
+    render(<ProjectSpatialAssetPreview projectId="reef-project" />);
+    await screen.findByRole("option", { name: /colony.ply/ });
+    fireEvent.change(screen.getByLabelText("Project 3D source"), {
+      target: { value: "asset-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Source coordinate unit"), {
+      target: { value: "millimeter" },
+    });
+    fireEvent.change(screen.getByLabelText("Source coordinate frame"), {
+      target: { value: "survey-frame-A" },
+    });
+    fireEvent.change(screen.getByLabelText("Metadata calibration evidence"), {
+      target: { value: "Unverified ruler reconstruction scale" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save metadata revision" }),
+    );
+
+    expect(
+      await screen.findByText(/Metadata revision 1 saved/),
+    ).toBeInTheDocument();
+    expect(createSpatialAssetMetadataRevision).toHaveBeenCalledWith(
+      "reef-project",
+      "asset-1",
+      expect.objectContaining({
+        coordinate_unit: "millimeter",
+        meters_per_unit: 0.001,
+        coordinate_frame_id: "survey-frame-A",
+        calibration_evidence: "Unverified ruler reconstruction scale",
+        review_state: "unreviewed",
+      }),
+    );
+  });
+
   it("selects an imported PLY and previews provisional point-cloud geometry", async () => {
     render(<ProjectSpatialAssetPreview projectId="reef-project" />);
     await screen.findByRole("option", { name: /colony.ply/ });

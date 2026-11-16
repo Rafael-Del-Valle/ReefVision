@@ -20,7 +20,8 @@ _LEGACY_SPATIAL = _API_ROOT / "migrations" / "legacy_spatial"
 _PROJECT_ID = "507af087-ff80-458f-9470-9b3bdc980a5b"
 _ASSET_ID = "04f9c44e-d30e-494f-ab1e-9aa3b4db02e9"
 _REVIEW_ID = "be5cb2db-445f-4a15-8434-5a7d168bd22e"
-_HEAD = "b14_integration_0001"
+_MERGE_HEAD = "b14_integration_0001"
+_HEAD = "b14_spatial_0040"
 
 MigrationDatabase = tuple[Config, Engine]
 
@@ -76,7 +77,7 @@ def test_integrated_graph_has_unique_revisions_and_one_head() -> None:
 
     assert len({revision.revision for revision in revisions}) == len(revisions)
     assert scripts.get_heads() == [_HEAD]
-    merge = scripts.get_revision(_HEAD)
+    merge = scripts.get_revision(_MERGE_HEAD)
     assert merge is not None
     assert set(merge.down_revision) == {"b13_temporal_0001", "spatial_0039"}
 
@@ -140,9 +141,11 @@ def test_validated_1_3_database_gains_spatial_branch_without_data_loss(
     command.upgrade(config, "head")
 
     assert _heads(engine) == (_HEAD,)
-    assert {"spatial_source_assets", "spatial_calibration_reviews"} <= set(
-        inspect(engine).get_table_names()
-    )
+    assert {
+        "spatial_source_assets",
+        "spatial_calibration_reviews",
+        "spatial_asset_metadata_revisions",
+    } <= set(inspect(engine).get_table_names())
     with engine.connect() as connection:
         assert (
             connection.exec_driver_sql(

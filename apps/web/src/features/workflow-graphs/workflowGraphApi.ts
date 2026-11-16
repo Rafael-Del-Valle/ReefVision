@@ -275,6 +275,38 @@ export interface SpatialSourceAsset {
   specimen_identity_verified: false;
 }
 
+export type SpatialCoordinateUnit =
+  "meter" | "millimeter" | "centimeter" | "micrometer" | "unitless" | "unknown";
+
+export type SpatialMetadataReviewState =
+  "unreviewed" | "attributed_unverified" | "rejected";
+
+export interface SpatialAssetMetadataRevisionCreate {
+  coordinate_unit: SpatialCoordinateUnit;
+  meters_per_unit: number | null;
+  coordinate_frame_id: string | null;
+  transform_to_project_frame: number[][] | null;
+  calibration_evidence: string | null;
+  review_state: SpatialMetadataReviewState;
+  reviewed_by_identity: string | null;
+  review_note: string | null;
+  created_by_identity: string;
+}
+
+export interface SpatialAssetMetadataRevision extends SpatialAssetMetadataRevisionCreate {
+  id: string;
+  project_id: string;
+  spatial_source_asset_id: string;
+  previous_revision_id: string | null;
+  revision: number;
+  source_sha256: string;
+  content_sha256: string;
+  created_at: string;
+  reviewer_authenticated: false;
+  calibration_verified: false;
+  transform_verified: false;
+}
+
 export function listProjectSpatialAssets(
   projectId: string,
   signal?: AbortSignal,
@@ -282,6 +314,28 @@ export function listProjectSpatialAssets(
   return request<SpatialSourceAsset[]>(
     `/projects/${encodeURIComponent(projectId)}/spatial/assets`,
     { signal },
+  );
+}
+
+export function listSpatialAssetMetadataRevisions(
+  projectId: string,
+  assetId: string,
+  signal?: AbortSignal,
+): Promise<SpatialAssetMetadataRevision[]> {
+  return request<SpatialAssetMetadataRevision[]>(
+    `/projects/${encodeURIComponent(projectId)}/spatial/assets/${encodeURIComponent(assetId)}/metadata-revisions`,
+    { signal },
+  );
+}
+
+export function createSpatialAssetMetadataRevision(
+  projectId: string,
+  assetId: string,
+  payload: SpatialAssetMetadataRevisionCreate,
+): Promise<SpatialAssetMetadataRevision> {
+  return request<SpatialAssetMetadataRevision>(
+    `/projects/${encodeURIComponent(projectId)}/spatial/assets/${encodeURIComponent(assetId)}/metadata-revisions`,
+    { method: "POST", body: JSON.stringify(payload) },
   );
 }
 

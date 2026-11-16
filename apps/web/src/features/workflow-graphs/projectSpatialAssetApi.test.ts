@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  createSpatialAssetMetadataRevision,
   importProjectSpatialAsset,
+  listSpatialAssetMetadataRevisions,
   listProjectSpatialAssets,
   previewProjectSpatialAsset,
 } from "./workflowGraphApi";
@@ -67,6 +69,77 @@ describe("project spatial source API", () => {
     expect(init.headers).toBeUndefined();
     expect(init.body).toBeInstanceOf(FormData);
     expect((init.body as FormData).get("file")).toBe(file);
+  });
+
+  it("lists and appends immutable metadata revisions on the selected asset", async () => {
+    const revision = {
+      id: "metadata-1",
+      project_id: "project 1",
+      spatial_source_asset_id: "asset /1",
+      previous_revision_id: null,
+      revision: 1,
+      source_sha256: asset.sha256,
+      coordinate_unit: "millimeter" as const,
+      meters_per_unit: 0.001,
+      coordinate_frame_id: "survey-frame-A",
+      transform_to_project_frame: null,
+      calibration_evidence: "Self-declared ruler scale",
+      review_state: "unreviewed" as const,
+      reviewed_by_identity: null,
+      review_note: null,
+      created_by_identity: "local_user",
+      content_sha256: "b".repeat(64),
+      created_at: "2026-11-15T00:00:00Z",
+      reviewer_authenticated: false as const,
+      calibration_verified: false as const,
+      transform_verified: false as const,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => [revision] })
+      .mockResolvedValueOnce({ ok: true, json: async () => revision });
+    vi.stubGlobal("fetch", fetchMock);
+    const controller = new AbortController();
+
+    expect(
+      await listSpatialAssetMetadataRevisions(
+        "project 1",
+        "asset /1",
+        controller.signal,
+      ),
+    ).toEqual([revision]);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/v1/projects/project%201/spatial/assets/asset%20%2F1/metadata-revisions",
+      expect.objectContaining({ signal: controller.signal }),
+    );
+
+    const payload = {
+      coordinate_unit: "millimeter" as const,
+      meters_per_unit: 0.001,
+      coordinate_frame_id: "survey-frame-A",
+      transform_to_project_frame: null,
+      calibration_evidence: "Self-declared ruler scale",
+      review_state: "unreviewed" as const,
+      reviewed_by_identity: null,
+      review_note: null,
+      created_by_identity: "local_user",
+    };
+    expect(
+      await createSpatialAssetMetadataRevision(
+        "project 1",
+        "asset /1",
+        payload,
+      ),
+    ).toEqual(revision);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/projects/project%201/spatial/assets/asset%20%2F1/metadata-revisions",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    );
   });
 
   it("binds both mesh and PLY cloud previews to immutable source bytes", async () => {

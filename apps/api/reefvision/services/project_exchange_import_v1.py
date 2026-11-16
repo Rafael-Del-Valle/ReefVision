@@ -37,6 +37,7 @@ from reefvision.db.models import (
     ReviewQueue,
     ReviewQueueItem,
     SkeletonAnalysisRevision,
+    SpatialAssetMetadataRevision,
     SpatialCalibrationReviewRecord,
     SpatialSourceAsset,
     TrainingDraft,
@@ -118,6 +119,7 @@ def register_v1_sections() -> None:
             "skeleton_analysis_revisions": SkeletonAnalysisRevision,
             "spatial_source_assets": SpatialSourceAsset,
             "spatial_calibration_reviews": SpatialCalibrationReviewRecord,
+            "spatial_asset_metadata_revisions": SpatialAssetMetadataRevision,
         }
     )
 
@@ -147,6 +149,7 @@ def register_v1_sections() -> None:
     )
     _insert_after("spatial_source_assets", "models")
     _insert_after("spatial_calibration_reviews", "spatial_source_assets")
+    _insert_after("spatial_asset_metadata_revisions", "spatial_calibration_reviews")
 
     _insert_after("pose_landmark_schemas", "models")
     _insert_after(

@@ -9,11 +9,18 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
+from reefvision.schemas.spatial_asset_metadata_revision_v14 import (
+    SpatialAssetMetadataRevisionCreate,
+    SpatialAssetMetadataRevisionResponse,
+)
 from reefvision.schemas.spatial_calibration_review_v14 import (
     SpatialCalibrationReviewCreate,
     SpatialCalibrationReviewResponse,
 )
 from reefvision.schemas.spatial_source_asset_v14 import SpatialSourceAssetResponse
+from reefvision.services.spatial_asset_metadata_revisions_v14 import (
+    SpatialAssetMetadataRevisionService,
+)
 from reefvision.services.spatial_calibration_review_v14 import SpatialCalibrationReviewService
 from reefvision.services.spatial_source_assets_v14 import SpatialSourceAssetService
 
@@ -130,3 +137,54 @@ def get_spatial_calibration_review(
     session: DbSession,
 ) -> SpatialCalibrationReviewResponse:
     return _review_service(request, session).get(project_id, asset_id, review_id)
+
+
+def _metadata_service(request: Request, session: Session) -> SpatialAssetMetadataRevisionService:
+    settings: Settings = request.app.state.settings
+    return SpatialAssetMetadataRevisionService(session, settings)
+
+
+@router.post(
+    "/projects/{project_id}/spatial/assets/{asset_id}/metadata-revisions",
+    response_model=SpatialAssetMetadataRevisionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_spatial_asset_metadata_revision(
+    project_id: str,
+    asset_id: str,
+    payload: SpatialAssetMetadataRevisionCreate,
+    request: Request,
+    session: DbSession,
+) -> SpatialAssetMetadataRevisionResponse:
+    return _metadata_service(request, session).create(project_id, asset_id, payload)
+
+
+@router.get(
+    "/projects/{project_id}/spatial/assets/{asset_id}/metadata-revisions",
+    response_model=list[SpatialAssetMetadataRevisionResponse],
+)
+def list_spatial_asset_metadata_revisions(
+    project_id: str,
+    asset_id: str,
+    request: Request,
+    session: DbSession,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[SpatialAssetMetadataRevisionResponse]:
+    return _metadata_service(request, session).list(
+        project_id, asset_id, limit=limit, offset=offset
+    )
+
+
+@router.get(
+    "/projects/{project_id}/spatial/assets/{asset_id}/metadata-revisions/{revision_id}",
+    response_model=SpatialAssetMetadataRevisionResponse,
+)
+def get_spatial_asset_metadata_revision(
+    project_id: str,
+    asset_id: str,
+    revision_id: str,
+    request: Request,
+    session: DbSession,
+) -> SpatialAssetMetadataRevisionResponse:
+    return _metadata_service(request, session).get(project_id, asset_id, revision_id)

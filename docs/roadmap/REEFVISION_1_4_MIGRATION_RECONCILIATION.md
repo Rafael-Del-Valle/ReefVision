@@ -3,11 +3,12 @@
 ## Integrated head
 
 The validated 1.3 and draft 1.4 spatial histories converge at
-`b14_integration_0001`:
+`b14_integration_0001`; the first additive integrated 1.4 schema revision is
+`b14_spatial_0040`:
 
 ```text
 b13_temporal_0001 ─┐
-                   ├─ b14_integration_0001
+                   ├─ b14_integration_0001 ─ b14_spatial_0040
 spatial_0039 ──────┘
 ```
 
@@ -21,6 +22,10 @@ hashes before and after relocation are:
 
 No applied migration body or database row is rewritten to pretend that a
 different schema ran.
+
+`b14_spatial_0040` adds append-only spatial asset metadata revisions for source
+units, coordinate frames, optional affine transforms, calibration evidence,
+local review attribution, revision ancestry, and content integrity hashes.
 
 ## Legacy numeric disambiguation
 
@@ -39,10 +44,10 @@ transaction before relabeling a proven draft-spatial head:
 
 ## Verified source matrix
 
-- Fresh database to `b14_integration_0001`.
+- Fresh database to `b14_spatial_0040`.
 - Validated 1.3 `b13_temporal_0001` to the integrated head while preserving a
   scientific record.
-- Legacy draft-spatial numeric `0038` and `0039` to the integrated head while
+- Legacy draft-spatial numeric `0038` and `0039` to the current head while
   preserving spatial asset and calibration-review IDs and rows.
 - Existing scientific, ReefPose, ecology, temporal, backup, unknown-head,
   ambiguous-schema, and failure-rollback lineage tests.

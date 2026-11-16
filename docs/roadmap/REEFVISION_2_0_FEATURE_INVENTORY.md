@@ -860,8 +860,9 @@ Acceptance checks:
 Evidence:
 
 - `source`: Project-scoped immutable source bytes, UUID/SHA binding, path and metadata integrity, append-only calibration-review replay, malformed/empty/oversized rejection, and tamper rejection are covered by focused backend tests. — `apps/api/reefvision/tests/test_spatial_source_assets_v14.py` (`rv14-spatial-assets-src`)
-- `source`: Project Exchange round-trip remaps spatial source/review UUIDs, restores verified original bytes, replays review evidence, requires originals, and rejects altered bytes or review evidence; focused exchange regressions pass. — `apps/api/reefvision/tests/test_spatial_asset_project_exchange_v14.py` (`rv14-spatial-assets-exchange`)
-- `browser`: Normal project navigation exposes the project-owned import control inside Workflow builder. — `apps/web/src/App.test.tsx` (`rv14-spatial-assets-ui`)
+- `source`: Additive b14_spatial_0040 stores append-only unit, frame, affine transform, calibration, local review, predecessor, source-hash, and integrity-hash metadata revisions while keeping authentication and verification flags false. — `apps/api/reefvision/tests/test_spatial_asset_metadata_revisions_v14.py` (`rv14-spatial-assets-metadata`)
+- `source`: Project Exchange round-trip remaps spatial source/review/metadata UUIDs, restores verified original bytes, recomputes remapped evidence hashes, requires originals, and rejects altered bytes, review evidence, or metadata evidence. — `apps/api/reefvision/tests/test_spatial_asset_project_exchange_v14.py` (`rv14-spatial-assets-exchange`)
+- `browser`: Normal project navigation exposes project-owned import and append-only unit/frame metadata controls inside Workflow builder; focused UI tests save and bind a metadata revision. — `apps/web/src/features/workflow-graphs/ProjectSpatialAssetPreview.test.tsx` (`rv14-spatial-assets-ui`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded

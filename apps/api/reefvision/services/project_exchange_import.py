@@ -59,6 +59,9 @@ from reefvision.schemas.project_exchange import (
 )
 from reefvision.schemas.projects import ProjectCreate
 from reefvision.schemas.scientific_heatmaps import ScientificHeatmapResponse
+from reefvision.schemas.spatial_asset_metadata_revision_v14 import (
+    SpatialAssetMetadataRevisionCreate,
+)
 from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvidence
 from reefvision.services.project_exchange_acquisition import validate_acquisition_exchange
 from reefvision.services.project_exchange_comparison import restore_comparison_jobs
@@ -114,6 +117,9 @@ from reefvision.services.project_exchange_workflows import restore_workflow_prov
 from reefvision.services.projects import ProjectService
 from reefvision.services.scientific_data import content_hash
 from reefvision.services.scientific_heatmaps import scientific_heatmap_content_hash
+from reefvision.services.spatial_asset_metadata_revisions_v14 import (
+    spatial_asset_metadata_content,
+)
 from reefvision.services.spatial_calibration_review_v14 import (
     canonical_spatial_calibration_review_evidence,
 )
@@ -706,6 +712,35 @@ def import_project_exchange(
                         )
                         values["evidence_json"] = evidence_json
                         values["evidence_sha256"] = evidence_sha256
+
+                    if section_name == "spatial_asset_metadata_revisions":
+                        values["created_by_identity"] = row["created_by_identity"]
+                        values["reviewed_by_identity"] = row.get("reviewed_by_identity")
+                        metadata_payload = SpatialAssetMetadataRevisionCreate.model_validate(
+                            {
+                                "coordinate_unit": values["coordinate_unit"],
+                                "meters_per_unit": values.get("meters_per_unit"),
+                                "coordinate_frame_id": values.get("coordinate_frame_id"),
+                                "transform_to_project_frame": values.get(
+                                    "transform_to_project_frame_json"
+                                ),
+                                "calibration_evidence": values.get("calibration_evidence"),
+                                "review_state": values["review_state"],
+                                "reviewed_by_identity": values.get("reviewed_by_identity"),
+                                "review_note": values.get("review_note"),
+                                "created_by_identity": values["created_by_identity"],
+                            }
+                        )
+                        values["content_sha256"] = canonical_json_sha256(
+                            spatial_asset_metadata_content(
+                                project_id=project.id,
+                                asset_id=values["spatial_source_asset_id"],
+                                source_sha256=values["source_sha256"],
+                                revision=values["revision"],
+                                previous_revision_id=values.get("previous_revision_id"),
+                                payload=metadata_payload,
+                            )
+                        )
 
                     media_kind = MEDIA_KIND_BY_SECTION.get(section_name)
                     if media_kind is not None and isinstance(old_id, str):

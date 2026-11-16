@@ -7,10 +7,17 @@ from typing import Any
 from pydantic import ValidationError as PydanticValidationError
 
 from reefvision.domain.errors import ValidationError
+from reefvision.schemas.spatial_asset_metadata_revision_v14 import (
+    SpatialAssetMetadataRevisionCreate,
+)
 from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvidence
+from reefvision.services.spatial_asset_metadata_revisions_v14 import (
+    spatial_asset_metadata_content,
+)
 from reefvision.services.spatial_calibration_review_v14 import (
     canonical_spatial_calibration_review_evidence,
 )
+from reefvision.storage.datasets import canonical_json_sha256
 
 
 def validate_spatial_exchange_records(
@@ -64,3 +71,56 @@ def validate_spatial_exchange_records(
         ):
             raise ValidationError("Spatial calibration review evidence failed integrity validation")
         review_ids.add(review_id)
+
+    metadata_ids: set[str] = set()
+    revisions_by_asset: dict[str, list[dict[str, Any]]] = {}
+    for row in sections.get("spatial_asset_metadata_revisions", []):
+        revision_id = row.get("id")
+        asset_id = row.get("spatial_source_asset_id")
+        asset = assets.get(str(asset_id))
+        if (
+            not isinstance(revision_id, str)
+            or not revision_id
+            or revision_id in metadata_ids
+            or row.get("project_id") != project_id
+            or asset is None
+            or row.get("source_sha256") != asset.get("sha256")
+            or type(row.get("revision")) is not int
+            or row["revision"] <= 0
+        ):
+            raise ValidationError("Spatial asset metadata source binding is invalid")
+        try:
+            payload = SpatialAssetMetadataRevisionCreate.model_validate(
+                {
+                    "coordinate_unit": row.get("coordinate_unit"),
+                    "meters_per_unit": row.get("meters_per_unit"),
+                    "coordinate_frame_id": row.get("coordinate_frame_id"),
+                    "transform_to_project_frame": row.get("transform_to_project_frame_json"),
+                    "calibration_evidence": row.get("calibration_evidence"),
+                    "review_state": row.get("review_state"),
+                    "reviewed_by_identity": row.get("reviewed_by_identity"),
+                    "review_note": row.get("review_note"),
+                    "created_by_identity": row.get("created_by_identity"),
+                }
+            )
+        except (PydanticValidationError, ValueError) as exc:
+            raise ValidationError("Spatial asset metadata evidence is invalid") from exc
+        content = spatial_asset_metadata_content(
+            project_id=project_id,
+            asset_id=str(asset_id),
+            source_sha256=str(asset["sha256"]),
+            revision=row["revision"],
+            previous_revision_id=row.get("previous_revision_id"),
+            payload=payload,
+        )
+        if canonical_json_sha256(content) != row.get("content_sha256"):
+            raise ValidationError("Spatial asset metadata evidence failed integrity validation")
+        metadata_ids.add(revision_id)
+        revisions_by_asset.setdefault(str(asset_id), []).append(row)
+
+    for rows in revisions_by_asset.values():
+        ordered = sorted(rows, key=lambda item: item["revision"])
+        for index, row in enumerate(ordered, start=1):
+            expected_previous = None if index == 1 else ordered[index - 2]["id"]
+            if row["revision"] != index or row.get("previous_revision_id") != expected_previous:
+                raise ValidationError("Spatial asset metadata revision chain is invalid")

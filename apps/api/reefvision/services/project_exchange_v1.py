@@ -36,6 +36,7 @@ from reefvision.db.models import (
     ProjectClassVisibilityDefault,
     ProjectExchangePackage,
     SkeletonAnalysisRevision,
+    SpatialAssetMetadataRevision,
     SpatialCalibrationReviewRecord,
     SpatialSourceAsset,
     TrainingDraft,
@@ -265,6 +266,13 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                     self.session.scalars(
                         select(SpatialCalibrationReviewRecord).where(
                             SpatialCalibrationReviewRecord.project_id == project.id
+                        )
+                    )
+                ),
+                "spatial_asset_metadata_revisions": list(
+                    self.session.scalars(
+                        select(SpatialAssetMetadataRevision).where(
+                            SpatialAssetMetadataRevision.project_id == project.id
                         )
                     )
                 ),

@@ -51,6 +51,30 @@ def _tamper_review_note_with_consistent_section_checksum(archive_bytes: bytes) -
     return target.getvalue()
 
 
+def _tamper_metadata_frame_with_consistent_section_checksum(
+    archive_bytes: bytes,
+) -> bytes:
+    source = io.BytesIO(archive_bytes)
+    target = io.BytesIO()
+    with zipfile.ZipFile(source, "r") as incoming:
+        members = {info.filename: incoming.read(info) for info in incoming.infolist()}
+    manifest_name = "reefvision-exchange-manifest.json"
+    manifest = json.loads(members[manifest_name])
+    section = manifest["sections"]["spatial_asset_metadata_revisions"]
+    rows = [json.loads(line) for line in members[section["path"]].splitlines()]
+    rows[0]["coordinate_frame_id"] = "altered-frame"
+    records = "".join(
+        json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n" for row in rows
+    ).encode()
+    members[section["path"]] = records
+    section["sha256"] = sha256(records).hexdigest()
+    members[manifest_name] = json.dumps(manifest, indent=2, sort_keys=True).encode()
+    with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED) as outgoing:
+        for name, payload in members.items():
+            outgoing.writestr(name, payload)
+    return target.getvalue()
+
+
 def test_spatial_original_and_review_round_trip_and_reject_tampering(
     client: TestClient,
     test_settings: Settings,
@@ -104,6 +128,46 @@ def test_spatial_original_and_review_round_trip_and_reject_tampering(
         },
     )
     assert review.status_code == 201, review.text
+    metadata = client.post(
+        f"{base}/spatial/assets/{asset['id']}/metadata-revisions",
+        json={
+            "coordinate_unit": "millimeter",
+            "meters_per_unit": 0.001,
+            "coordinate_frame_id": "survey-local-A",
+            "transform_to_project_frame": [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+            "calibration_evidence": "Unverified ruler reconstruction scale",
+            "review_state": "attributed_unverified",
+            "reviewed_by_identity": "reviewer-2",
+            "review_note": "Frame and scale evidence inspected",
+            "created_by_identity": "local_user",
+        },
+    )
+    assert metadata.status_code == 201, metadata.text
+    metadata_second = client.post(
+        f"{base}/spatial/assets/{asset['id']}/metadata-revisions",
+        json={
+            "coordinate_unit": "millimeter",
+            "meters_per_unit": 0.001,
+            "coordinate_frame_id": "survey-local-A",
+            "transform_to_project_frame": [
+                [1.0, 0.0, 0.0, 0.02],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+            "calibration_evidence": "Unverified ruler reconstruction scale",
+            "review_state": "attributed_unverified",
+            "reviewed_by_identity": "reviewer-2",
+            "review_note": "Transform translation corrected after local inspection",
+            "created_by_identity": "local_user",
+        },
+    )
+    assert metadata_second.status_code == 201, metadata_second.text
 
     created = client.post(
         f"{base}/exchange-packages",
@@ -124,6 +188,7 @@ def test_spatial_original_and_review_round_trip_and_reject_tampering(
     package = client.get(f"/api/v1/exchange-packages/{created.json()['package']['id']}").json()
     assert package["manifest_json"]["sections"]["spatial_source_assets"]["count"] == 1
     assert package["manifest_json"]["sections"]["spatial_calibration_reviews"]["count"] == 1
+    assert package["manifest_json"]["sections"]["spatial_asset_metadata_revisions"]["count"] == 2
     descriptor = next(
         item for item in package["manifest_json"]["media"] if item["kind"] == "spatial_source"
     )
@@ -163,6 +228,20 @@ def test_spatial_original_and_review_round_trip_and_reject_tampering(
     assert restored_review["id"] != review.json()["id"]
     assert restored_review["spatial_source_asset_id"] == restored_asset["id"]
     assert restored_review["evidence"]["reviewed_spatial_source_asset_id"] == restored_asset["id"]
+    restored_metadata = client.get(
+        f"/api/v1/projects/{restored_project_id}/spatial/assets/"
+        f"{restored_asset['id']}/metadata-revisions"
+    )
+    assert restored_metadata.status_code == 200, restored_metadata.text
+    assert len(restored_metadata.json()) == 2
+    restored_first, restored_second = restored_metadata.json()
+    assert restored_first["id"] != metadata.json()["id"]
+    assert restored_first["spatial_source_asset_id"] == restored_asset["id"]
+    assert restored_first["coordinate_frame_id"] == "survey-local-A"
+    assert restored_first["content_sha256"] != metadata.json()["content_sha256"]
+    assert restored_second["id"] != metadata_second.json()["id"]
+    assert restored_second["previous_revision_id"] == restored_first["id"]
+    assert restored_second["content_sha256"] != metadata_second.json()["content_sha256"]
     replay = client.post(
         f"/api/v1/projects/{restored_project_id}/spatial/mesh-preview",
         json={
@@ -212,6 +291,35 @@ def test_spatial_original_and_review_round_trip_and_reject_tampering(
         files={"file": ("altered-review.reefvision.zip", altered_review, "application/zip")},
     )
     assert rejected_review_import.status_code == 400, rejected_review_import.text
+
+    altered_metadata = _tamper_metadata_frame_with_consistent_section_checksum(archive_bytes)
+    metadata_inspection = client.post(
+        "/api/v1/exchange-packages/inspect",
+        files={
+            "file": (
+                "altered-metadata.reefvision.zip",
+                altered_metadata,
+                "application/zip",
+            )
+        },
+    )
+    assert metadata_inspection.status_code == 200, metadata_inspection.text
+    assert metadata_inspection.json()["compatible"] is False
+    assert any(
+        "metadata evidence failed integrity" in error.lower()
+        for error in metadata_inspection.json()["errors"]
+    ), metadata_inspection.json()["errors"]
+    rejected_metadata_import = client.post(
+        "/api/v1/exchange-packages/import",
+        files={
+            "file": (
+                "altered-metadata.reefvision.zip",
+                altered_metadata,
+                "application/zip",
+            )
+        },
+    )
+    assert rejected_metadata_import.status_code == 400, rejected_metadata_import.text
 
 
 def test_spatial_project_exchange_requires_original_media(
