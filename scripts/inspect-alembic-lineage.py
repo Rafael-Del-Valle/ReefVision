@@ -44,7 +44,96 @@ FAMILIES = {
 }
 
 
-def inspect(path: Path) -> dict:
+# The two independent revision-0038 migrations create distinct tables. This
+# optional read-only structural audit checks their recorded SQLite DDL shapes
+# to help a researcher assess provenance, not to authorize a migration. The
+# post-0038 scientific metrics and QC registry require separate reconciliation.
+_POST_0037_TABLE_CONTRACTS = {
+    "scientific_records": {
+        "columns": frozenset({
+            "id", "project_id", "variable", "source_kind", "observed_at", "image_id",
+            "video_id", "track_id", "model_run_id", "payload_json", "content_sha256",
+            "created_at",
+        }),
+        "required": frozenset({
+            "id", "project_id", "variable", "source_kind", "observed_at",
+            "payload_json", "content_sha256", "created_at",
+        }),
+        "foreign_keys": frozenset({
+            ("project_id", "projects", "id", "CASCADE"),
+            ("image_id", "images", "id", "RESTRICT"),
+            ("video_id", "videos", "id", "RESTRICT"),
+            ("track_id", "video_tracks", "id", "RESTRICT"),
+            ("model_run_id", "jobs", "id", "RESTRICT"),
+        }),
+        "indexes": frozenset({
+            (("project_id", "variable", "observed_at"), False),
+        }),
+    },
+    "review_queue_item_events": {
+        "columns": frozenset({
+            "id", "review_queue_id", "review_queue_item_id", "project_id",
+            "client_request_id", "event_type", "actor", "comment", "assignee",
+            "created_at",
+        }),
+        "required": frozenset({
+            "id", "review_queue_id", "review_queue_item_id", "project_id",
+            "client_request_id", "event_type", "actor", "created_at",
+        }),
+        "foreign_keys": frozenset({
+            ("review_queue_id", "review_queues", "id", "CASCADE"),
+            ("review_queue_item_id", "review_queue_items", "id", "CASCADE"),
+            ("project_id", "projects", "id", "CASCADE"),
+        }),
+        "indexes": frozenset({
+            (("review_queue_item_id", "client_request_id"), True),
+            (("review_queue_item_id", "created_at"), False),
+            (("review_queue_id", "created_at"), False),
+        }),
+    },
+}
+
+
+def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> bool:
+    """Check fixed migration DDL without exposing SQL, identities or row data.
+
+    Structural equivalence is NOT proof of a migration's provenance, safety
+    for upgrade, or an immutable backup. Only an integrated reviewed lineage
+    and data-preserving migration acceptance can resolve the revision conflict.
+    """
+    contract = _POST_0037_TABLE_CONTRACTS[table]
+    quoted = '"' + table.replace('"', '""') + '"'
+    columns = list(db.execute(f"PRAGMA table_xinfo({quoted})"))
+    by_name = {row[1]: row for row in columns}
+    if (
+        set(by_name) != contract["columns"]
+        or any(row[6] != 0 for row in columns)
+        or any(not by_name[name][3] for name in contract["required"])
+        or [row[1] for row in columns if row[5] > 0] != ["id"]
+    ):
+        return False
+
+    foreign_key_rows = list(db.execute(f"PRAGMA foreign_key_list({quoted})"))
+    # Both source migrations declare only single-column foreign keys.
+    if any(row[1] != 0 for row in foreign_key_rows):
+        return False
+    foreign_keys = {
+        (row[3], row[2], row[4], row[6].upper()) for row in foreign_key_rows
+    }
+    if foreign_keys != contract["foreign_keys"]:
+        return False
+
+    indexes = set()
+    for index in db.execute(f"PRAGMA index_list({quoted})"):
+        index_name = '"' + index[1].replace('"', '""') + '"'
+        columns_in_index = tuple(
+            row[2] for row in db.execute(f"PRAGMA index_info({index_name})")
+        )
+        indexes.add((columns_in_index, bool(index[2])))
+    return contract["indexes"] <= indexes
+
+
+def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
     if not path.is_file():
         raise ValueError(f"Database file does not exist: {path}")
     # SQLite URI read-only mode prevents accidental creation of missing databases.
@@ -143,7 +232,19 @@ def inspect(path: Path) -> dict:
             if qc
             else "unknown"
         )
+        structural_contracts = {}
+        if verify_structural_contracts:
+            for table in _POST_0037_TABLE_CONTRACTS:
+                if objects.get(table) != "table":
+                    structural_contracts[table] = "absent"
+                elif _post_0037_table_contract_matches(db, table):
+                    structural_contracts[table] = "matches"
+                else:
+                    structural_contracts[table] = "mismatch"
         warnings = []
+        for table, outcome in structural_contracts.items():
+            if outcome == "mismatch":
+                warnings.append(f"lineage_table_contract_mismatch_{table}")
         if not integrity_ok:
             warnings.append("sqlite_integrity_check_failed")
         if not full_integrity_ok:
@@ -317,6 +418,7 @@ def inspect(path: Path) -> dict:
             "canonical_alembic_stamp_constraints": canonical_stamp_constraints,
             "lineage_hint": lineage,
             "upgrade_authorized": False,
+            "structural_contracts": structural_contracts,
             "inventory": inventory,
             "other_schema_objects": sorted(
                 name for name in objects if name not in inventory and name != "alembic_version"
@@ -334,9 +436,16 @@ def main() -> None:
         action="store_true",
         help="Exit with status 2 when any lineage warning is present (for CI/preflight only)",
     )
+    parser.add_argument(
+        "--verify-structural-contracts",
+        action="store_true",
+        help="Read-only 1.1/1.6 revision-0038 DDL evidence checks (never authorizes migration)",
+    )
     args = parser.parse_args()
     try:
-        result = inspect(args.database)
+        result = inspect(
+            args.database, verify_structural_contracts=args.verify_structural_contracts
+        )
     except (sqlite3.Error, ValueError) as exc:
         parser.error(str(exc))
     print(json.dumps(result, indent=2, sort_keys=True))
