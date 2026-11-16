@@ -177,3 +177,35 @@ validation. Neither the inspector nor this change authorizes an Alembic
 upgrade or resolves the independent 1.1/1.6 revision-0038 collision.
 Exact-head CI and physical Windows MSI/CAB upgrade/rollback and installed
 GUI acceptance remain required.
+
+
+## 2026-11-16 — Main-file identity boundary evidence
+
+The standalone read-only SQLite/Alembic inspector also observes the primary
+database file's device, inode, byte count, modification time and change time
+at the beginning and near the end of each inventory. This closes a separate
+gap from WAL/journal sidecars: an external writer or backup process could
+replace or change the main SQLite file while an otherwise internally
+consistent, read-only SQL snapshot was being examined. A missing file at
+either observation boundary is likewise unsafe. The boolean JSON field
+`sqlite_database_stat_observations_match` records whether both probes
+succeeded and matched; the explicit
+`database_file_changed_during_inspection` warning causes the existing
+`--fail-on-warning` gate to reject a detected change. Device/inode and file
+timestamps are not published in the report.
+
+Six controlled regressions cover stable metadata, changes in file size,
+identity and change timestamp, plus a missing before/after observation.
+They retain original biological records and SQLite bytes and check that
+private scientific notes never appear in the report. This inventory code
+is not a new scientific processing node and leaves existing executable
+saved QC Workflow Builder graphs, review gates and run provenance untouched.
+
+**Limit:** two stat probes cannot detect a change that occurs and is
+reversed between observations, timestamp spoofing or an independently
+modified WAL whose existence escapes both probes. Passing them is not
+proof of an immutable backup, migration safety, or a verified research
+result. For release or upgrade acceptance, create and separately verify
+a quiescent, immutable database copy and reconcile the independent
+1.1/1.6 revision-0038 histories. Installed Windows MSI/CAB, GUI,
+rollback and biological-data acceptance still remain mandatory.
