@@ -268,7 +268,11 @@ class WorkflowExecutionService:
         for node in nodes:
             # Failed and interrupted nodes still carry scientific audit evidence.
             # Do not normalize stored JSON pair arrays into result objects on read.
-            if node.result_json is not None and not isinstance(node.result_json, dict):
+            if (
+                node.status != "succeeded"
+                and node.result_json is not None
+                and not isinstance(node.result_json, dict)
+            ):
                 raise ConflictError("Workflow node result must be a JSON object")
             # A saved node's parameters are scientific provenance, not an
             # iterable of pairs that may be silently coerced on read.
