@@ -320,7 +320,14 @@ def measure_point_cloud_preview(
                 dimension_scale_intervals.append([lower, upper])
     centroid = [sum(p[axis] for p in vertices) / len(vertices) * scale for axis in range(3)]
     diagonal = dist((0.0, 0.0, 0.0), dimensions)
-    envelope_volume: float | None = dimensions[0] * dimensions[1] * dimensions[2]
+    # Multiply larger extents first: multiplying two tiny axes before a
+    # large third axis can underflow to zero even when the final positive
+    # envelope volume is representable. This remains a bounding envelope,
+    # not an estimate of biological tissue volume.
+    envelope_product = 1.0
+    for dimension in sorted(dimensions, reverse=True):
+        envelope_product *= dimension
+    envelope_volume: float | None = envelope_product
     # Three representable dimensions may still have a product too small for
     # floating point. Report this as unknown rather than falsely claiming a
     # zero-volume (planar) cloud. Keep the independently valid dimensions.
@@ -358,8 +365,10 @@ def measure_point_cloud_preview(
                 value * (1 - relative_scale_uncertainty),
                 value * (1 + relative_scale_uncertainty),
             )
-            if value != 0.0 and relative_scale_uncertainty < 1.0 and any(
-                candidate == 0.0 for candidate in candidates
+            if (
+                value != 0.0
+                and relative_scale_uncertainty < 1.0
+                and any(candidate == 0.0 for candidate in candidates)
             ):
                 coordinate_scale_interval_underflow = True
                 intervals.append(None)
