@@ -406,3 +406,93 @@ def test_selected_chord_subresolution_separation_fails_without_workflow_artifact
         artifact["data_type"] == "point_cloud_measurement_preview"
         for artifact in detail.json()["artifacts"]
     )
+
+@pytest.mark.parametrize("source_format", ["xyz", "ply"])
+@pytest.mark.parametrize("sign", [-1, 1])
+def test_calibrated_subnormal_centroid_survives_averaging_in_saved_workflow(
+    client: TestClient, source_format: str, sign: int
+) -> None:
+    """Scale before averaging: a tiny raw mean may be zero while meters are not."""
+    points = [[sign * 5e-324, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+    scale = 1_000_000.0
+    assert sum(point[0] for point in points) / len(points) * scale == 0.0
+    expected_x = sign * (5e-324 * scale) / len(points)
+    assert expected_x != 0.0
+
+    params: dict[str, Any] = {
+        "meters_per_unit": scale,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic subnormal arithmetic; scale unverified",
+        "relative_scale_uncertainty": 0.1,
+    }
+    if source_format == "xyz":
+        params["points"] = points
+    else:
+        token = "-5e-324" if sign < 0 else "5e-324"
+        params["ply_text"] = (
+            "ply\nformat ascii 1.0\nelement vertex 3\n"
+            "property double x\nproperty double y\nproperty double z\n"
+            f"end_header\n{token} 0 0\n0 0 0\n0 0 0\n"
+        )
+    direct = measure_point_cloud_preview(points=points, **{
+        "meters_per_unit": scale,
+        "calibration_method": params["calibration_method"],
+        "calibration_evidence": params["calibration_evidence"],
+        "relative_scale_uncertainty": 0.1,
+    })
+    assert direct["arithmetic_centroid_in_source_frame_m"][0] == expected_x
+    assert direct["arithmetic_centroid_in_source_frame_m"][1:] == [0.0, 0.0]
+    assert direct["arithmetic_centroid_in_source_frame_scale_interval_m"][0] is not None
+    assert direct["provenance"]["calibration_verified"] is False
+    assert direct["branch_length_m"] is None
+
+    project_id = str(create_project(client, f"Subnormal centroid {source_format} {sign}")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    assert expected["arithmetic_centroid_in_source_frame_m"] == (
+        direct["arithmetic_centroid_in_source_frame_m"]
+    )
+    assert expected["arithmetic_centroid_in_source_frame_scale_interval_m"] == (
+        direct["arithmetic_centroid_in_source_frame_scale_interval_m"]
+    )
+    graph = {
+        "graph_id": f"subnormal-centroid-{source_format}-{sign}-v14",
+        "name": "Review provisional calibrated centroid arithmetic",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [{
+            "edge_id": "project-cloud",
+            "source_node_id": "project",
+            "source_port_id": "project",
+            "target_node_id": "cloud",
+            "target_port_id": "project",
+        }],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "point_cloud_measurement_preview"
+    )
+    for key, value in expected.items():
+        assert artifact[key] == value
+    assert artifact["project_id"] == project_id
+    assert artifact["measurement_status"] == "caller_supplied_unverified"
+    assert artifact["provenance"]["calibration_verified"] is False
