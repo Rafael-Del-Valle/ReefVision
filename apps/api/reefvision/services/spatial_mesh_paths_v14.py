@@ -720,7 +720,10 @@ def _closed_loop_source_planar_centroid(
         # projection used for the exact centroid. Boundary points count as
         # inside. No numerical epsilon or arbitrary XY-only projection.
         projected = [(point[first_axis], point[second_axis]) for point in translated]
-        query = (center[first_axis] - origin[first_axis], center[second_axis] - origin[second_axis])
+        query = (
+            center[first_axis] - origin[first_axis],
+            center[second_axis] - origin[second_axis],
+        )
         inside = False
         for start, end in pairwise([*projected, projected[0]]):
             cross = (
@@ -1289,10 +1292,14 @@ def mesh_surface_edge_traces(
                 source_planar_centroid_inside_or_on_perimeter,
             ) = _closed_loop_source_planar_centroid(positions)
             if source_planar_centroid_mesh_units is None:
-                warnings.append("closed_surface_trace_source_planar_centroid_unrepresentable")
+                warnings.append(
+                    "closed_surface_trace_source_planar_centroid_unrepresentable"
+                )
             else:
                 if source_planar_centroid_inside_or_on_perimeter is False:
-                    warnings.append("closed_surface_trace_source_planar_centroid_outside_perimeter")
+                    warnings.append(
+                        "closed_surface_trace_source_planar_centroid_outside_perimeter"
+                    )
                 calibrated_center = [
                     coordinate * scale for coordinate in source_planar_centroid_mesh_units
                 ]
