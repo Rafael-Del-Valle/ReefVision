@@ -150,14 +150,15 @@ def list_review_events(
     ):
         connection.exec_driver_sql("BEGIN")
     _scope(session, queue_id, item_id)
-    # UUID primary keys are random: when two audit entries share a timestamp,
-    # their lexicographic UUID order can reverse an assignment/unassignment.
-    # On local SQLite, rowid follows append order for existing event rows.
-    # Keep the old deterministic UUID fallback for non-SQLite backends.
-    ordering_id = (
-        literal_column("review_queue_item_events.rowid")
+    # Local SQLite rowid follows event append order, including when two entries
+    # share a timestamp OR the computer clock moves backwards between actions.
+    # Ordering primarily by wall-clock time can incorrectly resurrect an
+    # earlier assignment after a later unassignment. Other database engines
+    # retain timestamp/UUID ordering until a portable durable sequence exists.
+    ordering_columns = (
+        (literal_column("review_queue_item_events.rowid"),)
         if connection.dialect.name == "sqlite"
-        else ReviewQueueItemEvent.id
+        else (ReviewQueueItemEvent.created_at, ReviewQueueItemEvent.id)
     )
     filters = [ReviewQueueItemEvent.review_queue_item_id == item_id]
     total = (
@@ -176,10 +177,7 @@ def list_review_events(
             session.scalars(
                 select(ReviewQueueItemEvent)
                 .where(*filters)
-                .order_by(
-                    ReviewQueueItemEvent.created_at,
-                    ordering_id,
-                )
+                .order_by(*ordering_columns)
                 .offset(offset)
                 .limit(page_size)
             )
@@ -190,10 +188,7 @@ def list_review_events(
             *filters,
             ReviewQueueItemEvent.event_type.in_(("assign", "unassign")),
         )
-        .order_by(
-            ReviewQueueItemEvent.created_at.desc(),
-            ordering_id.desc(),
-        )
+        .order_by(*(column.desc() for column in ordering_columns))
         .limit(1)
     )
     return ReviewQueueEventsPage(
