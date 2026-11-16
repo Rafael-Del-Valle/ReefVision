@@ -19,41 +19,19 @@ from reefvision.schemas.review_queue_events import (
 )
 
 
-def _scope(session: Session, queue_id: str, item_id: str) -> ReviewQueueItem:
-    queue = session.get(ReviewQueue, queue_id)
-    if queue is None:
-        raise NotFoundError("Review queue not found")
-    item = session.get(ReviewQueueItem, item_id)
-    if item is None:
-        raise NotFoundError("Review queue item not found")
-    if item.review_queue_id != queue_id or item.project_id != queue.project_id:
-        raise ConflictError("Review item does not belong to this queue")
-    if queue.status != "complete":
-        raise ConflictError("Review queue is not ready for coordination")
-    # Refuse new coordination writes as well as reads when prior reviewer
-    # evidence has been moved across project/queue boundaries. Otherwise a
-    # fresh request key could append to a scientifically inconsistent history.
-    foreign_event_id = session.scalar(
-        select(ReviewQueueItemEvent.id)
-        .where(
-            ReviewQueueItemEvent.review_queue_item_id == item_id,
-            (
-                (ReviewQueueItemEvent.review_queue_id != queue_id)
-                | (ReviewQueueItemEvent.project_id != item.project_id)
-            ),
-        )
-        .limit(1)
-    )
-    if foreign_event_id is not None:
-        raise ConflictError("Review event provenance does not match its queue")
+def assert_review_event_action_integrity(session: Session, item_ids: list[str]) -> None:
+    """Fail closed for malformed historical QC actions on any selected item.
 
-    # External imports may preserve foreign keys yet corrupt an event's
-    # action fields. A malformed off-page event must neither give a false
-    # current assignee nor permit additional writes onto compromised evidence.
+    Both standalone coordination and saved-workflow bulk triage must reject
+    malformed evidence, including off-page and pre-idempotency-key records.
+    This is a read-only guard; it never repairs or verifies observations.
+    """
+    if not item_ids:
+        return
     invalid_event_id = session.scalar(
         select(ReviewQueueItemEvent.id)
         .where(
-            ReviewQueueItemEvent.review_queue_item_id == item_id,
+            ReviewQueueItemEvent.review_queue_item_id.in_(item_ids),
             or_(
                 ~ReviewQueueItemEvent.event_type.in_(
                     (
@@ -101,6 +79,40 @@ def _scope(session: Session, queue_id: str, item_id: str) -> ReviewQueueItem:
     )
     if invalid_event_id is not None:
         raise ConflictError("Review event history has inconsistent action evidence")
+
+
+def _scope(session: Session, queue_id: str, item_id: str) -> ReviewQueueItem:
+    queue = session.get(ReviewQueue, queue_id)
+    if queue is None:
+        raise NotFoundError("Review queue not found")
+    item = session.get(ReviewQueueItem, item_id)
+    if item is None:
+        raise NotFoundError("Review queue item not found")
+    if item.review_queue_id != queue_id or item.project_id != queue.project_id:
+        raise ConflictError("Review item does not belong to this queue")
+    if queue.status != "complete":
+        raise ConflictError("Review queue is not ready for coordination")
+    # Refuse new coordination writes as well as reads when prior reviewer
+    # evidence has been moved across project/queue boundaries. Otherwise a
+    # fresh request key could append to a scientifically inconsistent history.
+    foreign_event_id = session.scalar(
+        select(ReviewQueueItemEvent.id)
+        .where(
+            ReviewQueueItemEvent.review_queue_item_id == item_id,
+            (
+                (ReviewQueueItemEvent.review_queue_id != queue_id)
+                | (ReviewQueueItemEvent.project_id != item.project_id)
+            ),
+        )
+        .limit(1)
+    )
+    if foreign_event_id is not None:
+        raise ConflictError("Review event provenance does not match its queue")
+
+    # External imports may preserve foreign keys yet corrupt an event's
+    # action fields. A malformed off-page event must neither give a false
+    # current assignee nor permit additional writes onto compromised evidence.
+    assert_review_event_action_integrity(session, [item_id])
     return item
 
 

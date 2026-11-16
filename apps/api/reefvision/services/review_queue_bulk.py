@@ -18,6 +18,7 @@ from reefvision.db.models import ReviewQueue, ReviewQueueItem
 from reefvision.db.models.review_queue_bulk_request import ReviewQueueBulkRequestRecord
 from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
+from reefvision.services.review_queue_events import assert_review_event_action_integrity
 from reefvision.schemas.review_queues import (
     ReviewQueueBulkRequest,
     ReviewQueueBulkResponse,
@@ -113,6 +114,11 @@ def bulk_triage_review_queue(
     )
     if foreign_event_id is not None:
         raise ConflictError("Review event provenance does not match its queue")
+
+    # A saved Workflow Builder QC queue and a standalone queue share the same
+    # append-only event-shape contract. Validate *all* selected histories
+    # before an idempotent replay, registry insert, or bulk state transition.
+    assert_review_event_action_integrity(session, request.item_ids)
 
     # A batch's canonical item stores the original UUID as a scope marker;
     # the remaining items retain deterministic UUIDv5 event keys. This makes

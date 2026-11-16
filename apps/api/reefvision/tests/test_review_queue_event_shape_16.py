@@ -60,18 +60,19 @@ def test_inconsistent_reviewer_action_blocks_history_and_new_audit_writes(
         assert "inconsistent action evidence" in rejected.text
         assert "reviewer-one" not in rejected.text
 
-    rejected_write = client.post(
-        url, json={**original_payload, "client_request_id": str(uuid4())}
-    )
+    rejected_write = client.post(url, json={**original_payload, "client_request_id": str(uuid4())})
     assert rejected_write.status_code == 409, rejected_write.text
     assert "inconsistent action evidence" in rejected_write.text
 
     with app.state.session_factory() as session:
-        assert session.scalar(
-            select(func.count())
-            .select_from(ReviewQueueItemEvent)
-            .where(ReviewQueueItemEvent.review_queue_item_id == item_id)
-        ) == 1
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(ReviewQueueItemEvent)
+                .where(ReviewQueueItemEvent.review_queue_item_id == item_id)
+            )
+            == 1
+        )
         event = session.get(ReviewQueueItemEvent, event_id)
         assert event is not None
         assert getattr(event, field) == invalid_value
@@ -87,11 +88,10 @@ def test_inconsistent_reviewer_action_blocks_history_and_new_audit_writes(
 
     review_items = client.get(f"/api/v1/review-queues/{queue_id}/items")
     assert review_items.status_code == 200, review_items.text
-    assert next(
-        item["review_state"]
-        for item in review_items.json()["items"]
-        if item["id"] == item_id
-    ) == "pending"
+    assert (
+        next(item["review_state"] for item in review_items.json()["items"] if item["id"] == item_id)
+        == "pending"
+    )
 
 
 @pytest.mark.parametrize("saved_workflow", [False, True])
@@ -120,3 +120,114 @@ def test_tampered_comment_without_text_fails_closed(
     rejected = client.get(url)
     assert rejected.status_code == 409, rejected.text
     assert "inconsistent action evidence" in rejected.text
+
+
+@pytest.mark.parametrize("saved_workflow", [False, True])
+@pytest.mark.parametrize("keyed", [False, True])
+def test_bulk_triage_cannot_bypass_malformed_manual_event(
+    client: TestClient, saved_workflow: bool, keyed: bool
+) -> None:
+    """An invalid action in one selected item blocks the entire batch."""
+    queue_id, item_ids = _make_queue(client, saved_workflow=saved_workflow)
+    item_url = f"/api/v1/review-queues/{queue_id}/items/{item_ids[0]}/events"
+    batch_url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    created = client.post(
+        item_url,
+        json={
+            "client_request_id": str(uuid4()),
+            "event_type": "assign",
+            "actor": "local researcher",
+            "assignee": "private reviewer",
+        },
+    )
+    assert created.status_code == 201, created.text
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        event = session.get(ReviewQueueItemEvent, created.json()["id"])
+        assert event is not None
+        event.assignee = None
+        session.commit()
+
+    payload = {"item_ids": item_ids, "action": "start", "actor": "local researcher"}
+    if keyed:
+        payload["client_request_id"] = str(uuid4())
+    rejected = client.post(batch_url, json=payload)
+    assert rejected.status_code == 409, rejected.text
+    assert "inconsistent action evidence" in rejected.text
+    assert "private reviewer" not in rejected.text
+    items = client.get(f"/api/v1/review-queues/{queue_id}/items")
+    assert items.status_code == 200, items.text
+    assert {item["review_state"] for item in items.json()["items"]} == {"pending"}
+    with app.state.session_factory() as session:
+        events = list(
+            session.scalars(
+                select(ReviewQueueItemEvent).where(
+                    ReviewQueueItemEvent.review_queue_item_id.in_(item_ids)
+                )
+            )
+        )
+        assert len(events) == 1
+        if keyed:
+            from reefvision.db.models.review_queue_bulk_request import ReviewQueueBulkRequestRecord
+
+            assert session.get(ReviewQueueBulkRequestRecord, payload["client_request_id"]) is None
+        event = session.get(ReviewQueueItemEvent, created.json()["id"])
+        assert event is not None
+        event.assignee = "private reviewer"
+        session.commit()
+
+    retried = client.post(batch_url, json=payload)
+    assert retried.status_code == 200, retried.text
+    assert retried.json()["changed_count"] == len(item_ids)
+    assert retried.json()["requires_researcher_review"] is True
+    assert {item["review_state"] for item in retried.json()["items"]} == {"in_progress"}
+
+
+@pytest.mark.parametrize("saved_workflow", [False, True])
+def test_bulk_idempotent_replay_cannot_accept_malformed_prior_triage(
+    client: TestClient, saved_workflow: bool
+) -> None:
+    """An already-registered bulk UUID must not mask malformed event evidence."""
+    queue_id, item_ids = _make_queue(client, saved_workflow=saved_workflow)
+    batch_url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    payload = {
+        "item_ids": [item_ids[0]],
+        "action": "start",
+        "actor": "local researcher",
+        "client_request_id": str(uuid4()),
+    }
+    first = client.post(batch_url, json=payload)
+    assert first.status_code == 200, first.text
+    assert first.json()["changed_count"] == 1
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        event = session.scalar(
+            select(ReviewQueueItemEvent).where(
+                ReviewQueueItemEvent.review_queue_item_id == item_ids[0]
+            )
+        )
+        assert event is not None
+        assert event.event_type == "triage_start"
+        event.assignee = "forged assignee"
+        session.commit()
+
+    rejected = client.post(batch_url, json=payload)
+    assert rejected.status_code == 409, rejected.text
+    assert "inconsistent action evidence" in rejected.text
+    with app.state.session_factory() as session:
+        events = list(
+            session.scalars(
+                select(ReviewQueueItemEvent).where(
+                    ReviewQueueItemEvent.review_queue_item_id == item_ids[0]
+                )
+            )
+        )
+        assert len(events) == 1
+        assert events[0].assignee == "forged assignee"
+        events[0].assignee = None
+        session.commit()
+
+    replay = client.post(batch_url, json=payload)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["changed_count"] == 0
+    assert replay.json()["requires_researcher_review"] is True
