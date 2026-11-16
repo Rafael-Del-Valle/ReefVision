@@ -115,14 +115,14 @@ def test_rebuilt_qc_history_cannot_silently_reorder_review_actions(tmp_path: Pat
 
     with sqlite3.connect(after) as connection:
         rows = connection.execute(
-            'SELECT id, payload, note FROM review_queue_item_events ORDER BY id'
+            "SELECT id, payload, note FROM review_queue_item_events ORDER BY id"
         ).fetchall()
         connection.execute("DELETE FROM review_queue_item_events")
         connection.executemany(
-            'INSERT INTO review_queue_item_events (id, payload, note) VALUES (?, ?, ?)', rows
+            "INSERT INTO review_queue_item_events (id, payload, note) VALUES (?, ?, ?)", rows
         )
         assert connection.execute(
-            'SELECT id FROM review_queue_item_events ORDER BY rowid'
+            "SELECT id FROM review_queue_item_events ORDER BY rowid"
         ).fetchall() == [("a",), ("z",)]
     old_bytes, candidate_bytes = before.read_bytes(), after.read_bytes()
     code, report = _run(before, after)
