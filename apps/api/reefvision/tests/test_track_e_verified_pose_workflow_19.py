@@ -227,6 +227,43 @@ def test_verified_pose_dataset_persists_workflow_lineage(
     assert alternate_detail.status_code == 200, alternate_detail.text
     assert alternate_detail.json()["artifacts"] == []
     assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
+    # Exercise the *queued executor* path as well as direct persistence. The
+    # adapter output must retain its original shape until publish-time checks:
+    # converting a list of pairs into a dict would falsely sign it as science.
+    malformed_queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": graph_record["id"]},
+    )
+    assert malformed_queued.status_code == 202, malformed_queued.text
+    from reefvision.services import workflow_execution
+
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            workflow_execution,
+            "execute_runtime_adapter",
+            lambda *_args, **_kwargs: [
+                {
+                    "port_id": "dataset",
+                    "data_type": "pose_training_dataset",
+                    "payload": [("dataset_id", dataset_id)],
+                }
+            ],
+        )
+        assert (
+            process_workflow_run_job(
+                app.state.settings,
+                app.state.session_factory,
+                str(malformed_queued.json()["job_id"]),
+            )
+            is False
+        )
+    malformed_detail = client.get(f"/api/v1/workflow-runs/{malformed_queued.json()['id']}")
+    assert malformed_detail.status_code == 200, malformed_detail.text
+    assert malformed_detail.json()["run"]["status"] == "failed"
+    assert "payload must be a JSON object" in malformed_detail.json()["run"]["error_message"]
+    assert malformed_detail.json()["artifacts"] == []
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
+
     # Saved workflow artifacts must preserve active-learning source lineage,
     # including explicit nulls for scientist-verified datasets without a round.
     with app.state.session_factory() as session:
