@@ -384,14 +384,15 @@ def test_review_history_page_pins_one_sqlite_snapshot_during_concurrent_assignme
 
 
 @pytest.mark.parametrize("saved_workflow", [False, True])
-def test_equal_timestamp_assignments_preserve_append_order(
-    client: TestClient, saved_workflow: bool
+@pytest.mark.parametrize("clock_rollback", [False, True])
+def test_assignment_history_preserves_append_order_despite_clock_changes(
+    client: TestClient, saved_workflow: bool, clock_rollback: bool
 ) -> None:
-    """Random UUID ordering must not reverse same-time reviewer decisions.
+    """Wall-clock rollbacks and UUID order must never reverse reviewer actions.
 
-    Both the standalone QC queue and the saved/executed Workflow Builder queue
-    must display append chronology and compute the current assignment from
-    the later unassign, including with paginated history.
+    Both standalone and saved/executable Workflow Builder QC queues must show
+    the same append chronology and latest assignment, even when the later
+    unassignment carries an earlier timestamp or a lexically smaller UUID.
     """
     queue_id, item_ids = _make_queue(client, saved_workflow=saved_workflow)
     item_id = item_ids[0]
@@ -399,8 +400,13 @@ def test_equal_timestamp_assignments_preserve_append_order(
     queue = client.get(f"/api/v1/review-queues/{queue_id}")
     assert queue.status_code == 200, queue.text
     project_id = queue.json()["project_id"]
-    shared_time = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
-    # Force UUID lexical ordering to disagree with append ordering.
+    assigned_time = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
+    unassigned_time = (
+        datetime(2026, 11, 14, 12, 0, tzinfo=UTC)
+        if clock_rollback
+        else assigned_time
+    )
+    # Force UUID lexical ordering to disagree with append ordering too.
     assigned_id = "ffffffff-ffff-4fff-8fff-ffffffffffff"
     unassigned_id = "00000000-0000-4000-8000-000000000000"
     app = cast(FastAPI, client.app)
@@ -415,7 +421,7 @@ def test_equal_timestamp_assignments_preserve_append_order(
                 event_type="assign",
                 actor="researcher",
                 assignee="reviewer-one",
-                created_at=shared_time,
+                created_at=assigned_time,
             )
         )
         writer.flush()  # Guarantee insertion, not merely SQLAlchemy batching order.
@@ -428,7 +434,7 @@ def test_equal_timestamp_assignments_preserve_append_order(
                 client_request_id=str(uuid4()),
                 event_type="unassign",
                 actor="researcher",
-                created_at=shared_time,
+                created_at=unassigned_time,
             )
         )
         writer.commit()
@@ -437,6 +443,11 @@ def test_equal_timestamp_assignments_preserve_append_order(
     assert full.status_code == 200, full.text
     assert full.json()["total"] == 2
     assert [item["id"] for item in full.json()["items"]] == [assigned_id, unassigned_id]
+    timestamps = [event["created_at"] for event in full.json()["items"]]
+    if clock_rollback:
+        assert timestamps[0] > timestamps[1]
+    else:
+        assert timestamps[0] == timestamps[1]
     assert full.json()["current_assignee"] is None
     assert full.json()["requires_researcher_review"] is True
 
