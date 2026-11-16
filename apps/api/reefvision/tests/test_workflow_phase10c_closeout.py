@@ -167,6 +167,11 @@ def _prime_interrupted_run(
         assert first_node is not None
         assert second_node is not None
 
+        # Reproduce the worker's active publication state, rather than
+        # constructing an impossible artifact from a still-queued producer.
+        run.status = "running"
+        first_node.status = "running"
+
         service = WorkflowExecutionService(
             session,
             app.state.settings,
