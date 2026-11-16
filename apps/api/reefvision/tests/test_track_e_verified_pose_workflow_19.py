@@ -319,6 +319,32 @@ def test_verified_pose_dataset_persists_workflow_lineage(
             )
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
+    # Direct interrupted-run recovery checks a single succeeded node before
+    # the completed-run ownership validator. An undeclared, checksum-valid
+    # artifact attributed to this producer must not be ignored during reuse.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, run["nodes"][0]["id"])
+        published = session.get(WorkflowArtifact, outputs[0]["id"])
+        assert producer is not None and published is not None
+        undeclared = WorkflowArtifact(
+            workflow_run_id=published.workflow_run_id,
+            producer_node_run_id=published.producer_node_run_id,
+            producer_port_id="undeclared-pose-port",
+            data_type=published.data_type,
+            payload_json=dict(published.payload_json),
+            payload_sha256=published.payload_sha256,
+        )
+        session.add(undeclared)
+        session.flush()
+        with pytest.raises(ConflictError, match="undeclared persisted outputs"):
+            verify_succeeded_node_artifacts(
+                session,
+                run_id=str(queued.json()["id"]),
+                node_run=producer,
+            )
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
+
     # Both executions are genuine saved Workflow Builder runs referencing
     # this reviewed frozen dataset. Their identical output contracts must
     # not allow the first node to write an artifact into the second run.
