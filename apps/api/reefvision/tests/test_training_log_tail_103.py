@@ -722,9 +722,7 @@ def test_log_tail_quarantines_backspace_without_following_printable_text(
         b"train/dfl_loss=0.10\x9b2K",
     ],
 )
-def test_log_tail_quarantines_trailing_ansi_erase(
-    tmp_path: Path, erased_record: bytes
-) -> None:
+def test_log_tail_quarantines_trailing_ansi_erase(tmp_path: Path, erased_record: bytes) -> None:
     """A terminal clear after a loss invalidates it even without new text."""
     log = tmp_path / "training.log"
     original = erased_record + b"\ntrain/box_loss=0.22\n"
@@ -732,9 +730,7 @@ def test_log_tail_quarantines_trailing_ansi_erase(
 
     assert training_routes._training_log_tail("training.log", tmp_path) == {
         "available": True,
-        "text": (
-            "[terminal-edited training log record omitted]\ntrain/box_loss=0.22\n"
-        ),
+        "text": ("[terminal-edited training log record omitted]\ntrain/box_loss=0.22\n"),
     }
     assert log.read_bytes() == original
 
