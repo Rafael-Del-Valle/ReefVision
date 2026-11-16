@@ -829,6 +829,7 @@ def test_qc_16_migration_stages_preserve_records_and_diagnose_interrupted_ddl(
             "0038",
             ("environmental_event_definitions",),
             (
+                "computed_metrics_before_revision_0039",
                 "environmental_event_before_revision_0040",
                 "revision_0038_requires_schema_lineage_reconciliation",
             ),
