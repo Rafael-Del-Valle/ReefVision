@@ -42,6 +42,38 @@ NON_XY_PLANAR_CLOSED_LOOP_PARAMS = {
 }
 
 
+# A U-shaped, geometrically simple filled source contour has a centroid in
+# its *empty notch*. This is not a biological attachment centroid.
+CONCAVE_U_CLOSED_LOOP_PARAMS = {
+    **PARAMS,
+    "vertices": [
+        [0, 0, 0],
+        [4, 0, 0],
+        [4, 4, 0],
+        [3, 4, 0],
+        [3, 1, 0],
+        [1, 1, 0],
+        [1, 4, 0],
+        [0, 4, 0],
+        [0, 1, 0],
+        [4, 1, 0],
+    ],
+    "faces": [
+        [0, 1, 9],
+        [1, 2, 9],
+        [9, 2, 3],
+        [9, 3, 4],
+        [0, 9, 4],
+        [0, 4, 5],
+        [0, 5, 8],
+        [8, 5, 6],
+        [8, 6, 7],
+        [0, 8, 7],
+    ],
+    "surface_trace_vertex_paths": [[0, 1, 2, 3, 4, 5, 6, 7, 0]],
+}
+
+
 # Four noncoplanar source waypoints form a valid closed tetrahedral edge loop.
 # Its perimeter remains measurable, but it must never imply a planar contour
 # or a scientifically verified coral cross-sectional area.
@@ -494,9 +526,8 @@ def test_simple_planar_footprint_is_scale_qualified_and_order_invariant(
     assert trace["closed_loop_source_planar_centroid_mesh_units"] == pytest.approx(
         [1 / 3, 1 / 3, 0.0]
     )
-    assert trace["closed_loop_planar_centroid_m"] == pytest.approx(
-        [0.01 / 3, 0.01 / 3, 0.0]
-    )
+    assert trace["closed_loop_planar_centroid_m"] == pytest.approx([0.01 / 3, 0.01 / 3, 0.0])
+    assert trace["closed_loop_source_planar_centroid_inside_or_on_perimeter"] is True
     assert trace["closed_loop_planar_enclosed_area_scale_only_interval_m2"] == pytest.approx(
         [0.0000405, 0.0000605]
     )
@@ -540,9 +571,8 @@ def test_planar_footprint_non_xy_plane_and_full_scale_uncertainty() -> None:
     assert trace["closed_loop_source_planar_centroid_mesh_units"] == pytest.approx(
         [0.0, 2 / 3, 1.0]
     )
-    assert trace["closed_loop_planar_centroid_m"] == pytest.approx(
-        [0.0, 0.02 / 3, 0.01]
-    )
+    assert trace["closed_loop_planar_centroid_m"] == pytest.approx([0.0, 0.02 / 3, 0.01])
+    assert trace["closed_loop_source_planar_centroid_inside_or_on_perimeter"] is True
     assert trace["closed_loop_planar_enclosed_area_scale_only_interval_m2"] == pytest.approx(
         [0.0, 0.0012]
     )
@@ -574,6 +604,37 @@ def test_planar_footprint_non_xy_plane_and_full_scale_uncertainty() -> None:
     assert trace["human_review_verified"] is False
 
 
+@pytest.mark.parametrize("scale", [0.01, 1.0])
+@pytest.mark.parametrize(
+    "path",
+    [
+        [0, 1, 2, 3, 4, 5, 6, 7, 0],
+        [0, 7, 6, 5, 4, 3, 2, 1, 0],
+        [4, 5, 6, 7, 0, 1, 2, 3, 4],
+    ],
+)
+def test_concave_planar_centroid_can_be_outside_filled_perimeter(
+    scale: float, path: list[int]
+) -> None:
+    params = {
+        **CONCAVE_U_CLOSED_LOOP_PARAMS,
+        "meters_per_unit": scale,
+        "surface_trace_vertex_paths": [path],
+    }
+    trace = measure_mesh_preview(**params)["surface_edge_traces"][0]
+    assert trace["closed_loop_source_is_simple_planar_perimeter"] is True
+    assert trace["closed_loop_source_planar_enclosed_area_mesh_units2"] == pytest.approx(10.0)
+    assert trace["closed_loop_source_planar_centroid_mesh_units"] == pytest.approx(
+        [2.0, 1.7, 0.0]
+    )
+    assert trace["closed_loop_planar_centroid_m"] == pytest.approx(
+        [2 * scale, 1.7 * scale, 0.0]
+    )
+    assert trace["closed_loop_source_planar_centroid_inside_or_on_perimeter"] is False
+    assert "closed_surface_trace_source_planar_centroid_outside_perimeter" in trace["qc_warnings"]
+    assert trace["human_review_verified"] is False
+
+
 @pytest.mark.parametrize(
     "params",
     [
@@ -591,6 +652,7 @@ def test_non_simple_or_open_loops_never_have_planar_footprint(
     assert trace["closed_loop_planar_enclosed_area_m2"] is None
     assert trace["closed_loop_planar_centroid_m"] is None
     assert trace["closed_loop_source_planar_centroid_mesh_units"] is None
+    assert trace["closed_loop_source_planar_centroid_inside_or_on_perimeter"] is None
     assert trace["closed_loop_planar_enclosed_area_scale_only_interval_m2"] is None
     assert trace["closed_loop_source_planar_isoperimetric_quotient"] is None
     assert trace["closed_loop_source_planar_equivalent_diameter_mesh_units"] is None
@@ -1550,6 +1612,8 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
         "closed_loop_rotated",
         "closed_loop_max_uncertainty",
         "non_xy_planar_closed_loop",
+        "concave_u_closed_loop",
+        "concave_u_closed_loop_reverse",
         "noncoplanar_closed_loop",
         "proper_crossing_closed_loop",
         "contact_overlap_closed_loop",
@@ -1591,6 +1655,11 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             "relative_scale_uncertainty": 1.0,
         },
         "non_xy_planar_closed_loop": NON_XY_PLANAR_CLOSED_LOOP_PARAMS,
+        "concave_u_closed_loop": CONCAVE_U_CLOSED_LOOP_PARAMS,
+        "concave_u_closed_loop_reverse": {
+            **CONCAVE_U_CLOSED_LOOP_PARAMS,
+            "surface_trace_vertex_paths": [[0, 7, 6, 5, 4, 3, 2, 1, 0]],
+        },
         "noncoplanar_closed_loop": NONCOPLANAR_CLOSED_LOOP_PARAMS,
         "proper_crossing_closed_loop": PROPER_CROSSING_CLOSED_LOOP_PARAMS,
         "contact_overlap_closed_loop": CONTACT_OVERLAP_CLOSED_LOOP_PARAMS,
@@ -1662,6 +1731,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert "closed_loop_planar_enclosed_area_scale_only_interval_m2" in trace
     assert "closed_loop_source_planar_isoperimetric_quotient" in trace
     assert "closed_loop_source_planar_centroid_mesh_units" in trace
+    assert "closed_loop_source_planar_centroid_inside_or_on_perimeter" in trace
     assert "closed_loop_planar_centroid_m" in trace
     if case in (
         "closed_loop",
@@ -1672,12 +1742,20 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert trace["closed_loop_source_planar_centroid_mesh_units"] == pytest.approx(
             [1 / 3, 1 / 3, 0.0]
         )
+        assert trace["closed_loop_source_planar_centroid_inside_or_on_perimeter"] is True
     elif case == "non_xy_planar_closed_loop":
         assert trace["closed_loop_source_planar_centroid_mesh_units"] == pytest.approx(
             [0.0, 2 / 3, 1.0]
         )
+        assert trace["closed_loop_source_planar_centroid_inside_or_on_perimeter"] is True
+    elif case.startswith("concave_u"):
+        assert trace["closed_loop_source_planar_centroid_mesh_units"] == pytest.approx(
+            [2.0, 1.7, 0.0]
+        )
+        assert trace["closed_loop_source_planar_centroid_inside_or_on_perimeter"] is False
     else:
         assert trace["closed_loop_source_planar_centroid_mesh_units"] is None
+        assert trace["closed_loop_source_planar_centroid_inside_or_on_perimeter"] is None
     assert "closed_loop_source_planar_maximum_vertex_chord_mesh_units" in trace
     assert "closed_loop_source_planar_maximum_vertex_chord_waypoint_offsets" in trace
     assert "closed_loop_planar_maximum_vertex_chord_m" in trace
