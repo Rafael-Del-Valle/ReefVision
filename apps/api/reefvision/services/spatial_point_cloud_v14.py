@@ -270,9 +270,7 @@ def measure_point_cloud_preview(
     # distinguishable source span, including subnormal calibrated coordinates.
     source_bounds_min = [min(p[axis] for p in vertices) for axis in range(3)]
     source_bounds_max = [max(p[axis] for p in vertices) for axis in range(3)]
-    dimensions = [
-        (source_bounds_max[axis] - source_bounds_min[axis]) * scale for axis in range(3)
-    ]
+    dimensions = [(source_bounds_max[axis] - source_bounds_min[axis]) * scale for axis in range(3)]
     bounds_min = [value * scale for value in source_bounds_min]
     bounds_max = [value * scale for value in source_bounds_max]
     if any(
