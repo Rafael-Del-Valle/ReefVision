@@ -265,9 +265,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             connection.execute(text("PRAGMA table_xinfo(review_queue_item_events)")).mappings()
         )
         actual_columns = {row["name"] for row in review_xinfo}
-        hidden_review_columns = sorted(
-            row["name"] for row in review_xinfo if row["hidden"] != 0
-        )
+        hidden_review_columns = sorted(row["name"] for row in review_xinfo if row["hidden"] != 0)
     missing_columns = sorted(_REVIEW_COLUMNS - actual_columns)
     unexpected_review_columns = sorted(actual_columns - _REVIEW_COLUMNS)
     if missing_columns or unexpected_review_columns or hidden_review_columns or unexpected_science:
@@ -290,12 +288,12 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
         hidden_bulk_columns: list[str] = []
         if _BULK_TABLE in tables and connection.dialect.name == "sqlite":
             bulk_xinfo = list(
-                connection.execute(text("PRAGMA table_xinfo(review_queue_bulk_requests)")).mappings()
+                connection.execute(
+                    text("PRAGMA table_xinfo(review_queue_bulk_requests)")
+                ).mappings()
             )
             actual_bulk_names = {row["name"] for row in bulk_xinfo}
-            hidden_bulk_columns = sorted(
-                row["name"] for row in bulk_xinfo if row["hidden"] != 0
-            )
+            hidden_bulk_columns = sorted(row["name"] for row in bulk_xinfo if row["hidden"] != 0)
         else:
             actual_bulk_names = set(bulk_columns)
         missing_bulk = sorted(_BULK_COLUMNS - actual_bulk_names)
