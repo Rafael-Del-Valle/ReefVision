@@ -140,3 +140,37 @@ native MSI upgrade nor proof of migration correctness, rollback or interactive
 GUI behavior. Cross-version Alembic-0038 reconciliation, exact-head CI,
 representative biology and full installed-GUI acceptance remain release
 blockers. No research file content or pretrained weights are uploaded.
+
+## Installed science-probe and real-upgrade chronology (2026-11-16)
+
+**Preflight:** The native `scripts/acceptance-windows-clean-install.ps1`
+already records a real sequence: installed app/backend connectivity, locally
+registered model policy, external annotation import, class visibility, then
+restart and persisted QC/Workflow Builder replay. When a previous MSI is
+provided, its replacement install occurs **after** import probes but **before**
+class-visibility verification and the post-upgrade schema observation.
+
+Previously, the report verifier only required these pre-restart scientific
+probe timestamps individually to precede restart. It accepted a report whose
+model-policy check appeared before packaged API connectivity, whose annotation
+import preceded model-policy verification, or whose class-visibility check
+preceded the import. A real-upgrade report could also put its target MSI
+installation after target-version visibility checks, or present a
+post-upgrade schema observation older than the visibility probe. These
+internally contradictory reports could be reused as false-positive evidence.
+
+`validate_windows_acceptance_report.py` now checks three additional
+pre-restart causal dependencies and three real-upgrade-only dependencies
+against the existing native harness. Each violation fails closed with a
+specific evidence error. The independent standard-library regression tests
+exercise legitimate monotonic clean-install and upgrade reports as well as
+all six inverted edges, keeping other timestamps inside the acceptance run
+and retaining the required approval/researcher-review gates. No migration,
+scientific row, annotation, model, installer or research asset is modified.
+
+These checks are **structural evidence integrity**, not proof of an actual
+MSI execution or interactive scientific GUI session. Full exact-head
+Ruff/pytest/frontend/E2E/Windows acceptance, 1.1/1.6 migration-lineage
+reconciliation, representative biology and rollback remain required. The
+typed saved QC Workflow Builder already exists; installer-evidence parsing
+is intentionally not introduced as a scientific graph node.
