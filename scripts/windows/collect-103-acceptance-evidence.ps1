@@ -150,11 +150,18 @@ $os = Get-CimInstance Win32_OperatingSystem
         (Get-ArtifactEvidence -Path $CabPath -Kind 'cab')
     )
     webview2 = $webview
+    # A denied registry view is unknown, not proof that the runtime is absent.
+    # Preserve this machine-local diagnostic without making a GUI PASS claim.
+    webview2Inspection = [pscustomobject]@{
+        complete = [bool]$runtimeInfo.inspection_complete
+        unreadableScopes = @($runtimeInfo.unreadable_scopes)
+    }
     nvidia = $gpu
     limitations = @(
         'Read-only inventory; does not prove installation, GUI, training, or scientific acceptance.',
         'MSI/CAB magic-byte checks do not prove package structure, signature trust, or installer validity.',
         'WebView2 registry detection is advisory; absence does not prove runtime is unavailable.',
+        'An incomplete WebView2 registry inspection does not establish runtime absence or installed GUI acceptance.',
         'GPU inventory uses trusted Windows driver paths only; missing or failed nvidia-smi is not GPU acceptance.',
         'No file contents or scientific datasets are uploaded.'
     )
