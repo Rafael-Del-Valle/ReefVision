@@ -420,9 +420,7 @@ def test_representable_mixed_scale_envelope_not_lost_to_intermediate_underflow(
     interval = direct["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"]
     assert interval == pytest.approx([volume * 0.9**3, volume * 1.1**3], abs=0)
     assert "envelope_volume_below_numeric_resolution" not in direct["qc_warnings"]
-    assert (
-        "envelope_uncertainty_interval_below_numeric_resolution" not in direct["qc_warnings"]
-    )
+    assert "envelope_uncertainty_interval_below_numeric_resolution" not in direct["qc_warnings"]
     assert direct["surface_area_m2"] is None
     assert direct["branch_length_m"] is None
     assert direct["provenance"]["calibration_verified"] is False
@@ -456,6 +454,104 @@ def test_representable_mixed_scale_envelope_not_lost_to_intermediate_underflow(
     graph = {
         "graph_id": f"representable-mixed-scale-envelope-{source_format}",
         "name": "Preserve representable bounding envelope",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "point_cloud_measurement_preview"
+    )
+    assert artifact["payload_json"] == expected
+    assert len(artifact["payload_sha256"]) == 64
+    assert artifact["payload_json"]["measurement_status"] == "caller_supplied_unverified"
+    assert artifact["payload_json"]["provenance"]["calibration_verified"] is False
+
+
+@pytest.mark.parametrize("source_format", ["xyz", "ply"])
+@pytest.mark.parametrize("uncertainty", [0.0, 0.1])
+def test_quantized_subnormal_envelope_uncertainty_has_no_false_exact_interval(
+    client: TestClient, source_format: str, uncertainty: float
+) -> None:
+    """A positive subnormal envelope cannot resolve a nonzero scale interval."""
+    points = [[0.0, 0.0, 0.0], [1e-100, 1e-110, 5e-114]]
+    geometry = (
+        {"points": points}
+        if source_format == "xyz"
+        else {
+            "ply_text": (
+                "ply\nformat ascii 1.0\nelement vertex 2\n"
+                "property double x\nproperty double y\nproperty double z\n"
+                "end_header\n0 0 0\n1e-100 1e-110 5e-114\n"
+            )
+        }
+    )
+    params = {
+        **geometry,
+        "meters_per_unit": 1.0,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic resolution test; calibration unverified",
+        "relative_scale_uncertainty": uncertainty,
+    }
+    direct = measure_point_cloud_preview(
+        points=points,
+        meters_per_unit=1.0,
+        calibration_method="ruler",
+        calibration_evidence=params["calibration_evidence"],
+        relative_scale_uncertainty=uncertainty,
+    )
+    volume = direct["axis_aligned_bounding_box_envelope_volume_m3"]
+    assert volume == 5e-324
+    assert "envelope_volume_below_numeric_resolution" not in direct["qc_warnings"]
+    interval = direct["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"]
+    warning = "envelope_uncertainty_interval_below_numeric_resolution"
+    if uncertainty > 0.0:
+        assert interval is None
+        assert warning in direct["qc_warnings"]
+    else:
+        assert interval == [volume, volume]
+        assert warning not in direct["qc_warnings"]
+    assert direct["surface_area_m2"] is None
+    assert direct["branch_length_m"] is None
+    assert direct["provenance"]["calibration_verified"] is False
+
+    project_id = str(create_project(client, f"Quantized envelope {source_format} {uncertainty}")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert response.status_code == 200, response.text
+    expected = response.json()
+    assert expected["axis_aligned_bounding_box_envelope_volume_m3"] == volume
+    assert expected["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"] == interval
+    assert expected["qc_warnings"] == direct["qc_warnings"]
+
+    graph = {
+        "graph_id": f"quantized-subnormal-envelope-{source_format}-{uncertainty}",
+        "name": "Unresolved positive volume scale interval",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
             {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
