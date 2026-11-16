@@ -152,13 +152,13 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
     assert all(len(item["payload_sha256"]) == 64 for item in payload["artifacts"])
 
     # This completed, saved two-node execution has a real producer output.
-    # Replaying the same port with a different artifact type must not insert
-    # an ambiguous sibling artifact that a downstream worker cannot consume.
+    # A wrong type on its registered port must fail at the registry contract
+    # before it could create an ambiguous sibling artifact for consumers.
     with app.state.session_factory() as session:
         producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
         assert producer is not None
         original = artifacts["project_reference"]
-        with pytest.raises(ConflictError, match="already persisted a different artifact"):
+        with pytest.raises(ConflictError, match="output type does not match registry"):
             WorkflowExecutionService(session).persist_artifact(
                 run_id=str(run["id"]),
                 node_run=producer,
