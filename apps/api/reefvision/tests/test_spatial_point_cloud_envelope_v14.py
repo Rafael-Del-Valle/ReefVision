@@ -399,6 +399,7 @@ def test_positive_chord_lower_interval_underflow_is_unresolved_in_saved_workflow
     )
     assert artifact["payload_json"] == expected
 
+
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
 def test_representable_mixed_scale_envelope_not_lost_to_intermediate_underflow(
     client: TestClient, source_format: str
@@ -419,9 +420,9 @@ def test_representable_mixed_scale_envelope_not_lost_to_intermediate_underflow(
     interval = direct["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"]
     assert interval == pytest.approx([volume * 0.9**3, volume * 1.1**3], abs=0)
     assert "envelope_volume_below_numeric_resolution" not in direct["qc_warnings"]
-    assert "envelope_uncertainty_interval_below_numeric_resolution" not in direct[
-        "qc_warnings"
-    ]
+    assert (
+        "envelope_uncertainty_interval_below_numeric_resolution" not in direct["qc_warnings"]
+    )
     assert direct["surface_area_m2"] is None
     assert direct["branch_length_m"] is None
     assert direct["provenance"]["calibration_verified"] is False
@@ -431,9 +432,9 @@ def test_representable_mixed_scale_envelope_not_lost_to_intermediate_underflow(
         if source_format == "xyz"
         else {
             "ply_text": (
-                "ply\\nformat ascii 1.0\\nelement vertex 2\\n"
-                "property double x\\nproperty double y\\nproperty double z\\n"
-                "end_header\\n0 0 0\\n1e-170 1e-155 1e9\\n"
+                "ply\nformat ascii 1.0\nelement vertex 2\n"
+                "property double x\nproperty double y\nproperty double z\n"
+                "end_header\n0 0 0\n1e-170 1e-155 1e9\n"
             )
         }
     )
@@ -484,7 +485,8 @@ def test_representable_mixed_scale_envelope_not_lost_to_intermediate_underflow(
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifact = next(
-        item for item in detail.json()["artifacts"]
+        item
+        for item in detail.json()["artifacts"]
         if item["data_type"] == "point_cloud_measurement_preview"
     )
     assert artifact["payload_json"] == expected
