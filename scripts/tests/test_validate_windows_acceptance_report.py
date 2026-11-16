@@ -83,6 +83,9 @@ class AcceptanceEvidenceTests(unittest.TestCase):
     def test_clean_install_passes_but_does_not_claim_upgrade(self) -> None:
         clean = good_report()
         MODULE.validate_report(clean, expected_version="1.0.2")
+        # Isolate these staged-upgrade assertions from the new explicit
+        # compatibility-confirmation gate, tested separately below.
+        clean["previous_installer_isolated_acceptance_confirmed"] = True
         # Distinguish the two independently required real-upgrade stages.
         with self.assertRaisesRegex(
             MODULE.AcceptanceEvidenceError, "pre-migration asset retention did not PASS"
@@ -353,7 +356,6 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                 upgrade, expected_version="1.0.3", expected_upgrade="passed"
             )
 
-
     def test_previous_installer_upgrade_requires_isolated_data_confirmation(self) -> None:
         report = good_report()
         report["reefvision_version"] = "1.0.3"
@@ -373,7 +375,9 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                 with self.assertRaisesRegex(
                     MODULE.AcceptanceEvidenceError, "evidence flag"
                 ):
-                    MODULE.validate_report(altered, expected_version="1.0.3", expected_upgrade="passed")
+                    MODULE.validate_report(
+                        altered, expected_version="1.0.3", expected_upgrade="passed"
+                    )
 
         missing = copy.deepcopy(report)
         del missing["previous_installer_isolated_acceptance_confirmed"]
@@ -408,9 +412,12 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                 altered = copy.deepcopy(report)
                 altered["previous_installer_path"] = alias
                 with self.assertRaisesRegex(
-                    MODULE.AcceptanceEvidenceError, "Previous and target MSI paths are identical"
+                    MODULE.AcceptanceEvidenceError,
+                    "Previous and target MSI paths are identical",
                 ):
-                    MODULE.validate_report(altered, expected_version="1.0.3", expected_upgrade="passed")
+                    MODULE.validate_report(
+                        altered, expected_version="1.0.3", expected_upgrade="passed"
+                    )
 
     def test_upgrade_requires_real_higher_version_and_previous_installer(self) -> None:
         report = good_report()
