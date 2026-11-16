@@ -258,7 +258,10 @@ def _safe_terminal_log_text(payload: bytes) -> str:
             # never report an unverified loss when no new glyph follows.
             if value == "\x08" and (before.strip() or after.strip()):
                 return "[terminal-edited training log record omitted]"
-            if before.strip() and after.strip():
+            # Non-SGR terminal actions after printed content can erase the
+            # last loss even without any following printable characters.
+            # Keep leading progress-bar clears but reject altered metrics.
+            if value != "\x08" and before.strip():
                 return "[terminal-edited training log record omitted]"
         return record
 

@@ -622,9 +622,7 @@ def test_log_tail_broken_symlink_does_not_expose_or_invent_data(tmp_path: Path) 
 def test_log_tail_strips_terminal_control_sequences(tmp_path: Path) -> None:
     log = tmp_path / "training.log"
     original = (
-        b"\x1b[2J\x1b[31mEpoch 2\x1b[0m\n"
-        b"\x1b]0;Spoofed terminal title\x07"
-        b"train/box_loss=0.25\x00\n"
+        b"\x1b[2J\x1b[31mEpoch 2\x1b[0m\n\x1b]0;Spoofed terminal title\x07train/box_loss=0.25\x00\n"
     )
     log.write_bytes(original)
 
@@ -711,10 +709,31 @@ def test_log_tail_quarantines_backspace_without_following_printable_text(
 
     assert training_routes._training_log_tail("training.log", tmp_path) == {
         "available": True,
+        "text": ("epoch=5\n[terminal-edited training log record omitted]\ntrain/cls_loss=0.30\n"),
+    }
+    assert log.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    "erased_record",
+    [
+        b"train/box_loss=0.25\x1b[2K",
+        b"train/cls_loss=0.30\x1b[0K",
+        b"train/dfl_loss=0.10\x9b2K",
+    ],
+)
+def test_log_tail_quarantines_trailing_ansi_erase(
+    tmp_path: Path, erased_record: bytes
+) -> None:
+    """A terminal clear after a loss invalidates it even without new text."""
+    log = tmp_path / "training.log"
+    original = erased_record + b"\ntrain/box_loss=0.22\n"
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
         "text": (
-            "epoch=5\n"
-            "[terminal-edited training log record omitted]\n"
-            "train/cls_loss=0.30\n"
+            "[terminal-edited training log record omitted]\ntrain/box_loss=0.22\n"
         ),
     }
     assert log.read_bytes() == original
