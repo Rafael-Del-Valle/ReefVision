@@ -29,12 +29,12 @@ from reefvision.schemas.review_queues import (
     ReviewQueueResponse,
     ReviewScoreWeights,
 )
-from reefvision.services.review_queue_events import validate_review_item_event_scope
 from reefvision.services.quality_control import (
     CURRENT_QC_RULESET_VERSION,
     SEVERITY_SCORES,
     QualityControlService,
 )
+from reefvision.services.review_queue_events import validate_review_item_event_scope
 from reefvision.services.workflow_review_queue_integrity import (
     V3_SIGNAL_LABELS,
     queue_item_evidence_sha256,
@@ -73,9 +73,7 @@ class ReviewQueueService:
         # Single-item start/skip/return/complete must not bypass the shared
         # history/provenance check already used for coordination and bulk QC.
         # Validate before changing item state or appending another audit event.
-        return validate_review_item_event_scope(
-            self.session, item.review_queue_id, item.id
-        )
+        return validate_review_item_event_scope(self.session, item.review_queue_id, item.id)
 
     def _source_run(
         self,

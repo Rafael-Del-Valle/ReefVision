@@ -158,7 +158,9 @@ def test_single_item_triage_rejects_foreign_queue_audit_provenance(
     retry = client.post(f"/api/v1/review-queue-items/{item_id}/start")
     assert retry.status_code == 200, retry.text
     assert retry.json()["review_state"] == "in_progress"
-    assert retry.json()["requires_researcher_review"] is True
+    history = client.get(event_url)
+    assert history.status_code == 200, history.text
+    assert history.json()["requires_researcher_review"] is True
     annotations = client.get(f"/api/v1/images/{before['image_id']}/annotations")
     assert annotations.status_code == 200, annotations.text
     assert annotations.json()["annotations"] == []
