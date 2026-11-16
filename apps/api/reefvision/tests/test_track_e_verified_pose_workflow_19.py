@@ -443,6 +443,25 @@ def test_verified_pose_dataset_persists_workflow_lineage(
                     payload=payload,
                 ),
             )
+        # The executor records node failure before terminalizing its parent
+        # run. A direct adapter retry during that interval must still reject
+        # otherwise valid frozen-dataset output rather than rewriting science.
+        failed_run = session.get(WorkflowRun, str(malformed_queued.json()["id"]))
+        assert failed_run is not None
+        assert failed_node.status == "failed"
+        failed_run.status = "running"
+        session.flush()
+        with pytest.raises(ConflictError, match="Failed or cancelled workflow node artifacts"):
+            WorkflowExecutionService(session).persist_artifact(
+                run_id=failed_run.id,
+                node_run=failed_node,
+                specification=WorkflowArtifactSpec(
+                    port_id=outputs[0]["producer_port_id"],
+                    data_type=outputs[0]["data_type"],
+                    payload=payload,
+                ),
+            )
+        session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{malformed_queued.json()['id']}").json() == failed
     assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
 
