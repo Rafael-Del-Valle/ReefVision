@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from hashlib import sha256
 from typing import Any
 
 from sqlalchemy import select
@@ -24,6 +26,22 @@ from reefvision.storage.datasets import (
 WORKFLOW_PROVENANCE_SCHEMA_VERSION = "workflow-run-provenance-0001"
 
 
+def canonical_workflow_artifact_sha256(payload: dict[str, Any]) -> str:
+    """Hash portable JSON, rejecting NaN/infinity in persisted scientific results."""
+
+    try:
+        serialized = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Workflow artifact payload must contain finite JSON values") from exc
+    return sha256(serialized.encode("utf-8")).hexdigest()
+
+
 def verify_workflow_artifact(
     artifact: WorkflowArtifact,
     *,
@@ -39,7 +57,10 @@ def verify_workflow_artifact(
     if not isinstance(artifact.payload_json, dict):
         raise ConflictError("Workflow artifact payload must be a JSON object")
 
-    actual = canonical_json_sha256(artifact.payload_json)
+    try:
+        actual = canonical_workflow_artifact_sha256(artifact.payload_json)
+    except ValueError as exc:
+        raise ConflictError(str(exc)) from exc
 
     if actual != artifact.payload_sha256:
         raise ConflictError(f"Workflow artifact checksum failed for {artifact.id}")
