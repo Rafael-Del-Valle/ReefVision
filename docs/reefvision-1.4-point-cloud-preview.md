@@ -376,3 +376,27 @@ nonfinite `nan` is rejected as an invalid coordinate token before numeric
 conversion, and existing color buffers remain unchanged. Successful source
 parsing remains provisional and does not verify scale, reconstruction,
 registration, coral identity, biological condition, or anatomical branch length.
+
+## Nonplanar point-cloud envelope underflow QC (November 16, 2026)
+
+The optional axis-aligned bounding-box **envelope volume** is a geometric
+product of three measured extents, not coral tissue volume. With extremely
+small caller-supplied scales, all three lengths can remain finite and nonzero
+while their cubic product underflows the available floating-point precision.
+Previously, that case incorrectly reported a zero envelope volume, which is
+indistinguishable from a truly planar cloud.
+
+For a nondegenerate cloud in that condition the result now retains its three
+measured dimensions but reports
+`axis_aligned_bounding_box_envelope_volume_m3: null`, a null scale-only
+envelope-volume interval, and the explicit QC warning
+`envelope_volume_below_numeric_resolution`. A truly planar or collinear
+cloud still reports a genuine zero volume (and, when an uncertainty is
+provided, the interval [0, 0]). No uncertainty interval is fabricated for an
+unrepresentable nominal volume.
+
+XYZ and ASCII PLY synthetic regressions check direct service behavior,
+standalone project API responses, and **full checksummed artifact equality**
+through an executed, typed, persisted Workflow Builder graph. This is a
+numerical-integrity boundary, not validated biological volume, scientific
+scale calibration, registration, tissue completeness or coral reidentification.
