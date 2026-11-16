@@ -527,7 +527,9 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                         {p.name: p.read_bytes() for p in (bad, good)}, originals
                     )
 
-    def test_opt_in_decode_checks_exif_pixel_dimensions_against_native_raster(self) -> None:
+    def test_opt_in_decode_checks_exif_pixel_dimensions_against_native_raster(
+        self,
+    ) -> None:
         """Camera EXIF dimensions must not silently disagree with JPEG pixels."""
         try:
             from PIL import Image
@@ -568,7 +570,10 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                         self.assertEqual(record["jpeg_exif_pixel_width"], width)
                         self.assertEqual(record["jpeg_exif_pixel_height"], height)
                         self.assertEqual(
-                            (record["jpeg_display_width"], record["jpeg_display_height"]),
+                            (
+                                record["jpeg_display_width"],
+                                record["jpeg_display_height"],
+                            ),
                             (8, 12),
                         )
                     else:
