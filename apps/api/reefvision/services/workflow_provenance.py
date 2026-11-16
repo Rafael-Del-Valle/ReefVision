@@ -228,6 +228,19 @@ def verify_succeeded_node_artifacts(
                 raise ConflictError(
                     "Succeeded workflow input producer declares output owned by another node"
                 )
+        # Direct consumer recovery must account for every persisted output
+        # attributed to its producer, not just the artifact on this edge.
+        # Otherwise an undeclared checksum-valid sibling escapes validation.
+        persisted_producer_ids = set(
+            session.scalars(
+                select(WorkflowArtifact.id).where(
+                    WorkflowArtifact.workflow_run_id == run_id,
+                    WorkflowArtifact.producer_node_run_id == producer.id,
+                )
+            )
+        )
+        if persisted_producer_ids != set(declared_ids):
+            raise ConflictError("Succeeded workflow input producer has undeclared persisted outputs")
         # A checksum-valid input can still contradict the producer's saved
         # result summary. Direct consumer recovery must check that evidence
         # even when the upstream node is not being independently replayed.
