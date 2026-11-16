@@ -150,3 +150,30 @@ modifying data. Parameterized subprocess regressions cover both sides,
 JSON evidence, exit status, confidential notes, and byte preservation.
 Passing exact-head CI, independent migration reconciliation, and native
 Windows installed-GUI acceptance remain required.
+
+
+## 2026-11-16 — Read-only SQLite sidecar boundary evidence
+
+The independent `inspect-alembic-lineage.py` preflight now checks `-wal`,
+`-shm`, and rollback `-journal` sidecars **both before starting its
+read-only SQLite transaction and after collecting the evidence**. Previously
+it checked only at the end. A writer could checkpoint and remove a sidecar
+while inspection was running, leaving an apparently warning-free report even
+though the inspected database file was not a verified immutable snapshot.
+The report retains both observations in `sqlite_sidecars_before` and
+`sqlite_sidecars_after`; a sidecar seen at either boundary triggers the
+existing specific warning and causes `--fail-on-warning` to reject the
+candidate. Existing report keys and warning codes remain unchanged.
+
+Twelve parameterized regressions cover all three sidecar types, before-only,
+after-only, both-boundaries, and clean observations, asserting intact
+scientific records, unchanged database bytes, strict read-only access, and
+no private scientific note in JSON evidence. The tests use controlled
+sidecar-presence observations to make a disappearing WAL deterministic.
+Two observations cannot prove a backup is immutable or detect a sidecar
+that is created and removed entirely between the probes; use an
+independently created, verified, quiescent database snapshot for release
+validation. Neither the inspector nor this change authorizes an Alembic
+upgrade or resolves the independent 1.1/1.6 revision-0038 collision.
+Exact-head CI and physical Windows MSI/CAB upgrade/rollback and installed
+GUI acceptance remain required.
