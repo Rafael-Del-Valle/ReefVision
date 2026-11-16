@@ -16,6 +16,34 @@ function Assert-Throws([scriptblock]$Action, [string]$Message) {
     $script:passed++
 }
 
+# Evergreen runtime presence is a read-only diagnostic, never a GUI PASS.
+# Mock every registry access; no host registry data or keys are modified.
+$webview2Id = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+$machineWebview2 = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$webview2Id"
+$userWebview2 = "HKCU:\Software\Microsoft\EdgeUpdate\Clients\$webview2Id"
+$script:fakeWebview2Values = @{}
+$script:deniedWebview2Path = ''
+$readFakeWebview2Registry = {
+    param([string]$Path)
+    if ($Path -ceq $script:deniedWebview2Path) { throw 'Registry access unavailable' }
+    return $script:fakeWebview2Values[$Path]
+}
+$emptyWebview2 = Get-ReefVisionWebView2RuntimeInfo -ReadRegistryValue $readFakeWebview2Registry
+Assert-True (-not $emptyWebview2.detected -and $emptyWebview2.registrations.Count -eq 0) 'Missing WebView2 registry entries were misreported as installed.'
+$script:fakeWebview2Values[$machineWebview2] = '0.0.0.0'
+$script:fakeWebview2Values[$userWebview2] = '152.0.1234.56'
+$userRuntime = Get-ReefVisionWebView2RuntimeInfo -ReadRegistryValue $readFakeWebview2Registry
+Assert-True ($userRuntime.detected -and $userRuntime.registrations.Count -eq 1) 'A valid per-user runtime was concealed by an invalid machine sentinel.'
+Assert-True ($userRuntime.registrations[0].scope -ceq 'user' -and $userRuntime.registrations[0].version -ceq '152.0.1234.56') 'WebView2 runtime inventory lost version/scope provenance.'
+$script:deniedWebview2Path = $machineWebview2
+$permissionLimited = Get-ReefVisionWebView2RuntimeInfo -ReadRegistryValue $readFakeWebview2Registry
+Assert-True ($permissionLimited.detected -and $permissionLimited.registrations.Count -eq 1) 'A denied registry view obscured a valid per-user runtime.'
+$script:deniedWebview2Path = ''
+$script:fakeWebview2Values[$userWebview2] = '152.0.1234.56;malformed'
+$invalidWebview2 = Get-ReefVisionWebView2RuntimeInfo -ReadRegistryValue $readFakeWebview2Registry
+Assert-True (-not $invalidWebview2.detected) 'Malformed WebView2 registry version was accepted.'
+Assert-True ($invalidWebview2.evidence_scope -match 'interactive GUI unverified') 'Registry detection was mislabeled as physical WebView2 acceptance.'
+
 $defaultData = Join-Path $env:APPDATA 'org.reefvision.desktop'
 $OldConfig = $env:REEFVISION_CONFIG_DIR
 $HadConfig = Test-Path Env:REEFVISION_CONFIG_DIR
@@ -648,6 +676,7 @@ foreach ($expectedGap in @('camera_jpeg: SKIPPED', 'upgrade: SKIPPED', 'uninstal
 }
 $completeEvidence.Remove('model_policy')
 Assert-True (@(Get-ReefVisionAutomatedAcceptanceGaps -Report $completeEvidence) -ccontains 'model_policy: MISSING') 'Missing model-policy evidence must fail closed.'
+Assert-True ($acceptanceScript.Contains('webview2_runtime = Get-ReefVisionWebView2RuntimeInfo')) 'Runtime inventory must be recorded without completing the WebView2 GUI gate.'
 Assert-True ($acceptanceScript.Contains('webview2_gui = New-ReefVisionEvidenceResult')) 'Acceptance must explicitly record untested installed WebView2 GUI.'
 Assert-True ($acceptanceScript.Contains('gpu_scientific = New-ReefVisionEvidenceResult')) 'Acceptance must explicitly record untested physical GPU/scientific workflows.'
 Assert-True ($acceptanceScript.Contains('automated_acceptance_complete')) 'Acceptance report must distinguish full automated evidence from partial tests.'
