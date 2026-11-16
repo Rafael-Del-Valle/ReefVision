@@ -44,3 +44,17 @@ item state, private reviewer-label non-disclosure, request-key nonreservation,
 and safe replay after test-only repair. A separate replay regression changes
 an existing triage record and verifies that its previously registered request
 key does not bypass the guard. No automatic scientific review is introduced.
+
+
+## Bulk transition reason/actor integrity
+
+The shared read-only full-item guard rejects imported bulk `triage_skip`
+events with absent or whitespace-only reasons, non-skip triage events carrying
+an unauthorized comment, and event actor labels that are blank. It handles
+tabs and newlines as well as spaces; SQLite's default one-argument TRIM does not.
+Both standalone and persisted, executed QC Workflow Builder queues enforce
+these rules before paged history reads, new coordination events, bulk updates
+and keyed replay. New disposable database regressions exercise all four
+triage actions, malformed skip reasons, forged comments, blank actors, off-page
+history, unchanged scientific state and no-op replay only after test-only
+restoration. No event is silently repaired or scientifically approved.

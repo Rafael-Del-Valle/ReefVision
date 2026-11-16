@@ -28,11 +28,17 @@ def assert_review_event_action_integrity(session: Session, item_ids: list[str]) 
     """
     if not item_ids:
         return
+    # SQLite's default TRIM strips only spaces, not imported tab/newline-only
+    # reviewer labels or skip reasons. These are also empty human evidence.
+    whitespace = " \t\n\r\f\v"
     invalid_event_id = session.scalar(
         select(ReviewQueueItemEvent.id)
         .where(
             ReviewQueueItemEvent.review_queue_item_id.in_(item_ids),
             or_(
+                # The self-reported actor is not authentication, but must
+                # remain an intelligible audit label.
+                func.trim(ReviewQueueItemEvent.actor, whitespace) == "",
                 ~ReviewQueueItemEvent.event_type.in_(
                     (
                         "comment",
@@ -48,7 +54,7 @@ def assert_review_event_action_integrity(session: Session, item_ids: list[str]) 
                     ReviewQueueItemEvent.event_type == "assign",
                     or_(
                         ReviewQueueItemEvent.assignee.is_(None),
-                        func.trim(ReviewQueueItemEvent.assignee) == "",
+                        func.trim(ReviewQueueItemEvent.assignee, whitespace) == "",
                         ReviewQueueItemEvent.comment.is_not(None),
                     ),
                 ),
@@ -63,7 +69,7 @@ def assert_review_event_action_integrity(session: Session, item_ids: list[str]) 
                     ReviewQueueItemEvent.event_type == "comment",
                     or_(
                         ReviewQueueItemEvent.comment.is_(None),
-                        func.trim(ReviewQueueItemEvent.comment) == "",
+                        func.trim(ReviewQueueItemEvent.comment, whitespace) == "",
                         ReviewQueueItemEvent.assignee.is_not(None),
                     ),
                 ),
@@ -72,6 +78,20 @@ def assert_review_event_action_integrity(session: Session, item_ids: list[str]) 
                         ("triage_start", "triage_skip", "triage_return", "triage_complete")
                     ),
                     ReviewQueueItemEvent.assignee.is_not(None),
+                ),
+                # Only skip may carry a reason, and it requires a real one.
+                and_(
+                    ReviewQueueItemEvent.event_type == "triage_skip",
+                    or_(
+                        ReviewQueueItemEvent.comment.is_(None),
+                        func.trim(ReviewQueueItemEvent.comment, whitespace) == "",
+                    ),
+                ),
+                and_(
+                    ReviewQueueItemEvent.event_type.in_(
+                        ("triage_start", "triage_return", "triage_complete")
+                    ),
+                    ReviewQueueItemEvent.comment.is_not(None),
                 ),
             ),
         )

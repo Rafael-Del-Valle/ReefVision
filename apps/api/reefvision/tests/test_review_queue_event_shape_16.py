@@ -95,8 +95,9 @@ def test_inconsistent_reviewer_action_blocks_history_and_new_audit_writes(
 
 
 @pytest.mark.parametrize("saved_workflow", [False, True])
+@pytest.mark.parametrize("blank_comment", ["  ", "\t \r\n"])
 def test_tampered_comment_without_text_fails_closed(
-    client: TestClient, saved_workflow: bool
+    client: TestClient, saved_workflow: bool, blank_comment: str
 ) -> None:
     queue_id, item_ids = _make_queue(client, saved_workflow=saved_workflow)
     item_id = item_ids[0]
@@ -115,7 +116,7 @@ def test_tampered_comment_without_text_fails_closed(
     with app.state.session_factory() as session:
         event = session.get(ReviewQueueItemEvent, created.json()["id"])
         assert event is not None
-        event.comment = "  "
+        event.comment = blank_comment
         session.commit()
     rejected = client.get(url)
     assert rejected.status_code == 409, rejected.text
@@ -231,3 +232,106 @@ def test_bulk_idempotent_replay_cannot_accept_malformed_prior_triage(
     assert replay.status_code == 200, replay.text
     assert replay.json()["changed_count"] == 0
     assert replay.json()["requires_researcher_review"] is True
+
+
+@pytest.mark.parametrize("saved_workflow", [False, True])
+@pytest.mark.parametrize(
+    ("action", "field", "bad_value"),
+    [
+        ("start", "comment", "forged audit note"),
+        ("skip", "comment", None),
+        ("skip", "comment", " \t\r\n"),
+        ("return", "comment", "forged audit note"),
+        ("complete", "comment", "forged audit note"),
+        ("start", "actor", "  "),
+    ],
+)
+def test_corrupt_bulk_reason_or_actor_blocks_history_and_keyed_replay(
+    client: TestClient,
+    saved_workflow: bool,
+    action: str,
+    field: str,
+    bad_value: str | None,
+) -> None:
+    """Stand-alone and saved, executed QC graphs share typed action evidence."""
+    queue_id, item_ids = _make_queue(client, saved_workflow=saved_workflow)
+    item_id = item_ids[0]
+    bulk_url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    history_url = f"/api/v1/review-queues/{queue_id}/items/{item_id}/events"
+    if action == "complete":
+        prepared = client.post(
+            bulk_url, json={"item_ids": [item_id], "action": "start", "actor": "researcher"}
+        )
+        assert prepared.status_code == 200, prepared.text
+    elif action == "return":
+        prepared = client.post(
+            bulk_url,
+            json={
+                "item_ids": [item_id],
+                "action": "skip",
+                "reason": "Unclear substrate",
+                "actor": "researcher",
+            },
+        )
+        assert prepared.status_code == 200, prepared.text
+    payload = {
+        "item_ids": [item_id],
+        "action": action,
+        "actor": "researcher",
+        "client_request_id": str(uuid4()),
+    }
+    if action == "skip":
+        payload["reason"] = "Outside observation effort"
+    elif action == "complete":
+        payload["review_confirmed"] = True
+    initial = client.post(bulk_url, json=payload)
+    assert initial.status_code == 200, initial.text
+    assert initial.json()["changed_count"] == 1
+    original_state = initial.json()["items"][0]["review_state"]
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        event = session.scalar(
+            select(ReviewQueueItemEvent).where(
+                ReviewQueueItemEvent.review_queue_item_id == item_id,
+                ReviewQueueItemEvent.event_type == f"triage_{action}",
+            )
+        )
+        assert event is not None
+        event_id = event.id
+        original_value = getattr(event, field)
+        setattr(event, field, bad_value)
+        session.commit()
+
+    history = client.get(history_url, params={"page": 1000, "page_size": 1})
+    assert history.status_code == 409, history.text
+    assert "inconsistent action evidence" in history.text
+    replay = client.post(bulk_url, json=payload)
+    assert replay.status_code == 409, replay.text
+    assert "inconsistent action evidence" in replay.text
+    assert "Outside observation effort" not in replay.text
+    items = client.get(f"/api/v1/review-queues/{queue_id}/items")
+    assert items.status_code == 200, items.text
+    assert (
+        next(item["review_state"] for item in items.json()["items"] if item["id"] == item_id)
+        == original_state
+    )
+    with app.state.session_factory() as session:
+        matching = list(
+            session.scalars(
+                select(ReviewQueueItemEvent.id).where(
+                    ReviewQueueItemEvent.review_queue_item_id == item_id,
+                    ReviewQueueItemEvent.event_type == f"triage_{action}",
+                )
+            )
+        )
+        assert matching == [event_id]
+        event = session.get(ReviewQueueItemEvent, event_id)
+        assert event is not None
+        assert getattr(event, field) == bad_value
+        # Restore only a disposable test fixture, never historical user records.
+        setattr(event, field, original_value)
+        session.commit()
+    restored = client.post(bulk_url, json=payload)
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["changed_count"] == 0
+    assert restored.json()["requires_researcher_review"] is True

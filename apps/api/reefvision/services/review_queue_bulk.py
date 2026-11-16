@@ -18,12 +18,12 @@ from reefvision.db.models import ReviewQueue, ReviewQueueItem
 from reefvision.db.models.review_queue_bulk_request import ReviewQueueBulkRequestRecord
 from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
-from reefvision.services.review_queue_events import assert_review_event_action_integrity
 from reefvision.schemas.review_queues import (
     ReviewQueueBulkRequest,
     ReviewQueueBulkResponse,
     ReviewQueueItemResponse,
 )
+from reefvision.services.review_queue_events import assert_review_event_action_integrity
 
 
 def _is_sqlite_writer_contention(exc: OperationalError) -> bool:
