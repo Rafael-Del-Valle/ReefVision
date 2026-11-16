@@ -58,3 +58,22 @@ and keyed replay. New disposable database regressions exercise all four
 triage actions, malformed skip reasons, forged comments, blank actors, off-page
 history, unchanged scientific state and no-op replay only after test-only
 restoration. No event is silently repaired or scientifically approved.
+
+## Single-item triage must honor the same audit guard
+
+The individual `/review-queue-items/{item_id}/start|skip|return|complete`
+routes previously wrote manual state transitions without the provenance and
+full-history action-integrity checks already enforced by the event and bulk
+routes. An imported malformed event or reassigned foreign-queue event could be
+followed by a seemingly successful single-item review transition. All four
+single-item paths now reuse the existing validation before any state change or
+append-only event write, for both standalone queues and persisted, executable
+Workflow Builder QC queues. An invalid history returns HTTP 409, leaves review
+state and observations untouched, and never auto-confirms biological labels.
+
+Regression: `test_review_queue_single_item_history_guard_16.py` checks each
+single-item action against off-page corrupted action evidence (including a
+previous skip), tests provenance reassignment to a different real queue, and
+verifies recovery only after restoring the disposable fixture. It also checks
+saved-workflow and standalone parity, unchanged annotations and review gates.
+No migration, new workflow node, new model provider or researcher asset change.

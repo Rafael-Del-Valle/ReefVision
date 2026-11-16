@@ -101,7 +101,15 @@ def assert_review_event_action_integrity(session: Session, item_ids: list[str]) 
         raise ConflictError("Review event history has inconsistent action evidence")
 
 
-def _scope(session: Session, queue_id: str, item_id: str) -> ReviewQueueItem:
+def validate_review_item_event_scope(
+    session: Session, queue_id: str, item_id: str
+) -> ReviewQueueItem:
+    """Check item, queue, and full action history before any reviewer transition.
+
+    Shared by event endpoints and the four standalone single-item triage
+    endpoints, including queues produced by saved Workflow Builder graphs.
+    This does not approve observations or repair compromised audit events.
+    """
     queue = session.get(ReviewQueue, queue_id)
     if queue is None:
         raise NotFoundError("Review queue not found")
@@ -185,7 +193,7 @@ def _is_sqlite_event_request_collision(exc: IntegrityError) -> bool:
 def create_review_event(
     session: Session, queue_id: str, item_id: str, payload: ReviewQueueEventCreate
 ) -> ReviewQueueEventResponse:
-    item = _scope(session, queue_id, item_id)
+    item = validate_review_item_event_scope(session, queue_id, item_id)
     request_id = str(payload.client_request_id)
     prior = _existing(session, item.id, request_id)
     if prior is not None:
@@ -237,7 +245,7 @@ def list_review_events(
         connection.connection.driver_connection, "in_transaction", False
     ):
         connection.exec_driver_sql("BEGIN")
-    _scope(session, queue_id, item_id)
+    validate_review_item_event_scope(session, queue_id, item_id)
     # Local SQLite rowid follows event append order, including when two entries
     # share a timestamp OR the computer clock moves backwards between actions.
     # Ordering primarily by wall-clock time can incorrectly resurrect an
