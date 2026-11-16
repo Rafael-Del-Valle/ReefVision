@@ -1000,6 +1000,27 @@ function mockApi({
       if (url.includes(`/projects/${project.id}/dataset-versions`)) {
         return jsonResponse(datasetVersions);
       }
+      if (url.endsWith("/workflow-graphs/node-registry")) {
+        return jsonResponse([]);
+      }
+      if (
+        url.endsWith(`/projects/${project.id}/workflow-graphs`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse([]);
+      }
+      if (
+        url.endsWith(`/projects/${project.id}/workflow-runs`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse([]);
+      }
+      if (
+        url.endsWith(`/projects/${project.id}/spatial/assets`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse([]);
+      }
       if (
         url.endsWith(`/projects/${project.id}/exchange-packages`) &&
         (!init?.method || init.method === "GET")
@@ -1293,6 +1314,32 @@ describe("App", () => {
     expect(
       screen.getByText("Inspect or import exchange package"),
     ).toBeInTheDocument();
+  });
+
+  it("finds project-owned 3D originals through the contextual workflow workspace", async () => {
+    mockApi({ projects: [project] });
+    renderApp();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /CPT Coral Study/ }),
+    );
+    await userEvent.click(
+      screen.getByRole("tab", { name: "Video & automation" }),
+    );
+    await userEvent.click(
+      screen.getByRole("tab", { name: "Workflow builder" }),
+    );
+
+    expect(
+      screen.getByRole("tab", { name: "Workflow builder" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      await screen.findByRole("heading", {
+        name: "Project-owned 3D originals",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Import 3D original")).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /3D/i })).not.toBeInTheDocument();
   });
 
   it("opens Environmental Context with project scientific records", async () => {

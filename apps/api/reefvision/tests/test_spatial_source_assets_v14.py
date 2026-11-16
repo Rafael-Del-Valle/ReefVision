@@ -127,6 +127,13 @@ def test_same_source_bytes_remain_independent_between_projects(
         ("empty.obj", b""),
         ("too-large.obj", b"x" * (8 * 1024 * 1024 + 1)),
     ],
+    ids=[
+        "parent-path",
+        "windows-path",
+        "unsupported-extension",
+        "empty-payload",
+        "oversized-payload",
+    ],
 )
 def test_invalid_source_is_rejected(client: TestClient, filename: str, payload: bytes) -> None:
     project = str(create_project(client, "Reject spatial source")["id"])

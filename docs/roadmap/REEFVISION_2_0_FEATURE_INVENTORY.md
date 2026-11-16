@@ -54,8 +54,8 @@ Candidate target: `2.0`
 | 1.4 | Reviewed longitudinal 3D change | in_progress | 3D scientific task → Longitudinal comparison |
 | 1.4 | Reviewed 3D registration transforms and calibration evidence | in_progress | 3D scientific task → Registration review |
 | 1.4 | Representative 3D field validation | blocked | Known synthetic geometry is reported separately. |
-| 1.4 | Bounded OBJ/PLY/GLB mesh and point-cloud preview | in_progress | Open project asset → Scientific tasks → 3D preview |
-| 1.4 | Persistent versioned 3D project assets | in_progress | Project assets → Import 3D asset |
+| 1.4 | Bounded OBJ/PLY/GLB mesh and point-cloud preview | in_progress | Open project → Video & automation → Workflow builder → Project-owned 3D originals |
+| 1.4 | Persistent versioned 3D project assets | in_progress | Open project → Video & automation → Workflow builder → Project-owned 3D originals → Import 3D original |
 | 1.5 | Study setup, treatments, sampling units, exclusions, and statistical plan | in_progress | Research → Study design |
 | 1.5 | Offline field capture and later project reconciliation | in_progress | Project → Field capture |
 | 1.5 | Local model catalog, runtime selection, and prompt-assisted configuration | in_progress | Models & AI → Model Hub |
@@ -830,7 +830,7 @@ Evidence:
 - Target: `1.4`
 - Status: `in_progress`
 - Dependencies: `rv13-exchange-restore`
-- Entry point: Open project asset → Scientific tasks → 3D preview
+- Entry point: Open project → Video & automation → Workflow builder → Project-owned 3D originals
 - Workflow Builder: `required`
 
 Acceptance checks:
@@ -839,8 +839,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Focused spatial frontend suite covers bounded local and project-owned mesh/point-cloud previews, source validation, and warnings (46 tests). — `apps/web/src/features/workflow-graphs` (`rv14-spatial-preview-src`)
+- `browser`: Application-shell acceptance opens a project, selects Video & automation then Workflow builder, finds Project-owned 3D originals and its import control, and confirms no new top-level 3D tab. — `apps/web/src/App.test.tsx` (`rv14-spatial-preview-ui`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -850,7 +850,7 @@ Evidence:
 - Target: `1.4`
 - Status: `in_progress`
 - Dependencies: `rv14-spatial-preview`
-- Entry point: Project assets → Import 3D asset
+- Entry point: Open project → Video & automation → Workflow builder → Project-owned 3D originals → Import 3D original
 - Workflow Builder: `required`
 
 Acceptance checks:
@@ -859,8 +859,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Project-scoped immutable source bytes, UUID/SHA binding, path and metadata integrity, append-only calibration-review replay, malformed/empty/oversized rejection, and tamper rejection are covered by focused backend tests. — `apps/api/reefvision/tests/test_spatial_source_assets_v14.py` (`rv14-spatial-assets-src`)
+- `browser`: Normal project navigation exposes the project-owned import control inside Workflow builder. — `apps/web/src/App.test.tsx` (`rv14-spatial-assets-ui`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
