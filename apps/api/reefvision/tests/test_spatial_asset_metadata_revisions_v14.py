@@ -8,6 +8,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.db.models import SpatialAssetMetadataRevision
+from reefvision.schemas.spatial_asset_metadata_revision_v14 import (
+    SpatialAssetMetadataRevisionCreate,
+)
+from reefvision.services.spatial_asset_metadata_revisions_v14 import (
+    spatial_asset_metadata_content,
+)
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project
 
 OBJ = b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
@@ -148,3 +155,53 @@ def test_spatial_metadata_revision_rejects_invalid_or_unbound_evidence(
         },
     )
     assert wrong_project.status_code == 404, wrong_project.text
+
+
+def test_spatial_metadata_revisions_reject_rehashed_broken_ancestry(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Spatial ancestry integrity")["id"])
+    asset = _import_asset(client, project_id)
+    asset_id = str(asset["id"])
+    base = f"/api/v1/projects/{project_id}/spatial/assets/{asset_id}"
+    payload = {"coordinate_unit": "unknown", "created_by_identity": "local_user"}
+
+    first = client.post(f"{base}/metadata-revisions", json=payload)
+    second = client.post(f"{base}/metadata-revisions", json=payload)
+    assert first.status_code == second.status_code == 201
+    assert second.json()["previous_revision_id"] == first.json()["id"]
+
+    other_project = str(create_project(client, "Unrelated spatial ancestry")["id"])
+    other_asset = _import_asset(client, other_project)
+    foreign_base = (
+        f"/api/v1/projects/{other_project}/spatial/assets/{other_asset['id']}"
+    )
+    foreign = client.post(f"{foreign_base}/metadata-revisions", json=payload)
+    assert foreign.status_code == 201
+
+    app = cast(FastAPI, client.app)
+    for forged_predecessor in (None, foreign.json()["id"]):
+        with app.state.session_factory() as session:
+            row = session.get(SpatialAssetMetadataRevision, second.json()["id"])
+            assert row is not None
+            row.previous_revision_id = forged_predecessor
+            row.content_sha256 = canonical_json_sha256(
+                spatial_asset_metadata_content(
+                    project_id=project_id,
+                    asset_id=asset_id,
+                    source_sha256=str(asset["sha256"]),
+                    revision=2,
+                    previous_revision_id=forged_predecessor,
+                    payload=SpatialAssetMetadataRevisionCreate.model_validate(payload),
+                )
+            )
+            session.commit()
+        response = client.get(f"{base}/metadata-revisions/{second.json()['id']}")
+        assert response.status_code == 400, response.text
+        assert "ancestry" in response.json()["detail"].lower()
+        listed = client.get(f"{base}/metadata-revisions")
+        assert listed.status_code == 400, listed.text
+
+    unchanged = client.get(f"{base}/metadata-revisions/{first.json()['id']}")
+    assert unchanged.status_code == 200, unchanged.text
+    assert unchanged.json() == first.json()
