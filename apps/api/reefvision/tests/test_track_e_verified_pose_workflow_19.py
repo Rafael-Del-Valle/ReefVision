@@ -257,11 +257,14 @@ def test_verified_pose_dataset_persists_workflow_lineage(
             )
             is False
         )
-    malformed_detail = client.get(f"/api/v1/workflow-runs/{malformed_queued.json()['id']}")
+    malformed_detail = client.get(
+        f"/api/v1/workflow-runs/{malformed_queued.json()['id']}"
+    )
     assert malformed_detail.status_code == 200, malformed_detail.text
-    assert malformed_detail.json()["run"]["status"] == "failed"
-    assert "payload must be a JSON object" in malformed_detail.json()["run"]["error_message"]
-    assert malformed_detail.json()["artifacts"] == []
+    failed = malformed_detail.json()
+    assert failed["run"]["status"] == "failed"
+    assert "payload must be a JSON object" in failed["run"]["error_message"]
+    assert failed["artifacts"] == []
     assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
 
     # Saved workflow artifacts must preserve active-learning source lineage,
