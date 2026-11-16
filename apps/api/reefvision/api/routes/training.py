@@ -240,6 +240,7 @@ def _safe_terminal_log_text(payload: bytes) -> str:
     # A truncated terminal string is discarded through the end of the tail.
     text = re.sub(r"\x1b[\]PX^_][\s\S]*?(?:\x07|\x9c|\x1b\\|$)", "", text)
     text = re.sub(r"[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)", "", text)
+
     # Backspaces and cursor-edit/erase CSI sequences can rewrite an earlier
     # digit in a loss record. Simply deleting the control bytes would join
     # distinct fragments (0.25 + BS + 99 -> 0.2599), fabricating a metric.
@@ -253,6 +254,10 @@ def _safe_terminal_log_text(payload: bytes) -> str:
                 continue
             before = record[: control.start()]
             after = record[control.end() :]
+            # A trailing or leading backspace still edits terminal state;
+            # never report an unverified loss when no new glyph follows.
+            if value == "\x08" and (before.strip() or after.strip()):
+                return "[terminal-edited training log record omitted]"
             if before.strip() and after.strip():
                 return "[terminal-edited training log record omitted]"
         return record
