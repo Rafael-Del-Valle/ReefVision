@@ -217,6 +217,7 @@ def measure_point_cloud_preview(
     repeated_selected_point_pairs = False
     repeated_selected_endpoint_geometry = False
     coincident_selected_chord_count = 0
+    selected_chord_interval_underflow = False
     if point_index_pairs is not None:
         if not isinstance(point_index_pairs, list) or len(point_index_pairs) > 32:
             raise ValueError("At most 32 point-index pairs are supported")
@@ -245,6 +246,18 @@ def measure_point_cloud_preview(
             # Different indices can still identify identical XYZ coordinates.
             # Flag a zero-length chord instead of implying biological structure.
             chord_qc_warnings: list[str] = []
+            # A positive chord and positive lower scale factor must not
+            # acquire a false zero lower distance from floating-point underflow.
+            # Preserve the nominal chord and mark its interval unresolved.
+            chord_interval_underflow = (
+                relative_scale_uncertainty is not None
+                and chord_m > 0.0
+                and relative_scale_uncertainty < 1.0
+                and chord_m * (1 - relative_scale_uncertainty) == 0.0
+            )
+            if chord_interval_underflow:
+                chord_qc_warnings.append("chord_uncertainty_interval_below_numeric_resolution")
+                selected_chord_interval_underflow = True
             # Reversing a chord does not make an independent measurement.
             unordered_pair = (min(pair), max(pair))
             repeated_pair = unordered_pair in seen_point_pairs
@@ -280,7 +293,7 @@ def measure_point_cloud_preview(
                             chord_m * (1 - relative_scale_uncertainty),
                             chord_m * (1 + relative_scale_uncertainty),
                         ]
-                        if relative_scale_uncertainty is not None
+                        if relative_scale_uncertainty is not None and not chord_interval_underflow
                         else None
                     ),
                     "scale_uncertainty_m": (
@@ -290,6 +303,21 @@ def measure_point_cloud_preview(
                     ),
                 }
             )
+    # A positive calibrated extent with positive lower scale factor must not
+    # claim zero lower uncertainty solely because floating-point precision
+    # cannot represent the product. A truly planar axis stays [0, 0].
+    dimension_scale_interval_underflow = False
+    dimension_scale_intervals: list[list[float] | None] | None = None
+    if relative_scale_uncertainty is not None:
+        dimension_scale_intervals = []
+        for dimension in dimensions:
+            lower = dimension * (1 - relative_scale_uncertainty)
+            upper = dimension * (1 + relative_scale_uncertainty)
+            if dimension > 0.0 and relative_scale_uncertainty < 1.0 and lower == 0.0:
+                dimension_scale_interval_underflow = True
+                dimension_scale_intervals.append(None)
+            else:
+                dimension_scale_intervals.append([lower, upper])
     centroid = [sum(p[axis] for p in vertices) / len(vertices) * scale for axis in range(3)]
     diagonal = dist((0.0, 0.0, 0.0), dimensions)
     envelope_volume: float | None = dimensions[0] * dimensions[1] * dimensions[2]
@@ -301,14 +329,19 @@ def measure_point_cloud_preview(
     )
     if envelope_volume_underflow:
         envelope_volume = None
-    envelope_scale_interval = (
-        [
-            envelope_volume * (1 - relative_scale_uncertainty) ** 3,
-            envelope_volume * (1 + relative_scale_uncertainty) ** 3,
-        ]
-        if relative_scale_uncertainty is not None and envelope_volume is not None
-        else None
-    )
+    # A positive envelope with a nonzero lower scale factor must not acquire
+    # a zero lower bound solely from subnormal floating-point rounding. Treat
+    # the uncertainty interval as unrepresentable rather than claiming a
+    # physically possible zero-volume lower limit.
+    envelope_scale_interval_underflow = False
+    envelope_scale_interval: list[float] | None = None
+    if relative_scale_uncertainty is not None and envelope_volume is not None:
+        lower = envelope_volume * (1 - relative_scale_uncertainty) ** 3
+        upper = envelope_volume * (1 + relative_scale_uncertainty) ** 3
+        if envelope_volume > 0.0 and relative_scale_uncertainty < 1.0 and lower == 0.0:
+            envelope_scale_interval_underflow = True
+        else:
+            envelope_scale_interval = [lower, upper]
 
     def coordinate_scale_intervals(bounds: list[float]) -> list[list[float]] | None:
         if relative_scale_uncertainty is None:
@@ -416,6 +449,7 @@ def measure_point_cloud_preview(
             "coincident_endpoint_chords": coincident_selected_chord_count,
         },
         "axis_aligned_dimensions_m": dimensions,
+        "axis_aligned_dimension_scale_interval_m": dimension_scale_intervals,
         "axis_aligned_min_in_source_frame_m": bounds_min,
         "axis_aligned_max_in_source_frame_m": bounds_max,
         "axis_aligned_min_in_source_frame_scale_interval_m": coordinate_scale_intervals(bounds_min),
@@ -441,9 +475,24 @@ def measure_point_cloud_preview(
         "branch_length_m": None,
         "qc_warnings": (
             (["duplicate_points_present"] if unique_count < len(vertices) else [])
+            + (
+                ["dimension_uncertainty_interval_below_numeric_resolution"]
+                if dimension_scale_interval_underflow
+                else []
+            )
             + (["envelope_volume_below_numeric_resolution"] if envelope_volume_underflow else [])
+            + (
+                ["envelope_uncertainty_interval_below_numeric_resolution"]
+                if envelope_scale_interval_underflow
+                else []
+            )
             + (["preview_omits_axis_extrema"] if preview_omitted_axis_extrema else [])
             + (["preview_omits_selected_chord_endpoints"] if omitted_chord_endpoints else [])
+            + (
+                ["selected_chord_uncertainty_interval_below_numeric_resolution"]
+                if selected_chord_interval_underflow
+                else []
+            )
             + (["repeated_selected_point_pairs"] if repeated_selected_point_pairs else [])
             + (["coincident_selected_chord_endpoints"] if coincident_selected_chord_count else [])
             + (
