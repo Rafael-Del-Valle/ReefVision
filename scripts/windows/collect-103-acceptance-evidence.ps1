@@ -86,15 +86,30 @@ function Get-ArtifactEvidence([string]$Path, [string]$Kind) {
         sha256 = $sha256
     }
 }
-$webviewPaths = @(
-    'HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F1A6D1A4-3C6D-4E0B-9E14-4DDE4B2A57A9}',
-    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F1A6D1A4-3C6D-4E0B-9E14-4DDE4B2A57A9}',
-    'HKCU:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F1A6D1A4-3C6D-4E0B-9E14-4DDE4B2A57A9}'
-)
-$webview = @($webviewPaths | ForEach-Object {
-    $entry = Get-ItemProperty -LiteralPath $_ -ErrorAction SilentlyContinue
-    if ($null -ne $entry -and $entry.pv) {
-        [pscustomobject]@{ registryPath = $_; version = [string]$entry.pv }
+# Reuse the same validated WebView2 inventory as the clean-install harness.
+# The old local probes used a non-WebView2 product GUID and could silently
+# report no runtime; provider-based HKLM paths also depend on PowerShell bitness.
+# This remains read-only registry evidence, never installed-GUI acceptance.
+$acceptanceLibrary = Join-Path (Split-Path -Parent $PSScriptRoot) 'lib/windows-clean-acceptance.ps1'
+. $acceptanceLibrary
+$runtimeInfo = Get-ReefVisionWebView2RuntimeInfo
+$runtimeId = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+$registryPathsByScope = @{
+    'machine-32' = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$runtimeId"
+    'machine-64' = "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\$runtimeId"
+    'user' = "HKCU:\SOFTWARE\Microsoft\EdgeUpdate\Clients\$runtimeId"
+}
+$webview = @($runtimeInfo.registrations | ForEach-Object {
+    $scope = [string]$_.scope
+    if (-not $registryPathsByScope.ContainsKey($scope)) {
+        throw "Unexpected WebView2 registry scope: $scope"
+    }
+    # Preserve the existing 'registryPath'/'version' evidence fields, with an
+    # additive 'scope' for unambiguous 32-bit/64-bit machine view provenance.
+    [pscustomobject]@{
+        registryPath = $registryPathsByScope[$scope]
+        version = [string]$_.version
+        scope = $scope
     }
 })
 $gpu = $null
