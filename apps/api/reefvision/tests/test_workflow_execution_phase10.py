@@ -14,7 +14,7 @@ from reefvision.db.models import (
     WorkflowNodeRun,
     WorkflowRun,
 )
-from reefvision.domain.errors import ConflictError
+from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.jobs.workflow import _input_artifacts, process_workflow_run_job
 from reefvision.schemas.workflow_graphs import WorkflowPlanInputBinding
 from reefvision.services.workflow_execution import (
@@ -198,6 +198,20 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
                     payload=original["payload_json"],
                 ),
             )
+        session.rollback()
+
+    # This source artifact came from a saved, completed two-node workflow.
+    # Its malformed JSON array must not be coerced into a valid input object.
+    with app.state.session_factory() as session:
+        source = session.get(WorkflowArtifact, artifacts["project_reference"]["id"])
+        assert source is not None
+        source.payload_json = cast(dict[str, object], [["project_id", project["id"]]])
+        session.flush()
+        service = WorkflowExecutionService(session)
+        with pytest.raises(ValidationError, match="must contain a JSON object"):
+            service._single_payload({"project": [source]}, "project")
+        with pytest.raises(ValidationError, match="must contain a JSON object"):
+            service._optional_payload({"project": [source]}, "project")
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 

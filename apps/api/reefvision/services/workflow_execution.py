@@ -448,7 +448,11 @@ class WorkflowExecutionService:
         items = inputs.get(port_id, [])
         if len(items) != 1:
             raise ValidationError(f"Workflow input requires exactly one artifact: {port_id}")
-        return dict(items[0].payload_json)
+        # Preserve the JSON shape of workflow science even for direct callers.
+        payload = items[0].payload_json
+        if not isinstance(payload, dict):
+            raise ValidationError(f"Workflow input '{port_id}' must contain a JSON object")
+        return dict(payload)
 
     @staticmethod
     def _optional_payload(
@@ -458,7 +462,12 @@ class WorkflowExecutionService:
         items = inputs.get(port_id, [])
         if len(items) > 1:
             raise ValidationError(f"Workflow input accepts at most one artifact: {port_id}")
-        return dict(items[0].payload_json) if items else None
+        if not items:
+            return None
+        payload = items[0].payload_json
+        if not isinstance(payload, dict):
+            raise ValidationError(f"Workflow input '{port_id}' must contain a JSON object")
+        return dict(payload)
 
     def _execute_project_source(
         self,
