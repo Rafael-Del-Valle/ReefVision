@@ -120,6 +120,7 @@ def test_preview_scale_intervals_standalone_and_saved_workflow_parity(
     assert artifact["provenance"]["calibration_verified"] is False
     assert artifact["provenance"]["coordinate_registration_verified"] is False
 
+
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
 def test_dimension_lower_scale_interval_underflow_is_explicit_and_workflow_safe(
     client: TestClient, source_format: str
@@ -158,9 +159,7 @@ def test_dimension_lower_scale_interval_underflow_is_explicit_and_workflow_safe(
             [0.0, 0.0],
             [0.0, 0.0],
         ]
-        assert (
-            "dimension_uncertainty_interval_below_numeric_resolution" not in valid["qc_warnings"]
-        )
+        assert "dimension_uncertainty_interval_below_numeric_resolution" not in valid["qc_warnings"]
 
     project_id = str(create_project(client, f"Dimension lower interval {source_format}")["id"])
     base = f"/api/v1/projects/{project_id}"
