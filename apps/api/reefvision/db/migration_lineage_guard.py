@@ -254,12 +254,29 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
     unexpected_science = sorted(tables & _SCIENCE_TABLES)
     review_columns = inspector.get_columns(_REVIEW_TABLE) if _REVIEW_TABLE in tables else []
     actual_columns = {column["name"] for column in review_columns}
+    # SQLite table_info and some SQLAlchemy inspection paths omit generated
+    # columns. A forged 0038 stamp with extra ordinary/virtual/stored fields
+    # must not masquerade as the migration's exact append-only audit table.
+    # Inspect metadata only: never evaluate generated expressions or mutate
+    # persisted reviewer/scientific records.
+    hidden_review_columns: list[str] = []
+    if _REVIEW_TABLE in tables and connection.dialect.name == "sqlite":
+        review_xinfo = list(
+            connection.execute(text("PRAGMA table_xinfo(review_queue_item_events)")).mappings()
+        )
+        actual_columns = {row["name"] for row in review_xinfo}
+        hidden_review_columns = sorted(
+            row["name"] for row in review_xinfo if row["hidden"] != 0
+        )
     missing_columns = sorted(_REVIEW_COLUMNS - actual_columns)
-    if missing_columns or unexpected_science:
+    unexpected_review_columns = sorted(actual_columns - _REVIEW_COLUMNS)
+    if missing_columns or unexpected_review_columns or hidden_review_columns or unexpected_science:
         raise RuntimeError(
             f"Unsafe ReefVision Alembic revision {revision} collision: the installed "
             "database is not the ReefVision 1.6 review-events lineage "
             f"(missing review columns={missing_columns}; "
+            f"unexpected review columns={unexpected_review_columns}; "
+            f"generated/hidden review columns={hidden_review_columns}; "
             f"scientific tables present={unexpected_science}). "
             "ReefVision 1.1 independently used revision 0038 for scientific "
             "records. Stop migration, preserve the original database and "
@@ -270,7 +287,19 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
     if revision == "0041":
         bulk_details = inspector.get_columns(_BULK_TABLE) if _BULK_TABLE in tables else []
         bulk_columns = {column["name"]: column for column in bulk_details}
-        missing_bulk = sorted(_BULK_COLUMNS - bulk_columns.keys())
+        hidden_bulk_columns: list[str] = []
+        if _BULK_TABLE in tables and connection.dialect.name == "sqlite":
+            bulk_xinfo = list(
+                connection.execute(text("PRAGMA table_xinfo(review_queue_bulk_requests)")).mappings()
+            )
+            actual_bulk_names = {row["name"] for row in bulk_xinfo}
+            hidden_bulk_columns = sorted(
+                row["name"] for row in bulk_xinfo if row["hidden"] != 0
+            )
+        else:
+            actual_bulk_names = set(bulk_columns)
+        missing_bulk = sorted(_BULK_COLUMNS - actual_bulk_names)
+        unexpected_bulk_columns = sorted(actual_bulk_names - _BULK_COLUMNS)
         # SQLite permits NULL in a bare TEXT PRIMARY KEY. An apparently
         # unique registry with nullable identity/scope fields cannot prove
         # who submitted a batch or which scientific review it targeted.
@@ -324,6 +353,8 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             }
         if (
             missing_bulk
+            or unexpected_bulk_columns
+            or hidden_bulk_columns
             or bulk_primary_key != ["id"]
             or nullable_bulk
             or defaulted_bulk
@@ -332,6 +363,8 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             raise RuntimeError(
                 "Unsafe ReefVision Alembic revision 0041 collision: "
                 f"bulk request registry missing columns={missing_bulk}; "
+                f"unexpected columns={unexpected_bulk_columns}; "
+                f"generated/hidden columns={hidden_bulk_columns}; "
                 f"nullable required columns={nullable_bulk}; "
                 f"defaulted required columns={defaulted_bulk}; "
                 f"foreign keys={sorted(actual_foreign_keys)}; "
