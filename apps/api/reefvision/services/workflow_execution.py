@@ -1048,6 +1048,26 @@ class WorkflowExecutionService:
         # this run, even when its port, type and payload are identical.
         if node_run.workflow_run_id != run_id:
             raise ConflictError("Workflow artifact producer belongs to a different workflow run")
+        # Reject an undeclared output before writing it. A typed artifact's
+        # checksum does not prove its port is part of the producer contract;
+        # catching this at publication avoids persisting invalid science.
+        from reefvision.services.workflow_graphs import workflow_node_registry
+
+        definition = workflow_node_registry().get(node_run.node_type)
+        accepted_types = (
+            {
+                accepted_type
+                for port in definition.output_ports
+                if port.port_id == specification.port_id
+                for accepted_type in port.accepted_types
+            }
+            if definition is not None
+            else set()
+        )
+        if specification.data_type not in accepted_types:
+            raise ConflictError("Workflow artifact output type does not match registry")
+
+
         checksum = self.artifact_checksum(specification.payload)
 
         existing = list(
@@ -1087,24 +1107,6 @@ class WorkflowExecutionService:
                 "Workflow node already persisted a different artifact for this output"
             )
 
-        # Reject an undeclared output before writing it. A typed artifact's
-        # checksum does not prove its port is part of the producer contract;
-        # catching this at publication avoids persisting invalid science.
-        from reefvision.services.workflow_graphs import workflow_node_registry
-
-        definition = workflow_node_registry().get(node_run.node_type)
-        accepted_types = (
-            {
-                accepted_type
-                for port in definition.output_ports
-                if port.port_id == specification.port_id
-                for accepted_type in port.accepted_types
-            }
-            if definition is not None
-            else set()
-        )
-        if specification.data_type not in accepted_types:
-            raise ConflictError("Workflow artifact output type does not match registry")
 
         artifact = WorkflowArtifact(
             workflow_run_id=run_id,
