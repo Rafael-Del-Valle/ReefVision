@@ -63,10 +63,14 @@ class SpatialAssetMetadataRevisionService:
         # Check the immediate predecessor before exposing a purported history.
         if row.revision == 1:
             if row.previous_revision_id is not None:
-                raise ValidationError("Spatial asset metadata revision ancestry is inconsistent")
+                raise ValidationError(
+                    "Spatial asset metadata revision ancestry is inconsistent"
+                )
         else:
             if row.previous_revision_id is None:
-                raise ValidationError("Spatial asset metadata revision ancestry is inconsistent")
+                raise ValidationError(
+                    "Spatial asset metadata revision ancestry is inconsistent"
+                )
             predecessor = self.session.get(
                 SpatialAssetMetadataRevision, row.previous_revision_id
             )
@@ -77,7 +81,9 @@ class SpatialAssetMetadataRevisionService:
                 or predecessor.source_sha256 != source.sha256
                 or predecessor.revision != row.revision - 1
             ):
-                raise ValidationError("Spatial asset metadata revision ancestry is inconsistent")
+                raise ValidationError(
+                    "Spatial asset metadata revision ancestry is inconsistent"
+                )
         try:
             payload = SpatialAssetMetadataRevisionCreate.model_validate(
                 {
