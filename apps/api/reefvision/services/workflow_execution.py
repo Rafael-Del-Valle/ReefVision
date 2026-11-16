@@ -1155,6 +1155,11 @@ class WorkflowExecutionService:
         # recreate a missing output after a run was signed as succeeded.
         if run_status == "succeeded":
             raise ConflictError("Succeeded workflow run artifacts are immutable")
+        # Only the active executor may publish new science. An API-created,
+        # still-queued run or a pending/review-paused/already-succeeded node
+        # must not acquire an output by calling the adapter directly.
+        if run_status != "running" or node_run.status != "running":
+            raise ConflictError("Workflow artifact publication requires a running workflow and node")
 
         artifact = WorkflowArtifact(
             workflow_run_id=run_id,
