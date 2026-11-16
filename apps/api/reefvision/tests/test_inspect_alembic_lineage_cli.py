@@ -215,6 +215,69 @@ def test_alembic_stamp_constraints_are_diagnosed_without_mutation(
     assert path.read_bytes() == before
 
 
+
+@pytest.mark.parametrize(
+    ("generated_column", "canonical"),
+    [
+        ("", True),
+        (", shadow_revision TEXT GENERATED ALWAYS AS ('0038') VIRTUAL", False),
+        (", shadow_revision TEXT GENERATED ALWAYS AS ('0038') STORED", False),
+    ],
+)
+def test_generated_alembic_columns_cannot_masquerade_as_canonical(
+    tmp_path, generated_column, canonical
+):
+    """A SQLite table_info-only check overlooks generated revision columns."""
+    import json
+    import subprocess
+    import sys
+
+    path = tmp_path / "research.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute(
+            "CREATE TABLE alembic_version "
+            "(version_num TEXT NOT NULL PRIMARY KEY" + generated_column + ")"
+        )
+        db.execute("INSERT INTO alembic_version (version_num) VALUES ('0039')")
+        db.execute(
+            "CREATE TABLE review_queue_item_events "
+            "(id INTEGER PRIMARY KEY, note TEXT)"
+        )
+        db.execute(
+            "INSERT INTO review_queue_item_events VALUES (1, 'private coral observation')"
+        )
+        db.commit()
+
+    original = path.read_bytes()
+    with sqlite3.connect(path) as db:
+        # The old probe accepts all three versions as apparently single-column.
+        assert len(db.execute("PRAGMA table_info(alembic_version)").fetchall()) == 1
+        assert len(db.execute("PRAGMA table_xinfo(alembic_version)").fetchall()) == (
+            1 if canonical else 2
+        )
+
+    first = module.inspect(path)
+    assert module.inspect(path) == first
+    assert first["canonical_alembic_stamp_constraints"] is canonical
+    assert ("unexpected_alembic_version_columns" in first["warnings"]) is not canonical
+    assert ("noncanonical_alembic_stamp_constraints" in first["warnings"]) is not canonical
+    assert first["revision_rows"] == ["0039"]
+    assert first["lineage_hint"] == "qc"
+    assert first["upgrade_authorized"] is False
+    assert "private coral observation" not in json.dumps(first)
+    assert path.read_bytes() == original
+
+    strict = subprocess.run(
+        [sys.executable, str(SCRIPT), str(path), "--fail-on-warning"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert strict.returncode == (0 if canonical else 2)
+    assert json.loads(strict.stdout)["warnings"] == first["warnings"]
+    assert path.read_bytes() == original
+
+
 @pytest.mark.parametrize(
     ("revision", "tables", "expected_warnings"),
     [

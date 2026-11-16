@@ -84,25 +84,24 @@ def inspect(path: Path) -> dict:
             )
         }
         version_table_present = objects.get("alembic_version") == "table"
-        version_columns = (
-            {row[1] for row in db.execute('PRAGMA table_info("alembic_version")')}
-            if version_table_present
-            else set()
-        )
-        # Alembic's canonical SQLite stamp is a single non-null primary-key
-        # version_num column. A plausible revision string alone is insufficient
-        # evidence when a restored table permits duplicate or NULL stamps.
+        # table_info hides SQLite generated and virtual-table hidden columns.
+        # Use xinfo so a forged Alembic table cannot pass as single-column
+        # canonical merely because its extra columns are hidden from table_info.
         version_table_info = (
-            list(db.execute('PRAGMA table_info("alembic_version")'))
+            list(db.execute('PRAGMA table_xinfo("alembic_version")'))
             if version_table_present
             else []
         )
+        version_columns = {row[1] for row in version_table_info}
+        # A canonical Alembic stamp has precisely one ordinary, non-null
+        # text primary-key column. A plausible revision string is not enough.
         canonical_stamp_constraints = (
             len(version_table_info) == 1
             and version_table_info[0][1] == "version_num"
             and str(version_table_info[0][2]).upper() in {"VARCHAR(32)", "VARCHAR", "TEXT"}
             and version_table_info[0][3] == 1
             and version_table_info[0][5] == 1
+            and version_table_info[0][6] == 0
         )
         # A malformed Alembic table is a diagnostic finding, not an inspector crash.
         revisions = (

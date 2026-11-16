@@ -19,3 +19,21 @@ database-byte preservation. No research record is recalculated, accepted,
 repaired, or migrated by this inspection. Full repository pytest, lint/type,
 cross-version migration acceptance, saved Workflow Builder regressions and
 Windows installed-GUI/MSI testing remain release gates.
+
+## 2026-11-16 — Canonical Alembic stamp parity in the standalone inspector
+
+The separate read-only `scripts/inspect-alembic-lineage.py` preflight also
+used SQLite `PRAGMA table_info` to decide whether `alembic_version` had
+exactly one canonical column. Because `table_info` suppresses generated
+columns, a malformed stamp with an extra virtual or stored generated column
+could appear canonical even though the underlying schema differs.
+
+The preflight now inspects `table_xinfo` and requires exactly one ordinary
+`version_num` column with its existing text, NOT NULL and primary-key
+constraints. It emits the pre-existing `unexpected_alembic_version_columns`
+and `noncanonical_alembic_stamp_constraints` warnings on generated-column
+forgeries, causing `--fail-on-warning` to reject them. Regression fixtures
+include both generated-column kinds, a genuine single-column control,
+unchanged QC/biological records, no leaked observation text, and strict CLI
+exit status. This is read-only diagnostic parity, **not** authorization to
+reconcile the independent 1.1/1.6 revision-0038 collision.
