@@ -122,6 +122,30 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
     assert run["job_id"]
 
     app = cast(FastAPI, client.app)
+    # The queued Workflow Builder execution has a saved graph, but the
+    # pending producer must not publish science before worker execution.
+    queued_detail = client.get(f"/api/v1/workflow-runs/{run['id']}")
+    assert queued_detail.status_code == 200, queued_detail.text
+    with app.state.session_factory() as session:
+        pending_producer = session.get(
+            WorkflowNodeRun, queued_detail.json()["nodes"][0]["id"]
+        )
+        assert pending_producer is not None
+        assert pending_producer.status == "pending"
+        with pytest.raises(
+            ConflictError, match="publication requires a running workflow and node"
+        ):
+            WorkflowExecutionService(session).persist_artifact(
+                run_id=str(run["id"]),
+                node_run=pending_producer,
+                specification=WorkflowArtifactSpec(
+                    port_id="project",
+                    data_type="project_reference",
+                    payload={"project_id": project["id"]},
+                ),
+            )
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json()["artifacts"] == []
+
     assert (
         process_workflow_run_job(
             app.state.settings,
