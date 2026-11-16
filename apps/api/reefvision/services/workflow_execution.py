@@ -1067,6 +1067,11 @@ class WorkflowExecutionService:
         if specification.data_type not in accepted_types:
             raise ConflictError("Workflow artifact output type does not match registry")
 
+        # Adapters are runtime inputs even when WorkflowArtifactSpec is typed.
+        # Never turn a list of pairs into a signed scientific output via dict().
+        if not isinstance(specification.payload, dict):
+            raise ValidationError("Workflow artifact payload must be a JSON object")
+
         checksum = self.artifact_checksum(specification.payload)
 
         existing = list(
