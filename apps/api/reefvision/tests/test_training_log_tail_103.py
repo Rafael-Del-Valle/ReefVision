@@ -663,10 +663,23 @@ def test_log_tail_quarantines_sgr_spliced_loss_tokens(
 
     assert training_routes._training_log_tail("training.log", tmp_path) == {
         "available": True,
-        "text": (
-            "[terminal-edited training log record omitted]\n"
-            "train/cls_loss=0.31\n"
-        ),
+        "text": ("[terminal-edited training log record omitted]\ntrain/cls_loss=0.31\n"),
+    }
+    assert log.read_bytes() == original
+
+
+def test_log_tail_preserves_leading_clear_before_colored_epoch_and_loss(tmp_path: Path) -> None:
+    """A leading CSI clear must not be mistaken for a loss-token splice."""
+    log = tmp_path / "training.log"
+    original = (
+        b"\x1b[2K\x1b[36mEpoch 3\x1b[0m\n"
+        b"\x1b[0K\x1b[33mtrain/box_loss=0.25\x1b[0m\n"
+    )
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "Epoch 3\ntrain/box_loss=0.25\n",
     }
     assert log.read_bytes() == original
 
