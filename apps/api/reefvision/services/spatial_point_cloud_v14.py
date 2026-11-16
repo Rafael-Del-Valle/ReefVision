@@ -18,6 +18,16 @@ MAX_PREVIEW_POINTS = 512
 _PLY_FLOAT_TOKEN = r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
 
 
+def _scale_interval_unresolved(
+    nominal: float, uncertainty: float, lower: float, upper: float
+) -> bool:
+    """Flag rounding that falsely reports zero bounds or exact scale certainty."""
+    return nominal != 0.0 and (
+        (uncertainty < 1.0 and (lower == 0.0 or upper == 0.0))
+        or (uncertainty > 0.0 and lower == upper)
+    )
+
+
 def parse_ascii_ply_points(
     text: str, *, colors_out: list[list[int]] | None = None
 ) -> list[list[float]]:
@@ -251,9 +261,12 @@ def measure_point_cloud_preview(
             # Preserve the nominal chord and mark its interval unresolved.
             chord_interval_underflow = (
                 relative_scale_uncertainty is not None
-                and chord_m > 0.0
-                and relative_scale_uncertainty < 1.0
-                and chord_m * (1 - relative_scale_uncertainty) == 0.0
+                and _scale_interval_unresolved(
+                    chord_m,
+                    relative_scale_uncertainty,
+                    chord_m * (1 - relative_scale_uncertainty),
+                    chord_m * (1 + relative_scale_uncertainty),
+                )
             )
             if chord_interval_underflow:
                 chord_qc_warnings.append("chord_uncertainty_interval_below_numeric_resolution")
@@ -313,7 +326,7 @@ def measure_point_cloud_preview(
         for dimension in dimensions:
             lower = dimension * (1 - relative_scale_uncertainty)
             upper = dimension * (1 + relative_scale_uncertainty)
-            if dimension > 0.0 and relative_scale_uncertainty < 1.0 and lower == 0.0:
+            if _scale_interval_unresolved(dimension, relative_scale_uncertainty, lower, upper):
                 dimension_scale_interval_underflow = True
                 dimension_scale_intervals.append(None)
             else:
@@ -371,11 +384,7 @@ def measure_point_cloud_preview(
                 value * (1 - relative_scale_uncertainty),
                 value * (1 + relative_scale_uncertainty),
             )
-            if (
-                value != 0.0
-                and relative_scale_uncertainty < 1.0
-                and any(candidate == 0.0 for candidate in candidates)
-            ):
+            if _scale_interval_unresolved(value, relative_scale_uncertainty, *candidates):
                 coordinate_scale_interval_underflow = True
                 intervals.append(None)
             else:

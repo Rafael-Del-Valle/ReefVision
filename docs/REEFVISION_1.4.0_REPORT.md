@@ -157,6 +157,9 @@ annotation, calibration, anatomy, identity, growth, or condition evidence.
 - Representative registration, matching, longitudinal, anatomical branch
   length, condition, and physical-hardware acceptance are blocked as listed in
   the canonical inventory.
+- Point-cloud scale-only dimension, selected-chord and signed-coordinate intervals
+  are unresolved when nonzero uncertainty rounds distinct bounds to one float.
+  This is not evidence of exact scale, physical calibration or confidence limits.
 - The complete installed 1.3/legacy-draft-1.4 lineage matrix is not available.
 - Local true installation was blocked by the non-elevated session; remote
   disposable Windows installation passed.
