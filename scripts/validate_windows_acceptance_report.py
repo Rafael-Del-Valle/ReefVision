@@ -207,7 +207,11 @@ def validate_report(
     _require(isinstance(report, dict), "Acceptance report must be a JSON object")
     _require(report.get("schema_version") == "reefvision-windows-clean-acceptance-1", "Unknown evidence schema")
     _require(report.get("plan_only") is False, "Plan-only evidence is not installed acceptance")
-    for flag in ("live_sam2_requested", "approved_checkpoint_download"):
+    for flag in (
+        "live_sam2_requested",
+        "approved_checkpoint_download",
+        "previous_installer_isolated_acceptance_confirmed",
+    ):
         _require(isinstance(report.get(flag), bool), f"Missing explicit {flag} evidence flag")
     _require(report.get("failure_reason") is None, "Acceptance report records a failure")
     _isolated_acceptance_root(report)
@@ -273,6 +277,14 @@ def validate_report(
     upgrade = _status(report, "upgrade")
     _require(expected_upgrade in {"passed", "skipped"}, "Unknown expected upgrade policy")
     if expected_upgrade == "passed":
+        # The previous MSI is deliberately run before the target MSI. Its
+        # isolated-data compatibility requires explicit researcher confirmation
+        # before the native harness starts installation, not merely a valid
+        # previous version or checksum in a subsequently exported report.
+        _require(
+            report["previous_installer_isolated_acceptance_confirmed"],
+            "Real MSI upgrade requires explicit previous MSI isolated-data compatibility confirmation",
+        )
         _require(
             _status(report, "upgrade_install") == "PASS",
             "Real MSI installation and pre-migration asset retention did not PASS",
@@ -319,6 +331,13 @@ def validate_report(
         _require(
             isinstance(previous_digest, str) and SHA256.fullmatch(previous_digest) is not None,
             "Missing or invalid previous MSI SHA-256",
+        )
+        # Without --installer, file-byte checks cannot establish that these
+        # are separate MSI packages. Windows normalizes separators and casing,
+        # so catch aliases even in report-only/offline preflight validation.
+        _require(
+            PureWindowsPath(previous_path) != PureWindowsPath(report["installer_path"]),
+            "Previous and target MSI paths are identical",
         )
         _require(
             previous_digest.lower() != report["installer_sha256"].lower(),

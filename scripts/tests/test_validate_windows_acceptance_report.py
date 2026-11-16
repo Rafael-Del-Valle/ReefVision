@@ -43,6 +43,7 @@ def good_report() -> dict:
         "plan_only": False,
         "live_sam2_requested": False,
         "approved_checkpoint_download": False,
+        "previous_installer_isolated_acceptance_confirmed": False,
         "failure_reason": None,
         "started_at_utc": "2026-10-25T02:00:00Z",
         "completed_at_utc": "2026-10-25T02:20:00Z",
@@ -139,6 +140,7 @@ class AcceptanceEvidenceTests(unittest.TestCase):
         upgraded["post_upgrade_migration"] = upgraded_migration_evidence("1.0.3")
         upgraded["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
         upgraded["previous_installer_sha256"] = "b" * 64
+        upgraded["previous_installer_isolated_acceptance_confirmed"] = True
         upgraded["previous_installer_version"] = "1.0.2"
         MODULE.validate_report(
             upgraded, expected_version="1.0.3", expected_upgrade="passed"
@@ -231,6 +233,7 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                 report["post_upgrade_migration"] = upgraded_migration_evidence(report["reefvision_version"])
                 report["previous_installer_path"] = "C:/previous.msi"
                 report["previous_installer_sha256"] = "b" * 64
+                report["previous_installer_isolated_acceptance_confirmed"] = True
                 report["previous_installer_version"] = version
                 with self.assertRaisesRegex(MODULE.AcceptanceEvidenceError, "MSI numeric limits"):
                     MODULE.validate_report(report, expected_version="2.0.0", expected_upgrade="passed")
@@ -325,6 +328,7 @@ class AcceptanceEvidenceTests(unittest.TestCase):
         upgrade["post_upgrade_migration"] = upgraded_migration_evidence("1.0.3")
         upgrade["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
         upgrade["previous_installer_sha256"] = "b" * 64
+        upgrade["previous_installer_isolated_acceptance_confirmed"] = True
         upgrade["previous_installer_version"] = "1.0.2"
         MODULE.validate_report(upgrade, expected_version="1.0.3", expected_upgrade="passed")
 
@@ -349,6 +353,65 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                 upgrade, expected_version="1.0.3", expected_upgrade="passed"
             )
 
+
+    def test_previous_installer_upgrade_requires_isolated_data_confirmation(self) -> None:
+        report = good_report()
+        report["reefvision_version"] = "1.0.3"
+        report["upgrade_install"] = pass_evidence()
+        report["upgrade"] = pass_evidence()
+        report["post_upgrade_migration"] = upgraded_migration_evidence("1.0.3")
+        report["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
+        report["previous_installer_sha256"] = "b" * 64
+        report["previous_installer_version"] = "1.0.2"
+        report["previous_installer_isolated_acceptance_confirmed"] = True
+        MODULE.validate_report(report, expected_version="1.0.3", expected_upgrade="passed")
+
+        for value in (None, 0, 1, "true"):
+            with self.subTest(invalid_confirmation=value):
+                altered = copy.deepcopy(report)
+                altered["previous_installer_isolated_acceptance_confirmed"] = value
+                with self.assertRaisesRegex(
+                    MODULE.AcceptanceEvidenceError, "evidence flag"
+                ):
+                    MODULE.validate_report(altered, expected_version="1.0.3", expected_upgrade="passed")
+
+        missing = copy.deepcopy(report)
+        del missing["previous_installer_isolated_acceptance_confirmed"]
+        with self.assertRaisesRegex(MODULE.AcceptanceEvidenceError, "evidence flag"):
+            MODULE.validate_report(missing, expected_version="1.0.3", expected_upgrade="passed")
+
+        unapproved = copy.deepcopy(report)
+        unapproved["previous_installer_isolated_acceptance_confirmed"] = False
+        with self.assertRaisesRegex(
+            MODULE.AcceptanceEvidenceError, "isolated-data compatibility confirmation"
+        ):
+            MODULE.validate_report(unapproved, expected_version="1.0.3", expected_upgrade="passed")
+
+    def test_report_only_upgrade_requires_distinct_msi_paths(self) -> None:
+        report = good_report()
+        report["reefvision_version"] = "1.0.3"
+        report["upgrade_install"] = pass_evidence()
+        report["upgrade"] = pass_evidence()
+        report["post_upgrade_migration"] = upgraded_migration_evidence("1.0.3")
+        report["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
+        report["previous_installer_sha256"] = "b" * 64
+        report["previous_installer_version"] = "1.0.2"
+        report["previous_installer_isolated_acceptance_confirmed"] = True
+        MODULE.validate_report(report, expected_version="1.0.3", expected_upgrade="passed")
+
+        for alias in (
+            "C:/ReefVision_1.0.2_x64_en-US.msi",
+            r"c:\REEFVISION_1.0.2_X64_EN-US.MSI",
+            r"C:\.\ReefVision_1.0.2_x64_en-US.msi",
+        ):
+            with self.subTest(previous_msi_alias=alias):
+                altered = copy.deepcopy(report)
+                altered["previous_installer_path"] = alias
+                with self.assertRaisesRegex(
+                    MODULE.AcceptanceEvidenceError, "Previous and target MSI paths are identical"
+                ):
+                    MODULE.validate_report(altered, expected_version="1.0.3", expected_upgrade="passed")
+
     def test_upgrade_requires_real_higher_version_and_previous_installer(self) -> None:
         report = good_report()
         report["reefvision_version"] = "1.0.3"
@@ -357,10 +420,12 @@ class AcceptanceEvidenceTests(unittest.TestCase):
         report["post_upgrade_migration"] = upgraded_migration_evidence(report["reefvision_version"])
         report["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
         report["previous_installer_sha256"] = "b" * 64
+        report["previous_installer_isolated_acceptance_confirmed"] = True
         report["previous_installer_version"] = "1.0.2"
         MODULE.validate_report(report, expected_version="1.0.3", expected_upgrade="passed")
         for version in ("1.0.3", "1.0.4", "invalid"):
             changed = copy.deepcopy(report)
+            changed["previous_installer_isolated_acceptance_confirmed"] = True
             changed["previous_installer_version"] = version
             with self.assertRaises(MODULE.AcceptanceEvidenceError):
                 MODULE.validate_report(changed, expected_version="1.0.3", expected_upgrade="passed")
@@ -412,6 +477,7 @@ class AcceptanceEvidenceTests(unittest.TestCase):
         upgraded["post_upgrade_migration"] = upgraded_migration_evidence(upgraded["reefvision_version"])
         upgraded["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
         upgraded["previous_installer_sha256"] = "b" * 64
+        upgraded["previous_installer_isolated_acceptance_confirmed"] = True
         upgraded["previous_installer_version"] = "1.0.2"
         MODULE.validate_report(upgraded, expected_version="1.0.3", expected_upgrade="passed")
         upgraded["upgrade"]["detail"] = "  "
@@ -432,6 +498,7 @@ class AcceptanceEvidenceTests(unittest.TestCase):
             report["upgrade"] = pass_evidence()
             report["post_upgrade_migration"] = upgraded_migration_evidence(report["reefvision_version"])
             report["previous_installer_path"] = str(previous)
+            report["previous_installer_isolated_acceptance_confirmed"] = True
             report["previous_installer_version"] = "1.0.2"
             report["previous_installer_sha256"] = hashlib.sha256(previous.read_bytes()).hexdigest()
             MODULE.validate_report(
@@ -468,6 +535,7 @@ class AcceptanceEvidenceTests(unittest.TestCase):
         report["post_upgrade_migration"] = upgraded_migration_evidence("1.0.3")
         report["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
         report["previous_installer_sha256"] = "b" * 64
+        report["previous_installer_isolated_acceptance_confirmed"] = True
         report["previous_installer_version"] = "1.0.2"
         MODULE.validate_report(report, expected_version="1.0.3", expected_upgrade="passed")
 
@@ -639,6 +707,7 @@ class AcceptanceEvidenceTests(unittest.TestCase):
         upgrade["post_upgrade_migration"] = upgraded_migration_evidence("1.0.3")
         upgrade["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
         upgrade["previous_installer_sha256"] = "b" * 64
+        upgrade["previous_installer_isolated_acceptance_confirmed"] = True
         upgrade["previous_installer_version"] = "1.0.2"
         MODULE.validate_report(upgrade, expected_version="1.0.3", expected_upgrade="passed")
         upgrade["migration"].pop("timestamp_utc")
@@ -653,6 +722,7 @@ class AcceptanceEvidenceTests(unittest.TestCase):
         report["post_upgrade_migration"] = upgraded_migration_evidence(report["reefvision_version"])
         report["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
         report["previous_installer_sha256"] = "b" * 64
+        report["previous_installer_isolated_acceptance_confirmed"] = True
         report["previous_installer_version"] = "1.0.2"
         MODULE.validate_report(report, expected_version="1.0.3", expected_upgrade="passed")
         # Keep restart valid relative to every other required gate, so the
@@ -676,6 +746,7 @@ class AcceptanceEvidenceTests(unittest.TestCase):
         report["post_upgrade_migration"] = upgraded_migration_evidence(report["reefvision_version"])
         report["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
         report["previous_installer_sha256"] = "b" * 64
+        report["previous_installer_isolated_acceptance_confirmed"] = True
         report["previous_installer_version"] = "1.0.2"
         milestones = {
             "upgrade_install": "02:11:00",

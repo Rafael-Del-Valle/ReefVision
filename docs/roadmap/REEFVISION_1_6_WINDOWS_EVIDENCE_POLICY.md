@@ -204,3 +204,31 @@ Workflow Builder node because it verifies external installed-MSI evidence;
 existing typed saved QC workflow execution and review controls are retained.
 Real Windows MSI installation, GUI/rollback, cross-version migration
 reconciliation and researcher authorization remain release blockers.
+
+## Explicit prior-MSI isolation approval and artifact identity (2026-11-16)
+
+The native upgrade harness already refuses a previous MSI unless the
+researcher supplies `-PreviousInstallerSupportsIsolatedAcceptance`, attesting
+that it honors the marker-gated disposable data root. Before this change,
+the exported evidence did not retain that opt-in. The verifier could therefore
+accept an otherwise plausible upgrade report without any record of the
+researcher's compatibility confirmation. Installed reports now contain the
+strict Boolean `previous_installer_isolated_acceptance_confirmed`; a real
+upgrade requires `true`. Missing, string, integer or false values fail closed.
+
+A report-only upgrade could also describe the same Windows MSI path as both
+the previous and target installer with two different claimed hashes, when no
+actual installer files were supplied to `validate_report`. The verifier now
+rejects equal paths under Windows case-insensitive/separator-normalizing path
+identity even for offline report-only checks. Real-byte SHA-256 verification
+of both separate files remains required for the CLI acceptance path. New
+regression cases cover no consent, malformed consent, missing consent,
+same exact path, case aliases and slash/dot aliases, alongside valid upgrade
+controls. Existing clean installs continue to work without previous-MSI
+approval because they do not run any previous installer.
+
+These checks validate the internal *claims* of the report; they do not prove
+authentic consent, physical isolation or actual installed Windows usability.
+Real MSI/CAB installation, rollback, GUI interaction and independent migration
+lineage reconciliation remain **release HOLD** gates. No user projects,
+scientific records, model weights or installer artifacts are altered.

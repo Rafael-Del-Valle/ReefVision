@@ -77,6 +77,7 @@ $report = [ordered]@{
     # approval flag is required even on a disposable scientific test machine.
     live_sam2_requested = [bool]$LiveSam2Acceptance
     approved_checkpoint_download = [bool]$ApprovedCheckpointDownload
+    previous_installer_isolated_acceptance_confirmed = [bool]$PreviousInstallerSupportsIsolatedAcceptance
     install = New-ReefVisionEvidenceResult
     shortcuts = New-ReefVisionEvidenceResult
     first_launch = New-ReefVisionEvidenceResult
