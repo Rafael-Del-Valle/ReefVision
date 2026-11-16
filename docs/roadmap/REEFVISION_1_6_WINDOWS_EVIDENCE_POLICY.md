@@ -174,3 +174,33 @@ Ruff/pytest/frontend/E2E/Windows acceptance, 1.1/1.6 migration-lineage
 reconciliation, representative biology and rollback remain required. The
 typed saved QC Workflow Builder already exists; installer-evidence parsing
 is intentionally not introduced as a scientific graph node.
+
+## Approved live SAM evidence must include researcher review (2026-11-16)
+
+The native Windows harness deliberately refuses `-LiveSam2Acceptance` unless
+`-ApprovedCheckpointDownload` is also supplied. This optional check obtains
+pretrained SAM 2.1 weights over the network and is **never** part of default
+offline acceptance. Its confidence-review step must demonstrate that a pending
+prediction is not mistaken for a verified scientific annotation, and that
+acceptance requires an explicit human decision.
+
+The report now records separate, actual PowerShell switches
+`live_sam2_requested` and `approved_checkpoint_download`. The verifier
+requires real JSON booleans, rejects an unapproved live run, and accepts
+`sam2_live=PASS` only alongside `confidence_review=PASS` with both explicit
+switches true. An unrequested run must record both gates as `SKIPPED` with
+the native documented reasons. For an approved live run it additionally
+checks external annotation import → pending-prediction review → SAM completion
+→ restart, and SAM completion before target-MSI installation on upgrade.
+These are causal evidence checks, not cryptographic attestation or approval to
+download anything in this development iteration. Old reports lacking the new
+switch evidence fail closed for **new release claims** but are not altered.
+
+Standard-library tests include valid offline/live/upgrade controls, missing or
+non-boolean switch records, unapproved pretrained inference, split review
+results, undocumented skips, backwards event timestamps and live inference
+incorrectly placed after upgrade installation. This change adds no scientific
+Workflow Builder node because it verifies external installed-MSI evidence;
+existing typed saved QC workflow execution and review controls are retained.
+Real Windows MSI installation, GUI/rollback, cross-version migration
+reconciliation and researcher authorization remain release blockers.

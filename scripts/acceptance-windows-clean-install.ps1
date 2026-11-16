@@ -73,6 +73,10 @@ $report = [ordered]@{
     acceptance_root = $AcceptanceRoot
     isolated_data_root = $DataRoot
     plan_only = [bool]$PlanOnly
+    # Persist explicit command-line opt-in. The separate checkpoint-download
+    # approval flag is required even on a disposable scientific test machine.
+    live_sam2_requested = [bool]$LiveSam2Acceptance
+    approved_checkpoint_download = [bool]$ApprovedCheckpointDownload
     install = New-ReefVisionEvidenceResult
     shortcuts = New-ReefVisionEvidenceResult
     first_launch = New-ReefVisionEvidenceResult

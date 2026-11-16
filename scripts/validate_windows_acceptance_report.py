@@ -176,6 +176,17 @@ def _verify_causal_gate_order(report: dict[str, Any], *, expected_upgrade: str) 
             ("project_exchange", "upgrade"),
             ("upgrade", "uninstall"),
         )
+    if report.get("live_sam2_requested") is True:
+        # The native installed harness checks pending predictions, records
+        # researcher acceptance, then finalizes SAM evidence before restarting
+        # (and before invoking the target MSI during a real upgrade).
+        pairs += (
+            ("external_annotation_imports", "confidence_review"),
+            ("confidence_review", "sam2_live"),
+            ("sam2_live", "restart"),
+        )
+        if expected_upgrade == "passed":
+            pairs += (("sam2_live", "upgrade_install"),)
     for before, after in pairs:
         before_at = _utc(report[before]["timestamp_utc"], f"{before}.timestamp_utc")
         after_at = _utc(report[after]["timestamp_utc"], f"{after}.timestamp_utc")
@@ -196,6 +207,8 @@ def validate_report(
     _require(isinstance(report, dict), "Acceptance report must be a JSON object")
     _require(report.get("schema_version") == "reefvision-windows-clean-acceptance-1", "Unknown evidence schema")
     _require(report.get("plan_only") is False, "Plan-only evidence is not installed acceptance")
+    for flag in ("live_sam2_requested", "approved_checkpoint_download"):
+        _require(type(report.get(flag)) is bool, f"Missing explicit {flag} evidence flag")
     _require(report.get("failure_reason") is None, "Acceptance report records a failure")
     _isolated_acceptance_root(report)
     start = _utc(report.get("started_at_utc"), "started_at_utc")
@@ -234,6 +247,28 @@ def validate_report(
         _require(status in {"PASS", "SKIPPED"}, f"Invalid optional researcher-approval gate {key}")
         if status == "PASS":
             _verified_pass(report, key, started=start, completed=end)
+
+    # Live SAM obtains pretrained weights; a PASS must be tied to *both* the
+    # researcher-requested live test and the separate download approval used
+    # by the installed PowerShell harness. Its pending-prediction review and
+    # verified human acceptance are inseparable from live inference evidence.
+    if report["live_sam2_requested"]:
+        _require(
+            report["approved_checkpoint_download"],
+            "Live SAM acceptance lacks explicit checkpoint-download approval",
+        )
+        for key in OPTIONAL_APPROVAL_GATES:
+            _require(_status(report, key) == "PASS", f"Live SAM acceptance missing {key} PASS")
+    else:
+        skip_details = {
+            "sam2_live": "Real SAM 2.1 packaged runtime acceptance not requested",
+            "confidence_review": "Real pending prediction review not requested",
+        }
+        for key, detail in skip_details.items():
+            _require(
+                _status(report, key) == "SKIPPED" and report[key].get("detail") == detail,
+                f"Unrequested live SAM gate {key} must have its documented SKIPPED evidence",
+            )
 
     upgrade = _status(report, "upgrade")
     _require(expected_upgrade in {"passed", "skipped"}, "Unknown expected upgrade policy")

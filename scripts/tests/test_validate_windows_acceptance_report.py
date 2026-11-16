@@ -41,6 +41,8 @@ def good_report() -> dict:
     result = {
         "schema_version": "reefvision-windows-clean-acceptance-1",
         "plan_only": False,
+        "live_sam2_requested": False,
+        "approved_checkpoint_download": False,
         "failure_reason": None,
         "started_at_utc": "2026-10-25T02:00:00Z",
         "completed_at_utc": "2026-10-25T02:20:00Z",
@@ -62,8 +64,14 @@ def good_report() -> dict:
         "post_upgrade_migration": None,
         "upgrade_install": {"status": "SKIPPED", "detail": "SkipUpgrade requested"},
         "upgrade": {"status": "SKIPPED", "detail": "SkipUpgrade requested"},
-        "sam2_live": {"status": "SKIPPED"},
-        "confidence_review": {"status": "SKIPPED"},
+        "sam2_live": {
+            "status": "SKIPPED",
+            "detail": "Real SAM 2.1 packaged runtime acceptance not requested",
+        },
+        "confidence_review": {
+            "status": "SKIPPED",
+            "detail": "Real pending prediction review not requested",
+        },
     }
     for key in MODULE.REQUIRED_PASS:
         result[key] = pass_evidence()
@@ -233,6 +241,113 @@ class AcceptanceEvidenceTests(unittest.TestCase):
             report[field] = {"status": "NOT RUN"}
             with self.assertRaises(MODULE.AcceptanceEvidenceError):
                 MODULE.validate_report(report, expected_version="1.0.2")
+
+    def test_live_sam_requires_explicit_download_approval_and_verified_review(self) -> None:
+        report = good_report()
+        for key in ("live_sam2_requested", "approved_checkpoint_download"):
+            with self.subTest(missing_flag=key):
+                altered = copy.deepcopy(report)
+                del altered[key]
+                with self.assertRaisesRegex(
+                    MODULE.AcceptanceEvidenceError, "evidence flag"
+                ):
+                    MODULE.validate_report(altered, expected_version="1.0.2")
+        for value in (None, 0, 1, "false", "true"):
+            with self.subTest(non_boolean_request=value):
+                altered = copy.deepcopy(report)
+                altered["live_sam2_requested"] = value
+                with self.assertRaisesRegex(
+                    MODULE.AcceptanceEvidenceError, "evidence flag"
+                ):
+                    MODULE.validate_report(altered, expected_version="1.0.2")
+
+        live = good_report()
+        live["live_sam2_requested"] = True
+        live["confidence_review"] = pass_evidence()
+        live["sam2_live"] = pass_evidence()
+        with self.assertRaisesRegex(
+            MODULE.AcceptanceEvidenceError, "checkpoint-download approval"
+        ):
+            MODULE.validate_report(live, expected_version="1.0.2")
+        live["approved_checkpoint_download"] = True
+        MODULE.validate_report(live, expected_version="1.0.2")
+
+        for key in MODULE.OPTIONAL_APPROVAL_GATES:
+            with self.subTest(incomplete_live_review=key):
+                altered = copy.deepcopy(live)
+                altered[key] = {"status": "SKIPPED"}
+                with self.assertRaisesRegex(
+                    MODULE.AcceptanceEvidenceError, "missing .* PASS"
+                ):
+                    MODULE.validate_report(altered, expected_version="1.0.2")
+            with self.subTest(unrequested_live_proof=key):
+                altered = copy.deepcopy(report)
+                altered[key] = pass_evidence()
+                with self.assertRaisesRegex(
+                    MODULE.AcceptanceEvidenceError, "Unrequested live SAM gate"
+                ):
+                    MODULE.validate_report(altered, expected_version="1.0.2")
+
+        for key in MODULE.OPTIONAL_APPROVAL_GATES:
+            with self.subTest(undocumented_skip=key):
+                altered = copy.deepcopy(report)
+                altered[key]["detail"] = "no verification provided"
+                with self.assertRaisesRegex(
+                    MODULE.AcceptanceEvidenceError, "SKIPPED evidence"
+                ):
+                    MODULE.validate_report(altered, expected_version="1.0.2")
+
+    def test_live_sam_approval_evidence_follows_real_installed_sequence(self) -> None:
+        live = good_report()
+        live["live_sam2_requested"] = True
+        live["approved_checkpoint_download"] = True
+        live["confidence_review"] = pass_evidence()
+        live["sam2_live"] = pass_evidence()
+        MODULE.validate_report(live, expected_version="1.0.2")
+
+        for gate, invalid_timestamp in (
+            ("confidence_review", "2026-10-25T02:09:59Z"),
+            ("sam2_live", "2026-10-25T02:09:59Z"),
+            ("sam2_live", "2026-10-25T02:10:01Z"),
+        ):
+            with self.subTest(gate=gate, timestamp=invalid_timestamp):
+                altered = copy.deepcopy(live)
+                altered[gate]["timestamp_utc"] = invalid_timestamp
+                with self.assertRaisesRegex(
+                    MODULE.AcceptanceEvidenceError, "causal order invalid"
+                ):
+                    MODULE.validate_report(altered, expected_version="1.0.2")
+
+        upgrade = copy.deepcopy(live)
+        upgrade["reefvision_version"] = "1.0.3"
+        upgrade["upgrade_install"] = pass_evidence()
+        upgrade["upgrade"] = pass_evidence()
+        upgrade["post_upgrade_migration"] = upgraded_migration_evidence("1.0.3")
+        upgrade["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
+        upgrade["previous_installer_sha256"] = "b" * 64
+        upgrade["previous_installer_version"] = "1.0.2"
+        MODULE.validate_report(upgrade, expected_version="1.0.3", expected_upgrade="passed")
+
+        # Keep all existing approval/restart/upgrade dependencies plausible,
+        # but place the live inference after the upgraded MSI installation.
+        upgrade["upgrade_install"]["timestamp_utc"] = "2026-10-25T02:10:00Z"
+        upgrade["sam2_live"]["timestamp_utc"] = "2026-10-25T02:10:01Z"
+        upgrade["restart"]["timestamp_utc"] = "2026-10-25T02:10:02Z"
+        upgrade["project_persistence"]["timestamp_utc"] = "2026-10-25T02:10:02Z"
+        upgrade["qc_review_coordination"]["timestamp_utc"] = "2026-10-25T02:10:02Z"
+        upgrade["qc_workflow_persistence"]["timestamp_utc"] = "2026-10-25T02:10:02Z"
+        upgrade["qc_workflow_replay"]["timestamp_utc"] = "2026-10-25T02:10:02Z"
+        upgrade["project_exchange"]["timestamp_utc"] = "2026-10-25T02:10:02Z"
+        upgrade["upgrade"]["timestamp_utc"] = "2026-10-25T02:10:02Z"
+        upgrade["uninstall"]["timestamp_utc"] = "2026-10-25T02:10:02Z"
+        upgrade["data_retention"]["timestamp_utc"] = "2026-10-25T02:10:02Z"
+        with self.assertRaisesRegex(
+            MODULE.AcceptanceEvidenceError,
+            "sam2_live must not follow upgrade_install",
+        ):
+            MODULE.validate_report(
+                upgrade, expected_version="1.0.3", expected_upgrade="passed"
+            )
 
     def test_upgrade_requires_real_higher_version_and_previous_installer(self) -> None:
         report = good_report()
