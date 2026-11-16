@@ -670,18 +670,17 @@ def _closed_loop_source_enclosed_planar_area(
 
 def _closed_loop_source_planar_centroid(
     positions: list[_SourcePoint],
-) -> list[float] | None:
-    """Exact source-polygon centroid, not a coral anatomical landmark.
+) -> tuple[list[float] | None, bool | None]:
+    """Exact polygon centroid and point-in-filled-perimeter QC.
 
-    Signed shoelace weights in a nondegenerate coordinate projection determine
-    the polygon centroid in all three source axes. Rational arithmetic avoids
-    translated-coordinate cancellation and fabricated underflow zeros.
+    Both computations use source binary64 values as exact rationals, not
+    rounded preview vertices. An area centroid may fall outside a concave
+    outline; it is never automatically an organism location or landmark.
     """
     source = [tuple(Fraction(value) for value in point) for point in positions[:-1]]
     origin = source[0]
     translated = [
-        tuple(value - base for value, base in zip(point, origin, strict=True))
-        for point in source
+        tuple(value - base for value, base in zip(point, origin, strict=True)) for point in source
     ]
     following = [*translated[1:], translated[0]]
     for first_axis, second_axis in ((0, 1), (0, 2), (1, 2)):
@@ -710,14 +709,39 @@ def _closed_loop_source_planar_centroid(
         try:
             rounded = [float(value) for value in center]
         except OverflowError:
-            return None
-        if all(
+            return None, None
+        if not all(
             isfinite(value) and (value != 0 or exact == 0)
             for value, exact in zip(rounded, center, strict=True)
         ):
-            return rounded
-        return None
-    return None
+            return None, None
+
+        # Deterministic half-open ray crossing on the same nondegenerate
+        # projection used for the exact centroid. Boundary points count as
+        # inside. No numerical epsilon or arbitrary XY-only projection.
+        projected = [(point[first_axis], point[second_axis]) for point in translated]
+        query = (center[first_axis] - origin[first_axis], center[second_axis] - origin[second_axis])
+        inside = False
+        for start, end in pairwise([*projected, projected[0]]):
+            cross = (
+                (end[0] - start[0]) * (query[1] - start[1])
+                - (end[1] - start[1]) * (query[0] - start[0])
+            )
+            if (
+                cross == 0
+                and min(start[0], end[0]) <= query[0] <= max(start[0], end[0])
+                and min(start[1], end[1]) <= query[1] <= max(start[1], end[1])
+            ):
+                inside = True
+                break
+            if (start[1] > query[1]) != (end[1] > query[1]):
+                crossing_x = start[0] + (
+                    (query[1] - start[1]) * (end[0] - start[0]) / (end[1] - start[1])
+                )
+                if crossing_x > query[0]:
+                    inside = not inside
+        return rounded, inside
+    return None, None
 
 
 def mesh_surface_edge_traces(
@@ -1258,18 +1282,19 @@ def mesh_surface_edge_traces(
         # landmark or independently registered colony position.
         source_planar_centroid_mesh_units: list[float] | None = None
         calibrated_planar_centroid_m: list[float] | None = None
+        source_planar_centroid_inside_or_on_perimeter: bool | None = None
         if source_is_simple_planar_perimeter is True:
-            source_planar_centroid_mesh_units = _closed_loop_source_planar_centroid(
-                positions
-            )
+            (
+                source_planar_centroid_mesh_units,
+                source_planar_centroid_inside_or_on_perimeter,
+            ) = _closed_loop_source_planar_centroid(positions)
             if source_planar_centroid_mesh_units is None:
-                warnings.append(
-                    "closed_surface_trace_source_planar_centroid_unrepresentable"
-                )
+                warnings.append("closed_surface_trace_source_planar_centroid_unrepresentable")
             else:
+                if source_planar_centroid_inside_or_on_perimeter is False:
+                    warnings.append("closed_surface_trace_source_planar_centroid_outside_perimeter")
                 calibrated_center = [
-                    coordinate * scale
-                    for coordinate in source_planar_centroid_mesh_units
+                    coordinate * scale for coordinate in source_planar_centroid_mesh_units
                 ]
                 if all(isfinite(value) for value in calibrated_center) and all(
                     calibrated != 0 or source == 0
@@ -1452,6 +1477,9 @@ def mesh_surface_edge_traces(
                 ),
                 "closed_loop_source_planar_centroid_mesh_units": (
                     source_planar_centroid_mesh_units
+                ),
+                "closed_loop_source_planar_centroid_inside_or_on_perimeter": (
+                    source_planar_centroid_inside_or_on_perimeter
                 ),
                 "closed_loop_planar_centroid_m": calibrated_planar_centroid_m,
                 "closed_loop_source_planar_maximum_vertex_chord_mesh_units": (
