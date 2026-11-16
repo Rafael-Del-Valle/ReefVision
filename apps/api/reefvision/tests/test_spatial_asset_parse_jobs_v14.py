@@ -118,9 +118,7 @@ def test_rehashed_contradictory_parse_evidence_fails_closed(
         job = session.get(Job, asset["parse_job_id"])
         assert job is not None and job.result_json is not None
         altered = {**job.result_json, **overrides}
-        content = {
-            key: value for key, value in altered.items() if key != "content_sha256"
-        }
+        content = {key: value for key, value in altered.items() if key != "content_sha256"}
         altered["content_sha256"] = canonical_json_sha256(content)
         job.result_json = altered
         session.commit()
