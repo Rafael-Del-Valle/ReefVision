@@ -217,6 +217,7 @@ def measure_point_cloud_preview(
     repeated_selected_point_pairs = False
     repeated_selected_endpoint_geometry = False
     coincident_selected_chord_count = 0
+    selected_chord_interval_underflow = False
     if point_index_pairs is not None:
         if not isinstance(point_index_pairs, list) or len(point_index_pairs) > 32:
             raise ValueError("At most 32 point-index pairs are supported")
@@ -245,6 +246,18 @@ def measure_point_cloud_preview(
             # Different indices can still identify identical XYZ coordinates.
             # Flag a zero-length chord instead of implying biological structure.
             chord_qc_warnings: list[str] = []
+            # A positive chord and positive lower scale factor must not
+            # acquire a false zero lower distance from floating-point underflow.
+            # Preserve the nominal chord and mark its interval unresolved.
+            chord_interval_underflow = (
+                relative_scale_uncertainty is not None
+                and chord_m > 0.0
+                and relative_scale_uncertainty < 1.0
+                and chord_m * (1 - relative_scale_uncertainty) == 0.0
+            )
+            if chord_interval_underflow:
+                chord_qc_warnings.append("chord_uncertainty_interval_below_numeric_resolution")
+                selected_chord_interval_underflow = True
             # Reversing a chord does not make an independent measurement.
             unordered_pair = (min(pair), max(pair))
             repeated_pair = unordered_pair in seen_point_pairs
@@ -281,6 +294,7 @@ def measure_point_cloud_preview(
                             chord_m * (1 + relative_scale_uncertainty),
                         ]
                         if relative_scale_uncertainty is not None
+                        and not chord_interval_underflow
                         else None
                     ),
                     "scale_uncertainty_m": (
@@ -454,6 +468,11 @@ def measure_point_cloud_preview(
             )
             + (["preview_omits_axis_extrema"] if preview_omitted_axis_extrema else [])
             + (["preview_omits_selected_chord_endpoints"] if omitted_chord_endpoints else [])
+            + (
+                ["selected_chord_uncertainty_interval_below_numeric_resolution"]
+                if selected_chord_interval_underflow
+                else []
+            )
             + (["repeated_selected_point_pairs"] if repeated_selected_point_pairs else [])
             + (["coincident_selected_chord_endpoints"] if coincident_selected_chord_count else [])
             + (

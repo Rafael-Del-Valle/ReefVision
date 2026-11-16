@@ -208,10 +208,7 @@ def test_positive_envelope_uncertainty_lower_bound_underflow_is_unknown(
     assert volume is not None and volume > 0.0
     assert volume * 0.5**3 == 0.0
     assert direct["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"] is None
-    assert (
-        "envelope_uncertainty_interval_below_numeric_resolution"
-        in direct["qc_warnings"]
-    )
+    assert "envelope_uncertainty_interval_below_numeric_resolution" in direct["qc_warnings"]
     assert "envelope_volume_below_numeric_resolution" not in direct["qc_warnings"]
     assert direct["measurement_status"] == "caller_supplied_unverified"
 
@@ -235,10 +232,7 @@ def test_positive_envelope_uncertainty_lower_bound_underflow_is_unknown(
     assert response.status_code == 200, response.text
     expected = response.json()
     assert expected["axis_aligned_bounding_box_envelope_volume_m3"] == volume
-    assert (
-        expected["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"]
-        is None
-    )
+    assert expected["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"] is None
     assert expected["qc_warnings"] == direct["qc_warnings"]
     assert expected["provenance"]["calibration_verified"] is False
 
@@ -265,9 +259,7 @@ def test_positive_envelope_uncertainty_lower_bound_underflow_is_unknown(
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(
-        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-    )
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert process_workflow_run_job(
@@ -303,7 +295,102 @@ def test_envelope_scale_interval_retains_representable_and_true_zero_bounds(
     assert bounds is not None
     assert (bounds[0] == 0.0) is lower_is_exact_zero
     assert bounds[1] > 0.0
-    assert (
-        "envelope_uncertainty_interval_below_numeric_resolution"
-        not in result["qc_warnings"]
+    assert "envelope_uncertainty_interval_below_numeric_resolution" not in result["qc_warnings"]
+
+@pytest.mark.parametrize("source_format", ["xyz", "ply"])
+def test_positive_chord_lower_interval_underflow_is_unresolved_in_saved_workflow(
+    client: TestClient, source_format: str
+) -> None:
+    """Do not turn a positive calibrated chord's uncertainty bound into zero."""
+    scale = 1e-323
+    uncertainty = 0.9
+    points = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
+    direct = measure_point_cloud_preview(
+        points=points,
+        meters_per_unit=scale,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic underflow boundary; not a verified calibration",
+        relative_scale_uncertainty=uncertainty,
+        point_index_pairs=[[0, 1]],
     )
+    chord = direct["selected_point_chords"][0]
+    assert chord["chord_distance_m"] == scale
+    assert chord["chord_distance_m"] * (1 - uncertainty) == 0.0
+    assert chord["chord_distance_scale_interval_m"] is None
+    assert "chord_uncertainty_interval_below_numeric_resolution" in chord["qc_warnings"]
+    assert "selected_chord_uncertainty_interval_below_numeric_resolution" in direct["qc_warnings"]
+    assert direct["provenance"]["calibration_verified"] is False
+
+    # A mathematically zero lower bound and representable positive lower bound
+    # must remain distinguishable from floating-point loss of precision.
+    for valid_uncertainty, zero_lower_bound in [(1.0, True), (0.5, False)]:
+        valid = measure_point_cloud_preview(
+            points=points,
+            meters_per_unit=scale,
+            calibration_method="ruler",
+            calibration_evidence="Synthetic interval control; not verified",
+            relative_scale_uncertainty=valid_uncertainty,
+            point_index_pairs=[[0, 1]],
+        )
+        valid_chord = valid["selected_point_chords"][0]
+        interval = valid_chord["chord_distance_scale_interval_m"]
+        assert interval is not None
+        assert (interval[0] == 0.0) is zero_lower_bound
+        assert "chord_uncertainty_interval_below_numeric_resolution" not in valid_chord["qc_warnings"]
+
+    project_id = str(create_project(client, f"Chord interval boundary {source_format}")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    params = {
+        "meters_per_unit": scale,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic underflow boundary; not a verified calibration",
+        "relative_scale_uncertainty": uncertainty,
+        "point_index_pairs": [[0, 1]],
+    }
+    if source_format == "xyz":
+        params["points"] = points
+    else:
+        params["ply_text"] = (
+            "ply\nformat ascii 1.0\nelement vertex 2\n"
+            "property double x\nproperty double y\nproperty double z\n"
+            "end_header\n0 0 0\n1 0 0\n"
+        )
+    response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert response.status_code == 200, response.text
+    expected = response.json()
+    assert expected["selected_point_chords"][0]["chord_distance_scale_interval_m"] is None
+    assert expected["qc_warnings"] == direct["qc_warnings"]
+
+    graph = {
+        "graph_id": f"subresolution-chord-interval-{source_format}",
+        "name": "Chords retain unknown positive lower uncertainty bounds",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item for item in detail.json()["artifacts"]
+        if item["data_type"] == "point_cloud_measurement_preview"
+    )
+    assert artifact["payload_json"] == expected
