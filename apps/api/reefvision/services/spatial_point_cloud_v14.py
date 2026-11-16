@@ -228,7 +228,7 @@ def measure_point_cloud_preview(
                 )
             ):
                 raise ValueError(
-                    "Distinct selected point-cloud chord endpoints collapse after calibration"
+                    "Distinct selected chord endpoints collapse after calibration"
                 )
             # Different indices can still identify identical XYZ coordinates.
             # Flag a zero-length chord instead of implying biological structure.

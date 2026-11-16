@@ -351,11 +351,11 @@ def test_selected_chord_subresolution_separation_fails_without_workflow_artifact
         params["points"] = points
     else:
         params["ply_text"] = (
-            "ply\\nformat ascii 1.0\\nelement vertex 3\\n"
-            "property double x\\nproperty double y\\nproperty double z\\n"
-            "end_header\\n1e-20 0 0\\n1.0000000001e-20 0 0\\n1 0 0\\n"
+            "ply\nformat ascii 1.0\nelement vertex 3\n"
+            "property double x\nproperty double y\nproperty double z\n"
+            "end_header\n1e-20 0 0\n1.0000000001e-20 0 0\n1 0 0\n"
         )
-    with pytest.raises(ValueError, match="selected point-cloud chord endpoints collapse"):
+    with pytest.raises(ValueError, match="selected chord endpoints collapse"):
         measure_point_cloud_preview(
             points=points,
             meters_per_unit=scale,
@@ -364,18 +364,24 @@ def test_selected_chord_subresolution_separation_fails_without_workflow_artifact
             point_index_pairs=[[0, 1]],
         )
 
-    project_id = str(create_project(client, f"Unresolvable chord {source_format}")["id"])
+    project_id = str(
+        create_project(client, f"Unresolvable chord {source_format}")["id"]
+    )
     base = f"/api/v1/projects/{project_id}"
     standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert standalone.status_code == 400, standalone.text
-    assert "selected point-cloud chord endpoints collapse" in standalone.json()["detail"]
+    assert "selected chord endpoints collapse" in standalone.json()["detail"]
 
     graph = {
         "graph_id": f"point-cloud-unresolvable-chord-{source_format}",
         "name": "Reject a subresolution selected chord",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
-            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+            {
+                "node_id": "cloud",
+                "node_type": "point_cloud_preview",
+                "parameters": params,
+            },
         ],
         "edges": [
             {
@@ -389,7 +395,9 @@ def test_selected_chord_subresolution_separation_fails_without_workflow_artifact
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    run = client.post(
+        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+    )
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert not process_workflow_run_job(
