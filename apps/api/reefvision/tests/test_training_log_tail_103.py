@@ -638,10 +638,7 @@ def test_log_tail_quarantines_terminal_strings_inside_loss_tokens(
 
     assert training_routes._training_log_tail("training.log", tmp_path) == {
         "available": True,
-        "text": (
-            "[terminal-edited training log record omitted]\n"
-            "train/dfl_loss=0.10\n"
-        ),
+        "text": ("[terminal-edited training log record omitted]\ntrain/dfl_loss=0.10\n"),
     }
     assert log.read_bytes() == original
 
