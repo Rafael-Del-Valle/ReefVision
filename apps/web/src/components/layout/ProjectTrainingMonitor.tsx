@@ -20,11 +20,12 @@ function metricLabel(value: string): string {
   return value.replaceAll("/", " ").replaceAll("_", " ");
 }
 
-function metricEntries(run: TrainingRun): Array<[string, number]> {
+function metricEntries(run: TrainingRun): Array<[string, number, string]> {
   // Training summaries can lag behind per-epoch history. Prefer the last
   // finite observed loss for live box/cls/dfl reporting, while keeping the
   // summary authoritative for non-training metrics such as validation mAP.
-  const latest = new Map<string, number>();
+  // Show the persisted source, and flag stale epoch samples as older evidence.
+  const latest = new Map<string, { value: number; provenance: string }>();
   for (const [key, values] of Object.entries(run.metrics_history ?? {})) {
     if (!Array.isArray(values)) continue;
     // An in-progress epoch can append a missing or non-finite sample before
@@ -33,7 +34,10 @@ function metricEntries(run: TrainingRun): Array<[string, number]> {
     for (let index = values.length - 1; index >= 0; index -= 1) {
       const value = values[index];
       if (typeof value === "number" && Number.isFinite(value)) {
-        latest.set(key, value);
+        latest.set(key, {
+          value,
+          provenance: `history entry ${index + 1}/${values.length}${index < values.length - 1 ? "; prior sample" : ""}; epoch association unverified`,
+        });
         break;
       }
     }
@@ -41,7 +45,13 @@ function metricEntries(run: TrainingRun): Array<[string, number]> {
   for (const [key, value] of Object.entries(run.metrics ?? {})) {
     if (typeof value === "number" && Number.isFinite(value)) {
       if (!key.startsWith("train/") || !latest.has(key)) {
-        latest.set(key, value);
+        const history = run.metrics_history?.[key];
+        latest.set(key, {
+          value,
+          provenance: Array.isArray(history) && history.length > 0
+            ? "summary fallback; history unavailable; epoch association unverified"
+            : "summary; epoch association unverified",
+        });
       }
     }
   }
@@ -63,7 +73,12 @@ function metricEntries(run: TrainingRun): Array<[string, number]> {
   };
   return [...latest.entries()]
     .sort(([left], [right]) => priority(left) - priority(right))
-    .slice(0, 5);
+    .slice(0, 5)
+    .map(([key, metric]): [string, number, string] => [
+      key,
+      metric.value,
+      metric.provenance,
+    ]);
 }
 
 function metricValue(value: number): string {
@@ -235,10 +250,15 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
 
                 {metrics.length > 0 && (
                   <dl className="rv-training-monitor-metrics">
-                    {metrics.map(([key, value]) => (
+                    {metrics.map(([key, value, provenance]) => (
                       <div key={key}>
                         <dt>{metricLabel(key)}</dt>
-                        <dd>{metricValue(value)}</dd>
+                        <dd>
+                          <span>{metricValue(value)}</span>
+                          <small className="rv-training-monitor-metric-source">
+                            {provenance}
+                          </small>
+                        </dd>
                       </div>
                     ))}
                   </dl>
