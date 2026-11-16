@@ -272,9 +272,24 @@ def _safe_terminal_log_text(payload: bytes) -> str:
     # quarantine any physical record edited between two printable fragments.
     def omit_rewritten_record(record: str) -> str:
         controls = re.finditer(r"\x08|(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]", record)
+        # SGR colors are display-only, but removing them *inside* a loss
+        # token can splice two numbers (0.25 + SGR + 99 -> 0.2599).
+        # Ignore adjacent SGRs when checking the printed neighbors so a
+        # sequence of color resets cannot hide the join.
+        sgr = r"(?:\x1b\[|\x9b)[0-?]*[ -/]*m"
         for control in controls:
             value = control.group()
             if value != "\x08" and value.endswith("m"):
+                before_sgr = re.sub(
+                    rf"(?:{sgr})+$", "", record[: control.start()]
+                )
+                after_sgr = re.sub(
+                    rf"^(?:{sgr})+", "", record[control.end() :]
+                )
+                if token_character(before_sgr[-1:]) and token_character(
+                    after_sgr[:1]
+                ):
+                    return "[terminal-edited training log record omitted]"
                 continue
             before = record[: control.start()]
             after = record[control.end() :]
