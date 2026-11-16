@@ -696,9 +696,9 @@ def test_log_tail_quarantines_terminal_edits_that_fabricate_loss_values(
 @pytest.mark.parametrize(
     "edited_record",
     [
-        b"train/box_loss=0.25\\x08",
-        b"train/box_loss=0.25\\x08\\x08",
-        b"\\x08train/box_loss=0.25",
+        b"train/box_loss=0.25\x08",
+        b"train/box_loss=0.25\x08\x08",
+        b"\x08train/box_loss=0.25",
     ],
 )
 def test_log_tail_quarantines_backspace_without_following_printable_text(
@@ -706,15 +706,15 @@ def test_log_tail_quarantines_backspace_without_following_printable_text(
 ) -> None:
     """An unmatched terminal backspace makes the recorded loss untrustworthy."""
     log = tmp_path / "training.log"
-    original = b"epoch=5\\n" + edited_record + b"\\ntrain/cls_loss=0.30\\n"
+    original = b"epoch=5\n" + edited_record + b"\ntrain/cls_loss=0.30\n"
     log.write_bytes(original)
 
     assert training_routes._training_log_tail("training.log", tmp_path) == {
         "available": True,
         "text": (
-            "epoch=5\\n"
-            "[terminal-edited training log record omitted]\\n"
-            "train/cls_loss=0.30\\n"
+            "epoch=5\n"
+            "[terminal-edited training log record omitted]\n"
+            "train/cls_loss=0.30\n"
         ),
     }
     assert log.read_bytes() == original
