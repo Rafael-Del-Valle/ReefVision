@@ -123,6 +123,7 @@ def test_api_and_saved_workflow_reject_coercion_without_artifact(
         for artifact in detail.json()["artifacts"]
     )
 
+
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
 def test_calibration_underflow_standalone_and_workflow_fail_closed(
     client: TestClient, source_format: str
