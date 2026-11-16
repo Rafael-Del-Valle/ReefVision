@@ -47,7 +47,7 @@ try {
             throw 'WebView2 runtime evidence lost its canonical registry location, view, or version.'
         }
     }
-    if ($record.limitations -notmatch 'WebView2 registry detection is advisory') {
+    if (-not @($record.limitations | Where-Object { $_ -match 'WebView2 registry detection is advisory' }).Count) {
         throw 'Registry detection must not imply installed GUI acceptance.'
     }
     $expectedHash = (Get-FileHash -LiteralPath $sample -Algorithm SHA256).Hash.ToLowerInvariant()
