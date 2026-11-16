@@ -668,6 +668,58 @@ def _closed_loop_source_enclosed_planar_area(
     return area if isfinite(area) and area > 0 else None
 
 
+def _closed_loop_source_planar_centroid(
+    positions: list[_SourcePoint],
+) -> list[float] | None:
+    """Exact source-polygon centroid, not a coral anatomical landmark.
+
+    Signed shoelace weights in a nondegenerate coordinate projection determine
+    the polygon centroid in all three source axes. Rational arithmetic avoids
+    translated-coordinate cancellation and fabricated underflow zeros.
+    """
+    source = [tuple(Fraction(value) for value in point) for point in positions[:-1]]
+    origin = source[0]
+    translated = [
+        tuple(value - base for value, base in zip(point, origin, strict=True))
+        for point in source
+    ]
+    following = [*translated[1:], translated[0]]
+    for first_axis, second_axis in ((0, 1), (0, 2), (1, 2)):
+        weights = [
+            point[first_axis] * next_point[second_axis]
+            - point[second_axis] * next_point[first_axis]
+            for point, next_point in zip(translated, following, strict=True)
+        ]
+        twice_area = sum(weights, Fraction(0))
+        if twice_area == 0:
+            continue
+        center = [
+            origin[axis]
+            + sum(
+                (
+                    (point[axis] + next_point[axis]) * weight
+                    for point, next_point, weight in zip(
+                        translated, following, weights, strict=True
+                    )
+                ),
+                Fraction(0),
+            )
+            / (3 * twice_area)
+            for axis in range(3)
+        ]
+        try:
+            rounded = [float(value) for value in center]
+        except OverflowError:
+            return None
+        if all(
+            isfinite(value) and (value != 0 or exact == 0)
+            for value, exact in zip(rounded, center, strict=True)
+        ):
+            return rounded
+        return None
+    return None
+
+
 def mesh_surface_edge_traces(
     points: list[tuple[float, float, float]],
     faces: list[list[int]],
@@ -1202,7 +1254,36 @@ def mesh_surface_edge_traces(
         source_planar_chord_to_equivalent_diameter_ratio: float | None = None
         calibrated_planar_maximum_vertex_chord_m: float | None = None
         planar_maximum_vertex_chord_scale_interval_m: list[float] | None = None
+        # A provisional filled-outline coordinate centroid, not an anatomical
+        # landmark or independently registered colony position.
+        source_planar_centroid_mesh_units: list[float] | None = None
+        calibrated_planar_centroid_m: list[float] | None = None
         if source_is_simple_planar_perimeter is True:
+            source_planar_centroid_mesh_units = _closed_loop_source_planar_centroid(
+                positions
+            )
+            if source_planar_centroid_mesh_units is None:
+                warnings.append(
+                    "closed_surface_trace_source_planar_centroid_unrepresentable"
+                )
+            else:
+                calibrated_center = [
+                    coordinate * scale
+                    for coordinate in source_planar_centroid_mesh_units
+                ]
+                if all(isfinite(value) for value in calibrated_center) and all(
+                    calibrated != 0 or source == 0
+                    for calibrated, source in zip(
+                        calibrated_center,
+                        source_planar_centroid_mesh_units,
+                        strict=True,
+                    )
+                ):
+                    calibrated_planar_centroid_m = calibrated_center
+                else:
+                    warnings.append(
+                        "closed_surface_trace_calibrated_planar_centroid_unrepresentable"
+                    )
             # The repeated terminal waypoint is the same source vertex, not
             # an independent candidate. Maximal polygon separation occurs at
             # vertices, even when the polygon is concave. A tied maximum uses
@@ -1369,6 +1450,10 @@ def mesh_surface_edge_traces(
                 "closed_loop_source_planar_isoperimetric_quotient": (
                     source_planar_isoperimetric_quotient
                 ),
+                "closed_loop_source_planar_centroid_mesh_units": (
+                    source_planar_centroid_mesh_units
+                ),
+                "closed_loop_planar_centroid_m": calibrated_planar_centroid_m,
                 "closed_loop_source_planar_maximum_vertex_chord_mesh_units": (
                     source_planar_maximum_vertex_chord_mesh_units
                 ),
