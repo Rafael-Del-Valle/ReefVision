@@ -121,6 +121,40 @@ def test_preview_scale_intervals_standalone_and_saved_workflow_parity(
     assert artifact["provenance"]["coordinate_registration_verified"] is False
 
 
+@pytest.mark.parametrize("source_x", [-1.0, 1.0])
+def test_signed_coordinate_scale_intervals_never_invent_zero_bounds(source_x: float) -> None:
+    """Subresolution scale intervals stay unknown, not physically zero."""
+    points = [[0.0, 0.0, 0.0], [source_x, 0.0, 0.0]]
+    params = {
+        "points": points,
+        "meters_per_unit": 1e-323,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic numerical boundary; not verified",
+    }
+    unresolved = measure_point_cloud_preview(**params, relative_scale_uncertainty=0.9)
+    assert unresolved["preview_point_scale_intervals_m"][0][0] == [0.0, 0.0]
+    assert unresolved["preview_point_scale_intervals_m"][1][0] is None
+    assert unresolved["preview_point_scale_intervals_m"][1][1:] == [
+        [0.0, 0.0],
+        [0.0, 0.0],
+    ]
+    bound = "max" if source_x > 0 else "min"
+    assert unresolved[f"axis_aligned_{bound}_in_source_frame_scale_interval_m"][0] is None
+    assert unresolved["arithmetic_centroid_in_source_frame_scale_interval_m"][0] is None
+    assert "coordinate_uncertainty_interval_below_numeric_resolution" in unresolved["qc_warnings"]
+    assert unresolved["provenance"]["calibration_verified"] is False
+
+    # A mathematically zero bound (100% uncertainty) and exact calibration
+    # with no scale uncertainty are valid controls, even for negative values.
+    for uncertainty in (0.0, 1.0):
+        control = measure_point_cloud_preview(**params, relative_scale_uncertainty=uncertainty)
+        assert control["preview_point_scale_intervals_m"][1][0] is not None
+        assert control["arithmetic_centroid_in_source_frame_scale_interval_m"][0] is not None
+        assert "coordinate_uncertainty_interval_below_numeric_resolution" not in control[
+            "qc_warnings"
+        ]
+
+
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
 def test_dimension_lower_scale_interval_underflow_is_explicit_and_workflow_safe(
     client: TestClient, source_format: str
@@ -142,6 +176,10 @@ def test_dimension_lower_scale_interval_underflow_is_explicit_and_workflow_safe(
         [0.0, 0.0],
     ]
     assert "dimension_uncertainty_interval_below_numeric_resolution" in direct["qc_warnings"]
+    assert direct["preview_point_scale_intervals_m"][1][0] is None
+    assert direct["axis_aligned_max_in_source_frame_scale_interval_m"][0] is None
+    assert direct["arithmetic_centroid_in_source_frame_scale_interval_m"][0] is None
+    assert "coordinate_uncertainty_interval_below_numeric_resolution" in direct["qc_warnings"]
     assert direct["provenance"]["calibration_verified"] is False
 
     # Physical zero at 100% relative uncertainty is distinct from numeric loss.
