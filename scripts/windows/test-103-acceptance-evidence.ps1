@@ -17,6 +17,39 @@ try {
     $record = ($raw | Out-String | ConvertFrom-Json)
     if ($record.schema -ne 'reefvision.windows-acceptance-evidence.v1') { throw 'Unexpected evidence schema.' }
     if ($record.candidateSha -cne $sha) { throw 'Candidate SHA was not normalized.' }
+    # The standalone evidence collector must use the SAME canonical, read-only
+    # WebView2 registry inventory as the actual installed-app acceptance harness.
+    # The former ad hoc collector used a different product GUID and silently
+    # missed real Evergreen registrations. On CI, compare observed results
+    # rather than requiring a runtime to be installed on every Windows image.
+    $helper = Join-Path (Split-Path -Parent $PSScriptRoot) 'lib/windows-clean-acceptance.ps1'
+    . $helper
+    $expectedRuntime = Get-ReefVisionWebView2RuntimeInfo
+    $reportedRegistrations = @($record.webview2 | Where-Object { $null -ne $_ })
+    $expectedRegistrations = @($expectedRuntime.registrations | Where-Object { $null -ne $_ })
+    if ($reportedRegistrations.Count -ne $expectedRegistrations.Count) {
+        throw 'Evidence collector and installed-app harness disagree about WebView2 registrations.'
+    }
+    $webviewId = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+    $pathsByScope = @{
+        'machine-32' = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$webviewId"
+        'machine-64' = "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\$webviewId"
+        'user' = "HKCU:\SOFTWARE\Microsoft\EdgeUpdate\Clients\$webviewId"
+    }
+    foreach ($expectedEntry in $expectedRegistrations) {
+        $matches = @($reportedRegistrations | Where-Object {
+            $_.scope -ceq [string]$expectedEntry.scope -and
+            $_.version -ceq [string]$expectedEntry.version
+        })
+        if ($matches.Count -ne 1 -or
+            -not $pathsByScope.ContainsKey([string]$expectedEntry.scope) -or
+            $matches[0].registryPath -cne $pathsByScope[[string]$expectedEntry.scope]) {
+            throw 'WebView2 runtime evidence lost its canonical registry location, view, or version.'
+        }
+    }
+    if ($record.limitations -notmatch 'WebView2 registry detection is advisory') {
+        throw 'Registry detection must not imply installed GUI acceptance.'
+    }
     $expectedHash = (Get-FileHash -LiteralPath $sample -Algorithm SHA256).Hash.ToLowerInvariant()
     $msi = @($record.artifacts | Where-Object { $_.kind -eq 'msi' })
     $cab = @($record.artifacts | Where-Object { $_.kind -eq 'cab' })
