@@ -9,9 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from reefvision.db.models import ReviewQueue, ReviewQueueItem
-from reefvision.services.workflow_review_queue_integrity import (
-    validate_saved_queue_snapshot,
-)
+from reefvision.services.workflow_review_queue_integrity import validate_saved_queue_snapshot
 from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
     _frozen_graph,
     _run_frozen_graph,
@@ -49,25 +47,20 @@ def test_saved_frozen_graph_plan_rejects_inapplicable_confidence_gate(
     graph = _frozen_graph(version_id)
     graph["nodes"][-1]["parameters"] = {"review_below_confidence": 0.5}
 
-    invalid = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
-    )
+    invalid = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert invalid.status_code == 200, invalid.text
     plan = invalid.json()
     assert plan["valid"] is False
     assert plan["executable"] is False
     assert any(
-        item["code"] == "unsupported_frozen_qc_confidence_filter"
-        and item["node_id"] == "qc"
+        item["code"] == "unsupported_frozen_qc_confidence_filter" and item["node_id"] == "qc"
         for item in plan["issues"]
     )
 
     # A normal version-scoped graph remains executable and preserves a
     # dimensionless, checksummed queue awaiting explicit researcher review.
     valid_graph = _frozen_graph(version_id)
-    checked = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=valid_graph
-    )
+    checked = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=valid_graph)
     assert checked.status_code == 200, checked.text
     assert checked.json()["valid"] and checked.json()["executable"]
     saved = client.post(
