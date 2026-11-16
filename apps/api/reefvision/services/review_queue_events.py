@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from typing import Any
 
 from sqlalchemy import func, literal_column, select
 from sqlalchemy.exc import IntegrityError
@@ -155,7 +156,7 @@ def list_review_events(
     # Ordering primarily by wall-clock time can incorrectly resurrect an
     # earlier assignment after a later unassignment. Other database engines
     # retain timestamp/UUID ordering until a portable durable sequence exists.
-    ordering_columns = (
+    ordering_columns: tuple[Any, ...] = (
         (literal_column("review_queue_item_events.rowid"),)
         if connection.dialect.name == "sqlite"
         else (ReviewQueueItemEvent.created_at, ReviewQueueItemEvent.id)
