@@ -185,7 +185,13 @@ def measure_point_cloud_preview(
             )
         ):
             raise ValueError("Every point requires three bounded finite numeric coordinates")
-        vertices.append((float(point[0]), float(point[1]), float(point[2])))
+        xyz = (float(point[0]), float(point[1]), float(point[2]))
+        # Calibration must not turn a nonzero source coordinate into an
+        # apparently measured zero. Subnormal scales are otherwise valid, but
+        # a lost coordinate also corrupts preview points, centroids, and chords.
+        if any(value != 0.0 and value * scale == 0.0 for value in xyz):
+            raise ValueError("Nonzero point-cloud coordinate underflows after calibration")
+        vertices.append(xyz)
     # Selected point-pair chords refer to original input order, not branches.
     selected_chords: list[dict[str, Any]] = []
     selected_endpoint_indices: set[int] = set()
