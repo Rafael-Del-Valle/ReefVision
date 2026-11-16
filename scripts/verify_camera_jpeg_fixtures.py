@@ -309,8 +309,28 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                                 "jpeg_display_height": display_height,
                                 "jpeg_color_mode": decoded.mode,
                                 "jpeg_exif_orientation": orientation,
-                                "jpeg_exif_pixel_width": exif_pixel_width,
-                                "jpeg_exif_pixel_height": exif_pixel_height,
+                                # Malformed EXIF scalar tags can decode as bytes,
+                                # tuples, or strings. A raw bytes object breaks the
+                                # JSON acceptance manifest; do not coerce it into
+                                # a plausible scientific pixel measurement.
+                                "jpeg_exif_pixel_width": (
+                                    exif_pixel_width if type(exif_pixel_width) is int else None
+                                ),
+                                "jpeg_exif_pixel_height": (
+                                    exif_pixel_height if type(exif_pixel_height) is int else None
+                                ),
+                                "jpeg_exif_pixel_width_invalid_type": (
+                                    type(exif_pixel_width).__name__
+                                    if exif_pixel_width is not None
+                                    and type(exif_pixel_width) is not int
+                                    else None
+                                ),
+                                "jpeg_exif_pixel_height_invalid_type": (
+                                    type(exif_pixel_height).__name__
+                                    if exif_pixel_height is not None
+                                    and type(exif_pixel_height) is not int
+                                    else None
+                                ),
                                 "jpeg_exif_dimensions_match_raster": (
                                     exif_dimensions_match_raster
                                 ),

@@ -595,6 +595,62 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                     )
                     self.assertEqual(photo.read_bytes(), original)
 
+    def test_malformed_exif_pixel_dimensions_have_json_safe_qc_evidence(self) -> None:
+        """Noninteger camera EXIF dimensions cannot crash the inventory manifest."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; malformed EXIF types unverified")
+
+        samples = (
+            ("bytes_width", b"\x04\xff", 8),
+            ("tuple_width", (12, 13), 8),
+            ("string_width", "12", 8),
+            ("float_width", 12.5, 8),
+            ("bytes_height", 12, b"\xfe"),
+        )
+        for label, width, height in samples:
+            with self.subTest(case=label):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    photo = root / f"{label}.JPEG"
+                    exif = Image.Exif()
+                    dimensions = exif.get_ifd(34665)
+                    dimensions[40962] = width
+                    dimensions[40963] = height
+                    Image.new("RGB", (12, 8), (25, 80, 120)).save(
+                        photo, format="JPEG", exif=exif
+                    )
+                    original = photo.read_bytes()
+
+                    records, errors = MODULE.inventory(root, verify_decode=True)
+                    self.assertEqual(len(records), 1)
+                    record = records[0]
+                    self.assertTrue(record["jpeg_decodable"])
+                    self.assertEqual(record["jpeg_exif_dimensions_match_raster"], False)
+                    self.assertEqual(
+                        record["jpeg_exif_pixel_width"],
+                        width if type(width) is int else None,
+                    )
+                    self.assertEqual(
+                        record["jpeg_exif_pixel_height"],
+                        height if type(height) is int else None,
+                    )
+                    self.assertEqual(
+                        record["jpeg_exif_pixel_width_invalid_type"],
+                        type(width).__name__ if type(width) is not int else None,
+                    )
+                    self.assertEqual(
+                        record["jpeg_exif_pixel_height_invalid_type"],
+                        type(height).__name__ if type(height) is not int else None,
+                    )
+                    self.assertEqual(
+                        errors,
+                        [f"EXIF pixel dimensions inconsistent with JPEG raster: {photo.name}"],
+                    )
+                    self.assertTrue(json.loads(json.dumps(records))[0]["jpeg_decodable"])
+                    self.assertEqual(photo.read_bytes(), original)
+
     def test_invalid_exif_orientation_fails_geometry_qc_read_only(self) -> None:
         """Do not invent display dimensions for malformed camera EXIF."""
         try:
