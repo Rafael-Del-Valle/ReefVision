@@ -510,6 +510,29 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
+    # Consumer-only recovery must verify all saved upstream outputs, not just
+    # the legitimate input it consumes. A checksum-valid undeclared sibling
+    # cannot become trusted science merely because the selected edge is sound.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        original = session.get(WorkflowArtifact, artifacts["project_reference"]["id"])
+        assert producer is not None and consumer is not None and original is not None
+        extra = WorkflowArtifact(
+            workflow_run_id=str(run["id"]),
+            producer_node_run_id=producer.id,
+            producer_port_id="undeclared-consumer-sibling",
+            data_type=original.data_type,
+            payload_json=dict(original.payload_json),
+            payload_sha256=original.payload_sha256,
+        )
+        session.add(extra)
+        session.flush()
+        with pytest.raises(ConflictError, match="input producer has undeclared persisted outputs"):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
     # This graph was actually executed and its provenance frozen at closeout.
     # Removing *both* saved provenance fields used to bypass the integrity check.
     with app.state.session_factory() as session:
