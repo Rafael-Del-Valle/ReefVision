@@ -16,7 +16,7 @@ SCRIPT = Path(__file__).resolve().parents[1] / "inspect-alembic-lineage.py"
     [
         ("0038", True, 2),
         ("0038", False, 0),
-        ("0037", True, 0),
+        ("0037", True, 2),
         ("0037", False, 0),
     ],
 )
@@ -272,7 +272,7 @@ def test_valid_foreign_keys_allow_warning_free_preflight(tmp_path: Path) -> None
     database = tmp_path / "linked.sqlite"
     with sqlite3.connect(database) as connection:
         connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
-        connection.execute("INSERT INTO alembic_version VALUES ('0037')")
+        connection.execute("INSERT INTO alembic_version VALUES ('0039')")
         for name in (
             "scientific_records",
             "environmental_cache_entries",
@@ -924,4 +924,99 @@ def test_scientific_extension_migration_stamp_is_stage_aware_and_read_only(
                 )
             assert connection.execute("SELECT note FROM biological_sentinel").fetchone() == (
                 "coral-preserve",
+            )
+
+
+@pytest.mark.parametrize(
+    ("revision", "tables", "expected_warnings"),
+    [
+        (
+            "0014",
+            ("scientific_records", "environmental_cache_entries"),
+            ("scientific_base_before_revision_0038",),
+        ),
+        (
+            "0037",
+            ("scientific_records", "environmental_cache_entries"),
+            ("scientific_base_before_revision_0038",),
+        ),
+        (
+            "0037",
+            (
+                "scientific_records",
+                "environmental_cache_entries",
+                "computed_metric_definitions",
+                "computed_metric_results",
+            ),
+            ("scientific_base_before_revision_0038", "computed_metrics_before_revision_0039"),
+        ),
+        (
+            "0038",
+            (
+                "scientific_records",
+                "environmental_cache_entries",
+                "computed_metric_definitions",
+                "computed_metric_results",
+            ),
+            (
+                "computed_metrics_before_revision_0039",
+                "revision_0038_requires_schema_lineage_reconciliation",
+            ),
+        ),
+        (
+            "0038",
+            ("scientific_records", "environmental_cache_entries"),
+            ("revision_0038_requires_schema_lineage_reconciliation",),
+        ),
+        (
+            "0039",
+            (
+                "scientific_records",
+                "environmental_cache_entries",
+                "computed_metric_definitions",
+                "computed_metric_results",
+            ),
+            (),
+        ),
+    ],
+)
+@pytest.mark.parametrize("strict", [False, True])
+def test_11_scientific_tables_cannot_precede_their_revision(
+    tmp_path: Path,
+    revision: str,
+    tables: tuple[str, ...],
+    expected_warnings: tuple[str, ...],
+    strict: bool,
+) -> None:
+    """Preserve source observations when a stale stamp hides 1.1 migration DDL."""
+    database = tmp_path / "stale-scientific-stage.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
+        connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
+        for table in tables:
+            connection.execute(f'CREATE TABLE "{table}" (id INTEGER PRIMARY KEY, note TEXT)')
+            connection.execute(f'INSERT INTO "{table}" VALUES (1, ?)', ("scientific-keep",))
+        connection.execute("CREATE TABLE biological_sentinel (note TEXT)")
+        connection.execute("INSERT INTO biological_sentinel VALUES ('coral-keep')")
+    original_bytes = database.read_bytes()
+    for _ in range(2):
+        command = [sys.executable, str(SCRIPT)]
+        if strict:
+            command.append("--fail-on-warning")
+        result = subprocess.run(
+            [*command, str(database)], capture_output=True, text=True, check=False
+        )
+        assert result.returncode == (2 if strict and expected_warnings else 0), result.stderr
+        report = json.loads(result.stdout)
+        assert report["warnings"] == list(expected_warnings)
+        assert report["upgrade_authorized"] is False
+        assert report["lineage_hint"] == "scientific"
+        assert database.read_bytes() == original_bytes
+        with sqlite3.connect(database) as connection:
+            for table in tables:
+                assert connection.execute(f'SELECT note FROM "{table}"').fetchone() == (
+                    "scientific-keep",
+                )
+            assert connection.execute("SELECT note FROM biological_sentinel").fetchone() == (
+                "coral-keep",
             )

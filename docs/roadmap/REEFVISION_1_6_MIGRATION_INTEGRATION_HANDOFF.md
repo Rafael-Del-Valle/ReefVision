@@ -350,3 +350,27 @@ human-review gates are unchanged. This does not reconcile the 1.1/1.6
 revision-0038 collision, authorize a migration, or validate a real Windows
 installation. Exact-head CI, independent representative copied-database
 validation and researcher approval are still required.
+
+## 2026-11-16 — scientific migration-stage ordering in independent inventory
+
+The isolated, read-only `scripts/inspect-alembic-lineage.py` previously reported
+no warnings for a database stamped 0037 but already containing both 1.1
+scientific 0038 tables, or even the complete 0039 metric tables. Consequently
+its informational report was misleading and `--fail-on-warning` could exit
+successfully for a known interrupted-migration schema. The desktop's separate
+guard already refused this state; the independent evidence inspector did not.
+
+The inspector now reports `scientific_base_before_revision_0038` for any
+scientific 0038 base table with a numeric pre-0038 stamp, and
+`computed_metrics_before_revision_0039` for any 0039 metric table with
+a numeric pre-0039 stamp, including older historical revisions. Both are
+diagnostic warnings, **never upgrade permission**. Twelve CLI regression
+variants cover strict/informational operation, valid scientific stages,
+repeated read-only scans, unchanged biological and computed-metric sentinels,
+and byte-identical SQLite snapshots. The existing 0038 lineage-collision
+warning remains in place; no migration was executed or renumbered.
+
+This closes an evidence-reporting discrepancy only. The independent 1.1/1.6
+revision-0038 collision still requires a reviewed unified DAG, copied-database
+science validation, Windows MSI/CAB upgrade and installed-GUI acceptance.
+**1.6 remains on RELEASE HOLD.**

@@ -194,6 +194,18 @@ def inspect(path: Path) -> dict:
             warnings.append("qc_0041_missing_bulk_registry")
         metric_present = any(inventory[name]["present"] for name in science_metrics)
         metric_complete = all(inventory[name]["present"] for name in science_metrics)
+        # Installed 1.1 scientific tables cannot precede their migration
+        # stages. A valid-looking 0037 stamp with fully populated 0038/0039
+        # tables is an interrupted migration, not warning-free provenance.
+        # This check also covers older numeric revisions, matching the
+        # existing QC stage-order checks without trusting the Alembic stamp.
+        if numeric_revision is not None:
+            if numeric_revision < 38 and any(
+                inventory[name]["present"] for name in science_base
+            ):
+                warnings.append("scientific_base_before_revision_0038")
+            if numeric_revision < 39 and metric_present:
+                warnings.append("computed_metrics_before_revision_0039")
         if metric_present and not all(inventory[name]["present"] for name in science_base):
             warnings.append("computed_metrics_without_scientific_base")
         # Environmental 0040/0042 records are identifiable even when a
