@@ -668,13 +668,34 @@ def test_log_tail_quarantines_sgr_spliced_loss_tokens(
     assert log.read_bytes() == original
 
 
+
+@pytest.mark.parametrize(
+    "spliced_record",
+    [
+        b"train/box_loss=0.25\xe2\x80\x8b99",
+        b"train/cls_loss=0.\xe2\x81\xa030",
+        b"train/dfl_loss=0.1\xe2\x80\xa80",
+        b"train/bo\xe2\x80\x8bx_loss=0.25",
+    ],
+)
+def test_log_tail_quarantines_invisible_unicode_loss_splices(
+    tmp_path: Path, spliced_record: bytes
+) -> None:
+    """Removing invisible Unicode controls must not fabricate losses or labels."""
+    log = tmp_path / "training.log"
+    original = spliced_record + b"\ntrain/box_loss=0.22\n"
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "[terminal-edited training log record omitted]\ntrain/box_loss=0.22\n",
+    }
+    assert log.read_bytes() == original
+
 def test_log_tail_preserves_leading_clear_before_colored_epoch_and_loss(tmp_path: Path) -> None:
     """A leading CSI clear must not be mistaken for a loss-token splice."""
     log = tmp_path / "training.log"
-    original = (
-        b"\x1b[2K\x1b[36mEpoch 3\x1b[0m\n"
-        b"\x1b[0K\x1b[33mtrain/box_loss=0.25\x1b[0m\n"
-    )
+    original = b"\x1b[2K\x1b[36mEpoch 3\x1b[0m\n\x1b[0K\x1b[33mtrain/box_loss=0.25\x1b[0m\n"
     log.write_bytes(original)
 
     assert training_routes._training_log_tail("training.log", tmp_path) == {

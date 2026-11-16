@@ -271,6 +271,17 @@ def _safe_terminal_log_text(payload: bytes) -> str:
     # Retain ordinary SGR color and leading progress-bar clear sequences, but
     # quarantine any physical record edited between two printable fragments.
     def omit_rewritten_record(record: str) -> str:
+        # Dropping zero-width, directional, or Unicode separator characters
+        # inside a metric token would splice fragments into fabricated losses.
+        # Quarantine the entire display record, never change the source log.
+        for offset, char in enumerate(record):
+            if unicodedata.category(char) not in {"Cf", "Zl", "Zp"}:
+                continue
+            before = record[offset - 1 : offset]
+            after = record[offset + 1 : offset + 2]
+            if token_character(before) and token_character(after):
+                return "[terminal-edited training log record omitted]"
+
         controls = re.finditer(r"\x08|(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]", record)
         # SGR colors are display-only, but removing them *inside* a loss
         # token can splice two numbers (0.25 + SGR + 99 -> 0.2599).
