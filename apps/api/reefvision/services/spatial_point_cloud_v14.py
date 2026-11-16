@@ -336,10 +336,21 @@ def measure_point_cloud_preview(
     # calibrated centroid is representable. A point centroid is not a tissue
     # centroid or a verified organism position.
     centroid = [
-        fsum(point[axis] * scale for point in vertices) / len(vertices)
-        for axis in range(3)
+        fsum(point[axis] * scale for point in vertices) / len(vertices) for axis in range(3)
     ]
     diagonal = dist((0.0, 0.0, 0.0), dimensions)
+    # A calibrated diagonal may remain representable even when its scale-only
+    # uncertainty interval is rounded to a false point interval. Do not report
+    # zero-width uncertainty from limited floating-point resolution.
+    diagonal_scale_interval_underflow = False
+    diagonal_scale_interval: list[float] | None = None
+    if relative_scale_uncertainty is not None:
+        lower = diagonal * (1 - relative_scale_uncertainty)
+        upper = diagonal * (1 + relative_scale_uncertainty)
+        if _scale_interval_unresolved(diagonal, relative_scale_uncertainty, lower, upper):
+            diagonal_scale_interval_underflow = True
+        else:
+            diagonal_scale_interval = [lower, upper]
     # Multiply larger extents first: multiplying two tiny axes before a
     # large third axis can underflow to zero even when the final positive
     # envelope volume is representable. This remains a bounding envelope,
@@ -498,6 +509,7 @@ def measure_point_cloud_preview(
         "axis_aligned_min_in_source_frame_scale_interval_m": coordinate_scale_intervals(bounds_min),
         "axis_aligned_max_in_source_frame_scale_interval_m": coordinate_scale_intervals(bounds_max),
         "axis_aligned_bounding_box_diagonal_m": diagonal,
+        "axis_aligned_bounding_box_diagonal_scale_interval_m": diagonal_scale_interval,
         "axis_aligned_bounding_box_envelope_volume_m3": envelope_volume,
         "axis_aligned_bounding_box_envelope_volume_scale_interval_m3": (envelope_scale_interval),
         "axis_aligned_dimension_scale_uncertainty_m": (
@@ -507,7 +519,7 @@ def measure_point_cloud_preview(
         ),
         "axis_aligned_bounding_box_diagonal_scale_uncertainty_m": (
             diagonal * relative_scale_uncertainty
-            if relative_scale_uncertainty is not None
+            if relative_scale_uncertainty is not None and not diagonal_scale_interval_underflow
             else None
         ),
         "arithmetic_centroid_in_source_frame_m": centroid,
@@ -526,6 +538,11 @@ def measure_point_cloud_preview(
             + (
                 ["coordinate_uncertainty_interval_below_numeric_resolution"]
                 if coordinate_scale_interval_underflow
+                else []
+            )
+            + (
+                ["diagonal_uncertainty_interval_below_numeric_resolution"]
+                if diagonal_scale_interval_underflow
                 else []
             )
             + (["envelope_volume_below_numeric_resolution"] if envelope_volume_underflow else [])

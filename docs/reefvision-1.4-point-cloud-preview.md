@@ -455,3 +455,25 @@ standalone endpoint, typed graph planning and fully executed persisted Workflow
 Builder, including complete saved-artifact equality and provisional provenance.
 The synthetic subnormal examples test numeric integrity only, **not** verified
 calibration, validated coral tissue volume or organism condition.
+ 
+## Bounding-diagonal scale uncertainty at numeric limits (November 16, 2026)
+
+The calibrated axis-aligned bounding-box diagonal now exposes
+`axis_aligned_bounding_box_diagonal_scale_interval_m` alongside the existing
+nominal diagonal. It propagates the caller's **relative scale uncertainty only**,
+not photogrammetric/reconstruction accuracy or a statistical confidence interval.
+When the diagonal is positive but its lower/upper scale bounds collapse to a
+false zero-width interval (or lose a mathematically positive bound through
+underflow), the interval and existing absolute diagonal uncertainty become
+`null`, and `diagonal_uncertainty_interval_below_numeric_resolution` appears
+in `qc_warnings`. A genuinely zero diagonal and exactly zero relative scale
+uncertainty retain valid exact bounds; 100% uncertainty preserves a genuine zero
+lower bound. Unknown scale uncertainty leaves the interval null without the
+numeric-resolution warning.
+
+Signed XYZ and vertex-only ASCII PLY inputs share the same engine. Synthetic
+regressions compare direct measurements, standalone API output, and complete
+provisional persisted artifacts from executable typed Workflow Builder graphs.
+An axis-aligned diagonal is **not** measured coral branch length, and no
+calibration, coordinate-frame registration, specimen identity, or biological
+condition is independently verified.

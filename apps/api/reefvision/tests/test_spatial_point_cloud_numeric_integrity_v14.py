@@ -448,22 +448,122 @@ def test_calibrated_subnormal_centroid_survives_averaging_in_saved_workflow(
     assert direct["provenance"]["calibration_verified"] is False
     assert direct["branch_length_m"] is None
 
-    project_id = str(
-        create_project(client, f"Subnormal centroid {source_format} {sign}")["id"]
-    )
+    project_id = str(create_project(client, f"Subnormal centroid {source_format} {sign}")["id"])
     base = f"/api/v1/projects/{project_id}"
     standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
-    assert expected["arithmetic_centroid_in_source_frame_m"] == (
-        direct["arithmetic_centroid_in_source_frame_m"]
+    assert (
+        expected["arithmetic_centroid_in_source_frame_m"]
+        == (direct["arithmetic_centroid_in_source_frame_m"])
     )
-    assert expected["arithmetic_centroid_in_source_frame_scale_interval_m"] == (
-        direct["arithmetic_centroid_in_source_frame_scale_interval_m"]
+    assert (
+        expected["arithmetic_centroid_in_source_frame_scale_interval_m"]
+        == (direct["arithmetic_centroid_in_source_frame_scale_interval_m"])
     )
     graph = {
         "graph_id": f"subnormal-centroid-{source_format}-{sign}-v14",
         "name": "Review provisional calibrated centroid arithmetic",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "point_cloud_measurement_preview"
+    )
+    for key, value in expected.items():
+        assert artifact[key] == value
+    assert artifact["project_id"] == project_id
+    assert artifact["measurement_status"] == "caller_supplied_unverified"
+    assert artifact["provenance"]["calibration_verified"] is False
+
+
+@pytest.mark.parametrize("source_format", ["xyz", "ply"])
+@pytest.mark.parametrize(
+    ("relative_uncertainty", "expected_interval", "unresolved"),
+    [
+        (0.0, [5e-324, 5e-324], False),
+        (0.25, None, True),
+        (1.0, [0.0, 1e-323], False),
+    ],
+)
+def test_subnormal_diagonal_uncertainty_is_not_false_zero_in_saved_workflow(
+    client: TestClient,
+    source_format: str,
+    relative_uncertainty: float,
+    expected_interval: list[float] | None,
+    unresolved: bool,
+) -> None:
+    """A representable diagonal must not report numerically collapsed scale certainty."""
+    points = [[0.0, 0.0, 0.0], [5e-324, 0.0, 0.0]]
+    params: dict[str, Any] = {
+        "meters_per_unit": 1.0,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic subnormal diagonal; no verified scale",
+        "relative_scale_uncertainty": relative_uncertainty,
+    }
+    if source_format == "xyz":
+        params["points"] = points
+    else:
+        params["ply_text"] = (
+            "ply\nformat ascii 1.0\nelement vertex 2\n"
+            "property double x\nproperty double y\nproperty double z\n"
+            "end_header\n0 0 0\n5e-324 0 0\n"
+        )
+    direct = measure_point_cloud_preview(
+        points=points,
+        meters_per_unit=1.0,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic subnormal diagonal; no verified scale",
+        relative_scale_uncertainty=relative_uncertainty,
+    )
+    assert direct["axis_aligned_bounding_box_diagonal_m"] == 5e-324
+    assert direct["axis_aligned_bounding_box_diagonal_scale_interval_m"] == expected_interval
+    assert (
+        "diagonal_uncertainty_interval_below_numeric_resolution" in direct["qc_warnings"]
+    ) is unresolved
+    assert (
+        direct["axis_aligned_bounding_box_diagonal_scale_uncertainty_m"] is None
+    ) is unresolved
+    assert direct["surface_area_m2"] is None
+    assert direct["branch_length_m"] is None
+    assert direct["provenance"]["calibration_verified"] is False
+
+    project_id = str(create_project(client, "Subnormal diagonal interval v14")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    assert expected["axis_aligned_bounding_box_diagonal_scale_interval_m"] == expected_interval
+    graph = {
+        "graph_id": f"subnormal-diagonal-{source_format}-{relative_uncertainty}-v14",
+        "name": "Inspect provisional diagonal uncertainty resolution",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
             {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
