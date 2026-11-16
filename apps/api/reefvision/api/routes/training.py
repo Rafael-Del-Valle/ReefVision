@@ -240,6 +240,28 @@ def _safe_terminal_log_text(payload: bytes) -> str:
     # A truncated terminal string is discarded through the end of the tail.
     text = re.sub(r"\x1b[\]PX^_][\s\S]*?(?:\x07|\x9c|\x1b\\|$)", "", text)
     text = re.sub(r"[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)", "", text)
+    # Backspaces and cursor-edit/erase CSI sequences can rewrite an earlier
+    # digit in a loss record. Simply deleting the control bytes would join
+    # distinct fragments (0.25 + BS + 99 -> 0.2599), fabricating a metric.
+    # Retain ordinary SGR color and leading progress-bar clear sequences, but
+    # quarantine any physical record edited between two printable fragments.
+    def omit_rewritten_record(record: str) -> str:
+        controls = re.finditer(r"\x08|(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]", record)
+        for control in controls:
+            value = control.group()
+            if value != "\x08" and value.endswith("m"):
+                continue
+            before = record[: control.start()]
+            after = record[control.end() :]
+            if before.strip() and after.strip():
+                return "[terminal-edited training log record omitted]"
+        return record
+
+    records = re.split(r"(\r\n|\r|\n)", text)
+    text = "".join(
+        omit_rewritten_record(record) if index % 2 == 0 else record
+        for index, record in enumerate(records)
+    )
     text = re.sub(r"(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]", "", text)
     # A worker can flush an incomplete color/control sequence before a newline
     # or EOF. Removing only ESC[ leaves its digits appended to real losses

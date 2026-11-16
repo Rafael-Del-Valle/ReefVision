@@ -661,6 +661,38 @@ def test_log_tail_strips_hyperlinks_graphics_and_carriage_return_rewrites(
     assert log.read_bytes() == original
 
 
+@pytest.mark.parametrize(
+    "unreliable_record",
+    [
+        b"train/box_loss=0.25\x0899",
+        b"train/cls_loss=0.30\x1b[1D99",
+        b"train/dfl_loss=0.10\x9b2K00",
+    ],
+)
+def test_log_tail_quarantines_terminal_edits_that_fabricate_loss_values(
+    tmp_path: Path, unreliable_record: bytes
+) -> None:
+    """Never join numeric fragments separated by terminal rewrite commands."""
+    log = tmp_path / "training.log"
+    original = (
+        unreliable_record
+        + b"\n"
+        + b"\x1b[2Ktrain/box_loss=0.22\n"
+        + b"train/cls_loss=\x1b[32m0.31\x1b[0m\n"
+    )
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": (
+            "[terminal-edited training log record omitted]\n"
+            "train/box_loss=0.22\n"
+            "train/cls_loss=0.31\n"
+        ),
+    }
+    assert log.read_bytes() == original
+
+
 def test_log_tail_drops_incomplete_ansi_csi_without_fabricating_losses(
     tmp_path: Path,
 ) -> None:
