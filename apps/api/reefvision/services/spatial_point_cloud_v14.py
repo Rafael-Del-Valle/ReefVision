@@ -292,7 +292,7 @@ def measure_point_cloud_preview(
             )
     centroid = [sum(p[axis] for p in vertices) / len(vertices) * scale for axis in range(3)]
     diagonal = dist((0.0, 0.0, 0.0), dimensions)
-    envelope_volume = dimensions[0] * dimensions[1] * dimensions[2]
+    envelope_volume: float | None = dimensions[0] * dimensions[1] * dimensions[2]
     # Three representable dimensions may still have a product too small for
     # floating point. Report this as unknown rather than falsely claiming a
     # zero-volume (planar) cloud. Keep the independently valid dimensions.
