@@ -540,7 +540,9 @@ def test_quantized_subnormal_envelope_uncertainty_has_no_false_exact_interval(
     assert direct["branch_length_m"] is None
     assert direct["provenance"]["calibration_verified"] is False
 
-    project_id = str(create_project(client, f"Quantized envelope {source_format} {uncertainty}")["id"])
+    project_id = str(
+        create_project(client, f"Quantized envelope {source_format} {uncertainty}")["id"]
+    )
     base = f"/api/v1/projects/{project_id}"
     response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert response.status_code == 200, response.text
