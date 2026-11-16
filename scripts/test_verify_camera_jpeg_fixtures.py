@@ -589,7 +589,8 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                         []
                         if expected_ok
                         else [
-                            f"EXIF pixel dimensions inconsistent with JPEG raster: {photo.name}"
+                            "EXIF pixel dimensions inconsistent with JPEG raster: "
+                            f"{photo.name}"
                         ],
                     )
                     self.assertEqual(photo.read_bytes(), original)
