@@ -125,13 +125,13 @@ def test_preview_scale_intervals_standalone_and_saved_workflow_parity(
 def test_signed_coordinate_scale_intervals_never_invent_zero_bounds(source_x: float) -> None:
     """Subresolution scale intervals stay unknown, not physically zero."""
     points = [[0.0, 0.0, 0.0], [source_x, 0.0, 0.0]]
-    params = {
-        "points": points,
-        "meters_per_unit": 1e-323,
-        "calibration_method": "ruler",
-        "calibration_evidence": "Synthetic numerical boundary; not verified",
-    }
-    unresolved = measure_point_cloud_preview(**params, relative_scale_uncertainty=0.9)
+    unresolved = measure_point_cloud_preview(
+        points=points,
+        meters_per_unit=1e-323,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic numerical boundary; not verified",
+        relative_scale_uncertainty=0.9,
+    )
     assert unresolved["preview_point_scale_intervals_m"][0][0] == [0.0, 0.0]
     assert unresolved["preview_point_scale_intervals_m"][1][0] is None
     assert unresolved["preview_point_scale_intervals_m"][1][1:] == [
@@ -147,7 +147,13 @@ def test_signed_coordinate_scale_intervals_never_invent_zero_bounds(source_x: fl
     # A mathematically zero bound (100% uncertainty) and exact calibration
     # with no scale uncertainty are valid controls, even for negative values.
     for uncertainty in (0.0, 1.0):
-        control = measure_point_cloud_preview(**params, relative_scale_uncertainty=uncertainty)
+        control = measure_point_cloud_preview(
+            points=points,
+            meters_per_unit=1e-323,
+            calibration_method="ruler",
+            calibration_evidence="Synthetic numerical boundary; not verified",
+            relative_scale_uncertainty=uncertainty,
+        )
         assert control["preview_point_scale_intervals_m"][1][0] is not None
         assert control["arithmetic_centroid_in_source_frame_scale_interval_m"][0] is not None
         assert "coordinate_uncertainty_interval_below_numeric_resolution" not in control[
