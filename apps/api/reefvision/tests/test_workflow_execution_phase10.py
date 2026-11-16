@@ -127,9 +127,7 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
     queued_detail = client.get(f"/api/v1/workflow-runs/{run['id']}")
     assert queued_detail.status_code == 200, queued_detail.text
     with app.state.session_factory() as session:
-        pending_producer = session.get(
-            WorkflowNodeRun, queued_detail.json()["nodes"][0]["id"]
-        )
+        pending_producer = session.get(WorkflowNodeRun, queued_detail.json()["nodes"][0]["id"])
         assert pending_producer is not None
         assert pending_producer.status == "pending"
         specification = WorkflowArtifactSpec(
@@ -137,9 +135,7 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
             data_type="project_reference",
             payload={"project_id": project["id"]},
         )
-        with pytest.raises(
-            ConflictError, match="publication requires a running workflow and node"
-        ):
+        with pytest.raises(ConflictError, match="publication requires a running workflow and node"):
             WorkflowExecutionService(session).persist_artifact(
                 run_id=str(run["id"]),
                 node_run=pending_producer,
@@ -151,9 +147,7 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         assert queued_record is not None
         queued_record.status = "running"
         session.flush()
-        with pytest.raises(
-            ConflictError, match="publication requires a running workflow and node"
-        ):
+        with pytest.raises(ConflictError, match="publication requires a running workflow and node"):
             WorkflowExecutionService(session).persist_artifact(
                 run_id=str(run["id"]),
                 node_run=pending_producer,
