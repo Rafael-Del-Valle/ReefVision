@@ -286,21 +286,22 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                             exif_ifd = exif.get_ifd(34665)
                             exif_pixel_width = exif_ifd.get(40962, exif.get(40962))
                             exif_pixel_height = exif_ifd.get(40963, exif.get(40963))
+                            # Absence of these optional EXIF tags is not
+                            # evidence of consistency. Report conflicts as
+                            # scientific QC errors, not JPEG decode failures.
+                            exif_dimensions_match_raster: bool | None = None
                             if (
                                 exif_pixel_width is not None
                                 or exif_pixel_height is not None
                             ):
-                                if (
-                                    type(exif_pixel_width) is not int
-                                    or type(exif_pixel_height) is not int
-                                    or exif_pixel_width <= 0
-                                    or exif_pixel_height <= 0
-                                    or (exif_pixel_width, exif_pixel_height)
-                                    != (decoded.width, decoded.height)
-                                ):
-                                    raise ValueError(
-                                        "EXIF pixel dimensions conflict with JPEG raster"
-                                    )
+                                exif_dimensions_match_raster = (
+                                    type(exif_pixel_width) is int
+                                    and type(exif_pixel_height) is int
+                                    and exif_pixel_width > 0
+                                    and exif_pixel_height > 0
+                                    and (exif_pixel_width, exif_pixel_height)
+                                    == (decoded.width, decoded.height)
+                                )
                             decoded_metadata = {
                                 "jpeg_pixel_width": decoded.width,
                                 "jpeg_pixel_height": decoded.height,
@@ -310,6 +311,7 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                                 "jpeg_exif_orientation": orientation,
                                 "jpeg_exif_pixel_width": exif_pixel_width,
                                 "jpeg_exif_pixel_height": exif_pixel_height,
+                                "jpeg_exif_dimensions_match_raster": exif_dimensions_match_raster,
                                 "jpeg_icc_profile_present": icc_profile is not None,
                                 "jpeg_icc_profile_bytes": (
                                     len(icc_profile) if icc_profile is not None else 0
@@ -343,6 +345,10 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                     errors.append(f"JPEG fixture changed during decoding: {relative}")
                 else:
                     decoded_ok = True
+                    if decoded_metadata["jpeg_exif_dimensions_match_raster"] is False:
+                        errors.append(
+                            f"EXIF pixel dimensions inconsistent with JPEG raster: {relative}"
+                        )
             except ImportError:
                 errors.append(f"Pillow JPEG decoder unavailable: {relative}")
             except (
