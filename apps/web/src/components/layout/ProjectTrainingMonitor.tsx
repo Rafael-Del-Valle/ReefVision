@@ -34,9 +34,11 @@ function metricEntries(run: TrainingRun): Array<[string, number, string]> {
     for (let index = values.length - 1; index >= 0; index -= 1) {
       const value = values[index];
       if (typeof value === "number" && Number.isFinite(value)) {
+        const source = `history entry ${index + 1}/${values.length}`;
+        const prior = index < values.length - 1 ? "; prior sample" : "";
         latest.set(key, {
           value,
-          provenance: `history entry ${index + 1}/${values.length}${index < values.length - 1 ? "; prior sample" : ""}; epoch association unverified`,
+          provenance: `${source}${prior}; epoch association unverified`,
         });
         break;
       }
@@ -48,9 +50,10 @@ function metricEntries(run: TrainingRun): Array<[string, number, string]> {
         const history = run.metrics_history?.[key];
         latest.set(key, {
           value,
-          provenance: Array.isArray(history) && history.length > 0
-            ? "summary fallback; history unavailable; epoch association unverified"
-            : "summary; epoch association unverified",
+          provenance:
+            Array.isArray(history) && history.length > 0
+              ? "summary fallback; history unavailable; epoch association unverified"
+              : "summary; epoch association unverified",
         });
       }
     }
@@ -255,6 +258,7 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
                         <dt>{metricLabel(key)}</dt>
                         <dd>
                           <span>{metricValue(value)}</span>
+                          {" · "}
                           <small className="rv-training-monitor-metric-source">
                             {provenance}
                           </small>
