@@ -144,6 +144,12 @@ Assert-True ($acceptanceScript.Contains('"$api/projects/$projectId/classes"')) '
 Assert-True ($acceptanceScript.Contains("selection_kind -eq 'builtin_architecture'")) 'Catalog selection_kind must match the current API.'
 Assert-True (-not $acceptanceScript.Contains("selection_kind -eq 'architecture'")) 'Legacy architecture selection kind must not be used.'
 Assert-True ($acceptanceScript.Contains('external_annotation_imports = New-ReefVisionEvidenceResult')) 'Installed backend COCO/YOLO evidence must be reported.'
+Assert-True ($acceptanceScript.Contains('provider_manifests = New-ReefVisionEvidenceResult')) 'Installed provider-manifest evidence must be reported.'
+Assert-True ($acceptanceScript.Contains("'provider-manifests'")) 'Installed acceptance must seed the provider-manifest data directory.'
+Assert-True ($acceptanceScript.Contains('advanced-providers/manifests')) 'Installed acceptance must inspect the packaged manifest catalog.'
+Assert-True ($acceptanceScript.Contains('source_sha256 -cne $providerManifestHash')) 'Installed acceptance must bind discovery to the exact manifest bytes.'
+Assert-True ($acceptanceScript.Contains('execution_surface -ne ''blocked''')) 'Installed acceptance must require a blocked local execution surface.'
+Assert-True ($acceptanceScript.Contains('advanced-providers/local_acceptance/preflight')) 'Installed acceptance must exercise fail-closed local preflight.'
 # The installed-MSI test can exercise a real camera file when supplied.
 # It must remain optional and must verify immutable source bytes as well as
 # the display endpoint; a synthetic PNG does not establish camera acceptance.
