@@ -156,9 +156,9 @@ def test_signed_coordinate_scale_intervals_never_invent_zero_bounds(source_x: fl
         )
         assert control["preview_point_scale_intervals_m"][1][0] is not None
         assert control["arithmetic_centroid_in_source_frame_scale_interval_m"][0] is not None
-        assert "coordinate_uncertainty_interval_below_numeric_resolution" not in control[
-            "qc_warnings"
-        ]
+        assert (
+            "coordinate_uncertainty_interval_below_numeric_resolution" not in control["qc_warnings"]
+        )
 
 
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
