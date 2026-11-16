@@ -421,3 +421,17 @@ standalone project API responses, and **full checksummed artifact equality**
 through an executed, typed, persisted Workflow Builder graph. This is a
 numerical-integrity boundary, not validated biological volume, scientific
 scale calibration, registration, tissue completeness or coral reidentification.
+
+**Representable mixed-scale envelopes (November 16, 2026):** Axis-aligned
+envelope multiplication now evaluates the larger axis extents first. Extremely
+small X/Y extents multiplied before a large Z extent could previously round an
+intermediate product to zero even though the full three-axis product is a
+positive, representable subnormal number. The revised multiplication retains
+such provisional positive envelopes and their representable scale-only bounds.
+It still returns `null` plus `envelope_volume_below_numeric_resolution` when
+the final nominal envelope itself cannot be represented. XYZ/ASCII PLY standalone
+requests and executable saved Workflow Builder graphs are tested for exact
+artifact/provenance parity using a synthetic mixed-scale example. This numerical
+safeguard does **not** validate tissue volume, coordinate registration, physical
+calibration, or coral identity.
+
