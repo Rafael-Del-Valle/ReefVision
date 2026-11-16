@@ -53,9 +53,11 @@ transaction before relabeling a proven draft-spatial head:
   ambiguous-schema, and failure-rollback lineage tests.
 - Downgrade to the shared pre-branch `0037` and upgrade again.
 
-Installed Windows upgrade, Project Exchange, and verified pre-upgrade backup
-rollback remain open until an installer built from the final candidate SHA and
-representative 1.3/legacy-draft-1.4 profiles are available.
+Exact-head installed Windows engineering acceptance has exercised deterministic
+validated-1.3, legacy `0038`, and legacy `0039` profiles through upgrade,
+Project Exchange, and verified pre-upgrade backup restore. Representative
+prior-user acceptance remains open until authorized real validated-1.3 and
+legacy draft-1.4 profiles, each with a verified backup, are available.
 
 ## Metadata ancestry integrity
 
