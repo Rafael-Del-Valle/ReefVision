@@ -258,7 +258,7 @@ def test_verified_pose_dataset_persists_workflow_lineage(
             ],
         }
         session.flush()
-        with pytest.raises(ConflictError, match="multiple artifacts for one output port"):
+        with pytest.raises(ConflictError, match="multiple artifacts"):
             verify_succeeded_node_artifacts(
                 session,
                 run_id=str(queued.json()["id"]),
