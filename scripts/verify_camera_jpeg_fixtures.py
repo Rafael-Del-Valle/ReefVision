@@ -283,7 +283,7 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                             # or recompression invalidates camera geometry QC.
                             # Some exporters store these tags in IFD0; prefer
                             # the standard nested Exif IFD when available.
-                            exif_ifd = exif.get_ifd(34665) if exif.get(34665) is not None else {}
+                            exif_ifd = exif.get_ifd(34665)
                             exif_pixel_width = exif_ifd.get(40962, exif.get(40962))
                             exif_pixel_height = exif_ifd.get(40963, exif.get(40963))
                             if (
