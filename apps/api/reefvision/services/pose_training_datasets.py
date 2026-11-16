@@ -131,6 +131,11 @@ def frozen_pose_item_fingerprints_match(
                 or not isinstance(model.get("model_id"), str)
                 or not model["model_id"].strip()
                 or model["model_id"] != model["model_id"].strip()
+                # Frozen source-model lineage must retain a valid checkpoint
+                # digest even if someone re-signs the item and manifest.
+                or not isinstance(model.get("checkpoint_sha256"), str)
+                or len(model["checkpoint_sha256"]) != 64
+                or any(char not in "0123456789abcdef" for char in model["checkpoint_sha256"])
                 for model in row.source_models_json
             )
             or not isinstance(row.source_job_ids_json, list)
@@ -510,6 +515,14 @@ class PoseTrainingDatasetService:
             # while freezing immutable source-model provenance.
             if not isinstance(model.metadata_json, dict):
                 raise ConflictError("Source pose model metadata must be a JSON object")
+            # Reject corrupt registered source-model checksums before
+            # freezing a dataset that cannot prove its model lineage.
+            if (
+                not isinstance(model.sha256, str)
+                or len(model.sha256) != 64
+                or any(char not in "0123456789abcdef" for char in model.sha256)
+            ):
+                raise ConflictError("Source pose model checkpoint checksum is invalid")
 
             snapshots.append(
                 {
