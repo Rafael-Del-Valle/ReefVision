@@ -435,3 +435,21 @@ artifact/provenance parity using a synthetic mixed-scale example. This numerical
 safeguard does **not** validate tissue volume, coordinate registration, physical
 calibration, or coral identity.
 
+## Quantized positive envelope-uncertainty bounds (November 16, 2026)
+
+A positive but subnormal axis-aligned envelope may be representable even when
+distinct mathematical scale-uncertainty bounds both round to the **same**
+floating-point number. Reporting that degenerate interval would falsely imply
+zero uncertainty. When relative scale uncertainty is strictly positive and
+the computed bounds are identical, the preview now retains the nominal
+envelope, sets its scale-only interval to `null`, and emits
+`envelope_uncertainty_interval_below_numeric_resolution`. The same warning
+continues to cover a positive lower bound that underflows to zero. An exactly
+zero caller-supplied scale uncertainty retains a legitimate [volume, volume]
+interval; a truly planar cloud remains [0, 0].
+
+Parameterized XYZ/ASCII PLY regressions exercise the direct scientific service,
+standalone endpoint, typed graph planning and fully executed persisted Workflow
+Builder, including complete saved-artifact equality and provisional provenance.
+The synthetic subnormal examples test numeric integrity only, **not** verified
+calibration, validated coral tissue volume or organism condition.
