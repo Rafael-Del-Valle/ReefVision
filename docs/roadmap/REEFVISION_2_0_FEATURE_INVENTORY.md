@@ -2,17 +2,17 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-15T20:00:00Z`
+Updated: `2026-11-16T04:00:00Z`
 Candidate target: `2.0`
 
 ## Status summary
 
 | Status | Count |
 | --- | ---: |
-| blocked | 11 |
+| blocked | 12 |
 | explicitly_deferred | 4 |
-| in_progress | 36 |
-| verified | 25 |
+| in_progress | 33 |
+| verified | 27 |
 
 ## Features
 
@@ -50,12 +50,12 @@ Candidate target: `2.0`
 | 1.4 | Anatomical coral branch-length measurement | blocked | 3D scientific task → Measurements → Anatomical branch length |
 | 1.4 | Reviewed biological-condition measurements | blocked | 3D/scientific task → Condition review |
 | 1.4 | Reviewed extents, dimensions, area, surface paths, and conditional volume | verified | 3D scientific task → Measurements |
-| 1.4 | Validated 1.3 to 1.4 ancestry, migration, exchange, and rollback | in_progress | Installed upgrade and Project menu → Backup / Exchange |
+| 1.4 | Validated 1.3 to 1.4 ancestry, migration, exchange, and rollback | blocked | Installed upgrade and Project menu → Backup / Exchange |
 | 1.4 | Reviewed longitudinal 3D change | blocked | 3D scientific task → Longitudinal comparison |
 | 1.4 | Reviewed 3D registration transforms and calibration evidence | blocked | 3D scientific task → Registration review |
 | 1.4 | Representative 3D field validation | blocked | Known synthetic geometry is reported separately. |
-| 1.4 | Bounded OBJ/PLY/GLB mesh and point-cloud preview | in_progress | Open project → Video & automation → Workflow builder → Project-owned 3D originals |
-| 1.4 | Persistent versioned 3D project assets | in_progress | Open project → Video & automation → Workflow builder → Project-owned 3D originals → Import 3D original |
+| 1.4 | Bounded OBJ/PLY/GLB mesh and point-cloud preview | verified | Open project → Video & automation → Workflow builder → Project-owned 3D originals |
+| 1.4 | Persistent versioned 3D project assets | verified | Open project → Video & automation → Workflow builder → Project-owned 3D originals → Import 3D original |
 | 1.5 | Study setup, treatments, sampling units, exclusions, and statistical plan | in_progress | Research → Study design |
 | 1.5 | Offline field capture and later project reconciliation | in_progress | Project → Field capture |
 | 1.5 | Local model catalog, runtime selection, and prompt-assisted configuration | in_progress | Models & AI → Model Hub |
@@ -748,10 +748,11 @@ Evidence:
 ### rv14-lineage-upgrade: Validated 1.3 to 1.4 ancestry, migration, exchange, and rollback
 
 - Target: `1.4`
-- Status: `in_progress`
+- Status: `blocked`
 - Dependencies: `rv13-exchange-restore`, `rv14-versioned-spatial-assets`
 - Entry point: Installed upgrade and Project menu → Backup / Exchange
 - Workflow Builder: `not_applicable`
+- Missing input: Representative validated-1.3 and legacy draft-1.4 Windows data profiles, including a verified pre-upgrade backup for each, that can be upgraded by the final-candidate installer and exercised through Project Exchange and rollback/restore.
 
 Acceptance checks:
 
@@ -762,7 +763,7 @@ Evidence:
 
 - `source`: Real ancestry merge, unique Alembic graph, schema-fingerprinted legacy upgrades, ambiguity rejection, backup verification, and downgrade/upgrade regressions. — `docs/roadmap/REEFVISION_1_4_MIGRATION_RECONCILIATION.md` (`rv14-lineage-source`)
 - `browser`: none recorded
-- `windows_installed`: none recorded
+- `windows_installed`: Exact-SHA 1.4.0 Windows acceptance passed a published 1.0.3 upgrade with schema migration, persistence, Project Exchange, uninstall, and data retention. This is partial evidence and does not substitute for representative 1.3 and legacy draft-1.4 profiles. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/43792901192` (`rv14-lineage-win-103`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -832,34 +833,34 @@ Evidence:
 ### rv14-spatial-preview: Bounded OBJ/PLY/GLB mesh and point-cloud preview
 
 - Target: `1.4`
-- Status: `in_progress`
+- Status: `verified`
 - Dependencies: `rv13-exchange-restore`
 - Entry point: Open project → Video & automation → Workflow builder → Project-owned 3D originals
 - Workflow Builder: `required`
 
 Acceptance checks:
 
-- **in_progress** — Open supported bounded geometry through normal project navigation and preserve coordinate/unit warnings and preview limits. (`rv14-spatial-preview-check`)
+- **verified** — Open supported bounded geometry through normal project navigation and preserve coordinate/unit warnings and preview limits. (`rv14-spatial-preview-check`)
 
 Evidence:
 
 - `source`: Focused spatial frontend suite covers bounded local and project-owned mesh/point-cloud previews, source validation, and warnings (46 tests). — `apps/web/src/features/workflow-graphs` (`rv14-spatial-preview-src`)
 - `browser`: Application-shell acceptance opens a project, selects Video & automation then Workflow builder, finds Project-owned 3D originals and its import control, and confirms no new top-level 3D tab. — `apps/web/src/App.test.tsx` (`rv14-spatial-preview-ui`)
-- `windows_installed`: none recorded
+- `windows_installed`: Exact-SHA 1.4.0 installed acceptance passed and the packaged application was separately opened under an isolated profile through Home → project → Video & automation → Workflow builder → Project-owned 3D originals; mesh/point-cloud controls and scientific warnings were visible without a top-level 3D tab. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/43792901192` (`rv14-spatial-preview-win`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
 ### rv14-versioned-spatial-assets: Persistent versioned 3D project assets
 
 - Target: `1.4`
-- Status: `in_progress`
+- Status: `verified`
 - Dependencies: `rv14-spatial-preview`
 - Entry point: Open project → Video & automation → Workflow builder → Project-owned 3D originals → Import 3D original
 - Workflow Builder: `required`
 
 Acceptance checks:
 
-- **in_progress** — Import immutable source bytes, persist UUID/hash/units/frame/transform/calibration/review revisions, and exchange or reject tampered assets. (`rv14-versioned-spatial-assets-check`)
+- **verified** — Import immutable source bytes, persist UUID/hash/units/frame/transform/calibration/review revisions, and exchange or reject tampered assets. (`rv14-versioned-spatial-assets-check`)
 
 Evidence:
 
@@ -868,7 +869,7 @@ Evidence:
 - `source`: Every import queues a durable bounded structural parse job; valid mesh and point-cloud results remain explicitly uncalibrated/unreviewed, malformed and altered originals fail closed, duplicate imports deduplicate, and result hashes reject local or archive tampering. — `apps/api/reefvision/tests/test_spatial_asset_parse_jobs_v14.py` (`rv14-spatial-assets-parse`)
 - `source`: Project Exchange round-trip remaps spatial source/review/metadata/parse UUIDs, restores verified original bytes, recomputes remapped evidence hashes, requires originals, and rejects altered bytes, review evidence, metadata evidence, or parse results. — `apps/api/reefvision/tests/test_spatial_asset_project_exchange_v14.py` (`rv14-spatial-assets-exchange`)
 - `browser`: Normal project navigation exposes project-owned import, background structural parse status/QC, and append-only unit/frame metadata controls inside Workflow builder; focused UI tests exercise the path without a new top-level tab. — `apps/web/src/features/workflow-graphs/ProjectSpatialAssetPreview.test.tsx` (`rv14-spatial-assets-ui`)
-- `windows_installed`: none recorded
+- `windows_installed`: Exact-SHA disposable Windows clean-install and published 1.0.3-upgrade runs passed schema migration, project persistence/restart, Project Exchange, uninstall, and data retention for 1.4.0; packaged UI inspection separately confirmed project-owned import and metadata/preview controls. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/43792901192` (`rv14-spatial-assets-win`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 

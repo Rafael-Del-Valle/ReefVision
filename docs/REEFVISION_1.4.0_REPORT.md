@@ -1,182 +1,164 @@
-# ReefVision 1.4.0 Report
+# ReefVision 1.4.0 acceptance report
 
-## Status
+Report date: 2026-11-15
 
-Partial progress only. ReefVision `1.4.0` should not yet be claimed complete.
+## Release status
 
-This report covers the implemented and verified Milestone 8 slices currently in the repository:
+ReefVision 1.4 is **not release-complete**. The integrated candidate has a
+verified source and packaging foundation for bounded 3D assets, deterministic
+geometric measurements, migration reconciliation, Project Exchange, and the
+normal user-facing discovery path. Scientific claims that require representative
+specimens, independent references, reviewer authority, or preregistered
+thresholds remain blocked and are listed separately below.
 
-- version alignment to `1.4.0`;
-- system version and compatibility visibility;
-- structured rotating logs;
-- managed backup creation and verification;
-- managed restore into a new recovery location;
-- redacted diagnostic bundle export;
-- first-run onboarding and recovery UI foundations.
+This report does not authorize merging to `main`, tagging, or publishing. The
+published 1.0.3 release assets remain unchanged.
 
-Not yet verified complete:
+## Feature-by-feature result
 
-- packaged desktop backup or restore workflows;
-- installer upgrade and uninstall preservation checks;
-- clean-machine verification;
-- full NSIS release checksum and release-note packaging;
-- the remaining Milestone 8 documentation sweep;
-- any claim of full release readiness.
+The canonical status and evidence record is
+`docs/roadmap/REEFVISION_2_0_FEATURE_INVENTORY.json`; the generated Markdown
+inventory must agree with it. A broad 1.4 gate cannot close an individual entry.
 
-## Version Sources
+| Feature | Result | Boundary |
+| --- | --- | --- |
+| Bounded OBJ/PLY/GLB mesh and point-cloud preview | Verified | Bounded parsing, QC, warnings, and contextual Workflow Builder discovery are tested. |
+| Persistent versioned 3D project assets | Verified | Original bytes, UUID/hash binding, append-only metadata and review history, background parsing, exchange, and tamper rejection are covered. |
+| Reviewed geometric measurements | Verified on deterministic synthetic geometry | Extents, dimensions, area, paths, topology/QC, uncertainty, and conditional volume are covered; no biological interpretation is implied. |
+| Reviewed registration transforms | Blocked | Requires representative paired scans, independent control correspondences and scale evidence, reviewer/adjudicator authority, and preregistered residual/alignment thresholds. |
+| Reviewed 3D organism matching | Blocked | Requires repeated scans with independent identity labels, reviewer/adjudicator roles, an ambiguity protocol, and preregistered false/missed-match thresholds. |
+| Longitudinal 3D change | Blocked | Requires the blocked registration and organism-correspondence evidence plus preregistered longitudinal error and repeatability thresholds. |
+| Anatomical coral branch length | Blocked | Requires an approved endpoint/centerline rubric, independent reference branches, repeatability evidence, thresholds, and an adjudicator. A generic surface path is not an anatomical branch length. |
+| Biological-condition measurements | Blocked | Requires an approved rubric and observation unit, representative labeled specimens, independent review, adjudication, and reliability/accuracy thresholds. Geometry and confidence are not condition labels. |
+| 1.3 → 1.4 lineage, upgrade, exchange, and rollback | Source verified; installed lineage matrix blocked | Fresh/current migration and published 1.0.3 upgrade evidence pass. Representative 1.3 and legacy draft-1.4 profiles are still required for the complete installed lineage matrix. |
+| Representative 3D field validation | Blocked | Requires the authorized scan corpus, independent references/repeats/labels, target Windows/GPU configurations, and evidence destinations named in the inventory. |
 
-The main application version sources were updated to `1.4.0`:
+3D specimen correspondence is separate from appearance-based ReefPose
+re-identification across long gaps or videos. The latter remains its own 2.0
+inventory entry.
 
-- `apps/api/reefvision/__init__.py`
-- `pyproject.toml`
-- `package.json`
-- `apps/web/package.json`
-- `apps/web/package-lock.json`
-- `apps/web/src-tauri/tauri.conf.json`
-- `apps/web/src-tauri/Cargo.toml`
-- `apps/web/src-tauri/Cargo.lock`
+## User-facing entry point
 
-An automated backend test now fails if the authoritative version sources drift.
+A new user reaches the 1.4 tools through:
 
-## Implemented Milestone 8 Behavior
+1. Home → create or open a project.
+2. Video & automation → Workflow builder.
+3. Project-owned 3D originals → Import 3D original.
+4. Select the project source, then use mesh or point-cloud preview and the
+   relevant scientific node's contextual controls.
 
-### Backups
-
-- Managed backups are created as background jobs.
-- Backups use deterministic manifest ordering, SHA-256 checksums, and a completion marker.
-- Cancelled or failed backups do not appear complete.
-- Backup verification checks manifest readability, file membership, checksums, and completion state.
-
-### Restore
-
-- Restore is only allowed from a valid verified backup.
-- Restore currently targets a new managed directory under `recoveries/`.
-- Active data is not overwritten.
-- Restored files are verified against the backup manifest before finalization.
-- A restore receipt is written into the restored recovery copy.
-
-### Diagnostics
-
-- Diagnostic export is a background job.
-- Bundles include ReefVision version, backup-format version, dependency versions, disk summary, recent failed jobs, and bounded recent logs.
-- Data-directory and home-directory paths are redacted in strict mode.
-- Media files are not included by default.
-
-### Frontend
-
-- `System status` now shows version, schema, compatibility, data paths, logs, backup controls, restore controls, and diagnostics export.
-- A first-run onboarding modal is available and can be reopened from the top bar or `System status`.
-- The onboarding copy explicitly notes that YOLO import is still not exposed in this build.
+The packaged 1.4.0 application was launched with an isolated data root and this
+path was exercised. The project-owned import and preview controls were present,
+and the node registry exposed 3D Mesh Surface Preview, 3D Point Cloud Preview,
+and 3D Mesh Longitudinal Comparison (Provisional). The UI explicitly warns that
+the asset is not calibrated, a generic chord/path is not anatomical branch
+length, and preview output is not a biological condition or verified
+registration result. No top-level 3D tab was added; advanced controls remain in
+the relevant Workflow Builder workspace.
 
 ## Migrations
 
-- No new Alembic migration was added in this restore or diagnostics slice.
-- The current schema head remains `0009`.
-- The existing Milestone 8 migration is `0009_backup_records_and_app_scoped_jobs.py`.
+The validated 1.3 and aliased draft-spatial histories merge at
+`b14_integration_0001`. The single current head is `b14_spatial_0040`, which adds
+append-only spatial asset metadata revisions. The legacy numeric `0038`/`0039`
+migration bodies are preserved byte-for-byte under `legacy_spatial`; applied
+migrations were not edited.
 
-## Files Added or Changed in This Slice
+Verified migration paths include:
 
-Backend:
+- fresh database → `b14_spatial_0040`;
+- `b13_temporal_0001` → current head;
+- proven legacy draft-spatial numeric `0038` and `0039` → current head;
+- current head → `b14_integration_0001` → current head;
+- rejection without mutation for ambiguous, mixed, incomplete, unknown, and
+  future schema fingerprints.
 
-- `apps/api/reefvision/storage/diagnostics.py`
-- `apps/api/reefvision/jobs/diagnostics.py`
-- `apps/api/reefvision/jobs/restores.py`
-- `apps/api/reefvision/services/backups.py`
-- `apps/api/reefvision/services/system.py`
-- `apps/api/reefvision/jobs/worker.py`
-- `apps/api/reefvision/services/jobs.py`
-- `apps/api/reefvision/api/routes/backups.py`
-- `apps/api/reefvision/api/routes/system.py`
-- `apps/api/reefvision/schemas/backups.py`
-- `apps/api/reefvision/schemas/system.py`
-- `apps/api/reefvision/domain/enums.py`
-- `apps/api/reefvision/tests/test_restore_and_diagnostics.py`
+See `docs/roadmap/REEFVISION_1_4_MIGRATION_RECONCILIATION.md` for the graph and
+lineage invariants.
 
-Frontend:
+## Automated verification
 
-- `apps/web/src/api/client.ts`
-- `apps/web/src/features/system/SystemPanel.tsx`
-- `apps/web/src/features/onboarding/OnboardingModal.tsx`
-- `apps/web/src/App.tsx`
-- `apps/web/src/App.test.tsx`
-- `apps/web/src/styles/app.css`
+Source verification for the candidate includes:
 
-Docs:
+- Ruff lint and Ruff format across the backend: passed.
+- mypy across 636 source files: passed.
+- release inventory validation: 76 entries; 22 inventory tests passed.
+- frontend format and type checks: passed.
+- frontend unit tests: 124 files, 717 tests passed.
+- Playwright: 14 passed; 18 live-environment checks skipped by their declared
+  opt-in requirements.
+- production frontend build: passed, with the existing bundle-size advisory.
+- release metadata: 11 public version sources agree on 1.4.0.
+- Windows harness preflight regressions: 69 passed.
+- Alembic fresh upgrade, downgrade to `b14_integration_0001`, and re-upgrade to
+  `b14_spatial_0040`: passed with one head.
 
-- `README.md`
-- `CHANGELOG.md`
-- `docs/REEFVISION_1.4.0_REPORT.md`
+The exact final backend and GitHub CI counts are recorded in the final PR #79
+evidence update because the evidence SHA is produced after this report is
+committed.
 
-## Verification Run
+## Windows installer evidence
 
-Backend:
+GitHub Actions run
+`https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/43792901192`
+built and verified the 1.4.0 MSI from source commit
+`330bd56fddf66a9dd135b5e493c7f9e9a382be4f` and passed:
 
-```powershell
-.\.venv\Scripts\python.exe -m pytest apps/api/reefvision/tests/test_version_consistency.py apps/api/reefvision/tests/test_system.py -q
-```
+- exact source/version/provenance and MSI Media/payload digest verification;
+- disposable Windows clean install without developer runtimes on `PATH`;
+- first launch, frontend/backend connectivity, schema migration, project
+  persistence and restart;
+- Project Exchange round trip;
+- uninstall with user-data retention;
+- published 1.0.3 → 1.4.0 upgrade, persistence, exchange, uninstall, and
+  retention.
 
-Passed earlier in this milestone slice: `6 passed, 1 warning`.
+The MSI SHA-256 is
+`526e96386fc831dcef65b2bed8767746002b6f16822655003f64fd75efdf4f6c`.
+Its ProductVersion is 1.4.0, ProductCode is
+`{A60356E7-2A23-48DE-A2DD-0BCAB0D5BA2B}`, and UpgradeCode is
+`{5EDA8EE0-2A5D-5B08-A8DF-9BECFC3A4351}`. Every external CAB digest was
+verified.
 
-```powershell
-.\.venv\Scripts\python.exe -m pytest apps/api/reefvision/tests/test_backups.py apps/api/reefvision/tests/test_system.py apps/api/reefvision/tests/test_restore_and_diagnostics.py -q
-```
+The same packaged executable was also inspected locally from an administrative
+MSI extraction under an isolated profile. A true local MSI install was not run
+because this Codex Windows session is not elevated; the disposable GitHub
+Windows jobs provide the true installed evidence. Representative 1.3 and legacy
+draft-1.4 profile upgrades remain open.
 
-Passed: `12 passed, 1 warning`.
+## Synthetic, installed, and representative evidence
 
-```powershell
-.\.venv\Scripts\python.exe -m ruff check apps/api/reefvision/storage/diagnostics.py apps/api/reefvision/jobs/diagnostics.py apps/api/reefvision/jobs/restores.py apps/api/reefvision/services/backups.py apps/api/reefvision/services/system.py apps/api/reefvision/api/routes/backups.py apps/api/reefvision/api/routes/system.py apps/api/reefvision/schemas/backups.py apps/api/reefvision/schemas/system.py apps/api/reefvision/jobs/worker.py apps/api/reefvision/services/jobs.py apps/api/reefvision/domain/enums.py
-```
+- **Synthetic/source:** deterministic geometry, scaling, topology, conditional
+  volume, uncertainty propagation, registration/correspondence binding,
+  longitudinal withholding, immutable storage, exchange, and tamper rejection.
+- **Installed Windows:** clean 1.4.0 install and published 1.0.3 upgrade passed;
+  packaged user-path discovery was exercised separately under an isolated
+  profile.
+- **Representative/physical:** not run. No authorized representative scan
+  corpus, independent references/identity/condition labels, reviewer authority,
+  preregistered thresholds, or target-hardware evidence destination was
+  available.
 
-Passed.
+## Files and contracts changed in 1.4
 
-```powershell
-.\.venv\Scripts\python.exe -m ruff format --check apps/api/reefvision/storage/diagnostics.py apps/api/reefvision/jobs/diagnostics.py apps/api/reefvision/jobs/restores.py apps/api/reefvision/services/backups.py apps/api/reefvision/services/system.py apps/api/reefvision/api/routes/backups.py apps/api/reefvision/api/routes/system.py apps/api/reefvision/schemas/backups.py apps/api/reefvision/schemas/system.py apps/api/reefvision/jobs/worker.py apps/api/reefvision/services/jobs.py apps/api/reefvision/domain/enums.py apps/api/reefvision/tests/test_restore_and_diagnostics.py
-```
+The integrated branch changes backend spatial source, metadata, parse,
+measurement, registration, correspondence, longitudinal, Project Exchange, and
+migration code; Workflow Builder controls and previews; release metadata and
+Windows packaging; tests; and the release-accountability inventory and reports.
+The final PR diff is the authoritative file list.
 
-Passed.
+No original media is modified. Spatial originals remain project-owned immutable
+bytes, canonical identifiers are UUIDs, integrity failures are structured and
+fail closed, and no provisional output is silently promoted to verified
+annotation, calibration, anatomy, identity, growth, or condition evidence.
 
-```powershell
-.\.venv\Scripts\python.exe -m mypy apps/api/reefvision
-```
+## Known limitations and specification deviations
 
-Passed: `Success: no issues found in 117 source files`.
-
-Frontend:
-
-```powershell
-npm --prefix apps/web run test -- src/App.test.tsx src/runtime.test.ts
-```
-
-Passed: `12 passed`.
-
-```powershell
-npm --prefix apps/web run typecheck
-```
-
-Passed.
-
-```powershell
-npm --prefix apps/web run format:check
-```
-
-Passed.
-
-```powershell
-npm --prefix apps/web run build
-```
-
-Passed.
-
-## Known Limitations
-
-- Restore currently creates a verified recovery copy but does not activate it as the live ReefVision data directory.
-- Overwrite restore and rollback-protected replacement restore are not implemented.
-- Diagnostic bundles are backend-focused and do not yet collect packaged desktop metadata from the installed shell.
-- The current onboarding explains unavailable YOLO import honestly instead of surfacing a nonexistent workflow.
-- This report does not claim full desktop, installer, upgrade, uninstall, or clean-machine verification.
-
-## Specification Deviations Still Open
-
-- YOLO import is still absent from the user-facing workflow, despite being present in the product specification.
-- Full Milestone 8 release hardening and distribution verification remains incomplete.
-- The final `1.4.0` installer path and SHA-256 checksum have not been produced in this report.
+- Representative registration, matching, longitudinal, anatomical branch
+  length, condition, and physical-hardware acceptance are blocked as listed in
+  the canonical inventory.
+- The complete installed 1.3/legacy-draft-1.4 lineage matrix is not available.
+- Local true installation was blocked by the non-elevated session; remote
+  disposable Windows installation passed.
+- No 1.4 release-complete claim is made. No merge, tag, or publication was
+  performed.

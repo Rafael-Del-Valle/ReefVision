@@ -52,6 +52,22 @@ def test_ascii_ply_with_reordered_xyz_and_extra_scalar_property() -> None:
         "ply\nformat ascii 1.0\nend_header",
         PLY + ("x" * 256_001),
     ],
+    ids=[
+        "binary-format",
+        "non-triangular-face",
+        "out-of-range-index",
+        "negative-index",
+        "extra-face-row",
+        "non-finite-coordinate",
+        "fractional-uchar",
+        "uchar-overflow",
+        "negative-uchar",
+        "fractional-integer-coordinate",
+        "list-coordinate-property",
+        "unsupported-element",
+        "missing-geometry",
+        "oversized-payload",
+    ],
 )
 def test_rejects_unsupported_or_malformed_ply(invalid: str) -> None:
     with pytest.raises(ValueError):
