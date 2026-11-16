@@ -27,7 +27,24 @@ WORKFLOW_PROVENANCE_SCHEMA_VERSION = "workflow-run-provenance-0001"
 
 
 def canonical_workflow_artifact_sha256(payload: dict[str, Any]) -> str:
-    """Hash portable JSON, rejecting NaN/infinity in persisted scientific results."""
+    """Hash portable JSON; reject non-string keys and non-finite numbers."""
+
+    # JSON objects require string keys at every level. Python's encoder
+    # silently stringifies integer and boolean keys, changing the scientific
+    # source structure before a seemingly valid digest is persisted.
+    pending: list[Any] = [payload]
+    seen: set[int] = set()
+    while pending:
+        item = pending.pop()
+        if not isinstance(item, (dict, list, tuple)) or id(item) in seen:
+            continue
+        seen.add(id(item))
+        if isinstance(item, dict):
+            if any(not isinstance(key, str) for key in item):
+                raise ValueError("Workflow artifact JSON object keys must be strings")
+            pending.extend(item.values())
+        else:
+            pending.extend(item)
 
     try:
         serialized = json.dumps(

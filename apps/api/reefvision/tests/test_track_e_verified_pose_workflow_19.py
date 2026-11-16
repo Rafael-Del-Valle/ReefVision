@@ -42,6 +42,7 @@ from reefvision.services.workflow_pose_training import (
 from reefvision.services.workflow_provenance import (
     build_workflow_run_provenance,
     verify_succeeded_node_artifacts,
+    verify_workflow_artifact,
 )
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project
@@ -193,6 +194,18 @@ def test_verified_pose_dataset_persists_workflow_lineage(
                     port_id=outputs[0]["producer_port_id"],
                     data_type=outputs[0]["data_type"],
                     payload={**payload, "measurements": {"confidence": float("nan")}},
+                ),
+            )
+        # Nested numeric map keys would silently become strings when saved
+        # as JSON, so reject them before signing or writing scientific data.
+        with pytest.raises(ValidationError, match="JSON object keys must be strings"):
+            WorkflowExecutionService(session).persist_artifact(
+                run_id=str(queued.json()["id"]),
+                node_run=producer,
+                specification=WorkflowArtifactSpec(
+                    port_id=outputs[0]["producer_port_id"],
+                    data_type=outputs[0]["data_type"],
+                    payload={**payload, "counts_by_frame": {0: 3}},
                 ),
             )
     assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
@@ -845,6 +858,18 @@ def test_verified_pose_dataset_persists_workflow_lineage(
         artifact.payload_json = original_payload
         artifact.payload_sha256 = outputs[0]["payload_sha256"]
         session.commit()
+    assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
+
+    # Reject even a re-signed, in-memory artifact with non-string nested keys.
+    # The database could normalize these keys on commit, masking the defect.
+    with app.state.session_factory() as session:
+        artifact = session.get(WorkflowArtifact, outputs[0]["id"])
+        assert artifact is not None
+        artifact.payload_json = {**original_payload, "counts_by_frame": {0: 3}}
+        artifact.payload_sha256 = canonical_json_sha256(artifact.payload_json)
+        with pytest.raises(ConflictError, match="JSON object keys must be strings"):
+            verify_workflow_artifact(artifact)
+        session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json() == run
 
     # Deduplication must reject an artifact whose JSON object was replaced by
