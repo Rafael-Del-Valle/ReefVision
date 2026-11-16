@@ -136,16 +136,15 @@ def test_calibration_underflow_standalone_and_workflow_fail_closed(
         "property double x\nproperty double y\nproperty double z\n"
         "end_header\n0 0 0\n1e-30 0 0\n"
     )
-    params = {
+    params: dict[str, Any] = {
         "meters_per_unit": 1e-300,
         "calibration_method": "ruler",
         "calibration_evidence": "Unverified subnormal calibration",
-        **(
-            {"points": tiny_points}
-            if source_format == "xyz"
-            else {"ply_text": tiny_ply}
-        ),
     }
+    if source_format == "xyz":
+        params["points"] = tiny_points
+    else:
+        params["ply_text"] = tiny_ply
     with pytest.raises(ValueError, match="underflows after calibration"):
         measure_point_cloud_preview(
             points=tiny_points,
