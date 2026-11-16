@@ -12,6 +12,14 @@ from sqlalchemy import Connection, inspect, text
 
 from reefvision.db.review_event_topology_16 import assert_review_event_relationship_topology
 
+# The packaged pre-review lineage has 0001-0037 plus the historical video/mask
+# migration between 0014 and 0015. A foreign 0042 or a damaged single stamp
+# can otherwise bypass the 1.1/1.6 collision gate if its scientific tables were
+# lost during restoration. Never guess provenance from an unknown stamp.
+_KNOWN_PRE_REVIEW_REVISIONS = frozenset(
+    {f"{number:04d}" for number in range(1, 38)} | {"53ba400993db"}
+)
+
 _REVIEW_TABLE = "review_queue_item_events"
 _REVIEW_COLUMNS = frozenset(
     {
@@ -189,6 +197,17 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 "Unsafe ReefVision pre-review schema with preserved views: "
                 f"views={sorted(views)}. Preserve research views and reconcile "
                 "migration provenance before upgrading; do not stamp or drop data."
+            )
+        # The absence of known scientific tables does not prove that a lone
+        # foreign revision (including 1.1's later 0042) is an older 1.6
+        # migration. Without this gate, desktop startup could attempt Alembic
+        # writes against a partially restored foreign research schema.
+        if revision_rows[0] not in _KNOWN_PRE_REVIEW_REVISIONS:
+            raise RuntimeError(
+                "Unsafe ReefVision Alembic unsupported or foreign revision: "
+                "the stamp is not in the packaged pre-review migration lineage. "
+                "Preserve the database and reconcile scientific provenance from "
+                "a reviewed backup; do not stamp, downgrade, or upgrade it."
             )
         return
     # Alembic can record unrelated branch heads in the same version table.
