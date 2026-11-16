@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
-from sqlalchemy import func, literal_column, select
+from sqlalchemy import and_, func, literal_column, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -46,6 +46,61 @@ def _scope(session: Session, queue_id: str, item_id: str) -> ReviewQueueItem:
     )
     if foreign_event_id is not None:
         raise ConflictError("Review event provenance does not match its queue")
+
+    # External imports may preserve foreign keys yet corrupt an event's
+    # action fields. A malformed off-page event must neither give a false
+    # current assignee nor permit additional writes onto compromised evidence.
+    invalid_event_id = session.scalar(
+        select(ReviewQueueItemEvent.id)
+        .where(
+            ReviewQueueItemEvent.review_queue_item_id == item_id,
+            or_(
+                ~ReviewQueueItemEvent.event_type.in_(
+                    (
+                        "comment",
+                        "assign",
+                        "unassign",
+                        "triage_start",
+                        "triage_skip",
+                        "triage_return",
+                        "triage_complete",
+                    )
+                ),
+                and_(
+                    ReviewQueueItemEvent.event_type == "assign",
+                    or_(
+                        ReviewQueueItemEvent.assignee.is_(None),
+                        func.trim(ReviewQueueItemEvent.assignee) == "",
+                        ReviewQueueItemEvent.comment.is_not(None),
+                    ),
+                ),
+                and_(
+                    ReviewQueueItemEvent.event_type == "unassign",
+                    or_(
+                        ReviewQueueItemEvent.assignee.is_not(None),
+                        ReviewQueueItemEvent.comment.is_not(None),
+                    ),
+                ),
+                and_(
+                    ReviewQueueItemEvent.event_type == "comment",
+                    or_(
+                        ReviewQueueItemEvent.comment.is_(None),
+                        func.trim(ReviewQueueItemEvent.comment) == "",
+                        ReviewQueueItemEvent.assignee.is_not(None),
+                    ),
+                ),
+                and_(
+                    ReviewQueueItemEvent.event_type.in_(
+                        ("triage_start", "triage_skip", "triage_return", "triage_complete")
+                    ),
+                    ReviewQueueItemEvent.assignee.is_not(None),
+                ),
+            ),
+        )
+        .limit(1)
+    )
+    if invalid_event_id is not None:
+        raise ConflictError("Review event history has inconsistent action evidence")
     return item
 
 
