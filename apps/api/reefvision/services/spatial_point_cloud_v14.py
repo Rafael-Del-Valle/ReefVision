@@ -343,16 +343,28 @@ def measure_point_cloud_preview(
         else:
             envelope_scale_interval = [lower, upper]
 
-    def coordinate_scale_intervals(bounds: list[float]) -> list[list[float]] | None:
+    # A nonzero signed source-frame coordinate must not acquire a false zero
+    # uncertainty bound from floating-point underflow. Preserve the other
+    # representable axes, including genuine zero coordinates.
+    coordinate_scale_interval_underflow = False
+
+    def coordinate_scale_intervals(bounds: list[float]) -> list[list[float] | None] | None:
+        nonlocal coordinate_scale_interval_underflow
         if relative_scale_uncertainty is None:
             return None
-        intervals: list[list[float]] = []
+        intervals: list[list[float] | None] = []
         for value in bounds:
             candidates = (
                 value * (1 - relative_scale_uncertainty),
                 value * (1 + relative_scale_uncertainty),
             )
-            intervals.append([min(candidates), max(candidates)])
+            if value != 0.0 and relative_scale_uncertainty < 1.0 and any(
+                candidate == 0.0 for candidate in candidates
+            ):
+                coordinate_scale_interval_underflow = True
+                intervals.append(None)
+            else:
+                intervals.append([min(candidates), max(candidates)])
         return intervals
 
     unique_count = len(set(vertices))
@@ -478,6 +490,11 @@ def measure_point_cloud_preview(
             + (
                 ["dimension_uncertainty_interval_below_numeric_resolution"]
                 if dimension_scale_interval_underflow
+                else []
+            )
+            + (
+                ["coordinate_uncertainty_interval_below_numeric_resolution"]
+                if coordinate_scale_interval_underflow
                 else []
             )
             + (["envelope_volume_below_numeric_resolution"] if envelope_volume_underflow else [])
