@@ -76,6 +76,8 @@ $report = [ordered]@{
     installer_sha256 = $InstallerHash
     previous_installer_path = if ($PreviousInstallerPath) { $PreviousInstallerPath } else { $null }
     windows_version = [Environment]::OSVersion.VersionString
+    # Registry evidence is informational and never completes the interactive GUI gate.
+    webview2_runtime = Get-ReefVisionWebView2RuntimeInfo
     architecture = $env:PROCESSOR_ARCHITECTURE
     acceptance_root = $AcceptanceRoot
     isolated_data_root = $DataRoot
