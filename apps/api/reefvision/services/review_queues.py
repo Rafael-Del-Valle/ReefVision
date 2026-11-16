@@ -139,6 +139,15 @@ class ReviewQueueService:
         regenerated_from_queue_id: str | None = None,
     ) -> ReviewQueue:
         project = self.quality_control._project(project_id)
+        # Frozen dataset versions contain reviewed annotation snapshots but no
+        # pending prediction proposals. A confidence selection would silently
+        # return an empty, supposedly completed queue for every frozen image.
+        # Reject it before inserting a queue or modifying review history.
+        if dataset_version is not None and request.review_below_confidence is not None:
+            raise ValidationError(
+                "Frozen dataset versions do not snapshot pending predictions; "
+                "remove review_below_confidence or use a live project queue"
+            )
         # Dataset-version queues must rank the immutable snapshot, not the
         # project's later annotation edits or unreviewed live predictions.
         # Reuse the existing QC snapshot builder instead of reconstructing

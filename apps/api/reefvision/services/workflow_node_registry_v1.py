@@ -673,6 +673,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             "Optional signal_weights reuse standalone QC weight validation.",
             "Run/node identity prevents duplicate queues on retries.",
             "An optional unfiltered immutable dataset-version source freezes QC evidence.",
+            "Frozen datasets omit predictions; confidence filtering needs a live project.",
             "Scientist review is required before accepting observations.",
         ],
     )

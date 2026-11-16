@@ -537,6 +537,26 @@ class WorkflowGraphService:
                         )
                     )
 
+        # Prediction proposals are deliberately excluded from immutable
+        # dataset-version QC context. Flag confidence-gated version queues at
+        # planning time instead of letting a saved graph yield a false empty
+        # completed review queue. Live project-only filtering remains valid.
+        for node in graph.nodes:
+            if (
+                node.node_type == "qc_review_queue"
+                and node.parameters.get("review_below_confidence") is not None
+                and incoming.get((node.node_id, "dataset"))
+            ):
+                issues.append(
+                    self._issue(
+                        "error",
+                        "unsupported_frozen_qc_confidence_filter",
+                        "Frozen dataset versions do not snapshot pending predictions; "
+                        "remove the confidence filter or disconnect the dataset input",
+                        node_id=node.node_id,
+                    )
+                )
+
         for node in graph.nodes:
             accepted_purposes = _MODEL_PURPOSES_BY_NODE.get(node.node_type)
             if accepted_purposes is None:
