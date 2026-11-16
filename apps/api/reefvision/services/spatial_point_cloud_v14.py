@@ -192,6 +192,21 @@ def measure_point_cloud_preview(
         if any(value != 0.0 and value * scale == 0.0 for value in xyz):
             raise ValueError("Nonzero point-cloud coordinate underflows after calibration")
         vertices.append(xyz)
+    # Reject a collapsed cloud-wide span before evaluating optional chords. A
+    # two-point cloud can violate both contracts, and the primary extent error
+    # must retain its established diagnostic while wider clouds still exercise
+    # the more specific selected-chord guard below.
+    source_bounds_min = [min(p[axis] for p in vertices) for axis in range(3)]
+    source_bounds_max = [max(p[axis] for p in vertices) for axis in range(3)]
+    dimensions = [(source_bounds_max[axis] - source_bounds_min[axis]) * scale for axis in range(3)]
+    bounds_min = [value * scale for value in source_bounds_min]
+    bounds_max = [value * scale for value in source_bounds_max]
+    if any(
+        source_bounds_max[axis] > source_bounds_min[axis]
+        and (dimensions[axis] == 0.0 or bounds_min[axis] == bounds_max[axis])
+        for axis in range(3)
+    ):
+        raise ValueError("Nonzero point-cloud axis span collapses after calibration")
     # Selected point-pair chords refer to original input order, not branches.
     selected_chords: list[dict[str, Any]] = []
     selected_endpoint_indices: set[int] = set()
@@ -275,20 +290,6 @@ def measure_point_cloud_preview(
                     ),
                 }
             )
-    # Source extents can disappear even when the individual calibrated XYZ
-    # coordinates remain nonzero. Do not report a zero width or chord for a
-    # distinguishable source span, including subnormal calibrated coordinates.
-    source_bounds_min = [min(p[axis] for p in vertices) for axis in range(3)]
-    source_bounds_max = [max(p[axis] for p in vertices) for axis in range(3)]
-    dimensions = [(source_bounds_max[axis] - source_bounds_min[axis]) * scale for axis in range(3)]
-    bounds_min = [value * scale for value in source_bounds_min]
-    bounds_max = [value * scale for value in source_bounds_max]
-    if any(
-        source_bounds_max[axis] > source_bounds_min[axis]
-        and (dimensions[axis] == 0.0 or bounds_min[axis] == bounds_max[axis])
-        for axis in range(3)
-    ):
-        raise ValueError("Nonzero point-cloud axis span collapses after calibration")
     centroid = [sum(p[axis] for p in vertices) / len(vertices) * scale for axis in range(3)]
     diagonal = dist((0.0, 0.0, 0.0), dimensions)
     envelope_volume = dimensions[0] * dimensions[1] * dimensions[2]
