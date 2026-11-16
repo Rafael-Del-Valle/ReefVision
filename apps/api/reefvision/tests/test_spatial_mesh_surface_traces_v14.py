@@ -625,16 +625,10 @@ def test_concave_planar_centroid_can_be_outside_filled_perimeter(
     assert trace["closed_loop_source_is_simple_planar_perimeter"] is True
     source_area = trace["closed_loop_source_planar_enclosed_area_mesh_units2"]
     assert source_area == pytest.approx(10.0)
-    assert trace["closed_loop_source_planar_centroid_mesh_units"] == pytest.approx(
-        [2.0, 1.7, 0.0]
-    )
-    assert trace["closed_loop_planar_centroid_m"] == pytest.approx(
-        [2 * scale, 1.7 * scale, 0.0]
-    )
+    assert trace["closed_loop_source_planar_centroid_mesh_units"] == pytest.approx([2.0, 1.7, 0.0])
+    assert trace["closed_loop_planar_centroid_m"] == pytest.approx([2 * scale, 1.7 * scale, 0.0])
     assert trace["closed_loop_source_planar_centroid_inside_or_on_perimeter"] is False
-    assert "closed_surface_trace_source_planar_centroid_outside_perimeter" in (
-        trace["qc_warnings"]
-    )
+    assert "closed_surface_trace_source_planar_centroid_outside_perimeter" in (trace["qc_warnings"])
     assert trace["human_review_verified"] is False
 
 
@@ -1823,6 +1817,8 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "closed_loop_rotated",
         "closed_loop_max_uncertainty",
         "non_xy_planar_closed_loop",
+        "concave_u_closed_loop",
+        "concave_u_closed_loop_reverse",
         "noncoplanar_closed_loop",
         "proper_crossing_closed_loop",
         "contact_overlap_closed_loop",
@@ -1865,7 +1861,10 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             if case != "non_xy_planar_closed_loop":
                 expected_closing_turn = 135.0 if case == "closed_loop_rotated" else 90.0
                 assert trace["turn_angles_deg"][0] == pytest.approx(expected_closing_turn)
-                assert trace["total_absolute_geometric_turn_deg"] == pytest.approx(360.0)
+                expected_absolute_turn = 720.0 if case.startswith("concave_u") else 360.0
+                assert trace["total_absolute_geometric_turn_deg"] == pytest.approx(
+                    expected_absolute_turn
+                )
             assert trace["closed_loop_source_exact_coplanarity"] is True
             assert trace["closed_loop_source_noncoplanar_waypoint_offsets"] == []
             assert trace["closed_loop_source_proper_crossing_segment_pairs"] == []
@@ -1873,7 +1872,13 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             assert trace["closed_loop_source_collinear_overlap_segment_pairs"] == []
             assert trace["closed_loop_source_is_simple_planar_perimeter"] is True
             assert trace["closed_loop_source_local_backtrack_waypoint_offsets"] == []
-            expected_source_area = 3.0 if case == "non_xy_planar_closed_loop" else 0.5
+            expected_source_area = (
+                10.0
+                if case.startswith("concave_u")
+                else 3.0
+                if case == "non_xy_planar_closed_loop"
+                else 0.5
+            )
             assert trace["closed_loop_source_planar_enclosed_area_mesh_units2"] == (
                 expected_source_area
             )
@@ -1890,14 +1895,22 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
                 0.01 * diameter
             )
             expected_compactness = (
-                12 * pi / (5 + sqrt(13)) ** 2
+                10 * pi / 121
+                if case.startswith("concave_u")
+                else 12 * pi / (5 + sqrt(13)) ** 2
                 if case == "non_xy_planar_closed_loop"
                 else 2 * pi / (2 + sqrt(2)) ** 2
             )
             assert trace["closed_loop_source_planar_isoperimetric_quotient"] == pytest.approx(
                 expected_compactness
             )
-            source_maximum_span = sqrt(13) if case == "non_xy_planar_closed_loop" else sqrt(2)
+            source_maximum_span = (
+                4 * sqrt(2)
+                if case.startswith("concave_u")
+                else sqrt(13)
+                if case == "non_xy_planar_closed_loop"
+                else sqrt(2)
+            )
             assert trace["closed_loop_source_planar_maximum_vertex_chord_mesh_units"] == (
                 pytest.approx(source_maximum_span)
             )
