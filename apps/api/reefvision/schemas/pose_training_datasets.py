@@ -8,7 +8,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 PoseTrainingExportFormat = Literal[
-    "slp",
     "nwb",
     "coco",
     "dlc_csv",

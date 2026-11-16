@@ -529,19 +529,15 @@ describe("VideoTrackingWorkspace", () => {
     expect(
       screen.getByRole("heading", { name: "Scientific pose visualization" }),
     ).toBeInTheDocument();
-    const slpExport = screen.getByRole("link", { name: "SLEAP SLP" });
+    expect(
+      screen.queryByRole("link", { name: "SLEAP SLP" }),
+    ).not.toBeInTheDocument();
     const nwbExport = screen.getByRole("link", { name: "NWB" });
     const cocoExport = screen.getByRole("link", { name: "COCO pose" });
     const dlcExport = screen.getByRole("link", { name: "DeepLabCut CSV" });
     const yoloExport = screen.getByRole("link", {
       name: "Ultralytics pose ZIP",
     });
-    expect(slpExport).toHaveAttribute(
-      "href",
-      expect.stringContaining(
-        "/videos/video-1/pose-interoperability/export?format=slp",
-      ),
-    );
     expect(nwbExport).toHaveAttribute(
       "href",
       expect.stringContaining("format=nwb"),
@@ -643,7 +639,7 @@ describe("VideoTrackingWorkspace", () => {
     vi.mocked(poseInteropApi.importPoseInteroperability).mockResolvedValue({
       schema_version: "pose-interoperability-import-0001",
       video_id: "video-1",
-      format: "slp",
+      format: "nwb",
       created_track_ids: ["imported-track-1"],
       track_count: 1,
       keyframe_count: 2,
@@ -659,7 +655,7 @@ describe("VideoTrackingWorkspace", () => {
       await screen.findByRole("heading", { name: "Pose interoperability" }),
     ).toBeInTheDocument();
 
-    const poseFile = new File(["pose"], "external.slp", {
+    const poseFile = new File(["pose"], "external.nwb", {
       type: "application/octet-stream",
     });
     fireEvent.change(
@@ -678,7 +674,7 @@ describe("VideoTrackingWorkspace", () => {
     await waitFor(() =>
       expect(poseInteropApi.importPoseInteroperability).toHaveBeenCalledWith(
         "video-1",
-        "slp",
+        "nwb",
         poseFile,
         "class-1",
         true,
@@ -891,7 +887,7 @@ it("blocks pose inference until the ReefVision landmark schema is saved", async 
   expect(screen.getByText("Pose landmark schema")).toBeInTheDocument();
 });
 
-it("shows SLEAP-NN instance tracking controls without Ultralytics tracker knobs", async () => {
+it("preserves historical SLEAP-NN metadata but blocks active execution", async () => {
   vi.mocked(api.getTrackingModels).mockResolvedValue([
     {
       id: "sleap-pose-model",
@@ -933,18 +929,18 @@ it("shows SLEAP-NN instance tracking controls without Ultralytics tracker knobs"
   renderWorkspace();
 
   expect(
-    await screen.findByText("SLEAP-NN animal-instance tracking"),
+    await screen.findByText("Historical SLEAP-NN model unavailable"),
   ).toBeInTheDocument();
   expect(
-    screen.getByText(/fixed-window OKS\/Hungarian tracking/),
+    screen.getByText(/retired pending an authoritative license resolution/),
   ).toBeInTheDocument();
   expect(screen.queryByLabelText("Tracker")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Detector IoU")).not.toBeInTheDocument();
   expect(
     screen.getByRole("button", {
-      name: "Run SLEAP-NN pose + instance tracking",
+      name: "SLEAP-NN execution unavailable",
     }),
-  ).toBeEnabled();
+  ).toBeDisabled();
 });
 
 it("publishes timeline context and handles inspector seek commands without moving scientific ownership", async () => {

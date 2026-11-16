@@ -11,6 +11,7 @@ from typing import Any, Protocol, cast
 
 from reefvision.domain.errors import ValidationError
 from reefvision.ml.sleap_nn_provider import (
+    SLEAP_NN_RETIREMENT_REASON,
     SLEAP_NN_SUPPORTED_VERSION,
     extract_sleap_nn_bundle,
     keypoint_bbox,
@@ -552,5 +553,5 @@ def video_tracking_provider_for_name(provider_id: str) -> VideoTrackingProvider:
     if normalized == "ultralytics":
         return UltralyticsVideoTrackingProvider()
     if normalized == "sleap_nn":
-        return SleapNNVideoTrackingProvider()
+        raise ValidationError(SLEAP_NN_RETIREMENT_REASON)
     raise ValidationError(f"Unsupported video tracking provider: {provider_id}")

@@ -1195,8 +1195,9 @@ export function ModelManager({
           </label>
           <p className="annotation-helper">
             Register a local trained checkpoint. ReefVision preserves its
-            source, checksum, provider and class mapping. Pose models and SLEAP
-            bundles use the schema-aware registration in Pose Tracking.
+            source, checksum, provider and class mapping. Pose checkpoints use
+            schema-aware registration in Pose Tracking. Historical retired
+            providers remain readable but cannot be registered for new work.
           </p>
           {selectedProvider && (
             <p className="annotation-helper">

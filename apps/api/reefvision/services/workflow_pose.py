@@ -60,7 +60,6 @@ POSE_WORKFLOW_RUNTIME_NODE_TYPES = {
 }
 
 _EXTERNAL_POSE_EXPORT_FORMATS = {
-    "slp",
     "nwb",
     "coco",
     "dlc_csv",

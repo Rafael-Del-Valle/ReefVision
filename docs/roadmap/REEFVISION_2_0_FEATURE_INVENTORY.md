@@ -92,7 +92,7 @@ Candidate target: `2.0`
 | 2.0 | Typed, versioned Workflow Builder with guided forms and human gates | in_progress | Video & automation → Workflow Builder |
 | post-2.0 | Cloud accounts, hosted storage, and real-time collaboration | explicitly_deferred | Local cross-project summaries and offline exchange remain in scope. |
 | post-2.0 | Hyperspectral imagery | explicitly_deferred | Multispectral remains in scope. |
-| post-2.0 | Active SLEAP runtime, provider, and SLP interoperability | explicitly_deferred | BSD sleap-io may remain only for neutral NWB interchange after audit; native ReefPose is the supported pose path. |
+| post-2.0 | Active SLEAP runtime, provider, and SLP interoperability | explicitly_deferred | BSD sleap-io may remain only for neutral NWB interchange after audit; native ReefPose is the supported pose path. Installed-payload evidence is blocked until a Windows installer built from the final candidate SHA is available for dependency inspection. |
 | post-2.0 | Stereo reconstruction | explicitly_deferred | 3D import, measurement, and matching remain in scope. |
 
 ## Feature evidence
@@ -1598,11 +1598,12 @@ Evidence:
 
 Acceptance checks:
 
-- **in_progress** — Remove active runtime/provider/SLP support, preserve historical records as unavailable, and retain only audited neutral interchange. (`scope-sleap-active-support-check`)
+- **verified** — Remove active runtime/provider/SLP support, preserve historical records as unavailable, and retain only audited neutral NWB interchange. (`scope-sleap-source-retirement-check`)
+- **blocked** — Inspect a Windows installer built from the final candidate SHA and confirm that neither sleap-nn nor an active SLP runtime is packaged. (`scope-sleap-installed-payload-check`)
 
 Evidence:
 
-- `source`: none recorded
+- `source`: License audit, fail-closed provider/runtime factories, neutral-format schemas, and retirement regressions (64 passed; 5 opt-in NWB integration tests skipped). — `docs/THIRD_PARTY_SLEAP_AUDIT.md` (`scope-sleap-source-retirement`)
 - `browser`: none recorded
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded

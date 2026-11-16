@@ -157,7 +157,7 @@ export function VideoTrackingWorkspace({
   const [poseInteropImportFile, setPoseInteropImportFile] =
     useState<File | null>(null);
   const [poseInteropImportFormat, setPoseInteropImportFormat] =
-    useState<PoseInteroperabilityFormat>("slp");
+    useState<PoseInteroperabilityFormat>("nwb");
   const [confirmPoseInteropFrameMapping, setConfirmPoseInteropFrameMapping] =
     useState(false);
 
@@ -1657,7 +1657,7 @@ export function VideoTrackingWorkspace({
             <div>
               <strong>Import/export safeguards</strong>
               <p className="annotation-helper">
-                Import or export canonical pose data through SLEAP-IO.
+                Import or export canonical pose data through neutral formats.
                 ReefVision-exported files must match the target video checksum.
                 External files without ReefVision provenance require explicit
                 confirmation that frame indices correspond to this video.
@@ -1668,21 +1668,13 @@ export function VideoTrackingWorkspace({
                 <p className="annotation-helper">
                   Exports use the scientist-reviewed canonical pose state.
                   Repeated semantic labels receive stable external node names.
-                  SLP is exported natively; NWB, COCO, DeepLabCut, and
-                  Ultralytics downloads are ZIP bundles containing the standard
-                  native artifact plus a ReefVision manifest for exact frame and
-                  identity restoration. The full immutable
-                  association/correction audit history remains in ReefVision.
+                  NWB, COCO, DeepLabCut, and Ultralytics downloads are ZIP
+                  bundles containing the standard native artifact plus a
+                  ReefVision manifest for exact frame and identity restoration.
+                  The full immutable association/correction audit history
+                  remains in ReefVision.
                 </p>
                 <div className="workspace-actions">
-                  <a
-                    href={poseInteroperabilityExportUrl(
-                      selectedVideo.id,
-                      "slp",
-                    )}
-                  >
-                    SLEAP SLP
-                  </a>
                   <a
                     href={poseInteroperabilityExportUrl(
                       selectedVideo.id,
@@ -1729,7 +1721,6 @@ export function VideoTrackingWorkspace({
                   )
                 }
               >
-                <option value="slp">SLEAP SLP</option>
                 <option value="nwb">NWB</option>
                 <option value="coco">COCO pose JSON</option>
                 <option value="dlc_csv">DeepLabCut CSV</option>
@@ -1757,7 +1748,7 @@ export function VideoTrackingWorkspace({
               <input
                 aria-label="Pose interoperability import file"
                 type="file"
-                accept=".slp,.nwb,.json,.csv,.zip,application/zip"
+                accept=".nwb,.json,.csv,.zip,application/zip"
                 onChange={(event) =>
                   setPoseInteropImportFile(event.target.files?.[0] ?? null)
                 }
@@ -2178,11 +2169,12 @@ export function VideoTrackingWorkspace({
         {sleapTrackingSelected ? (
           <div className="workspace-guide compact">
             <div>
-              <strong>SLEAP-NN animal-instance tracking</strong>
+              <strong>Historical SLEAP-NN model unavailable</strong>
               <p className="annotation-helper">
-                {linkDetections
-                  ? "ReefVision uses SLEAP-NN fixed-window OKS/Hungarian tracking for animal instances. ByteTrack, BoT-SORT, and detector IoU do not apply to this provider."
-                  : "Animal-instance linking is disabled. Each SLEAP-NN instance is retained independently for review."}
+                Active SLEAP-NN execution is retired pending an authoritative
+                license resolution. ReefVision keeps this registration and its
+                provenance readable; use native ReefPose or an audited neutral
+                export for new work.
               </p>
             </div>
           </div>
@@ -2255,21 +2247,22 @@ export function VideoTrackingWorkspace({
             !selectedVideoId ||
             !trackingModelId ||
             trackingMutation.isPending ||
+            sleapTrackingSelected ||
             (poseTrackingSelected && selectedModelPoseSchema === null)
           }
           onClick={() => trackingMutation.mutate()}
         >
           {trackingMutation.isPending
             ? "Queuing..."
-            : linkDetections
-              ? sleapTrackingSelected
-                ? "Run SLEAP-NN pose + instance tracking"
-                : poseTrackingSelected
+            : sleapTrackingSelected
+              ? "SLEAP-NN execution unavailable"
+              : linkDetections
+                ? poseTrackingSelected
                   ? `Run pose + ${trackerLabel(trackerName)}`
                   : `Run ${trackerLabel(trackerName)}`
-              : poseTrackingSelected
-                ? "Run pose inference"
-                : "Run instance detection"}
+                : poseTrackingSelected
+                  ? "Run pose inference"
+                  : "Run instance detection"}
         </button>
         <label className="annotation-selection-row">
           <input

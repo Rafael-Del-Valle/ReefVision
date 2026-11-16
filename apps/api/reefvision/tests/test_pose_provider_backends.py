@@ -319,54 +319,24 @@ def test_ultralytics_multitask_adapter_declares_pose_support() -> None:
     assert "pose" in provider.supported_tasks
 
 
-def test_provider_catalog_exposes_optional_sleap_pose_backend(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        provider_hub_module,
-        "sleap_nn_runtime_status",
-        lambda: {
-            "ready": False,
-            "sleap_nn_version": None,
-            "sleap_io_version": None,
-            "issues": [
-                "sleap-nn 0.3.3 is required (found missing)",
-                "sleap-io 0.9.2 is required (found missing)",
-            ],
-        },
-    )
+def test_provider_catalog_preserves_retired_sleap_metadata() -> None:
     descriptor = provider_hub_module._sleap_nn_descriptor()
 
     assert descriptor.provider_id == "sleap_nn"
-    assert descriptor.supported_tasks == ("pose",)
-    assert descriptor.registerable is True
-    assert descriptor.availability_status == "dependency_missing"
-    assert descriptor.video_support is True
-    assert descriptor.required_model_files == (".zip",)
+    assert descriptor.supported_tasks == ()
+    assert descriptor.registerable is False
+    assert descriptor.availability_status == "retired_license_audit"
+    assert descriptor.video_support is False
+    assert descriptor.required_model_files == ()
 
 
-def test_provider_catalog_marks_incompatible_sleap_runtime(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        provider_hub_module,
-        "sleap_nn_runtime_status",
-        lambda: {
-            "ready": False,
-            "sleap_nn_version": "0.3.2",
-            "sleap_io_version": "0.9.2",
-            "issues": [
-                "sleap-nn 0.3.3 is required (found 0.3.2)",
-            ],
-        },
-    )
-
+def test_provider_catalog_retirement_is_independent_of_installed_runtime() -> None:
     descriptor = provider_hub_module._sleap_nn_descriptor()
 
-    assert descriptor.availability_status == "dependency_incompatible"
-    assert descriptor.availability_reason == ("sleap-nn 0.3.3 is required (found 0.3.2)")
-    assert descriptor.required_packages[0].status == "incompatible"
-    assert descriptor.required_packages[1].status == "ok"
+    assert descriptor.availability_status == "retired_license_audit"
+    assert "authoritative SLEAP-NN license resolution" in str(descriptor.availability_reason)
+    assert descriptor.required_packages[0].status == "retired_license_audit"
+    assert descriptor.required_packages[1].status == "neutral_nwb_only"
 
 
 def test_sleap_bundle_rejects_incompatible_provider_version(
@@ -427,7 +397,7 @@ def test_sleap_device_selection_is_strict_and_fails_closed(
         SleapNNVideoTrackingProvider._device("1")
 
 
-def test_sleap_bundle_registers_without_optional_runtime(
+def test_sleap_bundle_registration_is_retired_without_mutating_project(
     client: TestClient,
     tmp_path: Path,
 ) -> None:
@@ -452,35 +422,13 @@ def test_sleap_bundle_registers_without_optional_runtime(
             },
         )
 
-    assert response.status_code == 200, response.text
-    model = response.json()
-    assert model["provider_name"] == "sleap_nn"
-    assert model["task"] == "pose"
-    assert model["framework"] == "sleap_nn"
-    assert model["class_map_json"]["mapping"][class_name] == str(project["label_classes"][0]["id"])
-    assert model["metadata_json"]["pose_keypoint_shape"] == [3, 3]
-    assert model["metadata_json"]["pose_landmark_labels"] == [
-        "bell_center",
-        "tentacle",
-        "tentacle",
-    ]
-
-    bound = client.put(
-        f"/api/v1/models/{model['id']}/pose-landmark-schema",
-        json={
-            "groups": [
-                {"name": "bell_center", "count": 1},
-                {"name": "tentacle", "count": 2},
-            ]
-        },
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == (
+        "retired pending an authoritative SLEAP-NN license resolution"
     )
-    assert bound.status_code == 200, bound.text
-    schema = bound.json()["metadata_json"]["pose_landmark_schema"]
-    assert schema["expanded_labels"] == [
-        "bell_center",
-        "tentacle",
-        "tentacle",
-    ]
+    models = client.get(f"/api/v1/projects/{project['id']}/models")
+    assert models.status_code == 200, models.text
+    assert models.json() == []
 
 
 def _fake_video_metadata(_path: Path) -> dict[str, float | int]:

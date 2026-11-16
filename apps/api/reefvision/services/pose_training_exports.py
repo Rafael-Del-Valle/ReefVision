@@ -714,26 +714,6 @@ class PoseTrainingExportService:
                 ],
             }
 
-        if export_format == "slp":
-            return {
-                "lossy_native_artifact": True,
-                "preserved_natively": [
-                    "source video/frame index",
-                    "landmark coordinates",
-                    "landmark visibility",
-                    "track grouping",
-                    "stable unique landmark names",
-                ],
-                "transformed": [
-                    ("repeated semantic landmarks use stable unique SLEAP node names"),
-                ],
-                "manifest_only": [
-                    *common_manifest_only,
-                    "original repeated semantic label mapping",
-                    "full frozen canonical pose JSON",
-                ],
-            }
-
         return {
             "lossy_native_artifact": True,
             "preserved_natively": [
@@ -1246,45 +1226,19 @@ class PoseTrainingExportService:
 
             external_track = tracks[item.video_track_id]
 
-            instance: Any | None = None
-
-            if export_format == "slp":
-                user_instance = getattr(
-                    sio,
-                    "Instance",
-                    None,
-                )
-
-                if user_instance is not None and hasattr(
-                    user_instance,
-                    "from_numpy",
-                ):
-                    try:
-                        instance = user_instance.from_numpy(
-                            points,
-                            skeleton=skeleton,
-                            track=external_track,
-                        )
-                    except (
-                        TypeError,
-                        ValueError,
-                    ):
-                        instance = None
-
-            if instance is None:
-                instance = sio.PredictedInstance.from_numpy(
-                    points,
-                    skeleton=skeleton,
-                    point_scores=scores,
-                    score=float(
-                        cast(
-                            Any,
-                            dict(item.canonical_pose_json or {}).get("confidence") or 1.0,
-                        )
-                    ),
-                    track=external_track,
-                    tracking_score=None,
-                )
+            instance = sio.PredictedInstance.from_numpy(
+                points,
+                skeleton=skeleton,
+                point_scores=scores,
+                score=float(
+                    cast(
+                        Any,
+                        dict(item.canonical_pose_json or {}).get("confidence") or 1.0,
+                    )
+                ),
+                track=external_track,
+                tracking_score=None,
+            )
 
             raw_points = getattr(
                 instance,
@@ -1338,7 +1292,7 @@ class PoseTrainingExportService:
             labels,
         )
 
-    def _slp_or_nwb(
+    def _nwb(
         self,
         *,
         export_format: PoseTrainingExportFormat,
@@ -1359,21 +1313,6 @@ class PoseTrainingExportService:
 
         with TemporaryDirectory(prefix="reefvision-pose-training-export-") as temp:
             root = Path(temp)
-
-            if export_format == "slp":
-                output = root / "dataset.pose.slp"
-
-                sio.save_slp(
-                    labels,
-                    str(output),
-                    embed="all",
-                    verbose=False,
-                )
-
-                return (
-                    "dataset.pose.slp",
-                    output.read_bytes(),
-                )
 
             output = root / "dataset.pose.nwb"
 
@@ -1427,7 +1366,6 @@ class PoseTrainingExportService:
         export_format: PoseTrainingExportFormat,
     ) -> PoseTrainingExportArtifact:
         if export_format not in {
-            "slp",
             "nwb",
             "coco",
             "dlc_csv",
@@ -1498,7 +1436,7 @@ class PoseTrainingExportService:
             )
 
         else:
-            name, content = self._slp_or_nwb(
+            name, content = self._nwb(
                 export_format=export_format,
                 items=items,
                 schema=schema,

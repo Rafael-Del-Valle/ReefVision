@@ -465,7 +465,7 @@ def export_pose_interoperability(
     exchange_format: Annotated[
         PoseInteroperabilityFormat,
         Query(alias="format"),
-    ] = "slp",
+    ] = "nwb",
 ) -> Response:
     settings: Settings = request.app.state.settings
     payload = PoseInteroperabilityService(session, settings).export(
