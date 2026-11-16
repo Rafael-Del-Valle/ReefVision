@@ -173,9 +173,7 @@ def test_spatial_metadata_revisions_reject_rehashed_broken_ancestry(
 
     other_project = str(create_project(client, "Unrelated spatial ancestry")["id"])
     other_asset = _import_asset(client, other_project)
-    foreign_base = (
-        f"/api/v1/projects/{other_project}/spatial/assets/{other_asset['id']}"
-    )
+    foreign_base = f"/api/v1/projects/{other_project}/spatial/assets/{other_asset['id']}"
     foreign = client.post(f"{foreign_base}/metadata-revisions", json=payload)
     assert foreign.status_code == 201
 
