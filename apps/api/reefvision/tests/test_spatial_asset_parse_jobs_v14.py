@@ -5,12 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.db.models import Job
 from reefvision.jobs.spatial_source_parse_v14 import process_spatial_source_parse_job
 from reefvision.jobs.worker import process_next_thumbnail_job
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project
 
 OBJ = b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
@@ -78,6 +80,55 @@ def test_import_queues_background_structural_parse_without_claiming_calibration(
     rejected = client.get(f"/api/v1/projects/{project_id}/spatial/assets/{asset['id']}")
     assert rejected.status_code == 400, rejected.text
     assert "integrity" in rejected.json()["detail"].lower()
+
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {
+            "source_kind_resolved": "point_cloud",
+            "vertex_count": None,
+            "face_count": None,
+            "point_count": 3,
+        },
+        {"point_count": 3},
+        {"vertex_count": None},
+        {"qc_warnings": ["open_mesh_surface_not_enclosed"]},
+    ],
+    ids=["obj-falsely-point-cloud", "mesh-with-points", "mesh-without-vertices", "qc-removed"],
+)
+def test_rehashed_contradictory_parse_evidence_fails_closed(
+    client: TestClient, overrides: dict[str, object]
+) -> None:
+    """An unkeyed digest cannot make scientifically impossible counts truthful."""
+    project_id = str(create_project(client, "Spatial parse semantic integrity")["id"])
+    asset = _import(client, project_id, "coral.obj", OBJ)
+    app = cast(FastAPI, client.app)
+    assert process_spatial_source_parse_job(
+        app.state.settings,
+        app.state.session_factory,
+        asset["parse_job_id"],
+    )
+    with app.state.session_factory() as session:
+        job = session.get(Job, asset["parse_job_id"])
+        assert job is not None and job.result_json is not None
+        altered = {**job.result_json, **overrides}
+        content = {key: value for key, value in altered.items() if key != "content_sha256"}
+        altered["content_sha256"] = canonical_json_sha256(content)
+        job.result_json = altered
+        session.commit()
+
+    base = f"/api/v1/projects/{project_id}/spatial/assets"
+    for url in (f"{base}/{asset['id']}", base):
+        rejected = client.get(url)
+        assert rejected.status_code == 400, rejected.text
+        assert "integrity" in rejected.json()["detail"].lower()
+
+    # Never mutate or silently remove the original imported source evidence.
+    original = client.get(f"{base}/{asset['id']}/content")
+    assert original.status_code == 200
+    assert original.content == OBJ
 
 
 def test_malformed_source_is_preserved_but_background_parse_fails_closed(
