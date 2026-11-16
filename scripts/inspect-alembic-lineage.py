@@ -14,12 +14,23 @@ SCIENCE_EXTENSIONS = (
     "environmental_analysis_results",
 )
 
+
 def _sidecar_presence(database: Path) -> dict[str, bool]:
     """Check SQLite sidecars without opening, modifying, or removing them."""
-    return {
-        suffix: Path(f"{database}{suffix}").exists()
-        for suffix in ("-wal", "-shm", "-journal")
-    }
+    return {suffix: Path(f"{database}{suffix}").exists() for suffix in ("-wal", "-shm", "-journal")}
+
+
+def _database_stat_signature(database: Path) -> tuple[int, int, int, int, int] | None:
+    """Observe file identity and metadata without reading or modifying research bytes.
+
+    Matching observations do not prove an immutable backup; a separate verified
+    quiescent snapshot remains mandatory for installation or migration acceptance.
+    """
+    try:
+        stat = database.stat()
+    except OSError:
+        return None
+    return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
 
 
 FAMILIES = {
@@ -38,6 +49,7 @@ def inspect(path: Path) -> dict:
         raise ValueError(f"Database file does not exist: {path}")
     # SQLite URI read-only mode prevents accidental creation of missing databases.
     resolved_path = path.resolve()
+    database_stat_before = _database_stat_signature(resolved_path)
     sidecars_before = _sidecar_presence(resolved_path)
     uri = resolved_path.as_uri() + "?mode=ro"
     with sqlite3.connect(uri, uri=True) as db:
@@ -134,6 +146,18 @@ def inspect(path: Path) -> dict:
         # read-only evidence is collected. Observe sidecars at both boundaries:
         # a clean end state does not prove the original file was immutable.
         sidecars_after = _sidecar_presence(resolved_path)
+        database_stat_after = _database_stat_signature(resolved_path)
+        # A writer can also replace or change the main SQLite file during a
+        # lengthy integrity/lineage report, even if no sidecar exists at either
+        # boundary. This is only a fail-closed metadata probe, not a proof of
+        # immutability or a substitute for a verified offline snapshot.
+        database_stat_observations_match = (
+            database_stat_before is not None
+            and database_stat_after is not None
+            and database_stat_before == database_stat_after
+        )
+        if not database_stat_observations_match:
+            warnings.append("database_file_changed_during_inspection")
         for suffix, warning in (
             ("-wal", "wal_sidecar_requires_consistent_snapshot"),
             ("-shm", "shared_memory_sidecar_requires_consistent_snapshot"),
@@ -269,6 +293,7 @@ def inspect(path: Path) -> dict:
             "warnings": warnings,
             "sqlite_sidecars_before": sidecars_before,
             "sqlite_sidecars_after": sidecars_after,
+            "sqlite_database_stat_observations_match": database_stat_observations_match,
             "sqlite_integrity_ok": integrity_ok,
             "sqlite_full_integrity_ok": full_integrity_ok,
             "sqlite_foreign_key_violations": foreign_key_violations,
