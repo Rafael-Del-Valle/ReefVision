@@ -240,10 +240,16 @@ function Stop-AcceptanceDesktop($Process) {
     if (-not $Process.HasExited) { throw 'ReefVision did not close cleanly within 15 seconds.' }
 }
 
-function Assert-HistoricalDesktopRejectsProfile([string]$ProfileDataRoot, [int]$Seconds = 45) {
+function Assert-HistoricalDesktopRejectsProfile(
+    [string]$ProfileDataRoot,
+    [string]$RejectedRevision,
+    [int]$Seconds = 45
+) {
     $portPath = Join-Path $ProfileDataRoot 'runtime\backend-port.txt'
     $backendLogPath = Join-Path $ProfileDataRoot 'logs\backend.log'
     $desktopProcess = Start-AcceptanceDesktop -ProfileDataRoot $ProfileDataRoot
+    $explicitRejection = $false
+    $revisionPattern = [regex]::Escape($RejectedRevision)
     $deadline = [DateTime]::UtcNow.AddSeconds($Seconds)
     try {
         while ([DateTime]::UtcNow -lt $deadline) {
@@ -255,8 +261,9 @@ function Assert-HistoricalDesktopRejectsProfile([string]$ProfileDataRoot, [int]$
             }
             if (Test-Path -LiteralPath $backendLogPath) {
                 $backendLog = Get-Content -LiteralPath $backendLogPath -Raw
-                if ($backendLog -match "(?i)(can't locate revision|no such revision|not a valid upgrade target|database revision .* newer)") {
-                    return 'backend logged an explicit newer/unknown migration-revision rejection'
+                if ($backendLog -match "(?i)(can't locate revision|no such revision|not a valid upgrade target|database revision .* newer)[^\r\n]*$revisionPattern") {
+                    $explicitRejection = $true
+                    return "backend explicitly rejected migration revision $RejectedRevision"
                 }
             }
             $desktopProcess.Refresh()
@@ -268,7 +275,19 @@ function Assert-HistoricalDesktopRejectsProfile([string]$ProfileDataRoot, [int]$
         throw "Historical desktop published no backend port, but no explicit migration-revision rejection appeared within $Seconds seconds."
     } finally {
         $desktopProcess.Refresh()
-        if (-not $desktopProcess.HasExited) { Stop-AcceptanceDesktop $desktopProcess }
+        if (-not $desktopProcess.HasExited) {
+            if ($explicitRejection) {
+                # The failed startup has no usable application window. End only the
+                # disposable process started for this negative test before restoring.
+                $desktopProcess.Kill()
+                if (-not $desktopProcess.WaitForExit(15000)) {
+                    throw 'Rejected historical desktop remained running after cleanup.'
+                }
+            } else {
+                try { Stop-AcceptanceDesktop $desktopProcess }
+                catch { Write-Warning "Could not close failed historical probe: $($_.Exception.Message)" }
+            }
+        }
     }
 }
 function Import-AcceptanceImage(
@@ -885,7 +904,7 @@ try {
             $candidateProductCode = Get-AcceptanceMsiProperty -Path $InstallerPath -Name 'ProductCode'
             Run-Msi -Action Uninstall -PackageOrProduct $candidateProductCode -LogName 'candidate-before-historical-rejection-uninstall.log' | Out-Null
             Run-Msi -Action Install -PackageOrProduct $PreviousInstallerPath -LogName 'historical-rejection-install.log' -TargetRoot $InstallRoot | Out-Null
-            $rejectionDetail = Assert-HistoricalDesktopRejectsProfile -ProfileDataRoot $DataRoot
+            $rejectionDetail = Assert-HistoricalDesktopRejectsProfile -ProfileDataRoot $DataRoot -RejectedRevision $ExpectedSchemaRevision
             $upgradedHashAfter = (Get-FileHash -LiteralPath $upgradedDatabase -Algorithm SHA256).Hash.ToLowerInvariant()
             if ($upgradedHashAfter -cne $upgradedHashBefore) {
                 throw 'Historical build changed the upgraded database while rejecting it.'

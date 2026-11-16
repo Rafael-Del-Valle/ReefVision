@@ -229,6 +229,52 @@ foreach ($lineageParameter in @(
     Assert-True ($acceptanceParameterNames -contains $lineageParameter) "Installed lineage CLI is missing -$lineageParameter."
 }
 $acceptanceScript = Get-Content -LiteralPath $acceptancePath -Raw
+
+# Exercise the actual rejection probe without starting or killing a desktop.
+& {
+    $definition = $acceptanceAst.Find({
+        param($node)
+        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq 'Assert-HistoricalDesktopRejectsProfile'
+    }, $false)
+    . ([scriptblock]::Create($definition.Extent.Text))
+    $fakeProcess = [pscustomobject]@{HasExited=$false;Killed=$false;GracefulClose=$false}
+    $fakeProcess | Add-Member -MemberType ScriptMethod -Name Refresh -Value {}
+    $fakeProcess | Add-Member -MemberType ScriptMethod -Name Kill -Value {
+        $this.Killed = $true
+        $this.HasExited = $true
+    }
+    $fakeProcess | Add-Member -MemberType ScriptMethod -Name WaitForExit -Value { param($Milliseconds) return $this.HasExited }
+    function Start-AcceptanceDesktop([string]$ProfileDataRoot) { return $fakeProcess }
+    function Stop-AcceptanceDesktop($Process) { $Process.GracefulClose = $true }
+    $probeRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("reefvision-rejection-test-" + [guid]::NewGuid().ToString('N'))
+    try {
+        New-Item -ItemType Directory -Path (Join-Path $probeRoot 'logs'), (Join-Path $probeRoot 'runtime') -Force | Out-Null
+        $log = Join-Path $probeRoot 'logs\backend.log'
+        Set-Content -LiteralPath $log -Value "Can't locate revision identified by 'different_revision'"
+        $fakeProcess.HasExited = $true
+        Assert-Throws {
+            Assert-HistoricalDesktopRejectsProfile -ProfileDataRoot $probeRoot -RejectedRevision 'b14_spatial_0040' | Out-Null
+        } 'An unrelated rejection must not count as acceptance.'
+        Assert-True (-not $fakeProcess.Killed) 'An unrelated failure must not use rejection-specific cleanup.'
+
+        $fakeProcess.HasExited = $false
+        Set-Content -LiteralPath $log -Value "Can't locate revision identified by 'b14_spatial_0040'"
+        $port = Join-Path $probeRoot 'runtime\backend-port.txt'
+        Set-Content -LiteralPath $port -Value '12345'
+        Assert-Throws {
+            Assert-HistoricalDesktopRejectsProfile -ProfileDataRoot $probeRoot -RejectedRevision 'b14_spatial_0040' | Out-Null
+        } 'A published API port must fail despite a matching log.'
+        Assert-True ($fakeProcess.GracefulClose -and -not $fakeProcess.Killed) 'An unexpected API startup must retain the normal cleanup path.'
+
+        Remove-Item -LiteralPath $port
+        $fakeProcess.GracefulClose = $false
+        $result = Assert-HistoricalDesktopRejectsProfile -ProfileDataRoot $probeRoot -RejectedRevision 'b14_spatial_0040'
+        Assert-True ($result -like '*b14_spatial_0040*' -and $fakeProcess.Killed -and -not $fakeProcess.GracefulClose) 'An explicit rejection must clean up only the disposable failed-start process.'
+    } finally {
+        Remove-Item -LiteralPath $probeRoot -Recurse -Force
+    }
+}
 foreach ($lineageContract in @(
     'lineage_preflight',
     'lineage_initial_evidence',
