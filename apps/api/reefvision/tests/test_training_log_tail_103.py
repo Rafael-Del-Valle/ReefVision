@@ -619,6 +619,33 @@ def test_log_tail_broken_symlink_does_not_expose_or_invent_data(tmp_path: Path) 
     }
 
 
+@pytest.mark.parametrize(
+    "tampered_record",
+    [
+        b"train/box_loss=0.25\x1b]0;forged title\x0799",
+        b"train/cls_loss=0.\x1bPgraphics\x1b\\30",
+        b"train/dfl_loss=0.\x9d0;forged title\x9c10",
+        b"train/box\x1b]8;;https://example.invalid\x1b\\_loss=0.25",
+    ],
+)
+def test_log_tail_quarantines_terminal_strings_inside_loss_tokens(
+    tmp_path: Path, tampered_record: bytes
+) -> None:
+    """An invisible control string cannot join fragments into a new loss."""
+    log = tmp_path / "training.log"
+    original = tampered_record + b"\ntrain/dfl_loss=0.10\n"
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": (
+            "[terminal-edited training log record omitted]\n"
+            "train/dfl_loss=0.10\n"
+        ),
+    }
+    assert log.read_bytes() == original
+
+
 def test_log_tail_strips_terminal_control_sequences(tmp_path: Path) -> None:
     log = tmp_path / "training.log"
     original = (
