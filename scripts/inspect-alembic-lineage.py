@@ -168,10 +168,23 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
     indexes = set()
     nonprimary_unique_indexes = set()
     has_partial_unique = False
+    has_noncanonical_unique_keys = False
     for index in db.execute(f"PRAGMA index_list({quoted})"):
         index_name = '"' + index[1].replace('"', '""') + '"'
         columns_in_index = tuple(row[2] for row in db.execute(f"PRAGMA index_info({index_name})"))
         indexes.add((columns_in_index, bool(index[2])))
+        if index[2]:
+            # index_info omits collation and DESC flags. A forged request-key
+            # UNIQUE constraint using NOCASE may merge distinct reviewer
+            # idempotency tokens while still passing a column-only inventory.
+            # The original migrations use ordinary ascending BINARY keys.
+            key_rows = [
+                row for row in db.execute(f"PRAGMA index_xinfo({index_name})") if row[5]
+            ]
+            if len(key_rows) != len(columns_in_index) or any(
+                row[3] != 0 or row[4] != "BINARY" for row in key_rows
+            ):
+                has_noncanonical_unique_keys = True
         if index[2] and index[3] != "pk":
             # A partial replacement of the QC idempotency constraint can
             # admit duplicate review requests for excluded researchers.
@@ -183,6 +196,7 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
     return (
         contract["indexes"] <= indexes
         and not has_partial_unique
+        and not has_noncanonical_unique_keys
         and nonprimary_unique_indexes == required_unique_indexes
     )
 
