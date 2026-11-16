@@ -25,6 +25,8 @@ Workflow Builder regression cases require identical provisional artifacts.
 These are numerical limits of scale propagation, not physical measurement
 accuracy, verified coral morphology or anatomical branch lengths.
 
+**Signed coordinate scale-interval numerical resolution (November 16, 2026):** The optional scale-only intervals for sampled preview XYZ coordinates, source-frame extrema and arithmetic centroid now use `null` for an individual coordinate interval if its nonzero signed nominal coordinate has a strictly positive lower scale factor but either nonzero uncertainty bound numerically rounds to zero. `coordinate_uncertainty_interval_below_numeric_resolution` identifies this loss in `qc_warnings`; other representable axes and actual zero coordinates retain their valid bounds. At 100% relative scale uncertainty a zero bound is mathematically valid and remains reported. Negative source-frame coordinates are handled symmetrically. The XYZ/ASCII PLY standalone API and executable saved Workflow Builder paths use the same measurement engine; synthetic direct-service regressions cover both signs and saved-workflow artifact equality. A `null` interval means **numeric precision is insufficient**, not that calibration was physically invalid or an organism coordinate was verified.
+
 **Selected-chord uncertainty interval resolution (November 2026):** When a provisional, positive calibrated source-index chord has positive lower scale factor but its lower uncertainty distance rounds to zero, the nominal `chord_distance_m` is retained, `chord_distance_scale_interval_m` is `null`, and per-chord/top-level `chord_uncertainty_interval_below_numeric_resolution` / `selected_chord_uncertainty_interval_below_numeric_resolution` warnings identify the missing numeric precision. A relative uncertainty of exactly 1.0 retains a mathematically valid zero lower bound. XYZ and ASCII PLY standalone endpoints and executable persisted Workflow Builder regressions require identical artifacts. This does not establish independently verified calibration, organism identity, or anatomical branch length.
 
 **Selected-chord precision guard:** A full point cloud can retain its calibrated axis extents while a pair of very close selected source points becomes numerically indistinguishable. Point-chord measurement now fails closed when distinct source endpoints produce zero calibrated separation or identical calibrated XYZ coordinates; truly coincident source XYZ still retains a zero-length chord with its explicit QC warning. This applies to standalone XYZ/ASCII-PLY requests and persisted typed Workflow Builder runs; a failed run must save no point-cloud measurement artifact. Positive controls retain representable subnormal chord lengths. This checks floating-point representability, not measurement accuracy, biological anatomy or field calibration.
@@ -40,6 +42,8 @@ For visualization preparation, the result includes a deterministic sample of up 
 The preview also returns calibrated minimum and maximum XYZ coordinates in the **original source frame**. These axis-aligned bounds preserve negative coordinates and support future interactive camera framing; they are not registered geographic positions. Standalone API results and persisted Workflow Builder artifacts must agree on these bounds.
 
 The arithmetic point-sample centroid also includes `arithmetic_centroid_in_source_frame_scale_interval_m` when relative scale uncertainty is supplied, with lower and upper limits sorted correctly for negative source coordinates. It is `null` when uncertainty is unknown. This interval propagates **scale uncertainty only**; it does not account for reconstruction error, point-sampling density, or unverified coordinate registration. A sample centroid is not a validated organism center of mass. The standalone and saved-workflow results must match.
+
+**Calibrated centroid arithmetic precision (November 16, 2026):** The arithmetic point-sample centroid now sums the *calibrated* XYZ coordinates with compensated summation before dividing by the number of points. Previously, dividing a subnormal raw-coordinate sum by the point count could round a nonzero mean to zero before a large, valid meters-per-unit scale made it representable. For example, a three-point cloud with one source X coordinate of `5e-324` and an unverified scale of `1,000,000` m/unit has a representable positive calibrated mean X; the pre-calibration division reported zero. Synthetic positive/negative XYZ and ASCII PLY regressions require direct-service, standalone API, and executable persisted Workflow Builder parity (including provenance and scale intervals). This is a floating-point accuracy safeguard only: a point-sampling centroid is not a validated biological center, registration, or instrument calibration, and means below numeric resolution may remain unrepresentable.
 
 Selected point-index chords now carry per-chord `qc_warnings`. When two **distinct indices** resolve to the **same XYZ coordinate**, the preview retains the zero-distance chord and marks `coincident_endpoint_coordinates`; a distinct-index pair is not proof of a nonzero biological segment. The warning and measured zero remain in the saved Workflow Builder artifact, without promoting any measurement to verified status. The global `duplicate_points_present` warning remains independent of these pair-specific warnings.
 
@@ -419,3 +423,57 @@ standalone project API responses, and **full checksummed artifact equality**
 through an executed, typed, persisted Workflow Builder graph. This is a
 numerical-integrity boundary, not validated biological volume, scientific
 scale calibration, registration, tissue completeness or coral reidentification.
+
+**Representable mixed-scale envelopes (November 16, 2026):** Axis-aligned
+envelope multiplication now evaluates the larger axis extents first. Extremely
+small X/Y extents multiplied before a large Z extent could previously round an
+intermediate product to zero even though the full three-axis product is a
+positive, representable subnormal number. The revised multiplication retains
+such provisional positive envelopes and their representable scale-only bounds.
+It still returns `null` plus `envelope_volume_below_numeric_resolution` when
+the final nominal envelope itself cannot be represented. XYZ/ASCII PLY standalone
+requests and executable saved Workflow Builder graphs are tested for exact
+artifact/provenance parity using a synthetic mixed-scale example. This numerical
+safeguard does **not** validate tissue volume, coordinate registration, physical
+calibration, or coral identity.
+
+## Quantized positive envelope-uncertainty bounds (November 16, 2026)
+
+A positive but subnormal axis-aligned envelope may be representable even when
+distinct mathematical scale-uncertainty bounds both round to the **same**
+floating-point number. Reporting that degenerate interval would falsely imply
+zero uncertainty. When relative scale uncertainty is strictly positive and
+the computed bounds are identical, the preview now retains the nominal
+envelope, sets its scale-only interval to `null`, and emits
+`envelope_uncertainty_interval_below_numeric_resolution`. The same warning
+continues to cover a positive lower bound that underflows to zero. An exactly
+zero caller-supplied scale uncertainty retains a legitimate [volume, volume]
+interval; a truly planar cloud remains [0, 0].
+
+Parameterized XYZ/ASCII PLY regressions exercise the direct scientific service,
+standalone endpoint, typed graph planning and fully executed persisted Workflow
+Builder, including complete saved-artifact equality and provisional provenance.
+The synthetic subnormal examples test numeric integrity only, **not** verified
+calibration, validated coral tissue volume or organism condition.
+ 
+## Bounding-diagonal scale uncertainty at numeric limits (November 16, 2026)
+
+The calibrated axis-aligned bounding-box diagonal now exposes
+`axis_aligned_bounding_box_diagonal_scale_interval_m` alongside the existing
+nominal diagonal. It propagates the caller's **relative scale uncertainty only**,
+not photogrammetric/reconstruction accuracy or a statistical confidence interval.
+When the diagonal is positive but its lower/upper scale bounds collapse to a
+false zero-width interval (or lose a mathematically positive bound through
+underflow), the interval and existing absolute diagonal uncertainty become
+`null`, and `diagonal_uncertainty_interval_below_numeric_resolution` appears
+in `qc_warnings`. A genuinely zero diagonal and exactly zero relative scale
+uncertainty retain valid exact bounds; 100% uncertainty preserves a genuine zero
+lower bound. Unknown scale uncertainty leaves the interval null without the
+numeric-resolution warning.
+
+Signed XYZ and vertex-only ASCII PLY inputs share the same engine. Synthetic
+regressions compare direct measurements, standalone API output, and complete
+provisional persisted artifacts from executable typed Workflow Builder graphs.
+An axis-aligned diagonal is **not** measured coral branch length, and no
+calibration, coordinate-frame registration, specimen identity, or biological
+condition is independently verified.

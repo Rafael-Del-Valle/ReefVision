@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC
-from math import dist, isfinite
+from math import dist, fsum, isfinite
 from re import fullmatch
 from typing import Any
 
@@ -16,6 +16,16 @@ MAX_PLY_BYTES = 256_000
 MAX_PREVIEW_POINTS = 512
 # ASCII PLY numeric grammar: Python float() also accepts non-PLY underscores.
 _PLY_FLOAT_TOKEN = r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
+
+
+def _scale_interval_unresolved(
+    nominal: float, uncertainty: float, lower: float, upper: float
+) -> bool:
+    """Flag rounding that falsely reports zero bounds or exact scale certainty."""
+    return nominal != 0.0 and (
+        (uncertainty < 1.0 and (lower == 0.0 or upper == 0.0))
+        or (uncertainty > 0.0 and lower == upper)
+    )
 
 
 def parse_ascii_ply_points(
@@ -251,9 +261,12 @@ def measure_point_cloud_preview(
             # Preserve the nominal chord and mark its interval unresolved.
             chord_interval_underflow = (
                 relative_scale_uncertainty is not None
-                and chord_m > 0.0
-                and relative_scale_uncertainty < 1.0
-                and chord_m * (1 - relative_scale_uncertainty) == 0.0
+                and _scale_interval_unresolved(
+                    chord_m,
+                    relative_scale_uncertainty,
+                    chord_m * (1 - relative_scale_uncertainty),
+                    chord_m * (1 + relative_scale_uncertainty),
+                )
             )
             if chord_interval_underflow:
                 chord_qc_warnings.append("chord_uncertainty_interval_below_numeric_resolution")
@@ -313,14 +326,39 @@ def measure_point_cloud_preview(
         for dimension in dimensions:
             lower = dimension * (1 - relative_scale_uncertainty)
             upper = dimension * (1 + relative_scale_uncertainty)
-            if dimension > 0.0 and relative_scale_uncertainty < 1.0 and lower == 0.0:
+            if _scale_interval_unresolved(dimension, relative_scale_uncertainty, lower, upper):
                 dimension_scale_interval_underflow = True
                 dimension_scale_intervals.append(None)
             else:
                 dimension_scale_intervals.append([lower, upper])
-    centroid = [sum(p[axis] for p in vertices) / len(vertices) * scale for axis in range(3)]
+    # Divide only after calibration and compensated summation: dividing a
+    # positive subnormal source mean first can round it to zero even when its
+    # calibrated centroid is representable. A point centroid is not a tissue
+    # centroid or a verified organism position.
+    centroid = [
+        fsum(point[axis] * scale for point in vertices) / len(vertices) for axis in range(3)
+    ]
     diagonal = dist((0.0, 0.0, 0.0), dimensions)
-    envelope_volume: float | None = dimensions[0] * dimensions[1] * dimensions[2]
+    # A calibrated diagonal may remain representable even when its scale-only
+    # uncertainty interval is rounded to a false point interval. Do not report
+    # zero-width uncertainty from limited floating-point resolution.
+    diagonal_scale_interval_underflow = False
+    diagonal_scale_interval: list[float] | None = None
+    if relative_scale_uncertainty is not None:
+        lower = diagonal * (1 - relative_scale_uncertainty)
+        upper = diagonal * (1 + relative_scale_uncertainty)
+        if _scale_interval_unresolved(diagonal, relative_scale_uncertainty, lower, upper):
+            diagonal_scale_interval_underflow = True
+        else:
+            diagonal_scale_interval = [lower, upper]
+    # Multiply larger extents first: multiplying two tiny axes before a
+    # large third axis can underflow to zero even when the final positive
+    # envelope volume is representable. This remains a bounding envelope,
+    # not an estimate of biological tissue volume.
+    envelope_product = 1.0
+    for dimension in sorted(dimensions, reverse=True):
+        envelope_product *= dimension
+    envelope_volume: float | None = envelope_product
     # Three representable dimensions may still have a product too small for
     # floating point. Report this as unknown rather than falsely claiming a
     # zero-volume (planar) cloud. Keep the independently valid dimensions.
@@ -338,21 +376,37 @@ def measure_point_cloud_preview(
     if relative_scale_uncertainty is not None and envelope_volume is not None:
         lower = envelope_volume * (1 - relative_scale_uncertainty) ** 3
         upper = envelope_volume * (1 + relative_scale_uncertainty) ** 3
-        if envelope_volume > 0.0 and relative_scale_uncertainty < 1.0 and lower == 0.0:
+        # Quantized positive bounds may also become identical even when
+        # the caller supplied nonzero scale uncertainty. Never claim a
+        # precise zero-width scale-uncertainty interval at float resolution.
+        if envelope_volume > 0.0 and (
+            (relative_scale_uncertainty < 1.0 and lower == 0.0)
+            or (relative_scale_uncertainty > 0.0 and lower == upper)
+        ):
             envelope_scale_interval_underflow = True
         else:
             envelope_scale_interval = [lower, upper]
 
-    def coordinate_scale_intervals(bounds: list[float]) -> list[list[float]] | None:
+    # A nonzero signed source-frame coordinate must not acquire a false zero
+    # uncertainty bound from floating-point underflow. Preserve the other
+    # representable axes, including genuine zero coordinates.
+    coordinate_scale_interval_underflow = False
+
+    def coordinate_scale_intervals(bounds: list[float]) -> list[list[float] | None] | None:
+        nonlocal coordinate_scale_interval_underflow
         if relative_scale_uncertainty is None:
             return None
-        intervals: list[list[float]] = []
+        intervals: list[list[float] | None] = []
         for value in bounds:
             candidates = (
                 value * (1 - relative_scale_uncertainty),
                 value * (1 + relative_scale_uncertainty),
             )
-            intervals.append([min(candidates), max(candidates)])
+            if _scale_interval_unresolved(value, relative_scale_uncertainty, *candidates):
+                coordinate_scale_interval_underflow = True
+                intervals.append(None)
+            else:
+                intervals.append([min(candidates), max(candidates)])
         return intervals
 
     unique_count = len(set(vertices))
@@ -455,6 +509,7 @@ def measure_point_cloud_preview(
         "axis_aligned_min_in_source_frame_scale_interval_m": coordinate_scale_intervals(bounds_min),
         "axis_aligned_max_in_source_frame_scale_interval_m": coordinate_scale_intervals(bounds_max),
         "axis_aligned_bounding_box_diagonal_m": diagonal,
+        "axis_aligned_bounding_box_diagonal_scale_interval_m": diagonal_scale_interval,
         "axis_aligned_bounding_box_envelope_volume_m3": envelope_volume,
         "axis_aligned_bounding_box_envelope_volume_scale_interval_m3": (envelope_scale_interval),
         "axis_aligned_dimension_scale_uncertainty_m": (
@@ -464,7 +519,7 @@ def measure_point_cloud_preview(
         ),
         "axis_aligned_bounding_box_diagonal_scale_uncertainty_m": (
             diagonal * relative_scale_uncertainty
-            if relative_scale_uncertainty is not None
+            if relative_scale_uncertainty is not None and not diagonal_scale_interval_underflow
             else None
         ),
         "arithmetic_centroid_in_source_frame_m": centroid,
@@ -478,6 +533,16 @@ def measure_point_cloud_preview(
             + (
                 ["dimension_uncertainty_interval_below_numeric_resolution"]
                 if dimension_scale_interval_underflow
+                else []
+            )
+            + (
+                ["coordinate_uncertainty_interval_below_numeric_resolution"]
+                if coordinate_scale_interval_underflow
+                else []
+            )
+            + (
+                ["diagonal_uncertainty_interval_below_numeric_resolution"]
+                if diagonal_scale_interval_underflow
                 else []
             )
             + (["envelope_volume_below_numeric_resolution"] if envelope_volume_underflow else [])
