@@ -552,6 +552,17 @@ def test_subnormal_diagonal_uncertainty_is_not_false_zero_in_saved_workflow(
     assert direct["surface_area_m2"] is None
     assert direct["branch_length_m"] is None
     assert direct["provenance"]["calibration_verified"] is False
+    # A null subresolution interval must not be contradicted by a falsely
+    # zero absolute scale uncertainty on that same positive dimension.
+    assert direct["axis_aligned_dimension_scale_interval_m"][0] == expected_interval
+    assert direct["axis_aligned_dimension_scale_uncertainty_m"] == [
+        None if unresolved else 5e-324 * relative_uncertainty,
+        0.0,
+        0.0,
+    ]
+    assert (
+        "dimension_uncertainty_interval_below_numeric_resolution" in direct["qc_warnings"]
+    ) is unresolved
 
     project_id = str(create_project(client, "Subnormal diagonal interval v14")["id"])
     base = f"/api/v1/projects/{project_id}"
@@ -559,6 +570,9 @@ def test_subnormal_diagonal_uncertainty_is_not_false_zero_in_saved_workflow(
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     assert expected["axis_aligned_bounding_box_diagonal_scale_interval_m"] == expected_interval
+    assert expected["axis_aligned_dimension_scale_uncertainty_m"] == (
+        direct["axis_aligned_dimension_scale_uncertainty_m"]
+    )
     graph = {
         "graph_id": f"subnormal-diagonal-{source_format}-{relative_uncertainty}-v14",
         "name": "Inspect provisional diagonal uncertainty resolution",
@@ -646,13 +660,12 @@ def test_unresolved_chord_scale_delta_is_not_false_zero_in_saved_workflow(
         "chord_uncertainty_interval_below_numeric_resolution" in chord["qc_warnings"]
     ) is unresolved
     assert (
-        "selected_chord_uncertainty_interval_below_numeric_resolution"
-        in direct["qc_warnings"]
+        "selected_chord_uncertainty_interval_below_numeric_resolution" in direct["qc_warnings"]
     ) is unresolved
     assert (chord["chord_distance_scale_interval_m"] is None) is unresolved
     assert direct["provenance"]["calibration_verified"] is False
 
-    project_id = str(create_project(client, f"Subnormal chord delta {source_format}"))
+    project_id = str(create_project(client, f"Subnormal chord delta {source_format}")["id"])
     base = f"/api/v1/projects/{project_id}"
     standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert standalone.status_code == 200, standalone.text

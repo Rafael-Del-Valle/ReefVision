@@ -458,6 +458,25 @@ Builder, including complete saved-artifact equality and provisional provenance.
 The synthetic subnormal examples test numeric integrity only, **not** verified
 calibration, validated coral tissue volume or organism condition.
  
+## Dimension absolute-uncertainty parity at numeric limits (November 16, 2026)
+
+The axis-aligned dimension's absolute scale uncertainty now follows its
+`axis_aligned_dimension_scale_interval_m` availability. If a **positive**
+dimension and supplied positive relative uncertainty have an interval below
+binary64 resolution, the corresponding entry in
+`axis_aligned_dimension_scale_uncertainty_m` is `null`, not a misleading
+`0.0`. Other axes remain independently measurable. An exactly zero
+dimension or an explicitly zero relative uncertainty retains a genuine
+zero absolute scale uncertainty. The existing
+`dimension_uncertainty_interval_below_numeric_resolution` warning explains
+an unresolved interval; no new certainty or biological inference is implied.
+
+Parameterized XYZ and ASCII PLY direct-service, standalone endpoint and
+executable saved-workflow regressions cover underresolution, exact-zero and
+100%-relative-uncertainty inputs, with whole-artifact parity and unverified
+calibration provenance. This scale-only numerical safeguard does not provide
+reconstruction, photogrammetry, coral-anatomy or statistical confidence limits.
+
 ## Bounding-diagonal scale uncertainty at numeric limits (November 16, 2026)
 
 The calibrated axis-aligned bounding-box diagonal now exposes

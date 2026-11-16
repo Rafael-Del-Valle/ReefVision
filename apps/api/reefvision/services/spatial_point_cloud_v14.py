@@ -517,9 +517,15 @@ def measure_point_cloud_preview(
         "axis_aligned_bounding_box_diagonal_scale_interval_m": diagonal_scale_interval,
         "axis_aligned_bounding_box_envelope_volume_m3": envelope_volume,
         "axis_aligned_bounding_box_envelope_volume_scale_interval_m3": (envelope_scale_interval),
+        # Match the per-axis scale intervals: an unresolved positive
+        # uncertainty is unknown, never a physically exact zero. Keep genuine
+        # zero dimensions and zero caller uncertainty as zero.
         "axis_aligned_dimension_scale_uncertainty_m": (
-            [value * relative_scale_uncertainty for value in dimensions]
-            if relative_scale_uncertainty is not None
+            [
+                None if interval is None else value * relative_scale_uncertainty
+                for value, interval in zip(dimensions, dimension_scale_intervals, strict=True)
+            ]
+            if relative_scale_uncertainty is not None and dimension_scale_intervals is not None
             else None
         ),
         "axis_aligned_bounding_box_diagonal_scale_uncertainty_m": (
