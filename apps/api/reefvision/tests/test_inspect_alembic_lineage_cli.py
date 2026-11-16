@@ -215,7 +215,6 @@ def test_alembic_stamp_constraints_are_diagnosed_without_mutation(
     assert path.read_bytes() == before
 
 
-
 @pytest.mark.parametrize(
     ("generated_column", "canonical"),
     [
