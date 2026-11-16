@@ -1090,8 +1090,7 @@ def test_0038_qc_structural_audit_rejects_unreviewed_unique_index_semantics(
             )
         elif variant == "additional_unique_actor":
             connection.execute(
-                "CREATE UNIQUE INDEX unreviewed_actor_limit "
-                "ON review_queue_item_events (actor)"
+                "CREATE UNIQUE INDEX unreviewed_actor_limit ON review_queue_item_events (actor)"
             )
         elif variant == "additional_partial_unique_actor":
             connection.execute(
@@ -1104,9 +1103,7 @@ def test_0038_qc_structural_audit_rejects_unreviewed_unique_index_semantics(
             )
         connection.execute("INSERT INTO projects VALUES ('project')")
         connection.execute("INSERT INTO review_queues VALUES ('queue', 'project')")
-        connection.execute(
-            "INSERT INTO review_queue_items VALUES ('item', 'project', 'queue')"
-        )
+        connection.execute("INSERT INTO review_queue_items VALUES ('item', 'project', 'queue')")
         connection.execute(
             "INSERT INTO review_queue_item_events "
             "(id, review_queue_id, review_queue_item_id, project_id, "
@@ -1145,9 +1142,9 @@ def test_0038_qc_structural_audit_rejects_unreviewed_unique_index_semantics(
         assert "private original coral observation" not in completed.stdout
         assert database.read_bytes() == original
     with sqlite3.connect(database) as connection:
-        assert connection.execute(
-            "SELECT comment FROM review_queue_item_events"
-        ).fetchone() == ("private coral review",)
-        assert connection.execute(
-            "SELECT note FROM biological_sentinel"
-        ).fetchone() == ("private original coral observation",)
+        assert connection.execute("SELECT comment FROM review_queue_item_events").fetchone() == (
+            "private coral review",
+        )
+        assert connection.execute("SELECT note FROM biological_sentinel").fetchone() == (
+            "private original coral observation",
+        )

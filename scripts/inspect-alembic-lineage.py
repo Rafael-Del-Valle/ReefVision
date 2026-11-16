@@ -179,9 +179,7 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
             # biological observations or reviewer events. Require review.
             nonprimary_unique_indexes.add(columns_in_index)
             has_partial_unique |= bool(index[4])
-    required_unique_indexes = {
-        columns for columns, unique in contract["indexes"] if unique
-    }
+    required_unique_indexes = {columns for columns, unique in contract["indexes"] if unique}
     return (
         contract["indexes"] <= indexes
         and not has_partial_unique
