@@ -122,3 +122,127 @@ def test_api_and_saved_workflow_reject_coercion_without_artifact(
         artifact["data_type"] == "point_cloud_measurement_preview"
         for artifact in detail.json()["artifacts"]
     )
+
+@pytest.mark.parametrize("source_format", ["xyz", "ply"])
+def test_calibration_underflow_standalone_and_workflow_fail_closed(
+    client: TestClient, source_format: str
+) -> None:
+    """Do not record a physically nonzero point as calibrated zero."""
+    project_id = str(create_project(client, f"Underflow {source_format}")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    tiny_points = [[0.0, 0.0, 0.0], [1e-30, 0.0, 0.0]]
+    tiny_ply = (
+        "ply\nformat ascii 1.0\nelement vertex 2\n"
+        "property double x\nproperty double y\nproperty double z\n"
+        "end_header\n0 0 0\n1e-30 0 0\n"
+    )
+    params = {
+        "meters_per_unit": 1e-300,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unverified subnormal calibration",
+        **(
+            {"points": tiny_points}
+            if source_format == "xyz"
+            else {"ply_text": tiny_ply}
+        ),
+    }
+    with pytest.raises(ValueError, match="underflows after calibration"):
+        measure_point_cloud_preview(
+            points=tiny_points,
+            meters_per_unit=1e-300,
+            calibration_method="ruler",
+            calibration_evidence="Unverified subnormal calibration",
+        )
+    direct = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert direct.status_code == 400, direct.text
+
+    graph = {
+        "graph_id": f"point-cloud-underflow-{source_format}",
+        "name": "Reject unrepresentable calibrated coordinates",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert not process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert not any(
+        artifact["data_type"] == "point_cloud_measurement_preview"
+        for artifact in detail.json()["artifacts"]
+    )
+
+
+def test_small_representable_point_cloud_survives_persisted_workflow(
+    client: TestClient,
+) -> None:
+    """Do not reject legitimately small but representable calibrated lengths."""
+    project_id = str(create_project(client, "Representable tiny cloud")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    params = {
+        "points": [[0, 0, 0], [1e-100, 0, 0]],
+        "meters_per_unit": 1e-200,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unverified small-scale ruler",
+        "relative_scale_uncertainty": 0.0,
+    }
+    direct = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert direct.status_code == 200, direct.text
+    expected = direct.json()
+    assert expected["axis_aligned_dimensions_m"][0] == 1e-300
+    assert expected["axis_aligned_dimensions_m"][1:] == [0.0, 0.0]
+    assert expected["provenance"]["calibration_verified"] is False
+    assert expected["surface_area_m2"] is None
+    assert expected["branch_length_m"] is None
+
+    graph = {
+        "graph_id": "point-cloud-representable-tiny",
+        "name": "Retain representable calibrated extents",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item["payload_json"]
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "point_cloud_measurement_preview"
+    )
+    assert artifact == expected
