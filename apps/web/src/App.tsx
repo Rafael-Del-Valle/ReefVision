@@ -201,9 +201,9 @@ const PROJECT_NAV_GROUPS: Array<{
       },
       {
         id: "advanced_providers",
-        label: "Advanced providers",
+        label: "Providers",
         description:
-          "Use prompt, segmentation, depth, OCR, and VLM provider tools.",
+          "Inspect local manifests and use supported prompt, segmentation, depth, OCR, and VLM provider tools.",
       },
     ],
   },

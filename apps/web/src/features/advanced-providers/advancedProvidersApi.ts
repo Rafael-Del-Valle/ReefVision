@@ -41,6 +41,15 @@ export interface AdvancedProviderManifest {
   recommended_devices: string[];
   known_limitations: string[];
   integration_notes: string[];
+  source_kind: "built_in" | "local_manifest";
+  manifest_version: number | null;
+  declared_capabilities: string[];
+  availability_status: string | null;
+  availability_reason: string | null;
+  source_filename: string | null;
+  source_sha256: string | null;
+  discovery_status: string;
+  discovery_errors: string[];
 }
 
 export interface AdvancedProviderPreflight {
