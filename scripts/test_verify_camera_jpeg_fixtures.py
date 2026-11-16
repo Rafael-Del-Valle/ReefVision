@@ -564,25 +564,34 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                     records, errors = MODULE.inventory(root, verify_decode=True)
                     self.assertEqual(len(records), 1)
                     record = records[0]
-                    self.assertEqual(record["jpeg_decodable"], expected_ok)
-                    if expected_ok:
-                        self.assertEqual(errors, [])
-                        self.assertEqual(record["jpeg_exif_pixel_width"], width)
-                        self.assertEqual(record["jpeg_exif_pixel_height"], height)
-                        self.assertEqual(
-                            (
-                                record["jpeg_display_width"],
-                                record["jpeg_display_height"],
-                            ),
-                            (8, 12),
-                        )
-                    else:
-                        self.assertEqual(
-                            errors,
-                            [f"JPEG decode failed: {photo.name}: ValueError"],
-                        )
-                        self.assertNotIn("jpeg_pixel_width", record)
-                        self.assertNotIn("jpeg_display_width", record)
+                    # Decodable pixels and scientifically consistent EXIF
+                    # metadata are independent acceptance dimensions.
+                    self.assertTrue(record["jpeg_decodable"])
+                    self.assertEqual(record["jpeg_exif_pixel_width"], width)
+                    self.assertEqual(record["jpeg_exif_pixel_height"], height)
+                    self.assertEqual(
+                        record["jpeg_exif_dimensions_match_raster"],
+                        None if width is None and height is None else expected_ok,
+                    )
+                    self.assertEqual(
+                        (record["jpeg_pixel_width"], record["jpeg_pixel_height"]),
+                        (12, 8),
+                    )
+                    self.assertEqual(
+                        (
+                            record["jpeg_display_width"],
+                            record["jpeg_display_height"],
+                        ),
+                        (8, 12),
+                    )
+                    self.assertEqual(
+                        errors,
+                        []
+                        if expected_ok
+                        else [
+                            f"EXIF pixel dimensions inconsistent with JPEG raster: {photo.name}"
+                        ],
+                    )
                     self.assertEqual(photo.read_bytes(), original)
 
     def test_invalid_exif_orientation_fails_geometry_qc_read_only(self) -> None:
