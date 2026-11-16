@@ -21,7 +21,7 @@ The 1.5 foundation is an inspection and provenance layer, not a runtime extensio
 
 ## Verification state
 
-Source and browser-path tests cover the implemented slice. The feature inventory remains `in_progress` until an exact-SHA Windows installer is built and the installed application path is exercised. No representative scientific dataset or physical GPU is required for this metadata-only foundation.
+The provider-foundation inventory entry is verified at source SHA `6d054d532b3faad9eb1b6a377e26ea54d92c6046`. Source tests, the normal browser path, and Workflow Builder snapshot coverage passed. The exact-head Windows clean-install and published-1.0.3 upgrade runs seeded a declarative manifest in the isolated application data directory, verified its packaged-API source digest, and confirmed that installed preflight remained inspect-only and blocked. No representative scientific dataset or physical GPU is required for this metadata-only foundation.
 
 ## Versioning and migrations
 

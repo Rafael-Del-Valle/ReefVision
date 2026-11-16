@@ -11,8 +11,8 @@ Candidate target: `2.0`
 | --- | ---: |
 | blocked | 12 |
 | explicitly_deferred | 4 |
-| in_progress | 33 |
-| verified | 27 |
+| in_progress | 32 |
+| verified | 28 |
 
 ## Features
 
@@ -60,7 +60,7 @@ Candidate target: `2.0`
 | 1.5 | Offline field capture and later project reconciliation | in_progress | Project → Field capture |
 | 1.5 | Local model catalog, runtime selection, and prompt-assisted configuration | in_progress | Models & AI → Model Hub |
 | 1.5 | Unified detector, mask, pose, tracking, and event comparison | in_progress | Models & AI → Model comparison |
-| 1.5 | Early local provider and plugin foundations | in_progress | Models & AI → Providers |
+| 1.5 | Early local provider and plugin foundations | verified | Models & AI → Providers |
 | 1.5 | Complete research reproducibility package | in_progress | Research → Export reproducibility package |
 | 1.5 | Reviewer roles, independent queues, adjudication, and agreement | in_progress | Review → Reviewer lab |
 | 1.6 | Safe class management after use | in_progress | Annotate → Classes |
@@ -956,21 +956,20 @@ Evidence:
 ### rv15-provider-foundations: Early local provider and plugin foundations
 
 - Target: `1.5`
-- Status: `in_progress`
+- Status: `verified`
 - Dependencies: `rv13-temporal-dataset-training`
 - Entry point: Models & AI → Providers
 - Workflow Builder: `required`
-- Missing input: An exact-SHA Windows installer artifact and installed-app acceptance run for the 1.5 branch.
 
 Acceptance checks:
 
-- **in_progress** — Discover local provider manifests, expose capabilities/availability, isolate failures, and preserve unavailable provider records without executing unknown code. (`rv15-provider-foundations-check`)
+- **verified** — Discover local provider manifests, expose capabilities/availability, isolate failures, and preserve unavailable provider records without executing unknown code. (`rv15-provider-foundations-check`)
 
 Evidence:
 
-- `source`: Strict inspect-only manifest discovery, API exposure, failure isolation, and metadata-only Workflow Builder snapshots are covered by backend tests on the 1.5 branch. — `docs/superpowers/plans/2026-11-16-reefvision-1-5-provider-foundations.md` (`rv15-provider-foundations-src`)
-- `browser`: The tested user path is Home → open project → Models & AI → Providers; local manifests remain non-executable and unavailable records remain visible. — `apps/web/src/features/advanced-providers/AdvancedProviderWorkspace.test.tsx` (`rv15-provider-foundations-ui`)
-- `windows_installed`: none recorded
+- `source`: Strict inspect-only manifest discovery, API exposure, failure isolation, and metadata-only Workflow Builder snapshots passed the exact-head source gates. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/88` (`rv15-provider-foundations-src`)
+- `browser`: Home → open project → Models & AI → Providers passed component and Playwright acceptance; local manifests remain non-executable and unavailable records remain visible. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/88` (`rv15-provider-foundations-ui`)
+- `windows_installed`: Exact-head clean-install and published-1.0.3 upgrade runs discovered the seeded manifest with its source digest and returned blocked inspect-only preflight from the packaged API. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/43843151701` (`rv15-provider-foundations-win`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
