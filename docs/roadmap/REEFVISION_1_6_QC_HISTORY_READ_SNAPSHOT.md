@@ -70,3 +70,42 @@ A new deterministic test inserts two equal-time events with deliberately
 reversed UUID order, verifies chronological pages and unassigned summary,
 and checks that item review state stays pending. It runs for standalone and
 saved, successfully executed Workflow Builder QC queues.
+
+
+## Clock-rollback chronology hardening (2026-11-15)
+
+**Existing capability audited:** append-only QC comments/assignments and triage,
+consistent SQLite read snapshots, idempotent coordination writes and the typed
+executable saved `project_source -> qc_review_queue` Workflow Builder path.
+Those functions already exist in 1.6; no new, duplicate workflow node is
+needed for this read-only history correctness check.
+
+An equal-timestamp rowid *tie-breaker* is insufficient when the local system
+clock moves backwards (for example after offline fieldwork or clock
+synchronization). The later `unassign` can then have an earlier timestamp
+than the preceding `assign`; ordering primarily by the timestamp shows the
+wrong event last and incorrectly reports an active assignee. This is a genuine
+review provenance error, not evidence that the scientific annotations changed.
+
+On SQLite, both chronological history pagination and the current-assignee
+query now order by the actual **append rowid**, rather than wall-clock time
+with rowid used only for ties. Returned timestamps are retained unchanged for
+scientific audit, and every event, completion, reviewer decision, workflow run,
+typed artifact, saved graph and explicit researcher review gate remains intact.
+Other database engines retain their existing timestamp/UUID ordering pending
+a coordinated durable cross-backend sequence migration. SQLite `VACUUM`
+may renumber the implicit rowid, so this change does **not** claim permanent
+sequence identities or resolve that known limitation.
+
+The extended parameterized SQLite regression inserts assignment then
+unassignment with reversed UUID ordering and either identical timestamps or
+a full-day backward clock correction. It checks first/second pages, latest
+assignee and pending human-review state for both standalone API queues and
+persisted, executed Workflow Builder queues. No online service, model
+downloads, DB migration, automatic approval or original scientific-asset
+change is introduced.
+
+**Release HOLD:** complete exact-head lint/type/backend/frontend/E2E,
+representative biological and saved-workflow acceptance, reconciliation of
+the independent 1.1/1.6 Alembic-0038 histories, real Windows MSI/CAB
+installation/upgrade/rollback and installed-GUI acceptance remain required.
