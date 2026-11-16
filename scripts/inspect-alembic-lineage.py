@@ -14,6 +14,14 @@ SCIENCE_EXTENSIONS = (
     "environmental_analysis_results",
 )
 
+def _sidecar_presence(database: Path) -> dict[str, bool]:
+    """Check SQLite sidecars without opening, modifying, or removing them."""
+    return {
+        suffix: Path(f"{database}{suffix}").exists()
+        for suffix in ("-wal", "-shm", "-journal")
+    }
+
+
 FAMILIES = {
     "scientific": (
         "scientific_records",
@@ -30,6 +38,7 @@ def inspect(path: Path) -> dict:
         raise ValueError(f"Database file does not exist: {path}")
     # SQLite URI read-only mode prevents accidental creation of missing databases.
     resolved_path = path.resolve()
+    sidecars_before = _sidecar_presence(resolved_path)
     uri = resolved_path.as_uri() + "?mode=ro"
     with sqlite3.connect(uri, uri=True) as db:
         db.execute("PRAGMA query_only=ON")
@@ -121,14 +130,16 @@ def inspect(path: Path) -> dict:
             warnings.append("sqlite_foreign_key_check_failed")
         elif foreign_key_violations:
             warnings.append("sqlite_foreign_key_violations")
-        # A live SQLite WAL/journal can contain uncheckpointed scientific edits.
-        # Do not mistake a mutable database plus sidecars for an immutable backup.
+        # A SQLite writer may checkpoint and remove a WAL or journal while
+        # read-only evidence is collected. Observe sidecars at both boundaries:
+        # a clean end state does not prove the original file was immutable.
+        sidecars_after = _sidecar_presence(resolved_path)
         for suffix, warning in (
             ("-wal", "wal_sidecar_requires_consistent_snapshot"),
             ("-shm", "shared_memory_sidecar_requires_consistent_snapshot"),
             ("-journal", "rollback_journal_requires_consistent_snapshot"),
         ):
-            if Path(str(resolved_path) + suffix).exists():
+            if sidecars_before[suffix] or sidecars_after[suffix]:
                 warnings.append(warning)
         if not version_table_present:
             warnings.append("missing_alembic_version_table")
@@ -256,6 +267,8 @@ def inspect(path: Path) -> dict:
             warnings.append("unrecognized_schema_lineage")
         return {
             "warnings": warnings,
+            "sqlite_sidecars_before": sidecars_before,
+            "sqlite_sidecars_after": sidecars_after,
             "sqlite_integrity_ok": integrity_ok,
             "sqlite_full_integrity_ok": full_integrity_ok,
             "sqlite_foreign_key_violations": foreign_key_violations,
