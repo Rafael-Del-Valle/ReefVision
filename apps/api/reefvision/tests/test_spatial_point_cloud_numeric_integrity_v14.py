@@ -277,6 +277,7 @@ def test_small_representable_point_cloud_survives_persisted_workflow(
     base = f"/api/v1/projects/{project_id}"
     params = {
         "points": points,
+        "point_index_pairs": [[0, 1]],
         "meters_per_unit": scale,
         "calibration_method": "ruler",
         "calibration_evidence": "Unverified small-scale ruler",
@@ -287,6 +288,8 @@ def test_small_representable_point_cloud_survives_persisted_workflow(
     expected = direct.json()
     assert expected["axis_aligned_dimensions_m"][0] == expected_extent
     assert expected["axis_aligned_dimensions_m"][1:] == [0.0, 0.0]
+    assert expected["selected_point_chords"][0]["chord_distance_m"] == expected_extent
+    assert expected["selected_point_chords"][0]["qc_warnings"] == []
     assert expected["provenance"]["calibration_verified"] is False
     assert expected["surface_area_m2"] is None
     assert expected["branch_length_m"] is None
@@ -325,3 +328,77 @@ def test_small_representable_point_cloud_survives_persisted_workflow(
         if item["data_type"] == "point_cloud_measurement_preview"
     )
     assert artifact == expected
+
+
+@pytest.mark.parametrize("source_format", ["xyz", "ply"])
+def test_selected_chord_subresolution_separation_fails_without_workflow_artifact(
+    client: TestClient, source_format: str
+) -> None:
+    """A cloud-wide extent cannot validate every shorter selected chord."""
+    points = [[1e-20, 0.0, 0.0], [1.0000000001e-20, 0.0, 0.0], [1.0, 0.0, 0.0]]
+    scale = 1e-300
+    assert points[0][0] != points[1][0]
+    assert points[0][0] * scale == points[1][0] * scale != 0.0
+    assert (points[2][0] - points[0][0]) * scale != 0.0
+
+    params: dict[str, Any] = {
+        "meters_per_unit": scale,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic short-chord precision control; unverified",
+        "point_index_pairs": [[0, 1]],
+    }
+    if source_format == "xyz":
+        params["points"] = points
+    else:
+        params["ply_text"] = (
+            "ply\\nformat ascii 1.0\\nelement vertex 3\\n"
+            "property double x\\nproperty double y\\nproperty double z\\n"
+            "end_header\\n1e-20 0 0\\n1.0000000001e-20 0 0\\n1 0 0\\n"
+        )
+    with pytest.raises(ValueError, match="selected point-cloud chord endpoints collapse"):
+        measure_point_cloud_preview(
+            points=points,
+            meters_per_unit=scale,
+            calibration_method=params["calibration_method"],
+            calibration_evidence=params["calibration_evidence"],
+            point_index_pairs=[[0, 1]],
+        )
+
+    project_id = str(create_project(client, f"Unresolvable chord {source_format}")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert standalone.status_code == 400, standalone.text
+    assert "selected point-cloud chord endpoints collapse" in standalone.json()["detail"]
+
+    graph = {
+        "graph_id": f"point-cloud-unresolvable-chord-{source_format}",
+        "name": "Reject a subresolution selected chord",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert not process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert not any(
+        artifact["data_type"] == "point_cloud_measurement_preview"
+        for artifact in detail.json()["artifacts"]
+    )

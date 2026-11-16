@@ -217,6 +217,19 @@ def measure_point_cloud_preview(
             selected_endpoint_indices.update(pair)
             endpoints = [vertices[pair[0]], vertices[pair[1]]]
             chord_m = dist(*endpoints) * scale
+            # Global cloud extents can remain resolvable while a selected pair
+            # loses its smaller separation. Distinct source geometry must never
+            # become an apparently zero or coincident measured chord.
+            if endpoints[0] != endpoints[1] and (
+                chord_m == 0.0
+                or all(
+                    left * scale == right * scale
+                    for left, right in zip(*endpoints, strict=True)
+                )
+            ):
+                raise ValueError(
+                    "Distinct selected point-cloud chord endpoints collapse after calibration"
+                )
             # Different indices can still identify identical XYZ coordinates.
             # Flag a zero-length chord instead of implying biological structure.
             chord_qc_warnings: list[str] = []
