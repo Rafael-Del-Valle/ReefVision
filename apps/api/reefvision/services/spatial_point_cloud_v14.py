@@ -271,6 +271,15 @@ def measure_point_cloud_preview(
             if chord_interval_underflow:
                 chord_qc_warnings.append("chord_uncertainty_interval_below_numeric_resolution")
                 selected_chord_interval_underflow = True
+            # An unresolved scale interval cannot supply a trustworthy
+            # absolute uncertainty, even if floating point rounds it to zero.
+            chord_scale_uncertainty_m = (
+                chord_m * relative_scale_uncertainty
+                if relative_scale_uncertainty is not None
+                else None
+            )
+            if chord_interval_underflow:
+                chord_scale_uncertainty_m = None
             # Reversing a chord does not make an independent measurement.
             unordered_pair = (min(pair), max(pair))
             repeated_pair = unordered_pair in seen_point_pairs
@@ -309,11 +318,7 @@ def measure_point_cloud_preview(
                         if relative_scale_uncertainty is not None and not chord_interval_underflow
                         else None
                     ),
-                    "scale_uncertainty_m": (
-                        chord_m * relative_scale_uncertainty
-                        if relative_scale_uncertainty is not None
-                        else None
-                    ),
+                    "scale_uncertainty_m": chord_scale_uncertainty_m,
                 }
             )
     # A positive calibrated extent with positive lower scale factor must not
