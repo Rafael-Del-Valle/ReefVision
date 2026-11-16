@@ -419,6 +419,44 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                         altered, expected_version="1.0.3", expected_upgrade="passed"
                     )
 
+    def test_report_only_msi_paths_require_unambiguous_local_windows_files(self) -> None:
+        """A string-only PASS cannot claim device, share or ADS installer paths."""
+        unsafe = (
+            r"\\server\share\ReefVision.msi",
+            r"\\?\C:\disposable\ReefVision.msi",
+            "relative/ReefVision.msi",
+            "C:/disposable/../ReefVision.msi",
+            "C:/disposable/CON.msi",
+            "C:/disposable/ReefVision:alternate.msi",
+            "C:/disposable./ReefVision.msi",
+            "C:/disposable/\x00/ReefVision.msi",
+        )
+        for bad_path in unsafe:
+            with self.subTest(target_msi_path=bad_path):
+                changed = good_report()
+                changed["installer_path"] = bad_path
+                with self.assertRaises(MODULE.AcceptanceEvidenceError):
+                    MODULE.validate_report(changed, expected_version="1.0.2")
+
+        upgrade = good_report()
+        upgrade["reefvision_version"] = "1.0.3"
+        upgrade["upgrade_install"] = pass_evidence()
+        upgrade["upgrade"] = pass_evidence()
+        upgrade["post_upgrade_migration"] = upgraded_migration_evidence("1.0.3")
+        upgrade["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
+        upgrade["previous_installer_sha256"] = "b" * 64
+        upgrade["previous_installer_isolated_acceptance_confirmed"] = True
+        upgrade["previous_installer_version"] = "1.0.2"
+        MODULE.validate_report(upgrade, expected_version="1.0.3", expected_upgrade="passed")
+        for bad_path in unsafe:
+            with self.subTest(previous_msi_path=bad_path):
+                changed = copy.deepcopy(upgrade)
+                changed["previous_installer_path"] = bad_path
+                with self.assertRaises(MODULE.AcceptanceEvidenceError):
+                    MODULE.validate_report(
+                        changed, expected_version="1.0.3", expected_upgrade="passed"
+                    )
+
     def test_upgrade_requires_real_higher_version_and_previous_installer(self) -> None:
         report = good_report()
         report["reefvision_version"] = "1.0.3"

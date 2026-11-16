@@ -232,3 +232,21 @@ authentic consent, physical isolation or actual installed Windows usability.
 Real MSI/CAB installation, rollback, GUI interaction and independent migration
 lineage reconciliation remain **release HOLD** gates. No user projects,
 scientific records, model weights or installer artifacts are altered.
+
+## Report-only MSI path locality and ambiguity gate (2026-11-16)
+
+A report-only PASS previously checked MSI suffixes and compared old/new paths,
+but did not require either installer claim to identify an unambiguous local
+Windows-drive path. A fabricated report could therefore refer to a network
+share, device namespace, relative path, reserved device name, alternate data
+stream, traversal or unsafe component despite correct disposable data-root
+syntax. The independent verifier now applies its existing strict Windows
+path gate to **both installer names** in report-only mode, retaining the
+same-path alias check. When an `--installer` file is provided, actual source
+and target MSI bytes, hashes and file identity remain the stronger proof;
+disposable portable POSIX test fixtures still work in that file-backed mode.
+The added regression checks unsafe paths for clean installs and real-upgrade
+claims, with positive controls. This is report-structure validation, not
+proof of an installed MSI/CAB, installed GUI, rollback, scientific assets or
+real researcher consent. Existing typed saved QC Workflow Builder execution
+and explicit manual review remain unchanged. Release status remains HOLD.

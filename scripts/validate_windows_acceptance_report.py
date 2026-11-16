@@ -222,6 +222,12 @@ def validate_report(
     _require(report.get("reefvision_version") == expected_version, "Reported MSI version differs from expected version")
     _require(isinstance(report.get("installer_sha256"), str) and SHA256.fullmatch(report["installer_sha256"]) is not None, "Invalid installer SHA-256")
     _require(isinstance(report.get("installer_path"), str) and report["installer_path"].lower().endswith(".msi"), "Missing MSI path")
+    # Report-only evidence cannot treat a UNC share, device namespace,
+    # alternate data stream or relative path as a local Windows MSI.
+    # When --installer supplies real files, byte hashes and identity are
+    # checked below (including portable disposable POSIX test fixtures).
+    if installer is None:
+        _windows_path(report["installer_path"], "installer_path")
     if installer is not None:
         _require(installer.is_file(), "Expected MSI is missing")
         with installer.open("rb") as stream:
@@ -339,6 +345,8 @@ def validate_report(
             PureWindowsPath(previous_path) != PureWindowsPath(report["installer_path"]),
             "Previous and target MSI paths are identical",
         )
+        if installer is None:
+            _windows_path(previous_path, "previous_installer_path")
         _require(
             previous_digest.lower() != report["installer_sha256"].lower(),
             "Previous and target MSI SHA-256 digests are identical",
