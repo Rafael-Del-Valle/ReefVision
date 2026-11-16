@@ -336,7 +336,10 @@ def test_positive_chord_lower_interval_underflow_is_unresolved_in_saved_workflow
         interval = valid_chord["chord_distance_scale_interval_m"]
         assert interval is not None
         assert (interval[0] == 0.0) is zero_lower_bound
-        assert "chord_uncertainty_interval_below_numeric_resolution" not in valid_chord["qc_warnings"]
+        assert (
+            "chord_uncertainty_interval_below_numeric_resolution"
+            not in valid_chord["qc_warnings"]
+        )
 
     project_id = str(create_project(client, f"Chord interval boundary {source_format}")["id"])
     base = f"/api/v1/projects/{project_id}"
@@ -390,7 +393,8 @@ def test_positive_chord_lower_interval_underflow_is_unresolved_in_saved_workflow
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
     artifact = next(
-        item for item in detail.json()["artifacts"]
+        item
+        for item in detail.json()["artifacts"]
         if item["data_type"] == "point_cloud_measurement_preview"
     )
     assert artifact["payload_json"] == expected
