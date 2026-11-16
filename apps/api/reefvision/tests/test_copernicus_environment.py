@@ -268,9 +268,7 @@ def test_invalid_provider_grid_never_persists_scientific_records(
     elif damage == "unknown_resolution_axis":
         raw["coordinate_resolution"]["vertical_datum"] = 1.0
     elif damage == "missing_grid_variable":
-        raw["samples"] = [
-            sample for sample in raw["samples"] if sample["variable"] != "vo"
-        ]
+        raw["samples"] = [sample for sample in raw["samples"] if sample["variable"] != "vo"]
     elif damage == "unequal_grid_coverage":
         extra_cell = deepcopy(raw["samples"][0])
         extra_cell["latitude"] = 32.6
