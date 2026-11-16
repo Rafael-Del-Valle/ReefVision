@@ -2242,3 +2242,92 @@ def test_resigned_frozen_manifest_rejects_boolean_schema_revision(
             payload={"dataset_id": str(dataset["id"])},
             role="training",
         )
+
+
+def test_resigned_source_model_checkpoint_digest_cannot_enter_saved_pose_workflow(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Freeze a genuinely reviewed pose, save its unpinned workflow, and queue
+    # execution before altering the persisted source-model audit evidence.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    project_id = str(project["id"])
+    dataset_id = str(dataset["id"])
+    graph = {
+        "graph_id": "track-e-model-checkpoint-provenance",
+        "name": "Verified pose source checkpoint lineage",
+        "nodes": [
+            {
+                "node_id": "frozen-pose",
+                "node_type": "pose_training_dataset",
+                "parameters": {"dataset_id": dataset_id},
+            }
+        ],
+        "edges": [],
+    }
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": graph, "create_new_revision": True},
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(
+        f"/api/v1/projects/{project_id}/workflow-runs",
+        json={"graph_record_id": saved.json()["id"]},
+    )
+    assert queued.status_code == 202, queued.text
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        frozen = session.get(PoseTrainingDataset, dataset_id)
+        item = session.scalar(
+            select(PoseTrainingDatasetItem).where(PoseTrainingDatasetItem.dataset_id == dataset_id)
+        )
+        assert frozen is not None and item is not None
+        # Re-sign both the frozen evidence digest and the overall manifest.
+        # A source model without a real SHA-256 must not become training truth
+        # merely because its JSON and enclosing hashes are self-consistent.
+        item.source_models_json = [
+            {"model_id": "substituted-source-model", "checkpoint_sha256": "not-a-sha256"}
+        ]
+        summaries = [dict(summary) for summary in frozen.manifest_json["items"]]
+        assert len(summaries) == 1 and summaries[0]["item_id"] == item.id
+        summaries[0]["frozen_evidence_sha256"] = frozen_pose_item_evidence_sha256(item)
+        resigned_manifest = {**frozen.manifest_json, "items": summaries}
+        frozen.manifest_json = resigned_manifest
+        frozen.manifest_sha256 = canonical_json_sha256(resigned_manifest)
+        session.commit()
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ConflictError, match="item lineage no longer matches"),
+    ):
+        PoseTrainingDatasetService(session).native_package(dataset_id)
+
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["valid"] is False
+    assert "pose_dataset_item_lineage_mismatch" in {
+        issue["code"] for issue in plan.json()["issues"]
+    }
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="item fingerprints no longer match"),
+    ):
+        execute_pose_training_dataset_adapter(
+            session, app.state.settings, project_id, graph["nodes"][0]["parameters"], {}
+        )
+
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(queued.json()["job_id"]),
+        )
+        is False
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert "pose_dataset_item_lineage_mismatch" in detail.json()["run"]["error_message"]
+    assert detail.json()["artifacts"] == []
