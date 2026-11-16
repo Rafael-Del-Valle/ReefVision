@@ -335,3 +335,138 @@ def test_corrupt_bulk_reason_or_actor_blocks_history_and_keyed_replay(
     assert restored.status_code == 200, restored.text
     assert restored.json()["changed_count"] == 0
     assert restored.json()["requires_researcher_review"] is True
+@pytest.mark.parametrize("saved_workflow", [False, True])
+@pytest.mark.parametrize(
+    ("event_type", "field", "blank_value"),
+    [
+        ("comment", "actor", "\u00a0\u2003"),
+        ("comment", "comment", "\u202f\u3000"),
+        ("assign", "assignee", "\u2007\u205f"),
+    ],
+)
+def test_unicode_whitespace_only_history_blocks_all_coordination_paths(
+    client: TestClient,
+    saved_workflow: bool,
+    event_type: str,
+    field: str,
+    blank_value: str,
+) -> None:
+    """Imported Unicode blanks must be rejected like incoming .strip() blanks."""
+    queue_id, item_ids = _make_queue(client, saved_workflow=saved_workflow)
+    item_id = item_ids[0]
+    history_url = f"/api/v1/review-queues/{queue_id}/items/{item_id}/events"
+    payload = {
+        "client_request_id": str(uuid4()),
+        "event_type": event_type,
+        "actor": "local researcher",
+    }
+    if event_type == "comment":
+        payload["comment"] = "Uncertain coral polyp"
+    else:
+        payload["assignee"] = "private reviewer"
+    created = client.post(history_url, json=payload)
+    assert created.status_code == 201, created.text
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        event = session.get(ReviewQueueItemEvent, created.json()["id"])
+        assert event is not None
+        original = getattr(event, field)
+        setattr(event, field, blank_value)
+        session.commit()
+
+    # The corrupted event may be outside the requested history page.
+    history = client.get(history_url, params={"page": 1000, "page_size": 1})
+    manual = client.post(
+        history_url, json={**payload, "client_request_id": str(uuid4())}
+    )
+    bulk = client.post(
+        f"/api/v1/review-queues/{queue_id}/items/bulk",
+        json={"item_ids": item_ids, "action": "start", "actor": "researcher"},
+    )
+    single = client.post(f"/api/v1/review-queue-items/{item_id}/start")
+    for response in (history, manual, bulk, single):
+        assert response.status_code == 409, response.text
+        assert "inconsistent action evidence" in response.text
+        assert "private reviewer" not in response.text
+
+    with app.state.session_factory() as session:
+        events = list(
+            session.scalars(
+                select(ReviewQueueItemEvent).where(
+                    ReviewQueueItemEvent.review_queue_item_id == item_id
+                )
+            )
+        )
+        assert len(events) == 1
+        assert getattr(events[0], field) == blank_value
+        setattr(events[0], field, original)
+        session.commit()
+
+    restored = client.get(history_url)
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["requires_researcher_review"] is True
+    items = client.get(f"/api/v1/review-queues/{queue_id}/items")
+    assert items.status_code == 200, items.text
+    assert next(
+        item["review_state"] for item in items.json()["items"] if item["id"] == item_id
+    ) == "pending"
+
+
+@pytest.mark.parametrize("saved_workflow", [False, True])
+def test_unicode_blank_skip_reason_blocks_registered_bulk_retry(
+    client: TestClient, saved_workflow: bool
+) -> None:
+    """An existing bulk request key cannot bless a Unicode-only skip reason."""
+    queue_id, item_ids = _make_queue(client, saved_workflow=saved_workflow)
+    item_id = item_ids[0]
+    url = f"/api/v1/review-queues/{queue_id}/items/bulk"
+    payload = {
+        "item_ids": [item_id],
+        "action": "skip",
+        "actor": "researcher",
+        "reason": "Turbid image; uncountable polyps",
+        "client_request_id": str(uuid4()),
+    }
+    first = client.post(url, json=payload)
+    assert first.status_code == 200, first.text
+    assert first.json()["changed_count"] == 1
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        event = session.scalar(
+            select(ReviewQueueItemEvent).where(
+                ReviewQueueItemEvent.review_queue_item_id == item_id,
+                ReviewQueueItemEvent.event_type == "triage_skip",
+            )
+        )
+        assert event is not None
+        event.comment = "\u00a0\u3000"
+        session.commit()
+
+    history = client.get(
+        f"/api/v1/review-queues/{queue_id}/items/{item_id}/events"
+    )
+    replay = client.post(url, json=payload)
+    single = client.post(f"/api/v1/review-queue-items/{item_id}/return")
+    for response in (history, replay, single):
+        assert response.status_code == 409, response.text
+        assert "inconsistent action evidence" in response.text
+        assert "Turbid image" not in response.text
+
+    with app.state.session_factory() as session:
+        event = session.scalar(
+            select(ReviewQueueItemEvent).where(
+                ReviewQueueItemEvent.review_queue_item_id == item_id,
+                ReviewQueueItemEvent.event_type == "triage_skip",
+            )
+        )
+        assert event is not None
+        assert event.comment == "\u00a0\u3000"
+        event.comment = payload["reason"]
+        session.commit()
+
+    retried = client.post(url, json=payload)
+    assert retried.status_code == 200, retried.text
+    assert retried.json()["changed_count"] == 0
+    assert retried.json()["requires_researcher_review"] is True
