@@ -26,16 +26,10 @@ class SpatialSourceParseSummary(BaseModel):
     def validate_structural_counts_and_qc(self) -> SpatialSourceParseSummary:
         """Reject internally contradictory or falsely verified parse summaries."""
         if self.source_kind_resolved == "mesh":
-            if (
-                self.vertex_count is None
-                or self.face_count is None
-                or self.point_count is not None
-            ):
+            if self.vertex_count is None or self.face_count is None or self.point_count is not None:
                 raise ValueError("Mesh parse must have only vertex and face counts")
         elif (
-            self.point_count is None
-            or self.vertex_count is not None
-            or self.face_count is not None
+            self.point_count is None or self.vertex_count is not None or self.face_count is not None
         ):
             raise ValueError("Point-cloud parse must have only a point count")
         required_warnings = {
