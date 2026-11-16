@@ -601,6 +601,7 @@ def test_subnormal_diagonal_uncertainty_is_not_false_zero_in_saved_workflow(
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     assert artifact["provenance"]["calibration_verified"] is False
 
+
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
 @pytest.mark.parametrize(
     ("uncertainty", "expected_delta"),
@@ -625,9 +626,9 @@ def test_unresolved_chord_scale_delta_is_not_false_zero_in_saved_workflow(
         params["points"] = points
     else:
         params["ply_text"] = (
-            "ply\\nformat ascii 1.0\\nelement vertex 2\\n"
-            "property double x\\nproperty double y\\nproperty double z\\n"
-            "end_header\\n0 0 0\\n5e-324 0 0\\n"
+            "ply\nformat ascii 1.0\nelement vertex 2\n"
+            "property double x\nproperty double y\nproperty double z\n"
+            "end_header\n0 0 0\n5e-324 0 0\n"
         )
     direct = measure_point_cloud_preview(
         points=points,
