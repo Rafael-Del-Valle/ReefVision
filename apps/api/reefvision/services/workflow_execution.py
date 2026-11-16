@@ -1159,7 +1159,9 @@ class WorkflowExecutionService:
         # still-queued run or a pending/review-paused/already-succeeded node
         # must not acquire an output by calling the adapter directly.
         if run_status != "running" or node_run.status != "running":
-            raise ConflictError("Workflow artifact publication requires a running workflow and node")
+            raise ConflictError(
+                "Workflow artifact publication requires a running workflow and node"
+            )
 
         artifact = WorkflowArtifact(
             workflow_run_id=run_id,
