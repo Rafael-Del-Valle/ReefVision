@@ -64,7 +64,7 @@ MSI_VERSION = re.compile(r"\d{1,3}\.\d{1,3}\.\d{1,5}\Z")
 SHA256 = re.compile(r"[0-9a-fA-F]{64}\Z")
 ACCEPTANCE_RUN = re.compile(r"reefvision-clean-[0-9a-fA-F]{12}\Z")
 WINDOWS_RESERVED_NAME = re.compile(
-    r"(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?", re.IGNORECASE
+    r"(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\..*)?", re.IGNORECASE
 )
 
 
@@ -106,8 +106,10 @@ def _windows_path(value: Any, label: str) -> PureWindowsPath:
     for part in path.parts[1:]:
         _require(
             not part.endswith((" ", "."))
-            and ":" not in part
-            and not any(ord(character) < 32 for character in part)
+            # Win32 rejects these characters in ordinary file and directory
+            # names even though PureWindowsPath can represent them. The three
+            # superscript digits are also reserved in COM/LPT device names.
+            and not any(character in '< >:"|?*'.replace(" ", "") or ord(character) < 32 for character in part)
             and WINDOWS_RESERVED_NAME.fullmatch(part) is None,
             f"{label} contains an unsafe Windows path component",
         )

@@ -457,6 +457,72 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                         changed, expected_version="1.0.3", expected_upgrade="passed"
                     )
 
+    def test_report_only_rejects_invalid_win32_components_in_all_path_claims(self) -> None:
+        """Reject names accepted by PureWindowsPath but invalid for Win32 files."""
+        invalid_names = (
+            "bad<name",
+            "bad>name",
+            'bad"name',
+            "bad|name",
+            "bad?name",
+            "bad*name",
+            "COM¹",
+            "COM²",
+            "COM³",
+            "LPT¹",
+            "LPT²",
+            "LPT³",
+        )
+        upgrade = good_report()
+        upgrade["reefvision_version"] = "1.0.3"
+        upgrade["upgrade_install"] = pass_evidence()
+        upgrade["upgrade"] = pass_evidence()
+        upgrade["post_upgrade_migration"] = upgraded_migration_evidence("1.0.3")
+        upgrade["previous_installer_path"] = "C:/ReefVision_1.0.2.msi"
+        upgrade["previous_installer_sha256"] = "b" * 64
+        upgrade["previous_installer_isolated_acceptance_confirmed"] = True
+        upgrade["previous_installer_version"] = "1.0.2"
+        MODULE.validate_report(upgrade, expected_version="1.0.3", expected_upgrade="passed")
+
+        for name in invalid_names:
+            for field in (
+                "installer_path",
+                "previous_installer_path",
+                "acceptance_root",
+                "isolated_data_root",
+            ):
+                with self.subTest(name=name, field=field):
+                    is_upgrade = field == "previous_installer_path"
+                    changed = copy.deepcopy(upgrade if is_upgrade else good_report())
+                    if field == "acceptance_root":
+                        changed["acceptance_root"] = f"C:/disposable/{name}/reefvision-acceptance"
+                        changed["isolated_data_root"] = (
+                            f"{changed['acceptance_root']}/reefvision-clean-a1b2c3d4e5f6/data"
+                        )
+                    elif field == "isolated_data_root":
+                        changed[field] = (
+                            f"{changed['acceptance_root']}/reefvision-clean-a1b2c3d4e5f6/{name}"
+                        )
+                    else:
+                        changed[field] = f"C:/disposable/{name}.msi"
+                    with self.assertRaisesRegex(
+                        MODULE.AcceptanceEvidenceError, "unsafe Windows path component"
+                    ):
+                        MODULE.validate_report(
+                            changed,
+                            expected_version="1.0.3" if is_upgrade else "1.0.2",
+                            expected_upgrade="passed" if is_upgrade else "skipped",
+                        )
+
+    def test_report_only_allows_normal_unicode_and_punctuation_in_local_paths(self) -> None:
+        report = good_report()
+        report["acceptance_root"] = "C:/Field notes (Río)/reefvision-acceptance"
+        report["isolated_data_root"] = (
+            f"{report['acceptance_root']}/reefvision-clean-a1b2c3d4e5f6/data"
+        )
+        report["installer_path"] = "C:/Field notes (Río)/ReefVision - Local.msi"
+        MODULE.validate_report(report, expected_version="1.0.2")
+
     def test_upgrade_requires_real_higher_version_and_previous_installer(self) -> None:
         report = good_report()
         report["reefvision_version"] = "1.0.3"

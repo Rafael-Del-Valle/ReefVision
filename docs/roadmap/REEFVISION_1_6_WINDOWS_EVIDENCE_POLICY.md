@@ -250,3 +250,23 @@ claims, with positive controls. This is report-structure validation, not
 proof of an installed MSI/CAB, installed GUI, rollback, scientific assets or
 real researcher consent. Existing typed saved QC Workflow Builder execution
 and explicit manual review remain unchanged. Release status remains HOLD.
+
+## Win32 forbidden components and superscript device aliases (2026-11-16)
+
+The report-only local-drive test also needs to reject **normal Win32-invalid
+filename characters** (`< > : " | ? *`) that `PureWindowsPath` can parse as
+path text without guaranteeing a usable installed file. Windows additionally
+reserves `COM¹`, `COM²`, `COM³` and the matching `LPT` names; those
+Unicode superscript digits are not ordinary digits `1-9`. Reject these as
+components of disposable roots, isolated data paths, and both target/previous
+MSI claims, without blocking legitimate Unicode study folder names.
+
+The 48 negative report-only cases cover 12 invalid components across four
+path claim fields; clean-install and real-upgrade controls, plus a legal
+Unicode/punctuation control, preserve normal offline acceptance. This does not
+validate actual filesystem ancestry or installer bytes; the native Windows
+harness and file-backed SHA-256 checks remain separate. No new Workflow Builder
+node is appropriate for an external installer-evidence verifier. Scientific
+workflow execution and human review remain unchanged. **Release HOLD** for
+Alembic reconciliation, installed Windows GUI/MSI upgrade/rollback and
+representative biological acceptance.
