@@ -296,6 +296,49 @@ describe("ProjectTrainingMonitor", () => {
     expect(screen.queryByText("NaN")).not.toBeInTheDocument();
   });
 
+  it("labels stale loss samples and summary fallbacks without claiming current-epoch measurements", async () => {
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([
+      {
+        ...activeRun,
+        progress_epoch: 3,
+        metrics: {
+          "train/box_loss": 0.99,
+          "train/cls_loss": 0.55,
+          "metrics/mAP50(B)": 0.81,
+        },
+        metrics_history: {
+          "train/box_loss": [0.75, 0.25, null],
+          "train/cls_loss": [null, Number.NaN],
+        },
+      },
+    ]);
+
+    renderMonitor();
+    await screen.findByText("Swiftia detector");
+
+    const boxRow = screen.getByText("train box loss").closest("div");
+    expect(boxRow).toHaveTextContent("0.25");
+    expect(boxRow).toHaveTextContent(
+      "history entry 2/3; prior sample; epoch association unverified",
+    );
+    expect(screen.queryByText("0.99")).not.toBeInTheDocument();
+
+    const clsRow = screen.getByText("train cls loss").closest("div");
+    expect(clsRow).toHaveTextContent("0.55");
+    expect(clsRow).toHaveTextContent(
+      "summary fallback; history unavailable; epoch association unverified",
+    );
+
+    const mapRow = screen.getByText("metrics mAP50(B)").closest("div");
+    expect(mapRow).toHaveTextContent("0.81");
+    expect(mapRow).toHaveTextContent(
+      "summary; epoch association unverified",
+    );
+    // These are observation/source labels, not verified epoch associations;
+    // monitoring never mutates the training run or its persisted loss history.
+    expect(api.cancelTrainingRun).not.toHaveBeenCalled();
+  });
+
   it("cancels through the existing training-run API and updates the shared cache", async () => {
     vi.mocked(api.getTrainingRuns).mockResolvedValue([activeRun]);
     vi.mocked(api.cancelTrainingRun).mockResolvedValue({
