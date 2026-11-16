@@ -570,8 +570,9 @@ def test_subnormal_diagonal_uncertainty_is_not_false_zero_in_saved_workflow(
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     assert expected["axis_aligned_bounding_box_diagonal_scale_interval_m"] == expected_interval
-    assert expected["axis_aligned_dimension_scale_uncertainty_m"] == (
-        direct["axis_aligned_dimension_scale_uncertainty_m"]
+    assert (
+        expected["axis_aligned_dimension_scale_uncertainty_m"]
+        == (direct["axis_aligned_dimension_scale_uncertainty_m"])
     )
     graph = {
         "graph_id": f"subnormal-diagonal-{source_format}-{relative_uncertainty}-v14",
