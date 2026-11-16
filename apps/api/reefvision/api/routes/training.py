@@ -238,8 +238,31 @@ def _safe_terminal_log_text(payload: bytes) -> str:
     # Strip entire OSC (title/hyperlink), DCS, SOS, PM, and APC strings.
     # Removing just ESC would expose their printable payload as fake log data.
     # A truncated terminal string is discarded through the end of the tail.
-    text = re.sub(r"\x1b[\]PX^_][\s\S]*?(?:\x07|\x9c|\x1b\\|$)", "", text)
-    text = re.sub(r"[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)", "", text)
+    # Erasing OSC/DCS/APC strings can concatenate two fragments of the same
+    # metric or loss label (0.25 + OSC + 99 -> 0.2599). Treat a control
+    # embedded between token characters as a terminal edit, rather than
+    # manufacturing a measurement. The backspace sentinel is consumed by
+    # omit_rewritten_record below; no source log bytes are changed.
+    def token_character(char: str) -> bool:
+        return bool(char) and char.isascii() and (char.isalnum() or char in "._/+-%")
+
+    def strip_terminal_string(match: re.Match[str]) -> str:
+        before = text[match.start() - 1] if match.start() else ""
+        after = text[match.end()] if match.end() < len(text) else ""
+        if token_character(before) and token_character(after):
+            return "\x08"
+        return ""
+
+    text = re.sub(
+        r"\x1b[\]PX^_][\s\S]*?(?:\x07|\x9c|\x1b\\|$)",
+        strip_terminal_string,
+        text,
+    )
+    text = re.sub(
+        r"[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)",
+        strip_terminal_string,
+        text,
+    )
 
     # Backspaces and cursor-edit/erase CSI sequences can rewrite an earlier
     # digit in a loss record. Simply deleting the control bytes would join
