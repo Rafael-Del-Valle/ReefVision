@@ -240,7 +240,9 @@ def verify_succeeded_node_artifacts(
             )
         )
         if persisted_producer_ids != set(declared_ids):
-            raise ConflictError("Succeeded workflow input producer has undeclared persisted outputs")
+            raise ConflictError(
+                "Succeeded workflow input producer has undeclared persisted outputs"
+            )
         # A checksum-valid input can still contradict the producer's saved
         # result summary. Direct consumer recovery must check that evidence
         # even when the upstream node is not being independently replayed.
