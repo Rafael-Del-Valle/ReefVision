@@ -2071,7 +2071,6 @@ describe("AnnotationEditor", () => {
     ).toHaveLength(0);
   });
 
-
   it.each([
     {
       action: "Copy Current Visibility to Project Defaults",
@@ -2134,9 +2133,7 @@ describe("AnnotationEditor", () => {
           }
           const shared = handleDefaultEditorRequests(url, init);
           if (shared) return shared;
-          throw new Error(
-            `Unhandled request: ${init?.method ?? "GET"} ${url}`,
-          );
+          throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
         });
 
       renderEditor();
