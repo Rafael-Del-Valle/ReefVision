@@ -37,3 +37,27 @@ include both generated-column kinds, a genuine single-column control,
 unchanged QC/biological records, no leaked observation text, and strict CLI
 exit status. This is read-only diagnostic parity, **not** authorization to
 reconcile the independent 1.1/1.6 revision-0038 collision.
+
+## 2026-11-16 — Desktop preflight parity for 1.6 QC audit tables
+
+The desktop startup guard previously checked only that required columns were
+present in the 0038 review-event table and the 0041 bulk-request table.
+An extra ordinary column was tolerated, and SQLite generated VIRTUAL/STORED
+columns could escape the ordinary SQLAlchemy column inventory entirely.
+Neither is part of the exact append-only reviewer-audit migration contract.
+
+The **read-only** `assert_compatible_revision_0038` guard now checks both
+tables against their frozen column sets, using `PRAGMA table_xinfo` for SQLite.
+It rejects unexpected ordinary columns, unexpected generated columns, and any
+hidden-column flag before the application can perform migration writes.
+No generated expression is evaluated, no QC action is approved, and no
+researcher data is rewritten. Twelve file-backed parameterized regressions
+cover legitimate 0038/0041 shapes and ordinary/VIRTUAL/STORED additions,
+asserting two repeatable inspections, preserved reviewer/biological records,
+privacy-safe errors, and byte-for-byte preservation of the SQLite database.
+
+This is a stricter **1.6 lineage compatibility check**, not a migration
+reconciliation. Both independent 1.1/1.6 Alembic revision-0038 histories,
+saved Workflow Builder acceptance, complete backend/frontend/E2E CI, real
+Windows MSI/CAB install-upgrade-rollback, and installed-GUI validation remain
+mandatory release blockers until separately demonstrated.
