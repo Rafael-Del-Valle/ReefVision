@@ -1,4 +1,6 @@
-"""Disambiguate numeric Alembic revisions shared by 1.1 and standalone ReefPose."""
+"""Disambiguate numeric revisions shared by science, ReefPose, and draft 1.4."""
+
+from collections.abc import Mapping
 
 from alembic.util import CommandError
 from sqlalchemy import Connection, inspect
@@ -42,8 +44,13 @@ _POSE_STEPS = {
     "0043": ("reefpose_references",),
     "0044": ("reefpose_heldout_locks",),
 }
+_SPATIAL_STEPS = {
+    "0038": ("spatial_source_assets",),
+    "0039": ("spatial_calibration_reviews",),
+}
 LEGACY_NUMERIC_REVISIONS = frozenset(_POSE_STEPS)
 _POSE_PREFIX = "reefpose_"
+_SPATIAL_PREFIX = "spatial_"
 _ECOLOGY_TABLES = {
     "ecology_identity_revisions",
     "ecology_identity_image_evidence",
@@ -52,7 +59,7 @@ _ECOLOGY_TABLES = {
 }
 
 
-def _expected_features(steps: dict[str, tuple[str, ...]], revision: str) -> set[str]:
+def _expected_features(steps: Mapping[str, tuple[str, ...]], revision: str) -> set[str]:
     return {feature for step, features in steps.items() if step <= revision for feature in features}
 
 
@@ -88,6 +95,7 @@ def resolve_legacy_revision(connection: Connection, heads: tuple[str, ...]) -> s
         feature
         for feature in _expected_features(_POSE_STEPS, "0044")
         | _expected_features(_SCIENCE_STEPS, "0042")
+        | _expected_features(_SPATIAL_STEPS, "0039")
         | _ECOLOGY_TABLES
         if "." not in feature
     }
@@ -105,11 +113,15 @@ def resolve_legacy_revision(connection: Connection, heads: tuple[str, ...]) -> s
 
     pose_features = observed_features & _expected_features(_POSE_STEPS, "0044")
     science_features = observed_features & _expected_features(_SCIENCE_STEPS, "0042")
+    spatial_features = observed_features & _expected_features(_SPATIAL_STEPS, "0039")
 
     # Multiple heads can arise through valid targeted migrations in the new
     # graph. An explicit sibling head makes its schema valid alongside 1.1.
     sibling_pose_heads = [
         head.removeprefix(_POSE_PREFIX) for head in heads if head.startswith(_POSE_PREFIX)
+    ]
+    sibling_spatial_heads = [
+        head.removeprefix(_SPATIAL_PREFIX) for head in heads if head.startswith(_SPATIAL_PREFIX)
     ]
     ecology_active = any(head.startswith("b12_identity_") for head in heads)
     unexpected_schema = "review_queue_item_events" in tables or bool(
@@ -121,14 +133,25 @@ def resolve_legacy_revision(connection: Connection, heads: tuple[str, ...]) -> s
             and science_features == _expected_features(_SCIENCE_STEPS, legacy)
             and pose_features
             == _expected_features(_POSE_STEPS, max(sibling_pose_heads, default=""))
+            and spatial_features
+            == _expected_features(_SPATIAL_STEPS, max(sibling_spatial_heads, default=""))
         ):
             return None
         if (
             len(heads) == 1
             and not science_features
+            and not spatial_features
             and pose_features == _expected_features(_POSE_STEPS, legacy)
         ):
             return f"{_POSE_PREFIX}{legacy}"
+        if (
+            len(heads) == 1
+            and legacy in _SPATIAL_STEPS
+            and not science_features
+            and not pose_features
+            and spatial_features == _expected_features(_SPATIAL_STEPS, legacy)
+        ):
+            return f"{_SPATIAL_PREFIX}{legacy}"
 
     raise CommandError(
         f"Cannot determine migration lineage for Alembic revision(s) {', '.join(heads)}. "

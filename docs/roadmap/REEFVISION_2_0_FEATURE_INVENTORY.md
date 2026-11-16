@@ -753,11 +753,12 @@ Evidence:
 
 Acceptance checks:
 
-- **in_progress** — Merge validated 1.3 without editing migrations, upgrade both supported histories, preserve fingerprints, exchange, and restore a pre-upgrade backup. (`rv14-lineage-upgrade-check`)
+- **verified** — Merge validated 1.3 without editing applied migration bodies, disambiguate both supported numeric histories from schema fingerprints, preserve rows and IDs, and reject ambiguous or unknown histories without mutation. (`rv14-lineage-source-check`)
+- **blocked** — Using an installer built from the final candidate SHA, upgrade representative 1.3 and legacy draft-1.4 profiles, exchange the integrated records, and restore a verified pre-upgrade backup. (`rv14-lineage-installed-check`)
 
 Evidence:
 
-- `source`: none recorded
+- `source`: Real ancestry merge, unique Alembic graph, schema-fingerprinted legacy upgrades, ambiguity rejection, backup verification, and downgrade/upgrade regressions. — `docs/roadmap/REEFVISION_1_4_MIGRATION_RECONCILIATION.md` (`rv14-lineage-source`)
 - `browser`: none recorded
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded

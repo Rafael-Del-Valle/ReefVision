@@ -9,7 +9,10 @@ def test_mask_migrations_retain_the_common_lineage() -> None:
     config = Config(str(api_root / "alembic.ini"))
     scripts = ScriptDirectory.from_config(config)
 
-    assert set(scripts.get_heads()) == {"0039", "b13_temporal_0001"}
+    assert scripts.get_heads() == ["b14_integration_0001"]
+    integration = scripts.get_revision("b14_integration_0001")
+    assert integration is not None
+    assert set(integration.down_revision) == {"b13_temporal_0001", "spatial_0039"}
     temporal = scripts.get_revision("b13_temporal_0001")
     assert temporal is not None
     assert temporal.down_revision == "b13_scientific_0001"
@@ -52,8 +55,8 @@ def test_mask_migrations_retain_the_common_lineage() -> None:
     behavior_models = scripts.get_revision("0035")
     pose_active_learning = scripts.get_revision("0036")
     pose_training_datasets = scripts.get_revision("0037")
-    spatial_source_assets = scripts.get_revision("0038")
-    spatial_calibration_reviews = scripts.get_revision("0039")
+    spatial_source_assets = scripts.get_revision("spatial_0038")
+    spatial_calibration_reviews = scripts.get_revision("spatial_0039")
     assert editable_masks is not None
     assert editable_masks.down_revision == "53ba400993db"
     assert mask_datasets is not None
@@ -93,4 +96,4 @@ def test_mask_migrations_retain_the_common_lineage() -> None:
     assert spatial_source_assets is not None
     assert spatial_source_assets.down_revision == "0037"
     assert spatial_calibration_reviews is not None
-    assert spatial_calibration_reviews.down_revision == "0038"
+    assert spatial_calibration_reviews.down_revision == "spatial_0038"

@@ -19,7 +19,7 @@ from reefvision.services.system import SystemService
 
 _API_ROOT = Path(__file__).resolve().parents[2]
 _VERSIONS = _API_ROOT / "migrations" / "versions"
-_INTEGRATED_HEAD = "b13_temporal_0001"
+_INTEGRATED_HEAD = "b14_integration_0001"
 _POSE_MIGRATIONS = (
     "0038_pose_anatomy_definitions.py",
     "0039_pose_evaluation_runs.py",
@@ -279,7 +279,10 @@ def test_temporal_migration_preserves_prior_scientific_tables(
     assert tables <= set(inspect(engine).get_table_names())
     command.downgrade(config, prior)
     assert tables.isdisjoint(inspect(engine).get_table_names())
-    assert _read_heads(engine) == (prior,)
+    assert set(_read_heads(engine)) == {prior, "spatial_0039"}
+    assert {"spatial_source_assets", "spatial_calibration_reviews"} <= set(
+        inspect(engine).get_table_names()
+    )
     with engine.connect() as connection:
         assert connection.exec_driver_sql("SELECT id FROM projects").scalar_one() == _PROJECT_ID
     command.upgrade(config, "head")
