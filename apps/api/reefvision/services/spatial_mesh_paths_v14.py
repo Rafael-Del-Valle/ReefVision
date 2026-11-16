@@ -726,9 +726,8 @@ def _closed_loop_source_planar_centroid(
         )
         inside = False
         for start, end in pairwise([*projected, projected[0]]):
-            cross = (
-                (end[0] - start[0]) * (query[1] - start[1])
-                - (end[1] - start[1]) * (query[0] - start[0])
+            cross = (end[0] - start[0]) * (query[1] - start[1]) - (end[1] - start[1]) * (
+                query[0] - start[0]
             )
             if (
                 cross == 0
@@ -1292,14 +1291,10 @@ def mesh_surface_edge_traces(
                 source_planar_centroid_inside_or_on_perimeter,
             ) = _closed_loop_source_planar_centroid(positions)
             if source_planar_centroid_mesh_units is None:
-                warnings.append(
-                    "closed_surface_trace_source_planar_centroid_unrepresentable"
-                )
+                warnings.append("closed_surface_trace_source_planar_centroid_unrepresentable")
             else:
                 if source_planar_centroid_inside_or_on_perimeter is False:
-                    warnings.append(
-                        "closed_surface_trace_source_planar_centroid_outside_perimeter"
-                    )
+                    warnings.append("closed_surface_trace_source_planar_centroid_outside_perimeter")
                 calibrated_center = [
                     coordinate * scale for coordinate in source_planar_centroid_mesh_units
                 ]

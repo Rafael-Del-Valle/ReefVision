@@ -98,21 +98,26 @@ def _integrated_media_gaps(
 ) -> list[ProjectExchangeUnavailableAsset]:
     records = {
         (kind, row["id"]): row
-        for name, kind in (("images", "image"), ("videos", "video"), ("models", "model"))
+        for name, kind in (
+            ("images", "image"),
+            ("videos", "video"),
+            ("models", "model"),
+            ("spatial_source_assets", "spatial_source"),
+        )
         for row in sections.get(name, [])
     }
     seen: set[tuple[str, str]] = set()
     for descriptor in media:
         key = (descriptor["kind"], descriptor["record_id"])
         source = records.get(key)
+        source_size = (
+            source.get("file_size_bytes", source.get("size_bytes")) if source is not None else None
+        )
         if (
             source is None
             or key in seen
             or source["sha256"] != descriptor.get("sha256")
-            or (
-                source.get("file_size_bytes") is not None
-                and source["file_size_bytes"] != descriptor.get("size_bytes")
-            )
+            or (source_size is not None and source_size != descriptor.get("size_bytes"))
         ):
             raise ValidationError("Exchange media has duplicate or inconsistent source provenance")
         seen.add(key)
@@ -218,6 +223,20 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                     except ValueError:
                         errors.append(f"Section JSON is invalid: {name} line {line_number}")
                         break
+            if not errors:
+                from reefvision.services.project_exchange_spatial import (
+                    validate_spatial_exchange_records,
+                )
+
+                project = manifest.get("project")
+                project_id = project.get("id") if isinstance(project, dict) else None
+                if not isinstance(project_id, str) or not project_id:
+                    errors.append("Exchange archive source project ID is invalid")
+                else:
+                    try:
+                        validate_spatial_exchange_records(project_id, section_rows)
+                    except ValidationError as exc:
+                        errors.append(str(exc))
             if version == "1.2" and not errors:
                 from reefvision.services.project_exchange_import import SECTION_MODELS
                 from reefvision.services.project_exchange_import_v1 import register_v1_sections
@@ -264,8 +283,20 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                 errors=errors,
             )
             included_media_count = len(media)
-            if version == "1.2" and not errors:
-                unavailable_assets = _integrated_media_gaps(section_rows, media)
+            if not errors:
+                try:
+                    media_gaps = _integrated_media_gaps(section_rows, media)
+                except ValidationError as exc:
+                    errors.append(str(exc))
+                else:
+                    if version == "1.2":
+                        unavailable_assets = media_gaps
+                    missing_spatial = [item for item in media_gaps if item.kind == "spatial_source"]
+                    if missing_spatial:
+                        errors.append(
+                            "Project Exchange is missing original media for one or more "
+                            "spatial sources"
+                        )
             if not media:
                 warnings.append(
                     "Package does not include original media; imported records may require "

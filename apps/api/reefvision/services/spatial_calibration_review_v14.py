@@ -25,6 +25,21 @@ from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvi
 from reefvision.services.spatial_source_assets_v14 import SpatialSourceAssetService
 
 
+def canonical_spatial_calibration_review_evidence(
+    evidence: MeshCalibrationReviewEvidence,
+) -> tuple[dict[str, Any], str]:
+    """Return the canonical persisted payload and digest for review evidence."""
+
+    # Pydantic models can be mutated after construction; validate the current
+    # values before persisting or hashing scientific review evidence.
+    evidence = MeshCalibrationReviewEvidence.model_validate(evidence.model_dump(mode="python"))
+    payload = evidence.model_dump(mode="json")
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
+        "utf-8"
+    )
+    return payload, sha256(encoded).hexdigest()
+
+
 class SpatialCalibrationReviewService:
     def __init__(self, session: Session, settings: Settings) -> None:
         self.session = session
@@ -37,14 +52,7 @@ class SpatialCalibrationReviewService:
 
     @staticmethod
     def _canonical(evidence: MeshCalibrationReviewEvidence) -> tuple[dict[str, Any], str]:
-        # Pydantic models can be mutated after construction; validate the current
-        # values before persisting or hashing scientific review evidence.
-        evidence = MeshCalibrationReviewEvidence.model_validate(evidence.model_dump(mode="python"))
-        payload = evidence.model_dump(mode="json")
-        encoded = json.dumps(
-            payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-        ).encode("utf-8")
-        return payload, sha256(encoded).hexdigest()
+        return canonical_spatial_calibration_review_evidence(evidence)
 
     def _response(
         self, project_id: str, asset_id: str, record: SpatialCalibrationReviewRecord

@@ -39,7 +39,7 @@ class ProjectExchangeCreateResponse(BaseModel):
 
 
 class ProjectExchangeUnavailableAsset(BaseModel):
-    kind: Literal["image", "video", "model"]
+    kind: Literal["image", "video", "model", "spatial_source"]
     record_id: str
     imported_record_id: str | None = None
     name: str

@@ -860,6 +860,7 @@ Acceptance checks:
 Evidence:
 
 - `source`: Project-scoped immutable source bytes, UUID/SHA binding, path and metadata integrity, append-only calibration-review replay, malformed/empty/oversized rejection, and tamper rejection are covered by focused backend tests. — `apps/api/reefvision/tests/test_spatial_source_assets_v14.py` (`rv14-spatial-assets-src`)
+- `source`: Project Exchange round-trip remaps spatial source/review UUIDs, restores verified original bytes, replays review evidence, requires originals, and rejects altered bytes or review evidence; focused exchange regressions pass. — `apps/api/reefvision/tests/test_spatial_asset_project_exchange_v14.py` (`rv14-spatial-assets-exchange`)
 - `browser`: Normal project navigation exposes the project-owned import control inside Workflow builder. — `apps/web/src/App.test.tsx` (`rv14-spatial-assets-ui`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded

@@ -36,6 +36,8 @@ from reefvision.db.models import (
     ProjectClassVisibilityDefault,
     ProjectExchangePackage,
     SkeletonAnalysisRevision,
+    SpatialCalibrationReviewRecord,
+    SpatialSourceAsset,
     TrainingDraft,
     VideoAsset,
     WorkflowArtifact,
@@ -64,6 +66,7 @@ from reefvision.db.models.pose_training_dataset import (
     PoseTrainingDataset,
     PoseTrainingDatasetItem,
 )
+from reefvision.domain.errors import ValidationError
 from reefvision.schemas.project_exchange import ProjectExchangePackageResponse
 from reefvision.services.project_exchange import MANIFEST_NAME, ProjectExchangeService
 from reefvision.services.project_exchange_integrated import (
@@ -73,6 +76,7 @@ from reefvision.services.project_exchange_integrated import (
     has_integrated_records,
     integrated_records,
 )
+from reefvision.services.spatial_source_assets_v14 import SpatialSourceAssetService
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -249,6 +253,20 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                     )
                     if workflow_run_ids
                     else []
+                ),
+                "spatial_source_assets": list(
+                    self.session.scalars(
+                        select(SpatialSourceAsset).where(
+                            SpatialSourceAsset.project_id == project.id
+                        )
+                    )
+                ),
+                "spatial_calibration_reviews": list(
+                    self.session.scalars(
+                        select(SpatialCalibrationReviewRecord).where(
+                            SpatialCalibrationReviewRecord.project_id == project.id
+                        )
+                    )
                 ),
             }
         )
@@ -628,7 +646,7 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                 if isinstance(source_path, str) and source_path.strip():
                     original_paths.add(source_path.strip())
 
-        for section_name in ("images", "videos", "models"):
+        for section_name in ("images", "videos", "models", "spatial_source_assets"):
             for record in records.get(section_name, []):
                 managed_path = getattr(record, "managed_path", None)
                 if isinstance(managed_path, str):
@@ -660,11 +678,39 @@ class ProjectExchangeV1Service(ProjectExchangeService):
     def build_export(self, package_id: str) -> ProjectExchangePackageResponse:
         """Build a complete 1.0 archive and advertise its safe round-trip policy."""
 
+        queued_package = self._package(package_id)
+        has_spatial_sources = self.session.scalar(
+            select(SpatialSourceAsset.id)
+            .where(SpatialSourceAsset.project_id == queued_package.project_id)
+            .limit(1)
+        )
+        includes_media = bool(queued_package.options_json.get("include_media", False))
+        if not includes_media and has_spatial_sources:
+            raise ValidationError(
+                "Project Exchange must include original media when the project has spatial sources"
+            )
         super().build_export(package_id)
         package = self._package(package_id)
         project = self._project(package.project_id)
         manifest = dict(package.manifest_json)
         records = self._records(project)
+        spatial_sources: list[tuple[dict[str, object], Path]] = []
+        if bool(package.options_json.get("include_media", False)):
+            source_service = SpatialSourceAssetService(self.session, self.settings)
+            for asset in cast(Sequence[SpatialSourceAsset], records["spatial_source_assets"]):
+                original = source_service.read_verified(project.id, asset.id)
+                source_path = resolve_managed_project_path(self.settings, asset.managed_path)
+                descriptor: dict[str, object] = {
+                    "kind": "spatial_source",
+                    "record_id": asset.id,
+                    "path": f"media/spatial/{asset.id}.{asset.source_format}",
+                    "sha256": asset.sha256,
+                    "size_bytes": len(original),
+                }
+                spatial_sources.append((descriptor, source_path))
+            media = list(manifest.get("media", []))
+            media.extend(descriptor for descriptor, _ in spatial_sources)
+            manifest["media"] = media
         telemetry_sidecars = self._telemetry_sidecars(
             project,
             records,
@@ -716,6 +762,12 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                     ):
                         shutil.copyfileobj(incoming, outgoing)
                 for descriptor, source_path in telemetry_sidecars:
+                    target_archive.write(
+                        source_path,
+                        arcname=str(descriptor["path"]),
+                    )
+
+                for descriptor, source_path in spatial_sources:
                     target_archive.write(
                         source_path,
                         arcname=str(descriptor["path"]),

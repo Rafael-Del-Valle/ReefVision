@@ -59,6 +59,7 @@ from reefvision.schemas.project_exchange import (
 )
 from reefvision.schemas.projects import ProjectCreate
 from reefvision.schemas.scientific_heatmaps import ScientificHeatmapResponse
+from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvidence
 from reefvision.services.project_exchange_acquisition import validate_acquisition_exchange
 from reefvision.services.project_exchange_comparison import restore_comparison_jobs
 from reefvision.services.project_exchange_computed import (
@@ -104,6 +105,7 @@ from reefvision.services.project_exchange_scientific import (
     remap_scientific_sections,
     validate_exchange_records,
 )
+from reefvision.services.project_exchange_spatial import validate_spatial_exchange_records
 from reefvision.services.project_exchange_temporal_reefpose import (
     remap_temporal_exchange_row,
     restore_temporal_links,
@@ -112,6 +114,9 @@ from reefvision.services.project_exchange_workflows import restore_workflow_prov
 from reefvision.services.projects import ProjectService
 from reefvision.services.scientific_data import content_hash
 from reefvision.services.scientific_heatmaps import scientific_heatmap_content_hash
+from reefvision.services.spatial_calibration_review_v14 import (
+    canonical_spatial_calibration_review_evidence,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -191,6 +196,7 @@ MEDIA_KIND_BY_SECTION = {
     "images": "image",
     "videos": "video",
     "models": "model",
+    "spatial_source_assets": "spatial_source",
 }
 
 JSON_HASH_FIELDS: dict[type[Any], tuple[str, str]] = {
@@ -338,8 +344,11 @@ def _copy_packaged_media(
 ) -> str:
     member = str(descriptor["path"])
     suffix = PurePosixPath(member).suffix.lower()
-    plural = {"image": "images", "video": "videos", "model": "models"}[kind]
-    relative = f"{storage_root}/exchange-import/{plural}/{new_id}{suffix}"
+    if kind == "spatial_source":
+        relative = f"{storage_root}/spatial/originals/{new_id}{suffix}"
+    else:
+        plural = {"image": "images", "video": "videos", "model": "models"}[kind]
+        relative = f"{storage_root}/exchange-import/{plural}/{new_id}{suffix}"
     destination = resolve_managed_project_path(settings, relative)
     destination.parent.mkdir(parents=True, exist_ok=True)
     with archive.open(member, "r") as source, destination.open("wb") as target:
@@ -425,6 +434,7 @@ def import_project_exchange(
         validate_acquisition_exchange(section_rows)
         validate_computed_exchange_records(old_project_id, section_rows)
         validate_environmental_analysis_exchange(old_project_id, section_rows)
+        validate_spatial_exchange_records(old_project_id, section_rows)
         _validate_heatmap_artifacts(old_project_id, section_rows)
 
         project: Project | None = None
@@ -686,6 +696,16 @@ def import_project_exchange(
                                     "content_sha256": coverage["content_sha256"],
                                 }
                             )
+
+                    if section_name == "spatial_calibration_reviews":
+                        evidence = MeshCalibrationReviewEvidence.model_validate(
+                            values["evidence_json"]
+                        )
+                        evidence_json, evidence_sha256 = (
+                            canonical_spatial_calibration_review_evidence(evidence)
+                        )
+                        values["evidence_json"] = evidence_json
+                        values["evidence_sha256"] = evidence_sha256
 
                     media_kind = MEDIA_KIND_BY_SECTION.get(section_name)
                     if media_kind is not None and isinstance(old_id, str):
