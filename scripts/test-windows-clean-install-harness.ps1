@@ -34,6 +34,7 @@ $readFakeWebview2Registry = {
 }
 $emptyWebview2 = Get-ReefVisionWebView2RuntimeInfo -ReadRegistryValue $readFakeWebview2Registry
 Assert-True (-not $emptyWebview2.detected -and $emptyWebview2.registrations.Count -eq 0) 'Missing WebView2 registry entries were misreported as installed.'
+Assert-True ($emptyWebview2.inspection_complete -and $emptyWebview2.unreadable_scopes.Count -eq 0) 'Readable empty registry views must be distinguishable from inaccessible views.'
 $script:fakeWebview2Values[$machineWebview2] = '0.0.0.0'
 $script:fakeWebview2Values[$userWebview2] = '152.0.1234.56'
 $userRuntime = Get-ReefVisionWebView2RuntimeInfo -ReadRegistryValue $readFakeWebview2Registry
@@ -42,6 +43,14 @@ Assert-True ($userRuntime.registrations[0].scope -ceq 'user' -and $userRuntime.r
 $script:deniedWebview2Path = $machineWebview2
 $permissionLimited = Get-ReefVisionWebView2RuntimeInfo -ReadRegistryValue $readFakeWebview2Registry
 Assert-True ($permissionLimited.detected -and $permissionLimited.registrations.Count -eq 1) 'A denied registry view obscured a valid per-user runtime.'
+Assert-True (-not $permissionLimited.inspection_complete -and $permissionLimited.unreadable_scopes.Count -eq 1 -and $permissionLimited.unreadable_scopes[0] -ceq 'machine-32') 'A denied view must be recorded even if another runtime is detected.'
+# With no registered version in any readable view, denied access must remain
+# an unknown inspection, never evidence that WebView2 is absent.
+$script:fakeWebview2Values = @{}
+$script:deniedWebview2Path = $machineNativeWebview2
+$unknownWebview2 = Get-ReefVisionWebView2RuntimeInfo -ReadRegistryValue $readFakeWebview2Registry
+Assert-True (-not $unknownWebview2.detected -and -not $unknownWebview2.inspection_complete -and $unknownWebview2.registrations.Count -eq 0) 'An unreadable-only registration must not be reported as a completed negative inventory.'
+Assert-True ($unknownWebview2.unreadable_scopes.Count -eq 1 -and $unknownWebview2.unreadable_scopes[0] -ceq 'machine-64') 'Unknown WebView2 view provenance was lost.'
 $script:deniedWebview2Path = ''
 $script:fakeWebview2Values[$userWebview2] = '152.0.1234.56;malformed'
 $invalidWebview2 = Get-ReefVisionWebView2RuntimeInfo -ReadRegistryValue $readFakeWebview2Registry
