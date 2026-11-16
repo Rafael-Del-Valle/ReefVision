@@ -548,9 +548,7 @@ def test_subnormal_diagonal_uncertainty_is_not_false_zero_in_saved_workflow(
     assert (
         "diagonal_uncertainty_interval_below_numeric_resolution" in direct["qc_warnings"]
     ) is unresolved
-    assert (
-        direct["axis_aligned_bounding_box_diagonal_scale_uncertainty_m"] is None
-    ) is unresolved
+    assert (direct["axis_aligned_bounding_box_diagonal_scale_uncertainty_m"] is None) is unresolved
     assert direct["surface_area_m2"] is None
     assert direct["branch_length_m"] is None
     assert direct["provenance"]["calibration_verified"] is False
