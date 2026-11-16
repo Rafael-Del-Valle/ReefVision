@@ -1029,6 +1029,9 @@ def test_11_scientific_tables_cannot_precede_their_revision(
         ("canonical", False),
         ("additional_nonunique_index", False),
         ("partial_unique_replaces_request_constraint", True),
+        ("request_unique_nocase", True),
+        ("request_unique_descending", True),
+        ("request_unique_nocase_descending", True),
         ("additional_unique_actor", True),
         ("additional_partial_unique_actor", True),
     ],
@@ -1039,9 +1042,14 @@ def test_0038_qc_structural_audit_rejects_unreviewed_unique_index_semantics(
     """A column-matching QC table can still lose reviewer idempotency guarantees."""
     database = tmp_path / "review-events.sqlite"
     has_request_constraint = variant != "partial_unique_replaces_request_constraint"
+    request_indexed_column = "client_request_id"
+    if variant in {"request_unique_nocase", "request_unique_nocase_descending"}:
+        request_indexed_column += " COLLATE NOCASE"
+    if variant in {"request_unique_descending", "request_unique_nocase_descending"}:
+        request_indexed_column += " DESC"
     request_constraint = (
         ", CONSTRAINT uq_review_queue_item_event_request "
-        "UNIQUE (review_queue_item_id, client_request_id)"
+        f"UNIQUE (review_queue_item_id, {request_indexed_column})"
         if has_request_constraint
         else ""
     )
