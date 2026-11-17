@@ -1480,8 +1480,9 @@ def create_pose_workflow_training_result(
         isinstance(raw_seed, int)
         or (
             isinstance(raw_seed, str)
-            and raw_seed.strip().isascii()
-            and raw_seed.strip().isdecimal()
+            and raw_seed == raw_seed.strip()
+            and raw_seed.isascii()
+            and raw_seed.isdecimal()
         )
     ):
         raise ValidationError("Pose training random_seed must be a non-negative integer")
