@@ -232,7 +232,13 @@ def measure_point_cloud_preview(
             )
         ):
             raise ValueError("Every point requires three bounded finite numeric coordinates")
-        xyz = (float(point[0]), float(point[1]), float(point[2]))
+        # IEEE-754 signed zero is not a geometric distinction. Normalize it
+        # before ordered/unordered and selected-chord geometry fingerprints;
+        # exact imported PLY text retains its separate byte-level digest.
+        xyz = tuple(
+            0.0 if value == 0.0 else value
+            for value in (float(point[0]), float(point[1]), float(point[2]))
+        )
         # Calibration must not turn a nonzero source coordinate into an
         # apparently measured zero. Subnormal scales are otherwise valid, but
         # a lost coordinate also corrupts preview points, centroids, and chords.
