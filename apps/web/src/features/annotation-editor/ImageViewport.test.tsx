@@ -128,6 +128,25 @@ describe("ImageViewport", () => {
         fitTransform({ width: 1600, height: 1200 }, size).scale,
       );
 
+      // A hidden or collapsed desktop panel must not substitute the
+      // 1200x780 initial fallback for a previously measured viewport.
+      for (const [collapsedWidth, collapsedHeight] of [
+        [0, 600],
+        [900, 0],
+        [0, 0],
+      ]) {
+        act(() => {
+          size.width = collapsedWidth;
+          size.height = collapsedHeight;
+          notifyResize?.();
+        });
+        expect(currentView()).toEqual(manual);
+        expect(overlay.querySelector("polygon")).toHaveAttribute(
+          "points",
+          originalPoints,
+        );
+      }
+
       act(() => {
         size.width = 1100;
         size.height = 760;

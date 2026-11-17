@@ -91,10 +91,13 @@ export function ImageViewport({
     const frame = frameRef.current;
     if (!frame) return;
     const updateSize = () => {
-      const next = {
-        width: frame.clientWidth || FALLBACK_SIZE.width,
-        height: frame.clientHeight || FALLBACK_SIZE.height,
-      };
+      // Collapsed WebView2/desktop panels can briefly report a zero-sized
+      // frame. Keep the last valid measurement rather than replacing it
+      // with the initial fallback and shifting a scientist's manual view.
+      const measuredWidth = frame.clientWidth;
+      const measuredHeight = frame.clientHeight;
+      if (measuredWidth <= 0 || measuredHeight <= 0) return;
+      const next = { width: measuredWidth, height: measuredHeight };
       setFrameSize((current) =>
         current.width === next.width && current.height === next.height
           ? current
