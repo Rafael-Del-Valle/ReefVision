@@ -110,9 +110,10 @@ def test_standalone_qc_rejects_corrupt_model_confidence_without_writes(
     queues = client.get(url)
     assert queues.status_code == 200, queues.text
     assert len(queues.json()) == 1
-    assert _queue_item(client, original.json()["id"])["input_checksum"] == original_item[
-        "input_checksum"
-    ]
+    assert (
+        _queue_item(client, original.json()["id"])["input_checksum"]
+        == original_item["input_checksum"]
+    )
 
 
 def test_saved_workflow_qc_rejects_corrupt_confidence_then_recovers_without_approval(
@@ -163,16 +164,23 @@ def test_saved_workflow_qc_rejects_corrupt_confidence_then_recovers_without_appr
     assert failed.status_code == 200, failed.text
     assert failed.json()["status"] == "failed"
     assert not [
-        artifact for artifact in failed.json()["artifacts"]
+        artifact
+        for artifact in failed.json()["artifacts"]
         if artifact["data_type"] == "review_queue_reference"
     ]
     with app.state.session_factory() as session:
-        assert session.scalar(
-            select(ReviewQueue).where(ReviewQueue.project_id == project_id)
-        ) is not None
-        assert len(
-            session.scalars(select(ReviewQueue).where(ReviewQueue.project_id == project_id)).all()
-        ) == 1
+        assert (
+            session.scalar(select(ReviewQueue).where(ReviewQueue.project_id == project_id))
+            is not None
+        )
+        assert (
+            len(
+                session.scalars(
+                    select(ReviewQueue).where(ReviewQueue.project_id == project_id)
+                ).all()
+            )
+            == 1
+        )
 
         proposal = session.get(PredictionProposal, prediction_id)
         assert proposal is not None
@@ -187,7 +195,8 @@ def test_saved_workflow_qc_rejects_corrupt_confidence_then_recovers_without_appr
     detail = client.get(f"/api/v1/workflow-runs/{recovered.json()['id']}")
     assert detail.status_code == 200, detail.text
     artifacts = [
-        artifact for artifact in detail.json()["artifacts"]
+        artifact
+        for artifact in detail.json()["artifacts"]
         if artifact["data_type"] == "review_queue_reference"
     ]
     assert len(artifacts) == 1
