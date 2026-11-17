@@ -51,9 +51,7 @@ def _coral_qc_source(client: TestClient) -> tuple[str, str, str]:
             },
         ],
     )
-    qc = run_quality_control(
-        client, project_id, {"rule_categories": ["annotation_geometry"]}
-    )
+    qc = run_quality_control(client, project_id, {"rule_categories": ["annotation_geometry"]})
     assert qc["status"] == "succeeded"
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
@@ -84,9 +82,7 @@ def _set_corrupt_finding(
         session.commit()
 
 
-def _restore_finding(
-    client: TestClient, issue_id: str, original_project_id: str
-) -> None:
+def _restore_finding(client: TestClient, issue_id: str, original_project_id: str) -> None:
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
         issue = session.get(QualityControlIssue, issue_id)
@@ -196,11 +192,14 @@ def test_saved_qc_workflow_fails_closed_then_researcher_retries(
         if artifact["data_type"] == "review_queue_reference"
     ]
     with app.state.session_factory() as session:
-        assert len(
-            session.scalars(
-                select(ReviewQueue).where(ReviewQueue.project_id == project_id)
-            ).all()
-        ) == 1
+        assert (
+            len(
+                session.scalars(
+                    select(ReviewQueue).where(ReviewQueue.project_id == project_id)
+                ).all()
+            )
+            == 1
+        )
 
     _restore_finding(client, issue_id, project_id)
     if original_severity != "warning":
@@ -227,9 +226,7 @@ def test_saved_qc_workflow_fails_closed_then_researcher_retries(
     payload = artifacts[0]["payload_json"]
     assert payload["priority_score_unit"] == "dimensionless"
     assert payload["review_status"] == "requires_researcher_review"
-    assert _queue_item(client, payload["queue_id"])["input_checksum"] == baseline[
-        "input_checksum"
-    ]
+    assert _queue_item(client, payload["queue_id"])["input_checksum"] == baseline["input_checksum"]
     assert _queue_item(client, baseline_id)["review_state"] == "pending"
     with app.state.session_factory() as session:
         queue = session.get(ReviewQueue, baseline_id)

@@ -190,8 +190,7 @@ class ReviewQueueService:
                 # biological project. Check before writing any queue artifacts.
                 if (
                     issue.project_id != project.id
-                    or issue.dataset_version_id
-                    != (dataset_version.id if dataset_version else None)
+                    or issue.dataset_version_id != (dataset_version.id if dataset_version else None)
                     or issue.image_id not in scoped_image_ids
                     or issue.severity not in SEVERITY_SCORES
                 ):
