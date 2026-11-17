@@ -75,7 +75,7 @@ describe("ImageViewport", () => {
     expect(transform.style.transform).not.toContain("scale(1)");
   });
 
-  it("blocks viewport scrolling without treating horizontal or zero-delta wheel input as zoom", () => {
+  it("blocks scrolling without zooming for horizontal-dominant, Shift, or zero-delta wheels", () => {
     render(
       <ImageViewport width={1600} height={1200} label="Trackpad viewport">
         <div />
@@ -101,6 +101,14 @@ describe("ImageViewport", () => {
 
     expect(wheel({ deltaX: 120, deltaY: 0 })).toBe(true);
     expect(transform.style.transform).toBe(initial);
+    // Precision trackpads report slight vertical jitter during a horizontal
+    // scroll. Those gestures must not accidentally move annotated pixels.
+    expect(wheel({ deltaX: 120, deltaY: -5 })).toBe(true);
+    expect(transform.style.transform).toBe(initial);
+    expect(wheel({ deltaX: 100, deltaY: 100 })).toBe(true);
+    expect(transform.style.transform).toBe(initial);
+    expect(wheel({ deltaY: -120, shiftKey: true })).toBe(true);
+    expect(transform.style.transform).toBe(initial);
     expect(wheel({ deltaX: 0, deltaY: 0 })).toBe(false);
     expect(transform.style.transform).toBe(initial);
     expect(wheel({ deltaY: -100, ctrlKey: true })).toBe(false);
@@ -109,6 +117,10 @@ describe("ImageViewport", () => {
 
     expect(wheel({ deltaY: -100 })).toBe(true);
     expect(transform.style.transform).not.toBe(initial);
+    const afterVerticalWheel = transform.style.transform;
+    // Ordinary vertical-dominant diagonal gestures still zoom normally.
+    expect(wheel({ deltaX: 5, deltaY: -100 })).toBe(true);
+    expect(transform.style.transform).not.toBe(afterVerticalWheel);
   });
 
   it("prevents document scrolling when the wheel targets an annotation overlay", () => {
