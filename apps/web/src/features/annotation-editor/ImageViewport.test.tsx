@@ -240,6 +240,52 @@ describe("ImageViewport", () => {
     expect(transform.style.transform).not.toBe(afterVerticalWheel);
   });
 
+  it("contains malformed wheel pointer positions without changing scientific geometry", () => {
+    render(
+      <ImageViewport width={1600} height={1200} label="Invalid pointer viewport">
+        <svg data-testid="pointer-overlay" viewBox="0 0 1600 1200">
+          <polygon points="10,10 40,10 40,40" />
+        </svg>
+      </ImageViewport>,
+    );
+    const frame = screen.getByRole("region", {
+      name: "Invalid pointer viewport",
+    });
+    const transform = screen.getByTestId("image-viewport-transform");
+    const polygon = screen
+      .getByTestId("pointer-overlay")
+      .querySelector("polygon");
+    const originalPoints = polygon?.getAttribute("points");
+    const initial = transform.style.transform;
+
+    const malformedWheel = (clientX: number, clientY: number) => {
+      const event = new WheelEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        deltaY: -120,
+        clientX: 200,
+        clientY: 180,
+      });
+      // The native WebView2 event properties are read-only. Override them
+      // to reproduce malformed input without depending on DOM coercion.
+      Object.defineProperty(event, "clientX", { value: clientX });
+      Object.defineProperty(event, "clientY", { value: clientY });
+      fireEvent(frame, event);
+      expect(event.defaultPrevented).toBe(true);
+    };
+
+    malformedWheel(Number.NaN, 180);
+    malformedWheel(200, Number.POSITIVE_INFINITY);
+    malformedWheel(Number.NEGATIVE_INFINITY, Number.NaN);
+    expect(transform.style.transform).toBe(initial);
+    expect(polygon).toHaveAttribute("points", originalPoints);
+
+    // The first valid wheel event must still zoom the image and overlay.
+    fireEvent.wheel(frame, { deltaY: -120, clientX: 200, clientY: 180 });
+    expect(transform.style.transform).not.toBe(initial);
+    expect(polygon).toHaveAttribute("points", originalPoints);
+  });
+
   it("contains malformed one-axis wheel values", () => {
     render(
       <ImageViewport
