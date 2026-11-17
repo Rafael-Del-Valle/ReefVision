@@ -1688,7 +1688,7 @@ def test_pose_workflow_pins_offline_amp_from_verified_truth(
     for invalid_amp in (True, 1, "false", None, [], {}):
         with (
             app.state.session_factory() as session,
-            pytest.raises(ValidationError, match=r"training_config\\.amp must be false"),
+            pytest.raises(ValidationError, match=r"training_config\.amp must be false"),
         ):
             create_pose_workflow_training_result(
                 session,
