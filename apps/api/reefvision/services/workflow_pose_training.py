@@ -1323,11 +1323,12 @@ def create_pose_workflow_training_result(
         else None
     )
 
-    # Saved graph settings are reproducibility assertions. Do not stringify
-    # booleans/arrays or trim whitespace into an apparently valid precision.
+    # The offline pose worker always forces AMP off. Reject an explicitly
+    # requested AMP precision instead of recording a mode the worker never used.
+    # This restriction applies only to saved pose-workflow training.
     precision = parameters.get("precision", "fp32")
-    if not isinstance(precision, str) or precision not in {"fp32", "amp"}:
-        raise ValidationError("Pose training precision must be fp32 or amp")
+    if not isinstance(precision, str) or precision != "fp32":
+        raise ValidationError("Pose workflow training precision must be fp32 (offline AMP disabled)")
 
     supplied_config = parameters.get(
         "training_config",
