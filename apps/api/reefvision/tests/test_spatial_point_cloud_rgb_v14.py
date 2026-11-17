@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from typing import cast
 
 import pytest
@@ -510,7 +511,8 @@ def test_resampled_loci_stay_distinct_from_biological_change_in_saved_workflows(
             assert detail.status_code == 200, detail.text
             assert detail.json()["run"]["status"] == "succeeded"
             artifact = next(
-                item for item in detail.json()["artifacts"]
+                item
+                for item in detail.json()["artifacts"]
                 if item["data_type"] == "point_cloud_measurement_preview"
             )
             for key in (
@@ -552,3 +554,101 @@ def test_resampled_loci_stay_distinct_from_biological_change_in_saved_workflows(
     warning = "nonuniform_duplicate_coordinates_can_bias_row_centroid"
     assert warning in repeated["qc_warnings"]
     assert warning not in first["qc_warnings"]
+
+
+@pytest.mark.parametrize("source_format", ["xyz", "ply"])
+def test_preview_digest_changes_with_sampling_not_source(
+    client: TestClient, source_format: str
+) -> None:
+    """A bounded scan display must be tied to its exact sampled source rows."""
+    project_id = str(create_project(client, "Preview sample source binding")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    points = [[float(i), 1.0 if i == 511 else 0.0, 0.0] for i in range(513)]
+    params = {
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unverified field reference",
+        "relative_scale_uncertainty": 0.1,
+    }
+    if source_format == "xyz":
+        params["points"] = points
+    else:
+        rows = "".join(f"{x} {y} {z}\n" for x, y, z in points)
+        params["ply_text"] = (
+            "ply\nformat ascii 1.0\nelement vertex 513\n"
+            "property float x\nproperty float y\nproperty float z\n"
+            "end_header\n" + rows
+        )
+
+    normal = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    protected_params = {**params, "preserve_axis_extrema_in_preview": True}
+    protected = client.post(f"{base}/spatial/point-cloud-preview", json=protected_params)
+    assert normal.status_code == 200, normal.text
+    assert protected.status_code == 200, protected.text
+    unpinned, pinned = normal.json(), protected.json()
+    assert 511 not in unpinned["preview_point_indices"]
+    assert 511 in pinned["preview_point_indices"]
+    assert unpinned["preview_omitted_axis_extrema"] == ["y_max"]
+    assert pinned["preview_omitted_axis_extrema"] == []
+    assert unpinned["provenance"] == pinned["provenance"]
+    assert unpinned["axis_aligned_dimensions_m"] == pinned["axis_aligned_dimensions_m"]
+    assert unpinned["preview_sample_geometry_sha256"] != pinned["preview_sample_geometry_sha256"]
+    digest_input = [[index, *points[index]] for index in pinned["preview_point_indices"]]
+    expected_digest = hashlib.sha256(
+        json.dumps(digest_input, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    assert pinned["preview_sample_geometry_sha256"] == expected_digest
+    assert pinned["provenance"]["calibration_verified"] is False
+    assert pinned["provenance"]["specimen_identity_verified"] is False
+    assert pinned["surface_area_m2"] is None
+    assert pinned["branch_length_m"] is None
+
+    graph = {
+        "graph_id": f"preview-sample-binding-{source_format}",
+        "name": "Reproducible spatial preview source binding",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {
+                "node_id": "c",
+                "node_type": "point_cloud_preview",
+                "parameters": protected_params,
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "c",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    digests = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "point_cloud_measurement_preview"
+        )
+        assert artifact["payload_json"]["preview_sample_geometry_sha256"] == expected_digest
+        assert artifact["payload_json"]["preview_point_indices"] == pinned["preview_point_indices"]
+        assert artifact["payload_json"]["provenance"] == pinned["provenance"]
+        assert artifact["payload_json"]["qc_warnings"] == pinned["qc_warnings"]
+        digests.append(artifact["payload_sha256"])
+    assert len(set(digests)) == 1
+    assert len(digests[0]) == 64
