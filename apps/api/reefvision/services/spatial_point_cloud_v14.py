@@ -547,6 +547,11 @@ def measure_point_cloud_preview(
         else:
             selected = []
         preview_indices = sorted(protected | set(selected))
+    # Display decimation can hide distinct imported XYZ loci even when it
+    # preserves the bounding extrema. This is visualization completeness,
+    # not a biological sampling or tissue-coverage estimate.
+    preview_unique_coordinate_count = len({vertices[index] for index in preview_indices})
+    preview_unique_coordinate_coverage_fraction = preview_unique_coordinate_count / unique_count
     omitted_chord_endpoints = sorted(selected_endpoint_indices - set(preview_indices))
     # A uniform index sample may hide the actual extent of a coral scan.
     # Compare raw source-axis extrema before scaling to avoid float rounding.
@@ -572,6 +577,10 @@ def measure_point_cloud_preview(
         "maximum_coordinate_multiplicity": maximum_coordinate_multiplicity,
         "source_affine_dimension": source_affine_dimension,
         "preview_point_indices": preview_indices,
+        "preview_unique_coordinate_count": preview_unique_coordinate_count,
+        "preview_unique_coordinate_coverage_fraction": (
+            preview_unique_coordinate_coverage_fraction
+        ),
         "preview_extrema_source_indices": extrema_indices,
         "preview_sampling_strategy": (
             "uniform_index_extrema_and_chord_endpoints_preserving"
@@ -670,6 +679,11 @@ def measure_point_cloud_preview(
             + (
                 ["envelope_uncertainty_interval_below_numeric_resolution"]
                 if envelope_scale_interval_underflow
+                else []
+            )
+            + (
+                ["preview_omits_unique_coordinate_loci"]
+                if preview_unique_coordinate_count < unique_count
                 else []
             )
             + (["preview_omits_axis_extrema"] if preview_omitted_axis_extrema else [])
