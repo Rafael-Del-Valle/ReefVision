@@ -26,6 +26,9 @@ from reefvision.storage.projects import resolve_managed_project_path
 # Bound each decoded vendor EXIF container before JSON conversion. Camera files
 # remain immutable; oversized advisory fields are unknown, not partial metadata.
 MAX_CAMERA_METADATA_CONTAINER_ITEMS = 4_096
+# Cap the aggregate decoded nodes in a single EXIF value. Per-container limits
+# alone cannot constrain a broad tree of individually legal nested lists.
+MAX_CAMERA_METADATA_TOTAL_NODES = 16_384
 
 # File extensions are only a preflight filter; Pillow verifies the actual decoded format.
 SUPPORTED_EXTENSIONS = {
@@ -130,12 +133,31 @@ def _safe_metadata_key(value: object) -> str | None:
     return name if len(name) <= 65_536 else None
 
 
-def _json_safe(value: object, *, _active: set[int] | None = None, _depth: int = 0) -> object | None:
+def _json_safe(
+    value: object,
+    *,
+    _active: set[int] | None = None,
+    _depth: int = 0,
+    _budget: list[int] | None = None,
+) -> object | None:
     """Convert untrusted camera metadata into bounded, strictly JSON-safe values.
 
     Recursive or extremely deep metadata is represented as unknown rather than
-    causing an import-time RecursionError. The source image bytes are unchanged.
+    causing an import-time RecursionError. An exhausted aggregate node budget
+    rejects the entire vendor value, never an indistinguishable partial tree.
+    The source image bytes are unchanged.
     """
+    if _budget is None:
+        # Use one shared budget throughout this value's recursive conversion.
+        # The second slot records exhaustion so that no partial data escapes.
+        _budget = [MAX_CAMERA_METADATA_TOTAL_NODES, 0]
+        converted = _json_safe(value, _active=_active, _depth=_depth, _budget=_budget)
+        return None if _budget[1] else converted
+    if _budget[0] <= 0:
+        _budget[1] = 1
+        return None
+    _budget[0] -= 1
+
     if isinstance(value, float):
         return value if math.isfinite(value) else None
     if isinstance(value, str):
@@ -180,9 +202,22 @@ def _json_safe(value: object, *, _active: set[int] | None = None, _depth: int = 
                     # the first recorded provenance value with a later alias.
                     if name in sanitized:
                         continue
-                    sanitized[name] = _json_safe(item, _active=_active, _depth=_depth + 1)
+                    converted = _json_safe(
+                        item, _active=_active, _depth=_depth + 1, _budget=_budget
+                    )
+                    if _budget[1]:
+                        return None
+                    sanitized[name] = converted
                 return sanitized
-            return [_json_safe(item, _active=_active, _depth=_depth + 1) for item in value]
+            sanitized_items: list[object | None] = []
+            for item in value:
+                converted = _json_safe(
+                    item, _active=_active, _depth=_depth + 1, _budget=_budget
+                )
+                if _budget[1]:
+                    return None
+                sanitized_items.append(converted)
+            return sanitized_items
         finally:
             _active.remove(identity)
     if isinstance(value, bytes):
