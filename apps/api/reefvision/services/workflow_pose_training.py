@@ -1400,9 +1400,13 @@ def create_pose_workflow_training_result(
     # Device selection is persisted as experimental configuration. Reject
     # lossy string coercion before queuing a GPU job or recording its lineage.
     requested_device = parameters.get("device", "auto")
-    if not isinstance(requested_device, str) or not requested_device.strip():
-        raise ValidationError("Pose training device must be a non-blank string")
-    device = requested_device.strip()
+    if (
+        not isinstance(requested_device, str)
+        or not requested_device.strip()
+        or requested_device != requested_device.strip()
+    ):
+        raise ValidationError("Pose training device must be a non-blank canonical string")
+    device = requested_device
 
     # Ultralytics also accepts a seed in training_config. When no top-level
     # seed is supplied, persist that effective seed in the training run rather
