@@ -277,10 +277,7 @@ def test_full_mesh_preview_covers_all_patches_and_zero_area_is_undefined() -> No
         **base,
     )
     assert two_patches["preview_edge_connected_patch_face_counts"] == [1, 1]
-    assert two_patches["preview_edge_connected_patch_surface_area_coverage_fractions"] == [
-        1.0,
-        1.0,
-    ]
+    assert two_patches["preview_edge_connected_patch_surface_area_coverage_fractions"] == [1.0, 1.0]
     assert two_patches["preview_omitted_edge_connected_patch_indices"] == []
     assert "preview_omits_edge_connected_mesh_patches" not in two_patches["qc_warnings"]
     degenerate = measure_mesh_preview(
