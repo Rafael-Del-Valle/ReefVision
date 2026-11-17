@@ -553,6 +553,7 @@ def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
         relative_scale_uncertainty=0.1,
     )
     assert direct["duplicate_point_row_count"] == 1
+    assert direct["duplicate_point_row_fraction"] == pytest.approx(0.25)
     assert direct["unique_point_count"] == 3
     assert direct["maximum_coordinate_multiplicity"] == 2
     assert direct["arithmetic_centroid_in_source_frame_m"] == pytest.approx([-0.025, 0.05, 0.0])
@@ -589,6 +590,8 @@ def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
     assert repeated_rows["provenance"]["unique_coordinate_geometry_sha256"] == unique_sha
     assert reordered_rows["provenance"]["unique_coordinate_geometry_sha256"] == unique_sha
     assert repeated_rows["provenance"]["geometry_sha256"] != direct["provenance"]["geometry_sha256"]
+    assert repeated_rows["duplicate_point_row_fraction"] == pytest.approx(0.4)
+    assert reordered_rows["duplicate_point_row_fraction"] == pytest.approx(0.25)
     assert (
         reordered_rows["provenance"]["geometry_sha256"] == direct["provenance"]["geometry_sha256"]
     )
@@ -614,6 +617,7 @@ def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
         relative_scale_uncertainty=0.1,
     )
     assert balanced["row_vs_unique_coordinate_centroid_separation_m"] == 0.0
+    assert balanced["duplicate_point_row_fraction"] == pytest.approx(0.5)
     nonuniform_warning = "nonuniform_duplicate_coordinates_can_bias_row_centroid"
     assert nonuniform_warning not in balanced["qc_warnings"]
 
@@ -638,6 +642,7 @@ def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
     expected = standalone.json()
     fields = (
         "duplicate_point_row_count",
+        "duplicate_point_row_fraction",
         "unique_point_count",
         "maximum_coordinate_multiplicity",
         "arithmetic_centroid_in_source_frame_m",

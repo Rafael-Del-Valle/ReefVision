@@ -554,3 +554,20 @@ can affect it. Synthetic XYZ and ASCII PLY regressions cover changing multiplici
 row permutation and exact standalone/API/persisted Workflow Builder artifact parity.
 Physical coral/photogrammetry reference validation and independent reviewer sign-off
 remain outstanding.
+
+## Duplicate scan-row fraction (November 17, 2026)
+
+The unverified XYZ/ASCII PLY preview reports `duplicate_point_row_fraction` as
+`duplicate_point_row_count / point_count`, alongside the existing raw and unique
+coordinate counts. This ratio is zero for entirely distinct coordinate rows and
+increases when the source contains identical XYZ rows. It supports comparing
+within-scan coordinate redundancy; a repeated row is **not** a separate coral
+observation or an independent biological replicate.
+
+Changing duplicate multiplicities changes this acquisition-QC ratio and the
+full geometry fingerprint while leaving the distinct-locus fingerprint
+unchanged. The measurement retains its provisional calibration and specimen
+identity, and the ratio **does not estimate** true reconstruction completeness,
+tissue coverage, accuracy, surface area or biological health. Synthetic XYZ
+and ASCII PLY regressions cover direct service, standalone API, typed persisted
+Workflow Builder execution and repeat saved-artifact parity.

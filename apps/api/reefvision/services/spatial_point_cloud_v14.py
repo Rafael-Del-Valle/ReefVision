@@ -567,6 +567,8 @@ def measure_point_cloud_preview(
         "point_count": len(vertices),
         "unique_point_count": unique_count,
         "duplicate_point_row_count": duplicate_row_count,
+        # Sampling redundancy is acquisition QC, not tissue coverage or identity.
+        "duplicate_point_row_fraction": duplicate_row_count / len(vertices),
         "maximum_coordinate_multiplicity": maximum_coordinate_multiplicity,
         "source_affine_dimension": source_affine_dimension,
         "preview_point_indices": preview_indices,
