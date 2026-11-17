@@ -138,3 +138,21 @@ checksum. Saved-node retries cannot substitute a different weight vector.
 Historical default-weight nodes without this optional parameter remain
 replayable. Scores are review-priority heuristics, not calibrated probabilities
 or verified biological observations.
+
+## Invalid imported model confidences and saved workflow recovery (1.6)
+
+Local model registration does not imply that predictions are scientific truth.
+A live QC queue rejects a non-finite or out-of-range confidence probability
+(outside `[0, 1]`) before writing any new queue. The same check applies to the
+executable saved `project_source → qc_review_queue` graph. The failed run
+records an error; it must not produce a `review_queue_reference` artifact or
+mark any prediction researcher-approved. Existing historical queues and their
+pending reviewer decisions are retained unchanged.
+
+After correcting the imported prediction evidence, start a **new** saved
+workflow run rather than interpreting the failed run as a successful review.
+The successful output retains a dimensionless priority score and explicitly
+requires researcher review. CI regressions exercise negative probabilities,
+values above one and both positive and negative infinity through standalone
+API queue creation and persisted saved-graph failure/recovery; these are
+software integrity checks, not validation of model confidence calibration.
