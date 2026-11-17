@@ -3,7 +3,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$CandidateSha,
     [string]$MsiPath,
-    [string]$CabPath,
+    [string[]]$CabPath,
     [string]$ProvenancePath
 )
 Set-StrictMode -Version Latest
@@ -116,10 +116,28 @@ $webview = @($runtimeInfo.registrations | ForEach-Object {
 # Caller-supplied SHA and an MSI hash are not evidence of common build origin.
 # The optional manifest check ties supplied bytes to the claimed candidate,
 # while explicitly disclosing CABs not supplied to this read-only collector.
-$artifactRecords = @(
-    (Get-ArtifactEvidence -Path $MsiPath -Kind 'msi')
-    (Get-ArtifactEvidence -Path $CabPath -Kind 'cab')
-)
+# The split-cabinet Windows build produces five or six external CABs.
+# Inventory each supplied CAB independently; a single -CabPath was previously
+# unable to produce complete same-build evidence for the actual installer.
+# Retain a not_provided CAB record for legacy MSI-only invocations.
+$cabCandidates = @($CabPath | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+if ($cabCandidates.Count -gt 6) {
+    throw 'ReefVision 1.0.3 acceptance supports at most six external CAB paths.'
+}
+$artifactRecords = @((Get-ArtifactEvidence -Path $MsiPath -Kind 'msi'))
+if ($cabCandidates.Count -eq 0) {
+    $artifactRecords += Get-ArtifactEvidence -Path $null -Kind 'cab'
+} else {
+    $seenCabPaths = @{}
+    foreach ($cabCandidate in $cabCandidates) {
+        $cabEvidence = Get-ArtifactEvidence -Path $cabCandidate -Kind 'cab'
+        if ($seenCabPaths.ContainsKey([string]$cabEvidence.path)) {
+            throw 'Duplicate external CAB path in acceptance evidence.'
+        }
+        $seenCabPaths[[string]$cabEvidence.path] = $true
+        $artifactRecords += $cabEvidence
+    }
+}
 $provenanceEvidence = [pscustomobject]@{
     status = 'not_provided'
     declaredArtifacts = 0
@@ -231,6 +249,7 @@ $os = Get-CimInstance Win32_OperatingSystem
         'GPU inventory uses trusted Windows driver paths only; missing or failed nvidia-smi is not GPU acceptance.',
         'A matching unsigned provenance manifest does not attest the build or prove installation.',
         'Missing CAB artifacts remain unverified even when the supplied MSI hash matches.',
+        'The MSI Media table must be checked separately to establish the complete required external CAB set.',
         'No file contents or scientific datasets are uploaded.'
     )
 } | ConvertTo-Json -Depth 7

@@ -100,25 +100,66 @@ try {
             [ordered]@{ name = 'rv1.cab'; sha256 = $expectedCabHash }
         )
     }
+    # A real 1.0.3 split-cabinet MSI has five or six CABs. A single-CAB
+    # argument could never produce matched_complete on the actual payload.
+    $candidateCabPaths = @($candidateCab)
+    foreach ($cabNumber in 2..5) {
+        $extraCabPath = Join-Path $fixture "rv$cabNumber.cab"
+        $extraBytes = [byte[]](77, 83, 67, 70, 255, 0, 17, [byte]$cabNumber, 51)
+        [System.IO.File]::WriteAllBytes($extraCabPath, $extraBytes)
+        $candidateCabPaths += $extraCabPath
+        $candidateManifest.files += [ordered]@{
+            name = "rv$cabNumber.cab"
+            sha256 = (Get-FileHash -LiteralPath $extraCabPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        }
+    }
     $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
-    $matched = (& $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $candidateCab -ProvenancePath $manifestPath |
+    $matched = (& $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $candidateCabPaths -ProvenancePath $manifestPath |
         Out-String | ConvertFrom-Json)
     if ($matched.provenance.status -cne 'matched_complete' -or
-        $matched.provenance.verifiedArtifacts -ne 2 -or
-        $matched.provenance.declaredArtifacts -ne 2 -or
+        $matched.provenance.verifiedArtifacts -ne 6 -or
+        $matched.provenance.declaredArtifacts -ne 6 -or
+        @($matched.artifacts | Where-Object { $_.kind -eq 'cab' -and $_.status -eq 'hashed' }).Count -ne 5 -or
         @($matched.provenance.unverifiedArtifactNames | Where-Object { $null -ne $_ }).Count -ne 0) {
-        throw 'Complete matching manifest did not produce bounded, exact-source artifact evidence.'
+        throw 'Five-CAB manifest did not produce complete, separately hashed installer evidence.'
     }
-    $candidateManifest.files += [ordered]@{ name = 'rv2.cab'; sha256 = ('a' * 64) }
+    $candidateManifest.files += [ordered]@{ name = 'rv6.cab'; sha256 = ('a' * 64) }
     $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
-    $partial = (& $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $candidateCab -ProvenancePath $manifestPath |
+    $partial = (& $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $candidateCabPaths -ProvenancePath $manifestPath |
         Out-String | ConvertFrom-Json)
     if ($partial.provenance.status -cne 'matched_subset' -or
-        $partial.provenance.verifiedArtifacts -ne 2 -or
+        $partial.provenance.verifiedArtifacts -ne 6 -or
+        $partial.provenance.declaredArtifacts -ne 7 -or
         @($partial.provenance.unverifiedArtifactNames).Count -ne 1 -or
-        $partial.provenance.unverifiedArtifactNames[0] -cne 'rv2.cab') {
-        throw 'An omitted CAB was incorrectly accepted as matching full installer provenance.'
+        $partial.provenance.unverifiedArtifactNames[0] -cne 'rv6.cab') {
+        throw 'A missing sixth CAB was incorrectly accepted as complete installer provenance.'
     }
+    # Both five- and six-CAB layouts must support complete validation.
+    $sixthCab = Join-Path $fixture 'rv6.cab'
+    [System.IO.File]::WriteAllBytes($sixthCab, [byte[]](77, 83, 67, 70, 255, 0, 17, 6, 51))
+    $candidateManifest.files[-1].sha256 = (Get-FileHash -LiteralPath $sixthCab -Algorithm SHA256).Hash.ToLowerInvariant()
+    $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    $sixCabPaths = @($candidateCabPaths) + @($sixthCab)
+    $completeSix = (& $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $sixCabPaths -ProvenancePath $manifestPath |
+        Out-String | ConvertFrom-Json)
+    if ($completeSix.provenance.status -cne 'matched_complete' -or
+        $completeSix.provenance.verifiedArtifacts -ne 7 -or
+        $completeSix.provenance.declaredArtifacts -ne 7 -or
+        @($completeSix.artifacts | Where-Object { $_.kind -eq 'cab' -and $_.status -eq 'hashed' }).Count -ne 6) {
+        throw 'Six-CAB manifest did not produce complete installer evidence.'
+    }
+    $duplicatePathRejected = $false
+    try { $null = & $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath @($candidateCab, $candidateCab) 2>&1 }
+    catch { $duplicatePathRejected = $true }
+    if (-not $duplicatePathRejected) { throw 'A repeated CAB source path was counted twice.' }
+    # A modified middle CAB must fail provenance validation even when every
+    # other CAB and the MSI still hash to their declared values.
+    [System.IO.File]::WriteAllBytes($candidateCabPaths[2], [byte[]](77, 83, 67, 70, 255, 0, 17, 99, 51))
+    $tamperedCabRejected = $false
+    try { $null = & $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $sixCabPaths -ProvenancePath $manifestPath 2>&1 }
+    catch { $tamperedCabRejected = $true }
+    if (-not $tamperedCabRejected) { throw 'A changed middle CAB incorrectly passed build provenance.' }
+    [System.IO.File]::WriteAllBytes($candidateCabPaths[2], [byte[]](77, 83, 67, 70, 255, 0, 17, 3, 51))
     $candidateManifest.source_commit = ('f' * 40)
     $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
     $wrongCommitRejected = $false
@@ -300,7 +341,7 @@ try {
         Remove-Item Function:\Get-Command -ErrorAction SilentlyContinue
         $env:PATH = $oldPath
     }
-    Write-Output 'PASS: SHA validation, MSI/CAB header checks, stable handle hashes, mutable-writer rejection, linked-path checks where supported, safe GPU discovery, and evidence limitations.'
+    Write-Output 'PASS: SHA validation, five/six-CAB manifest coverage, duplicate/tampered CAB rejection, MSI/CAB headers, stable handle hashes, mutable-writer rejection, linked paths where supported, safe GPU discovery, and evidence limitations.'
 } finally {
     Remove-Item -LiteralPath $fixture -Recurse -Force -ErrorAction SilentlyContinue
 }

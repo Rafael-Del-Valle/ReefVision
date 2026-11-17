@@ -159,6 +159,17 @@ $records | Export-Csv -LiteralPath (Join-Path $staging 'installer-artifact-manif
 $records | Format-Table -AutoSize
 ```
 
+For a split-cabinet ReefVision 1.0.3 build, the read-only collector can verify **all five or six CABs** against the same `build-provenance.json` alongside the MSI (not just one CAB):
+
+```powershell
+$msi = Join-Path $staging 'ReefVision_1.0.3_x64_en-US.msi'
+$cabs = @(Get-ChildItem -LiteralPath $staging -Filter 'rv*.cab' -File | Sort-Object Name | ForEach-Object FullName)
+& scripts/windows/collect-103-acceptance-evidence.ps1 -CandidateSha '<exact 40-character source commit>' `
+  -MsiPath $msi -CabPath $cabs -ProvenancePath (Join-Path $staging 'build-provenance.json')
+```
+
+Require `provenance.status = matched_complete` and the expected individual MSI/CAB hashes before progressing; `matched_subset` means at least one declared artifact was not supplied. Compare the MSI **Media** table with the complete CAB set separately, because an unsigned manifest cannot establish which CABs the installer actually needs. This procedure never launches `msiexec`.
+
 If the build embeds CAB data inside the MSI, a separate CAB may not exist; record that packaging fact instead of inventing a CAB artifact. An unsigned development MSI must be labeled **unsigned**; a signature status alone is not proof of a trusted publisher or successful installation. Preserve the manifest alongside the exact build logs and immutable artifact copies.
 
 On a clean Windows account or VM snapshot, record Windows build, architecture, WebView2 runtime, installation command and exit code, installer log, application startup, first image rendering, gallery scrolling, JPG/JPEG import, and read-only training monitor launch. For an interactive MSI install with verbose logging, an operator may use `msiexec.exe /i "<absolute MSI path>" /L*V "<absolute log path>"`; do **not** invoke this automatically from CI on a shared machine. Record installed product/version, WebView2 initialization errors, and any missing runtime dependencies. Reboot only if explicitly required and record it.
