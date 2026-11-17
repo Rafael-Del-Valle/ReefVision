@@ -2600,6 +2600,43 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
             processor=substituted_job_processor,
         )
 
+    # Newly queued saved-workflow jobs carry immutable source and split
+    # digests in their request. Detect a worker changing one while leaving
+    # dataset IDs and otherwise valid checkpoint bytes untouched.
+    def substituted_manifest_processor(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        assert _fake_pose_processor(settings, factory, job_id)
+        with factory() as child_session:
+            job = child_session.get(Job, job_id)
+            assert job is not None
+            request = dict(job.request_json)
+            assert request["pose_training_dataset_manifest_sha256"] == dataset["manifest_sha256"]
+            assert len(request["pose_split_manifest_sha256"]) == 64
+            job.request_json = {
+                **request,
+                "pose_training_dataset_manifest_sha256": "0" * 64,
+            }
+            child_session.commit()
+        return True
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="child job frozen manifest lineage changed"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={"training_config": {"epochs": 1}},
+            workflow_run_id="saved-pose-run",
+            workflow_node_run_id="tampered-frozen-manifest-node",
+            processor=substituted_manifest_processor,
+        )
+
     # A different successful job with copied request metadata must not
     # replace the exact child job queued by this saved workflow node.
     def substituted_job_identity_processor(
