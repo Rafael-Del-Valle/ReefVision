@@ -53,6 +53,12 @@ def assert_review_event_action_integrity(session: Session, item_ids: list[str]) 
                 # of the manual-review API. Imported or restored events must
                 # satisfy those same human-evidence limits before history
                 # reads, reviewer writes, or keyed bulk replays.
+                # SQLite LENGTH(text) stops at the first NUL byte. Reject
+                # restored NUL-containing evidence explicitly, so an
+                # overlong or hidden label cannot bypass the Unicode limits.
+                func.instr(ReviewQueueItemEvent.actor, "\x00") > 0,
+                func.instr(ReviewQueueItemEvent.comment, "\x00") > 0,
+                func.instr(ReviewQueueItemEvent.assignee, "\x00") > 0,
                 func.length(ReviewQueueItemEvent.actor) > 100,
                 func.length(ReviewQueueItemEvent.comment) > 2000,
                 func.length(ReviewQueueItemEvent.assignee) > 100,

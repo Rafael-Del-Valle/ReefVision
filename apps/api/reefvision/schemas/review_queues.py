@@ -135,6 +135,8 @@ class ReviewQueueItemActorRequest(BaseModel):
     @classmethod
     def normalize_actor(cls, value: str) -> str:
         actor = value.strip()
+        if "\x00" in actor:
+            raise ValueError("Reviewer label cannot contain NUL")
         if not actor:
             raise ValueError("Reviewer label cannot be blank")
         return actor
@@ -162,6 +164,8 @@ class ReviewQueueItemSkipRequest(ReviewQueueItemActorRequest):
     @classmethod
     def normalize_reason(cls, value: str) -> str:
         reason = value.strip()
+        if "\x00" in reason:
+            raise ValueError("Skip reason cannot contain NUL")
         if not reason:
             raise ValueError("A nonempty skip reason is required")
         return reason
@@ -184,9 +188,18 @@ class ReviewQueueBulkRequest(BaseModel):
     @classmethod
     def normalize_actor(cls, value: str) -> str:
         actor = value.strip()
+        if "\x00" in actor:
+            raise ValueError("Reviewer label cannot contain NUL")
         if not actor:
             raise ValueError("Bulk triage actor label cannot be blank")
         return actor
+
+    @field_validator("reason")
+    @classmethod
+    def reject_nul_reason(cls, value: str | None) -> str | None:
+        if value is not None and "\x00" in value:
+            raise ValueError("Skip reason cannot contain NUL")
+        return value
 
     @model_validator(mode="after")
     def require_manual_review_confirmation(self) -> Self:
