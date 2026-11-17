@@ -162,10 +162,20 @@ def test_saved_workflow_qc_rejects_corrupt_confidence_then_recovers_without_appr
     )
     failed = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
     assert failed.status_code == 200, failed.text
-    assert failed.json()["status"] == "failed"
+    # A run-detail response wraps status under "run"; a failed QC node must
+    # not produce a review-queue artifact or implicitly approve predictions.
+    failed_detail = failed.json()
+    assert failed_detail["run"]["status"] == "failed"
+    assert "confidence must be finite and within" in (
+        failed_detail["run"]["error_message"] or ""
+    )
+    assert any(
+        node["node_type"] == "qc_review_queue" and node["status"] == "failed"
+        for node in failed_detail["nodes"]
+    )
     assert not [
         artifact
-        for artifact in failed.json()["artifacts"]
+        for artifact in failed_detail["artifacts"]
         if artifact["data_type"] == "review_queue_reference"
     ]
     with app.state.session_factory() as session:
@@ -194,6 +204,7 @@ def test_saved_workflow_qc_rejects_corrupt_confidence_then_recovers_without_appr
     )
     detail = client.get(f"/api/v1/workflow-runs/{recovered.json()['id']}")
     assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
     artifacts = [
         artifact
         for artifact in detail.json()["artifacts"]
