@@ -113,9 +113,9 @@ $webview = @($runtimeInfo.registrations | ForEach-Object {
         scope = $scope
     }
 })
-# A caller-supplied CandidateSha and a file hash are not proof that an MSI
-# came from that commit. Optionally cross-check the actual build-desktop
-# provenance manifest, without treating an unsigned manifest as attestation.
+# Caller-supplied SHA and an MSI hash are not evidence of common build origin.
+# The optional manifest check ties supplied bytes to the claimed candidate,
+# while explicitly disclosing CABs not supplied to this read-only collector.
 $artifactRecords = @(
     (Get-ArtifactEvidence -Path $MsiPath -Kind 'msi')
     (Get-ArtifactEvidence -Path $CabPath -Kind 'cab')
@@ -128,31 +128,57 @@ $provenanceEvidence = [pscustomobject]@{
 }
 if (-not [string]::IsNullOrWhiteSpace($ProvenancePath)) {
     if ($artifactRecords[0].status -ne 'hashed') {
-        throw 'An MSI must be supplied before validating installer provenance.'
+        throw 'An MSI is required before validating build provenance.'
     }
     $manifestFile = Get-Item -LiteralPath $ProvenancePath -Force -ErrorAction Stop
     if ($manifestFile.PSIsContainer -or $manifestFile.Name -cne 'build-provenance.json') {
         throw 'Provenance must be a build-provenance.json regular file.'
     }
     Assert-ReefVisionNoReparseAncestors -Path $manifestFile.FullName
-    $msiDirectory = [System.IO.Path]::GetDirectoryName([string]$artifactRecords[0].path)
-    if (-not [string]::Equals($manifestFile.DirectoryName, $msiDirectory, [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw 'Installer and provenance manifest must share the same staging directory.'
+    $msiDirectory = [IO.Path]::GetDirectoryName([string]$artifactRecords[0].path)
+    if (-not [string]::Equals($manifestFile.DirectoryName, $msiDirectory, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Manifest and MSI must be in the same staging directory.'
     }
     $manifest = Get-Content -LiteralPath $manifestFile.FullName -Raw -ErrorAction Stop | ConvertFrom-Json
     if ($manifest.version -cne '1.0.3' -or
         $manifest.source_commit -cne $CandidateSha.ToLowerInvariant() -or
-        $manifest.source_tree_clean -ne $true -or
-        $manifest.msi_verified -ne $true) {
-        throw 'Manifest version, commit identity, source cleanliness, or MSI verification does not match this candidate.'
+        $manifest.source_tree_clean -ne $true -or $manifest.msi_verified -ne $true) {
+        throw 'Build provenance does not match the candidate version, SHA, or verification flags.'
     }
     $declared = @{}
     foreach ($entry in @($manifest.files)) {
         $name = [string]$entry.name
         $hash = [string]$entry.sha256
-        # Only basenames from the actual Windows MSI build are permitted. No
-        # directory traversal, drive prefixes, duplicates, or arbitrary files.
-        if ($name -cnotmatch '^(?:ReefVision_1\.0\.3_x64_en-US\.msi|rv[1-9][0-9]*\.cab)
+        if ($name -cnotmatch '^(?:ReefVision_1\.0\.3_x64_en-US\.msi|rv[1-9][0-9]*\.cab)$' -or
+            $hash -cnotmatch '^[0-9a-f]{64}$' -or $declared.ContainsKey($name)) {
+            throw 'Unsafe, duplicate, or malformed build-provenance artifact.'
+        }
+        $declared[$name] = $hash
+    }
+    if (-not $declared.ContainsKey('ReefVision_1.0.3_x64_en-US.msi')) {
+        throw 'Build manifest omits the expected MSI.'
+    }
+    $verified = @{}
+    foreach ($artifact in $artifactRecords) {
+        if ($artifact.status -ne 'hashed') { continue }
+        $name = [IO.Path]::GetFileName([string]$artifact.path)
+        $directory = [IO.Path]::GetDirectoryName([string]$artifact.path)
+        if (-not [string]::Equals($directory, $msiDirectory, [StringComparison]::OrdinalIgnoreCase) -or
+            -not $declared.ContainsKey($name) -or
+            $declared[$name] -cne $artifact.sha256 -or $verified.ContainsKey($name)) {
+            throw 'Artifact hash, name, or directory conflicts with build provenance.'
+        }
+        $verified[$name] = $true
+    }
+    $unverified = @($declared.Keys | Where-Object { -not $verified.ContainsKey($_) } | Sort-Object)
+    $provenanceEvidence = [pscustomobject]@{
+        status = if ($unverified.Count -eq 0) { 'matched_complete' } else { 'matched_subset' }
+        declaredArtifacts = $declared.Count
+        verifiedArtifacts = $verified.Count
+        unverifiedArtifactNames = $unverified
+    }
+}
+$gpu = $null
 # Never execute a PATH-resolved program while collecting supposedly read-only
 # evidence. A project-local nvidia-smi.exe could otherwise be launched merely
 # by running the acceptance inventory. Prefer known driver installation paths.
@@ -203,149 +229,8 @@ $os = Get-CimInstance Win32_OperatingSystem
         'An incomplete WebView2 registry inspection does not establish runtime absence or installed GUI acceptance.',
         'Malformed WebView2 registry versions are reported by scope, without exposing registry values.',
         'GPU inventory uses trusted Windows driver paths only; missing or failed nvidia-smi is not GPU acceptance.',
-        'A matching unsigned provenance manifest does not cryptographically attest the build or prove installation.',
-        'Missing CABs remain unverified even if the provided MSI hash matches its build manifest.',
-        'No file contents or scientific datasets are uploaded.'
-    )
-} | ConvertTo-Json -Depth 7
- -or
-            $hash -cnotmatch '^[0-9a-f]{64}
-# Never execute a PATH-resolved program while collecting supposedly read-only
-# evidence. A project-local nvidia-smi.exe could otherwise be launched merely
-# by running the acceptance inventory. Prefer known driver installation paths.
-$trustedNvidiaSmiPaths = @(
-    (Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::System)) 'nvidia-smi.exe')
-    (Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFiles)) 'NVIDIA Corporation\NVSMI\nvidia-smi.exe')
-)
-$nvidiaSmi = $trustedNvidiaSmiPaths |
-    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
-    Select-Object -First 1
-if ($null -ne $nvidiaSmi) {
-    try {
-        $output = @(& $nvidiaSmi --query-gpu=name,driver_version,memory.total --format=csv,noheader 2>&1 | ForEach-Object { [string]$_ })
-        if ($LASTEXITCODE -eq 0) {
-            $gpu = $output
-        } else {
-            $gpu = @("nvidia-smi exited with code $LASTEXITCODE; GPU inventory unverified")
-        }
-    } catch {
-        $gpu = @("nvidia-smi query failed: $($_.Exception.Message)")
-    }
-}
-$os = Get-CimInstance Win32_OperatingSystem
-[pscustomobject]@{
-    schema = 'reefvision.windows-acceptance-evidence.v1'
-    candidateSha = $CandidateSha.ToLowerInvariant()
-    collectedUtc = (Get-Date).ToUniversalTime().ToString('o')
-    computer = $env:COMPUTERNAME
-    osCaption = $os.Caption
-    osVersion = $os.Version
-    osBuild = $os.BuildNumber
-    powershellVersion = $PSVersionTable.PSVersion.ToString()
-    artifacts = @(
-        (Get-ArtifactEvidence -Path $MsiPath -Kind 'msi')
-        (Get-ArtifactEvidence -Path $CabPath -Kind 'cab')
-    )
-    webview2 = $webview
-    # A denied registry view is unknown, not proof that the runtime is absent.
-    # Preserve this machine-local diagnostic without making a GUI PASS claim.
-    webview2Inspection = [pscustomobject]@{
-        complete = [bool]$runtimeInfo.inspection_complete
-        unreadableScopes = @($runtimeInfo.unreadable_scopes)
-        invalidScopes = @($runtimeInfo.invalid_scopes)
-    }
-    nvidia = $gpu
-    limitations = @(
-        'Read-only inventory; does not prove installation, GUI, training, or scientific acceptance.',
-        'MSI/CAB magic-byte checks do not prove package structure, signature trust, or installer validity.',
-        'WebView2 registry detection is advisory; absence does not prove runtime is unavailable.',
-        'An incomplete WebView2 registry inspection does not establish runtime absence or installed GUI acceptance.',
-        'Malformed WebView2 registry versions are reported by scope, without exposing registry values.',
-        'GPU inventory uses trusted Windows driver paths only; missing or failed nvidia-smi is not GPU acceptance.',
-        'No file contents or scientific datasets are uploaded.'
-    )
-} | ConvertTo-Json -Depth 7
- -or $declared.ContainsKey($name)) {
-            throw 'Invalid, duplicate, or unsafe artifact entry in build provenance.'
-        }
-        $declared[$name] = $hash
-    }
-    if ($declared.Count -eq 0 -or -not $declared.ContainsKey('ReefVision_1.0.3_x64_en-US.msi')) {
-        throw 'Build provenance does not contain the expected MSI.'
-    }
-    $verified = @{}
-    foreach ($artifact in $artifactRecords) {
-        if ($artifact.status -ne 'hashed') { continue }
-        $name = [System.IO.Path]::GetFileName([string]$artifact.path)
-        $directory = [System.IO.Path]::GetDirectoryName([string]$artifact.path)
-        if (-not [string]::Equals($directory, $msiDirectory, [System.StringComparison]::OrdinalIgnoreCase) -or
-            -not $declared.ContainsKey($name) -or
-            $declared[$name] -cne $artifact.sha256 -or $verified.ContainsKey($name)) {
-            throw 'Supplied installer artifact does not match the candidate provenance manifest.'
-        }
-        $verified[$name] = $true
-    }
-    $unverified = @($declared.Keys | Where-Object { -not $verified.ContainsKey($_) } | Sort-Object)
-    $provenanceEvidence = [pscustomobject]@{
-        status = if ($unverified.Count -eq 0) { 'matched_complete' } else { 'matched_subset' }
-        declaredArtifacts = $declared.Count
-        verifiedArtifacts = $verified.Count
-        unverifiedArtifactNames = $unverified
-    }
-}
-$gpu = $null
-# Never execute a PATH-resolved program while collecting supposedly read-only
-# evidence. A project-local nvidia-smi.exe could otherwise be launched merely
-# by running the acceptance inventory. Prefer known driver installation paths.
-$trustedNvidiaSmiPaths = @(
-    (Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::System)) 'nvidia-smi.exe')
-    (Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFiles)) 'NVIDIA Corporation\NVSMI\nvidia-smi.exe')
-)
-$nvidiaSmi = $trustedNvidiaSmiPaths |
-    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
-    Select-Object -First 1
-if ($null -ne $nvidiaSmi) {
-    try {
-        $output = @(& $nvidiaSmi --query-gpu=name,driver_version,memory.total --format=csv,noheader 2>&1 | ForEach-Object { [string]$_ })
-        if ($LASTEXITCODE -eq 0) {
-            $gpu = $output
-        } else {
-            $gpu = @("nvidia-smi exited with code $LASTEXITCODE; GPU inventory unverified")
-        }
-    } catch {
-        $gpu = @("nvidia-smi query failed: $($_.Exception.Message)")
-    }
-}
-$os = Get-CimInstance Win32_OperatingSystem
-[pscustomobject]@{
-    schema = 'reefvision.windows-acceptance-evidence.v1'
-    candidateSha = $CandidateSha.ToLowerInvariant()
-    collectedUtc = (Get-Date).ToUniversalTime().ToString('o')
-    computer = $env:COMPUTERNAME
-    osCaption = $os.Caption
-    osVersion = $os.Version
-    osBuild = $os.BuildNumber
-    powershellVersion = $PSVersionTable.PSVersion.ToString()
-    artifacts = @(
-        (Get-ArtifactEvidence -Path $MsiPath -Kind 'msi')
-        (Get-ArtifactEvidence -Path $CabPath -Kind 'cab')
-    )
-    webview2 = $webview
-    # A denied registry view is unknown, not proof that the runtime is absent.
-    # Preserve this machine-local diagnostic without making a GUI PASS claim.
-    webview2Inspection = [pscustomobject]@{
-        complete = [bool]$runtimeInfo.inspection_complete
-        unreadableScopes = @($runtimeInfo.unreadable_scopes)
-        invalidScopes = @($runtimeInfo.invalid_scopes)
-    }
-    nvidia = $gpu
-    limitations = @(
-        'Read-only inventory; does not prove installation, GUI, training, or scientific acceptance.',
-        'MSI/CAB magic-byte checks do not prove package structure, signature trust, or installer validity.',
-        'WebView2 registry detection is advisory; absence does not prove runtime is unavailable.',
-        'An incomplete WebView2 registry inspection does not establish runtime absence or installed GUI acceptance.',
-        'Malformed WebView2 registry versions are reported by scope, without exposing registry values.',
-        'GPU inventory uses trusted Windows driver paths only; missing or failed nvidia-smi is not GPU acceptance.',
+        'A matching unsigned provenance manifest does not attest the build or prove installation.',
+        'Missing CAB artifacts remain unverified even when the supplied MSI hash matches.',
         'No file contents or scientific datasets are uploaded.'
     )
 } | ConvertTo-Json -Depth 7
