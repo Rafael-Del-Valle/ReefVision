@@ -57,6 +57,7 @@ def test_oversized_vendor_metadata_mapping_does_not_expand_into_project_json() -
     at_limit = list(range(MAX_CAMERA_METADATA_CONTAINER_ITEMS))
     assert _json_safe(at_limit) == at_limit
 
+
 def test_aggregate_vendor_tree_budget_drops_entire_untrusted_value() -> None:
     """Bound a broad but individually valid tree without partial scientific metadata."""
     dense = [[0, 1, 2, 3] for _ in range(MAX_CAMERA_METADATA_CONTAINER_ITEMS)]
