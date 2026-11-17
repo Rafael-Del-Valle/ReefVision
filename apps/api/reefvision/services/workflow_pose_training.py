@@ -352,6 +352,22 @@ def _pose_dataset(
     return dataset
 
 
+
+def _shared_pose_source_videos(
+    training_items: list[dict[str, Any]],
+    validation_items: list[dict[str, Any]],
+) -> bool:
+    """Reject overlapping video identities or content across frozen truth sets."""
+
+    # A single video can have different frozen digests after its contents
+    # change between reviewed rounds. Neither its database identity nor its
+    # content hash alone establishes independent validation provenance.
+    training_ids = {item["video_id"] for item in training_items}
+    validation_ids = {item["video_id"] for item in validation_items}
+    training_digests = {item["video_sha256"] for item in training_items}
+    validation_digests = {item["video_sha256"] for item in validation_items}
+    return bool(training_ids & validation_ids or training_digests & validation_digests)
+
 def _seed_pose_model(
     session: Session,
     settings: Settings,
@@ -1188,14 +1204,11 @@ def create_pose_workflow_training_result(
         raise ValidationError("Pose validation dataset must be distinct from the training dataset")
 
     # Distinct frozen records are not independent validation truth if they
-    # contain frames from the same source video (even different frames/tracks).
-    if validation_dataset is not None:
-        training_videos = {str(item["video_sha256"]) for item in dataset.manifest_json["items"]}
-        validation_videos = {
-            str(item["video_sha256"]) for item in validation_dataset.manifest_json["items"]
-        }
-        if training_videos & validation_videos:
-            raise ValidationError("Pose validation dataset must use independent source videos")
+    # share a source video's identity or content (even across track revisions).
+    if validation_dataset is not None and _shared_pose_source_videos(
+        dataset.manifest_json["items"], validation_dataset.manifest_json["items"]
+    ):
+        raise ValidationError("Pose validation dataset must use independent source videos")
 
     # Matching landmark definitions do not establish identical scientific
     # schema lineage: two reviewed schemas can share a content hash while
