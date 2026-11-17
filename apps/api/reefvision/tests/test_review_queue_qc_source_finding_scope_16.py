@@ -10,7 +10,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from reefvision.db.models import QualityControlIssue, ReviewQueue, ReviewQueueItem
+from reefvision.db.models import (
+    QualityControlIssue,
+    QualityControlRun,
+    ReviewQueue,
+    ReviewQueueItem,
+)
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.workflow_review_queue_integrity import validate_saved_queue_snapshot
 from reefvision.tests.test_annotations import create_project, import_one
@@ -79,6 +84,12 @@ def _set_corrupt_finding(
             issue.severity = "critical"
         elif field == "status":
             issue.status = "unknown-restored-state"
+        elif field == "unselected_rule":
+            issue.rule_id = "unselected_restored_qc_rule"
+        elif field == "count":
+            run = session.get(QualityControlRun, issue.quality_control_run_id)
+            assert run is not None
+            run.issue_count += 1
         elif field == "inactive_scope":
             issue.status = "dismissed"
             issue.project_id = foreign_project_id
@@ -87,7 +98,13 @@ def _set_corrupt_finding(
         session.commit()
 
 
-def _restore_finding(client: TestClient, issue_id: str, original_project_id: str) -> None:
+def _restore_finding(
+    client: TestClient,
+    issue_id: str,
+    original_project_id: str,
+    original_rule_id: str,
+    original_issue_count: int,
+) -> None:
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
         issue = session.get(QualityControlIssue, issue_id)
@@ -95,8 +112,11 @@ def _restore_finding(client: TestClient, issue_id: str, original_project_id: str
         issue.severity = "warning"
         issue.status = "open"
         issue.project_id = original_project_id
+        issue.rule_id = original_rule_id
+        run = session.get(QualityControlRun, issue.quality_control_run_id)
+        assert run is not None
+        run.issue_count = original_issue_count
         session.commit()
-
 
 
 @pytest.mark.parametrize(
@@ -124,7 +144,9 @@ def test_legitimate_inactive_finding_keeps_source_lineage_and_excludes_priority(
     assert item["review_state"] == "pending"
 
 
-@pytest.mark.parametrize("field", ["severity", "project", "status", "inactive_scope"])
+@pytest.mark.parametrize(
+    "field", ["severity", "project", "status", "inactive_scope", "unselected_rule", "count"]
+)
 def test_standalone_qc_rejects_corrupt_source_finding_atomically(
     client: TestClient, field: str
 ) -> None:
@@ -135,6 +157,10 @@ def test_standalone_qc_rejects_corrupt_source_finding_atomically(
         issue = session.get(QualityControlIssue, issue_id)
         assert issue is not None
         original_severity = issue.severity
+        original_rule_id = issue.rule_id
+        run = session.get(QualityControlRun, issue.quality_control_run_id)
+        assert run is not None
+        original_issue_count = run.issue_count
 
     endpoint = f"/api/v1/projects/{project_id}/review-queues"
     request = {"source_quality_control_run_id": qc_id}
@@ -145,13 +171,18 @@ def test_standalone_qc_rejects_corrupt_source_finding_atomically(
 
     rejected = client.post(endpoint, json=request)
     assert rejected.status_code == 400, rejected.text
-    assert "inconsistent scope or severity" in rejected.text
+    expected_error = (
+        "source run finding inventory" if field == "count" else "inconsistent scope or severity"
+    )
+    assert expected_error in rejected.text
     queues = client.get(endpoint)
     assert queues.status_code == 200, queues.text
     assert len(queues.json()) == 1
     assert _queue_item(client, before.json()["id"]) == baseline
 
-    _restore_finding(client, issue_id, project_id)
+    _restore_finding(
+        client, issue_id, project_id, original_rule_id, original_issue_count
+    )
     if original_severity != "warning":
         with app.state.session_factory() as session:
             issue = session.get(QualityControlIssue, issue_id)
@@ -165,7 +196,9 @@ def test_standalone_qc_rejects_corrupt_source_finding_atomically(
     assert after["review_state"] == "pending"
 
 
-@pytest.mark.parametrize("field", ["severity", "project", "status", "inactive_scope"])
+@pytest.mark.parametrize(
+    "field", ["severity", "project", "status", "inactive_scope", "unselected_rule", "count"]
+)
 def test_saved_qc_workflow_fails_closed_then_researcher_retries(
     client: TestClient, field: str
 ) -> None:
@@ -178,6 +211,10 @@ def test_saved_qc_workflow_fails_closed_then_researcher_retries(
         issue = session.get(QualityControlIssue, issue_id)
         assert issue is not None
         original_severity = issue.severity
+        original_rule_id = issue.rule_id
+        run = session.get(QualityControlRun, issue.quality_control_run_id)
+        assert run is not None
+        original_issue_count = run.issue_count
 
     graph = {
         "graph_id": f"qc-source-validation-{uuid4()}",
@@ -213,7 +250,10 @@ def test_saved_qc_workflow_fails_closed_then_researcher_retries(
     assert failed.status_code == 200, failed.text
     detail = failed.json()
     assert detail["run"]["status"] == "failed"
-    assert "inconsistent scope or severity" in (detail["run"]["error_message"] or "")
+    expected_error = (
+        "source run finding inventory" if field == "count" else "inconsistent scope or severity"
+    )
+    assert expected_error in (detail["run"]["error_message"] or "")
     assert any(
         node["node_type"] == "qc_review_queue" and node["status"] == "failed"
         for node in detail["nodes"]
@@ -233,7 +273,9 @@ def test_saved_qc_workflow_fails_closed_then_researcher_retries(
             == 1
         )
 
-    _restore_finding(client, issue_id, project_id)
+    _restore_finding(
+        client, issue_id, project_id, original_rule_id, original_issue_count
+    )
     if original_severity != "warning":
         with app.state.session_factory() as session:
             issue = session.get(QualityControlIssue, issue_id)

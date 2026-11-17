@@ -184,13 +184,30 @@ class ReviewQueueService:
         )
         issues_by_image: dict[str, list[Any]] = defaultdict(list)
         if source_run is not None:
-            for issue in self.quality_control.quality_control.issues_for_run(source_run.id):
+            source_issues = self.quality_control.quality_control.issues_for_run(source_run.id)
+            selected_rule_ids = source_run.selected_rule_ids_json
+            # Preserve original QC evidence: restored or externally changed
+            # finding counts and rule attribution must not silently influence
+            # a standalone or saved-workflow review queue.
+            if (
+                type(source_run.issue_count) is not int
+                or source_run.issue_count != len(source_issues)
+                or not isinstance(selected_rule_ids, list)
+                or any(type(rule_id) is not str or not rule_id for rule_id in selected_rule_ids)
+                or len(set(selected_rule_ids)) != len(selected_rule_ids)
+            ):
+                raise ValidationError(
+                    "QC source run finding inventory or selected rules are inconsistent; "
+                    "restore verified QC evidence before review queue creation"
+                )
+            for issue in source_issues:
                 # SQLite does not enforce QC lifecycle enum values. Validate
                 # all source findings before filtering dismissed/resolved rows:
                 # a corrupt status or foreign scientific scope must not make
                 # an audit diagnostic silently disappear from saved provenance.
                 if (
                     issue.status not in QUALITY_CONTROL_ISSUE_STATUSES
+                    or issue.rule_id not in selected_rule_ids
                     or issue.project_id != project.id
                     or issue.dataset_version_id != (dataset_version.id if dataset_version else None)
                     or (issue.image_id is not None and issue.image_id not in scoped_image_ids)

@@ -1,3 +1,10 @@
+## 2026-11-17 — Complete QC source inventory and rule attribution (Track D)
+
+- **Audit:** isolated draft PR #77, issue #76, 1.0–1.5 overlap, already executable saved Workflow Builder QC and [exact-head CI #44171880909](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44171880909). The previous head passed frontend and Windows preservation jobs but backend stopped before pytest on one extra blank line.
+- **Implementation:** fail closed if a QC run's stored issue count disagrees with its full finding inventory, selected rule IDs are malformed/duplicated, or a finding claims a rule not selected in that exact run. Includes dismissed/project-wide findings and does not mutate scientific data. Also applies the exact prior Ruff blank-line fix.
+- **Regressions:** extend biological-image standalone API and persisted executed `project_source -> qc_review_queue` workflow tests with missing/count-corrupt and reattributed-rule evidence, verified researcher-directed fixture restoration, no forged artifact on failure, typed dimensionless priority and pending approval. No duplicate workflow node, migration or pretrained weights.
+- **Release HOLD:** exact-head backend/frontend/E2E, independent Alembic 0038 reconciliation with 1.1, representative science/saved-graph acceptance, genuine Windows MSI/CAB install/upgrade/rollback and installed GUI, explicit researcher approval. No merge, release, deployment or asset deletion.
+
 ## 2026-11-17 — QC source lifecycle and inactive-scope evidence validation (Track D)
 
 - **Audit:** isolated 1.6 draft PR #77, master issue #76, prior 1.0–1.5 QC capabilities, existing standalone review queues and executable saved Workflow Builder graph. SQLite does not enforce QC issue lifecycle status. Existing priority generation discarded inactive/unknown statuses before validating issue project, dataset-version, image scope or severity. An imported invalid status or a dismissed finding pointing at another study could silently disappear from new queue provenance.

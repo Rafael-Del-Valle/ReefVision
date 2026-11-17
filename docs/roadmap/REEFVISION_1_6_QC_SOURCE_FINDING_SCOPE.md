@@ -16,9 +16,11 @@ attributed mismatched findings to the wrong biological study.
 
 ## Implementation and scientific semantics
 
-Before inserting **new** queue records, 1.6 validates the source run's
-active image-scoped findings against the selected project, dataset version,
-image inventory and defined severity scores (info, warning, error). A
+Before inserting **new** queue records, 1.6 compares **all** source findings
+against the QC run's persisted issue count and selected rule IDs. This
+detects removed or reattributed findings even if they were dismissed or
+project-wide. It then validates source findings against the selected project,
+dataset version, image inventory and severity scores (info, warning, error). A
 mismatch raises a user-visible, generic validation error without exposing
 confidential finding text. Dismissed or otherwise non-active findings and
 run-wide findings with no image ID are not ranked as image-specific evidence.
@@ -37,7 +39,8 @@ scientific **consistency check**, not automated biological verification.
 ## Regression and remaining acceptance
 
 `test_review_queue_qc_source_finding_scope_16.py` checks invalid
-severity and mismatched study identity against both the standalone API
+severity, mismatched study identity, unselected rule attribution and altered
+run-level issue counts against both the standalone API
 and persisted, executable saved graphs, ensures writes are atomic,
 and tests an explicit correction/recovery while historical review
 evidence remains intact.
