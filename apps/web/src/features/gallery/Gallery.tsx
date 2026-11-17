@@ -863,11 +863,13 @@ function GalleryContent({
     const handleWheel = (event: WheelEvent) => {
       // Preserve native browser zoom gestures on both Windows and macOS.
       if (event.ctrlKey || event.metaKey) return;
-      const delta =
-        Math.abs(event.deltaX) > Math.abs(event.deltaY)
-          ? event.deltaX
-          : event.deltaY;
-      if (!Number.isFinite(delta) || delta === 0) return;
+      // Some WebView2 precision-wheel events have one malformed axis while
+      // the other contains a valid scroll gesture. Ignore the bad axis rather
+      // than allowing the browser to scroll the document behind the preview.
+      const deltaX = Number.isFinite(event.deltaX) ? event.deltaX : 0;
+      const deltaY = Number.isFinite(event.deltaY) ? event.deltaY : 0;
+      const delta = Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY;
+      if (delta === 0) return;
       // Even when all thumbnails fit, wheel input must not scroll the
       // surrounding document and partially displace the focused image.
       event.preventDefault();

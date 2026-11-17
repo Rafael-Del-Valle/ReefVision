@@ -2278,6 +2278,79 @@ describe("Gallery", () => {
     expect(zoom.defaultPrevented).toBe(false);
   });
 
+  it("contains precision-trackpad wheel gestures with a malformed companion axis", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+    renderGallery();
+
+    const filmstrip = await screen.findByRole("list", {
+      name: "Nearby images",
+    });
+    Object.defineProperty(filmstrip, "scrollWidth", {
+      configurable: true,
+      value: 1000,
+    });
+    Object.defineProperty(filmstrip, "clientWidth", {
+      configurable: true,
+      value: 200,
+    });
+
+    // Horizontal precision motion is still usable if the vertical axis is
+    // non-finite. Previously the NaN comparison discarded the entire wheel
+    // event and let WebView2 scroll the page instead.
+    const horizontal = new WheelEvent("wheel", {
+      deltaX: 75,
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(horizontal, "deltaY", { value: Number.NaN });
+    fireEvent(filmstrip, horizontal);
+    expect(horizontal.defaultPrevented).toBe(true);
+    expect(filmstrip.scrollLeft).toBe(75);
+
+    const vertical = new WheelEvent("wheel", {
+      deltaY: -25,
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(vertical, "deltaX", {
+      value: Number.POSITIVE_INFINITY,
+    });
+    fireEvent(filmstrip, vertical);
+    expect(vertical.defaultPrevented).toBe(true);
+    expect(filmstrip.scrollLeft).toBe(50);
+
+    // Valid diagonal gestures still prefer their dominant axis.
+    const diagonal = new WheelEvent("wheel", {
+      deltaX: 30,
+      deltaY: 7,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(filmstrip, diagonal);
+    expect(diagonal.defaultPrevented).toBe(true);
+    expect(filmstrip.scrollLeft).toBe(80);
+
+    // Do not interfere with native Ctrl+wheel zoom, even with bad input.
+    const zoom = new WheelEvent("wheel", {
+      deltaX: 100,
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(zoom, "deltaY", { value: Number.NaN });
+    fireEvent(filmstrip, zoom);
+    expect(zoom.defaultPrevented).toBe(false);
+    expect(filmstrip.scrollLeft).toBe(80);
+  });
+
   it("bounds horizontal filmstrip wheel scrolling at both ends", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({
