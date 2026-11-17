@@ -1328,7 +1328,9 @@ def create_pose_workflow_training_result(
     # This restriction applies only to saved pose-workflow training.
     precision = parameters.get("precision", "fp32")
     if not isinstance(precision, str) or precision != "fp32":
-        raise ValidationError("Pose workflow training precision must be fp32 (offline AMP disabled)")
+        raise ValidationError(
+            "Pose workflow training precision must be fp32 (offline AMP disabled)"
+        )
 
     supplied_config = parameters.get(
         "training_config",
