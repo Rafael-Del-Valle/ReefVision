@@ -154,6 +154,15 @@ def materialize_pose_training_exports(
 ) -> dict[str, object]:
     """Materialize immutable pose exports without reusing train frames as validation."""
 
+    # The destination is deleted and rebuilt on each training run. A symlink
+    # here (or in an ancestor) could redirect exported scientific data outside
+    # the managed run; a pre-existing validation-stage symlink is just as unsafe.
+    if destination.is_symlink() or any(parent.is_symlink() for parent in destination.parents):
+        raise ValidationError("Pose training export destination contains a symbolic link")
+    validation_stage = destination.parent / f".{destination.name}-validation"
+    if validation_content is not None and validation_stage.is_symlink():
+        raise ValidationError("Pose training validation staging path is a symbolic link")
+
     shutil.rmtree(
         destination,
         ignore_errors=True,
