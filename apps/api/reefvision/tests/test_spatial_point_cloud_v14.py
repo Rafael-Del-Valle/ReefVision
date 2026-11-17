@@ -562,9 +562,8 @@ def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
     )
     separation = direct["row_vs_unique_coordinate_centroid_separation_m"]
     assert separation == pytest.approx((0.025**2 + (1 / 60) ** 2) ** 0.5)
-    assert direct["row_vs_unique_coordinate_centroid_separation_scale_interval_m"] == (
-        pytest.approx([0.9 * separation, 1.1 * separation])
-    )
+    separation_interval = direct["row_vs_unique_coordinate_centroid_separation_scale_interval_m"]
+    assert separation_interval == pytest.approx([0.9 * separation, 1.1 * separation])
     assert "duplicate_points_present" in direct["qc_warnings"]
     assert "nonuniform_duplicate_coordinates_can_bias_row_centroid" in direct["qc_warnings"]
     assert direct["branch_length_m"] is None
@@ -580,9 +579,8 @@ def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
         relative_scale_uncertainty=0.1,
     )
     assert balanced["row_vs_unique_coordinate_centroid_separation_m"] == 0.0
-    assert "nonuniform_duplicate_coordinates_can_bias_row_centroid" not in (
-        balanced["qc_warnings"]
-    )
+    nonuniform_warning = "nonuniform_duplicate_coordinates_can_bias_row_centroid"
+    assert nonuniform_warning not in balanced["qc_warnings"]
 
     project_id = str(create_project(client, "Repeated scan coordinates")["id"])
     base = f"/api/v1/projects/{project_id}"
