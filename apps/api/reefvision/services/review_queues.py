@@ -39,6 +39,7 @@ from reefvision.services.quality_control import (
     QualityControlService,
 )
 from reefvision.services.review_queue_events import validate_review_item_event_scope
+from reefvision.services.review_queue_transaction_16 import begin_serialized_review_triage
 from reefvision.services.workflow_review_queue_integrity import (
     V3_SIGNAL_LABELS,
     queue_item_evidence_sha256,
@@ -71,6 +72,8 @@ class ReviewQueueService:
         return queue
 
     def _item(self, item_id: str) -> ReviewQueueItem:
+        # Single and bulk reviewers must see the latest committed state.
+        begin_serialized_review_triage(self.session)
         item = self.queues.get_item(item_id)
         if item is None:
             raise NotFoundError("Review queue item not found")

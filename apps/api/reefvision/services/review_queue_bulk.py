@@ -24,6 +24,7 @@ from reefvision.schemas.review_queues import (
     ReviewQueueItemResponse,
 )
 from reefvision.services.review_queue_events import assert_review_event_action_integrity
+from reefvision.services.review_queue_transaction_16 import begin_serialized_review_triage
 
 
 def _is_sqlite_writer_contention(exc: OperationalError) -> bool:
@@ -70,6 +71,8 @@ def _is_sqlite_bulk_idempotency_collision(exc: IntegrityError) -> bool:
 def bulk_triage_review_queue(
     session: Session, queue_id: str, request: ReviewQueueBulkRequest
 ) -> ReviewQueueBulkResponse:
+    # Serialize with single-item triage before inspecting any queue or event state.
+    begin_serialized_review_triage(session)
     queue = session.get(ReviewQueue, queue_id)
     if queue is None:
         raise NotFoundError("Review queue not found")

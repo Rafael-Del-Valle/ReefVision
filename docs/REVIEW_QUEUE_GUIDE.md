@@ -156,3 +156,19 @@ requires researcher review. CI regressions exercise negative probabilities,
 values above one and both positive and negative infinity through standalone
 API queue creation and persisted saved-graph failure/recovery; these are
 software integrity checks, not validation of model confidence calibration.
+
+
+### Concurrent local reviewers and retry safety (1.6)
+
+Single-item and bulk QC review transitions now obtain a SQLite **immediate
+write transaction before reading queue state or append-only reviewer history**.
+This prevents separate local API sessions from independently deciding that
+the same stale item state permits conflicting review actions. Writer contention
+is a conflict, not a successful review or verified biological observation;
+retry after the competing transaction finishes. For keyed bulk actions, reuse
+the **same client request UUID** to preserve exactly-once audit semantics.
+No change is made to original images, predictions, immutable QC snapshots,
+saved typed Workflow Builder graphs, or researcher approval requirements.
+Tests cover blocked writer, explicit recovery and preservation of the single
+committed review event. This is local SQLite concurrency validation, **not**
+multi-user authentication or proof of installed Windows GUI behavior.
