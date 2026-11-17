@@ -754,9 +754,9 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
-    # A direct consumer recovery must reject a checksum-valid upstream
-    # artifact whose persisted type no longer matches the target input port.
-    # The consumer cannot rely on the producer's separate verification call.
+    # A direct consumer recovery must reject a checksum-valid upstream artifact
+    # when its persisted type disagrees with the producer's output registry.
+    # Recovery validates producer lineage before checking the consumer input.
     with app.state.session_factory() as session:
         consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
         producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
@@ -774,7 +774,7 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
             "outputs": [{**summary[0], "data_type": "image_collection"}],
         }
         session.flush()
-        with pytest.raises(ConflictError, match="input type does not match registry"):
+        with pytest.raises(ConflictError, match="producer output type does not match registry"):
             verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
