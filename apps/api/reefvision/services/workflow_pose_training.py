@@ -506,6 +506,23 @@ def _seed_pose_model(
     return model
 
 
+def _check_declared_pose_job_manifest_lineage(
+    request: dict[str, Any],
+    *,
+    training_manifest_sha256: str,
+    validation_manifest_sha256: str | None,
+    split_manifest_sha256: str,
+) -> None:
+    """Check frozen digests advertised by newer jobs without breaking legacy jobs."""
+    for field, expected in (
+        ("pose_training_dataset_manifest_sha256", training_manifest_sha256),
+        ("pose_validation_dataset_manifest_sha256", validation_manifest_sha256),
+        ("pose_split_manifest_sha256", split_manifest_sha256),
+    ):
+        if field in request and request[field] != expected:
+            raise ValidationError("Pose training child job frozen manifest lineage changed")
+
+
 def _completed_workflow_pose_training_run(
     session: Session,
     *,
@@ -801,6 +818,15 @@ def _reused_pose_training_result(
         or request.get("workflow_node_run_id") != workflow_node_run_id
     ):
         raise ValidationError("Recovered pose training child job lineage changed")
+
+    _check_declared_pose_job_manifest_lineage(
+        request,
+        training_manifest_sha256=dataset.manifest_sha256,
+        validation_manifest_sha256=(
+            validation_dataset.manifest_sha256 if validation_dataset is not None else None
+        ),
+        split_manifest_sha256=run.split_manifest_sha256,
+    )
 
     # Persisted result paths are untrusted on replay. Reject malformed values
     # before managed-path resolution so recovery fails with a domain error.
@@ -1590,9 +1616,14 @@ def create_pose_workflow_training_result(
         request_json={
             "training_run_id": run.id,
             "pose_training_dataset_id": (dataset.id),
+            "pose_training_dataset_manifest_sha256": dataset.manifest_sha256,
             "pose_validation_dataset_id": (
                 validation_dataset.id if validation_dataset is not None else None
             ),
+            "pose_validation_dataset_manifest_sha256": (
+                validation_dataset.manifest_sha256 if validation_dataset is not None else None
+            ),
+            "pose_split_manifest_sha256": split_manifest_sha256,
             "created_by_workflow": True,
             "workflow_run_id": (workflow_run_id),
             "workflow_node_run_id": (workflow_node_run_id),
@@ -1666,6 +1697,15 @@ def create_pose_workflow_training_result(
         or request.get("workflow_node_run_id") != workflow_node_run_id
     ):
         raise ValidationError("Completed pose training child job lineage changed")
+
+    _check_declared_pose_job_manifest_lineage(
+        request,
+        training_manifest_sha256=dataset.manifest_sha256,
+        validation_manifest_sha256=(
+            validation_dataset.manifest_sha256 if validation_dataset is not None else None
+        ),
+        split_manifest_sha256=split_manifest_sha256,
+    )
 
     # Validate the persisted run itself before first exposing its checkpoint.
     # A worker can change training configuration after the job was queued;
