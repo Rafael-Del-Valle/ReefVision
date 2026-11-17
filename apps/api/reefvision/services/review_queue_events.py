@@ -13,6 +13,7 @@ from reefvision.db.models import ReviewQueue, ReviewQueueItem
 from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
 from reefvision.domain.errors import ConflictError, NotFoundError
 from reefvision.schemas.review_queue_events import (
+    REVIEWER_LABEL_DIRECTION_CONTROLS,
     ReviewQueueEventCreate,
     ReviewQueueEventResponse,
     ReviewQueueEventsPage,
@@ -59,6 +60,14 @@ def assert_review_event_action_integrity(session: Session, item_ids: list[str]) 
                 func.instr(ReviewQueueItemEvent.actor, "\x00") > 0,
                 func.instr(ReviewQueueItemEvent.comment, "\x00") > 0,
                 func.instr(ReviewQueueItemEvent.assignee, "\x00") > 0,
+                # Invisible bidi embedding/override/isolate markers can make
+                # imported reviewer labels appear to identify someone else.
+                # Check full history, including events outside the current page.
+                *(
+                    func.instr(column, marker) > 0
+                    for column in (ReviewQueueItemEvent.actor, ReviewQueueItemEvent.assignee)
+                    for marker in REVIEWER_LABEL_DIRECTION_CONTROLS
+                ),
                 func.length(ReviewQueueItemEvent.actor) > 100,
                 func.length(ReviewQueueItemEvent.comment) > 2000,
                 func.length(ReviewQueueItemEvent.assignee) > 100,

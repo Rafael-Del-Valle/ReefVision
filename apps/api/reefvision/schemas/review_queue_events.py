@@ -18,6 +18,18 @@ ReviewEventType = Literal[
     "triage_complete",
 ]
 
+# These explicit bidi formatting controls can visually reverse or hide the
+# self-reported actor/assignee in a scientific review audit. Preserve natural
+# Arabic/Hebrew names and comments; refuse only the structural controls in
+# *reviewer labels*, without rewriting existing research notes.
+REVIEWER_LABEL_DIRECTION_CONTROLS = "\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069"
+
+
+def has_unsafe_reviewer_label_control(value: str | None) -> bool:
+    return value is not None and any(
+        character in REVIEWER_LABEL_DIRECTION_CONTROLS for character in value
+    )
+
 
 class ReviewQueueEventCreate(BaseModel):
     client_request_id: UUID
@@ -35,6 +47,10 @@ class ReviewQueueEventCreate(BaseModel):
         # Reject new ambiguous audit evidence before any database write.
         if any("\x00" in value for value in (self.actor, self.comment or "", self.assignee or "")):
             raise ValueError("Review event labels and comments cannot contain NUL")
+        if has_unsafe_reviewer_label_control(self.actor) or has_unsafe_reviewer_label_control(
+            self.assignee
+        ):
+            raise ValueError("Reviewer labels cannot contain Unicode direction controls")
         if not self.actor:
             raise ValueError("Actor label cannot be blank")
         if self.event_type == "comment":

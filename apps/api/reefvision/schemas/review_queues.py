@@ -10,6 +10,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 from reefvision.domain.enums import ReviewQueueItemState
+from reefvision.schemas.review_queue_events import has_unsafe_reviewer_label_control
 
 
 class ReviewScoreWeights(BaseModel):
@@ -137,6 +138,8 @@ class ReviewQueueItemActorRequest(BaseModel):
         actor = value.strip()
         if "\x00" in actor:
             raise ValueError("Reviewer label cannot contain NUL")
+        if has_unsafe_reviewer_label_control(actor):
+            raise ValueError("Reviewer label cannot contain Unicode direction controls")
         if not actor:
             raise ValueError("Reviewer label cannot be blank")
         return actor
@@ -190,6 +193,8 @@ class ReviewQueueBulkRequest(BaseModel):
         actor = value.strip()
         if "\x00" in actor:
             raise ValueError("Reviewer label cannot contain NUL")
+        if has_unsafe_reviewer_label_control(actor):
+            raise ValueError("Reviewer label cannot contain Unicode direction controls")
         if not actor:
             raise ValueError("Bulk triage actor label cannot be blank")
         return actor
