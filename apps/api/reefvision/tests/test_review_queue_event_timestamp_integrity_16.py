@@ -124,6 +124,7 @@ def test_imported_invalid_event_time_blocks_audit_and_recovers_only_after_fixtur
     assert replay.status_code == 201, replay.text
     assert replay.json()["id"] == event_id
 
+
 @pytest.mark.parametrize("saved_workflow", [False, True])
 def test_valid_review_timestamp_guard_has_no_sqlalchemy_deprecation(
     client: TestClient, saved_workflow: bool
