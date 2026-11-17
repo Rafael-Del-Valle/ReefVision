@@ -420,6 +420,7 @@ def test_partial_only_mesh_decimation_warns_in_saved_workflow(client: TestClient
         hashes.append(artifact["payload_sha256"])
     assert len(set(hashes)) == 1
 
+
 def test_unsampled_mesh_tip_extremum_is_explicit_in_saved_workflow(client: TestClient) -> None:
     """A decimated, connected mesh can hide a tip while camera bounds still include it."""
     from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
