@@ -399,6 +399,11 @@ def _seed_pose_model(
     if model.purpose != "detector" or model.task != "pose" or model.provider_name != "ultralytics":
         raise ValidationError("Pose retraining seed must be a registered Ultralytics pose model")
 
+    # Legacy models may omit metadata, but an array of key/value pairs must
+    # never be coerced into apparently valid registered-model provenance.
+    if model.metadata_json is not None and not isinstance(model.metadata_json, dict):
+        raise ValidationError("Pose retraining seed metadata must be a JSON object")
+
     # The registered checksum is scientific lineage, not optional metadata.
     # Reject malformed persisted digests before inspecting the local checkpoint.
     if (
