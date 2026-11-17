@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from json import JSONDecodeError
 
 from sqlalchemy import update
 from sqlalchemy.orm import Session
@@ -50,6 +51,15 @@ class ClassVisibilityService:
     def _sanitize_hidden_class_ids(
         self, hidden_class_ids: list[str], valid_class_ids: tuple[str, ...]
     ) -> list[str]:
+        # SQLite JSON does not enforce list[str]. Imported or restored
+        # preferences can contain scalars, maps, or unhashable nested arrays.
+        # Reject them rather than displaying a misleading partial setting.
+        if not isinstance(hidden_class_ids, list) or any(
+            not isinstance(class_id, str) for class_id in hidden_class_ids
+        ):
+            raise ConflictError(
+                "Stored class-visibility settings are malformed; restore a verified backup"
+            )
         valid = set(valid_class_ids)
         return [class_id for class_id in dict.fromkeys(hidden_class_ids) if class_id in valid]
 
@@ -106,13 +116,21 @@ class ClassVisibilityService:
         self._project(project_id)
         valid_class_ids = self._project_class_ids(project_id)
         user_identity = get_local_user_identity(self.settings)
-        preferences_by_layer = {
-            item.layer_type: item
-            for item in self.preferences.list_for_project_user(project_id, user_identity)
-        }
-        defaults_by_layer = {
-            item.layer_type: item for item in self.project_defaults.list_for_project(project_id)
-        }
+        try:
+            preferences_by_layer = {
+                item.layer_type: item
+                for item in self.preferences.list_for_project_user(project_id, user_identity)
+            }
+            defaults_by_layer = {
+                item.layer_type: item
+                for item in self.project_defaults.list_for_project(project_id)
+            }
+        except JSONDecodeError as exc:
+            # ORM row hydration deserializes the JSON field. Reject malformed
+            # raw bytes before returning a mixed editor visibility bundle.
+            raise ConflictError(
+                "Stored class-visibility JSON is malformed; restore a verified backup"
+            ) from exc
 
         user_preferences: dict[ClassVisibilityLayerType, ClassVisibilityScopeStateResponse] = {}
         project_defaults: dict[ClassVisibilityLayerType, ClassVisibilityScopeStateResponse] = {}
@@ -164,6 +182,16 @@ class ClassVisibilityService:
             project_id, payload.hidden_class_ids
         )
         user_identity = get_local_user_identity(self.settings)
+        # The project writer turn is held before this read. A legacy PUT must
+        # not silently overwrite malformed restored evidence.
+        try:
+            existing = self.preferences.get(project_id, user_identity, resolved_layer_type)
+        except JSONDecodeError as exc:
+            raise ConflictError(
+                "Stored class-visibility JSON is malformed; restore a verified backup"
+            ) from exc
+        if existing is not None:
+            self._sanitize_hidden_class_ids(existing.hidden_class_ids_json, valid_class_ids)
         if payload.expected_record_id is not None and payload.expected_updated_at is None:
             raise ValidationError("Visibility record id requires an existing revision")
         if "expected_updated_at" in payload.model_fields_set:
@@ -250,6 +278,14 @@ class ClassVisibilityService:
             project_id, payload.hidden_class_ids
         )
         user_identity = get_local_user_identity(self.settings)
+        try:
+            existing = self.project_defaults.get(project_id, resolved_layer_type)
+        except JSONDecodeError as exc:
+            raise ConflictError(
+                "Stored class-visibility JSON is malformed; restore a verified backup"
+            ) from exc
+        if existing is not None:
+            self._sanitize_hidden_class_ids(existing.hidden_class_ids_json, valid_class_ids)
         if payload.expected_record_id is not None and payload.expected_updated_at is None:
             raise ValidationError("Visibility record id requires an existing revision")
         if "expected_updated_at" in payload.model_fields_set:
