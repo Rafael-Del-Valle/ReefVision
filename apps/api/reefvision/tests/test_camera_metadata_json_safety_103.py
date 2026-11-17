@@ -47,7 +47,9 @@ def test_oversized_vendor_metadata_list_does_not_expand_into_project_json() -> N
 
 
 def test_oversized_vendor_metadata_mapping_does_not_expand_into_project_json() -> None:
-    oversized = {str(index): index for index in range(MAX_CAMERA_METADATA_CONTAINER_ITEMS + 1)}
+    oversized = {
+        str(index): index for index in range(MAX_CAMERA_METADATA_CONTAINER_ITEMS + 1)
+    }
     assert _json_safe(oversized) is None
     # Legitimate, bounded camera arrays retain their original order and values.
     at_limit = list(range(MAX_CAMERA_METADATA_CONTAINER_ITEMS))
