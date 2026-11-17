@@ -66,6 +66,7 @@ def assert_review_event_action_integrity(session: Session, item_ids: list[str]) 
             func.strftime("%Y-%m-%d %H:%M:%S", stored_timestamp).is_(None),
             func.date(func.substr(stored_timestamp, 1, 10), "+0 days")
             != func.substr(stored_timestamp, 1, 10),
+            func.substr(stored_timestamp, 1, 4) == "0000",
             func.substr(stored_timestamp, 12, 2) == "24",
         )
 

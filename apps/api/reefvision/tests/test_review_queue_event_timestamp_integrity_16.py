@@ -22,6 +22,7 @@ from reefvision.tests.test_review_queue_bulk_sqlite_contention_16 import _make_q
     "bad_timestamp",
     [
         "not-a-timestamp",
+        "0000-01-01 12:00:00.000000",
         "2026-02-30 12:00:00.000000",
         "2026-11-17 24:00:00.000000",
         "2026-11-17 12:00:00.000000\x00hidden",
