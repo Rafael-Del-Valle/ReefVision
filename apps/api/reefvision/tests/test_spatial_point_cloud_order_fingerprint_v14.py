@@ -51,11 +51,14 @@ def test_permuted_cloud_retains_geometry_hash_but_not_point_order() -> None:
     assert permuted["surface_area_m2"] is None
 
 
-@pytest.mark.parametrize("source_format", ["xyz", "ply", "ply_rgb"])
+@pytest.mark.parametrize(
+    "source_format",
+    ["xyz", "ply", "ply_rgb", "ply_rgb_colors_only", "ply_rgb_signed_only", "ply_rgb_lexical_only"],
+)
 def test_signed_zero_is_not_a_new_specimen_geometry_in_saved_workflow(
     client: TestClient, source_format: str
 ) -> None:
-    """Geometry hashes ignore signed zero and RGB; raw PLY integrity does not."""
+    """Vary signed zero, valid numeric spellings, and RGB through persisted workflows."""
     canonical_points = [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 3.0, 1.0]]
     signed_points = [[-0.0, 0.0, -0.0], [2.0, -0.0, 0.0], [0.0, 3.0, 1.0]]
     canonical_direct = _preview(canonical_points)
@@ -79,7 +82,7 @@ def test_signed_zero_is_not_a_new_specimen_geometry_in_saved_workflow(
         canonical_params = {**params, "points": canonical_points}
         signed_params = {**params, "points": signed_points}
     else:
-        colored = source_format == "ply_rgb"
+        colored = source_format.startswith("ply_rgb")
         header = (
             "ply\nformat ascii 1.0\nelement vertex 3\n"
             "property double x\nproperty double y\nproperty double z\n"
@@ -89,7 +92,21 @@ def test_signed_zero_is_not_a_new_specimen_geometry_in_saved_workflow(
         header += "end_header\n"
         if colored:
             canonical_text = header + "0 0 0 12 34 56\n2 0 0 65 43 21\n0 3 1 7 8 9\n"
-            signed_text = header + "-0 0 -0 120 34 56\n2 -0 0 65 43 21\n0 3 1 7 8 9\n"
+            is_color_only = source_format == "ply_rgb_colors_only"
+            is_signed_only = source_format == "ply_rgb_signed_only"
+            is_lexical_only = source_format == "ply_rgb_lexical_only"
+            if is_lexical_only:
+                source_zero = "+0.0e+0 0.000 -0E+0"
+                source_two = "2.0e+0 0e0 +0.0"
+            else:
+                source_zero = "0 0 0" if is_color_only else "-0 0 -0"
+                source_two = "2 0 0" if is_color_only else "2 -0 0"
+            preserve_rgb = is_signed_only or is_lexical_only
+            first_rgb = "12 34 56" if preserve_rgb else "120 34 56"
+            third_row = "0.0 3e0 1.000 7 8 9\n" if is_lexical_only else "0 3 1 7 8 9\n"
+            signed_text = (
+                header + f"{source_zero} {first_rgb}\n" + f"{source_two} 65 43 21\n" + third_row
+            )
         else:
             canonical_text = header + "0 0 0\n2 0 0\n0 3 1\n"
             signed_text = header + "-0 0 -0\n2 -0 0\n0 3 1\n"
@@ -106,12 +123,20 @@ def test_signed_zero_is_not_a_new_specimen_geometry_in_saved_workflow(
     for key in ("geometry_sha256", "ordered_geometry_sha256"):
         assert clean["provenance"][key] == signed["provenance"][key]
     assert clean["selected_point_chords"] == signed["selected_point_chords"]
-    assert clean["axis_aligned_dimensions_m"] == signed["axis_aligned_dimensions_m"]
+    for field in (
+        "axis_aligned_dimensions_m",
+        "axis_aligned_bounding_box_envelope_volume_m3",
+        "arithmetic_centroid_in_source_frame_m",
+        "qc_warnings",
+    ):
+        assert clean[field] == signed[field]
+    assert clean["source_affine_dimension"] == signed["source_affine_dimension"] == 2
+    assert "positive_bounding_envelope_for_lower_dimensional_source" in signed["qc_warnings"]
     assert signed["provenance"]["calibration_verified"] is False
     assert signed["provenance"]["specimen_identity_verified"] is False
     assert signed["surface_area_m2"] is None
     assert signed["branch_length_m"] is None
-    if source_format in {"ply", "ply_rgb"}:
+    if source_format != "xyz":
         assert (
             clean["provenance"]["source_text_sha256"] != signed["provenance"]["source_text_sha256"]
         )
@@ -121,10 +146,15 @@ def test_signed_zero_is_not_a_new_specimen_geometry_in_saved_workflow(
         )
     else:
         assert signed["provenance"]["source_text_sha256"] is None
-    if source_format == "ply_rgb":
-        assert clean["preview_point_colors_rgb_uint8"] == [[12, 34, 56], [65, 43, 21], [7, 8, 9]]
-        assert signed["preview_point_colors_rgb_uint8"] == [[120, 34, 56], [65, 43, 21], [7, 8, 9]]
-        assert clean["preview_point_colors_rgb_uint8"] != signed["preview_point_colors_rgb_uint8"]
+    if source_format.startswith("ply_rgb"):
+        clean_colors = clean["preview_point_colors_rgb_uint8"]
+        modified_colors = signed["preview_point_colors_rgb_uint8"]
+        assert clean_colors == [[12, 34, 56], [65, 43, 21], [7, 8, 9]]
+        if source_format in {"ply_rgb_signed_only", "ply_rgb_lexical_only"}:
+            assert modified_colors == clean_colors
+        else:
+            assert modified_colors == [[120, 34, 56], [65, 43, 21], [7, 8, 9]]
+            assert clean_colors != modified_colors
     else:
         assert clean["preview_point_colors_rgb_uint8"] is None
         assert signed["preview_point_colors_rgb_uint8"] is None
