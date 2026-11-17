@@ -53,12 +53,12 @@ def test_permuted_cloud_retains_geometry_hash_but_not_point_order() -> None:
 
 @pytest.mark.parametrize(
     "source_format",
-    ["xyz", "ply", "ply_rgb", "ply_rgb_colors_only", "ply_rgb_signed_only"],
+    ["xyz", "ply", "ply_rgb", "ply_rgb_colors_only", "ply_rgb_signed_only", "ply_rgb_lexical_only"],
 )
 def test_signed_zero_is_not_a_new_specimen_geometry_in_saved_workflow(
     client: TestClient, source_format: str
 ) -> None:
-    """Separately vary signed zeros and RGB across API and persisted workflows."""
+    """Vary signed zero, valid numeric spellings, and RGB through persisted workflows."""
     canonical_points = [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 3.0, 1.0]]
     signed_points = [[-0.0, 0.0, -0.0], [2.0, -0.0, 0.0], [0.0, 3.0, 1.0]]
     canonical_direct = _preview(canonical_points)
@@ -94,14 +94,21 @@ def test_signed_zero_is_not_a_new_specimen_geometry_in_saved_workflow(
             canonical_text = header + "0 0 0 12 34 56\n2 0 0 65 43 21\n0 3 1 7 8 9\n"
             is_color_only = source_format == "ply_rgb_colors_only"
             is_signed_only = source_format == "ply_rgb_signed_only"
-            source_zero = "0 0 0" if is_color_only else "-0 0 -0"
-            source_two = "2 0 0" if is_color_only else "2 -0 0"
-            first_rgb = "12 34 56" if is_signed_only else "120 34 56"
+            is_lexical_only = source_format == "ply_rgb_lexical_only"
+            if is_lexical_only:
+                source_zero = "+0.0e+0 0.000 -0E+0"
+                source_two = "2.0e+0 0e0 +0.0"
+            else:
+                source_zero = "0 0 0" if is_color_only else "-0 0 -0"
+                source_two = "2 0 0" if is_color_only else "2 -0 0"
+            preserve_rgb = is_signed_only or is_lexical_only
+            first_rgb = "12 34 56" if preserve_rgb else "120 34 56"
+            third_row = "0.0 3e0 1.000 7 8 9\n" if is_lexical_only else "0 3 1 7 8 9\n"
             signed_text = (
                 header
                 + f"{source_zero} {first_rgb}\n"
                 + f"{source_two} 65 43 21\n"
-                + "0 3 1 7 8 9\n"
+                + third_row
             )
         else:
             canonical_text = header + "0 0 0\n2 0 0\n0 3 1\n"
@@ -127,9 +134,7 @@ def test_signed_zero_is_not_a_new_specimen_geometry_in_saved_workflow(
     ):
         assert clean[field] == signed[field]
     assert clean["source_affine_dimension"] == signed["source_affine_dimension"] == 2
-    assert (
-        "positive_bounding_envelope_for_lower_dimensional_source" in signed["qc_warnings"]
-    )
+    assert "positive_bounding_envelope_for_lower_dimensional_source" in signed["qc_warnings"]
     assert signed["provenance"]["calibration_verified"] is False
     assert signed["provenance"]["specimen_identity_verified"] is False
     assert signed["surface_area_m2"] is None
@@ -148,7 +153,7 @@ def test_signed_zero_is_not_a_new_specimen_geometry_in_saved_workflow(
         clean_colors = clean["preview_point_colors_rgb_uint8"]
         modified_colors = signed["preview_point_colors_rgb_uint8"]
         assert clean_colors == [[12, 34, 56], [65, 43, 21], [7, 8, 9]]
-        if source_format == "ply_rgb_signed_only":
+        if source_format in {"ply_rgb_signed_only", "ply_rgb_lexical_only"}:
             assert modified_colors == clean_colors
         else:
             assert modified_colors == [[120, 34, 56], [65, 43, 21], [7, 8, 9]]
