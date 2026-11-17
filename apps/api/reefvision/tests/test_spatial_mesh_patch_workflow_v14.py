@@ -195,6 +195,7 @@ def test_hidden_mesh_patch_during_display_decimation_in_saved_workflow(
         + direct["preview_partially_sampled_patch_missing_area_fraction"]
     ) == pytest.approx(1.0)
     assert "preview_omits_edge_connected_mesh_patches" in direct["qc_warnings"]
+    assert "preview_omits_reconstructed_mesh_surface_area" in direct["qc_warnings"]
     assert direct["measurement_status"] == "caller_supplied_unverified"
     assert direct["provenance"]["calibration_verified"] is False
 
@@ -319,6 +320,7 @@ def test_full_mesh_preview_covers_all_patches_and_zero_area_is_undefined() -> No
     assert two_patches["preview_omitted_patch_surface_area_m2"] == 0.0
     assert two_patches["preview_omitted_patch_surface_area_scale_interval_m2"] is None
     assert "preview_omits_edge_connected_mesh_patches" not in two_patches["qc_warnings"]
+    assert "preview_omits_reconstructed_mesh_surface_area" not in two_patches["qc_warnings"]
     degenerate = measure_mesh_preview(
         vertices=[[0, 0, 0], [1, 0, 0], [2, 0, 0]],
         faces=[[0, 1, 2]],
@@ -334,3 +336,87 @@ def test_full_mesh_preview_covers_all_patches_and_zero_area_is_undefined() -> No
     assert degenerate["preview_omitted_patch_surface_area_fraction"] is None
     assert degenerate["preview_omitted_patch_surface_area_m2"] == 0.0
     assert degenerate["preview_omitted_patch_surface_area_scale_interval_m2"] is None
+
+
+def test_partial_only_mesh_decimation_warns_in_saved_workflow(client: TestClient) -> None:
+    """A visible connected patch can still lose meaningful area in its render sample."""
+    from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
+
+    # 514 equal-area triangles forming one edge-connected fan.
+    vertices = [[0, 0, 0]] + [[index, 1, 0] for index in range(515)]
+    params = {
+        "vertices": vertices,
+        "faces": [[0, index + 1, index + 2] for index in range(514)],
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic scale; independent review pending",
+        "relative_scale_uncertainty": 0.1,
+    }
+    direct = measure_mesh_preview(**params)
+    assert direct["edge_connected_patch_face_counts"] == [514]
+    assert direct["preview_edge_connected_patch_face_counts"] == [512]
+    assert direct["preview_omitted_edge_connected_patch_indices"] == []
+    assert direct["preview_partially_sampled_patch_indices"] == [0]
+    assert direct["surface_area_m2"] == pytest.approx(0.0257)
+    assert direct["preview_sampled_surface_area_m2"] == pytest.approx(0.0256)
+    assert direct["preview_partially_sampled_patch_missing_area_fraction"] == pytest.approx(
+        1 / 257
+    )
+    assert "preview_omits_reconstructed_mesh_surface_area" in direct["qc_warnings"]
+    assert "preview_omits_edge_connected_mesh_patches" not in direct["qc_warnings"]
+
+    project_id = str(create_project(client, "Partially sampled mesh")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    assert standalone.json()["qc_warnings"] == direct["qc_warnings"]
+    assert standalone.json()["preview_surface_area_fraction"] == direct[
+        "preview_surface_area_fraction"
+    ]
+
+    graph = {
+        "graph_id": "partially-sampled-mesh-v14",
+        "name": "Visible patch area-loss QC",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "m",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    planned = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert planned.status_code == 200, planned.text
+    assert planned.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        )
+        assert artifact["payload_json"]["qc_warnings"] == standalone.json()["qc_warnings"]
+        assert artifact["payload_json"]["preview_surface_area_fraction"] == standalone.json()[
+            "preview_surface_area_fraction"
+        ]
+        assert artifact["payload_json"]["provenance"] == standalone.json()["provenance"]
+        hashes.append(artifact["payload_sha256"])
+    assert len(set(hashes)) == 1
+

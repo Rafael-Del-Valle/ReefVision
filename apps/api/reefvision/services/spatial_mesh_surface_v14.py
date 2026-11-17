@@ -508,7 +508,7 @@ def measure_mesh_preview(
     # Display sampling can underrepresent large triangles; expose its area
     # coverage without treating sampled faces as scientific measurements.
     display_geometry = _sample_mesh_display_geometry(points, faces, scale)
-    sampled_raw_area = sum(face_areas[index] for index in display_geometry["preview_face_indices"])
+    sampled_raw_area = fsum(face_areas[index] for index in display_geometry["preview_face_indices"])
     # A uniform face-index sample can exclude an entire disconnected surface
     # patch, even if its full-mesh area is large. Record per-patch display
     # coverage without altering scientific measurements or source topology.
@@ -893,6 +893,11 @@ def measure_mesh_preview(
             + (
                 ["preview_omits_edge_connected_mesh_patches"]
                 if preview_omitted_patch_indices
+                else []
+            )
+            + (
+                ["preview_omits_reconstructed_mesh_surface_area"]
+                if omitted_patch_raw_area > 0 or preview_partially_sampled_missing_raw_area > 0
                 else []
             )
             + (

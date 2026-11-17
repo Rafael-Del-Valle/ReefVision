@@ -200,7 +200,11 @@ annotation, calibration, anatomy, identity, growth, or condition evidence.
   underflow to zero under calibration is withheld as null, not falsely reported
   as zero; visualization loss is never equivalent to absent coral tissue.
   A distinct warning marks omissions; a zero-area
-  patch has undefined area coverage rather than invented certainty. All
+  patch has undefined area coverage rather than invented certainty. A separate
+  `preview_omits_reconstructed_mesh_surface_area` warning now flags any positive
+  source-triangle area omitted by bounded display sampling, including loss
+  within a still-visible single connected patch. The displayed area sum uses
+  compensated summation. Neither warning implies a biological tissue loss. All
   scientific surface-area/topology measurements still use the complete mesh.
   These are visualization diagnostics, not evidence of coral colony identity,
   tissue coverage, anatomical branch structure, or independently verified
