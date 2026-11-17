@@ -941,6 +941,51 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
+    # This real completed producer -> consumer run must not be reusable when
+    # an extra checksum-valid producer output is re-signed into both its saved
+    # output IDs and result summary under an unregistered output port. The
+    # selected consumer input remains valid, so direct consumer recovery must
+    # validate the sibling's typed port instead of relying on producer replay.
+    with app.state.session_factory() as session:
+        producer = session.get(WorkflowNodeRun, payload["nodes"][0]["id"])
+        consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
+        original = session.get(WorkflowArtifact, artifacts["project_reference"]["id"])
+        assert producer is not None and consumer is not None and original is not None
+        original_ids = producer.output_artifact_ids_json
+        producer_result = dict(producer.result_json or {})
+        original_summary = producer_result.get("outputs")
+        assert isinstance(original_ids, list) and len(original_ids) == 1
+        assert isinstance(original_summary, list) and len(original_summary) == 1
+        invalid_port = "unregistered-upstream-output"
+        sibling = WorkflowArtifact(
+            workflow_run_id=str(run["id"]),
+            producer_node_run_id=producer.id,
+            producer_port_id=invalid_port,
+            data_type=original.data_type,
+            payload_json=dict(original.payload_json),
+            payload_sha256=original.payload_sha256,
+        )
+        session.add(sibling)
+        session.flush()
+        producer.output_artifact_ids_json = [*original_ids, sibling.id]
+        producer.result_json = {
+            **producer_result,
+            "outputs": [
+                *original_summary,
+                {
+                    "artifact_id": sibling.id,
+                    "port_id": invalid_port,
+                    "data_type": sibling.data_type,
+                    "payload_sha256": sibling.payload_sha256,
+                },
+            ],
+        }
+        session.flush()
+        with pytest.raises(ConflictError, match="input producer output type does not match registry"):
+            verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
+        session.rollback()
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
+
     # Older saved workflows may lack an optional producer output summary.
     # A legitimate consumer input must not conceal a forged sibling artifact
     # owned by the consumer, even if both artifact checksums remain valid.
