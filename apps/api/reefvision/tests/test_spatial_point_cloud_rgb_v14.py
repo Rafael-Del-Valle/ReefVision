@@ -154,9 +154,23 @@ def test_coincident_point_indices_have_explicit_chord_qc() -> None:
     )
     assert result["qc_warnings"] == [
         "duplicate_points_present",
+        "nonuniform_duplicate_coordinates_can_bias_row_centroid",
         "coincident_selected_chord_endpoints",
         "source_point_cloud_affine_dimension_below_3",
     ]
+    assert result["point_count"] == 3
+    assert result["unique_point_count"] == 2
+    assert result["duplicate_point_row_count"] == 1
+    assert result["duplicate_point_row_fraction"] == pytest.approx(1 / 3)
+    assert result["maximum_coordinate_multiplicity"] == 2
+    assert result["arithmetic_centroid_in_source_frame_m"] == pytest.approx([0, 0.01, 0])
+    assert result["unique_coordinate_centroid_in_source_frame_m"] == pytest.approx(
+        [0, 0.015, 0]
+    )
+    assert result["row_vs_unique_coordinate_centroid_separation_m"] == pytest.approx(0.005)
+    assert result[
+        "row_vs_unique_coordinate_centroid_separation_scale_interval_m"
+    ] == pytest.approx([0.0045, 0.0055])
     assert result["source_affine_dimension"] == 1
     assert result["axis_aligned_bounding_box_envelope_volume_m3"] == 0.0
     coincident, distinct = result["selected_point_chords"]
@@ -168,6 +182,112 @@ def test_coincident_point_indices_have_explicit_chord_qc() -> None:
     assert distinct["qc_warnings"] == []
     assert result["branch_length_m"] is None
     assert result["measurement_status"] == "caller_supplied_unverified"
+
+
+@pytest.mark.parametrize("source_format", ["xyz", "ply"])
+def test_duplicate_centroid_qc_standalone_and_persisted_workflow(
+    client: TestClient, source_format: str
+) -> None:
+    """Nonuniform acquisition rows must retain explicit unverified centroid QC."""
+    project_id = str(create_project(client, "Repeated scan locus QC")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    params = {
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unverified scan ruler",
+        "relative_scale_uncertainty": 0.1,
+        "point_index_pairs": [[0, 1], [0, 2]],
+    }
+    if source_format == "xyz":
+        params["points"] = [[0, 0, 0], [0, 0, 0], [0, 3, 0]]
+    else:
+        params["ply_text"] = (
+            "ply\nformat ascii 1.0\nelement vertex 3\n"
+            "property float x\nproperty float y\nproperty float z\nend_header\n"
+            "0 0 0\n0 0 0\n0 3 0\n"
+        )
+
+    response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert response.status_code == 200, response.text
+    expected = response.json()
+    assert expected["duplicate_point_row_fraction"] == pytest.approx(1 / 3)
+    assert expected["unique_point_count"] == 2
+    assert expected["arithmetic_centroid_in_source_frame_m"] == pytest.approx([0, 0.01, 0])
+    assert expected["unique_coordinate_centroid_in_source_frame_m"] == pytest.approx(
+        [0, 0.015, 0]
+    )
+    assert expected["row_vs_unique_coordinate_centroid_separation_m"] == pytest.approx(0.005)
+    assert expected["qc_warnings"] == [
+        "duplicate_points_present",
+        "nonuniform_duplicate_coordinates_can_bias_row_centroid",
+        "coincident_selected_chord_endpoints",
+        "source_point_cloud_affine_dimension_below_3",
+    ]
+    assert expected["measurement_status"] == "caller_supplied_unverified"
+    assert expected["provenance"]["calibration_verified"] is False
+    assert expected["provenance"]["specimen_identity_verified"] is False
+    assert expected["surface_area_m2"] is None
+    assert expected["branch_length_m"] is None
+
+    graph = {
+        "graph_id": f"duplicate-centroid-{source_format}-v14",
+        "name": "Repeated scan locus centroid QC",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    digests = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "point_cloud_measurement_preview"
+        )
+        payload = artifact["payload_json"]
+        for key in (
+            "point_count",
+            "unique_point_count",
+            "duplicate_point_row_count",
+            "duplicate_point_row_fraction",
+            "arithmetic_centroid_in_source_frame_m",
+            "unique_coordinate_centroid_in_source_frame_m",
+            "row_vs_unique_coordinate_centroid_separation_m",
+            "row_vs_unique_coordinate_centroid_separation_scale_interval_m",
+            "qc_warnings",
+            "measurement_status",
+            "provenance",
+            "surface_area_m2",
+            "branch_length_m",
+        ):
+            assert payload[key] == expected[key]
+        assert payload["project_id"] == project_id
+        digests.append(artifact["payload_sha256"])
+    assert len(set(digests)) == 1
+    assert len(digests[0]) == 64
 
 
 def test_rgb_decimation_retains_source_index_alignment(client: TestClient) -> None:
