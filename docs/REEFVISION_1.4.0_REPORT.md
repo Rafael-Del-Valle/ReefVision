@@ -51,6 +51,20 @@ API and twice-run, persisted typed Workflow Builder regression checks use a
 synthetic hidden large patch, with zero omission and degenerate-area controls.
 The preview must never be used to infer coral condition or tissue coverage.
 
+### Partially visible patch coverage
+
+The bounded preview now distinguishes completely hidden edge-connected mesh
+patches from patches represented by some, but not all, source faces. It reports
+`preview_partially_sampled_patch_indices` and the unitless
+`preview_partially_sampled_patch_missing_area_fraction`. For any mesh with
+positive area, displayed area, wholly omitted-patch area, and missing area
+within partially represented patches should sum to the complete reconstructed
+mesh area fraction (1). Direct scientific measurement, standalone project API,
+and twice-executed persisted typed Workflow Builder tests check this
+decomposition and artifact parity. Zero-area meshes report an undefined area
+fraction, not a biological coverage estimate. Neither preview sampling nor the
+relative area fraction validates specimen completeness.
+
 ## User-facing entry point
 
 A new user reaches the 1.4 tools through:
