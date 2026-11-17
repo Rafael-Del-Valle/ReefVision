@@ -183,6 +183,22 @@ class ReviewQueueService:
             for issue in self.quality_control.quality_control.issues_for_run(source_run.id):
                 if issue.status not in {"open", "acknowledged"} or issue.image_id is None:
                     continue
+                # A restored or externally modified source finding can retain
+                # its run ID while referencing another study, an image outside
+                # this scope, or an unknown severity. Never silently score
+                # these rows as zero or attribute their evidence to this
+                # biological project. Check before writing any queue artifacts.
+                if (
+                    issue.project_id != project.id
+                    or issue.dataset_version_id
+                    != (dataset_version.id if dataset_version else None)
+                    or issue.image_id not in scoped_image_ids
+                    or issue.severity not in SEVERITY_SCORES
+                ):
+                    raise ValidationError(
+                        "Active QC source finding has inconsistent scope or severity; "
+                        "correct QC source evidence before review queue creation"
+                    )
                 issues_by_image[issue.image_id].append(issue)
         scoped_images = [
             image for image in project_context.images if image.image_id in scoped_image_ids
