@@ -1973,9 +1973,7 @@ def test_pose_validation_rejects_second_verified_round_from_same_video(
         different_digest = "0" * 64
         if different_digest == training_items[0]["video_sha256"]:
             different_digest = "1" * 64
-        revised_items = [
-            {**item, "video_sha256": different_digest} for item in validation_items
-        ]
+        revised_items = [{**item, "video_sha256": different_digest} for item in validation_items]
         assert _shared_pose_source_videos(training_items, revised_items)
 
     with (
