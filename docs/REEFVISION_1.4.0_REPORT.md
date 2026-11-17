@@ -160,6 +160,11 @@ annotation, calibration, anatomy, identity, growth, or condition evidence.
 - Point-cloud scale-only dimension, selected-chord and signed-coordinate intervals
   are unresolved when nonzero uncertainty rounds distinct bounds to one float.
   This is not evidence of exact scale, physical calibration or confidence limits.
+- Point-cloud axis extrema now report their supporting source-row counts and
+  distinct XYZ-locus counts separately for each minimum and maximum face.
+  Duplicating acquisition rows raises row support without increasing independent
+  coordinate-locus support. These are descriptive quality-control counts,
+  neither statistical uncertainty nor evidence of real tissue boundaries.
 - A point-cloud preview now carries a SHA-256 of its exact sampled source-row
   indices and normalized, unscaled XYZ positions. Changing which rows are
   displayed can change this digest without changing the complete source cloud.

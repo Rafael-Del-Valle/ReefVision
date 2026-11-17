@@ -523,6 +523,7 @@ def test_resampled_loci_stay_distinct_from_biological_change_in_saved_workflows(
                 "arithmetic_centroid_in_source_frame_m",
                 "unique_coordinate_centroid_in_source_frame_m",
                 "axis_aligned_dimensions_m",
+                "axis_extrema_support",
                 "measurement_status",
             ):
                 assert artifact["payload_json"][key] == expected[key]
@@ -535,21 +536,52 @@ def test_resampled_loci_stay_distinct_from_biological_change_in_saved_workflows(
     assert repeated["point_count"] == 4
     assert first["unique_point_count"] == repeated["unique_point_count"] == 3
     assert first["axis_aligned_dimensions_m"] == repeated["axis_aligned_dimensions_m"]
-    assert first["provenance"]["unique_coordinate_geometry_sha256"] == (
-        repeated["provenance"]["unique_coordinate_geometry_sha256"]
+    # A repeated acquisition row supports the same bounding face, but does
+    # not add another independent XYZ locus to the geometric evidence.
+    assert first["axis_extrema_support"]["x"] == {
+        "minimum_source_rows": 2,
+        "minimum_distinct_xyz_loci": 2,
+        "maximum_source_rows": 1,
+        "maximum_distinct_xyz_loci": 1,
+    }
+    assert repeated["axis_extrema_support"]["x"] == {
+        "minimum_source_rows": 3,
+        "minimum_distinct_xyz_loci": 2,
+        "maximum_source_rows": 1,
+        "maximum_distinct_xyz_loci": 1,
+    }
+    # A constant z-axis has identical minimum and maximum supporting sets.
+    assert first["axis_extrema_support"]["z"] == {
+        "minimum_source_rows": 3,
+        "minimum_distinct_xyz_loci": 3,
+        "maximum_source_rows": 3,
+        "maximum_distinct_xyz_loci": 3,
+    }
+    assert repeated["axis_extrema_support"]["z"] == {
+        "minimum_source_rows": 4,
+        "minimum_distinct_xyz_loci": 3,
+        "maximum_source_rows": 4,
+        "maximum_distinct_xyz_loci": 3,
+    }
+    assert (
+        first["provenance"]["unique_coordinate_geometry_sha256"]
+        == (repeated["provenance"]["unique_coordinate_geometry_sha256"])
     )
     first_hash = first["provenance"]["geometry_sha256"]
     repeated_hash = repeated["provenance"]["geometry_sha256"]
     assert first_hash != repeated_hash
     if source_format == "ply":
-        assert first["provenance"]["source_text_sha256"] != (
-            repeated["provenance"]["source_text_sha256"]
+        assert (
+            first["provenance"]["source_text_sha256"]
+            != (repeated["provenance"]["source_text_sha256"])
         )
-    assert first["arithmetic_centroid_in_source_frame_m"] != (
-        repeated["arithmetic_centroid_in_source_frame_m"]
+    assert (
+        first["arithmetic_centroid_in_source_frame_m"]
+        != (repeated["arithmetic_centroid_in_source_frame_m"])
     )
-    assert first["unique_coordinate_centroid_in_source_frame_m"] == (
-        repeated["unique_coordinate_centroid_in_source_frame_m"]
+    assert (
+        first["unique_coordinate_centroid_in_source_frame_m"]
+        == (repeated["unique_coordinate_centroid_in_source_frame_m"])
     )
     warning = "nonuniform_duplicate_coordinates_can_bias_row_centroid"
     assert warning in repeated["qc_warnings"]

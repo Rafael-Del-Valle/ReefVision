@@ -462,6 +462,26 @@ def measure_point_cloud_preview(
         return intervals
 
     coordinate_multiplicities = Counter(vertices)
+    # For each bounding-box face, distinguish repeated acquisition rows from
+    # distinct observed XYZ loci supporting that extremum. This is evidence
+    # about how a measured extent was obtained, not proof the extrema represent
+    # biological boundaries or independent observations.
+    axis_extrema_support: dict[str, dict[str, int]] = {}
+    for axis, label in enumerate(("x", "y", "z")):
+        minimum = source_bounds_min[axis]
+        maximum = source_bounds_max[axis]
+        minimum_counts = [
+            count for xyz, count in coordinate_multiplicities.items() if xyz[axis] == minimum
+        ]
+        maximum_counts = [
+            count for xyz, count in coordinate_multiplicities.items() if xyz[axis] == maximum
+        ]
+        axis_extrema_support[label] = {
+            "minimum_source_rows": sum(minimum_counts),
+            "minimum_distinct_xyz_loci": len(minimum_counts),
+            "maximum_source_rows": sum(maximum_counts),
+            "maximum_distinct_xyz_loci": len(maximum_counts),
+        }
     unique_count = len(coordinate_multiplicities)
     duplicate_row_count = len(vertices) - unique_count
     maximum_coordinate_multiplicity = max(coordinate_multiplicities.values())
@@ -620,6 +640,7 @@ def measure_point_cloud_preview(
             "coincident_endpoint_chords": coincident_selected_chord_count,
         },
         "axis_aligned_dimensions_m": dimensions,
+        "axis_extrema_support": axis_extrema_support,
         "axis_aligned_dimension_scale_interval_m": dimension_scale_intervals,
         "axis_aligned_min_in_source_frame_m": bounds_min,
         "axis_aligned_max_in_source_frame_m": bounds_max,
