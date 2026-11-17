@@ -92,9 +92,11 @@ def test_signed_zero_is_not_a_new_specimen_geometry_in_saved_workflow(
         header += "end_header\n"
         if colored:
             canonical_text = header + "0 0 0 12 34 56\n2 0 0 65 43 21\n0 3 1 7 8 9\n"
-            source_zero = "0 0 0" if source_format == "ply_rgb_colors_only" else "-0 0 -0"
-            source_two = "2 0 0" if source_format == "ply_rgb_colors_only" else "2 -0 0"
-            first_rgb = "12 34 56" if source_format == "ply_rgb_signed_only" else "120 34 56"
+            is_color_only = source_format == "ply_rgb_colors_only"
+            is_signed_only = source_format == "ply_rgb_signed_only"
+            source_zero = "0 0 0" if is_color_only else "-0 0 -0"
+            source_two = "2 0 0" if is_color_only else "2 -0 0"
+            first_rgb = "12 34 56" if is_signed_only else "120 34 56"
             signed_text = (
                 header
                 + f"{source_zero} {first_rgb}\n"
@@ -125,7 +127,9 @@ def test_signed_zero_is_not_a_new_specimen_geometry_in_saved_workflow(
     ):
         assert clean[field] == signed[field]
     assert clean["source_affine_dimension"] == signed["source_affine_dimension"] == 2
-    assert "positive_bounding_envelope_for_lower_dimensional_source" in signed["qc_warnings"]
+    assert (
+        "positive_bounding_envelope_for_lower_dimensional_source" in signed["qc_warnings"]
+    )
     assert signed["provenance"]["calibration_verified"] is False
     assert signed["provenance"]["specimen_identity_verified"] is False
     assert signed["surface_area_m2"] is None
