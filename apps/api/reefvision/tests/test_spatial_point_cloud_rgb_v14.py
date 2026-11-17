@@ -63,6 +63,8 @@ def test_rgb_ply_standalone_and_saved_workflow_parity(client: TestClient) -> Non
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     assert expected["preview_point_colors_rgb_uint8"] == [[0, 128, 255], [255, 64, 0], [11, 22, 7]]
+    assert expected["source_affine_dimension"] == 2
+    assert expected["qc_warnings"] == ["source_point_cloud_affine_dimension_below_3"]
     assert expected["measurement_status"] == "caller_supplied_unverified"
     assert expected["provenance"]["calibration_verified"] is False
     assert expected["surface_area_m2"] is None
@@ -132,6 +134,8 @@ def test_rgb_ply_standalone_and_saved_workflow_parity(client: TestClient) -> Non
         "selected_point_chords",
         "arithmetic_centroid_in_source_frame_m",
         "preview_point_colors_rgb_uint8",
+        "source_affine_dimension",
+        "qc_warnings",
         "provenance",
     ):
         assert payload[key] == expected[key]
@@ -153,6 +157,8 @@ def test_coincident_point_indices_have_explicit_chord_qc() -> None:
         "coincident_selected_chord_endpoints",
         "source_point_cloud_affine_dimension_below_3",
     ]
+    assert result["source_affine_dimension"] == 1
+    assert result["axis_aligned_bounding_box_envelope_volume_m3"] == 0.0
     coincident, distinct = result["selected_point_chords"]
     assert coincident["point_indices"] == [0, 1]
     assert coincident["chord_distance_m"] == 0
