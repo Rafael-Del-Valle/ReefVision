@@ -525,8 +525,13 @@ def measure_mesh_preview(
     # Area in wholly invisible patches is more informative than their face
     # count; this is reconstructed mesh area, never measured tissue coverage.
     omitted_patch_raw_area = fsum(
-        patch_area_mesh_units[ordered_patches[index]]
-        for index in preview_omitted_patch_indices
+        patch_area_mesh_units[ordered_patches[index]] for index in preview_omitted_patch_indices
+    )
+    # A finite full-mesh area does not guarantee that a tiny hidden patch's
+    # calibrated area is representable. Withhold a false zero when it underflows.
+    omitted_patch_area_m2 = omitted_patch_raw_area * scale * scale
+    omitted_patch_area_representable = (
+        omitted_patch_raw_area == 0 or omitted_patch_area_m2 > 0
     )
     preview_patch_area_coverage_fractions = [
         min(1.0, fsum(sampled_patch_face_areas.get(patch, [])) / patch_area_mesh_units[patch])
@@ -621,6 +626,20 @@ def measure_mesh_preview(
         "preview_omitted_edge_connected_patch_indices": preview_omitted_patch_indices,
         "preview_omitted_patch_surface_area_fraction": (
             omitted_patch_raw_area / raw_area if raw_area > 0 else None
+        ),
+        "preview_omitted_patch_surface_area_m2": (
+            omitted_patch_area_m2 if omitted_patch_area_representable else None
+        ),
+        "preview_omitted_patch_surface_area_scale_interval_m2": (
+            [
+                omitted_patch_area_m2 * (1 - relative_scale_uncertainty) ** 2,
+                omitted_patch_area_m2 * (1 + relative_scale_uncertainty) ** 2,
+            ]
+            if (
+                relative_scale_uncertainty is not None
+                and omitted_patch_area_representable
+            )
+            else None
         ),
         "vertex_count": len(points),
         "preview_referenced_bounds_in_source_frame_m": {

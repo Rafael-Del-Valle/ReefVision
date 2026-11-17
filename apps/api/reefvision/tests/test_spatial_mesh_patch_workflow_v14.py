@@ -171,8 +171,10 @@ def test_hidden_mesh_patch_during_display_decimation_in_saved_workflow(
     assert direct["edge_connected_patch_face_counts"] == [513, 1]
     assert direct["preview_edge_connected_patch_face_counts"] == [512, 0]
     assert direct["preview_omitted_edge_connected_patch_indices"] == [1]
-    assert direct["preview_omitted_patch_surface_area_fraction"] == pytest.approx(
-        250 / 506.5
+    assert direct["preview_omitted_patch_surface_area_fraction"] == pytest.approx(250 / 506.5)
+    assert direct["preview_omitted_patch_surface_area_m2"] == pytest.approx(0.025)
+    assert direct["preview_omitted_patch_surface_area_scale_interval_m2"] == pytest.approx(
+        [0.025 * 0.9**2, 0.025 * 1.1**2]
     )
     assert direct["preview_edge_connected_patch_surface_area_coverage_fractions"] == pytest.approx(
         [512 / 513, 0.0]
@@ -195,6 +197,8 @@ def test_hidden_mesh_patch_during_display_decimation_in_saved_workflow(
         "preview_edge_connected_patch_surface_area_coverage_fractions",
         "preview_omitted_edge_connected_patch_indices",
         "preview_omitted_patch_surface_area_fraction",
+        "preview_omitted_patch_surface_area_m2",
+        "preview_omitted_patch_surface_area_scale_interval_m2",
         "preview_surface_area_fraction",
         "surface_area_m2",
         "qc_warnings",
@@ -251,6 +255,8 @@ def test_hidden_mesh_patch_during_display_decimation_in_saved_workflow(
             "preview_edge_connected_patch_surface_area_coverage_fractions",
             "preview_omitted_edge_connected_patch_indices",
             "preview_omitted_patch_surface_area_fraction",
+        "preview_omitted_patch_surface_area_m2",
+        "preview_omitted_patch_surface_area_scale_interval_m2",
             "preview_surface_area_fraction",
             "surface_area_m2",
             "qc_warnings",
@@ -286,6 +292,8 @@ def test_full_mesh_preview_covers_all_patches_and_zero_area_is_undefined() -> No
     assert two_patches["preview_edge_connected_patch_surface_area_coverage_fractions"] == [1.0, 1.0]
     assert two_patches["preview_omitted_edge_connected_patch_indices"] == []
     assert two_patches["preview_omitted_patch_surface_area_fraction"] == 0.0
+    assert two_patches["preview_omitted_patch_surface_area_m2"] == 0.0
+    assert two_patches["preview_omitted_patch_surface_area_scale_interval_m2"] is None
     assert "preview_omits_edge_connected_mesh_patches" not in two_patches["qc_warnings"]
     degenerate = measure_mesh_preview(
         vertices=[[0, 0, 0], [1, 0, 0], [2, 0, 0]],
@@ -296,3 +304,5 @@ def test_full_mesh_preview_covers_all_patches_and_zero_area_is_undefined() -> No
     assert degenerate["preview_edge_connected_patch_surface_area_coverage_fractions"] == [None]
     assert degenerate["preview_omitted_edge_connected_patch_indices"] == []
     assert degenerate["preview_omitted_patch_surface_area_fraction"] is None
+    assert degenerate["preview_omitted_patch_surface_area_m2"] == 0.0
+    assert degenerate["preview_omitted_patch_surface_area_scale_interval_m2"] is None

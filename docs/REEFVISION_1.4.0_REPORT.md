@@ -37,6 +37,20 @@ inventory must agree with it. A broad 1.4 gate cannot close an individual entry.
 re-identification across long gaps or videos. The latter remains its own 2.0
 inventory entry.
 
+### Bounded mesh-preview surface visibility QC
+
+A decimated preview can omit a complete edge-connected mesh patch even when
+the original geometry is retained for measurements. The report exposes the
+fraction of reconstructed source-mesh area in fully omitted patches, its
+calibrated area in square meters, and a scale-only uncertainty interval where
+the caller supplies relative scale uncertainty. The interval squares the
+common scale bounds; it does not account for segmentation, reconstruction,
+registration, or biological tissue uncertainty. A nonrepresentably small
+omitted area is withheld rather than reported as exactly zero. Standalone
+API and twice-run, persisted typed Workflow Builder regression checks use a
+synthetic hidden large patch, with zero omission and degenerate-area controls.
+The preview must never be used to infer coral condition or tissue coverage.
+
 ## User-facing entry point
 
 A new user reaches the 1.4 tools through:
