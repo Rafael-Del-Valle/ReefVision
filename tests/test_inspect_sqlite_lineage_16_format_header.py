@@ -16,15 +16,10 @@ def _create_database(
     path: Path, *, application_id: int, user_version: int, bump_schema_cookie: bool
 ) -> None:
     with closing(sqlite3.connect(path)) as db:
-        db.execute(
-            "CREATE TABLE alembic_version "
-            "(version_num VARCHAR(32) NOT NULL PRIMARY KEY)"
-        )
+        db.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)")
         db.execute("INSERT INTO alembic_version VALUES ('0038')")
         db.execute("CREATE TABLE scientific_records (id INTEGER PRIMARY KEY, note TEXT)")
-        db.execute(
-            "INSERT INTO scientific_records VALUES (1, 'private coral coordinates')"
-        )
+        db.execute("INSERT INTO scientific_records VALUES (1, 'private coral coordinates')")
         if bump_schema_cookie:
             db.execute("CREATE TABLE transitory_probe (id INTEGER)")
             db.execute("DROP TABLE transitory_probe")
@@ -99,17 +94,16 @@ def test_format_header_gate_is_read_only_and_independent_of_ddl(
     assert comparison["changed_definitions"] == []
     assert comparison["requires_researcher_review"] is True
     assert report["classification"] == "requires_researcher_review"
-    assert report["sqlite_header"]["schema_version"] != comparison[
-        "reference_sqlite_header"
-    ]["schema_version"]
+    assert (
+        report["sqlite_header"]["schema_version"]
+        != comparison["reference_sqlite_header"]["schema_version"]
+    )
     assert [entry["field"] for entry in comparison["format_header_differences"]] == (
         expected_fields
     )
     for entry in comparison["format_header_differences"]:
         assert entry["database_value"] == report["sqlite_header"][entry["field"]]
-        assert entry["reference_value"] == comparison["reference_sqlite_header"][
-            entry["field"]
-        ]
+        assert entry["reference_value"] == comparison["reference_sqlite_header"][entry["field"]]
     assert "private coral coordinates" not in strict.stdout
     assert "private coral coordinates" not in strict.stderr
     assert (source.read_bytes(), reference.read_bytes()) == original
@@ -121,9 +115,7 @@ def test_format_header_gate_is_read_only_and_independent_of_ddl(
 
 def test_format_header_gate_requires_independent_database(tmp_path: Path) -> None:
     source = tmp_path / "source.sqlite"
-    _create_database(
-        source, application_id=10, user_version=2, bump_schema_cookie=False
-    )
+    _create_database(source, application_id=10, user_version=2, bump_schema_cookie=False)
     before = source.read_bytes()
     result = subprocess.run(
         [sys.executable, str(SCRIPT), str(source), "--fail-on-format-header-drift"],
