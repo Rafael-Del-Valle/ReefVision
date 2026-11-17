@@ -108,7 +108,16 @@ function bestEpoch(
   metric[1].forEach((value, index) => {
     if (value > metric[1][bestIndex]) bestIndex = index;
   });
+  const rawHistory = run.metrics_history;
+  // A malformed recorded epoch column is not the same as an absent one:
+  // do not invent index-based epoch provenance for corrupted worker data.
+  const recordedEpochColumn =
+    rawHistory &&
+    typeof rawHistory === "object" &&
+    !Array.isArray(rawHistory) &&
+    Object.prototype.hasOwnProperty.call(rawHistory, "epoch");
   const epochs = history(run).epoch;
+  if (recordedEpochColumn && !epochs) return null;
   // A truncated or malformed epoch column must not produce a fabricated best
   // epoch. Without an epoch column, the metric index is explicitly 1-based.
   if (

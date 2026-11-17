@@ -368,6 +368,50 @@ describe("TrainingRunDetail", () => {
     }
   });
 
+  it("does not invent best epochs when a recorded epoch column is malformed", () => {
+    for (const malformedEpochs of [
+      [1, Number.NaN, 3],
+      [1, null, 3],
+      [1, 2, Number.POSITIVE_INFINITY],
+      "unparseable",
+      null,
+    ]) {
+      const { unmount } = render(
+        <TrainingRunDetail
+          run={{
+            ...run,
+            metrics_history: {
+              epoch: malformedEpochs,
+              "metrics/mAP50-95(B)": [0.2, 0.8, 0.5],
+            } as unknown as TrainingRun["metrics_history"],
+          }}
+          registering={false}
+          onCancel={vi.fn()}
+          onRegister={vi.fn()}
+        />,
+      );
+      expect(screen.queryByText("Best epoch")).not.toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it("uses index-based epoch numbering only when legacy history omits epochs", () => {
+    render(
+      <TrainingRunDetail
+        run={{
+          ...run,
+          metrics_history: {
+            "metrics/mAP50-95(B)": [0.2, 0.8, 0.5],
+          },
+        }}
+        registering={false}
+        onCancel={vi.fn()}
+        onRegister={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Best epoch").parentElement).toHaveTextContent("2");
+  });
+
   it("renders long finite training histories without overflowing function argument limits", () => {
     const values = Array.from(
       { length: 150_000 },
