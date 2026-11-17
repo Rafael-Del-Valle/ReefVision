@@ -569,6 +569,44 @@ def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
     assert direct["surface_area_m2"] is None
     assert direct["measurement_status"] == "caller_supplied_unverified"
 
+    # Exact unique loci are stable under repeated scan rows and reordering.
+    # Full geometry hashes must still bind the acquisition multiplicities.
+    repeated_rows = measure_point_cloud_preview(
+        points=[*points, points[0]],
+        meters_per_unit=0.1,
+        calibration_method="ruler",
+        calibration_evidence="Unverified acquisition scale",
+        relative_scale_uncertainty=0.1,
+    )
+    reordered_rows = measure_point_cloud_preview(
+        points=list(reversed(points)),
+        meters_per_unit=0.1,
+        calibration_method="ruler",
+        calibration_evidence="Unverified acquisition scale",
+        relative_scale_uncertainty=0.1,
+    )
+    unique_sha = direct["provenance"]["unique_coordinate_geometry_sha256"]
+    assert repeated_rows["provenance"]["unique_coordinate_geometry_sha256"] == unique_sha
+    assert reordered_rows["provenance"]["unique_coordinate_geometry_sha256"] == unique_sha
+    assert (
+        repeated_rows["provenance"]["geometry_sha256"]
+        != direct["provenance"]["geometry_sha256"]
+    )
+    assert (
+        reordered_rows["provenance"]["geometry_sha256"]
+        == direct["provenance"]["geometry_sha256"]
+    )
+    assert (
+        reordered_rows["provenance"]["ordered_geometry_sha256"]
+        != direct["provenance"]["ordered_geometry_sha256"]
+    )
+    assert repeated_rows["unique_coordinate_centroid_in_source_frame_m"] == direct[
+        "unique_coordinate_centroid_in_source_frame_m"
+    ]
+    assert repeated_rows["arithmetic_centroid_in_source_frame_m"] != direct[
+        "arithmetic_centroid_in_source_frame_m"
+    ]
+
     # Uniform duplicate multiplicities cannot change a mathematical centroid.
     balanced = measure_point_cloud_preview(
         points=[[-1.0, 0.0, 0.0], [-1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
@@ -616,6 +654,7 @@ def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
     for key in fields[:-1]:
         assert expected[key] == direct[key]
     assert expected["provenance"]["calibration_verified"] is False
+    assert expected["provenance"]["unique_coordinate_geometry_sha256"] == unique_sha
 
     graph = {
         "graph_id": "duplicate-point-centroid-v14",

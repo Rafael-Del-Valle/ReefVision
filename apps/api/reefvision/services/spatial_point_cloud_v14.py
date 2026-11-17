@@ -499,6 +499,14 @@ def measure_point_cloud_preview(
     geometry_hash = hashlib.sha256(
         json.dumps(sorted(vertices), separators=(",", ":")).encode("utf-8")
     ).hexdigest()
+    # Compare exact observed XYZ loci independently of acquisition row
+    # multiplicity. This hash is not a registered specimen identity, and
+    # calibration reviews must still bind the full source geometry hash.
+    unique_coordinate_geometry_hash = hashlib.sha256(
+        json.dumps(
+            sorted(coordinate_multiplicities), separators=(",", ":")
+        ).encode("utf-8")
+    ).hexdigest()
     # Deterministic, bounded display sample. Original indices are preserved
     # so display decimation never changes the identity of measured point pairs.
     preview_count = min(len(vertices), MAX_PREVIEW_POINTS)
@@ -692,6 +700,7 @@ def measure_point_cloud_preview(
         "measurement_status": "caller_supplied_unverified",
         "provenance": {
             "geometry_sha256": geometry_hash,
+            "unique_coordinate_geometry_sha256": unique_coordinate_geometry_hash,
             "ordered_geometry_sha256": hashlib.sha256(
                 json.dumps(vertices, separators=(",", ":")).encode("utf-8")
             ).hexdigest(),
