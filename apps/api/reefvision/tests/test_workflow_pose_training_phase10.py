@@ -2424,7 +2424,20 @@ def test_pose_workflow_rejects_lossy_architecture_from_verified_truth(
     }
     parameters = {"training_config": {"epochs": 1}}
 
-    for invalid_architecture in (None, False, 0, [], {}, "", "   ", 123):
+    # Saved graph inputs must not change the registered model identity by trimming whitespace.
+    for invalid_architecture in (
+        None,
+        False,
+        0,
+        [],
+        {},
+        "",
+        "   ",
+        123,
+        " yolo11n-pose.yaml",
+        "yolo11n-pose.yaml ",
+        "\tyolo11n-pose.yaml",
+    ):
         with (
             app.state.session_factory() as session,
             pytest.raises(ValidationError, match="architecture must be a non-blank string"),
