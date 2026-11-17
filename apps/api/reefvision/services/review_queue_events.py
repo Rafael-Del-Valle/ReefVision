@@ -49,6 +49,13 @@ def assert_review_event_action_integrity(session: Session, item_ids: list[str]) 
             or_(
                 # The self-reported actor is not authentication, but must
                 # remain an intelligible audit label.
+                # SQLite VARCHAR/TEXT fields do not enforce the length limits
+                # of the manual-review API. Imported or restored events must
+                # satisfy those same human-evidence limits before history
+                # reads, reviewer writes, or keyed bulk replays.
+                func.length(ReviewQueueItemEvent.actor) > 100,
+                func.length(ReviewQueueItemEvent.comment) > 2000,
+                func.length(ReviewQueueItemEvent.assignee) > 100,
                 func.trim(ReviewQueueItemEvent.actor, whitespace) == "",
                 ~ReviewQueueItemEvent.event_type.in_(
                     (

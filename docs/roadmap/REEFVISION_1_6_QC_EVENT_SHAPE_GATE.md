@@ -110,3 +110,34 @@ set rejects them; this is not a claim that full repository tests passed.
 migration/research data and saved-workflow scientific acceptance, coordinated
 1.1/1.6 revision-0038 reconciliation and real installed-Windows MSI/CAB
 upgrade/rollback and GUI validation, plus explicit researcher approval.
+
+## Restored reviewer text-length parity (2026-11-17)
+
+The manual review API already caps actor and assignee labels at 100 Unicode
+characters and comments at 2,000. SQLite VARCHAR/TEXT storage does not enforce
+these limits, so a restored, imported, or manually modified event can exceed
+the accepted scientific audit contract while its event type, foreign keys,
+queue provenance and nonblank text remain otherwise valid. That event could
+previously be read or followed by another reviewer transition.
+
+The shared full-history SQL preflight now rejects over-limit actor, assignee
+or comment fields with HTTP 409, including when the event is outside the
+requested history page. It uses SQLite's character-aware LENGTH (not byte
+length) to match Pydantic's Unicode string limits. The same guard runs before
+new coordination comments, assignments, single-item transitions, keyed and
+unkeyed bulk triage, and idempotent replay on standalone and persisted,
+executable saved Workflow Builder QC queues. No record is truncated, repaired,
+approved, or deleted.
+
+`test_review_queue_event_length_integrity_16.py` covers two actual queue
+origins and all three fields, tests the 422 boundary on direct submission,
+forces disposable over-limit stored evidence, verifies no new events or
+triage transitions occur, and confirms safe replay only after restoring the
+test fixture. Provenance, review gates, typed workflow outputs, dataset
+snapshots and the source scientific annotations remain unchanged.
+
+**Release HOLD:** this is a bounded local scientific-integrity improvement,
+not version acceptance. Exact-head repository CI, prior 1.1/1.6 Alembic-0038
+reconciliation, representative biological saved-workflow tests, real Windows
+MSI/CAB installed-GUI clean install/upgrade/rollback and explicit owner
+approval remain required.
