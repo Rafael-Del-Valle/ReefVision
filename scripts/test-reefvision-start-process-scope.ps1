@@ -29,7 +29,7 @@ function Assert-SameIds {
     $actual = @($Observed | ForEach-Object { [int]$_ } | Sort-Object)
     $wanted = @($Expected | Sort-Object)
     if (($actual -join ',') -ne ($wanted -join ',')) {
-        throw "$Context: observed '$($actual -join ',')', expected '$($wanted -join ',')'"
+        throw "${Context}: observed '$($actual -join ',')', expected '$($wanted -join ',')'"
     }
 }
 $observed = Get-ReefVisionDesktopProcessList -InstalledExecutablePath $installed
