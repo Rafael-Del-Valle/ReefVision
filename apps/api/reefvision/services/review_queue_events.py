@@ -12,12 +12,12 @@ from sqlalchemy.orm import Session
 from reefvision.db.models import ReviewQueue, ReviewQueueItem
 from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
 from reefvision.domain.errors import ConflictError, NotFoundError
-from reefvision.services.review_queue_transaction_16 import begin_serialized_review_triage
 from reefvision.schemas.review_queue_events import (
     ReviewQueueEventCreate,
     ReviewQueueEventResponse,
     ReviewQueueEventsPage,
 )
+from reefvision.services.review_queue_transaction_16 import begin_serialized_review_triage
 
 
 def assert_review_event_action_integrity(session: Session, item_ids: list[str]) -> None:
