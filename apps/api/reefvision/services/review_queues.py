@@ -513,6 +513,31 @@ class ReviewQueueService:
                     for prediction in sorted(predictions, key=lambda item: item.id)
                 ],
                 "issue_ids": sorted(issue.id for issue in image_issues),
+                # A QC issue identifier and its maximum severity do not
+                # identify the underlying scientific finding. Thresholds,
+                # measured values, rule versions and explanations can change
+                # while the image's QC score and issue IDs remain identical.
+                # Hash the complete diagnostic evidence (never expose it as
+                # queue-item output), sorted for deterministic replay.
+                "issue_evidence": [
+                    {
+                        "id": issue.id,
+                        "rule_id": issue.rule_id,
+                        "rule_version": issue.rule_version,
+                        "fingerprint": issue.fingerprint,
+                        "severity": issue.severity,
+                        "status": issue.status,
+                        "title": issue.title,
+                        "explanation": issue.explanation,
+                        "annotation_ids": issue.annotation_ids_json,
+                        "prediction_ids": issue.prediction_ids_json,
+                        "class_ids": issue.class_ids_json,
+                        "measured_values": issue.measured_values_json,
+                        "thresholds": issue.thresholds_json,
+                        "resolution_metadata": issue.resolution_metadata_json,
+                    }
+                    for issue in sorted(image_issues, key=lambda item: item.id)
+                ],
                 "signal_values": signal_values,
                 "weights": request.signal_weights.model_dump(mode="json"),
             }
