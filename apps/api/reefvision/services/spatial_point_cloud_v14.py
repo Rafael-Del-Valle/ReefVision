@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from datetime import UTC
 from fractions import Fraction
 from math import dist, fsum, isfinite
@@ -460,7 +461,34 @@ def measure_point_cloud_preview(
                 intervals.append([min(candidates), max(candidates)])
         return intervals
 
-    unique_count = len(set(vertices))
+    coordinate_multiplicities = Counter(vertices)
+    unique_count = len(coordinate_multiplicities)
+    duplicate_row_count = len(vertices) - unique_count
+    maximum_coordinate_multiplicity = max(coordinate_multiplicities.values())
+    # Raw scan rows are not independent organisms or necessarily independent
+    # spatial observations. Keep the existing row-weighted centroid, but
+    # contrast it with a centroid counting each distinct XYZ location once.
+    # Neither is a validated tissue centroid or verified organism position.
+    unique_coordinate_centroid = [
+        fsum(point[axis] * scale for point in coordinate_multiplicities) / unique_count
+        for axis in range(3)
+    ]
+    centroid_separation = dist(centroid, unique_coordinate_centroid)
+    if len(set(coordinate_multiplicities.values())) == 1:
+        # Equal multiplicities cannot move the mathematical centroid. Avoid
+        # a false difference from independent floating-point summation paths.
+        centroid_separation = 0.0
+    centroid_separation_scale_interval: list[float] | None = None
+    centroid_separation_interval_unresolved = False
+    if relative_scale_uncertainty is not None:
+        lower = centroid_separation * (1 - relative_scale_uncertainty)
+        upper = centroid_separation * (1 + relative_scale_uncertainty)
+        if _scale_interval_unresolved(
+            centroid_separation, relative_scale_uncertainty, lower, upper
+        ):
+            centroid_separation_interval_unresolved = True
+        else:
+            centroid_separation_scale_interval = [lower, upper]
     source_affine_dimension = _source_affine_dimension(vertices)
     # Even a tilted line or plane can span a positive axis-aligned 3D box.
     # Keep the mathematically valid envelope but explicitly prohibit readers
@@ -532,6 +560,8 @@ def measure_point_cloud_preview(
         "schema_version": "point-cloud-preview-0001",
         "point_count": len(vertices),
         "unique_point_count": unique_count,
+        "duplicate_point_row_count": duplicate_row_count,
+        "maximum_coordinate_multiplicity": maximum_coordinate_multiplicity,
         "source_affine_dimension": source_affine_dimension,
         "preview_point_indices": preview_indices,
         "preview_extrema_source_indices": extrema_indices,
@@ -591,10 +621,29 @@ def measure_point_cloud_preview(
         "arithmetic_centroid_in_source_frame_scale_interval_m": coordinate_scale_intervals(
             centroid
         ),
+        "unique_coordinate_centroid_in_source_frame_m": unique_coordinate_centroid,
+        "unique_coordinate_centroid_in_source_frame_scale_interval_m": (
+            coordinate_scale_intervals(unique_coordinate_centroid)
+        ),
+        "row_vs_unique_coordinate_centroid_separation_m": centroid_separation,
+        "row_vs_unique_coordinate_centroid_separation_scale_interval_m": (
+            centroid_separation_scale_interval
+        ),
         "surface_area_m2": None,
         "branch_length_m": None,
         "qc_warnings": (
-            (["duplicate_points_present"] if unique_count < len(vertices) else [])
+            (["duplicate_points_present"] if duplicate_row_count else [])
+            + (
+                ["nonuniform_duplicate_coordinates_can_bias_row_centroid"]
+                if duplicate_row_count
+                and len(set(coordinate_multiplicities.values())) > 1
+                else []
+            )
+            + (
+                ["centroid_separation_uncertainty_interval_below_numeric_resolution"]
+                if centroid_separation_interval_unresolved
+                else []
+            )
             + (
                 ["dimension_uncertainty_interval_below_numeric_resolution"]
                 if dimension_scale_interval_underflow
