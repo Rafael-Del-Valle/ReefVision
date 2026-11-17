@@ -164,13 +164,11 @@ def test_coincident_point_indices_have_explicit_chord_qc() -> None:
     assert result["duplicate_point_row_fraction"] == pytest.approx(1 / 3)
     assert result["maximum_coordinate_multiplicity"] == 2
     assert result["arithmetic_centroid_in_source_frame_m"] == pytest.approx([0, 0.01, 0])
-    assert result["unique_coordinate_centroid_in_source_frame_m"] == pytest.approx(
-        [0, 0.015, 0]
-    )
+    assert result["unique_coordinate_centroid_in_source_frame_m"] == pytest.approx([0, 0.015, 0])
     assert result["row_vs_unique_coordinate_centroid_separation_m"] == pytest.approx(0.005)
-    assert result[
-        "row_vs_unique_coordinate_centroid_separation_scale_interval_m"
-    ] == pytest.approx([0.0045, 0.0055])
+    assert result["row_vs_unique_coordinate_centroid_separation_scale_interval_m"] == pytest.approx(
+        [0.0045, 0.0055]
+    )
     assert result["source_affine_dimension"] == 1
     assert result["axis_aligned_bounding_box_envelope_volume_m3"] == 0.0
     coincident, distinct = result["selected_point_chords"]
@@ -213,9 +211,7 @@ def test_duplicate_centroid_qc_standalone_and_persisted_workflow(
     assert expected["duplicate_point_row_fraction"] == pytest.approx(1 / 3)
     assert expected["unique_point_count"] == 2
     assert expected["arithmetic_centroid_in_source_frame_m"] == pytest.approx([0, 0.01, 0])
-    assert expected["unique_coordinate_centroid_in_source_frame_m"] == pytest.approx(
-        [0, 0.015, 0]
-    )
+    assert expected["unique_coordinate_centroid_in_source_frame_m"] == pytest.approx([0, 0.015, 0])
     assert expected["row_vs_unique_coordinate_centroid_separation_m"] == pytest.approx(0.005)
     assert expected["qc_warnings"] == [
         "duplicate_points_present",
@@ -436,3 +432,112 @@ def test_three_digit_zero_rgb_token_remains_valid() -> None:
     colors: list[list[int]] = []
     assert parse_ascii_ply_points(valid, colors_out=colors) == parse_ascii_ply_points(RGB_PLY)
     assert colors[-1] == [11, 0, 7]
+
+
+@pytest.mark.parametrize("source_format", ["xyz", "ply"])
+def test_resampled_loci_stay_distinct_from_biological_change_in_saved_workflows(
+    client: TestClient, source_format: str
+) -> None:
+    """Repeated acquisition rows alter centroids, not unique spatial loci."""
+    project_id = str(create_project(client, "Acquisition resampling integrity")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    original = [[0, 0, 0], [4, 0, 0], [0, 2, 0]]
+    resampled = [[0, 0, 0], [0, 0, 0], [4, 0, 0], [0, 2, 0]]
+    measured = []
+    for label, points in (("original", original), ("resampled", resampled)):
+        params = {
+            "meters_per_unit": 0.01,
+            "calibration_method": "ruler",
+            "calibration_evidence": "Provisional scale; no identity review",
+            "relative_scale_uncertainty": 0.1,
+        }
+        if source_format == "xyz":
+            params["points"] = points
+        else:
+            header = (
+                "ply\nformat ascii 1.0\n"
+                f"element vertex {len(points)}\n"
+                "property float x\nproperty float y\n"
+                "property float z\nend_header\n"
+            )
+            rows = "".join(f"{x} {y} {z}\n" for x, y, z in points)
+            params["ply_text"] = header + rows
+        response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+        assert response.status_code == 200, response.text
+        expected = response.json()
+        assert expected["measurement_status"] == "caller_supplied_unverified"
+        assert expected["provenance"]["calibration_verified"] is False
+        assert expected["surface_area_m2"] is None
+        assert expected["branch_length_m"] is None
+        graph = {
+            "graph_id": f"acquisition-resample-{source_format}-{label}",
+            "name": "Acquisition row multiplicity QC",
+            "nodes": [
+                {"node_id": "p", "node_type": "project_source"},
+                {"node_id": "c", "node_type": "point_cloud_preview", "parameters": params},
+            ],
+            "edges": [
+                {
+                    "edge_id": "e",
+                    "source_node_id": "p",
+                    "source_port_id": "project",
+                    "target_node_id": "c",
+                    "target_port_id": "project",
+                }
+            ],
+        }
+        plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+        assert plan.status_code == 200, plan.text
+        assert plan.json()["executable"] is True
+        saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+        assert saved.status_code == 201, saved.text
+        digests = []
+        for _ in range(2):
+            run = client.post(
+                f"{base}/workflow-runs",
+                json={"graph_record_id": saved.json()["id"]},
+            )
+            assert run.status_code == 202, run.text
+            app = cast(FastAPI, client.app)
+            assert process_workflow_run_job(
+                app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+            )
+            detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+            assert detail.status_code == 200, detail.text
+            assert detail.json()["run"]["status"] == "succeeded"
+            artifact = next(
+                item for item in detail.json()["artifacts"]
+                if item["data_type"] == "point_cloud_measurement_preview"
+            )
+            for key in (
+                "provenance",
+                "qc_warnings",
+                "point_count",
+                "unique_point_count",
+                "arithmetic_centroid_in_source_frame_m",
+                "unique_coordinate_centroid_in_source_frame_m",
+                "axis_aligned_dimensions_m",
+                "measurement_status",
+            ):
+                assert artifact["payload_json"][key] == expected[key]
+            digests.append(artifact["payload_sha256"])
+        assert len(set(digests)) == 1
+        measured.append(expected)
+
+    first, repeated = measured
+    assert first["point_count"] == 3
+    assert repeated["point_count"] == 4
+    assert first["unique_point_count"] == repeated["unique_point_count"] == 3
+    assert first["axis_aligned_dimensions_m"] == repeated["axis_aligned_dimensions_m"]
+    assert first["provenance"]["unique_coordinate_geometry_sha256"] == (
+        repeated["provenance"]["unique_coordinate_geometry_sha256"]
+    )
+    assert first["provenance"]["geometry_sha256"] != repeated["provenance"]["geometry_sha256"]
+    assert first["arithmetic_centroid_in_source_frame_m"] != (
+        repeated["arithmetic_centroid_in_source_frame_m"]
+    )
+    assert first["unique_coordinate_centroid_in_source_frame_m"] == (
+        repeated["unique_coordinate_centroid_in_source_frame_m"]
+    )
+    assert "nonuniform_duplicate_coordinates_can_bias_row_centroid" in repeated["qc_warnings"]
+    assert "nonuniform_duplicate_coordinates_can_bias_row_centroid" not in first["qc_warnings"]
