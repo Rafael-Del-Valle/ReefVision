@@ -128,12 +128,15 @@ describe("ImageViewport", () => {
         fitTransform({ width: 1600, height: 1200 }, size).scale,
       );
 
-      // A hidden or collapsed desktop panel must not substitute the
-      // 1200x780 initial fallback for a previously measured viewport.
+      // Hidden, collapsed, or unmeasurable WebView2 panels must not
+      // substitute the 1200x780 fallback for a previously measured viewport.
       for (const [collapsedWidth, collapsedHeight] of [
         [0, 600],
         [900, 0],
         [0, 0],
+        [Number.NaN, 600],
+        [900, Number.POSITIVE_INFINITY],
+        [Number.NEGATIVE_INFINITY, 600],
       ]) {
         act(() => {
           size.width = collapsedWidth;
@@ -239,7 +242,11 @@ describe("ImageViewport", () => {
 
   it("contains malformed one-axis wheel values", () => {
     render(
-      <ImageViewport width={1600} height={1200} label="Malformed wheel viewport">
+      <ImageViewport
+        width={1600}
+        height={1200}
+        label="Malformed wheel viewport"
+      >
         <svg data-testid="wheel-overlay" viewBox="0 0 1600 1200">
           <polygon points="10,10 40,10 40,40" />
         </svg>

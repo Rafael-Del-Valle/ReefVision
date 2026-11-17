@@ -108,7 +108,14 @@ export function ImageViewport({
       // with the initial fallback and shifting a scientist's manual view.
       const measuredWidth = frame.clientWidth;
       const measuredHeight = frame.clientHeight;
-      if (measuredWidth <= 0 || measuredHeight <= 0) return;
+      if (
+        !Number.isFinite(measuredWidth) ||
+        !Number.isFinite(measuredHeight) ||
+        measuredWidth <= 0 ||
+        measuredHeight <= 0
+      ) {
+        return;
+      }
       const next = { width: measuredWidth, height: measuredHeight };
       setFrameSize((current) =>
         current.width === next.width && current.height === next.height
