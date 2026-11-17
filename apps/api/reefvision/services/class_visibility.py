@@ -122,8 +122,7 @@ class ClassVisibilityService:
                 for item in self.preferences.list_for_project_user(project_id, user_identity)
             }
             defaults_by_layer = {
-                item.layer_type: item
-                for item in self.project_defaults.list_for_project(project_id)
+                item.layer_type: item for item in self.project_defaults.list_for_project(project_id)
             }
         except JSONDecodeError as exc:
             # ORM row hydration deserializes the JSON field. Reject malformed

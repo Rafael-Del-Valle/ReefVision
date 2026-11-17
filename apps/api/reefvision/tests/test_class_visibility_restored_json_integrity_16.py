@@ -42,9 +42,7 @@ def test_restored_bad_json_fails_closed_without_overwriting_reviewer_settings(
         name="Swiftia Open",
         display_color="#E76F51",
     )
-    layer_url = (
-        f"/api/v1/projects/{project['id']}/class-visibility/{scope}/annotations"
-    )
+    layer_url = f"/api/v1/projects/{project['id']}/class-visibility/{scope}/annotations"
     bundle_url = f"/api/v1/projects/{project['id']}/class-visibility"
     saved = client.put(layer_url, json={"hidden_class_ids": [label_class["id"]]})
     assert saved.status_code == 200, saved.text
@@ -148,10 +146,13 @@ def test_legacy_unknown_and_duplicate_hidden_class_ids_remain_compatible(
     assert state["saved"] is True
     assert state["hidden_class_ids"] == [label_class["id"]]
     with app.state.session_factory() as session:
-        assert session.execute(
-            text(
-                f"SELECT hidden_class_ids_json FROM {table} "
-                "WHERE project_id = :project_id AND layer_type = 'annotations'"
-            ),
-            {"project_id": project["id"]},
-        ).scalar_one() == raw
+        assert (
+            session.execute(
+                text(
+                    f"SELECT hidden_class_ids_json FROM {table} "
+                    "WHERE project_id = :project_id AND layer_type = 'annotations'"
+                ),
+                {"project_id": project["id"]},
+            ).scalar_one()
+            == raw
+        )
