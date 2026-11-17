@@ -591,8 +591,14 @@ def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
     assert reordered_rows["provenance"]["unique_coordinate_geometry_sha256"] == unique_sha
     assert repeated_rows["duplicate_point_row_fraction"] == pytest.approx(0.4)
     assert reordered_rows["duplicate_point_row_fraction"] == pytest.approx(0.25)
-    assert repeated_rows["provenance"]["geometry_sha256"] != direct["provenance"]["geometry_sha256"]
-    assert reordered_rows["provenance"]["geometry_sha256"] == direct["provenance"]["geometry_sha256"]
+    assert (
+        repeated_rows["provenance"]["geometry_sha256"]
+        != direct["provenance"]["geometry_sha256"]
+    )
+    assert (
+        reordered_rows["provenance"]["geometry_sha256"]
+        == direct["provenance"]["geometry_sha256"]
+    )
     assert (
         reordered_rows["provenance"]["ordered_geometry_sha256"]
         != direct["provenance"]["ordered_geometry_sha256"]
