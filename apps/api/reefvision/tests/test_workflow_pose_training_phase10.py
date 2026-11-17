@@ -592,6 +592,40 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     with app.state.session_factory() as session:
         assert session.scalars(select(TrainingRun.id)).all() == []
 
+    # An actual local registration must not silently fall back to its filename
+    # when persisted source-architecture lineage is a malformed JSON array.
+    with app.state.session_factory() as session:
+        registered = session.get(ModelRegistration, model_id)
+        assert registered is not None
+        original_metadata = dict(registered.metadata_json or {})
+        registered.metadata_json = {**original_metadata, "source_architecture": []}
+        session.commit()
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="seed source architecture metadata is invalid"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload={
+                "project_id": project["id"],
+                "dataset_id": dataset["id"],
+                "manifest_sha256": dataset["manifest_sha256"],
+            },
+            initial_model_payload=seed_reference,
+            parameters={"device": "cpu", "training_config": {"epochs": 1}},
+            processor=_fake_pose_processor,
+        )
+
+    with app.state.session_factory() as session:
+        assert session.scalars(select(TrainingRun.id)).all() == []
+        registered = session.get(ModelRegistration, model_id)
+        assert registered is not None
+        registered.metadata_json = original_metadata
+        session.commit()
+
     # Reuse the actual API-frozen scientist-reviewed dataset. A partial or
     # blank saved-workflow identity must never launch an untraceable training
     # job or bypass node-level replay protection.
