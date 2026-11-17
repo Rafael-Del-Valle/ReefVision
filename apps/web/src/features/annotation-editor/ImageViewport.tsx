@@ -127,8 +127,13 @@ export function ImageViewport({
 
       event.preventDefault();
       event.stopPropagation();
-      // Horizontal trackpad movement must not unexpectedly zoom the image.
-      if (event.deltaY === 0) return;
+      // Trackpads often emit a small vertical jitter during horizontal
+      // scrolling. Do not zoom the source image or its scientific overlays
+      // when horizontal movement dominates, or Shift requests horizontal pan.
+      // Still consume the wheel event to avoid scrolling the document.
+      if (event.shiftKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) {
+        return;
+      }
 
       const rect = frame.getBoundingClientRect();
       updateView(
