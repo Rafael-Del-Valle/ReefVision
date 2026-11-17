@@ -308,6 +308,39 @@ describe("TrainingRunDetail", () => {
     ).toBeInTheDocument();
   });
 
+  it("discloses invalid loss histories instead of silently hiding or interpolating them", () => {
+    render(
+      <TrainingRunDetail
+        run={{
+          ...run,
+          status: "training",
+          metrics_history: {
+            epoch: [1, 2, 3],
+            "train/box_loss": [null, null, null],
+            "train/cls_loss": [0.8, null, 0.4],
+            "train/dfl_loss": [0.6, Number.NaN, 0.5],
+            "val/box_loss": "malformed",
+          } as unknown as TrainingRun["metrics_history"],
+        }}
+        registering={false}
+        onCancel={vi.fn()}
+        onRegister={vi.fn()}
+      />,
+    );
+
+    const pending = screen.getByText("train box loss").closest("figure");
+    expect(pending).toHaveTextContent("Awaiting first measurement");
+    expect(pending?.querySelector("svg")).toBeNull();
+    for (const label of ["train cls loss", "train dfl loss", "val box loss"]) {
+      const figure = screen.getByText(label).closest("figure");
+      expect(figure).toHaveTextContent(
+        "Stored samples contain missing, nonnumeric, or non-finite values; chart not plotted (no interpolation).",
+      );
+      expect(figure?.querySelector("svg")).toBeNull();
+    }
+    expect(screen.queryByText("Best epoch")).not.toBeInTheDocument();
+  });
+
   it("does not invent best epochs from mismatched or fractional epoch history", () => {
     for (const epoch of [
       [1, 2],

@@ -54,6 +54,26 @@ function laterUnavailableSamples(
   return Array.isArray(samples) ? samples.length - measured : 0;
 }
 
+function invalidMetricColumns(
+  run: TrainingRun,
+  validHistory: Record<string, number[]>,
+): string[] {
+  const raw = run.metrics_history;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+  // An all-null worker column is a pending measurement, not corrupt data.
+  // A non-array value or an internal gap must be surfaced instead of silently
+  // disappearing or being interpolated into a scientific loss curve.
+  return Object.entries(raw).flatMap(([key, samples]) => {
+    if (
+      /^epoch$|^time$/i.test(key) ||
+      Object.prototype.hasOwnProperty.call(validHistory, key)
+    ) {
+      return [];
+    }
+    return [key];
+  });
+}
+
 function metricLabel(key: string): string {
   return key.replaceAll("/", " ").replaceAll("_", " ");
 }
@@ -254,6 +274,7 @@ export function TrainingRunDetail({
     }
   }
   const metricHistory = history(run);
+  const invalidMetrics = invalidMetricColumns(run, metricHistory);
   const best = bestEpoch(run);
   // Interrupted or older jobs may have no artifact manifest yet. Do not
   // hide the training console, loss history, or immutable run provenance.
@@ -371,6 +392,15 @@ export function TrainingRunDetail({
               )}
             />
           ))}
+        {invalidMetrics.map((key) => (
+          <figure className="training-metric-chart" key={key}>
+            <figcaption>{metricLabel(key)}</figcaption>
+            <small>
+              Stored samples contain missing, nonnumeric, or non-finite values;
+              chart not plotted (no interpolation).
+            </small>
+          </figure>
+        ))}
       </div>
       {tuningResults?.trials?.length ? (
         <TuningDashboard results={tuningResults} onApply={onApplyBest} />
