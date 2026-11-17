@@ -162,9 +162,11 @@ $records | Format-Table -AutoSize
 For a split-cabinet ReefVision 1.0.3 build, the read-only collector can verify **all five or six CABs** against the same `build-provenance.json` alongside the MSI (not just one CAB):
 
 ```powershell
+$repoRoot = 'C:\path\to\ReefVision' # replace with the exact-SHA source checkout
+$collector = Join-Path $repoRoot 'scripts/windows/collect-103-acceptance-evidence.ps1'
 $msi = Join-Path $staging 'ReefVision_1.0.3_x64_en-US.msi'
 $cabs = @(Get-ChildItem -LiteralPath $staging -Filter 'rv*.cab' -File | Sort-Object Name | ForEach-Object FullName)
-& scripts/windows/collect-103-acceptance-evidence.ps1 -CandidateSha '<exact 40-character source commit>' `
+& $collector -CandidateSha '<exact 40-character source commit>' `
   -MsiPath $msi -CabPath $cabs -ProvenancePath (Join-Path $staging 'build-provenance.json')
 ```
 
