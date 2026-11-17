@@ -503,9 +503,7 @@ def measure_point_cloud_preview(
     # multiplicity. This hash is not a registered specimen identity, and
     # calibration reviews must still bind the full source geometry hash.
     unique_coordinate_geometry_hash = hashlib.sha256(
-        json.dumps(
-            sorted(coordinate_multiplicities), separators=(",", ":")
-        ).encode("utf-8")
+        json.dumps(sorted(coordinate_multiplicities), separators=(",", ":")).encode("utf-8")
     ).hexdigest()
     # Deterministic, bounded display sample. Original indices are preserved
     # so display decimation never changes the identity of measured point pairs.
@@ -569,6 +567,8 @@ def measure_point_cloud_preview(
         "point_count": len(vertices),
         "unique_point_count": unique_count,
         "duplicate_point_row_count": duplicate_row_count,
+        # Sampling redundancy is acquisition QC, not tissue coverage or identity.
+        "duplicate_point_row_fraction": duplicate_row_count / len(vertices),
         "maximum_coordinate_multiplicity": maximum_coordinate_multiplicity,
         "source_affine_dimension": source_affine_dimension,
         "preview_point_indices": preview_indices,
