@@ -160,6 +160,11 @@ annotation, calibration, anatomy, identity, growth, or condition evidence.
 - Point-cloud scale-only dimension, selected-chord and signed-coordinate intervals
   are unresolved when nonzero uncertainty rounds distinct bounds to one float.
   This is not evidence of exact scale, physical calibration or confidence limits.
+- A point-cloud preview now carries a SHA-256 of its exact sampled source-row
+  indices and normalized, unscaled XYZ positions. Changing which rows are
+  displayed can change this digest without changing the complete source cloud.
+  This is visualization provenance, not source-byte authentication, verified
+  biological identity, registration, surface area, or branch-length evidence.
 - The complete installed 1.3/legacy-draft-1.4 lineage matrix is not available.
 - Local true installation was blocked by the non-elevated session; remote
   disposable Windows installation passed.
