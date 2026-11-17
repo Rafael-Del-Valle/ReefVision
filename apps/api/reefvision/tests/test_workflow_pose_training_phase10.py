@@ -1965,7 +1965,22 @@ def test_pose_workflow_rejects_lossy_random_seeds_from_verified_truth(
     }
     # Unicode superscript digits cannot be parsed as integers; huge seeds
     # must not overflow the persisted signed 64-bit training-run column.
-    for invalid_seed in (True, False, -1, 2.5, "2.5", "invalid", "²", 2**63, "9" * 5000):
+    # A decimal string with surrounding whitespace must not be normalized
+    # into a different saved random seed without the scientist's consent.
+    for invalid_seed in (
+        True,
+        False,
+        -1,
+        2.5,
+        "2.5",
+        "invalid",
+        "²",
+        2**63,
+        "9" * 5000,
+        " 7",
+        "7 ",
+        "\t7",
+    ):
         with (
             app.state.session_factory() as session,
             pytest.raises(ValidationError, match="random_seed must be a non-negative integer"),
