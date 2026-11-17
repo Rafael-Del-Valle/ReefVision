@@ -17,11 +17,14 @@ export function ImageViewport({
   width,
   height,
   label,
+  sourceImageId,
   children,
 }: {
   width: number;
   height: number;
   label: string;
+  // Different camera sources can share dimensions but not viewport state.
+  sourceImageId?: string;
   children: ReactNode;
 }) {
   const frameRef = useRef<HTMLDivElement | null>(null);
@@ -36,7 +39,12 @@ export function ImageViewport({
   } | null>(null);
   // Preserve a scientist-selected zoom/pan when the desktop pane resizes.
   const manualViewRef = useRef(false);
-  const previousLayoutRef = useRef({ width, height, frameSize: FALLBACK_SIZE });
+  const previousLayoutRef = useRef({
+    width,
+    height,
+    sourceImageId,
+    frameSize: FALLBACK_SIZE,
+  });
   const [frameSize, setFrameSize] = useState(FALLBACK_SIZE);
   const [view, setView] = useState(viewRef.current);
 
@@ -59,12 +67,16 @@ export function ImageViewport({
 
   useEffect(() => {
     const previous = previousLayoutRef.current;
-    const imageChanged = width !== previous.width || height !== previous.height;
+    const imageChanged =
+      width !== previous.width ||
+      height !== previous.height ||
+      sourceImageId !== previous.sourceImageId;
     const frameChanged =
       frameSize.width !== previous.frameSize.width ||
       frameSize.height !== previous.frameSize.height;
     if (imageChanged) {
-      // New source dimensions mean new pixel coordinates: always refit.
+      // New source identity (even at identical dimensions) means a distinct
+      // scientific image. Discard the old zoom and in-flight pan anchor.
       manualViewRef.current = false;
       dragRef.current = null;
     }
@@ -84,8 +96,8 @@ export function ImageViewport({
           (frameSize.height - previous.frameSize.height) / 2,
       });
     }
-    previousLayoutRef.current = { width, height, frameSize };
-  }, [frameSize, height, updateView, width]);
+    previousLayoutRef.current = { width, height, sourceImageId, frameSize };
+  }, [frameSize, height, sourceImageId, updateView, width]);
 
   useEffect(() => {
     const frame = frameRef.current;

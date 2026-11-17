@@ -379,6 +379,65 @@ describe("ImageViewport", () => {
     expect(polygon).toHaveAttribute("points", originalPoints);
   });
 
+  it("refits when switching same-size camera images without carrying stale pan or zoom", () => {
+    const renderSource = (sourceImageId: string) => (
+      <ImageViewport
+        width={1600}
+        height={1200}
+        label="Camera mask viewport"
+        sourceImageId={sourceImageId}
+      >
+        <svg data-testid="source-geometry" viewBox="0 0 1600 1200">
+          <polygon points="10,20 30,20 30,40" />
+        </svg>
+      </ImageViewport>
+    );
+    const { rerender } = render(renderSource("camera-a"));
+    const frame = screen.getByRole("region", { name: "Camera mask viewport" });
+    const transform = screen.getByTestId("image-viewport-transform");
+    const originalGeometry = screen
+      .getByTestId("source-geometry")
+      .querySelector("polygon")
+      ?.getAttribute("points");
+    const fitted = transform.style.transform;
+
+    fireEvent.wheel(frame, { deltaY: -120, clientX: 300, clientY: 200 });
+    const zoomed = transform.style.transform;
+    expect(zoomed).not.toBe(fitted);
+
+    // A refetch of the *same* camera source must preserve the scientist's view.
+    rerender(renderSource("camera-a"));
+    expect(transform.style.transform).toBe(zoomed);
+
+    fireEvent.pointerDown(frame, {
+      button: 0,
+      altKey: true,
+      pointerId: 9,
+      clientX: 50,
+      clientY: 60,
+    });
+    fireEvent.pointerMove(window, {
+      pointerId: 9,
+      clientX: 100,
+      clientY: 120,
+    });
+    expect(transform.style.transform).not.toBe(zoomed);
+
+    // Dimensions are identical, so only the source identity can trigger
+    // the reset. An old active pointer must not pan the newly opened image.
+    rerender(renderSource("camera-b"));
+    expect(transform.style.transform).toBe(fitted);
+    fireEvent.pointerMove(window, {
+      pointerId: 9,
+      clientX: 140,
+      clientY: 160,
+    });
+    expect(transform.style.transform).toBe(fitted);
+    expect(
+      screen.getByTestId("source-geometry").querySelector("polygon"),
+    ).toHaveAttribute("points", originalGeometry);
+  });
+
   it("preserves Alt-modified polygon vertex gestures", () => {
     const onPointerDown = vi.fn();
     render(
