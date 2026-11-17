@@ -1250,6 +1250,35 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
 
     assert retry_completed_node()["training_run_id"] == result["training_run_id"]
 
+    # New jobs seal the entire queued request. Removing a frozen manifest
+    # assertion must not turn a modern job into an unchecked legacy request.
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None and persisted.job_id is not None
+        child_job = session.get(Job, persisted.job_id)
+        assert child_job is not None
+        original_request = dict(child_job.request_json)
+        assert persisted.draft_snapshot_json["pose_child_job_request_sha256"] == (
+            canonical_json_sha256(original_request)
+        )
+        dropped_digest_request = dict(original_request)
+        dropped_digest_request.pop("pose_training_dataset_manifest_sha256")
+        child_job.request_json = dropped_digest_request
+        session.commit()
+
+    with pytest.raises(ValidationError, match="child job request checksum changed"):
+        retry_completed_node()
+
+    with app.state.session_factory() as session:
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None and persisted.job_id is not None
+        child_job = session.get(Job, persisted.job_id)
+        assert child_job is not None
+        child_job.request_json = original_request
+        session.commit()
+
+    assert retry_completed_node()["training_run_id"] == result["training_run_id"]
+
     # A real API-frozen, scientist-reviewed pose dataset underlies this run.
     # Corrupt only the persisted child-run snapshot and verify that replay
     # cannot silently return its checkpoint with falsified dataset lineage.
@@ -2635,6 +2664,39 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
             workflow_run_id="saved-pose-run",
             workflow_node_run_id="tampered-frozen-manifest-node",
             processor=substituted_manifest_processor,
+        )
+
+    # The first completion also rejects missing frozen lineage fields, even
+    # when the worker preserves the dataset ID and valid checkpoint bytes.
+    def removed_manifest_processor(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        assert _fake_pose_processor(settings, factory, job_id)
+        with factory() as child_session:
+            job = child_session.get(Job, job_id)
+            assert job is not None
+            request = dict(job.request_json)
+            assert "pose_training_dataset_manifest_sha256" in request
+            request.pop("pose_training_dataset_manifest_sha256")
+            job.request_json = request
+            child_session.commit()
+        return True
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="child job request checksum changed"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={"training_config": {"epochs": 1}},
+            workflow_run_id="saved-pose-run",
+            workflow_node_run_id="removed-frozen-manifest-node",
+            processor=removed_manifest_processor,
         )
 
     # A different successful job with copied request metadata must not
