@@ -509,6 +509,27 @@ def measure_mesh_preview(
     # coverage without treating sampled faces as scientific measurements.
     display_geometry = _sample_mesh_display_geometry(points, faces, scale)
     sampled_raw_area = sum(face_areas[index] for index in display_geometry["preview_face_indices"])
+    # A uniform face-index sample can exclude an entire disconnected surface
+    # patch, even if its full-mesh area is large. Record per-patch display
+    # coverage without altering scientific measurements or source topology.
+    sampled_patch_face_counts: Counter[int] = Counter()
+    sampled_patch_face_areas: dict[int, list[float]] = {}
+    for face_index in display_geometry["preview_face_indices"]:
+        patch = root(face_index)
+        sampled_patch_face_counts[patch] += 1
+        sampled_patch_face_areas.setdefault(patch, []).append(face_areas[face_index])
+    preview_patch_face_counts = [
+        sampled_patch_face_counts[patch] for patch in ordered_patches
+    ]
+    preview_omitted_patch_indices = [
+        index for index, count in enumerate(preview_patch_face_counts) if count == 0
+    ]
+    preview_patch_area_coverage_fractions = [
+        min(1.0, fsum(sampled_patch_face_areas.get(patch, [])) / patch_area_mesh_units[patch])
+        if patch_area_mesh_units[patch] > 0
+        else None
+        for patch in ordered_patches
+    ]
     return {
         "schema_version": "mesh-preview-0001",
         "surface_area_m2": area_m2,
@@ -589,6 +610,11 @@ def measure_mesh_preview(
         **display_geometry,
         "preview_sampled_surface_area_m2": sampled_raw_area * scale * scale,
         "preview_surface_area_fraction": sampled_raw_area / raw_area if raw_area > 0 else None,
+        "preview_edge_connected_patch_face_counts": preview_patch_face_counts,
+        "preview_edge_connected_patch_surface_area_coverage_fractions": (
+            preview_patch_area_coverage_fractions
+        ),
+        "preview_omitted_edge_connected_patch_indices": preview_omitted_patch_indices,
         "vertex_count": len(points),
         "preview_referenced_bounds_in_source_frame_m": {
             "minimum": preview_min_m,
@@ -806,6 +832,11 @@ def measure_mesh_preview(
             + (["coincident_mesh_patch_coordinates"] if coincident_patch_coordinates else [])
             + (["inconsistent_face_winding"] if inconsistent_winding_edge_count else [])
             + (["unreferenced_mesh_vertices"] if unreferenced_vertex_count else [])
+            + (
+                ["preview_omits_edge_connected_mesh_patches"]
+                if preview_omitted_patch_indices
+                else []
+            )
             + (
                 ["zero_area_mesh_patch_centroid_undefined"]
                 if any(patch_area_mesh_units[patch] == 0 for patch in ordered_patches)
