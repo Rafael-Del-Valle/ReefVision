@@ -241,6 +241,13 @@ def main() -> None:
         "never establish migration equivalence",
     )
     parser.add_argument(
+        "--fail-on-format-header-drift",
+        action="store_true",
+        help="Exit 2 when --compare-to finds different SQLite application_id "
+        "or user_version values; schema_version is a change counter, "
+        "not a migration identity",
+    )
+    parser.add_argument(
         "--fail-on-noncanonical-stamp", action="store_true",
         help="Exit 2 if Alembic version_num lacks canonical text type, NOT NULL, or primary-key constraints; "
         "opt-in for legacy SQLite schemas",
@@ -252,6 +259,8 @@ def main() -> None:
         parser.error("--fail-on-revision-mismatch requires --compare-to")
     if args.fail_on_lineage_collision and args.compare_to is None:
         parser.error("--fail-on-lineage-collision requires --compare-to")
+    if args.fail_on_format_header_drift and args.compare_to is None:
+        parser.error("--fail-on-format-header-drift requires --compare-to")
     # Validate both inputs before samefile(): pathlib.samefile raises an
     # unhandled OSError for missing paths. Report a stable CLI usage error
     # without attempting to create or modify either research database.
@@ -296,6 +305,20 @@ def main() -> None:
         evidence["schema_comparison"] = {
             "reference_database": reference["database"],
             "reference_schema_sha256": reference["schema_sha256"],
+            "reference_sqlite_header": reference["sqlite_header"],
+            # application_id and user_version are format assertions independent
+            # of Alembic DDL and can differ even when names, SQL and 0038 match.
+            # schema_version is a SQLite schema-change cookie: its difference
+            # alone is not a format incompatibility or evidence of migration.
+            "format_header_differences": [
+                {
+                    "field": key,
+                    "database_value": evidence["sqlite_header"][key],
+                    "reference_value": reference["sqlite_header"][key],
+                }
+                for key in ("application_id", "user_version")
+                if evidence["sqlite_header"][key] != reference["sqlite_header"][key]
+            ],
             # Show both validated revision values to support independent human
             # reconciliation; a boolean alone cannot explain mismatched stamps.
             "reference_alembic_stamps": reference["alembic_stamps"],
@@ -351,6 +374,9 @@ def main() -> None:
         raise SystemExit(2)
 
     if args.fail_on_revision_mismatch and not evidence["schema_comparison"]["revision_markers_match"]:
+        raise SystemExit(2)
+
+    if args.fail_on_format_header_drift and evidence["schema_comparison"]["format_header_differences"]:
         raise SystemExit(2)
 
     def has_integrity_error(report: dict) -> bool:
