@@ -81,11 +81,11 @@ def test_signed_zero_is_not_a_new_specimen_geometry_in_saved_workflow(
         signed_params = {**params, "points": signed_points}
     else:
         header = (
-            "ply\\nformat ascii 1.0\\nelement vertex 3\\n"
-            "property double x\\nproperty double y\\nproperty double z\\nend_header\\n"
+            "ply\nformat ascii 1.0\nelement vertex 3\n"
+            "property double x\nproperty double y\nproperty double z\nend_header\n"
         )
-        canonical_text = header + "0 0 0\\n2 0 0\\n0 3 1\\n"
-        signed_text = header + "-0 0 -0\\n2 -0 0\\n0 3 1\\n"
+        canonical_text = header + "0 0 0\n2 0 0\n0 3 1\n"
+        signed_text = header + "-0 0 -0\n2 -0 0\n0 3 1\n"
         canonical_params = {**params, "ply_text": canonical_text}
         signed_params = {**params, "ply_text": signed_text}
 
