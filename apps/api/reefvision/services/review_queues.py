@@ -20,6 +20,7 @@ from reefvision.db.models import (
     ReviewQueueItem,
 )
 from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
+from reefvision.domain.enums import QUALITY_CONTROL_ISSUE_STATUSES
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.repositories.review_queues import ReviewQueueRepository
 from reefvision.schemas.review_queues import (
@@ -184,23 +185,26 @@ class ReviewQueueService:
         issues_by_image: dict[str, list[Any]] = defaultdict(list)
         if source_run is not None:
             for issue in self.quality_control.quality_control.issues_for_run(source_run.id):
-                if issue.status not in {"open", "acknowledged"} or issue.image_id is None:
-                    continue
-                # A restored or externally modified source finding can retain
-                # its run ID while referencing another study, an image outside
-                # this scope, or an unknown severity. Never silently score
-                # these rows as zero or attribute their evidence to this
-                # biological project. Check before writing any queue artifacts.
+                # SQLite does not enforce QC lifecycle enum values. Validate
+                # all source findings before filtering dismissed/resolved rows:
+                # a corrupt status or foreign scientific scope must not make
+                # an audit diagnostic silently disappear from saved provenance.
                 if (
-                    issue.project_id != project.id
+                    issue.status not in QUALITY_CONTROL_ISSUE_STATUSES
+                    or issue.project_id != project.id
                     or issue.dataset_version_id != (dataset_version.id if dataset_version else None)
-                    or issue.image_id not in scoped_image_ids
+                    or (issue.image_id is not None and issue.image_id not in scoped_image_ids)
                     or issue.severity not in SEVERITY_SCORES
                 ):
                     raise ValidationError(
-                        "Active QC source finding has inconsistent scope or severity; "
-                        "correct QC source evidence before review queue creation"
+                        "QC source finding has inconsistent scope or severity "
+                        "or an invalid lifecycle status; correct QC source evidence "
+                        "before review queue creation"
                     )
+                # Legitimately inactive findings and global project diagnostics
+                # have no active per-image priority but retain valid lineage.
+                if issue.status not in {"open", "acknowledged"} or issue.image_id is None:
+                    continue
                 issues_by_image[issue.image_id].append(issue)
         scoped_images = [
             image for image in project_context.images if image.image_id in scoped_image_ids

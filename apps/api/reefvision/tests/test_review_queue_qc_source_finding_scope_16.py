@@ -77,6 +77,11 @@ def _set_corrupt_finding(
         assert issue is not None
         if field == "severity":
             issue.severity = "critical"
+        elif field == "status":
+            issue.status = "unknown-restored-state"
+        elif field == "inactive_scope":
+            issue.status = "dismissed"
+            issue.project_id = foreign_project_id
         else:
             issue.project_id = foreign_project_id
         session.commit()
@@ -88,11 +93,38 @@ def _restore_finding(client: TestClient, issue_id: str, original_project_id: str
         issue = session.get(QualityControlIssue, issue_id)
         assert issue is not None
         issue.severity = "warning"
+        issue.status = "open"
         issue.project_id = original_project_id
         session.commit()
 
 
-@pytest.mark.parametrize("field", ["severity", "project"])
+
+@pytest.mark.parametrize(
+    "lifecycle_status",
+    ["dismissed", "resolved_in_later_run", "no_longer_applicable"],
+)
+def test_legitimate_inactive_finding_keeps_source_lineage_and_excludes_priority(
+    client: TestClient, lifecycle_status: str
+) -> None:
+    project_id, qc_id, issue_id = _coral_qc_source(client)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        issue = session.get(QualityControlIssue, issue_id)
+        assert issue is not None
+        issue.status = lifecycle_status
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/projects/{project_id}/review-queues",
+        json={"source_quality_control_run_id": qc_id},
+    )
+    assert response.status_code == 201, response.text
+    item = _queue_item(client, response.json()["id"])
+    assert issue_id not in item["related_issue_ids_json"]
+    assert item["review_state"] == "pending"
+
+
+@pytest.mark.parametrize("field", ["severity", "project", "status", "inactive_scope"])
 def test_standalone_qc_rejects_corrupt_source_finding_atomically(
     client: TestClient, field: str
 ) -> None:
@@ -133,7 +165,7 @@ def test_standalone_qc_rejects_corrupt_source_finding_atomically(
     assert after["review_state"] == "pending"
 
 
-@pytest.mark.parametrize("field", ["severity", "project"])
+@pytest.mark.parametrize("field", ["severity", "project", "status", "inactive_scope"])
 def test_saved_qc_workflow_fails_closed_then_researcher_retries(
     client: TestClient, field: str
 ) -> None:
