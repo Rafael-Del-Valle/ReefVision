@@ -190,7 +190,7 @@ if (-not [string]::IsNullOrWhiteSpace($ProvenancePath)) {
             throw 'Build provenance must declare contiguous rv1..rvN CAB payloads.'
         }
     }
-    $verified = @{
+    $verified = @{}
     foreach ($artifact in $artifactRecords) {
         if ($artifact.status -ne 'hashed') { continue }
         $name = [IO.Path]::GetFileName([string]$artifact.path)
