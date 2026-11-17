@@ -220,9 +220,14 @@ def test_saved_workflow_qc_rejects_corrupt_confidence_then_recovers_without_appr
     with app.state.session_factory() as session:
         # Only the baseline and the explicitly retried saved run may own QC
         # queues; the failed run must not leave a ghost review artifact.
-        assert len(
-            session.scalars(select(ReviewQueue).where(ReviewQueue.project_id == project_id)).all()
-        ) == 2
+        assert (
+            len(
+                session.scalars(
+                    select(ReviewQueue).where(ReviewQueue.project_id == project_id)
+                ).all()
+            )
+            == 2
+        )
         queue = session.get(ReviewQueue, baseline_id)
         assert queue is not None
         items = session.scalars(
