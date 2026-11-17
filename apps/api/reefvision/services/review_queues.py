@@ -34,6 +34,9 @@ from reefvision.services.quality_control import (
     SEVERITY_SCORES,
     QualityControlService,
 )
+from reefvision.services.measurement_aware_dataset_versions import (
+    MeasurementAwareDatasetVersionService,
+)
 from reefvision.services.review_queue_events import validate_review_item_event_scope
 from reefvision.services.workflow_review_queue_integrity import (
     V3_SIGNAL_LABELS,
@@ -185,6 +188,36 @@ class ReviewQueueService:
         ]
         if not scoped_images:
             raise ValidationError("No images are available in the requested review-queue scope")
+
+        # Verified polygon/raster masks are independent biological annotations.
+        # Existing QC scores intentionally keep their 1.0 formula; the
+        # immutable input fingerprint must nevertheless distinguish revised
+        # segmentation geometry and measurements at an identical bbox/count.
+        # Reuse dataset snapshotting's managed-raster hashing instead of
+        # inventing a second content-digest or reading the original images.
+        if dataset_version is None:
+            mask_service = MeasurementAwareDatasetVersionService(self.session, self.settings)
+            live_masks = mask_service._masks_for_images(
+                [image.image_id for image in scoped_images]
+            )
+            mask_evidence_by_image_id = {
+                image_id: sorted(
+                    (mask_service._mask_snapshot(mask) for mask in masks),
+                    key=lambda snapshot: str(snapshot["id"]),
+                )
+                for image_id, masks in live_masks.items()
+            }
+        else:
+            # Frozen mask snapshots already contain immutable raster digests,
+            # polygon vertices, revisions, and measurement provenance. Never
+            # use later live masks to describe a dataset-version queue.
+            mask_evidence_by_image_id = {
+                image_id: sorted(
+                    (dict(snapshot) for snapshot in version_item.mask_annotation_snapshot_json),
+                    key=lambda snapshot: str(snapshot["id"]),
+                )
+                for image_id, version_item in version_items_by_image_id.items()
+            }
 
         class_counts: Counter[str] = Counter()
         for image in scoped_images:
@@ -440,6 +473,13 @@ class ReviewQueueService:
                     }
                     for annotation in sorted(annotations, key=lambda item: item.id)
                 ],
+                # Mask changes can alter scientific observations without
+                # changing box annotations, counts, scores, or image pixels.
+                # Persist only the digest of these verified mask inputs in the
+                # item's checksum; never assert that a QC queue verifies them.
+                "verified_mask_annotation_evidence": mask_evidence_by_image_id.get(
+                    image.image_id, []
+                ),
                 "prediction_ids": sorted(item.id for item in predictions),
                 # Prediction IDs alone cannot distinguish changed coordinates,
                 # confidence, labels, or reviewer provenance at the same count.
