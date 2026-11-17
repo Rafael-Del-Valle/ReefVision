@@ -508,13 +508,23 @@ function Stop-ReefVisionRunningProcesses {
     param([string]$InstalledExecutablePath)
 
     $processes = Get-ReefVisionDesktopProcessList -InstalledExecutablePath $InstalledExecutablePath
+    $failedProcesses = @()
     foreach ($process in @($processes.desktop) + @($processes.sidecars)) {
         try {
-            Stop-Process -Id $process.Id -Force -ErrorAction Stop
+            # Use the identity-checked Process object, not its reusable numeric PID.
+            # A process that exits after enumeration must never redirect the stop
+            # to an unrelated process that Windows assigned the same PID.
+            Stop-Process -InputObject $process -Force -ErrorAction Stop
         }
         catch {
+            $failedProcesses += "$($process.ProcessName) ($($process.Id))"
             Write-Warning "Could not stop process $($process.ProcessName) ($($process.Id)): $($_.Exception.Message)"
         }
+    }
+    if ($failedProcesses.Count -gt 0) {
+        # The caller must not launch a duplicate session or start MSI replacement
+        # after a partial stop. Preserve the existing installation and research.
+        throw "Refusing to restart or update ReefVision: unable to stop managed process(es): $($failedProcesses -join ', ')."
     }
 }
 
