@@ -2438,6 +2438,107 @@ describe("Gallery", () => {
     expect(filmstrip.scrollLeft).toBe(248);
   });
 
+  it("contains filmstrip wheels through collapsed and invalid WebView2 layout", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+    renderGallery();
+    const filmstrip = await screen.findByRole("list", {
+      name: "Nearby images",
+    });
+    Object.defineProperty(filmstrip, "clientWidth", {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(filmstrip, "scrollWidth", {
+      configurable: true,
+      value: Number.NaN,
+    });
+    filmstrip.scrollLeft = 37;
+    const collapsed = new WheelEvent("wheel", {
+      deltaY: 75,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(filmstrip, collapsed);
+    expect(collapsed.defaultPrevented).toBe(true);
+    expect(filmstrip.scrollLeft).toBe(37);
+
+    // When WebView2 restores valid measurements, scrolling resumes. A stale
+    // nonfinite scroll offset must not be propagated into the next gesture.
+    Object.defineProperty(filmstrip, "scrollWidth", {
+      configurable: true,
+      value: 1000,
+    });
+    filmstrip.scrollLeft = Number.NaN;
+    const recovered = new WheelEvent("wheel", {
+      deltaY: 25,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(filmstrip, recovered);
+    expect(recovered.defaultPrevented).toBe(true);
+    expect(filmstrip.scrollLeft).toBe(25);
+
+    // An overflowing wheel product also resolves to a finite scroll edge.
+    const huge = new WheelEvent("wheel", {
+      deltaY: Number.MAX_VALUE,
+      deltaMode: 1,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(filmstrip, huge);
+    expect(huge.defaultPrevented).toBe(true);
+    expect(filmstrip.scrollLeft).toBe(800);
+  });
+
+  it("defers active-image alignment until collapsed pane geometry recovers", async () => {
+    const nextImage: ProjectImage = {
+      ...image,
+      id: "image-2",
+      original_filename: "swiftia-02.png",
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image, nextImage],
+        total: 2,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+    renderGallery();
+    const filmstrip = await screen.findByRole("list", {
+      name: "Nearby images",
+    });
+    const second = screen.getByRole("listitem", {
+      name: "Focus swiftia-02.png",
+    });
+    const stripRect = { left: Number.NaN, right: 400 };
+    vi.spyOn(filmstrip, "getBoundingClientRect").mockImplementation(
+      () => stripRect as DOMRect,
+    );
+    vi.spyOn(second, "getBoundingClientRect").mockReturnValue({
+      left: 450,
+      right: 550,
+    } as DOMRect);
+
+    await userEvent.click(second);
+    expect(filmstrip.scrollLeft).toBe(0);
+    expect(second).toHaveAttribute("aria-current", "true");
+
+    stripRect.left = 100;
+    window.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(filmstrip.scrollLeft).toBe(150));
+    expect(screen.getByAltText("Focused project image: swiftia-02.png")).toBeInTheDocument();
+  });
+
   it("keeps focus navigation inside the horizontal filmstrip", async () => {
     const secondImage: ProjectImage = {
       ...image,

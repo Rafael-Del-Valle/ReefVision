@@ -825,10 +825,32 @@ function GalleryContent({
       // scrolling the page or changing which image is selected.
       const strip = filmstrip.getBoundingClientRect();
       const active = thumbnail.getBoundingClientRect();
-      if (active.left < strip.left) {
-        filmstrip.scrollLeft += active.left - strip.left;
-      } else if (active.right > strip.right) {
-        filmstrip.scrollLeft += active.right - strip.right;
+      // A hidden/collapsed WebView2 pane can temporarily report empty or
+      // nonfinite geometry. Never write a NaN scroll offset into the strip;
+      // the resize observer will align the image when its bounds recover.
+      if (
+        !Number.isFinite(strip.left) ||
+        !Number.isFinite(strip.right) ||
+        !Number.isFinite(active.left) ||
+        !Number.isFinite(active.right) ||
+        strip.right <= strip.left ||
+        active.right <= active.left
+      ) {
+        return;
+      }
+      const correction =
+        active.left < strip.left
+          ? active.left - strip.left
+          : active.right > strip.right
+            ? active.right - strip.right
+            : 0;
+      if (correction === 0) return;
+      const previous = Number.isFinite(filmstrip.scrollLeft)
+        ? filmstrip.scrollLeft
+        : 0;
+      const next = previous + correction;
+      if (Number.isFinite(next)) {
+        filmstrip.scrollLeft = Math.max(0, next);
       }
     };
 
@@ -874,20 +896,35 @@ function GalleryContent({
       // surrounding document and partially displace the focused image.
       event.preventDefault();
       event.stopPropagation();
-      if (filmstrip.scrollWidth <= filmstrip.clientWidth) return;
+      const contentWidth = filmstrip.scrollWidth;
+      const viewportWidth = filmstrip.clientWidth;
+      // While the desktop dock is collapsed, layout dimensions can be zero
+      // or unmeasurable. Contain the wheel without changing scroll position.
+      if (
+        !Number.isFinite(contentWidth) ||
+        !Number.isFinite(viewportWidth) ||
+        viewportWidth <= 0 ||
+        contentWidth <= viewportWidth
+      ) {
+        return;
+      }
       const multiplier =
         event.deltaMode === 1
           ? 16
           : event.deltaMode === 2
-            ? filmstrip.clientWidth
+            ? viewportWidth
             : 1;
-      filmstrip.scrollLeft = Math.max(
-        0,
-        Math.min(
-          filmstrip.scrollWidth - filmstrip.clientWidth,
-          filmstrip.scrollLeft + delta * multiplier,
-        ),
-      );
+      const current = Number.isFinite(filmstrip.scrollLeft)
+        ? filmstrip.scrollLeft
+        : 0;
+      const requested = current + delta * multiplier;
+      // Extremely large but finite wheel deltas can overflow the product.
+      // Snap to a valid edge rather than poisoning WebView2's scroll offset.
+      filmstrip.scrollLeft = Number.isFinite(requested)
+        ? Math.max(0, Math.min(contentWidth - viewportWidth, requested))
+        : delta > 0
+          ? contentWidth - viewportWidth
+          : 0;
     };
 
     filmstrip.addEventListener("wheel", handleWheel, { passive: false });
