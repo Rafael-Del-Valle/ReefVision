@@ -22,6 +22,28 @@ SPEC.loader.exec_module(MODULE)
 
 
 class CameraFixtureInventoryTests(unittest.TestCase):
+    def test_owner_camera_manifest_recipes_cover_all_jpeg_suffixes(self) -> None:
+        """Owner-hardware evidence must not silently skip .jfi/.jif originals."""
+        import re
+
+        guide = (
+            Path(__file__).resolve().parents[1]
+            / "docs"
+            / "acceptance"
+            / "REEFVISION_103_WINDOWS_RELEASE_EVIDENCE.md"
+        ).read_text(encoding="utf-8")
+        all_patterns = re.findall(r"\\$_\\.Extension -match '([^']+)'", guide)
+        jpeg_patterns = [pattern for pattern in all_patterns if "jpg" in pattern.lower()]
+        self.assertEqual(len(jpeg_patterns), 2, "Both pre/post camera manifest recipes are required")
+        for pattern in jpeg_patterns:
+            for suffix in MODULE.JPEG_SUFFIXES:
+                with self.subTest(pattern=pattern, suffix=suffix):
+                    self.assertIsNotNone(re.fullmatch(pattern, suffix))
+                    self.assertIsNotNone(re.fullmatch(pattern, suffix.upper()))
+            for unsupported in (".png", ".tif", ".arw", ".heic"):
+                with self.subTest(pattern=pattern, unsupported=unsupported):
+                    self.assertIsNone(re.fullmatch(pattern, unsupported))
+
     def test_windows_file_identity_ignores_inconsistent_ctime_only(self) -> None:
         """Windows path stat and handle fstat can disagree on creation/change time."""
         from types import SimpleNamespace

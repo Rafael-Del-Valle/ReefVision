@@ -35,7 +35,7 @@ Before importing any camera files, create an immutable source manifest in PowerS
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path -LiteralPath '.').Path
 $files = @(Get-ChildItem -LiteralPath $root -File -Recurse |
-  Where-Object { $_.Extension -match '^(?i:\.(jpg|jpeg|jpe|jfif))$' } |
+  Where-Object { $_.Extension -match '^(?i:\.(jpg|jpeg|jpe|jfif|jfi|jif))$' } |
   Sort-Object FullName)
 if ($files.Count -eq 0) { throw 'No original JPEG camera samples found' }
 $manifest = @($files | ForEach-Object {
@@ -50,7 +50,7 @@ $manifest | Export-Csv -LiteralPath (Join-Path $root 'jpeg-source-manifest.csv')
 $manifest | Format-Table -AutoSize
 ```
 
-Use separate physical camera originals for `.jpg`, `.JPG`, `.jpeg`, and `.JPEG` when available. For `.jpe` and `.jfif`, record whether the sample is genuinely camera-generated or an explicitly labeled **alias copy**; renaming a file only exercises extension routing and does **not** validate decoder compatibility. Record EXIF orientation, ICC profile (including CMYK if present), dimensions, and camera model from a trusted metadata reader; never infer them from the extension. Test import, thumbnail, first-image viewport, full-resolution image, navigation, annotation overlay, and reopen for every sample. Unsupported color profiles or aliases must produce a clear recoverable error rather than a blank viewport.
+Use separate physical camera originals for `.jpg`, `.JPG`, `.jpeg`, and `.JPEG` when available. For `.jpe`, `.jfif`, `.jfi`, and `.jif`, record whether the sample is genuinely camera-generated or an explicitly labeled **alias copy**; renaming a file only exercises extension routing and does **not** validate decoder compatibility. Record EXIF orientation, ICC profile (including CMYK if present), dimensions, and camera model from a trusted metadata reader; never infer them from the extension. Test import, thumbnail, first-image viewport, full-resolution image, navigation, annotation overlay, and reopen for every sample. Unsupported color profiles or aliases must produce a clear recoverable error rather than a blank viewport.
 
 After import, verify **every original** against the saved manifest with the following read-only PowerShell check. Run from the same root directory used to generate the CSV; this intentionally fails closed on missing files, changed bytes, duplicate manifest paths, or newly added JPEGs. It does not modify the camera originals.
 
@@ -81,10 +81,20 @@ foreach ($entry in $expected) {
   }
 }
 $actual = @(Get-ChildItem -LiteralPath $root -File -Recurse |
-  Where-Object { $_.Extension -match '^(?i:\.(jpg|jpeg|jpe|jfif))$' })
+  Where-Object { $_.Extension -match '^(?i:\.(jpg|jpeg|jpe|jfif|jfi|jif))$' })
 if ($actual.Count -ne $expected.Count) { throw 'JPEG source set changed since manifest creation' }
 "PASS: $($expected.Count) original JPEG files match pre-import SHA-256 and size"
 ```
+
+For a separately validated JPEG decoder/EXIF inventory, also run the repository's
+read-only scanner on an owner-approved **copy** of the camera samples, both
+before and after import (do not write its JSON report into the fixture tree):
+`python scripts/verify_camera_jpeg_fixtures.py "C:\\camera-test-copies" --verify-decode`.
+It covers all six supported JPEG suffixes, case variants, EXIF geometry, ICC
+payload fingerprints, collision/duplicate-source risks, and filesystem links;
+a nonzero exit blocks acceptance. Keep both reports outside the source directory.
+Neither this scanner nor the PowerShell hash check substitutes for installed
+WebView2 or physical Canon/Sony image-compatibility evidence.
 
 **Limitations:** This comparison assumes a trusted, unchanged manifest and a dedicated staging directory. Reject filesystem reparse points/symlinks in the staging tree: lexical path checks do not prove physical containment. Preserve the manifest and its SHA-256 separately. This verifies original-file integrity, **not** decoding or GUI compatibility. Record application commit, Windows/WebView2 version, per-file results and decode errors; missing real-camera samples are **BLOCKED**, not PASS.
 
