@@ -474,7 +474,11 @@ def test_resampled_loci_stay_distinct_from_biological_change_in_saved_workflows(
             "name": "Acquisition row multiplicity QC",
             "nodes": [
                 {"node_id": "p", "node_type": "project_source"},
-                {"node_id": "c", "node_type": "point_cloud_preview", "parameters": params},
+                {
+                    "node_id": "c",
+                    "node_type": "point_cloud_preview",
+                    "parameters": params,
+                },
             ],
             "edges": [
                 {
@@ -532,12 +536,19 @@ def test_resampled_loci_stay_distinct_from_biological_change_in_saved_workflows(
     assert first["provenance"]["unique_coordinate_geometry_sha256"] == (
         repeated["provenance"]["unique_coordinate_geometry_sha256"]
     )
-    assert first["provenance"]["geometry_sha256"] != repeated["provenance"]["geometry_sha256"]
+    first_hash = first["provenance"]["geometry_sha256"]
+    repeated_hash = repeated["provenance"]["geometry_sha256"]
+    assert first_hash != repeated_hash
+    if source_format == "ply":
+        assert first["provenance"]["source_text_sha256"] != (
+            repeated["provenance"]["source_text_sha256"]
+        )
     assert first["arithmetic_centroid_in_source_frame_m"] != (
         repeated["arithmetic_centroid_in_source_frame_m"]
     )
     assert first["unique_coordinate_centroid_in_source_frame_m"] == (
         repeated["unique_coordinate_centroid_in_source_frame_m"]
     )
-    assert "nonuniform_duplicate_coordinates_can_bias_row_centroid" in repeated["qc_warnings"]
-    assert "nonuniform_duplicate_coordinates_can_bias_row_centroid" not in first["qc_warnings"]
+    warning = "nonuniform_duplicate_coordinates_can_bias_row_centroid"
+    assert warning in repeated["qc_warnings"]
+    assert warning not in first["qc_warnings"]
