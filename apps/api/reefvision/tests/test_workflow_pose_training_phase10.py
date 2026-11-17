@@ -2166,10 +2166,7 @@ def test_pose_workflow_rejects_malformed_seed_metadata_from_verified_truth(
         assert model is not None
         # A list of pairs could previously be coerced by dict() to pass as
         # the seed's original architecture during saved workflow execution.
-        model.metadata_json = cast(
-            Any,
-            [["source_architecture", "yolo11n-pose.pt"]],
-        )
+        model.metadata_json = cast(Any, [["source_architecture", "yolo11n-pose.pt"]])
         session.commit()
 
     with (
