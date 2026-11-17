@@ -163,7 +163,10 @@ annotation, calibration, anatomy, identity, growth, or condition evidence.
 - Decimated 3D mesh previews now report how many source faces from each
   edge-connected reconstruction patch remain visible, per-patch fractions
   of full reconstructed patch area represented, and indices of patches omitted
-  entirely from the display. A distinct warning marks omissions; a zero-area
+  entirely from the display. The omitted-patch area fraction reports the
+  proportion of the complete reconstructed area belonging to fully hidden
+  patches, separating patch loss from ordinary within-patch face decimation.
+  A distinct warning marks omissions; a zero-area
   patch has undefined area coverage rather than invented certainty. All
   scientific surface-area/topology measurements still use the complete mesh.
   These are visualization diagnostics, not evidence of coral colony identity,

@@ -522,6 +522,12 @@ def measure_mesh_preview(
     preview_omitted_patch_indices = [
         index for index, count in enumerate(preview_patch_face_counts) if count == 0
     ]
+    # Area in wholly invisible patches is more informative than their face
+    # count; this is reconstructed mesh area, never measured tissue coverage.
+    omitted_patch_raw_area = fsum(
+        patch_area_mesh_units[ordered_patches[index]]
+        for index in preview_omitted_patch_indices
+    )
     preview_patch_area_coverage_fractions = [
         min(1.0, fsum(sampled_patch_face_areas.get(patch, [])) / patch_area_mesh_units[patch])
         if patch_area_mesh_units[patch] > 0
@@ -613,6 +619,9 @@ def measure_mesh_preview(
             preview_patch_area_coverage_fractions
         ),
         "preview_omitted_edge_connected_patch_indices": preview_omitted_patch_indices,
+        "preview_omitted_patch_surface_area_fraction": (
+            omitted_patch_raw_area / raw_area if raw_area > 0 else None
+        ),
         "vertex_count": len(points),
         "preview_referenced_bounds_in_source_frame_m": {
             "minimum": preview_min_m,
