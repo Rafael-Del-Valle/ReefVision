@@ -166,18 +166,16 @@ export function ImageViewport({
     // zooming the scientific image and its aligned annotation overlays.
     const handleNativeWheel = (event: globalThis.WheelEvent) => {
       if (event.ctrlKey || event.metaKey) return;
-      if (!Number.isFinite(event.deltaX) || !Number.isFinite(event.deltaY)) {
-        return;
-      }
-      if (event.deltaX === 0 && event.deltaY === 0) return;
+      // WebView2 trackpads can supply a malformed axis alongside a real
+      // scroll value. Validate independently to avoid stray page movement.
+      const deltaX = Number.isFinite(event.deltaX) ? event.deltaX : 0;
+      const deltaY = Number.isFinite(event.deltaY) ? event.deltaY : 0;
+      if (deltaX === 0 && deltaY === 0) return;
 
       event.preventDefault();
       event.stopPropagation();
-      // Trackpads often emit a small vertical jitter during horizontal
-      // scrolling. Do not zoom the source image or its scientific overlays
-      // when horizontal movement dominates, or Shift requests horizontal pan.
-      // Still consume the wheel event to avoid scrolling the document.
-      if (event.shiftKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) {
+      // Never zoom scientific overlays on horizontal or Shift scrolling.
+      if (event.shiftKey || Math.abs(deltaX) >= Math.abs(deltaY)) {
         return;
       }
 
@@ -187,7 +185,7 @@ export function ImageViewport({
         zoomAtPoint(
           viewRef.current,
           { x: event.clientX - rect.left, y: event.clientY - rect.top },
-          viewRef.current.scale * (event.deltaY > 0 ? 1 / 1.08 : 1.08),
+          viewRef.current.scale * (deltaY > 0 ? 1 / 1.08 : 1.08),
         ),
       );
     };
