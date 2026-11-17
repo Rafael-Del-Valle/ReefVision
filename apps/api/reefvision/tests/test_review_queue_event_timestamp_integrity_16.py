@@ -89,17 +89,22 @@ def test_imported_invalid_event_time_blocks_audit_and_recovers_only_after_fixtur
     assert listing.status_code == 200, listing.text
     assert {item["review_state"] for item in listing.json()["items"]} == {"pending"}
     with app.state.session_factory() as session:
-        assert session.execute(
-            text(
-                "SELECT COUNT(*) FROM review_queue_item_events "
-                "WHERE review_queue_item_id = :id"
-            ),
-            {"id": item_id},
-        ).scalar_one() == 1
-        assert session.execute(
-            text("SELECT created_at FROM review_queue_item_events WHERE id = :id"),
-            {"id": event_id},
-        ).scalar_one() == bad_timestamp
+        assert (
+            session.execute(
+                text(
+                    "SELECT COUNT(*) FROM review_queue_item_events WHERE review_queue_item_id = :id"
+                ),
+                {"id": item_id},
+            ).scalar_one()
+            == 1
+        )
+        assert (
+            session.execute(
+                text("SELECT created_at FROM review_queue_item_events WHERE id = :id"),
+                {"id": event_id},
+            ).scalar_one()
+            == bad_timestamp
+        )
         # Restore only the disposable fixture; production never auto-repairs.
         session.execute(
             text("UPDATE review_queue_item_events SET created_at = :value WHERE id = :id"),
