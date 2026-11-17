@@ -571,3 +571,31 @@ identity, and the ratio **does not estimate** true reconstruction completeness,
 tissue coverage, accuracy, surface area or biological health. Synthetic XYZ
 and ASCII PLY regressions cover direct service, standalone API, typed persisted
 Workflow Builder execution and repeat saved-artifact parity.
+
+## Unique-coordinate display coverage QC (November 17, 2026)
+
+The bounded point-cloud preview now returns
+`preview_unique_coordinate_count` (distinct normalized XYZ coordinate triples
+actually visible among `preview_point_indices`) and
+`preview_unique_coordinate_coverage_fraction`, calculated as the number
+visible divided by `unique_point_count` in the **entire imported scan**.
+When that fraction is below one, `preview_omits_unique_coordinate_loci`
+is emitted even if `preview_axis_extrema_covered` is true. No source
+points are removed from the underlying measurements, and both full/ordered
+geometry and distinct-locus fingerprints remain tied to the original input.
+
+For a 513-distinct-point import, the fixed 512-point display reports
+512/513 coverage; a 600-row import with only two repeated coordinate
+locations can report 2/2 despite heavy duplicate-row redundancy. These
+metrics deliberately measure **display visibility of exact imported XYZ
+locations**, not field coverage, photogrammetric reconstruction quality,
+specimen completeness, tissue area, biological condition or a statistically
+random sample. Source order can influence which coordinate locations appear
+in the bounded display. No automatic specimen matching, inferred anatomical
+branch measurement or calibration verification is implied.
+
+XYZ and vertex-only ASCII PLY regressions compare the direct measurement
+engine, standalone project API and twice-executed persisted, typed Workflow
+Builder graph artifacts. Calibration, coordinate registration and biological
+identity stay provisional pending independent physical reference and human
+review. Windows installed GUI/GPU and full release acceptance are still open.
