@@ -83,6 +83,61 @@ def _queue_run(
     return response.json()
 
 
+def test_saved_workflow_rejects_malformed_reviewed_dataset_artifact(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Malformed reviewed dataset artifact")
+    graph = _save_graph(client, project["id"], _project_images_graph())
+    run = _queue_run(client, project["id"], graph["id"])
+    app = cast(FastAPI, client.app)
+    assert (
+        process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(run["job_id"]),
+        )
+        is True
+    )
+    response = client.get(f"/api/v1/workflow-runs/{run['id']}")
+    assert response.status_code == 200, response.text
+    detail = response.json()
+    project_artifact_id = next(
+        artifact["id"]
+        for artifact in detail["artifacts"]
+        if artifact["data_type"] == "project_reference"
+    )
+    with app.state.session_factory() as session:
+        project_artifact = session.get(WorkflowArtifact, project_artifact_id)
+        producer = session.get(WorkflowNodeRun, detail["nodes"][0]["id"])
+        assert project_artifact is not None and producer is not None
+        # Use a genuine saved Workflow Builder input, but supply a malformed
+        # downstream review record to the dataset creation adapter. A JSON
+        # array of pairs must not be normalized into signed scientist review.
+        malformed_review = WorkflowArtifact(
+            workflow_run_id=str(run["id"]),
+            producer_node_run_id=producer.id,
+            producer_port_id="reviewed",
+            data_type="reviewed_annotations",
+            payload_json=[["project_id", project["id"]]],
+            payload_sha256=project_artifact.payload_sha256,
+        )
+        with pytest.raises(
+            ValidationError, match="Workflow input 'reviewed' must contain a JSON object"
+        ):
+            WorkflowExecutionService(session, app.state.settings)._execute_dataset_version_create(
+                project_id=str(project["id"]),
+                run_id=str(run["id"]),
+                node_run=producer,
+                parameters={},
+                inputs={
+                    "project": [project_artifact],
+                    "reviewed": [malformed_review],
+                },
+            )
+    # A rejected input must not modify the source run's frozen lineage.
+    assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == detail
+
+
 def test_executable_workflow_persists_nodes_and_typed_artifacts(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
