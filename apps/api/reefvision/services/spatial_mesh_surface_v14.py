@@ -518,9 +518,7 @@ def measure_mesh_preview(
         patch = root(face_index)
         sampled_patch_face_counts[patch] += 1
         sampled_patch_face_areas.setdefault(patch, []).append(face_areas[face_index])
-    preview_patch_face_counts = [
-        sampled_patch_face_counts[patch] for patch in ordered_patches
-    ]
+    preview_patch_face_counts = [sampled_patch_face_counts[patch] for patch in ordered_patches]
     preview_omitted_patch_indices = [
         index for index, count in enumerate(preview_patch_face_counts) if count == 0
     ]
