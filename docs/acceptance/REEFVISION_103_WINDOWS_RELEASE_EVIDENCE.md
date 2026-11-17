@@ -89,7 +89,7 @@ if ($actual.Count -ne $expected.Count) { throw 'JPEG source set changed since ma
 For a separately validated JPEG decoder/EXIF inventory, also run the repository's
 read-only scanner on an owner-approved **copy** of the camera samples, both
 before and after import (do not write its JSON report into the fixture tree):
-`python scripts/verify_camera_jpeg_fixtures.py "C:\\camera-test-copies" --verify-decode`.
+`python scripts/verify_camera_jpeg_fixtures.py "C:\camera-test-copies" --verify-decode`.
 It covers all six supported JPEG suffixes, case variants, EXIF geometry, ICC
 payload fingerprints, collision/duplicate-source risks, and filesystem links;
 a nonzero exit blocks acceptance. Keep both reports outside the source directory.

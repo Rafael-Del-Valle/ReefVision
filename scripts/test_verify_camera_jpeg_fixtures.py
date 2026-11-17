@@ -32,7 +32,7 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             / "acceptance"
             / "REEFVISION_103_WINDOWS_RELEASE_EVIDENCE.md"
         ).read_text(encoding="utf-8")
-        all_patterns = re.findall(r"\\$_\\.Extension -match '([^']+)'", guide)
+        all_patterns = re.findall(r"\$_\.Extension -match '([^']+)'", guide)
         jpeg_patterns = [pattern for pattern in all_patterns if "jpg" in pattern.lower()]
         self.assertEqual(len(jpeg_patterns), 2, "Both pre/post camera manifest recipes are required")
         for pattern in jpeg_patterns:
