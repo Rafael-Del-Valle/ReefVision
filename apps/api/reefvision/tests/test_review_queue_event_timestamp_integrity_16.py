@@ -6,6 +6,7 @@ Workflow Builder queues; never attempts to repair a researcher's audit history.
 
 from __future__ import annotations
 
+import warnings
 from typing import cast
 from uuid import uuid4
 
@@ -13,6 +14,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import text
+from sqlalchemy.exc import SADeprecationWarning
 
 from reefvision.tests.test_review_queue_bulk_sqlite_contention_16 import _make_queue
 
@@ -121,3 +123,31 @@ def test_imported_invalid_event_time_blocks_audit_and_recovers_only_after_fixtur
     replay = client.post(events_url, json=payload)
     assert replay.status_code == 201, replay.text
     assert replay.json()["id"] == event_id
+
+@pytest.mark.parametrize("saved_workflow", [False, True])
+def test_valid_review_timestamp_guard_has_no_sqlalchemy_deprecation(
+    client: TestClient, saved_workflow: bool
+) -> None:
+    """Live and saved QC workflows must still accept canonical action history."""
+    queue_id, item_ids = _make_queue(client, saved_workflow=saved_workflow)
+    url = f"/api/v1/review-queues/{queue_id}/items/{item_ids[0]}/events"
+    payload = {
+        "client_request_id": str(uuid4()),
+        "event_type": "assign",
+        "actor": "local coral reviewer",
+        "assignee": "second researcher",
+    }
+    # This caught the CI-wide regression when a String GLOB expression was
+    # inverted with ~; warnings-as-errors must hold even outside CI settings.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", SADeprecationWarning)
+        created = client.post(url, json=payload)
+        history = client.get(url)
+        replay = client.post(url, json=payload)
+
+    assert created.status_code == 201, created.text
+    assert history.status_code == 200, history.text
+    assert replay.status_code == 201, replay.text
+    assert history.json()["total"] == 1
+    assert history.json()["requires_researcher_review"] is True
+    assert replay.json()["id"] == created.json()["id"]

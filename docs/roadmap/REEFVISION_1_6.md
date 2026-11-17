@@ -1,3 +1,9 @@
+## 2026-11-17 — Timestamp guard SQLAlchemy CI compatibility (Track D)
+
+- **Root cause and exact-head evidence:** [1.6 CI #44130212882](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44130212882) failed with 164 backend tests (1,936 passed, 32 skipped). The new timestamp guard applied unary inversion to a SQLite String GLOB SQLAlchemy expression, producing a SADeprecationWarning that strict pytest treats as an error. Frontend and native-Windows preservation jobs passed on that head.
+- **Fix:** use SQLite's integer-returning glob(pattern, value) == 0 predicate, never a String unary-inverse. Preserve the full-history invalid timestamp, NUL/year-zero, reviewer approval, idempotency and executable saved Workflow Builder checks without rewriting audit data. Added two warning-as-error regressions for valid standalone and saved executed QC queues, alongside ten pre-existing invalid-history cases. Independent SQLAlchemy 2.0.50/SQLite probes confirmed five malformed timestamps rejected, canonical timestamp retained and no SQLAlchemy warnings.
+- **Release HOLD:** final-head CI and real Windows installed-GUI, MSI/CAB upgrade/rollback, representative biological/saved-workflow acceptance, independent 1.1/1.6 Alembic-0038 reconciliation and researcher approval remain required. No version merge, release, downloads or asset changes.
+
 ## 2026-11-17 — Corrupt QC event timestamp fail-closed guard (Track D)
 
 - **Pre-work audit:** isolated draft PR #77 and HEAD, 1.1/1.2 scientific-workflow scope, existing 1.6 QC review/manual/bulk service and executable saved QC Workflow Builder, issue #76, and previous exact-head CI. Earlier capabilities are preserved; this closes a specific previously uncovered imported-audit integrity gap rather than creating duplicate UI or workflow nodes.

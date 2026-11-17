@@ -62,7 +62,10 @@ def assert_review_event_action_integrity(session: Session, item_ids: list[str]) 
             ReviewQueueItemEvent.created_at.is_(None),
             func.instr(stored_timestamp, "\x00") > 0,
             func.length(stored_timestamp) != 26,
-            ~stored_timestamp.op("GLOB")(canonical_shape),
+            # GLOB returns an integer on SQLite. Avoid unary ~ on a String
+            # SQLAlchemy expression: SQLAlchemy 2.0.50 treats it as a deprecated
+            # inverse on String, failing strict backend CI before audit checks.
+            func.glob(canonical_shape, stored_timestamp) == 0,
             func.strftime("%Y-%m-%d %H:%M:%S", stored_timestamp).is_(None),
             func.date(func.substr(stored_timestamp, 1, 10), "+0 days")
             != func.substr(stored_timestamp, 1, 10),
