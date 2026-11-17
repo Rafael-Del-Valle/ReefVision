@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
-from sqlalchemy import and_, func, literal_column, or_, select
+from sqlalchemy import String, and_, cast, func, literal_column, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -43,11 +43,38 @@ def assert_review_event_action_integrity(session: Session, item_ids: list[str]) 
         "\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f"
         "\u205f\u3000"
     )
+    # SQLAlchemy's SQLite DateTime decoder expects a real ISO timestamp.
+    # Restored arbitrary TEXT can instead raise ValueError while rendering
+    # history, turning a corrupt event into a 500 and obscuring audit order.
+    # Check *every* event before materialization or idempotent replay.
+    # Validate canonical application-written UTC-naive SQLite storage; reject
+    # hidden NUL, impossible dates and 24:00 (SQLite accepts it but Python
+    # datetime does not). No stored event is rewritten or auto-approved.
+    sqlite_timestamp_checks: tuple[Any, ...] = ()
+    if session.get_bind().dialect.name == "sqlite":
+        stored_timestamp = cast(ReviewQueueItemEvent.created_at, String)
+        canonical_shape = (
+            "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] "
+            "[0-9][0-9]:[0-9][0-9]:[0-9][0-9]."
+            "[0-9][0-9][0-9][0-9][0-9][0-9]"
+        )
+        sqlite_timestamp_checks = (
+            ReviewQueueItemEvent.created_at.is_(None),
+            func.instr(stored_timestamp, "\x00") > 0,
+            func.length(stored_timestamp) != 26,
+            ~stored_timestamp.op("GLOB")(canonical_shape),
+            func.strftime("%Y-%m-%d %H:%M:%S", stored_timestamp).is_(None),
+            func.date(func.substr(stored_timestamp, 1, 10), "+0 days")
+            != func.substr(stored_timestamp, 1, 10),
+            func.substr(stored_timestamp, 12, 2) == "24",
+        )
+
     invalid_event_id = session.scalar(
         select(ReviewQueueItemEvent.id)
         .where(
             ReviewQueueItemEvent.review_queue_item_id.in_(item_ids),
             or_(
+                *sqlite_timestamp_checks,
                 # SQLite VARCHAR(36) does not enforce UUID length or syntax,
                 # and LENGTH(TEXT) stops at NUL. The API converts UUID input
                 # to canonical lower-case 8-4-4-4-12 strings; bulk-generated
