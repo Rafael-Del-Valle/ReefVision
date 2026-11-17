@@ -1319,6 +1319,11 @@ def create_pose_workflow_training_result(
     # ReefVision controls this from the explicit validation input.
     training_config["val"] = validation_dataset is not None
 
+    # Epochs are an integer scientific configuration, not a value to truncate
+    # with int() or reinterpret from a boolean during saved-workflow replay.
+    if type(training_config.get("epochs")) is not int:
+        raise ValidationError("Pose training_config.epochs must be an integer")
+
     validate_ultralytics_training_configuration(
         task="pose",
         mode="train",
@@ -1328,12 +1333,7 @@ def create_pose_workflow_training_result(
         settings=settings,
     )
 
-    epochs = int(
-        training_config.get(
-            "epochs",
-            50,
-        )
-    )
+    epochs = training_config["epochs"]
 
     if epochs < 1:
         raise ValidationError("Pose training epochs must be at least 1")
