@@ -2613,9 +2613,7 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
             job = child_session.get(Job, job_id)
             assert job is not None
             request = dict(job.request_json)
-            assert (
-                request["pose_training_dataset_manifest_sha256"] == dataset["manifest_sha256"]
-            )
+            assert request["pose_training_dataset_manifest_sha256"] == dataset["manifest_sha256"]
             assert len(request["pose_split_manifest_sha256"]) == 64
             job.request_json = {
                 **request,
@@ -2626,9 +2624,7 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
 
     with (
         app.state.session_factory() as session,
-        pytest.raises(
-            ValidationError, match="child job frozen manifest lineage changed"
-        ),
+        pytest.raises(ValidationError, match="child job frozen manifest lineage changed"),
     ):
         create_pose_workflow_training_result(
             session,
