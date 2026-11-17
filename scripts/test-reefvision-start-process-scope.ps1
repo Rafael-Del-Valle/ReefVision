@@ -64,7 +64,7 @@ $script:stopped = @()
 $script:stopInputs = @()
 $blockedError = $null
 try {
-    Stop-ReefVisionRunningProcesses -InstalledExecutablePath $installed -WarningAction SilentlyContinue
+    Stop-ReefVisionRunningProcesses -InstalledExecutablePath $installed
 }
 catch {
     $blockedError = $_.Exception.Message
