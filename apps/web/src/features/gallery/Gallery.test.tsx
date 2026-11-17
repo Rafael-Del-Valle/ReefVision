@@ -2242,6 +2242,57 @@ describe("Gallery", () => {
     }
   });
 
+  it("contains malformed WebView2 wheel axes without moving the first image or filmstrip", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+    renderGallery();
+    const focused = await screen.findByAltText(
+      "Focused project image: swiftia-01.png",
+    );
+    const filmstrip = screen.getByRole("list", { name: "Nearby images" });
+
+    // A WebView2 precision wheel may report one invalid axis, or both.
+    // Neither case may escape into document scrolling or poison the strip.
+    for (const target of [focused, filmstrip]) {
+      for (const [deltaX, deltaY] of [
+        [Number.NaN, 0],
+        [Number.NaN, Number.POSITIVE_INFINITY],
+      ]) {
+        const malformed = new WheelEvent("wheel", {
+          deltaX: 0,
+          deltaY: 0,
+          bubbles: true,
+          cancelable: true,
+        });
+        Object.defineProperty(malformed, "deltaX", { value: deltaX });
+        Object.defineProperty(malformed, "deltaY", { value: deltaY });
+        fireEvent(target, malformed);
+        expect(malformed.defaultPrevented).toBe(true);
+      }
+
+      // Genuine zero-motion wheel input remains a no-op.
+      const stationary = new WheelEvent("wheel", {
+        deltaX: 0,
+        deltaY: 0,
+        bubbles: true,
+        cancelable: true,
+      });
+      fireEvent(target, stationary);
+      expect(stationary.defaultPrevented).toBe(false);
+    }
+    expect(filmstrip.scrollLeft).toBe(0);
+    expect(
+      screen.getByRole("listitem", { name: "Focus swiftia-01.png" }),
+    ).toHaveAttribute("aria-current", "true");
+  });
+
   it("contains wheel input when thumbnails fit without scrolling the page", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({
