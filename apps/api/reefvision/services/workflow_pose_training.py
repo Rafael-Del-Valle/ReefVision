@@ -1305,9 +1305,15 @@ def create_pose_workflow_training_result(
             "Pose training_config.val must match the separate frozen validation dataset"
         )
 
+    # Offline pose workers disable AMP unconditionally. A saved workflow
+    # must not claim that AMP was enabled when the worker actually used fp32.
+    if "amp" in supplied_config and supplied_config["amp"] is not False:
+        raise ValidationError("Pose training_config.amp must be false for offline training")
+
     training_config = {
         **DEFAULT_POSE_TRAINING_CONFIG,
         **dict(supplied_config),
+        "amp": False,
     }
 
     # ReefVision controls this from the explicit validation input.
