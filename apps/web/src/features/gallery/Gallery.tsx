@@ -348,9 +348,14 @@ function FocusedImagePreview({ image }: { image: ProjectImageListItem }) {
     // Use a non-passive native listener so preventDefault works in WebView2.
     const containPreviewWheel = (event: WheelEvent) => {
       if (event.ctrlKey || event.metaKey) return;
+      // WebView2 precision-wheel input can expose a nonfinite axis. Contain
+      // malformed gestures even when the other axis is zero so the document
+      // cannot scroll behind the initial scientific image preview.
       if (
-        (!Number.isFinite(event.deltaX) || event.deltaX === 0) &&
-        (!Number.isFinite(event.deltaY) || event.deltaY === 0)
+        Number.isFinite(event.deltaX) &&
+        Number.isFinite(event.deltaY) &&
+        event.deltaX === 0 &&
+        event.deltaY === 0
       ) {
         return;
       }
@@ -888,14 +893,17 @@ function GalleryContent({
       // Some WebView2 precision-wheel events have one malformed axis while
       // the other contains a valid scroll gesture. Ignore the bad axis rather
       // than allowing the browser to scroll the document behind the preview.
+      const invalidAxis =
+        !Number.isFinite(event.deltaX) || !Number.isFinite(event.deltaY);
       const deltaX = Number.isFinite(event.deltaX) ? event.deltaX : 0;
       const deltaY = Number.isFinite(event.deltaY) ? event.deltaY : 0;
       const delta = Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY;
-      if (delta === 0) return;
-      // Even when all thumbnails fit, wheel input must not scroll the
-      // surrounding document and partially displace the focused image.
+      if (delta === 0 && !invalidAxis) return;
+      // Even when all thumbnails fit or a WebView2 gesture contains only
+      // invalid axis values, never scroll the surrounding document.
       event.preventDefault();
       event.stopPropagation();
+      if (delta === 0) return;
       const contentWidth = filmstrip.scrollWidth;
       const viewportWidth = filmstrip.clientWidth;
       // While the desktop dock is collapsed, layout dimensions can be zero
