@@ -359,9 +359,7 @@ def test_partial_only_mesh_decimation_warns_in_saved_workflow(client: TestClient
     assert direct["preview_partially_sampled_patch_indices"] == [0]
     assert direct["surface_area_m2"] == pytest.approx(0.0257)
     assert direct["preview_sampled_surface_area_m2"] == pytest.approx(0.0256)
-    assert direct["preview_partially_sampled_patch_missing_area_fraction"] == pytest.approx(
-        1 / 257
-    )
+    assert direct["preview_partially_sampled_patch_missing_area_fraction"] == pytest.approx(1 / 257)
     assert "preview_omits_reconstructed_mesh_surface_area" in direct["qc_warnings"]
     assert "preview_omits_edge_connected_mesh_patches" not in direct["qc_warnings"]
 
@@ -370,9 +368,10 @@ def test_partial_only_mesh_decimation_warns_in_saved_workflow(client: TestClient
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 200, standalone.text
     assert standalone.json()["qc_warnings"] == direct["qc_warnings"]
-    assert standalone.json()["preview_surface_area_fraction"] == direct[
-        "preview_surface_area_fraction"
-    ]
+    assert (
+        standalone.json()["preview_surface_area_fraction"]
+        == direct["preview_surface_area_fraction"]
+    )
 
     graph = {
         "graph_id": "partially-sampled-mesh-v14",
@@ -413,10 +412,98 @@ def test_partial_only_mesh_decimation_warns_in_saved_workflow(client: TestClient
             if item["data_type"] == "mesh_measurement_preview"
         )
         assert artifact["payload_json"]["qc_warnings"] == standalone.json()["qc_warnings"]
-        assert artifact["payload_json"]["preview_surface_area_fraction"] == standalone.json()[
-            "preview_surface_area_fraction"
-        ]
+        assert (
+            artifact["payload_json"]["preview_surface_area_fraction"]
+            == standalone.json()["preview_surface_area_fraction"]
+        )
         assert artifact["payload_json"]["provenance"] == standalone.json()["provenance"]
         hashes.append(artifact["payload_sha256"])
     assert len(set(hashes)) == 1
 
+def test_unsampled_mesh_tip_extremum_is_explicit_in_saved_workflow(client: TestClient) -> None:
+    """A decimated, connected mesh can hide a tip while camera bounds still include it."""
+    from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
+
+    # The flap is face 256, omitted by the deterministic 514 -> 512 face sample.
+    # It is connected along an edge but alone owns the source z maximum.
+    vertices = [[0, 0, 0]] + [[index, 1, 0] for index in range(514)] + [[0, 0, 100]]
+    faces = [[0, index + 1, index + 2] for index in range(513)]
+    faces.insert(256, [0, 1, 515])
+    params = {
+        "vertices": vertices,
+        "faces": faces,
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic flap; independent verification pending",
+        "relative_scale_uncertainty": 0.05,
+    }
+    direct = measure_mesh_preview(**params)
+    assert direct["edge_connected_patch_count"] == 1
+    assert direct["preview_omitted_edge_connected_patch_indices"] == []
+    assert direct["preview_omitted_axis_extremum_sides"] == ["z_max"]
+    assert direct["preview_referenced_bounds_in_source_frame_m"]["maximum"][2] == 1.0
+    assert direct["preview_displayed_bounds_in_source_frame_m"]["maximum"][2] == 0.0
+    assert "preview_omits_source_axis_extrema" in direct["qc_warnings"]
+    assert direct["provenance"]["calibration_verified"] is False
+
+    project_id = str(create_project(client, "Unsampled mesh apex")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    for key in (
+        "preview_omitted_axis_extremum_sides",
+        "preview_displayed_bounds_in_source_frame_m",
+        "preview_referenced_bounds_in_source_frame_m",
+        "qc_warnings",
+        "provenance",
+    ):
+        assert standalone.json()[key] == direct[key]
+
+    graph = {
+        "graph_id": "mesh-hidden-tip-extremum-v14",
+        "name": "Source extrema omitted from display",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "m",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    artifact_hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        )
+        for key in (
+            "preview_omitted_axis_extremum_sides",
+            "preview_displayed_bounds_in_source_frame_m",
+            "preview_referenced_bounds_in_source_frame_m",
+            "qc_warnings",
+            "provenance",
+        ):
+            assert artifact["payload_json"][key] == standalone.json()[key]
+        artifact_hashes.append(artifact["payload_sha256"])
+    assert len(set(artifact_hashes)) == 1

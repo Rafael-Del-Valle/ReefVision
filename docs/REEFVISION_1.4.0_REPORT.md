@@ -65,6 +65,22 @@ decomposition and artifact parity. Zero-area meshes report an undefined area
 fraction, not a biological coverage estimate. Neither preview sampling nor the
 relative area fraction validates specimen completeness.
 
+### Rendered bounds versus source extrema
+
+A bounded triangle sample may retain a connected surface patch while omitting
+the face containing a reconstructed extremum (for example a narrow tip).
+`preview_displayed_bounds_in_source_frame_m` now describes only vertices
+actually submitted to the renderer, independently of the existing
+`preview_referenced_bounds_in_source_frame_m` used to fit the camera to all
+source faces. `preview_omitted_axis_extremum_sides` identifies any of the six
+source-axis minimum/maximum sides not represented in the rendered sample, and
+`preview_omits_source_axis_extrema` warns explicitly. Extrema are compared in
+original coordinates before calibration to avoid false equality under extreme
+scales. A synthetic 514-face connected mesh with an unsampled tall flap is
+exercised through direct measurement, standalone API, and twice-executed
+persisted typed Workflow Builder graphs. The result is display fidelity QC,
+not biological branch presence/absence, verified anatomy, or scale accuracy.
+
 ## User-facing entry point
 
 A new user reaches the 1.4 tools through:

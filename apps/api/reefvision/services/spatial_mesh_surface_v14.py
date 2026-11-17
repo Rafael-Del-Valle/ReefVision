@@ -509,6 +509,28 @@ def measure_mesh_preview(
     # coverage without treating sampled faces as scientific measurements.
     display_geometry = _sample_mesh_display_geometry(points, faces, scale)
     sampled_raw_area = fsum(face_areas[index] for index in display_geometry["preview_face_indices"])
+    # The camera frame uses all source faces, whereas the renderer only
+    # displays a bounded sample. Detect when the displayed vertices omit a
+    # source-axis extremum (for example, an unsampled coral-tip reconstruction).
+    # Compare raw source coordinates, not scaled floats, so tiny calibration
+    # factors cannot turn a real omission into an apparent equality.
+    sampled_points = [points[index] for index in display_geometry["preview_vertex_indices"]]
+    sampled_bounds_min_m = [
+        min(point[axis] for point in sampled_points) * scale for axis in range(3)
+    ]
+    sampled_bounds_max_m = [
+        max(point[axis] for point in sampled_points) * scale for axis in range(3)
+    ]
+    omitted_extremum_sides: list[str] = []
+    for axis, axis_name in enumerate(("x", "y", "z")):
+        if min(point[axis] for point in sampled_points) > min(
+            point[axis] for point in referenced_points
+        ):
+            omitted_extremum_sides.append(f"{axis_name}_min")
+        if max(point[axis] for point in sampled_points) < max(
+            point[axis] for point in referenced_points
+        ):
+            omitted_extremum_sides.append(f"{axis_name}_max")
     # A uniform face-index sample can exclude an entire disconnected surface
     # patch, even if its full-mesh area is large. Record per-patch display
     # coverage without altering scientific measurements or source topology.
@@ -638,6 +660,11 @@ def measure_mesh_preview(
         "area_weighted_effective_triangle_count": area_weighted_effective_triangle_count,
         **display_geometry,
         "preview_sampled_surface_area_m2": sampled_raw_area * scale * scale,
+        "preview_displayed_bounds_in_source_frame_m": {
+            "minimum": sampled_bounds_min_m,
+            "maximum": sampled_bounds_max_m,
+        },
+        "preview_omitted_axis_extremum_sides": omitted_extremum_sides,
         "preview_surface_area_fraction": sampled_raw_area / raw_area if raw_area > 0 else None,
         "preview_edge_connected_patch_face_counts": preview_patch_face_counts,
         "preview_edge_connected_patch_surface_area_coverage_fractions": (
@@ -900,6 +927,7 @@ def measure_mesh_preview(
                 if omitted_patch_raw_area > 0 or preview_partially_sampled_missing_raw_area > 0
                 else []
             )
+            + (["preview_omits_source_axis_extrema"] if omitted_extremum_sides else [])
             + (
                 ["zero_area_mesh_patch_centroid_undefined"]
                 if any(patch_area_mesh_units[patch] == 0 for patch in ordered_patches)
