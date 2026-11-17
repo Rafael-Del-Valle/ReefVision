@@ -34,6 +34,9 @@ export function ImageViewport({
     y: number;
     view: ViewportTransform;
   } | null>(null);
+  // Preserve a scientist-selected zoom/pan when the desktop pane resizes.
+  const manualViewRef = useRef(false);
+  const previousLayoutRef = useRef({ width, height, frameSize: FALLBACK_SIZE });
   const [frameSize, setFrameSize] = useState(FALLBACK_SIZE);
   const [view, setView] = useState(viewRef.current);
 
@@ -44,17 +47,45 @@ export function ImageViewport({
 
   const fit = useCallback(() => {
     dragRef.current = null;
+    manualViewRef.current = false;
     updateView(fitTransform({ width, height }, frameSize));
   }, [frameSize, height, updateView, width]);
 
   const actualSize = useCallback(() => {
     dragRef.current = null;
+    manualViewRef.current = true;
     updateView(actualSizeTransform({ width, height }, frameSize));
   }, [frameSize, height, updateView, width]);
 
   useEffect(() => {
-    fit();
-  }, [fit, height, width]);
+    const previous = previousLayoutRef.current;
+    const imageChanged = width !== previous.width || height !== previous.height;
+    const frameChanged =
+      frameSize.width !== previous.frameSize.width ||
+      frameSize.height !== previous.frameSize.height;
+    if (imageChanged) {
+      // New source dimensions mean new pixel coordinates: always refit.
+      manualViewRef.current = false;
+      dragRef.current = null;
+    }
+    if (imageChanged || !manualViewRef.current) {
+      updateView(fitTransform({ width, height }, frameSize));
+    } else if (frameChanged) {
+      // Keep the same original-image pixel under the viewport center.
+      // A drag started before resizing must not reuse its old anchor.
+      dragRef.current = null;
+      updateView({
+        ...viewRef.current,
+        offsetX:
+          viewRef.current.offsetX +
+          (frameSize.width - previous.frameSize.width) / 2,
+        offsetY:
+          viewRef.current.offsetY +
+          (frameSize.height - previous.frameSize.height) / 2,
+      });
+    }
+    previousLayoutRef.current = { width, height, frameSize };
+  }, [frameSize, height, updateView, width]);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -136,6 +167,7 @@ export function ImageViewport({
       }
 
       const rect = frame.getBoundingClientRect();
+      manualViewRef.current = true;
       updateView(
         zoomAtPoint(
           viewRef.current,
@@ -166,6 +198,7 @@ export function ImageViewport({
     if (dragRef.current) return;
     event.preventDefault();
     event.stopPropagation();
+    manualViewRef.current = true;
     dragRef.current = {
       pointerId: event.pointerId,
       x: event.clientX,

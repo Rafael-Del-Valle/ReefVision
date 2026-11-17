@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import { fitTransform } from "./geometry";
 import { ImageViewport } from "./ImageViewport";
 
 describe("ImageViewport", () => {
@@ -73,6 +74,101 @@ describe("ImageViewport", () => {
     expect(transform.style.transform).not.toContain("scale(1)");
     await userEvent.click(screen.getByRole("button", { name: "Fit to View" }));
     expect(transform.style.transform).not.toContain("scale(1)");
+  });
+
+
+  it("preserves user zoom and annotated pixel positions when a desktop pane resizes", () => {
+    let notifyResize: (() => void) | undefined;
+    class MockResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        notifyResize = () => callback([], this as unknown as ResizeObserver);
+      }
+      observe() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", MockResizeObserver);
+    try {
+      const size = { width: 900, height: 600 };
+      const { rerender, unmount } = render(
+        <ImageViewport width={1600} height={1200} label="Resizable image">
+          <svg data-testid="resizing-overlay" viewBox="0 0 1600 1200">
+            <polygon points="10,20 40,20 40,60" />
+          </svg>
+        </ImageViewport>,
+      );
+      const frame = screen.getByRole("region", { name: "Resizable image" });
+      Object.defineProperty(frame, "clientWidth", {
+        configurable: true,
+        get: () => size.width,
+      });
+      Object.defineProperty(frame, "clientHeight", {
+        configurable: true,
+        get: () => size.height,
+      });
+      const transform = screen.getByTestId("image-viewport-transform");
+      const overlay = screen.getByTestId("resizing-overlay");
+      const originalPoints = overlay.querySelector("polygon")?.getAttribute(
+        "points",
+      );
+      const currentView = () => {
+        const match = transform.style.transform.match(
+          /^translate\((-?[\d.]+)px, (-?[\d.]+)px\) scale\(([\d.]+)\)$/,
+        );
+        if (!match) throw new Error("Unexpected scientific viewport transform");
+        return {
+          offsetX: Number(match[1]),
+          offsetY: Number(match[2]),
+          scale: Number(match[3]),
+        };
+      };
+
+      act(() => notifyResize?.());
+      fireEvent.wheel(frame, { deltaY: -120, clientX: 450, clientY: 300 });
+      const manual = currentView();
+      expect(manual.scale).toBeGreaterThan(
+        fitTransform({ width: 1600, height: 1200 }, size).scale,
+      );
+
+      act(() => {
+        size.width = 1100;
+        size.height = 760;
+        notifyResize?.();
+      });
+      const resized = currentView();
+      expect(resized.scale).toBeCloseTo(manual.scale);
+      expect(resized.offsetX).toBeCloseTo(manual.offsetX + 100);
+      expect(resized.offsetY).toBeCloseTo(manual.offsetY + 80);
+      expect(overlay.querySelector("polygon")).toHaveAttribute(
+        "points",
+        originalPoints,
+      );
+
+      // Explicit Fit re-enables automatic resizing; another camera image
+      // with different source dimensions also starts with its own fit.
+      fireEvent.click(screen.getByRole("button", { name: "Fit to View" }));
+      act(() => {
+        size.width = 1200;
+        size.height = 820;
+        notifyResize?.();
+      });
+      const expectedFit = fitTransform({ width: 1600, height: 1200 }, size);
+      expect(currentView().scale).toBeCloseTo(expectedFit.scale);
+
+      fireEvent.wheel(frame, { deltaY: -120, clientX: 450, clientY: 300 });
+      rerender(
+        <ImageViewport width={3200} height={800} label="Resizable image">
+          <svg data-testid="resizing-overlay" viewBox="0 0 3200 800">
+            <polygon points="10,20 40,20 40,60" />
+          </svg>
+        </ImageViewport>,
+      );
+      expect(currentView().scale).toBeCloseTo(
+        fitTransform({ width: 3200, height: 800 }, size).scale,
+      );
+      unmount();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("blocks scrolling without zooming for horizontal-dominant, Shift, or zero-delta wheels", () => {
