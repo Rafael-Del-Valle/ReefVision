@@ -565,6 +565,7 @@ export function RasterMaskWorkspace({
             width={image.width_px}
             height={image.height_px}
             label="Raster mask viewport"
+            sourceImageId={image.id}
           >
             <img
               src={imageDisplayUrl(image.id)}

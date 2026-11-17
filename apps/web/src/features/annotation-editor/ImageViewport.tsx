@@ -138,6 +138,11 @@ export function ImageViewport({
       const drag = dragRef.current;
       // Ignore unrelated mouse, pen, or touch pointers during an active pan.
       if (!drag || event.pointerId !== drag.pointerId) return;
+      // Malformed WebView2 pointer coordinates must not corrupt the stored
+      // scientific image transform or its pixel-aligned mask overlays.
+      if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) {
+        return;
+      }
       updateView({
         ...drag.view,
         offsetX: drag.view.offsetX + event.clientX - drag.x,
@@ -226,6 +231,11 @@ export function ImageViewport({
     }
     // A second pointer must not steal a drag already in progress.
     if (dragRef.current) return;
+    // Ignore bad input before taking ownership of a pan gesture. A later
+    // valid pointerdown must still be able to initiate deliberate panning.
+    if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     manualViewRef.current = true;

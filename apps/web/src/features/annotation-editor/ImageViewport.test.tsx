@@ -432,6 +432,64 @@ describe("ImageViewport", () => {
     expect(polygon).toHaveAttribute("points", originalGeometry);
   });
 
+  it("ignores invalid pan coordinates and recovers without changing raster geometry", () => {
+    render(
+      <ImageViewport width={1600} height={1200} label="Raster pan viewport">
+        <svg data-testid="raster-geometry" viewBox="0 0 1600 1200">
+          <polygon points="10,10 50,10 50,50" />
+        </svg>
+      </ImageViewport>,
+    );
+    const frame = screen.getByRole("region", { name: "Raster pan viewport" });
+    const transform = screen.getByTestId("image-viewport-transform");
+    const polygon = screen
+      .getByTestId("raster-geometry")
+      .querySelector("polygon");
+    const sourcePoints = polygon?.getAttribute("points");
+    const original = transform.style.transform;
+
+    const pointer = (
+      target: Element | Window,
+      type: string,
+      clientX: number,
+      clientY: number,
+    ) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      // WebView2 properties are read-only; use explicit values rather than
+      // DOM constructor coercion to reproduce nonfinite native coordinates.
+      Object.defineProperties(event, {
+        pointerId: { value: 19 },
+        button: { value: 0 },
+        altKey: { value: true },
+        clientX: { value: clientX },
+        clientY: { value: clientY },
+      });
+      fireEvent(target, event);
+    };
+
+    pointer(frame, "pointerdown", Number.NaN, 60);
+    pointer(window, "pointermove", 100, 120);
+    expect(transform.style.transform).toBe(original);
+
+    // A bad pointerdown must not reserve the pan for later valid input.
+    pointer(frame, "pointerdown", 50, 60);
+    pointer(window, "pointermove", Number.POSITIVE_INFINITY, 110);
+    pointer(window, "pointermove", 90, Number.NEGATIVE_INFINITY);
+    expect(transform.style.transform).toBe(original);
+
+    pointer(window, "pointermove", 90, 110);
+    const panned = transform.style.transform;
+    expect(panned).not.toBe(original);
+
+    // Bad updates during a good drag are ignored without cancelling it.
+    pointer(window, "pointermove", Number.NaN, 150);
+    expect(transform.style.transform).toBe(panned);
+    pointer(window, "pointermove", 120, 130);
+    expect(transform.style.transform).not.toBe(panned);
+    expect(transform.style.transform).not.toMatch(/NaN|Infinity/);
+    expect(polygon).toHaveAttribute("points", sourcePoints);
+  });
+
   it("preserves wheel zoom when a prior pan pointer keeps moving", () => {
     render(
       <ImageViewport
