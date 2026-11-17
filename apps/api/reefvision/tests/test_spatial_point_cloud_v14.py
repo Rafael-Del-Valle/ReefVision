@@ -538,6 +538,7 @@ def test_ascii_ply_comment_remains_supported() -> None:
     with_comment = PLY.replace("end_header", "comment temperature C\nend_header")
     assert parse_ascii_ply_points(with_comment) == parse_ascii_ply_points(PLY)
 
+
 @pytest.mark.parametrize("as_ply", [False, True])
 def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
     client: TestClient, as_ply: bool
@@ -554,9 +555,7 @@ def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
     assert direct["duplicate_point_row_count"] == 1
     assert direct["unique_point_count"] == 3
     assert direct["maximum_coordinate_multiplicity"] == 2
-    assert direct["arithmetic_centroid_in_source_frame_m"] == pytest.approx(
-        [-0.025, 0.05, 0.0]
-    )
+    assert direct["arithmetic_centroid_in_source_frame_m"] == pytest.approx([-0.025, 0.05, 0.0])
     assert direct["unique_coordinate_centroid_in_source_frame_m"] == pytest.approx(
         [0.0, 0.2 / 3, 0.0]
     )
@@ -651,7 +650,8 @@ def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
         assert detail.status_code == 200, detail.text
         assert detail.json()["run"]["status"] == "succeeded"
         artifact = next(
-            a for a in detail.json()["artifacts"]
+            a
+            for a in detail.json()["artifacts"]
             if a["data_type"] == "point_cloud_measurement_preview"
         )
         for key in fields:

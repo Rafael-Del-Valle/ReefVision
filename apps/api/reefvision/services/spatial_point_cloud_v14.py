@@ -635,8 +635,7 @@ def measure_point_cloud_preview(
             (["duplicate_points_present"] if duplicate_row_count else [])
             + (
                 ["nonuniform_duplicate_coordinates_can_bias_row_centroid"]
-                if duplicate_row_count
-                and len(set(coordinate_multiplicities.values())) > 1
+                if duplicate_row_count and len(set(coordinate_multiplicities.values())) > 1
                 else []
             )
             + (
