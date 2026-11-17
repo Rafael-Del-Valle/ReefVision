@@ -76,7 +76,6 @@ describe("ImageViewport", () => {
     expect(transform.style.transform).not.toContain("scale(1)");
   });
 
-
   it("preserves user zoom and annotated pixel positions when a desktop pane resizes", () => {
     let notifyResize: (() => void) | undefined;
     class MockResizeObserver {
@@ -107,9 +106,9 @@ describe("ImageViewport", () => {
       });
       const transform = screen.getByTestId("image-viewport-transform");
       const overlay = screen.getByTestId("resizing-overlay");
-      const originalPoints = overlay.querySelector("polygon")?.getAttribute(
-        "points",
-      );
+      const originalPoints = overlay
+        .querySelector("polygon")
+        ?.getAttribute("points");
       const currentView = () => {
         const match = transform.style.transform.match(
           /^translate\((-?[\d.]+)px, (-?[\d.]+)px\) scale\(([\d.]+)\)$/,
