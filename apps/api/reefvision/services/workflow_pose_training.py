@@ -352,7 +352,6 @@ def _pose_dataset(
     return dataset
 
 
-
 def _shared_pose_source_videos(
     training_items: list[dict[str, Any]],
     validation_items: list[dict[str, Any]],
