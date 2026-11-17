@@ -523,6 +523,25 @@ def _check_declared_pose_job_manifest_lineage(
             raise ValidationError("Pose training child job frozen manifest lineage changed")
 
 
+def _check_frozen_pose_job_request(
+    snapshot: dict[str, Any] | None,
+    request: dict[str, Any],
+) -> None:
+    """Detect drift from a newly queued child job without breaking legacy runs."""
+    if not isinstance(snapshot, dict):
+        raise ValidationError("Pose training child job snapshot must be a JSON object")
+    if "pose_child_job_request_sha256" not in snapshot:
+        return
+    expected = snapshot["pose_child_job_request_sha256"]
+    if (
+        not isinstance(expected, str)
+        or len(expected) != 64
+        or any(char not in "0123456789abcdef" for char in expected)
+        or canonical_json_sha256(request) != expected
+    ):
+        raise ValidationError("Pose training child job request checksum changed")
+
+
 def _completed_workflow_pose_training_run(
     session: Session,
     *,
@@ -827,6 +846,8 @@ def _reused_pose_training_result(
         ),
         split_manifest_sha256=run.split_manifest_sha256,
     )
+
+    _check_frozen_pose_job_request(run.draft_snapshot_json, request)
 
     # Persisted result paths are untrusted on replay. Reject malformed values
     # before managed-path resolution so recovery fails with a domain error.
@@ -1638,6 +1659,12 @@ def create_pose_workflow_training_result(
     session.flush()
 
     run.job_id = job.id
+    # Pin the exact queued child request, including frozen manifest digests.
+    # Earlier jobs without this assertion remain readable on replay.
+    run.draft_snapshot_json = {
+        **dict(run.draft_snapshot_json or {}),
+        "pose_child_job_request_sha256": canonical_json_sha256(job.request_json),
+    }
 
     session.commit()
 
@@ -1706,6 +1733,8 @@ def create_pose_workflow_training_result(
         ),
         split_manifest_sha256=split_manifest_sha256,
     )
+
+    _check_frozen_pose_job_request(run.draft_snapshot_json, request)
 
     # Validate the persisted run itself before first exposing its checkpoint.
     # A worker can change training configuration after the job was queued;
