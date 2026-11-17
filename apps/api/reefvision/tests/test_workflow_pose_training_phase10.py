@@ -1258,9 +1258,10 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
         child_job = session.get(Job, persisted.job_id)
         assert child_job is not None
         original_request = dict(child_job.request_json)
-        assert persisted.draft_snapshot_json["pose_child_job_request_sha256"] == (
-            canonical_json_sha256(original_request)
-        )
+        expected_request_digest = persisted.draft_snapshot_json[
+            "pose_child_job_request_sha256"
+        ]
+        assert expected_request_digest == canonical_json_sha256(original_request)
         dropped_digest_request = dict(original_request)
         dropped_digest_request.pop("pose_training_dataset_manifest_sha256")
         child_job.request_json = dropped_digest_request
