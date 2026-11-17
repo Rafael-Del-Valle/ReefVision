@@ -34,7 +34,13 @@ def _create_database(
 
 
 @pytest.mark.parametrize(
-    ("source_application", "reference_application", "source_user", "reference_user", "expected_fields"),
+    (
+        "source_application",
+        "reference_application",
+        "source_user",
+        "reference_user",
+        "expected_fields",
+    ),
     [
         (10, 10, 2, 2, []),
         (10, 11, 2, 2, ["application_id"]),
@@ -74,7 +80,7 @@ def test_format_header_gate_is_read_only_and_independent_of_ddl(
     ]
     diagnostic = subprocess.run(command, capture_output=True, text=True, check=False)
     strict = subprocess.run(
-        command + ["--fail-on-format-header-drift"],
+        [*command, "--fail-on-format-header-drift"],
         capture_output=True,
         text=True,
         check=False,
