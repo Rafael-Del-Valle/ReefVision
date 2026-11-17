@@ -598,7 +598,14 @@ class WorkflowExecutionService:
     ) -> list[WorkflowArtifactSpec]:
         project_payload = self._single_payload(inputs, "project")
         parent_payload = self._optional_payload(inputs, "parent_dataset")
-        reviewed_payloads = [dict(artifact.payload_json) for artifact in inputs.get("reviewed", [])]
+        # A reviewed artifact is part of the frozen scientific dataset lineage.
+        # Reject malformed persisted JSON rather than coercing a list of pairs
+        # into a seemingly valid, but different, review record via dict().
+        reviewed_payloads: list[dict[str, Any]] = []
+        for artifact in inputs.get("reviewed", []):
+            if not isinstance(artifact.payload_json, dict):
+                raise ValidationError("Workflow input 'reviewed' must contain a JSON object")
+            reviewed_payloads.append(dict(artifact.payload_json))
         result = create_workflow_dataset_version(
             self.session,
             self._required_settings(),
