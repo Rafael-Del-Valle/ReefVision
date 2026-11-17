@@ -64,9 +64,7 @@ def test_imported_overlength_review_evidence_blocks_all_triage_paths(
 
     # Every entry point checks entire historical evidence, not only this page.
     history = client.get(events_url, params={"page": 999, "page_size": 1})
-    manual = client.post(
-        events_url, json={**payload, "client_request_id": str(uuid4())}
-    )
+    manual = client.post(events_url, json={**payload, "client_request_id": str(uuid4())})
     bulk = client.post(
         f"/api/v1/review-queues/{queue_id}/items/bulk",
         json={
