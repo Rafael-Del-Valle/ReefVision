@@ -238,6 +238,5 @@ def test_corrupt_visibility_reset_preserves_restored_evidence(
     key = "user_preferences" if scope == "preferences" else "project_defaults"
     assert bundle.json()[key]["annotations"]["saved"] is False
     assert (
-        client.get(f"/api/v1/projects/{healthy_project['id']}/class-visibility").status_code
-        == 200
+        client.get(f"/api/v1/projects/{healthy_project['id']}/class-visibility").status_code == 200
     )
