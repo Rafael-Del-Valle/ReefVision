@@ -78,8 +78,14 @@ source-axis minimum/maximum sides not represented in the rendered sample, and
 original coordinates before calibration to avoid false equality under extreme
 scales. A synthetic 514-face connected mesh with an unsampled tall flap is
 exercised through direct measurement, standalone API, and twice-executed
-persisted typed Workflow Builder graphs. The result is display fidelity QC,
-not biological branch presence/absence, verified anatomy, or scale accuracy.
+persisted typed Workflow Builder graphs. A follow-up scientific regression
+distinguishes the measurement kernel's calibration provenance from the
+standalone API's additional source and observation audit fields. It asserts
+that the extra fields remain explicitly unverified or absent when callers
+supply no independent evidence, while two persisted workflow executions
+match the complete standalone API provenance and artifact hashes. The result
+is display fidelity QC, not biological branch presence/absence, verified
+anatomy, or scale accuracy.
 
 ## User-facing entry point
 
