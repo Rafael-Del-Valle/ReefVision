@@ -546,6 +546,13 @@ def measure_mesh_preview(
     # calibrated area is representable. Withhold a false zero when it underflows.
     omitted_patch_area_m2 = omitted_patch_raw_area * scale * scale
     omitted_patch_area_representable = omitted_patch_raw_area == 0 or omitted_patch_area_m2 > 0
+    # Keep partially sampled patches distinct from wholly omitted patches.
+    # A positive source-area omission can underflow under extreme scale inputs;
+    # missing measurement must never be represented as zero observed omission.
+    partial_missing_area_m2 = preview_partially_sampled_missing_raw_area * scale * scale
+    partial_missing_area_representable = (
+        preview_partially_sampled_missing_raw_area == 0 or partial_missing_area_m2 > 0
+    )
     preview_patch_area_coverage_fractions = [
         min(1.0, fsum(sampled_patch_face_areas.get(patch, [])) / patch_area_mesh_units[patch])
         if patch_area_mesh_units[patch] > 0
@@ -640,6 +647,17 @@ def measure_mesh_preview(
         "preview_partially_sampled_patch_indices": preview_partially_sampled_patch_indices,
         "preview_partially_sampled_patch_missing_area_fraction": (
             preview_partially_sampled_missing_raw_area / raw_area if raw_area > 0 else None
+        ),
+        "preview_partially_sampled_patch_missing_area_m2": (
+            partial_missing_area_m2 if partial_missing_area_representable else None
+        ),
+        "preview_partially_sampled_patch_missing_area_scale_interval_m2": (
+            [
+                partial_missing_area_m2 * (1 - relative_scale_uncertainty) ** 2,
+                partial_missing_area_m2 * (1 + relative_scale_uncertainty) ** 2,
+            ]
+            if relative_scale_uncertainty is not None and partial_missing_area_representable
+            else None
         ),
         "preview_omitted_patch_surface_area_fraction": (
             omitted_patch_raw_area / raw_area if raw_area > 0 else None

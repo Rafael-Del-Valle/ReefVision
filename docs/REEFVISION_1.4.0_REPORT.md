@@ -194,6 +194,11 @@ annotation, calibration, anatomy, identity, growth, or condition evidence.
   entirely from the display. The omitted-patch area fraction reports the
   proportion of the complete reconstructed area belonging to fully hidden
   patches, separating patch loss from ordinary within-patch face decimation.
+  Within partially visible patches, the direct sum of the hidden faces also
+  reports provisional calibrated missing area in m² and a scale-only interval
+  when an uncertainty was supplied. Positive raw missing area that would
+  underflow to zero under calibration is withheld as null, not falsely reported
+  as zero; visualization loss is never equivalent to absent coral tissue.
   A distinct warning marks omissions; a zero-area
   patch has undefined area coverage rather than invented certainty. All
   scientific surface-area/topology measurements still use the complete mesh.

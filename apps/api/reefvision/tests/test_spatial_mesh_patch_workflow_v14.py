@@ -175,6 +175,10 @@ def test_hidden_mesh_patch_during_display_decimation_in_saved_workflow(
     assert direct["preview_partially_sampled_patch_missing_area_fraction"] == pytest.approx(
         0.5 / 506.5
     )
+    assert direct["preview_partially_sampled_patch_missing_area_m2"] == pytest.approx(0.00005)
+    assert direct["preview_partially_sampled_patch_missing_area_scale_interval_m2"] == pytest.approx(
+        [0.00005 * 0.9**2, 0.00005 * 1.1**2]
+    )
     assert direct["preview_omitted_patch_surface_area_fraction"] == pytest.approx(250 / 506.5)
     assert direct["preview_omitted_patch_surface_area_m2"] == pytest.approx(0.025)
     assert direct["preview_omitted_patch_surface_area_scale_interval_m2"] == pytest.approx(
@@ -207,6 +211,8 @@ def test_hidden_mesh_patch_during_display_decimation_in_saved_workflow(
         "preview_omitted_edge_connected_patch_indices",
         "preview_partially_sampled_patch_indices",
         "preview_partially_sampled_patch_missing_area_fraction",
+        "preview_partially_sampled_patch_missing_area_m2",
+        "preview_partially_sampled_patch_missing_area_scale_interval_m2",
         "preview_omitted_patch_surface_area_fraction",
         "preview_omitted_patch_surface_area_m2",
         "preview_omitted_patch_surface_area_scale_interval_m2",
@@ -267,6 +273,8 @@ def test_hidden_mesh_patch_during_display_decimation_in_saved_workflow(
             "preview_omitted_edge_connected_patch_indices",
             "preview_partially_sampled_patch_indices",
             "preview_partially_sampled_patch_missing_area_fraction",
+            "preview_partially_sampled_patch_missing_area_m2",
+            "preview_partially_sampled_patch_missing_area_scale_interval_m2",
             "preview_omitted_patch_surface_area_fraction",
             "preview_omitted_patch_surface_area_m2",
             "preview_omitted_patch_surface_area_scale_interval_m2",
@@ -306,6 +314,8 @@ def test_full_mesh_preview_covers_all_patches_and_zero_area_is_undefined() -> No
     assert two_patches["preview_omitted_edge_connected_patch_indices"] == []
     assert two_patches["preview_partially_sampled_patch_indices"] == []
     assert two_patches["preview_partially_sampled_patch_missing_area_fraction"] == 0.0
+    assert two_patches["preview_partially_sampled_patch_missing_area_m2"] == 0.0
+    assert two_patches["preview_partially_sampled_patch_missing_area_scale_interval_m2"] is None
     assert two_patches["preview_omitted_patch_surface_area_fraction"] == 0.0
     assert two_patches["preview_omitted_patch_surface_area_m2"] == 0.0
     assert two_patches["preview_omitted_patch_surface_area_scale_interval_m2"] is None
@@ -320,6 +330,8 @@ def test_full_mesh_preview_covers_all_patches_and_zero_area_is_undefined() -> No
     assert degenerate["preview_omitted_edge_connected_patch_indices"] == []
     assert degenerate["preview_partially_sampled_patch_indices"] == []
     assert degenerate["preview_partially_sampled_patch_missing_area_fraction"] is None
+    assert degenerate["preview_partially_sampled_patch_missing_area_m2"] == 0.0
+    assert degenerate["preview_partially_sampled_patch_missing_area_scale_interval_m2"] is None
     assert degenerate["preview_omitted_patch_surface_area_fraction"] is None
     assert degenerate["preview_omitted_patch_surface_area_m2"] == 0.0
     assert degenerate["preview_omitted_patch_surface_area_scale_interval_m2"] is None
