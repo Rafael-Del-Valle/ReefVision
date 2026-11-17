@@ -1782,7 +1782,7 @@ def test_pose_workflow_rejects_lossy_device_from_verified_truth(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Use a scientist-reviewed pose dataset frozen through the real API.
-    # A non-string or empty device must fail before a training job is queued.
+    # An invalid or noncanonical device must fail before a training job is queued.
     project, dataset = _frozen_dataset(client, monkeypatch)
     app = cast(FastAPI, client.app)
     dataset_payload = {
@@ -1795,10 +1795,10 @@ def test_pose_workflow_rejects_lossy_device_from_verified_truth(
         "architecture": "yolo11n-pose.yaml",
         "training_config": {"epochs": 1},
     }
-    for invalid_device in (False, 0, None, [], {}, "", "   "):
+    for invalid_device in (False, 0, None, [], {}, "", "   ", " cpu", "cpu ", "\tcuda:0"):
         with (
             app.state.session_factory() as session,
-            pytest.raises(ValidationError, match="device must be a non-blank string"),
+            pytest.raises(ValidationError, match="device must be a non-blank canonical string"),
         ):
             create_pose_workflow_training_result(
                 session,
@@ -1821,7 +1821,7 @@ def test_pose_workflow_rejects_lossy_device_from_verified_truth(
             test_settings,
             project_id=str(project["id"]),
             dataset_payload=dataset_payload,
-            parameters={**parameters, "device": " cpu "},
+            parameters={**parameters, "device": "cpu"},
             processor=_fake_pose_processor,
         )
     assert result["device"] == "cpu"
