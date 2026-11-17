@@ -21,15 +21,37 @@ function history(run: TrainingRun): Record<string, number[]> {
     Array.isArray(rawHistory)
   )
     return {};
+  // Workers sometimes append a null placeholder for an unfinished epoch.
+  // Preserve the finite, contiguous measured prefix without interpolating a
+  // missing loss or joining values across an internal gap.
   return Object.fromEntries(
-    Object.entries(rawHistory).filter(
-      (entry): entry is [string, number[]] =>
-        Array.isArray(entry[1]) &&
-        entry[1].every(
+    Object.entries(rawHistory).flatMap(([key, samples]) => {
+      if (!Array.isArray(samples)) return [];
+      let measured = samples.length;
+      while (measured > 0 && samples[measured - 1] === null) {
+        measured -= 1;
+      }
+      const prefix: unknown[] = samples.slice(0, measured);
+      if (
+        !prefix.every(
           (value) => typeof value === "number" && Number.isFinite(value),
-        ),
-    ),
+        )
+      ) {
+        return [];
+      }
+      return [[key, prefix as number[]]];
+    }),
   );
+}
+
+function laterUnavailableSamples(
+  run: TrainingRun,
+  key: string,
+  measured: number,
+): number {
+  const raw = run.metrics_history as Record<string, unknown> | null | undefined;
+  const samples = raw?.[key];
+  return Array.isArray(samples) ? samples.length - measured : 0;
 }
 
 function metricLabel(key: string): string {
@@ -88,7 +110,19 @@ function bestEpoch(
   };
 }
 
-function MetricChart({ label, values }: { label: string; values: number[] }) {
+function MetricChart({
+  label,
+  values,
+  laterUnavailable = 0,
+}: {
+  label: string;
+  values: number[];
+  laterUnavailable?: number;
+}) {
+  const measuredLabel = laterUnavailable ? "Last measured" : "Latest";
+  const missingLabel = laterUnavailable
+    ? ` · ${laterUnavailable} subsequent sample(s) unavailable`
+    : "";
   // A live training job has only one loss observation after its first epoch.
   // Render that sample rather than hiding the chart until epoch two.
   if (values.length === 1) {
@@ -102,7 +136,10 @@ function MetricChart({ label, values }: { label: string; values: number[] }) {
         >
           <circle cx="50" cy="22" r="2" />
         </svg>
-        <small>Latest {values[0].toFixed(4)} · 1 epoch</small>
+        <small>
+          {measuredLabel} {values[0].toFixed(4)} · 1 epoch
+          {missingLabel}
+        </small>
       </figure>
     );
   }
@@ -163,7 +200,8 @@ function MetricChart({ label, values }: { label: string; values: number[] }) {
         <polyline points={points} />
       </svg>
       <small>
-        Latest {values.at(-1)?.toFixed(4)} · {values.length} epochs
+        {measuredLabel} {values.at(-1)?.toFixed(4)} · {values.length} epochs
+        {missingLabel}
         {values.length > 1002 &&
           " · overview downsampled (raw metrics preserved)"}
       </small>
@@ -309,7 +347,12 @@ export function TrainingRunDetail({
         {Object.entries(metricHistory)
           .filter(([key]) => !/^epoch$|^time$/i.test(key))
           .map(([key, values]) => (
-            <MetricChart key={key} label={key} values={values} />
+            <MetricChart
+              key={key}
+              label={key}
+              values={values}
+              laterUnavailable={laterUnavailableSamples(run, key, values.length)}
+            />
           ))}
       </div>
       {tuningResults?.trials?.length ? (
