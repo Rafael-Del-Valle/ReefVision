@@ -1622,6 +1622,54 @@ def test_pose_workflow_rejects_null_training_config_from_verified_truth(
     assert result["pose_training_dataset_id"] == dataset["id"]
 
 
+def test_pose_workflow_rejects_lossy_precision_from_verified_truth(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Keep the original scientist-reviewed, API-frozen dataset intact.
+    # Replaying a saved configuration must not normalize invalid precision.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    dataset_payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+    for invalid_precision in (None, False, 0, [], {}, "", " fp32 ", "amp ", "FP32"):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="precision must be fp32 or amp"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=dataset_payload,
+                parameters={
+                    "precision": invalid_precision,
+                    "training_config": {"epochs": 1},
+                },
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert session.scalar(select(TrainingRun.id)) is None
+        valid = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters={
+                "device": "cpu",
+                "precision": "fp32",
+                "training_config": {"epochs": 1},
+            },
+            processor=_fake_pose_processor,
+        )
+    assert valid["precision"] == "fp32"
+
+
 def test_pose_workflow_rejects_lossy_run_names_from_verified_truth(
     client: TestClient,
     test_settings: Settings,

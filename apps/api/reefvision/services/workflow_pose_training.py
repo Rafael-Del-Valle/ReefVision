@@ -1276,17 +1276,10 @@ def create_pose_workflow_training_result(
         else None
     )
 
-    precision = str(
-        parameters.get(
-            "precision",
-            "fp32",
-        )
-    ).strip()
-
-    if precision not in {
-        "fp32",
-        "amp",
-    }:
+    # Saved graph settings are reproducibility assertions. Do not stringify
+    # booleans/arrays or trim whitespace into an apparently valid precision.
+    precision = parameters.get("precision", "fp32")
+    if not isinstance(precision, str) or precision not in {"fp32", "amp"}:
         raise ValidationError("Pose training precision must be fp32 or amp")
 
     supplied_config = parameters.get(
