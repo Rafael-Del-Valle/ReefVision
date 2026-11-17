@@ -1358,9 +1358,13 @@ def create_pose_workflow_training_result(
     # Never turn False, zero, or an empty container into a default model.
     if "architecture" in parameters:
         requested_architecture = parameters["architecture"]
-        if not isinstance(requested_architecture, str) or not requested_architecture.strip():
+        if (
+            not isinstance(requested_architecture, str)
+            or not requested_architecture.strip()
+            or requested_architecture != requested_architecture.strip()
+        ):
             raise ValidationError("Pose training architecture must be a non-blank string")
-        architecture = requested_architecture.strip()
+        architecture = requested_architecture
     else:
         architecture = str(
             metadata.get("source_architecture")
