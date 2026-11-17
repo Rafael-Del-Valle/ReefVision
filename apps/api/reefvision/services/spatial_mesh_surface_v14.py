@@ -230,7 +230,7 @@ def measure_mesh_preview(
     nonmanifold = sum(count > 2 for count in edges.values())
     # Group by shared edges, never by shared vertices alone. Sort patches by
     # their first face so that exported results are reproducible across runs.
-    patch_area_mesh_units: dict[int, float] = {}
+    patch_area_terms: dict[int, list[float]] = {}
     patch_first_face: dict[int, int] = {}
     patch_face_counts: dict[int, int] = {}
     patch_degenerate_faces: Counter[int] = Counter()
@@ -240,7 +240,7 @@ def measure_mesh_preview(
     patch_faces: dict[int, list[list[int]]] = {}
     for face_index, face_area in enumerate(face_areas):
         patch = root(face_index)
-        patch_area_mesh_units[patch] = patch_area_mesh_units.get(patch, 0.0) + face_area
+        patch_area_terms.setdefault(patch, []).append(face_area)
         patch_face_counts[patch] = patch_face_counts.get(patch, 0) + 1
         if face_area == 0:
             patch_degenerate_faces[patch] += 1
@@ -253,6 +253,10 @@ def measure_mesh_preview(
         )
         patch_faces.setdefault(patch, []).append(faces[face_index])
         patch_first_face.setdefault(patch, face_index)
+    # Preserve contributions smaller than the ULP of a large triangle. The
+    # complete mesh already uses fsum; per-patch areas must use the same
+    # arithmetic or patch totals, coverage and fractions can contradict it.
+    patch_area_mesh_units = {patch: fsum(areas) for patch, areas in patch_area_terms.items()}
     ordered_patches = sorted(patch_area_mesh_units, key=patch_first_face.__getitem__)
     # Separate edge-connected patches can still touch at source vertices. Such
     # a union is not a regular closed surface, even if every patch is closed.

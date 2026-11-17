@@ -530,3 +530,107 @@ def test_unsampled_mesh_tip_extremum_is_explicit_in_saved_workflow(client: TestC
             assert artifact["payload_json"][key] == standalone.json()[key]
         artifact_hashes.append(artifact["payload_sha256"])
     assert len(set(artifact_hashes)) == 1
+
+
+def test_compensated_patch_area_reconciles_mixed_scale_faces_in_saved_workflow(
+    client: TestClient,
+) -> None:
+    """Tiny positive faces must survive patch accumulation and workflow replay."""
+    from math import fsum
+
+    from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
+
+    # The shared edge intentionally makes this an explicitly nonmanifold mesh;
+    # topology QC must remain visible rather than rejecting valid area evidence.
+    # Each small face is below the ULP of the dominant 0.5-unit² triangle.
+    heights = [(2.0 + index / 300) * 1e-17 for index in range(300)]
+    vertices = [[0, 0, 0], [1, 0, 0], [0, 1, 0]] + [
+        [0.5, height, 0.0] for height in heights
+    ]
+    faces = [[0, 1, 2]] + [[0, 1, index + 3] for index in range(len(heights))]
+    params = {
+        "vertices": vertices,
+        "faces": faces,
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic field scale; independent verification pending",
+        "relative_scale_uncertainty": 0.05,
+    }
+    expected_raw_area = fsum([0.5] + [0.5 * height for height in heights])
+    assert expected_raw_area > 0.5
+    expected_area_m2 = expected_raw_area * 0.01 * 0.01
+    direct = measure_mesh_preview(**params)
+    assert direct["surface_area_m2"] == expected_area_m2
+    assert direct["edge_connected_patch_count"] == 1
+    assert direct["edge_connected_patch_surface_areas_m2"] == [expected_area_m2]
+    assert direct["edge_connected_patch_surface_area_fractions"] == [1.0]
+    assert direct["preview_surface_area_fraction"] == 1.0
+    assert direct["preview_edge_connected_patch_surface_area_coverage_fractions"] == [1.0]
+    assert "nonmanifold_mesh_edges" in direct["qc_warnings"]
+    assert direct["provenance"]["calibration_verified"] is False
+
+    project_id = str(create_project(client, "Compensated mesh patch areas")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert response.status_code == 200, response.text
+    standalone = response.json()
+    for field in (
+        "surface_area_m2",
+        "edge_connected_patch_surface_areas_m2",
+        "edge_connected_patch_surface_area_fractions",
+        "preview_edge_connected_patch_surface_area_coverage_fractions",
+        "qc_warnings",
+    ):
+        assert standalone[field] == direct[field]
+    assert standalone["provenance"]["calibration_verified"] is False
+
+    graph = {
+        "graph_id": "compensated-mesh-patch-area-v14",
+        "name": "Compensated patch surface area",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "m",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        )
+        payload = artifact["payload_json"]
+        for field in (
+            "surface_area_m2",
+            "edge_connected_patch_surface_areas_m2",
+            "edge_connected_patch_surface_area_fractions",
+            "preview_edge_connected_patch_surface_area_coverage_fractions",
+            "qc_warnings",
+            "provenance",
+        ):
+            assert payload[field] == standalone[field]
+        hashes.append(artifact["payload_sha256"])
+    assert len(set(hashes)) == 1

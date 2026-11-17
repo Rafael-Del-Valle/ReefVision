@@ -51,6 +51,23 @@ API and twice-run, persisted typed Workflow Builder regression checks use a
 synthetic hidden large patch, with zero omission and degenerate-area controls.
 The preview must never be used to infer coral condition or tissue coverage.
 
+### Compensated per-patch area reconciliation
+
+The complete reconstructed mesh already accumulates triangle surface areas
+with compensated summation. Each edge-connected patch now uses the same
+reduction instead of repeatedly adding small faces to a much larger running
+total. Without this, many sub-ULP positive triangles sharing a patch could
+disappear from its reported area even while remaining in the full-mesh total,
+making per-patch area fractions and bounded-preview coverage inconsistent.
+
+A synthetic dominant-face-plus-300-sliver fixture verifies exact reconciliation
+of the full-mesh area and its sole patch area, complete preview area coverage,
+and intentional nonmanifold-edge QC. Standalone API execution and two runs of
+a typed persisted Workflow Builder graph must agree on values, unverified
+calibration provenance, and stable artifact hashes. This improves arithmetic
+integrity, not reconstruction accuracy, organism identity, tissue area,
+anatomical branch length, or uncertainty beyond supplied scale error.
+
 ### Partially visible patch coverage
 
 The bounded preview now distinguishes completely hidden edge-connected mesh
