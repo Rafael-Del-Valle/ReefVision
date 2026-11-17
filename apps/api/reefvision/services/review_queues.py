@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
+from math import isfinite
 from statistics import mean
 from typing import Any
 from uuid import NAMESPACE_URL, uuid4, uuid5
@@ -188,6 +189,24 @@ class ReviewQueueService:
         ]
         if not scoped_images:
             raise ValidationError("No images are available in the requested review-queue scope")
+
+        # Models imported from local tools may contain an invalid confidence
+        # value despite the normal inference API validation. Neither a NaN
+        # priority nor an out-of-range probability is scientific evidence.
+        # Reject all scoped prediction rows before creating a queue or
+        # persisting any workflow-owned review artifact.
+        for image in scoped_images:
+            for prediction in project_context.predictions_by_image.get(image.image_id, []):
+                confidence = prediction.confidence
+                if (
+                    not isinstance(confidence, (int, float))
+                    or not isfinite(confidence)
+                    or not 0.0 <= confidence <= 1.0
+                ):
+                    raise ValidationError(
+                        "Review queue prediction confidence must be finite and within [0, 1]; "
+                        "correct local prediction evidence before QC review"
+                    )
 
         # Verified polygon/raster masks are independent biological annotations.
         # Existing QC scores intentionally keep their 1.0 formula; the
