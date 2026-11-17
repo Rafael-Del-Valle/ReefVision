@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from reefvision.db.models import ReviewQueue, ReviewQueueItem
 from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
 from reefvision.domain.errors import ConflictError, NotFoundError
+from reefvision.services.review_queue_transaction_16 import begin_serialized_review_triage
 from reefvision.schemas.review_queue_events import (
     ReviewQueueEventCreate,
     ReviewQueueEventResponse,
@@ -203,6 +204,12 @@ def _is_sqlite_event_request_collision(exc: IntegrityError) -> bool:
 def create_review_event(
     session: Session, queue_id: str, item_id: str, payload: ReviewQueueEventCreate
 ) -> ReviewQueueEventResponse:
+    # Manual comments and assignment changes must serialize with single-item
+    # and bulk triage before checking queue scope, existing event keys or the
+    # current history. Otherwise separate local SQLite sessions can each
+    # accept a stale snapshot and append incompatible researcher decisions.
+    # A held writer turn is a retryable conflict, never implicit approval.
+    begin_serialized_review_triage(session)
     item = validate_review_item_event_scope(session, queue_id, item_id)
     request_id = str(payload.client_request_id)
     prior = _existing(session, item.id, request_id)

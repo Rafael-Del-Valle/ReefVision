@@ -21,8 +21,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
-from reefvision.schemas.review_queue_events import ReviewQueueEventResponse
-from reefvision.services.review_queue_events import _is_sqlite_event_request_collision
+from reefvision.domain.errors import ConflictError
+from reefvision.schemas.review_queue_events import ReviewQueueEventCreate, ReviewQueueEventResponse
+from reefvision.services.review_queue_events import (
+    _is_sqlite_event_request_collision,
+    create_review_event,
+)
+from reefvision.services.review_queue_transaction_16 import begin_serialized_review_triage
 from reefvision.tests.test_review_queue_bulk_sqlite_contention_16 import _make_queue
 
 
@@ -458,3 +463,94 @@ def test_assignment_history_preserves_append_order_despite_clock_changes(
     queue_items = client.get(f"/api/v1/review-queues/{queue_id}/items")
     assert queue_items.status_code == 200, queue_items.text
     assert {item["review_state"] for item in queue_items.json()["items"]} == {"pending"}
+
+
+@pytest.mark.parametrize("saved_workflow", [False, True])
+def test_manual_assignment_serializes_with_triage_writer(
+    client: TestClient, saved_workflow: bool
+) -> None:
+    """A pending triage write must block assignment before its history read.
+
+    Exercise standalone and persisted executable Workflow Builder QC queues;
+    retry the identical event key only after the first transaction releases.
+    """
+    queue_id, item_ids = _make_queue(client, saved_workflow=saved_workflow)
+    item_id = item_ids[0]
+    event_url = f"/api/v1/review-queues/{queue_id}/items/{item_id}/events"
+    payload = {
+        "client_request_id": str(uuid4()),
+        "event_type": "assign",
+        "actor": "local researcher",
+        "assignee": "second-reviewer",
+    }
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as triage_writer:
+        begin_serialized_review_triage(triage_writer)
+        # This writer has already claimed the same barrier used by both
+        # single-item and bulk review state transitions.
+        blocked = client.post(event_url, json=payload)
+        assert blocked.status_code == 409, blocked.text
+        assert "busy" in blocked.text.lower()
+        triage_writer.rollback()
+
+    before = client.get(event_url)
+    assert before.status_code == 200, before.text
+    assert before.json()["items"] == []
+    assert before.json()["current_assignee"] is None
+
+    created = client.post(event_url, json=payload)
+    assert created.status_code == 201, created.text
+    replay = client.post(event_url, json=payload)
+    assert replay.status_code == 201, replay.text
+    assert replay.json()["id"] == created.json()["id"]
+    history = client.get(event_url)
+    assert history.status_code == 200, history.text
+    assert history.json()["total"] == 1
+    assert history.json()["current_assignee"] == "second-reviewer"
+    assert history.json()["requires_researcher_review"] is True
+    queue_items = client.get(f"/api/v1/review-queues/{queue_id}/items")
+    assert queue_items.status_code == 200, queue_items.text
+    assert {item["review_state"] for item in queue_items.json()["items"]} == {"pending"}
+
+
+@pytest.mark.parametrize("saved_workflow", [False, True])
+def test_manual_event_rejects_stale_read_transaction_before_append(
+    client: TestClient, saved_workflow: bool
+) -> None:
+    """A prior explicit SQLite read snapshot cannot become a writer decision."""
+    queue_id, item_ids = _make_queue(client, saved_workflow=saved_workflow)
+    item_id = item_ids[0]
+    event_url = f"/api/v1/review-queues/{queue_id}/items/{item_id}/events"
+    payload = {
+        "client_request_id": str(uuid4()),
+        "event_type": "comment",
+        "actor": "local researcher",
+        "comment": "Inspect this polyp boundary before review",
+    }
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as stale_reader:
+        stale_reader.connection().exec_driver_sql("BEGIN")
+        assert stale_reader.connection().exec_driver_sql("SELECT 1").scalar() == 1
+        with pytest.raises(ConflictError, match="fresh transaction"):
+            create_review_event(
+                stale_reader,
+                queue_id,
+                item_id,
+                ReviewQueueEventCreate.model_validate(payload),
+            )
+        stale_reader.rollback()
+
+    empty = client.get(event_url)
+    assert empty.status_code == 200, empty.text
+    assert empty.json()["total"] == 0
+    recovered = client.post(event_url, json=payload)
+    assert recovered.status_code == 201, recovered.text
+    repeated = client.post(event_url, json=payload)
+    assert repeated.status_code == 201, repeated.text
+    assert repeated.json()["id"] == recovered.json()["id"]
+    history = client.get(event_url)
+    assert history.status_code == 200, history.text
+    assert history.json()["total"] == 1
+    assert history.json()["requires_researcher_review"] is True
+    assert history.json()["current_assignee"] is None
