@@ -131,3 +131,6 @@ jobs:
       - name: Reject real NTFS junctions and research-directory substitutions
         shell: pwsh
         run: python -m pytest scripts/tests/test_verify_research_row_preservation_16.py -v
+      - name: Verify installed start/restart process isolation
+        shell: pwsh
+        run: .\\scripts\\test-reefvision-start-process-scope.ps1

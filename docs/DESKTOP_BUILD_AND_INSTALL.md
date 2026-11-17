@@ -152,3 +152,7 @@ The desktop installer bundles the frontend and backend together. Researchers sho
 - uninstall the app without removing user data by default.
 
 Clean-machine verification is still required before those claims are treated as fully release-ready.
+
+## 1.6 installed start/restart process scope
+
+The managed `start-reefvision --status` and `--restart` commands now enumerate only desktop processes with the exact selected installed executable path and `reefvision-api*.exe` sidecars beneath that installation directory. Process names by themselves do **not** establish ownership. Inaccessible/unknown executable paths and sidecars from development checkouts or other installation directories are excluded from restart, rather than being force-terminated. The Windows CI regression mocks process enumeration and termination to verify that foreign studies and unreadable process identities remain untouched. This does not replace physical installed-GUI testing, graceful shutdown/crash recovery validation, or Windows MSI upgrade/rollback acceptance.

@@ -393,16 +393,74 @@ function Get-ReefVisionHealthSnapshot {
     }
 }
 
+# Process names alone are not an installed-app identity. Development checkouts,
+# unrelated users and old installations can all run "ReefVision"/"reefvision-api".
+# Fail closed if Windows does not disclose the executable path.
+function Test-ReefVisionManagedProcessPath {
+    param(
+        [string]$ProcessPath,
+        [string]$InstalledExecutablePath,
+        [ValidateSet("desktop", "sidecar")]
+        [string]$Kind
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ProcessPath) -or
+        [string]::IsNullOrWhiteSpace($InstalledExecutablePath)) {
+        return $false
+    }
+    try {
+        $candidate = [System.IO.Path]::GetFullPath($ProcessPath)
+        $installed = [System.IO.Path]::GetFullPath($InstalledExecutablePath)
+    }
+    catch {
+        return $false
+    }
+    if ($Kind -eq "desktop") {
+        return [string]::Equals(
+            $candidate, $installed, [System.StringComparison]::OrdinalIgnoreCase
+        )
+    }
+
+    $executableName = [System.IO.Path]::GetFileName($candidate)
+    if (-not $executableName.StartsWith("reefvision-api", [System.StringComparison]::OrdinalIgnoreCase) -or
+        -not $executableName.EndsWith(".exe", [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $false
+    }
+    $installedDirectory = [System.IO.Path]::GetDirectoryName($installed)
+    if ([string]::IsNullOrWhiteSpace($installedDirectory)) {
+        return $false
+    }
+    $installPrefix = $installedDirectory.TrimEnd([char[]]@('\', '/')) + [System.IO.Path]::DirectorySeparatorChar
+    return $candidate.StartsWith($installPrefix, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
 function Get-ReefVisionDesktopProcessList {
+    param([string]$InstalledExecutablePath)
+
+    if ([string]::IsNullOrWhiteSpace($InstalledExecutablePath)) {
+        $InstalledExecutablePath = Resolve-ReefVisionInstalledDesktopPath
+    }
     $desktopProcessNames = @(Get-ReefVisionDesktopProcessNames)
     $desktopProcessLookup = @{}
     foreach ($name in $desktopProcessNames) {
         $desktopProcessLookup[$name] = $true
     }
-    $desktop = @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
-        $desktopProcessLookup.ContainsKey($_.ProcessName)
-    })
-    $sidecars = @(Get-Process | Where-Object { $_.ProcessName -like "reefvision-api*" })
+    $desktop = @()
+    $sidecars = @()
+    foreach ($process in @(Get-Process -ErrorAction SilentlyContinue)) {
+        # Access to Path is denied for some processes. Unknown identity is
+        # never permission to terminate the process or claim it is our app.
+        $processPath = $null
+        try { $processPath = [string]$process.Path } catch { continue }
+        if ($desktopProcessLookup.ContainsKey($process.ProcessName) -and
+            (Test-ReefVisionManagedProcessPath -ProcessPath $processPath -InstalledExecutablePath $InstalledExecutablePath -Kind desktop)) {
+            $desktop += $process
+        }
+        elseif ($process.ProcessName -like "reefvision-api*" -and
+            (Test-ReefVisionManagedProcessPath -ProcessPath $processPath -InstalledExecutablePath $InstalledExecutablePath -Kind sidecar)) {
+            $sidecars += $process
+        }
+    }
     return @{
         desktop = $desktop
         sidecars = $sidecars
@@ -447,7 +505,9 @@ function Start-ReefVisionExecutable {
 }
 
 function Stop-ReefVisionRunningProcesses {
-    $processes = Get-ReefVisionDesktopProcessList
+    param([string]$InstalledExecutablePath)
+
+    $processes = Get-ReefVisionDesktopProcessList -InstalledExecutablePath $InstalledExecutablePath
     foreach ($process in @($processes.desktop) + @($processes.sidecars)) {
         try {
             Stop-Process -Id $process.Id -Force -ErrorAction Stop
@@ -464,7 +524,7 @@ function Get-ReefVisionDesktopStatus {
     )
 
     $desktopPath = Resolve-ReefVisionInstalledDesktopPath -PreferredPath $InstalledExecutablePath
-    $processes = Get-ReefVisionDesktopProcessList
+    $processes = Get-ReefVisionDesktopProcessList -InstalledExecutablePath $desktopPath
     $health = Get-ReefVisionHealthSnapshot
     $version = Get-ReefVisionExecutableVersion -ExecutablePath $desktopPath
 

@@ -185,7 +185,7 @@ Set-ReefVisionInstalledDesktopPath -ExecutablePath $desktopPath
 
 if ($restart) {
     Write-ReefVisionCommandStep "Restarting ReefVision"
-    Stop-ReefVisionRunningProcesses
+    Stop-ReefVisionRunningProcesses -InstalledExecutablePath $desktopPath
     Start-Sleep -Milliseconds 300
     $status = Get-ReefVisionDesktopStatus -InstalledExecutablePath $desktopPath
 }
@@ -196,7 +196,7 @@ elseif ($status.desktop_process_count -gt 0) {
 }
 elseif ($status.sidecar_process_count -gt 0) {
     Write-ReefVisionCommandNote "An orphaned ReefVision sidecar was detected. Stopping it before launch."
-    Stop-ReefVisionRunningProcesses
+    Stop-ReefVisionRunningProcesses -InstalledExecutablePath $desktopPath
     Start-Sleep -Milliseconds 300
 }
 
