@@ -82,6 +82,74 @@ try {
         $cabEvidence[0].sha256 -cne $expectedCabHash -or $cabEvidence[0].bytes -ne $cabBytes.Length) {
         throw 'CAB artifact evidence does not match the input bytes.'
     }
+    # A hash-only inventory cannot establish installer source identity. Match
+    # the optional candidate build manifest and explicitly enumerate CABs that
+    # were declared but not provided to this read-only collector.
+    $candidateMsi = Join-Path $fixture 'ReefVision_1.0.3_x64_en-US.msi'
+    $candidateCab = Join-Path $fixture 'rv1.cab'
+    $manifestPath = Join-Path $fixture 'build-provenance.json'
+    [System.IO.File]::WriteAllBytes($candidateMsi, $bytes)
+    [System.IO.File]::WriteAllBytes($candidateCab, $cabBytes)
+    $candidateManifest = [ordered]@{
+        version = '1.0.3'
+        source_commit = $sha
+        source_tree_clean = $true
+        msi_verified = $true
+        files = @(
+            [ordered]@{ name = 'ReefVision_1.0.3_x64_en-US.msi'; sha256 = $expectedHash }
+            [ordered]@{ name = 'rv1.cab'; sha256 = $expectedCabHash }
+        )
+    }
+    $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    $matched = (& $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $candidateCab -ProvenancePath $manifestPath |
+        Out-String | ConvertFrom-Json)
+    if ($matched.provenance.status -cne 'matched_complete' -or
+        $matched.provenance.verifiedArtifacts -ne 2 -or
+        $matched.provenance.declaredArtifacts -ne 2 -or
+        @($matched.provenance.unverifiedArtifactNames | Where-Object { $null -ne $_ }).Count -ne 0) {
+        throw 'Complete matching manifest did not produce bounded, exact-source artifact evidence.'
+    }
+    $candidateManifest.files += [ordered]@{ name = 'rv2.cab'; sha256 = ('a' * 64) }
+    $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    $partial = (& $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $candidateCab -ProvenancePath $manifestPath |
+        Out-String | ConvertFrom-Json)
+    if ($partial.provenance.status -cne 'matched_subset' -or
+        $partial.provenance.verifiedArtifacts -ne 2 -or
+        @($partial.provenance.unverifiedArtifactNames).Count -ne 1 -or
+        $partial.provenance.unverifiedArtifactNames[0] -cne 'rv2.cab') {
+        throw 'An omitted CAB was incorrectly accepted as matching full installer provenance.'
+    }
+    $candidateManifest.source_commit = ('f' * 40)
+    $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    $wrongCommitRejected = $false
+    try { $null = & $collector -CandidateSha $sha -MsiPath $candidateMsi -ProvenancePath $manifestPath 2>&1 }
+    catch { $wrongCommitRejected = $true }
+    if (-not $wrongCommitRejected) { throw 'A different build commit was accepted as the requested candidate.' }
+    $candidateManifest.source_commit = $sha
+    $candidateManifest.files[0].sha256 = ('b' * 64)
+    $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    $wrongHashRejected = $false
+    try { $null = & $collector -CandidateSha $sha -MsiPath $candidateMsi -ProvenancePath $manifestPath 2>&1 }
+    catch { $wrongHashRejected = $true }
+    if (-not $wrongHashRejected) { throw 'A mismatched installer SHA-256 was accepted as build provenance.' }
+    $candidateManifest.files[0].sha256 = $expectedHash
+    $candidateManifest.msi_verified = $false
+    $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    $unverifiedBuildRejected = $false
+    try { $null = & $collector -CandidateSha $sha -MsiPath $candidateMsi -ProvenancePath $manifestPath 2>&1 }
+    catch { $unverifiedBuildRejected = $true }
+    if (-not $unverifiedBuildRejected) { throw 'An unverified MSI build was accepted as verified provenance.' }
+    $candidateManifest.msi_verified = $true
+    $candidateManifest.files += $candidateManifest.files[0]
+    $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    $duplicateRejected = $false
+    try { $null = & $collector -CandidateSha $sha -MsiPath $candidateMsi -ProvenancePath $manifestPath 2>&1 }
+    catch { $duplicateRejected = $true }
+    if (-not $duplicateRejected) { throw 'A duplicated artifact record was accepted as provenance.' }
+    $noMsiRejected = $false
+    try { $null = & $collector -CandidateSha $sha -ProvenancePath $manifestPath 2>&1 }
+    catch { $noMsiRejected = $true }
+    if (-not $noMsiRejected) { throw 'A build manifest without an actual MSI was accepted as installer evidence.' }
     # Windows installer paths are case-insensitive and may contain spaces. The
     # collector must hash uppercase extensions without modifying either file.
     $uppercaseMsi = Join-Path $fixture 'Camera Build.MSI'
