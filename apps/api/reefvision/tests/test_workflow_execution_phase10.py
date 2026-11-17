@@ -1033,7 +1033,7 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
         with app.state.session_factory() as session:
             consumer = session.get(WorkflowNodeRun, payload["nodes"][1]["id"])
             assert consumer is not None
-            with pytest.raises(ConflictError, match="type is not registered for artifact reuse"):
+            with pytest.raises(ConflictError, match="input producer type is not registered"):
                 verify_succeeded_node_artifacts(session, run_id=str(run["id"]), node_run=consumer)
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json() == payload
 
