@@ -37,6 +37,7 @@ from reefvision.jobs.training import (
 )
 from reefvision.services.workflow_pose_training import (
     _optional_payload,
+    _shared_pose_source_videos,
     _single_payload,
     create_pose_workflow_training_result,
     execute_pose_training_dataset_adapter,
@@ -1958,6 +1959,24 @@ def test_pose_validation_rejects_second_verified_round_from_same_video(
     assert frozen_validation.status_code == 201, frozen_validation.text
     validation = frozen_validation.json()
     assert validation["id"] != training["id"]
+
+    # Both frozen datasets came from genuine independently verified rounds.
+    # Even when a later source-video revision carries a different digest,
+    # sharing the original video identity is still training/validation leakage.
+    with app.state.session_factory() as session:
+        training_row = session.get(PoseTrainingDataset, str(training["id"]))
+        validation_row = session.get(PoseTrainingDataset, str(validation["id"]))
+        assert training_row is not None and validation_row is not None
+        training_items = training_row.manifest_json["items"]
+        validation_items = validation_row.manifest_json["items"]
+        assert training_items[0]["video_id"] == validation_items[0]["video_id"]
+        different_digest = "0" * 64
+        if different_digest == training_items[0]["video_sha256"]:
+            different_digest = "1" * 64
+        revised_items = [
+            {**item, "video_sha256": different_digest} for item in validation_items
+        ]
+        assert _shared_pose_source_videos(training_items, revised_items)
 
     with (
         app.state.session_factory() as session,
