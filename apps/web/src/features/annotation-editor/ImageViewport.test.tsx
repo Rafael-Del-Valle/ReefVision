@@ -417,11 +417,7 @@ describe("ImageViewport", () => {
     });
     const panned = transform.style.transform;
 
-    fireEvent.wheel(frame, {
-      deltaY: -120,
-      clientX: 300,
-      clientY: 250,
-    });
+    fireEvent.wheel(frame, { deltaY: -120, clientX: 300, clientY: 250 });
     const zoomed = transform.style.transform;
     expect(zoomed).not.toBe(panned);
 
