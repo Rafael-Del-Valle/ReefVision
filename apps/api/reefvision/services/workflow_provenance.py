@@ -359,6 +359,28 @@ def verify_succeeded_node_artifacts(
         # upstream resolved optional defaults as well as graph-specified values.
         # The producer contract's absence is rejected by the port check below.
         producer_definition = registry.get(producer.node_type)
+        if producer_definition is None:
+            raise ConflictError("Succeeded workflow input producer type is not registered")
+        # Direct consumer recovery can bypass separate verification of the
+        # upstream node. All declared sibling artifacts, not just the one on
+        # this edge, must honor the registered typed output-port contract.
+        accepted_upstream_types = {
+            port.port_id: set(port.accepted_types) for port in producer_definition.output_ports
+        }
+        seen_upstream_ports: set[str] = set()
+        for output_id in _artifact_ids(producer.output_artifact_ids_json, field="output IDs"):
+            sibling_output = _artifact_by_id(session, output_id, run_id=run_id)
+            if sibling_output.producer_port_id in seen_upstream_ports:
+                raise ConflictError(
+                    "Succeeded workflow input producer has multiple artifacts for one output port"
+                )
+            seen_upstream_ports.add(sibling_output.producer_port_id)
+            if sibling_output.data_type not in accepted_upstream_types.get(
+                sibling_output.producer_port_id, set()
+            ):
+                raise ConflictError(
+                    "Succeeded workflow input producer output type does not match registry"
+                )
         if (
             producer_definition is not None
             and isinstance(producer_parameters, dict)
