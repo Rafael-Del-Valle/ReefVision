@@ -121,10 +121,11 @@ def test_saved_workflow_rejects_malformed_reviewed_dataset_artifact(
             payload_json=[["project_id", project["id"]]],
             payload_sha256=project_artifact.payload_sha256,
         )
+        service = WorkflowExecutionService(session, app.state.settings)
         with pytest.raises(
             ValidationError, match="Workflow input 'reviewed' must contain a JSON object"
         ):
-            WorkflowExecutionService(session, app.state.settings)._execute_dataset_version_create(
+            service._execute_dataset_version_create(
                 project_id=str(project["id"]),
                 run_id=str(run["id"]),
                 node_run=producer,
