@@ -909,11 +909,7 @@ function GalleryContent({
         return;
       }
       const multiplier =
-        event.deltaMode === 1
-          ? 16
-          : event.deltaMode === 2
-            ? viewportWidth
-            : 1;
+        event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewportWidth : 1;
       const current = Number.isFinite(filmstrip.scrollLeft)
         ? filmstrip.scrollLeft
         : 0;

@@ -2536,7 +2536,9 @@ describe("Gallery", () => {
     stripRect.left = 100;
     window.dispatchEvent(new Event("resize"));
     await waitFor(() => expect(filmstrip.scrollLeft).toBe(150));
-    expect(screen.getByAltText("Focused project image: swiftia-02.png")).toBeInTheDocument();
+    expect(
+      screen.getByAltText("Focused project image: swiftia-02.png"),
+    ).toBeInTheDocument();
   });
 
   it("keeps focus navigation inside the horizontal filmstrip", async () => {
