@@ -537,3 +537,126 @@ def test_non_ascii_ply_rejected_without_standalone_or_workflow_artifact(
 def test_ascii_ply_comment_remains_supported() -> None:
     with_comment = PLY.replace("end_header", "comment temperature C\nend_header")
     assert parse_ascii_ply_points(with_comment) == parse_ascii_ply_points(PLY)
+
+@pytest.mark.parametrize("as_ply", [False, True])
+def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
+    client: TestClient, as_ply: bool
+) -> None:
+    """Repeated scan rows affect a row-weighted centroid, not verified biology."""
+    points = [[-1.0, 0.0, 0.0], [-1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 2.0, 0.0]]
+    direct = measure_point_cloud_preview(
+        points=points,
+        meters_per_unit=0.1,
+        calibration_method="ruler",
+        calibration_evidence="Unverified acquisition scale",
+        relative_scale_uncertainty=0.1,
+    )
+    assert direct["duplicate_point_row_count"] == 1
+    assert direct["unique_point_count"] == 3
+    assert direct["maximum_coordinate_multiplicity"] == 2
+    assert direct["arithmetic_centroid_in_source_frame_m"] == pytest.approx(
+        [-0.025, 0.05, 0.0]
+    )
+    assert direct["unique_coordinate_centroid_in_source_frame_m"] == pytest.approx(
+        [0.0, 0.2 / 3, 0.0]
+    )
+    separation = direct["row_vs_unique_coordinate_centroid_separation_m"]
+    assert separation == pytest.approx((0.025**2 + (1 / 60) ** 2) ** 0.5)
+    assert direct["row_vs_unique_coordinate_centroid_separation_scale_interval_m"] == (
+        pytest.approx([0.9 * separation, 1.1 * separation])
+    )
+    assert "duplicate_points_present" in direct["qc_warnings"]
+    assert "nonuniform_duplicate_coordinates_can_bias_row_centroid" in direct["qc_warnings"]
+    assert direct["branch_length_m"] is None
+    assert direct["surface_area_m2"] is None
+    assert direct["measurement_status"] == "caller_supplied_unverified"
+
+    # Uniform duplicate multiplicities cannot change a mathematical centroid.
+    balanced = measure_point_cloud_preview(
+        points=[[-1.0, 0.0, 0.0], [-1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+        meters_per_unit=0.1,
+        calibration_method="ruler",
+        calibration_evidence="Unverified acquisition scale",
+        relative_scale_uncertainty=0.1,
+    )
+    assert balanced["row_vs_unique_coordinate_centroid_separation_m"] == 0.0
+    assert "nonuniform_duplicate_coordinates_can_bias_row_centroid" not in (
+        balanced["qc_warnings"]
+    )
+
+    project_id = str(create_project(client, "Repeated scan coordinates")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    parameters: dict = {
+        "meters_per_unit": 0.1,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unverified acquisition scale",
+        "relative_scale_uncertainty": 0.1,
+    }
+    if as_ply:
+        parameters["ply_text"] = (
+            "ply\nformat ascii 1.0\nelement vertex 4\n"
+            "property float x\nproperty float y\nproperty float z\nend_header\n"
+            "-1 0 0\n-1 0 0\n1 0 0\n0 2 0\n"
+        )
+    else:
+        parameters["points"] = points
+    standalone = client.post(f"{base}/spatial/point-cloud-preview", json=parameters)
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    fields = (
+        "duplicate_point_row_count",
+        "unique_point_count",
+        "maximum_coordinate_multiplicity",
+        "arithmetic_centroid_in_source_frame_m",
+        "unique_coordinate_centroid_in_source_frame_m",
+        "unique_coordinate_centroid_in_source_frame_scale_interval_m",
+        "row_vs_unique_coordinate_centroid_separation_m",
+        "row_vs_unique_coordinate_centroid_separation_scale_interval_m",
+        "qc_warnings",
+        "measurement_status",
+        "provenance",
+    )
+    for key in fields[:-1]:
+        assert expected[key] == direct[key]
+    assert expected["provenance"]["calibration_verified"] is False
+
+    graph = {
+        "graph_id": "duplicate-point-centroid-v14",
+        "name": "Repeated scan coordinate sensitivity",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": parameters},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            a for a in detail.json()["artifacts"]
+            if a["data_type"] == "point_cloud_measurement_preview"
+        )
+        for key in fields:
+            assert artifact["payload_json"][key] == expected[key]
+        assert artifact["payload_json"]["surface_area_m2"] is None
+        assert artifact["payload_json"]["project_id"] == project_id
