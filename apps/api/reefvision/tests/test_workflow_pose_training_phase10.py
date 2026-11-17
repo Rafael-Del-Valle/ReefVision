@@ -1671,6 +1671,50 @@ def test_pose_workflow_rejects_null_training_config_from_verified_truth(
     assert result["pose_training_dataset_id"] == dataset["id"]
 
 
+
+def test_pose_workflow_rejects_noninteger_epochs_from_verified_truth(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A scientist-reviewed dataset is frozen through the actual API.
+    # bool and fractional/string epochs must not become a different run via int().
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    dataset_payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+    for invalid_epochs in (True, False, 1.5, 1.0, "1", None, [], {}):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match=r"training_config\.epochs must be an integer"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=dataset_payload,
+                parameters={"device": "cpu", "training_config": {"epochs": invalid_epochs}},
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert session.scalar(select(TrainingRun.id)) is None
+        result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters={"device": "cpu", "training_config": {"epochs": 1}},
+            processor=_fake_pose_processor,
+        )
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        assert persisted.progress_total_epochs == 1
+        assert persisted.training_config_json["epochs"] == 1
+
 def test_pose_workflow_pins_offline_amp_from_verified_truth(
     client: TestClient,
     test_settings: Settings,
