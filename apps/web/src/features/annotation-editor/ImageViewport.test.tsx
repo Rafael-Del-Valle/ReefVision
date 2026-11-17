@@ -237,7 +237,7 @@ describe("ImageViewport", () => {
     expect(transform.style.transform).not.toBe(afterVerticalWheel);
   });
 
-  it("contains malformed one-axis wheel input without changing annotations", () => {
+  it("contains malformed one-axis wheel values", () => {
     render(
       <ImageViewport width={1600} height={1200} label="Malformed wheel viewport">
         <svg data-testid="wheel-overlay" viewBox="0 0 1600 1200">
@@ -249,7 +249,9 @@ describe("ImageViewport", () => {
       name: "Malformed wheel viewport",
     });
     const transform = screen.getByTestId("image-viewport-transform");
-    const polygon = screen.getByTestId("wheel-overlay").querySelector("polygon");
+    const polygon = screen
+      .getByTestId("wheel-overlay")
+      .querySelector("polygon");
     const originalPoints = polygon?.getAttribute("points");
     const initial = transform.style.transform;
 
