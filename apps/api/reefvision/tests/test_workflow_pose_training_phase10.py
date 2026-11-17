@@ -1671,6 +1671,49 @@ def test_pose_workflow_rejects_null_training_config_from_verified_truth(
     assert result["pose_training_dataset_id"] == dataset["id"]
 
 
+def test_pose_workflow_pins_offline_amp_from_verified_truth(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The dataset is frozen through the scientist-review API. Reject an AMP
+    # request that the offline worker would silently override to fp32.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    dataset_payload = {
+        "project_id": project["id"],
+        "dataset_id": dataset["id"],
+        "manifest_sha256": dataset["manifest_sha256"],
+    }
+    for invalid_amp in (True, 1, "false", None, [], {}):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match=r"training_config\\.amp must be false"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=dataset_payload,
+                parameters={"device": "cpu", "training_config": {"epochs": 1, "amp": invalid_amp}},
+                processor=_fake_pose_processor,
+            )
+
+    with app.state.session_factory() as session:
+        assert session.scalar(select(TrainingRun.id)) is None
+        result = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload=dataset_payload,
+            parameters={"device": "cpu", "training_config": {"epochs": 1}},
+            processor=_fake_pose_processor,
+        )
+        persisted = session.get(TrainingRun, result["training_run_id"])
+        assert persisted is not None
+        assert persisted.training_config_json["amp"] is False
+
+
 def test_pose_workflow_rejects_lossy_precision_from_verified_truth(
     client: TestClient,
     test_settings: Settings,
