@@ -382,6 +382,77 @@ describe("ImageViewport", () => {
     expect(polygon).toHaveAttribute("points", originalGeometry);
   });
 
+  it("preserves wheel zoom when a prior pan pointer keeps moving", () => {
+    render(
+      <ImageViewport
+        width={1600}
+        height={1200}
+        label="Concurrent pan and zoom viewport"
+      >
+        <svg data-testid="gesture-overlay" viewBox="0 0 1600 1200">
+          <polygon points="10,20 40,20 40,60" />
+        </svg>
+      </ImageViewport>,
+    );
+    const frame = screen.getByRole("region", {
+      name: "Concurrent pan and zoom viewport",
+    });
+    const transform = screen.getByTestId("image-viewport-transform");
+    const polygon = screen
+      .getByTestId("gesture-overlay")
+      .querySelector("polygon");
+    const originalPoints = polygon?.getAttribute("points");
+
+    fireEvent.pointerDown(frame, {
+      button: 0,
+      altKey: true,
+      pointerId: 31,
+      clientX: 100,
+      clientY: 110,
+    });
+    fireEvent.pointerMove(window, {
+      pointerId: 31,
+      clientX: 140,
+      clientY: 150,
+    });
+    const panned = transform.style.transform;
+
+    fireEvent.wheel(frame, {
+      deltaY: -120,
+      clientX: 300,
+      clientY: 250,
+    });
+    const zoomed = transform.style.transform;
+    expect(zoomed).not.toBe(panned);
+
+    // WebView2 can deliver another move from the still-held pan pointer
+    // after the scientist has zoomed. Never restore the old pan anchor.
+    fireEvent.pointerMove(window, {
+      pointerId: 31,
+      clientX: 220,
+      clientY: 230,
+    });
+    expect(transform.style.transform).toBe(zoomed);
+    expect(polygon).toHaveAttribute("points", originalPoints);
+
+    // Ending the old gesture does not prevent a new deliberate pan.
+    fireEvent.pointerUp(window, { pointerId: 31 });
+    fireEvent.pointerDown(frame, {
+      button: 0,
+      altKey: true,
+      pointerId: 32,
+      clientX: 100,
+      clientY: 110,
+    });
+    fireEvent.pointerMove(window, {
+      pointerId: 32,
+      clientX: 125,
+      clientY: 135,
+    });
+    expect(transform.style.transform).not.toBe(zoomed);
+    expect(polygon).toHaveAttribute("points", originalPoints);
+  });
+
   it("cancels a pan on Escape without moving scientific overlays", () => {
     render(
       <ImageViewport width={1600} height={1200} label="Escape viewport">

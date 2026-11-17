@@ -187,6 +187,9 @@ export function ImageViewport({
       }
 
       const rect = frame.getBoundingClientRect();
+      // A pending pan still holds a pre-zoom transform. A later pointermove
+      // must not overwrite the scientist's new zoom with that stale view.
+      dragRef.current = null;
       manualViewRef.current = true;
       updateView(
         zoomAtPoint(
