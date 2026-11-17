@@ -498,8 +498,8 @@ try {
     $logPath = Join-Path $logDir ("msi-update-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N') + '.log')
 
     Write-ReefVisionCommandStep "Stopping running ReefVision processes"
-    Stop-ReefVisionRunningProcesses
-    Start-Sleep -Milliseconds 500
+    Stop-ReefVisionRunningProcesses -InstalledExecutablePath $installedDesktopPath
+    # Only replace MSI files after all matched installed-app processes exit.
 
     # MSI owns installation and rollback. Never overwrite portable backend
     # files or remove any existing user assets during the update.

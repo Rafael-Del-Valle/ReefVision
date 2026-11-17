@@ -505,8 +505,18 @@ function Start-ReefVisionExecutable {
 }
 
 function Stop-ReefVisionRunningProcesses {
-    param([string]$InstalledExecutablePath)
+    param(
+        [string]$InstalledExecutablePath,
+        [ValidateRange(1, 120)]
+        [int]$QuiescenceAttempts = 20,
+        [ValidateRange(0, 5000)]
+        [int]$QuiescenceDelayMilliseconds = 250
+    )
 
+    # Use one stable installation identity for stopping and the final live check.
+    if ([string]::IsNullOrWhiteSpace($InstalledExecutablePath)) {
+        $InstalledExecutablePath = Resolve-ReefVisionInstalledDesktopPath
+    }
     $processes = Get-ReefVisionDesktopProcessList -InstalledExecutablePath $InstalledExecutablePath
     $failedProcesses = @()
     foreach ($process in @($processes.desktop) + @($processes.sidecars)) {
@@ -526,6 +536,23 @@ function Stop-ReefVisionRunningProcesses {
         # after a partial stop. Preserve the existing installation and research.
         throw "Refusing to restart or update ReefVision: unable to stop managed process(es): $($failedProcesses -join ', ')."
     }
+
+    # Stop-Process can return before a process has actually exited. Recheck
+    # the same installed executable, not an unrelated study with a shared name.
+    # Never start another desktop or replace MSI-managed binaries while a
+    # matched desktop/sidecar remains live; a bounded wait avoids a hang.
+    for ($attempt = 0; $attempt -lt $QuiescenceAttempts; $attempt += 1) {
+        $remaining = Get-ReefVisionDesktopProcessList -InstalledExecutablePath $InstalledExecutablePath
+        $stillRunning = @($remaining.desktop) + @($remaining.sidecars)
+        if ($stillRunning.Count -eq 0) {
+            return
+        }
+        if ($attempt + 1 -lt $QuiescenceAttempts) {
+            Start-Sleep -Milliseconds $QuiescenceDelayMilliseconds
+        }
+    }
+    $identities = @($stillRunning | ForEach-Object { "$($_.ProcessName) ($($_.Id))" })
+    throw "Refusing to restart or update ReefVision: managed process(es) still running after stop: $($identities -join ', ')."
 }
 
 function Get-ReefVisionDesktopStatus {

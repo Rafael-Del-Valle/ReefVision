@@ -18,9 +18,11 @@ $script:fakeProcesses = @(
 $script:stopped = @()
 $script:stopInputs = @()
 $script:blockedIds = @()
+$script:lingeringIds = @()
+$script:activeIds = @(101, 102, 103, 104, 105, 106, 107, 108)
 function Get-Process {
     param([string]$ErrorAction)
-    return $script:fakeProcesses
+    return @($script:fakeProcesses | Where-Object { $script:activeIds -contains [int]$_.Id })
 }
 function Stop-Process {
     # A positional PID stop is intentionally NOT supported by this mock.
@@ -34,6 +36,9 @@ function Stop-Process {
         throw 'Synthetic access denied; keep the installation running.'
     }
     $script:stopped += [int]$InputObject.Id
+    if ($script:lingeringIds -notcontains [int]$InputObject.Id) {
+        $script:activeIds = @($script:activeIds | Where-Object { $_ -ne [int]$InputObject.Id })
+    }
 }
 function Assert-SameIds {
     param([object[]]$Observed, [int[]]$Expected, [string]$Context)
@@ -60,6 +65,7 @@ Assert-SameIds -Observed $script:stopInputs -Expected @() -Context 'no foreign o
 # A protected or still-busy sidecar must prevent restart/MSI installation.
 # A warning alone would let the installer replace a running research session.
 $script:blockedIds = @(104)
+$script:activeIds = @(101, 102, 103, 104, 105, 106, 107, 108)
 $script:stopped = @()
 $script:stopInputs = @()
 $blockedError = $null
@@ -78,9 +84,37 @@ Assert-SameIds -Observed @($script:stopInputs | ForEach-Object { $_.Id }) -Expec
 
 # Explicit recovery may proceed only after all managed stops succeed.
 $script:blockedIds = @()
+$script:activeIds = @(101, 102, 103, 104, 105, 106, 107, 108)
 $script:stopped = @()
 Stop-ReefVisionRunningProcesses -InstalledExecutablePath $installed
 Assert-SameIds -Observed $script:stopped -Expected @(101,104,108) -Context 'recovered restart'
+
+# Stop-Process can report success without the sidecar exiting promptly.
+# The MSI must not start while that managed executable still holds files open.
+$script:activeIds = @(101, 102, 103, 104, 105, 106, 107, 108)
+$script:lingeringIds = @(104)
+$script:stopped = @()
+$lateError = $null
+try {
+    Stop-ReefVisionRunningProcesses -InstalledExecutablePath $installed -QuiescenceAttempts 2 -QuiescenceDelayMilliseconds 1
+}
+catch {
+    $lateError = $_.Exception.Message
+}
+if ($null -eq $lateError -or $lateError -notmatch 'still running' -or $lateError -notmatch '104') {
+    throw "A stop reported success without exiting, but update/restart was not blocked: $lateError"
+}
+Assert-SameIds -Observed $script:stopped -Expected @(101,104,108) -Context 'pending exit stop requests'
+$remaining = Get-ReefVisionDesktopProcessList -InstalledExecutablePath $installed
+Assert-SameIds -Observed @($remaining.sidecars | ForEach-Object { $_.Id }) -Expected @(104) -Context 'held-open installed sidecar'
+
+# Explicit recovery after exit must succeed without retrying foreign studies.
+$script:lingeringIds = @()
+$script:stopped = @()
+Stop-ReefVisionRunningProcesses -InstalledExecutablePath $installed -QuiescenceAttempts 2 -QuiescenceDelayMilliseconds 1
+Assert-SameIds -Observed $script:stopped -Expected @(104) -Context 'managed sidecar exit recovery'
+$remaining = Get-ReefVisionDesktopProcessList -InstalledExecutablePath $installed
+Assert-SameIds -Observed @($remaining.desktop + $remaining.sidecars | ForEach-Object { $_.Id }) -Expected @() -Context 'quiescent install before MSI'
 if (Test-ReefVisionManagedProcessPath -ProcessPath 'C:\ReefVision-archive\reefvision-api.exe' -InstalledExecutablePath $installed -Kind sidecar) {
     throw 'A sibling directory was incorrectly treated as the installed backend.'
 }
