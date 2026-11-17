@@ -63,6 +63,12 @@ class ClassVisibilityService:
         valid = set(valid_class_ids)
         return [class_id for class_id in dict.fromkeys(hidden_class_ids) if class_id in valid]
 
+    def _lock_project_for_visibility_write(self, project_id: str) -> None:
+        """Serialize local visibility writes, resets and class-inventory edits."""
+        self.session.execute(
+            update(Project).where(Project.id == project_id).values(updated_at=Project.updated_at)
+        )
+
     def _validated_hidden_class_ids(
         self, project_id: str, hidden_class_ids: list[str]
     ) -> tuple[list[str], tuple[str, ...]]:
@@ -71,9 +77,7 @@ class ClassVisibilityService:
         # SQLite writer lock *before* reading the project class inventory and
         # hold it through the preference/default commit. This no-op preserves
         # the project's updated_at revision and all scientific records.
-        self.session.execute(
-            update(Project).where(Project.id == project_id).values(updated_at=Project.updated_at)
-        )
+        self._lock_project_for_visibility_write(project_id)
         valid_class_ids = self._project_class_ids(project_id)
         valid = set(valid_class_ids)
         invalid = [class_id for class_id in hidden_class_ids if class_id not in valid]
@@ -243,6 +247,22 @@ class ClassVisibilityService:
         user_identity = get_local_user_identity(self.settings)
         if expected_record_id is not None and expected_updated_at is None:
             raise ValidationError("Visibility record id requires an existing revision")
+
+        # A revision-checked DELETE previously bypassed JSON hydration and
+        # could erase corrupt restored evidence, unlike GET and PUT. Hold the
+        # project writer lock before inspection so no concurrent local editor
+        # can replace the scoped row between validation and deletion.
+        self._lock_project_for_visibility_write(project_id)
+        try:
+            preference = self.preferences.get(project_id, user_identity, resolved_layer_type)
+        except JSONDecodeError as exc:
+            raise ConflictError(
+                "Stored class-visibility JSON is malformed; restore a verified backup"
+            ) from exc
+        if preference is not None:
+            self._sanitize_hidden_class_ids(
+                preference.hidden_class_ids_json, self._project_class_ids(project_id)
+            )
         if expected_updated_at is not None:
             if not self.preferences.delete_if_updated_at(
                 project_id,
@@ -258,9 +278,7 @@ class ClassVisibilityService:
             self.session.commit()
             return
 
-        # Preserve the historical local API for existing scripts. The editor
-        # supplies the observed revision to avoid deleting newer preferences.
-        preference = self.preferences.get(project_id, user_identity, resolved_layer_type)
+        # Preserve legacy unconditional DELETE only for a valid stored scope.
         if preference is not None:
             self.session.delete(preference)
             self.session.commit()
@@ -333,6 +351,21 @@ class ClassVisibilityService:
         resolved_layer_type = self._layer_type(layer_type)
         if expected_record_id is not None and expected_updated_at is None:
             raise ValidationError("Visibility record id requires an existing revision")
+
+        # Prevent either legacy or revision-checked resets from erasing malformed
+        # imported project defaults. Acquire the writer turn before reading
+        # so validation and deletion refer to the same committed scope.
+        self._lock_project_for_visibility_write(project_id)
+        try:
+            project_default = self.project_defaults.get(project_id, resolved_layer_type)
+        except JSONDecodeError as exc:
+            raise ConflictError(
+                "Stored class-visibility JSON is malformed; restore a verified backup"
+            ) from exc
+        if project_default is not None:
+            self._sanitize_hidden_class_ids(
+                project_default.hidden_class_ids_json, self._project_class_ids(project_id)
+            )
         if expected_updated_at is not None:
             if not self.project_defaults.delete_if_updated_at(
                 project_id, resolved_layer_type, expected_updated_at, expected_record_id
@@ -344,9 +377,7 @@ class ClassVisibilityService:
             self.session.commit()
             return
 
-        # Legacy local API clients retain their unconditional DELETE behavior.
-        # The GUI always uses the conditional path to avoid lost project edits.
-        project_default = self.project_defaults.get(project_id, resolved_layer_type)
+        # Legacy local scripts retain unconditional DELETE for valid defaults.
         if project_default is not None:
             self.session.delete(project_default)
             self.session.commit()

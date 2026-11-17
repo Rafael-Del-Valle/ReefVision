@@ -156,3 +156,88 @@ def test_legacy_unknown_and_duplicate_hidden_class_ids_remain_compatible(
             ).scalar_one()
             == raw
         )
+
+
+@pytest.mark.parametrize("scope", ["preferences", "defaults"])
+@pytest.mark.parametrize("conditional", [False, True])
+@pytest.mark.parametrize("malformed_json", ['{"incomplete"', "null", '[["nested"]]'])
+def test_corrupt_visibility_reset_preserves_restored_evidence(
+    client: TestClient, scope: str, conditional: bool, malformed_json: str
+) -> None:
+    """Neither legacy nor revision-checked DELETE may erase imported corruption."""
+    project = create_project(client, name="Visibility reset preservation")
+    healthy_project = create_project(client, name="Visibility reset separate scope")
+    label_class = create_label_class(
+        client,
+        project["id"],
+        class_index=0,
+        name="Swiftia Closed",
+        display_color="#E76F51",
+    )
+    path = f"/api/v1/projects/{project['id']}/class-visibility/{scope}/annotations"
+    saved = client.put(path, json={"hidden_class_ids": [label_class["id"]]})
+    assert saved.status_code == 200, saved.text
+    revision = saved.json()
+    params = (
+        {
+            "expected_updated_at": revision["updated_at"],
+            "expected_record_id": revision["record_id"],
+        }
+        if conditional
+        else None
+    )
+    table = {
+        "preferences": "class_visibility_preferences",
+        "defaults": "project_class_visibility_defaults",
+    }[scope]
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        original_json = session.execute(
+            text(
+                f"SELECT hidden_class_ids_json FROM {table} "
+                "WHERE project_id = :project_id AND layer_type = 'annotations'"
+            ),
+            {"project_id": project["id"]},
+        ).scalar_one()
+        session.execute(
+            text(
+                f"UPDATE {table} SET hidden_class_ids_json = :raw "
+                "WHERE project_id = :project_id AND layer_type = 'annotations'"
+            ),
+            {"project_id": project["id"], "raw": malformed_json},
+        )
+        session.commit()
+
+    rejected = client.delete(path, params=params)
+    assert rejected.status_code == 409, rejected.text
+    assert "malformed" in rejected.json()["detail"].lower()
+    assert label_class["id"] not in rejected.text
+    with app.state.session_factory() as session:
+        persisted = session.execute(
+            text(
+                f"SELECT hidden_class_ids_json FROM {table} "
+                "WHERE project_id = :project_id AND layer_type = 'annotations'"
+            ),
+            {"project_id": project["id"]},
+        ).scalar_one()
+        assert persisted == malformed_json
+        session.execute(
+            text(
+                f"UPDATE {table} SET hidden_class_ids_json = :raw "
+                "WHERE project_id = :project_id AND layer_type = 'annotations'"
+            ),
+            {"project_id": project["id"], "raw": original_json},
+        )
+        session.commit()
+
+    # The same original revision works again after *fixture-only* restoration.
+    restored_reset = client.delete(path, params=params)
+    assert restored_reset.status_code == 204, restored_reset.text
+    bundle = client.get(f"/api/v1/projects/{project['id']}/class-visibility")
+    assert bundle.status_code == 200, bundle.text
+    key = "user_preferences" if scope == "preferences" else "project_defaults"
+    assert bundle.json()[key]["annotations"]["saved"] is False
+    assert (
+        client.get(f"/api/v1/projects/{healthy_project['id']}/class-visibility").status_code
+        == 200
+    )
