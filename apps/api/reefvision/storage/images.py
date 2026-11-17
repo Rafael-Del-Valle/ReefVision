@@ -23,6 +23,10 @@ from reefvision.config import Settings
 from reefvision.domain.errors import ValidationError
 from reefvision.storage.projects import resolve_managed_project_path
 
+# Bound each decoded vendor EXIF container before JSON conversion. Camera files
+# remain immutable; oversized advisory fields are unknown, not partial metadata.
+MAX_CAMERA_METADATA_CONTAINER_ITEMS = 4_096
+
 # File extensions are only a preflight filter; Pillow verifies the actual decoded format.
 SUPPORTED_EXTENSIONS = {
     ".jpg",
@@ -148,6 +152,11 @@ def _json_safe(value: object, *, _active: set[int] | None = None, _depth: int = 
         # 13,000 binary bits are below the default 4,300 decimal-digit limit.
         return value if value.bit_length() <= 13_000 else None
     if isinstance(value, (tuple, list, dict)):
+        # A malformed vendor tag can contain a very large list or mapping.
+        # Do not materialize an unbounded serialized copy in project records;
+        # retain other decodable metadata and the unmodified camera original.
+        if len(value) > MAX_CAMERA_METADATA_CONTAINER_ITEMS:
+            return None
         if _depth >= 32:
             return None
         if _active is None:
