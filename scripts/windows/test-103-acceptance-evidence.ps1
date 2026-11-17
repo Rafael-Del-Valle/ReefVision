@@ -148,6 +148,29 @@ try {
         @($completeSix.artifacts | Where-Object { $_.kind -eq 'cab' -and $_.status -eq 'hashed' }).Count -ne 6) {
         throw 'Six-CAB manifest did not produce complete installer evidence.'
     }
+    # A forged/partial manifest must never appear "matched_complete" merely
+    # because the caller lists only the MSI. The CAB set must be complete in
+    # the declaration, even when only an MSI is supplied for a subset check.
+    $validManifestFiles = @($candidateManifest.files)
+    $candidateManifest.files = @($validManifestFiles[0])
+    $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    $msiOnlyManifestRejected = $false
+    try { $null = & $collector -CandidateSha $sha -MsiPath $candidateMsi -ProvenancePath $manifestPath 2>&1 }
+    catch { $msiOnlyManifestRejected = $true }
+    if (-not $msiOnlyManifestRejected) { throw 'MSI-only manifest was accepted as complete split-CAB build provenance.' }
+
+    # Six declared cabinets with rv3 replaced by rv7 is not a valid cabinet
+    # inventory, even if the supplied MSI bytes and signature still match.
+    $candidateManifest.files = @($validManifestFiles | Where-Object { $_.name -cne 'rv3.cab' })
+    $candidateManifest.files += [ordered]@{ name = 'rv7.cab'; sha256 = ('a' * 64) }
+    $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    $gapManifestRejected = $false
+    try { $null = & $collector -CandidateSha $sha -MsiPath $candidateMsi -ProvenancePath $manifestPath 2>&1 }
+    catch { $gapManifestRejected = $true }
+    if (-not $gapManifestRejected) { throw 'Noncontiguous rv1..rvN CAB manifest was accepted.' }
+    $candidateManifest.files = $validManifestFiles
+    $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+
     $duplicatePathRejected = $false
     try { $null = & $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath @($candidateCab, $candidateCab) 2>&1 }
     catch { $duplicatePathRejected = $true }
