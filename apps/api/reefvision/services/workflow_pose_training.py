@@ -368,6 +368,7 @@ def _shared_pose_source_videos(
     validation_digests = {item["video_sha256"] for item in validation_items}
     return bool(training_ids & validation_ids or training_digests & validation_digests)
 
+
 def _seed_pose_model(
     session: Session,
     settings: Settings,
