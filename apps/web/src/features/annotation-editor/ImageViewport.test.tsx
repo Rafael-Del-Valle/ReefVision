@@ -242,7 +242,11 @@ describe("ImageViewport", () => {
 
   it("contains malformed wheel pointer positions without changing scientific geometry", () => {
     render(
-      <ImageViewport width={1600} height={1200} label="Invalid pointer viewport">
+      <ImageViewport
+        width={1600}
+        height={1200}
+        label="Invalid pointer viewport"
+      >
         <svg data-testid="pointer-overlay" viewBox="0 0 1600 1200">
           <polygon points="10,10 40,10 40,40" />
         </svg>
