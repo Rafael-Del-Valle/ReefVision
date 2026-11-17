@@ -160,6 +160,16 @@ annotation, calibration, anatomy, identity, growth, or condition evidence.
 - Point-cloud scale-only dimension, selected-chord and signed-coordinate intervals
   are unresolved when nonzero uncertainty rounds distinct bounds to one float.
   This is not evidence of exact scale, physical calibration or confidence limits.
+- Decimated 3D mesh previews now report how many source faces from each
+  edge-connected reconstruction patch remain visible, per-patch fractions
+  of full reconstructed patch area represented, and indices of patches omitted
+  entirely from the display. A distinct warning marks omissions; a zero-area
+  patch has undefined area coverage rather than invented certainty. All
+  scientific surface-area/topology measurements still use the complete mesh.
+  These are visualization diagnostics, not evidence of coral colony identity,
+  tissue coverage, anatomical branch structure, or independently verified
+  physical calibration. Standalone and persisted-graph regression coverage is
+  under exact-head CI review, not physical/biological field acceptance.
 - Point-cloud axis extrema now report their supporting source-row counts and
   distinct XYZ-locus counts separately for each minimum and maximum face.
   Duplicating acquisition rows raises row support without increasing independent
