@@ -474,6 +474,56 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
     assert exploratory["validation_image_count"] == 0
 
 
+
+def test_pose_materialization_rejects_symlinked_export_destinations(
+    tmp_path: Path,
+) -> None:
+    # A previously prepared run or validation stage can be redirected to a
+    # different directory. No copied pose images should follow that redirect.
+    archive = _pose_export_zip(b"reviewed-pose-export")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    marker = outside / "keep.txt"
+    marker.write_text("unchanged", encoding="utf-8")
+
+    linked_destination = tmp_path / "pose-dataset"
+    try:
+        linked_destination.symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"Symlink creation is unavailable on this host: {exc}")
+
+    with pytest.raises(ValidationError, match="destination contains a symbolic link"):
+        materialize_pose_training_exports(
+            training_content=archive,
+            validation_content=None,
+            destination=linked_destination,
+        )
+    assert marker.read_text(encoding="utf-8") == "unchanged"
+    assert not (outside / "data.yaml").exists()
+
+    linked_parent = tmp_path / "redirected-run"
+    linked_parent.symlink_to(outside, target_is_directory=True)
+    with pytest.raises(ValidationError, match="destination contains a symbolic link"):
+        materialize_pose_training_exports(
+            training_content=archive,
+            validation_content=None,
+            destination=linked_parent / "pose-dataset",
+        )
+    assert not (outside / "pose-dataset").exists()
+
+    validation_stage = tmp_path / ".safe-pose-dataset-validation"
+    validation_stage.symlink_to(outside, target_is_directory=True)
+    destination = tmp_path / "safe-pose-dataset"
+    with pytest.raises(ValidationError, match="validation staging path is a symbolic link"):
+        materialize_pose_training_exports(
+            training_content=archive,
+            validation_content=archive,
+            destination=destination,
+        )
+    assert not destination.exists()
+    assert marker.read_text(encoding="utf-8") == "unchanged"
+
+
 def test_pose_training_workflow_node_is_registered_and_executable(
     client: TestClient,
 ) -> None:
