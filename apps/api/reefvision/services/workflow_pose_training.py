@@ -404,6 +404,18 @@ def _seed_pose_model(
     if model.metadata_json is not None and not isinstance(model.metadata_json, dict):
         raise ValidationError("Pose retraining seed metadata must be a JSON object")
 
+    # A present source architecture is registered checkpoint provenance.
+    # Never coerce a malformed value or silently replace it with the filename.
+    metadata = model.metadata_json or {}
+    if "source_architecture" in metadata:
+        source_architecture = metadata["source_architecture"]
+        if (
+            not isinstance(source_architecture, str)
+            or not source_architecture.strip()
+            or source_architecture != source_architecture.strip()
+        ):
+            raise ValidationError("Pose retraining seed source architecture metadata is invalid")
+
     # The registered checksum is scientific lineage, not optional metadata.
     # Reject malformed persisted digests before inspecting the local checkpoint.
     if (
