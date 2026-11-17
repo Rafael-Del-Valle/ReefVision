@@ -237,6 +237,49 @@ describe("ImageViewport", () => {
     expect(transform.style.transform).not.toBe(afterVerticalWheel);
   });
 
+  it("contains malformed one-axis wheel input without changing annotations", () => {
+    render(
+      <ImageViewport width={1600} height={1200} label="Malformed wheel viewport">
+        <svg data-testid="wheel-overlay" viewBox="0 0 1600 1200">
+          <polygon points="10,10 40,10 40,40" />
+        </svg>
+      </ImageViewport>,
+    );
+    const frame = screen.getByRole("region", {
+      name: "Malformed wheel viewport",
+    });
+    const transform = screen.getByTestId("image-viewport-transform");
+    const polygon = screen.getByTestId("wheel-overlay").querySelector("polygon");
+    const originalPoints = polygon?.getAttribute("points");
+    const initial = transform.style.transform;
+
+    const wheel = (deltaX: number, deltaY: number) => {
+      const event = new WheelEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        clientX: 200,
+        clientY: 180,
+      });
+      // Override read-only axes to emulate bad WebView2 data without
+      // relying on whether the native constructor accepts NaN/Infinity.
+      Object.defineProperty(event, "deltaX", { value: deltaX });
+      Object.defineProperty(event, "deltaY", { value: deltaY });
+      fireEvent(frame, event);
+      return event.defaultPrevented;
+    };
+
+    expect(wheel(Number.NaN, -120)).toBe(true);
+    const zoomed = transform.style.transform;
+    expect(zoomed).not.toBe(initial);
+
+    expect(wheel(120, Number.POSITIVE_INFINITY)).toBe(true);
+    expect(transform.style.transform).toBe(zoomed);
+
+    expect(wheel(Number.NaN, Number.NEGATIVE_INFINITY)).toBe(false);
+    expect(transform.style.transform).toBe(zoomed);
+    expect(polygon).toHaveAttribute("points", originalPoints);
+  });
+
   it("prevents document scrolling when the wheel targets an annotation overlay", () => {
     render(
       <ImageViewport width={6000} height={4000} label="Scientific image">
