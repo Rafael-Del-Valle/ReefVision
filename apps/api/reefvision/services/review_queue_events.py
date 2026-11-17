@@ -48,6 +48,22 @@ def assert_review_event_action_integrity(session: Session, item_ids: list[str]) 
         .where(
             ReviewQueueItemEvent.review_queue_item_id.in_(item_ids),
             or_(
+                # SQLite VARCHAR(36) does not enforce UUID length or syntax,
+                # and LENGTH(TEXT) stops at NUL. The API converts UUID input
+                # to canonical lower-case 8-4-4-4-12 strings; bulk-generated
+                # UUIDv5 action keys use the same encoding. Never accept a
+                # restored, imported or corrupted audit idempotency identity.
+                # Include off-page history before keyed replay or any triage.
+                ReviewQueueItemEvent.client_request_id.is_(None),
+                func.instr(ReviewQueueItemEvent.client_request_id, "\x00") > 0,
+                func.length(ReviewQueueItemEvent.client_request_id) != 36,
+                *(
+                    func.substr(ReviewQueueItemEvent.client_request_id, position, 1) != "-"
+                    for position in (9, 14, 19, 24)
+                ),
+                func.replace(ReviewQueueItemEvent.client_request_id, "-", "").op("GLOB")(
+                    "*[^0123456789abcdef]*"
+                ),
                 # The self-reported actor is not authentication, but must
                 # remain an intelligible audit label.
                 # SQLite VARCHAR/TEXT fields do not enforce the length limits
