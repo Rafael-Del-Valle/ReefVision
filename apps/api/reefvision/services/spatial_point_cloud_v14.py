@@ -503,9 +503,7 @@ def measure_point_cloud_preview(
     # multiplicity. This hash is not a registered specimen identity, and
     # calibration reviews must still bind the full source geometry hash.
     unique_coordinate_geometry_hash = hashlib.sha256(
-        json.dumps(
-            sorted(coordinate_multiplicities), separators=(",", ":")
-        ).encode("utf-8")
+        json.dumps(sorted(coordinate_multiplicities), separators=(",", ":")).encode("utf-8")
     ).hexdigest()
     # Deterministic, bounded display sample. Original indices are preserved
     # so display decimation never changes the identity of measured point pairs.

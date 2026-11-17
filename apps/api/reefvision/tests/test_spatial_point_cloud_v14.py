@@ -588,24 +588,22 @@ def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
     unique_sha = direct["provenance"]["unique_coordinate_geometry_sha256"]
     assert repeated_rows["provenance"]["unique_coordinate_geometry_sha256"] == unique_sha
     assert reordered_rows["provenance"]["unique_coordinate_geometry_sha256"] == unique_sha
+    assert repeated_rows["provenance"]["geometry_sha256"] != direct["provenance"]["geometry_sha256"]
     assert (
-        repeated_rows["provenance"]["geometry_sha256"]
-        != direct["provenance"]["geometry_sha256"]
-    )
-    assert (
-        reordered_rows["provenance"]["geometry_sha256"]
-        == direct["provenance"]["geometry_sha256"]
+        reordered_rows["provenance"]["geometry_sha256"] == direct["provenance"]["geometry_sha256"]
     )
     assert (
         reordered_rows["provenance"]["ordered_geometry_sha256"]
         != direct["provenance"]["ordered_geometry_sha256"]
     )
-    assert repeated_rows["unique_coordinate_centroid_in_source_frame_m"] == direct[
-        "unique_coordinate_centroid_in_source_frame_m"
-    ]
-    assert repeated_rows["arithmetic_centroid_in_source_frame_m"] != direct[
-        "arithmetic_centroid_in_source_frame_m"
-    ]
+    assert (
+        repeated_rows["unique_coordinate_centroid_in_source_frame_m"]
+        == direct["unique_coordinate_centroid_in_source_frame_m"]
+    )
+    assert (
+        repeated_rows["arithmetic_centroid_in_source_frame_m"]
+        != direct["arithmetic_centroid_in_source_frame_m"]
+    )
 
     # Uniform duplicate multiplicities cannot change a mathematical centroid.
     balanced = measure_point_cloud_preview(
