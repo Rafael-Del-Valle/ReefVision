@@ -116,8 +116,9 @@ def test_standalone_qc_rejects_corrupt_model_confidence_without_writes(
     )
 
 
+@pytest.mark.parametrize("bad_confidence", [-0.01, 1.01, float("inf"), float("-inf")])
 def test_saved_workflow_qc_rejects_corrupt_confidence_then_recovers_without_approval(
-    client: TestClient,
+    client: TestClient, bad_confidence: float
 ) -> None:
     project_id, prediction_id = _local_prediction(client)
     baseline_id = _saved_workflow_queue(client, project_id, f"qc-finite-before-{uuid4()}")
@@ -151,7 +152,7 @@ def test_saved_workflow_qc_rejects_corrupt_confidence_then_recovers_without_appr
     with app.state.session_factory() as session:
         proposal = session.get(PredictionProposal, prediction_id)
         assert proposal is not None
-        proposal.confidence = float("inf")
+        proposal.confidence = bad_confidence
         session.commit()
 
     endpoint = f"/api/v1/projects/{project_id}/workflow-runs"
@@ -166,9 +167,7 @@ def test_saved_workflow_qc_rejects_corrupt_confidence_then_recovers_without_appr
     # not produce a review-queue artifact or implicitly approve predictions.
     failed_detail = failed.json()
     assert failed_detail["run"]["status"] == "failed"
-    assert "confidence must be finite and within" in (
-        failed_detail["run"]["error_message"] or ""
-    )
+    assert "confidence must be finite and within" in (failed_detail["run"]["error_message"] or "")
     assert any(
         node["node_type"] == "qc_review_queue" and node["status"] == "failed"
         for node in failed_detail["nodes"]
@@ -205,6 +204,7 @@ def test_saved_workflow_qc_rejects_corrupt_confidence_then_recovers_without_appr
     detail = client.get(f"/api/v1/workflow-runs/{recovered.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
+    assert not detail.json()["run"]["error_message"]
     artifacts = [
         artifact
         for artifact in detail.json()["artifacts"]
@@ -218,6 +218,11 @@ def test_saved_workflow_qc_rejects_corrupt_confidence_then_recovers_without_appr
     assert current["input_checksum"] == baseline["input_checksum"]
     assert current["review_state"] == "pending"
     with app.state.session_factory() as session:
+        # Only the baseline and the explicitly retried saved run may own QC
+        # queues; the failed run must not leave a ghost review artifact.
+        assert len(
+            session.scalars(select(ReviewQueue).where(ReviewQueue.project_id == project_id)).all()
+        ) == 2
         queue = session.get(ReviewQueue, baseline_id)
         assert queue is not None
         items = session.scalars(
