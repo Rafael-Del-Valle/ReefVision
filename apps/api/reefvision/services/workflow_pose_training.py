@@ -520,7 +520,9 @@ def _check_declared_pose_job_manifest_lineage(
         ("pose_split_manifest_sha256", split_manifest_sha256),
     ):
         if field in request and request[field] != expected:
-            raise ValidationError("Pose training child job frozen manifest lineage changed")
+            raise ValidationError(
+                "Pose training child job frozen manifest lineage changed"
+            )
 
 
 def _completed_workflow_pose_training_run(
