@@ -5,6 +5,7 @@ import math
 from reefvision.storage.images import (
     MAX_CAMERA_METADATA_CONTAINER_ITEMS,
     MAX_CAMERA_METADATA_TOTAL_NODES,
+    MAX_CAMERA_METADATA_TOTAL_TEXT_CHARS,
     _json_safe,
 )
 
@@ -71,3 +72,20 @@ def test_aggregate_vendor_tree_budget_drops_entire_untrusted_value() -> None:
 def test_bounded_nested_vendor_tree_retains_order_and_values() -> None:
     camera_channels = [[0, 1, 2, 3] for _ in range(100)]
     assert _json_safe(camera_channels) == camera_channels
+
+
+def test_aggregate_vendor_text_budget_rejects_complete_value() -> None:
+    """Do not persist a huge nested EXIF payload built from individually legal strings."""
+    tag = "v" * 65_536
+    oversized = [tag] * (MAX_CAMERA_METADATA_TOTAL_TEXT_CHARS // len(tag) + 1)
+    assert _json_safe(oversized) is None
+    # Each EXIF tag has its own budget; preserve a normal independent observation.
+    assert _json_safe({"exposure_seconds": 0.125}) == {"exposure_seconds": 0.125}
+    assert _json_safe([tag, tag]) == [tag, tag]
+
+
+def test_vendor_mapping_keys_consume_shared_text_budget() -> None:
+    """A multitude of long vendor keys must not bypass the bounded value budget."""
+    keys = [f"{index:02d}" + "k" * (65_536 - 2) for index in range(17)]
+    assert _json_safe({key: 1 for key in keys}) is None
+    assert _json_safe({keys[0]: 1}) == {keys[0]: 1}
