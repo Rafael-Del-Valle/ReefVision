@@ -40,6 +40,13 @@ $script:fakeWebview2Values[$userWebview2] = '152.0.1234.56'
 $userRuntime = Get-ReefVisionWebView2RuntimeInfo -ReadRegistryValue $readFakeWebview2Registry
 Assert-True ($userRuntime.detected -and $userRuntime.registrations.Count -eq 1) 'A valid per-user runtime was concealed by an invalid machine sentinel.'
 Assert-True ($userRuntime.registrations[0].scope -ceq 'user' -and $userRuntime.registrations[0].version -ceq '152.0.1234.56') 'WebView2 runtime inventory lost version/scope provenance.'
+Assert-True ($userRuntime.inspection_complete -and $userRuntime.invalid_scopes.Count -eq 0) 'The absent-runtime 0.0.0.0 sentinel must remain a readable negative registration.'
+# Malformed machine pv must not obscure a genuine per-user runtime.
+$script:fakeWebview2Values[$machineWebview2] = '152.0.not-a-version'
+$mixedWebview2 = Get-ReefVisionWebView2RuntimeInfo -ReadRegistryValue $readFakeWebview2Registry
+Assert-True ($mixedWebview2.detected -and $mixedWebview2.registrations.Count -eq 1) 'Malformed machine pv concealed a valid per-user WebView2 runtime.'
+Assert-True (-not $mixedWebview2.inspection_complete -and $mixedWebview2.invalid_scopes.Count -eq 1 -and $mixedWebview2.invalid_scopes[0] -ceq 'machine-32') 'Malformed machine pv must be recorded by scope without exposing values.'
+$script:fakeWebview2Values[$machineWebview2] = '0.0.0.0'
 $script:deniedWebview2Path = $machineWebview2
 $permissionLimited = Get-ReefVisionWebView2RuntimeInfo -ReadRegistryValue $readFakeWebview2Registry
 Assert-True ($permissionLimited.detected -and $permissionLimited.registrations.Count -eq 1) 'A denied registry view obscured a valid per-user runtime.'
@@ -55,6 +62,7 @@ $script:deniedWebview2Path = ''
 $script:fakeWebview2Values[$userWebview2] = '152.0.1234.56;malformed'
 $invalidWebview2 = Get-ReefVisionWebView2RuntimeInfo -ReadRegistryValue $readFakeWebview2Registry
 Assert-True (-not $invalidWebview2.detected) 'Malformed WebView2 registry version was accepted.'
+Assert-True (-not $invalidWebview2.inspection_complete -and $invalidWebview2.invalid_scopes.Count -eq 1 -and $invalidWebview2.invalid_scopes[0] -ceq 'user') 'Malformed pv must make negative WebView2 inventory incomplete.'
 Assert-True ($invalidWebview2.evidence_scope -match 'interactive GUI unverified') 'Registry detection was mislabeled as physical WebView2 acceptance.'
 # WOW6432Node is the 32-bit registry view on 64-bit Windows. Verify that
 # different machine-view versions retain their exact, independent provenance.

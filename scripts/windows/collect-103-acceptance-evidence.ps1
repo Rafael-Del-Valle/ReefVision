@@ -155,6 +155,7 @@ $os = Get-CimInstance Win32_OperatingSystem
     webview2Inspection = [pscustomobject]@{
         complete = [bool]$runtimeInfo.inspection_complete
         unreadableScopes = @($runtimeInfo.unreadable_scopes)
+        invalidScopes = @($runtimeInfo.invalid_scopes)
     }
     nvidia = $gpu
     limitations = @(
@@ -162,6 +163,7 @@ $os = Get-CimInstance Win32_OperatingSystem
         'MSI/CAB magic-byte checks do not prove package structure, signature trust, or installer validity.',
         'WebView2 registry detection is advisory; absence does not prove runtime is unavailable.',
         'An incomplete WebView2 registry inspection does not establish runtime absence or installed GUI acceptance.',
+        'Malformed WebView2 registry versions are reported by scope, without exposing registry values.',
         'GPU inventory uses trusted Windows driver paths only; missing or failed nvidia-smi is not GPU acceptance.',
         'No file contents or scientific datasets are uploaded.'
     )

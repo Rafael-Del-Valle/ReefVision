@@ -58,6 +58,7 @@ function Get-ReefVisionWebView2RuntimeInfo {
     )
     $registrations = @()
     $unreadableScopes = @()
+    $invalidScopes = @()
     foreach ($location in $locations) {
         try {
             $raw = & $ReadRegistryValue $location
@@ -70,9 +71,17 @@ function Get-ReefVisionWebView2RuntimeInfo {
         }
         if ($null -eq $raw) { continue }
         $value = [string]$raw
-        if ($value -notmatch '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$') { continue }
+        if ($value -notmatch '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$') {
+            # A present but malformed pv is not evidence of WebView2 absence.
+            # Retain the scope only, never expose untrusted registry contents.
+            $invalidScopes += [string]$location.scope
+            continue
+        }
         $parsed = [version]'0.0.0.0'
-        if (-not [version]::TryParse($value, [ref]$parsed)) { continue }
+        if (-not [version]::TryParse($value, [ref]$parsed)) {
+            $invalidScopes += [string]$location.scope
+            continue
+        }
         if ($parsed -le [version]'0.0.0.0') { continue }
         $registrations += [ordered]@{
             scope = [string]$location.scope
@@ -82,8 +91,9 @@ function Get-ReefVisionWebView2RuntimeInfo {
     return [ordered]@{
         detected = ($registrations.Count -gt 0)
         registrations = @($registrations)
-        inspection_complete = ($unreadableScopes.Count -eq 0)
+        inspection_complete = ($unreadableScopes.Count -eq 0 -and $invalidScopes.Count -eq 0)
         unreadable_scopes = @($unreadableScopes)
+        invalid_scopes = @($invalidScopes)
         evidence_scope = 'registry only; interactive GUI unverified'
     }
 }
