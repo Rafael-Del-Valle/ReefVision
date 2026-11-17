@@ -76,9 +76,7 @@ def test_imported_nul_evidence_blocks_history_triage_and_keyed_retry(
         "client_request_id": str(uuid4()),
     }
     history = client.get(history_url, params={"page": 999, "page_size": 1})
-    manual = client.post(
-        history_url, json={**payload, "client_request_id": str(uuid4())}
-    )
+    manual = client.post(history_url, json={**payload, "client_request_id": str(uuid4())})
     bulk = client.post(batch_url, json=batch)
     single = client.post(f"/api/v1/review-queue-items/{item_id}/start")
     for rejected in (history, manual, bulk, single):

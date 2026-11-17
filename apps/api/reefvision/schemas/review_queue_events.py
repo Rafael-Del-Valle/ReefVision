@@ -33,10 +33,7 @@ class ReviewQueueEventCreate(BaseModel):
         self.actor = self.actor.strip()
         # SQLite can store NUL inside TEXT, where LENGTH stops counting.
         # Reject new ambiguous audit evidence before any database write.
-        if any(
-            "\x00" in value
-            for value in (self.actor, self.comment or "", self.assignee or "")
-        ):
+        if any("\x00" in value for value in (self.actor, self.comment or "", self.assignee or "")):
             raise ValueError("Review event labels and comments cannot contain NUL")
         if not self.actor:
             raise ValueError("Actor label cannot be blank")
