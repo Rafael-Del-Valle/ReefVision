@@ -29,13 +29,13 @@ from reefvision.schemas.review_queues import (
     ReviewQueueResponse,
     ReviewScoreWeights,
 )
+from reefvision.services.measurement_aware_dataset_versions import (
+    MeasurementAwareDatasetVersionService,
+)
 from reefvision.services.quality_control import (
     CURRENT_QC_RULESET_VERSION,
     SEVERITY_SCORES,
     QualityControlService,
-)
-from reefvision.services.measurement_aware_dataset_versions import (
-    MeasurementAwareDatasetVersionService,
 )
 from reefvision.services.review_queue_events import validate_review_item_event_scope
 from reefvision.services.workflow_review_queue_integrity import (
@@ -197,9 +197,7 @@ class ReviewQueueService:
         # inventing a second content-digest or reading the original images.
         if dataset_version is None:
             mask_service = MeasurementAwareDatasetVersionService(self.session, self.settings)
-            live_masks = mask_service._masks_for_images(
-                [image.image_id for image in scoped_images]
-            )
+            live_masks = mask_service._masks_for_images([image.image_id for image in scoped_images])
             mask_evidence_by_image_id = {
                 image_id: sorted(
                     (mask_service._mask_snapshot(mask) for mask in masks),
