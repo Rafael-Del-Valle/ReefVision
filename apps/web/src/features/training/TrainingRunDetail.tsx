@@ -123,6 +123,19 @@ function MetricChart({
   const missingLabel = laterUnavailable
     ? ` · ${laterUnavailable} subsequent sample(s) unavailable`
     : "";
+  // An in-progress worker may reserve epoch slots without having written a
+  // loss measurement. Show that status without plotting fabricated zeroes.
+  if (values.length === 0 && laterUnavailable > 0) {
+    return (
+      <figure className="training-metric-chart">
+        <figcaption>{metricLabel(label)}</figcaption>
+        <small>
+          Awaiting first measurement · {laterUnavailable} epoch sample(s)
+          unavailable
+        </small>
+      </figure>
+    );
+  }
   // A live training job has only one loss observation after its first epoch.
   // Render that sample rather than hiding the chart until epoch two.
   if (values.length === 1) {
@@ -351,7 +364,11 @@ export function TrainingRunDetail({
               key={key}
               label={key}
               values={values}
-              laterUnavailable={laterUnavailableSamples(run, key, values.length)}
+              laterUnavailable={laterUnavailableSamples(
+                run,
+                key,
+                values.length,
+              )}
             />
           ))}
       </div>

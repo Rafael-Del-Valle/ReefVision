@@ -243,6 +243,41 @@ describe("TrainingRunDetail", () => {
     expect(screen.queryByText("Best epoch")).not.toBeInTheDocument();
   });
 
+  it("shows pending worker loss columns without inventing zero-valued epochs", () => {
+    render(
+      <TrainingRunDetail
+        run={{
+          ...run,
+          status: "training",
+          metrics_history: {
+            epoch: [1, 2],
+            "train/box_loss": [null, null],
+            "train/cls_loss": [0, null],
+            "train/dfl_loss": [null, null],
+          } as unknown as TrainingRun["metrics_history"],
+        }}
+        registering={false}
+        onCancel={vi.fn()}
+        onRegister={vi.fn()}
+      />,
+    );
+
+    for (const label of ["train box loss", "train dfl loss"]) {
+      const figure = screen.getByText(label).closest("figure");
+      expect(figure).toHaveTextContent(
+        "Awaiting first measurement · 2 epoch sample(s) unavailable",
+      );
+      expect(figure?.querySelector("svg")).toBeNull();
+    }
+    expect(
+      screen.getByRole("img", { name: /train cls loss across 1 epoch/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Last measured 0\.0000 · 1 epoch/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Best epoch")).not.toBeInTheDocument();
+  });
+
   it("does not plot non-finite training metrics or report a fictitious best epoch", () => {
     render(
       <TrainingRunDetail
