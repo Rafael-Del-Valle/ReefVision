@@ -554,6 +554,9 @@ def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
     )
     assert direct["duplicate_point_row_count"] == 1
     assert direct["duplicate_point_row_fraction"] == pytest.approx(0.25)
+    assert direct["preview_unique_coordinate_count"] == 3
+    assert direct["preview_unique_coordinate_coverage_fraction"] == pytest.approx(1.0)
+    assert "preview_omits_unique_coordinate_loci" not in direct["qc_warnings"]
     assert direct["unique_point_count"] == 3
     assert direct["maximum_coordinate_multiplicity"] == 2
     assert direct["arithmetic_centroid_in_source_frame_m"] == pytest.approx([-0.025, 0.05, 0.0])
@@ -591,13 +594,9 @@ def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
     assert reordered_rows["provenance"]["unique_coordinate_geometry_sha256"] == unique_sha
     assert repeated_rows["duplicate_point_row_fraction"] == pytest.approx(0.4)
     assert reordered_rows["duplicate_point_row_fraction"] == pytest.approx(0.25)
+    assert repeated_rows["provenance"]["geometry_sha256"] != direct["provenance"]["geometry_sha256"]
     assert (
-        repeated_rows["provenance"]["geometry_sha256"]
-        != direct["provenance"]["geometry_sha256"]
-    )
-    assert (
-        reordered_rows["provenance"]["geometry_sha256"]
-        == direct["provenance"]["geometry_sha256"]
+        reordered_rows["provenance"]["geometry_sha256"] == direct["provenance"]["geometry_sha256"]
     )
     assert (
         reordered_rows["provenance"]["ordered_geometry_sha256"]
@@ -647,6 +646,8 @@ def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
     fields = (
         "duplicate_point_row_count",
         "duplicate_point_row_fraction",
+        "preview_unique_coordinate_count",
+        "preview_unique_coordinate_coverage_fraction",
         "unique_point_count",
         "maximum_coordinate_multiplicity",
         "arithmetic_centroid_in_source_frame_m",
@@ -704,3 +705,115 @@ def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
             assert artifact["payload_json"][key] == expected[key]
         assert artifact["payload_json"]["surface_area_m2"] is None
         assert artifact["payload_json"]["project_id"] == project_id
+
+
+@pytest.mark.parametrize("as_ply", [False, True])
+def test_bounded_preview_unique_locus_coverage_direct_api_and_saved_workflow(
+    client: TestClient, as_ply: bool
+) -> None:
+    """A 512-point display can hide source loci despite preserving all extrema."""
+    points = [[float(i), 0.0, 0.0] for i in range(513)]
+    calibration = {
+        "meters_per_unit": 0.001,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unverified scan scale",
+    }
+    direct = measure_point_cloud_preview(points=points, **calibration)
+    assert direct["unique_point_count"] == 513
+    assert direct["preview_unique_coordinate_count"] == 512
+    assert direct["preview_unique_coordinate_coverage_fraction"] == pytest.approx(512 / 513)
+    assert direct["preview_axis_extrema_covered"] is True
+    assert "preview_omits_axis_extrema" not in direct["qc_warnings"]
+    assert "preview_omits_unique_coordinate_loci" in direct["qc_warnings"]
+    assert direct["provenance"]["calibration_verified"] is False
+    assert direct["branch_length_m"] is None
+
+    parameters = {**calibration}
+    if as_ply:
+        parameters["ply_text"] = (
+            "ply\nformat ascii 1.0\nelement vertex 513\n"
+            "property float x\nproperty float y\nproperty float z\nend_header\n"
+            + "".join(f"{i} 0 0\n" for i in range(513))
+        )
+    else:
+        parameters["points"] = points
+    project_id = str(create_project(client, "Distinct XYZ preview coverage")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/point-cloud-preview", json=parameters)
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    fields = (
+        "point_count",
+        "unique_point_count",
+        "preview_unique_coordinate_count",
+        "preview_unique_coordinate_coverage_fraction",
+        "preview_point_indices",
+        "preview_axis_extrema_covered",
+        "qc_warnings",
+        "measurement_status",
+        "provenance",
+    )
+    for field in fields[:-1]:
+        assert expected[field] == direct[field]
+    assert expected["provenance"]["geometry_sha256"] == direct["provenance"]["geometry_sha256"]
+    assert expected["provenance"]["calibration_verified"] is False
+
+    graph = {
+        "graph_id": "distinct-point-preview-v14",
+        "name": "Audit missing distinct XYZ display loci",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": parameters},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "point_cloud_measurement_preview"
+        )
+        for field in fields:
+            assert artifact["payload_json"][field] == expected[field]
+        assert artifact["payload_json"]["branch_length_m"] is None
+        assert artifact["payload_json"]["project_id"] == project_id
+
+
+def test_duplicate_rich_preview_does_not_fake_missing_distinct_loci() -> None:
+    """Hundreds of duplicated rows can still display every unique XYZ location."""
+    points = [[0.0, 0.0, 0.0]] * 300 + [[1.0, 0.0, 0.0]] * 300
+    preview = measure_point_cloud_preview(
+        points=points,
+        meters_per_unit=0.01,
+        calibration_method="ruler",
+        calibration_evidence="Unverified scan scale",
+    )
+    assert preview["point_count"] == 600
+    assert preview["unique_point_count"] == 2
+    assert preview["preview_unique_coordinate_count"] == 2
+    assert preview["preview_unique_coordinate_coverage_fraction"] == pytest.approx(1.0)
+    assert preview["duplicate_point_row_fraction"] == pytest.approx(598 / 600)
+    assert "preview_omits_unique_coordinate_loci" not in preview["qc_warnings"]
+    assert preview["provenance"]["calibration_verified"] is False
