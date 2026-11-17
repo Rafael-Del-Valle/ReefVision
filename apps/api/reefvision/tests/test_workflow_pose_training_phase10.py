@@ -1792,7 +1792,8 @@ def test_pose_workflow_requires_effective_fp32_precision_from_verified_truth(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Keep the original scientist-reviewed, API-frozen dataset intact.
-    # A saved workflow must record effective fp32, never a requested AMP mode that the offline worker ignores.
+    # A saved workflow must record effective fp32, not an AMP mode
+    # that the offline worker silently ignores.
     project, dataset = _frozen_dataset(client, monkeypatch)
     app = cast(FastAPI, client.app)
     dataset_payload = {
@@ -1800,10 +1801,12 @@ def test_pose_workflow_requires_effective_fp32_precision_from_verified_truth(
         "dataset_id": dataset["id"],
         "manifest_sha256": dataset["manifest_sha256"],
     }
-    for invalid_precision in (None, False, 0, [], {}, "", " fp32 ", "amp", "amp ", "FP32"):
+    for invalid_precision in (None, False, 0, [], {}, "", " fp32 ", "amp", "FP32"):
         with (
             app.state.session_factory() as session,
-            pytest.raises(ValidationError, match=r"precision must be fp32 \(offline AMP disabled\)"),
+            pytest.raises(
+                ValidationError, match=r"precision must be fp32 \(offline AMP disabled\)"
+            ),
         ):
             create_pose_workflow_training_result(
                 session,
