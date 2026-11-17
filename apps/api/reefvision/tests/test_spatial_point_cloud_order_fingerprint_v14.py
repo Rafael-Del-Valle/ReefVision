@@ -111,7 +111,14 @@ def test_signed_zero_is_not_a_new_specimen_geometry_in_saved_workflow(
             canonical_text = header + "0 0 0\n2 0 0\n0 3 1\n"
             signed_text = header + "-0 0 -0\n2 -0 0\n0 3 1\n"
         canonical_params = {**params, "ply_text": canonical_text}
-        signed_params = {**params, "ply_text": signed_text}
+        # Preserve a byte-exact replay binding even when geometry fingerprints
+        # agree across RGB changes, signed zero, and lexical numeric aliases.
+        signed_source_sha = hashlib.sha256(signed_text.encode("utf-8")).hexdigest()
+        signed_params = {
+            **params,
+            "ply_text": signed_text,
+            "expected_source_payload_sha256": signed_source_sha,
+        }
 
     project_id = str(create_project(client, "Signed-zero geometry identity")["id"])
     base = f"/api/v1/projects/{project_id}"
@@ -120,6 +127,22 @@ def test_signed_zero_is_not_a_new_specimen_geometry_in_saved_workflow(
     assert clean_response.status_code == 200, clean_response.text
     assert signed_response.status_code == 200, signed_response.text
     clean, signed = clean_response.json(), signed_response.json()
+    if source_format != "xyz":
+        stale_source_sha = hashlib.sha256(canonical_params["ply_text"].encode("utf-8")).hexdigest()
+        assert stale_source_sha != signed_source_sha
+        # Equal parsed XYZ must not allow an earlier PLY's byte-level guard
+        # to be replayed against a cosmetically changed submitted original.
+        stale_response = client.post(
+            f"{base}/spatial/point-cloud-preview",
+            json={**signed_params, "expected_source_payload_sha256": stale_source_sha},
+        )
+        assert 400 <= stale_response.status_code < 500, stale_response.text
+        assert "SHA-256" in stale_response.text
+        assert clean["provenance"]["source_payload_integrity_checked"] is False
+        assert signed["provenance"]["source_payload_integrity_checked"] is True
+        assert signed["provenance"]["source_payload_sha256"] == signed_source_sha
+    else:
+        assert signed["provenance"]["source_payload_integrity_checked"] is False
     for key in ("geometry_sha256", "ordered_geometry_sha256"):
         assert clean["provenance"][key] == signed["provenance"][key]
     assert clean["selected_point_chords"] == signed["selected_point_chords"]
