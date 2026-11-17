@@ -1143,6 +1143,17 @@ class WorkflowExecutionService:
         if len(existing) > 1:
             raise ConflictError("Workflow node has ambiguous persisted artifacts for this output")
         if existing:
+            # Reusing a checksum-valid artifact is still a scientific action.
+            # A queued workflow or pending/review-paused node cannot bypass
+            # the active-executor guard simply because a row already exists.
+            # Interrupted workers mark the resumed run running before replay.
+            if run_status not in {"running", "succeeded"} or node_run.status not in {
+                "running",
+                "succeeded",
+            }:
+                raise ConflictError(
+                    "Workflow artifact reuse requires an active workflow and node"
+                )
             candidate = existing[0]
             if (
                 candidate.data_type == specification.data_type
