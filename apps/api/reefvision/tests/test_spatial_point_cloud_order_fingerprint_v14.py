@@ -10,9 +10,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.jobs.workflow import process_workflow_run_job
-from reefvision.tests.test_annotations import create_project
-
 from reefvision.services.spatial_point_cloud_v14 import measure_point_cloud_preview
+from reefvision.tests.test_annotations import create_project
 
 
 def _preview(points: list[list[float]]) -> dict:
@@ -52,11 +51,11 @@ def test_permuted_cloud_retains_geometry_hash_but_not_point_order() -> None:
     assert permuted["surface_area_m2"] is None
 
 
-@pytest.mark.parametrize("source_format", ["xyz", "ply"])
+@pytest.mark.parametrize("source_format", ["xyz", "ply", "ply_rgb"])
 def test_signed_zero_is_not_a_new_specimen_geometry_in_saved_workflow(
     client: TestClient, source_format: str
 ) -> None:
-    """PLY byte evidence may differ while identical XYZ geometry stays bound."""
+    """Geometry hashes ignore signed zero and RGB; raw PLY integrity does not."""
     canonical_points = [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 3.0, 1.0]]
     signed_points = [[-0.0, 0.0, -0.0], [2.0, -0.0, 0.0], [0.0, 3.0, 1.0]]
     canonical_direct = _preview(canonical_points)
@@ -80,12 +79,20 @@ def test_signed_zero_is_not_a_new_specimen_geometry_in_saved_workflow(
         canonical_params = {**params, "points": canonical_points}
         signed_params = {**params, "points": signed_points}
     else:
+        colored = source_format == "ply_rgb"
         header = (
             "ply\nformat ascii 1.0\nelement vertex 3\n"
-            "property double x\nproperty double y\nproperty double z\nend_header\n"
+            "property double x\nproperty double y\nproperty double z\n"
         )
-        canonical_text = header + "0 0 0\n2 0 0\n0 3 1\n"
-        signed_text = header + "-0 0 -0\n2 -0 0\n0 3 1\n"
+        if colored:
+            header += "property uchar red\nproperty uchar green\nproperty uchar blue\n"
+        header += "end_header\n"
+        if colored:
+            canonical_text = header + "0 0 0 12 34 56\n2 0 0 65 43 21\n0 3 1 7 8 9\n"
+            signed_text = header + "-0 0 -0 120 34 56\n2 -0 0 65 43 21\n0 3 1 7 8 9\n"
+        else:
+            canonical_text = header + "0 0 0\n2 0 0\n0 3 1\n"
+            signed_text = header + "-0 0 -0\n2 -0 0\n0 3 1\n"
         canonical_params = {**params, "ply_text": canonical_text}
         signed_params = {**params, "ply_text": signed_text}
 
@@ -104,7 +111,7 @@ def test_signed_zero_is_not_a_new_specimen_geometry_in_saved_workflow(
     assert signed["provenance"]["specimen_identity_verified"] is False
     assert signed["surface_area_m2"] is None
     assert signed["branch_length_m"] is None
-    if source_format == "ply":
+    if source_format in {"ply", "ply_rgb"}:
         assert clean["provenance"]["source_text_sha256"] != signed["provenance"][
             "source_text_sha256"
         ]
@@ -113,6 +120,19 @@ def test_signed_zero_is_not_a_new_specimen_geometry_in_saved_workflow(
         ).hexdigest()
     else:
         assert signed["provenance"]["source_text_sha256"] is None
+    if source_format == "ply_rgb":
+        assert clean["preview_point_colors_rgb_uint8"] == [
+            [12, 34, 56], [65, 43, 21], [7, 8, 9]
+        ]
+        assert signed["preview_point_colors_rgb_uint8"] == [
+            [120, 34, 56], [65, 43, 21], [7, 8, 9]
+        ]
+        assert clean["preview_point_colors_rgb_uint8"] != signed[
+            "preview_point_colors_rgb_uint8"
+        ]
+    else:
+        assert clean["preview_point_colors_rgb_uint8"] is None
+        assert signed["preview_point_colors_rgb_uint8"] is None
 
     graph = {
         "graph_id": f"signed-zero-geometry-{source_format}-v14",
