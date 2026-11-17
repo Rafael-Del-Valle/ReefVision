@@ -538,6 +538,7 @@ def test_ascii_ply_comment_remains_supported() -> None:
     with_comment = PLY.replace("end_header", "comment temperature C\nend_header")
     assert parse_ascii_ply_points(with_comment) == parse_ascii_ply_points(PLY)
 
+
 @pytest.mark.parametrize("as_ply", [False, True])
 def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
     client: TestClient, as_ply: bool
@@ -554,9 +555,7 @@ def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
     assert direct["duplicate_point_row_count"] == 1
     assert direct["unique_point_count"] == 3
     assert direct["maximum_coordinate_multiplicity"] == 2
-    assert direct["arithmetic_centroid_in_source_frame_m"] == pytest.approx(
-        [-0.025, 0.05, 0.0]
-    )
+    assert direct["arithmetic_centroid_in_source_frame_m"] == pytest.approx([-0.025, 0.05, 0.0])
     assert direct["unique_coordinate_centroid_in_source_frame_m"] == pytest.approx(
         [0.0, 0.2 / 3, 0.0]
     )
@@ -569,6 +568,35 @@ def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
     assert direct["branch_length_m"] is None
     assert direct["surface_area_m2"] is None
     assert direct["measurement_status"] == "caller_supplied_unverified"
+
+    # Exact unique loci are stable under repeated scan rows and reordering.
+    # Full geometry hashes must still bind the acquisition multiplicities.
+    repeated_rows = measure_point_cloud_preview(
+        points=[*points, points[0]],
+        meters_per_unit=0.1,
+        calibration_method="ruler",
+        calibration_evidence="Unverified acquisition scale",
+        relative_scale_uncertainty=0.1,
+    )
+    reordered_rows = measure_point_cloud_preview(
+        points=list(reversed(points)),
+        meters_per_unit=0.1,
+        calibration_method="ruler",
+        calibration_evidence="Unverified acquisition scale",
+        relative_scale_uncertainty=0.1,
+    )
+    unique_sha = direct["provenance"]["unique_coordinate_geometry_sha256"]
+    assert repeated_rows["provenance"]["unique_coordinate_geometry_sha256"] == unique_sha
+    assert reordered_rows["provenance"]["unique_coordinate_geometry_sha256"] == unique_sha
+    assert repeated_rows["provenance"]["geometry_sha256"] != direct["provenance"]["geometry_sha256"]
+    assert reordered_rows["provenance"]["geometry_sha256"] == direct["provenance"]["geometry_sha256"]
+    assert reordered_rows["provenance"]["ordered_geometry_sha256"] != direct["provenance"]["ordered_geometry_sha256"]
+    assert repeated_rows["unique_coordinate_centroid_in_source_frame_m"] == direct[
+        "unique_coordinate_centroid_in_source_frame_m"
+    ]
+    assert repeated_rows["arithmetic_centroid_in_source_frame_m"] != direct[
+        "arithmetic_centroid_in_source_frame_m"
+    ]
 
     # Uniform duplicate multiplicities cannot change a mathematical centroid.
     balanced = measure_point_cloud_preview(
@@ -617,6 +645,7 @@ def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
     for key in fields[:-1]:
         assert expected[key] == direct[key]
     assert expected["provenance"]["calibration_verified"] is False
+    assert expected["provenance"]["unique_coordinate_geometry_sha256"] == unique_sha
 
     graph = {
         "graph_id": "duplicate-point-centroid-v14",
@@ -651,7 +680,8 @@ def test_duplicate_coordinate_centroid_qc_direct_api_and_persisted_workflow(
         assert detail.status_code == 200, detail.text
         assert detail.json()["run"]["status"] == "succeeded"
         artifact = next(
-            a for a in detail.json()["artifacts"]
+            a
+            for a in detail.json()["artifacts"]
             if a["data_type"] == "point_cloud_measurement_preview"
         )
         for key in fields:

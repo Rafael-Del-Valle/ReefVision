@@ -535,3 +535,22 @@ Workflow Builder plan, and twice-executed persisted workflow artifacts.
 Provenance remains explicitly caller-supplied and unverified; discrete exact
 rank reflects imported floating-point coordinates and can be sensitive to
 capture noise, so no biological or registration inference is authorized.
+
+
+## Duplicate-insensitive exact XYZ-locus fingerprint (November 17, 2026)
+
+The point-cloud preview now returns `provenance.unique_coordinate_geometry_sha256`, a
+SHA-256 digest of **sorted distinct, normalized source-frame XYZ coordinate triples**.
+It is independent of scan-row order, repeated row multiplicities and ASCII PLY RGB
+presentation. The existing `geometry_sha256` still incorporates multiplicities,
+`ordered_geometry_sha256` retains input ordering, and `source_payload_sha256`
+retains imported PLY source-text bytes. Calibration-review receipts intentionally
+continue to bind the **full** `geometry_sha256`, not this new diagnostic.
+
+An equal unique-locus digest does **not** establish specimen reidentification,
+coordinate registration, unchanged biological condition, scan completeness or physical
+calibration: coordinate rounding, noise, coordinate-frame changes and sampling density
+can affect it. Synthetic XYZ and ASCII PLY regressions cover changing multiplicity,
+row permutation and exact standalone/API/persisted Workflow Builder artifact parity.
+Physical coral/photogrammetry reference validation and independent reviewer sign-off
+remain outstanding.
