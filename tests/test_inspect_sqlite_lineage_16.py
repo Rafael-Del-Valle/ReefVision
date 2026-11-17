@@ -534,6 +534,16 @@ def test_schema_comparison_cli_detects_same_name_changed_ddl_without_writes(
     assert comparison["matches"] is False
     assert comparison["only_in_database"] == []
     assert comparison["only_in_reference"] == []
+    changed = comparison["changed_definitions"]
+    assert len(changed) == 1
+    assert {key: changed[0][key] for key in ("type", "name", "table")} == {
+        "type": "table",
+        "name": "scientific_records",
+        "table": "scientific_records",
+    }
+    assert len(changed[0]["database_sha256"]) == 64
+    assert len(changed[0]["reference_sha256"]) == 64
+    assert changed[0]["database_sha256"] != changed[0]["reference_sha256"]
     assert comparison["requires_researcher_review"] is True
     assert report["classification"] == "requires_researcher_review"
     assert "45.0" not in result.stdout
@@ -567,8 +577,69 @@ def test_schema_comparison_cli_accepts_equal_structures_with_different_rows(
     assert report["schema_comparison"]["matches"] is True
     assert report["schema_comparison"]["only_in_database"] == []
     assert report["schema_comparison"]["only_in_reference"] == []
+    assert report["schema_comparison"]["changed_definitions"] == []
     assert "secret coral" not in result.stdout
     assert (current.read_bytes(), reference.read_bytes()) == original
+
+
+def test_lineage_collision_identifies_private_index_ddl_without_leakage(
+    tmp_path: Path,
+) -> None:
+    """Same-stamp, same-name index drift requires review without DDL disclosure."""
+    import json
+    import subprocess
+    import sys
+
+    current = tmp_path / "current.sqlite"
+    reference = tmp_path / "reference.sqlite"
+    for path, secret in (
+        (current, "SITE_ALPHA_PRIVATE"),
+        (reference, "SITE_BETA_PRIVATE"),
+    ):
+        with sqlite3.connect(path) as db:
+            db.execute(
+                "CREATE TABLE alembic_version ("
+                "version_num VARCHAR(32) NOT NULL PRIMARY KEY)"
+            )
+            db.execute("INSERT INTO alembic_version VALUES ('0038')")
+            db.execute(
+                "CREATE TABLE scientific_records ("
+                "id INTEGER PRIMARY KEY, depth_m REAL, site TEXT)"
+            )
+            db.execute(
+                "CREATE INDEX idx_study_site ON scientific_records(depth_m) "
+                f"WHERE site = '{secret}'"
+            )
+            db.execute(
+                "INSERT INTO scientific_records VALUES (1, 55.0, ?)",
+                (secret,),
+            )
+    originals = (current.read_bytes(), reference.read_bytes())
+    result = subprocess.run(
+        [
+            sys.executable, str(SCRIPT), str(current), "--compare-to",
+            str(reference), "--fail-on-lineage-collision",
+        ],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 2, result.stderr
+    comparison = json.loads(result.stdout)["schema_comparison"]
+    assert comparison["revision_markers_match"] is True
+    assert comparison["matches"] is False
+    assert comparison["only_in_database"] == []
+    assert comparison["only_in_reference"] == []
+    assert len(comparison["changed_definitions"]) == 1
+    assert {
+        key: comparison["changed_definitions"][0][key]
+        for key in ("type", "name", "table")
+    } == {
+        "type": "index",
+        "name": "idx_study_site",
+        "table": "scientific_records",
+    }
+    for secret in ("SITE_ALPHA_PRIVATE", "SITE_BETA_PRIVATE"):
+        assert secret not in result.stdout
+    assert (current.read_bytes(), reference.read_bytes()) == originals
 
 
 @pytest.mark.parametrize("invalid_reference", [True, False])

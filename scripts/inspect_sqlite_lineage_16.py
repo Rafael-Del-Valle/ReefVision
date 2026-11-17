@@ -174,6 +174,22 @@ def inspect(path: Path) -> dict:
                 {"type": kind, "name": name, "table": table}
                 for kind, name, table, _sql in schema_rows
             ],
+            # SQL and biological data stay private: only canonical per-object
+            # DDL digests are exposed to pinpoint same-name migration drift.
+            "schema_definition_sha256": [
+                {
+                    "type": kind,
+                    "name": name,
+                    "table": table,
+                    "definition_sha256": hashlib.sha256(
+                        json.dumps(
+                            [kind, name, table, sql],
+                            ensure_ascii=False, separators=(",", ":"),
+                        ).encode("utf-8")
+                    ).hexdigest(),
+                }
+                for kind, name, table, sql in schema_rows
+            ],
             "sqlite_header": sqlite_header,
             "foreign_key_violation_count": len(foreign_keys) if foreign_key_check_error is None else None,
             "foreign_key_check_error": foreign_key_check_error,
@@ -267,6 +283,16 @@ def main() -> None:
                 for kind, name, table in sorted(objects)
             ]
 
+        source_definitions = {
+            (item["type"], item["name"], item["table"]): item["definition_sha256"]
+            for item in evidence["schema_definition_sha256"]
+        }
+        reference_definitions = {
+            (item["type"], item["name"], item["table"]): item["definition_sha256"]
+            for item in reference["schema_definition_sha256"]
+        }
+        shared_definitions = source_definitions.keys() & reference_definitions.keys()
+
         evidence["schema_comparison"] = {
             "reference_database": reference["database"],
             "reference_schema_sha256": reference["schema_sha256"],
@@ -301,6 +327,21 @@ def main() -> None:
             ),
             "only_in_database": describe(source_objects - reference_objects),
             "only_in_reference": describe(reference_objects - source_objects),
+            # Same names but different table/index/view/trigger definitions
+            # previously produced an unexplained hash mismatch. Report only
+            # changed object identities and DDL hashes; never raw SQL or rows.
+            "changed_definitions": [
+                {
+                    "type": kind,
+                    "name": name,
+                    "table": table,
+                    "database_sha256": source_definitions[(kind, name, table)],
+                    "reference_sha256": reference_definitions[(kind, name, table)],
+                }
+                for kind, name, table in sorted(shared_definitions)
+                if source_definitions[(kind, name, table)]
+                != reference_definitions[(kind, name, table)]
+            ],
             # Same named object can have different DDL; hashes, not name
             # equality, determine structural equivalence.
             "requires_researcher_review": True,
