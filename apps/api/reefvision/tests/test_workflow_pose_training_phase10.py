@@ -2150,6 +2150,50 @@ def test_pose_seed_rejects_distinct_schema_identity_with_matching_content(
         )
 
 
+def test_pose_workflow_rejects_malformed_seed_metadata_from_verified_truth(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Freeze a scientist-verified round and register a local, schema-bound
+    # checkpoint before corrupting only its persisted JSON metadata shape.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    model_id = _seed_model(app, project, dataset)
+
+    with app.state.session_factory() as session:
+        model = session.get(ModelRegistration, model_id)
+        assert model is not None
+        # A list of pairs could previously be coerced by dict() to pass as
+        # the seed's original architecture during saved workflow execution.
+        model.metadata_json = cast(
+            Any,
+            [["source_architecture", "yolo11n-pose.pt"]],
+        )
+        session.commit()
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="seed metadata must be a JSON object"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            dataset_payload={
+                "project_id": project["id"],
+                "dataset_id": dataset["id"],
+                "manifest_sha256": dataset["manifest_sha256"],
+            },
+            initial_model_payload={"model_id": model_id},
+            parameters={"training_config": {"epochs": 1}},
+            processor=_fake_pose_processor,
+        )
+
+    with app.state.session_factory() as session:
+        assert session.scalar(select(TrainingRun.id)) is None
+
+
 def test_pose_workflow_rejects_lossy_initialization_mode_from_verified_truth(
     client: TestClient,
     test_settings: Settings,
