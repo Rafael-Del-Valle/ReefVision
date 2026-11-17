@@ -1671,7 +1671,6 @@ def test_pose_workflow_rejects_null_training_config_from_verified_truth(
     assert result["pose_training_dataset_id"] == dataset["id"]
 
 
-
 def test_pose_workflow_rejects_noninteger_epochs_from_verified_truth(
     client: TestClient,
     test_settings: Settings,
@@ -1714,6 +1713,7 @@ def test_pose_workflow_rejects_noninteger_epochs_from_verified_truth(
         assert persisted is not None
         assert persisted.progress_total_epochs == 1
         assert persisted.training_config_json["epochs"] == 1
+
 
 def test_pose_workflow_pins_offline_amp_from_verified_truth(
     client: TestClient,
