@@ -44,6 +44,11 @@ jobs:
           python -m ruff format --check scripts/audit-alembic-revision-collisions.py scripts/tests/test_audit_alembic_revision_collisions.py scripts/tests/test_audit_alembic_revision_collisions_cli.py
           python -m pytest scripts/tests/test_audit_alembic_revision_collisions.py scripts/tests/test_audit_alembic_revision_collisions_cli.py -v
           python scripts/audit-alembic-revision-collisions.py apps/api/migrations/versions
+      - name: Verify 1.6 SQLite lineage and format-header comparison
+        run: |
+          python -m ruff check tests/test_inspect_sqlite_lineage_16_format_header.py
+          python -m ruff format --check tests/test_inspect_sqlite_lineage_16_format_header.py
+          python -m pytest tests/test_inspect_sqlite_lineage_16.py tests/test_inspect_sqlite_lineage_16_stamp_types.py tests/test_inspect_sqlite_lineage_16_format_header.py -v
       - name: Lint and test independent 1.6 research row-preservation gate
         run: |
           python -m ruff check scripts/verify-research-row-preservation-16.py scripts/tests/test_verify_research_row_preservation_16.py
