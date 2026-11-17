@@ -176,9 +176,8 @@ def test_hidden_mesh_patch_during_display_decimation_in_saved_workflow(
         0.5 / 506.5
     )
     assert direct["preview_partially_sampled_patch_missing_area_m2"] == pytest.approx(0.00005)
-    assert direct["preview_partially_sampled_patch_missing_area_scale_interval_m2"] == pytest.approx(
-        [0.00005 * 0.9**2, 0.00005 * 1.1**2]
-    )
+    partial_interval = direct["preview_partially_sampled_patch_missing_area_scale_interval_m2"]
+    assert partial_interval == pytest.approx([0.00005 * 0.9**2, 0.00005 * 1.1**2])
     assert direct["preview_omitted_patch_surface_area_fraction"] == pytest.approx(250 / 506.5)
     assert direct["preview_omitted_patch_surface_area_m2"] == pytest.approx(0.025)
     assert direct["preview_omitted_patch_surface_area_scale_interval_m2"] == pytest.approx(
