@@ -552,6 +552,16 @@ def measure_point_cloud_preview(
     # not a biological sampling or tissue-coverage estimate.
     preview_unique_coordinate_count = len({vertices[index] for index in preview_indices})
     preview_unique_coordinate_coverage_fraction = preview_unique_coordinate_count / unique_count
+    # An exact display-sample fingerprint binds source-row indices and raw
+    # normalized XYZ locations. Changing preview sampling can change this
+    # digest without changing the full source cloud. It is NOT a biological
+    # identity, registration, or calibration verification.
+    preview_sample_geometry_sha256 = hashlib.sha256(
+        json.dumps(
+            [[index, *vertices[index]] for index in preview_indices],
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
     omitted_chord_endpoints = sorted(selected_endpoint_indices - set(preview_indices))
     # A uniform index sample may hide the actual extent of a coral scan.
     # Compare raw source-axis extrema before scaling to avoid float rounding.
@@ -577,6 +587,7 @@ def measure_point_cloud_preview(
         "maximum_coordinate_multiplicity": maximum_coordinate_multiplicity,
         "source_affine_dimension": source_affine_dimension,
         "preview_point_indices": preview_indices,
+        "preview_sample_geometry_sha256": preview_sample_geometry_sha256,
         "preview_unique_coordinate_count": preview_unique_coordinate_count,
         "preview_unique_coordinate_coverage_fraction": (
             preview_unique_coordinate_coverage_fraction
