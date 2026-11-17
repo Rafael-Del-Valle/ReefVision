@@ -474,7 +474,6 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
     assert exploratory["validation_image_count"] == 0
 
 
-
 def test_pose_materialization_rejects_symlinked_export_destinations(
     tmp_path: Path,
 ) -> None:
