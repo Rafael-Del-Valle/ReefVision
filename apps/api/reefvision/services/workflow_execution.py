@@ -1151,9 +1151,7 @@ class WorkflowExecutionService:
                 "running",
                 "succeeded",
             }:
-                raise ConflictError(
-                    "Workflow artifact reuse requires an active workflow and node"
-                )
+                raise ConflictError("Workflow artifact reuse requires an active workflow and node")
             candidate = existing[0]
             if (
                 candidate.data_type == specification.data_type
