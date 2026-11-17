@@ -456,9 +456,31 @@ def test_unsampled_mesh_tip_extremum_is_explicit_in_saved_workflow(client: TestC
         "preview_displayed_bounds_in_source_frame_m",
         "preview_referenced_bounds_in_source_frame_m",
         "qc_warnings",
-        "provenance",
     ):
         assert standalone.json()[key] == direct[key]
+    # The request adapter extends kernel calibration provenance with explicit
+    # source/observation audit fields. It must not discard kernel evidence or
+    # silently promote unreviewed calibration, registration, or organism identity.
+    api_provenance = standalone.json()["provenance"]
+    for key, value in direct["provenance"].items():
+        assert api_provenance[key] == value
+    assert api_provenance["source_format"] == "indexed_triangles"
+    for key in (
+        "source_payload_sha256",
+        "source_payload_size_bytes",
+        "specimen_id",
+        "observation_id",
+        "observed_at_utc",
+        "coordinate_frame_id",
+    ):
+        assert api_provenance[key] is None
+    for key in (
+        "source_payload_integrity_checked",
+        "coordinate_registration_verified",
+        "specimen_identity_verified",
+        "observation_metadata_verified",
+    ):
+        assert api_provenance[key] is False
 
     graph = {
         "graph_id": "mesh-hidden-tip-extremum-v14",
