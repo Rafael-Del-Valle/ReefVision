@@ -198,6 +198,51 @@ describe("TrainingRunDetail", () => {
     expect(screen.getByText(/metrics mAP50\(B\) 0\.6000/i)).toBeInTheDocument();
   });
 
+  it("preserves measured loss prefixes while disclosing unavailable trailing epochs", () => {
+    render(
+      <TrainingRunDetail
+        run={{
+          ...run,
+          status: "training",
+          progress_epoch: 3,
+          metrics_history: {
+            epoch: [1, 2, 3],
+            "metrics/mAP50-95(B)": [0.31, null, null],
+            "train/box_loss": [1.2, 0.9, null],
+            "train/cls_loss": [0.6, null, null],
+            "train/dfl_loss": [null, 0.2, null],
+          } as unknown as TrainingRun["metrics_history"],
+        }}
+        registering={false}
+        onCancel={vi.fn()}
+        onRegister={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("img", { name: /train box loss across 2 epochs/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Last measured 0\.9000 · 2 epochs · 1 subsequent sample\(s\) unavailable/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /train cls loss across 1 epoch/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Last measured 0\.6000 · 1 epoch · 2 subsequent sample\(s\) unavailable/i,
+      ),
+    ).toBeInTheDocument();
+    // Do not bridge a missing first epoch or infer best-epoch provenance
+    // from a validation series shorter than the persisted epoch column.
+    expect(
+      screen.queryByRole("img", { name: /train dfl loss/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Best epoch")).not.toBeInTheDocument();
+  });
+
   it("does not plot non-finite training metrics or report a fictitious best epoch", () => {
     render(
       <TrainingRunDetail
