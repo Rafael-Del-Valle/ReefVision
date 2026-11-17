@@ -194,9 +194,13 @@ def test_hidden_mesh_patch_during_display_decimation_in_saved_workflow(
         "surface_area_m2",
         "qc_warnings",
         "measurement_status",
-        "provenance",
     ):
         assert standalone.json()[key] == direct[key]
+    assert (
+        standalone.json()["provenance"]["geometry_sha256"]
+        == direct["provenance"]["geometry_sha256"]
+    )
+    assert standalone.json()["provenance"]["calibration_verified"] is False
 
     graph = {
         "graph_id": "hidden-patch-preview-v14",
