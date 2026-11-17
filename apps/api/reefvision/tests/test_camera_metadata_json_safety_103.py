@@ -2,7 +2,11 @@
 
 import math
 
-from reefvision.storage.images import MAX_CAMERA_METADATA_CONTAINER_ITEMS, _json_safe
+from reefvision.storage.images import (
+    MAX_CAMERA_METADATA_CONTAINER_ITEMS,
+    MAX_CAMERA_METADATA_TOTAL_NODES,
+    _json_safe,
+)
 
 
 def test_recursive_camera_metadata_does_not_crash_import_serialization() -> None:
@@ -47,10 +51,22 @@ def test_oversized_vendor_metadata_list_does_not_expand_into_project_json() -> N
 
 
 def test_oversized_vendor_metadata_mapping_does_not_expand_into_project_json() -> None:
-    oversized = {
-        str(index): index for index in range(MAX_CAMERA_METADATA_CONTAINER_ITEMS + 1)
-    }
+    oversized = {str(index): index for index in range(MAX_CAMERA_METADATA_CONTAINER_ITEMS + 1)}
     assert _json_safe(oversized) is None
     # Legitimate, bounded camera arrays retain their original order and values.
     at_limit = list(range(MAX_CAMERA_METADATA_CONTAINER_ITEMS))
     assert _json_safe(at_limit) == at_limit
+
+def test_aggregate_vendor_tree_budget_drops_entire_untrusted_value() -> None:
+    """Bound a broad but individually valid tree without partial scientific metadata."""
+    dense = [[0, 1, 2, 3] for _ in range(MAX_CAMERA_METADATA_CONTAINER_ITEMS)]
+    assert len(dense) <= MAX_CAMERA_METADATA_CONTAINER_ITEMS
+    assert sum(len(group) + 1 for group in dense) > MAX_CAMERA_METADATA_TOTAL_NODES
+    assert _json_safe(dense) is None
+    # A separate independently decoded exposure tag is still trustworthy.
+    assert _json_safe({"exposure_seconds": 0.125}) == {"exposure_seconds": 0.125}
+
+
+def test_bounded_nested_vendor_tree_retains_order_and_values() -> None:
+    camera_channels = [[0, 1, 2, 3] for _ in range(100)]
+    assert _json_safe(camera_channels) == camera_channels
