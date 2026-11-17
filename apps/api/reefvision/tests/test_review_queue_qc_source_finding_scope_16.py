@@ -180,9 +180,7 @@ def test_standalone_qc_rejects_corrupt_source_finding_atomically(
     assert len(queues.json()) == 1
     assert _queue_item(client, before.json()["id"]) == baseline
 
-    _restore_finding(
-        client, issue_id, project_id, original_rule_id, original_issue_count
-    )
+    _restore_finding(client, issue_id, project_id, original_rule_id, original_issue_count)
     if original_severity != "warning":
         with app.state.session_factory() as session:
             issue = session.get(QualityControlIssue, issue_id)
@@ -273,9 +271,7 @@ def test_saved_qc_workflow_fails_closed_then_researcher_retries(
             == 1
         )
 
-    _restore_finding(
-        client, issue_id, project_id, original_rule_id, original_issue_count
-    )
+    _restore_finding(client, issue_id, project_id, original_rule_id, original_issue_count)
     if original_severity != "warning":
         with app.state.session_factory() as session:
             issue = session.get(QualityControlIssue, issue_id)
