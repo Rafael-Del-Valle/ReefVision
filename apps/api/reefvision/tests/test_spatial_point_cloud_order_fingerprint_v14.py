@@ -10,9 +10,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.jobs.workflow import process_workflow_run_job
-from reefvision.tests.test_annotations import create_project
-
 from reefvision.services.spatial_point_cloud_v14 import measure_point_cloud_preview
+from reefvision.tests.test_annotations import create_project
 
 
 def _preview(points: list[list[float]]) -> dict:
@@ -105,12 +104,13 @@ def test_signed_zero_is_not_a_new_specimen_geometry_in_saved_workflow(
     assert signed["surface_area_m2"] is None
     assert signed["branch_length_m"] is None
     if source_format == "ply":
-        assert clean["provenance"]["source_text_sha256"] != signed["provenance"][
-            "source_text_sha256"
-        ]
-        assert signed["provenance"]["source_text_sha256"] == hashlib.sha256(
-            signed_params["ply_text"].encode("utf-8")
-        ).hexdigest()
+        assert (
+            clean["provenance"]["source_text_sha256"] != signed["provenance"]["source_text_sha256"]
+        )
+        assert (
+            signed["provenance"]["source_text_sha256"]
+            == hashlib.sha256(signed_params["ply_text"].encode("utf-8")).hexdigest()
+        )
     else:
         assert signed["provenance"]["source_text_sha256"] is None
 

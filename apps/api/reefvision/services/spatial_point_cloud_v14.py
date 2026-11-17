@@ -235,9 +235,11 @@ def measure_point_cloud_preview(
         # IEEE-754 signed zero is not a geometric distinction. Normalize it
         # before ordered/unordered and selected-chord geometry fingerprints;
         # exact imported PLY text retains its separate byte-level digest.
-        xyz = tuple(
-            0.0 if value == 0.0 else value
-            for value in (float(point[0]), float(point[1]), float(point[2]))
+        source_xyz = (float(point[0]), float(point[1]), float(point[2]))
+        xyz: tuple[float, float, float] = (
+            0.0 if source_xyz[0] == 0.0 else source_xyz[0],
+            0.0 if source_xyz[1] == 0.0 else source_xyz[1],
+            0.0 if source_xyz[2] == 0.0 else source_xyz[2],
         )
         # Calibration must not turn a nonzero source coordinate into an
         # apparently measured zero. Subnormal scales are otherwise valid, but
