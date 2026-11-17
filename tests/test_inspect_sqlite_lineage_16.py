@@ -392,14 +392,14 @@ def test_cli_integrity_gate_preserves_json_and_database(tmp_path: Path) -> None:
 def test_cli_integrity_gate_does_not_treat_ambiguous_stamp_as_integrity_error(
     tmp_path: Path,
 ) -> None:
-    """A healthy SQLite database with 0038 still requires human lineage review."""
+    """A canonical but ambiguous 0038 stamp still requires human lineage review."""
     import json
     import subprocess
     import sys
 
     path = tmp_path / "healthy_ambiguous.sqlite"
     with sqlite3.connect(path) as db:
-        db.execute("CREATE TABLE alembic_version (version_num TEXT)")
+        db.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)")
         db.execute("INSERT INTO alembic_version VALUES ('0038')")
     before = path.read_bytes()
     result = subprocess.run(
