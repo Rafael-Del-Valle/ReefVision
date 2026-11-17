@@ -186,6 +186,13 @@ export function ImageViewport({
         return;
       }
 
+      // A malformed WebView2 pointer location must never poison the image
+      // transform with NaN/Infinity or displace pixel-aligned annotations.
+      // The wheel has already been contained, so retain the current view.
+      if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) {
+        return;
+      }
+
       const rect = frame.getBoundingClientRect();
       // A pending pan still holds a pre-zoom transform. A later pointermove
       // must not overwrite the scientist's new zoom with that stale view.
