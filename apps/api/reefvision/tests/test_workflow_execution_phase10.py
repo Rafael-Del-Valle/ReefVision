@@ -210,6 +210,38 @@ def test_executable_workflow_persists_nodes_and_typed_artifacts(
                 specification=specification,
             )
         session.rollback()
+    # Reusing a checksum-valid but improperly pre-existing output must not
+    # bypass the executor status gate on an actual saved, queued workflow.
+    # Roll back the simulated stray row so the normal worker run still proves
+    # the existing saved workflow can execute successfully afterwards.
+    with app.state.session_factory() as session:
+        pending = session.get(WorkflowNodeRun, queued_detail.json()["nodes"][0]["id"])
+        queued_record = session.get(WorkflowRun, str(run["id"]))
+        assert pending is not None and queued_record is not None
+        service = WorkflowExecutionService(session)
+        stray_payload = {"project_id": project["id"]}
+        session.add(
+            WorkflowArtifact(
+                workflow_run_id=str(run["id"]),
+                producer_node_run_id=pending.id,
+                producer_port_id="project",
+                data_type="project_reference",
+                payload_json=stray_payload,
+                payload_sha256=service.artifact_checksum(stray_payload),
+            )
+        )
+        session.flush()
+        with pytest.raises(ConflictError, match="reuse requires an active workflow and node"):
+            service.persist_artifact(
+                run_id=str(run["id"]), node_run=pending, specification=specification
+            )
+        queued_record.status = "running"
+        session.flush()
+        with pytest.raises(ConflictError, match="reuse requires an active workflow and node"):
+            service.persist_artifact(
+                run_id=str(run["id"]), node_run=pending, specification=specification
+            )
+        session.rollback()
     assert client.get(f"/api/v1/workflow-runs/{run['id']}").json()["artifacts"] == []
 
     assert (
