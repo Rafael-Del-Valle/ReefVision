@@ -29,6 +29,9 @@ MAX_CAMERA_METADATA_CONTAINER_ITEMS = 4_096
 # Cap the aggregate decoded nodes in a single EXIF value. Per-container limits
 # alone cannot constrain a broad tree of individually legal nested lists.
 MAX_CAMERA_METADATA_TOTAL_NODES = 16_384
+# Aggregate decoded EXIF strings and mapping keys can still be huge when
+# individually bounded. Reject the entire value beyond this shared text budget.
+MAX_CAMERA_METADATA_TOTAL_TEXT_CHARS = 1_048_576
 
 # File extensions are only a preflight filter; Pillow verifies the actual decoded format.
 SUPPORTED_EXTENSIONS = {
@@ -133,6 +136,17 @@ def _safe_metadata_key(value: object) -> str | None:
     return name if len(name) <= 65_536 else None
 
 
+def _bounded_metadata_text(value: str, budget: list[int]) -> str | None:
+    """Limit both individual strings and cumulative text in one EXIF value."""
+    if len(value) > 65_536:
+        return None
+    if len(value) > budget[2]:
+        budget[1] = 1
+        return None
+    budget[2] -= len(value)
+    return value
+
+
 def _json_safe(
     value: object,
     *,
@@ -143,14 +157,14 @@ def _json_safe(
     """Convert untrusted camera metadata into bounded, strictly JSON-safe values.
 
     Recursive or extremely deep metadata is represented as unknown rather than
-    causing an import-time RecursionError. An exhausted aggregate node budget
+    causing an import-time RecursionError. Exhausted aggregate node or text budgets
     rejects the entire vendor value, never an indistinguishable partial tree.
     The source image bytes are unchanged.
     """
     if _budget is None:
         # Use one shared budget throughout this value's recursive conversion.
         # The second slot records exhaustion so that no partial data escapes.
-        _budget = [MAX_CAMERA_METADATA_TOTAL_NODES, 0]
+        _budget = [MAX_CAMERA_METADATA_TOTAL_NODES, 0, MAX_CAMERA_METADATA_TOTAL_TEXT_CHARS]
         converted = _json_safe(value, _active=_active, _depth=_depth, _budget=_budget)
         return None if _budget[1] else converted
     if _budget[0] <= 0:
@@ -164,7 +178,7 @@ def _json_safe(
         # Camera/vendor text is advisory. Bound decoded metadata to prevent
         # enormous EXIF strings from overwhelming API responses and project
         # records; unknown is safer than silently truncating provenance.
-        return value if len(value) <= 65_536 else None
+        return _bounded_metadata_text(value, _budget)
     if isinstance(value, bool) or value is None:
         return value
     if isinstance(value, int):
@@ -202,6 +216,8 @@ def _json_safe(
                     # the first recorded provenance value with a later alias.
                     if name in sanitized:
                         continue
+                    if _bounded_metadata_text(name, _budget) is None:
+                        return None
                     converted = _json_safe(
                         item, _active=_active, _depth=_depth + 1, _budget=_budget
                     )
@@ -211,9 +227,7 @@ def _json_safe(
                 return sanitized
             sanitized_items: list[object | None] = []
             for item in value:
-                converted = _json_safe(
-                    item, _active=_active, _depth=_depth + 1, _budget=_budget
-                )
+                converted = _json_safe(item, _active=_active, _depth=_depth + 1, _budget=_budget)
                 if _budget[1]:
                     return None
                 sanitized_items.append(converted)
@@ -229,7 +243,7 @@ def _json_safe(
     except Exception:
         return None
     # Vendor wrappers are no more trustworthy than native EXIF strings.
-    return text if len(text) <= 65_536 else None
+    return _bounded_metadata_text(text, _budget)
 
 
 def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
