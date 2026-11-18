@@ -1140,3 +1140,76 @@ def test_scientific_storage_rules_survive_migration(
     assert "private-coral" not in json.dumps(report)
     assert before.read_bytes() == original
     assert after.read_bytes() == candidate
+
+
+@pytest.mark.parametrize("table", ["scientific_records", "review_queue_item_events"])
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "same",
+        "formatted",
+        "removed",
+        "changed_event",
+        "conditional",
+        "inert_body",
+        "additional_guard",
+    ],
+)
+def test_protected_scientific_and_reviewer_triggers_survive_upgrade(
+    tmp_path: Path, table: str, mode: str
+) -> None:
+    """Identical current rows must not conceal removal of future write safeguards."""
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    baseline = (
+        f"CREATE TRIGGER preserve_original BEFORE UPDATE ON {table} "
+        "BEGIN SELECT RAISE(ABORT, 'private review and science rule'); END"
+    )
+    for path, candidate in ((before, False), (after, True)):
+        with sqlite3.connect(path) as connection:
+            connection.execute(
+                f"CREATE TABLE {table} (id TEXT PRIMARY KEY, measurement_mm REAL NOT NULL)"
+            )
+            connection.execute(
+                f"INSERT INTO {table} VALUES (?, ?)", ("private-coral-source", 3.5)
+            )
+            statement: str | None = baseline
+            if candidate:
+                if mode == "removed":
+                    statement = None
+                elif mode == "changed_event":
+                    statement = baseline.replace("BEFORE UPDATE", "BEFORE DELETE")
+                elif mode == "conditional":
+                    statement = baseline.replace(
+                        " BEGIN ", " WHEN NEW.measurement_mm < 0 BEGIN "
+                    )
+                elif mode == "inert_body":
+                    statement = baseline.replace(
+                        "SELECT RAISE(ABORT, 'private review and science rule')",
+                        "SELECT 1",
+                    )
+                elif mode == "formatted":
+                    statement = baseline.replace(
+                        " BEFORE UPDATE ", "\\n before update \\n"
+                    )
+            if statement is not None:
+                connection.execute(statement)
+            if candidate and mode == "additional_guard":
+                connection.execute(
+                    f"CREATE TRIGGER preserve_new_delete BEFORE DELETE ON {table} "
+                    "BEGIN SELECT RAISE(ABORT, 'new guard'); END"
+                )
+    baseline_bytes, candidate_bytes = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+    valid = mode in {"same", "formatted", "additional_guard"}
+    assert code == (0 if valid else 2)
+    assert report["status"] == ("PASS_PRESERVATION_ONLY" if valid else "HOLD")
+    assert next(entry["status"] for entry in report["tables"] if entry["table"] == table) == (
+        "preserved" if valid else "changed_trigger_contract"
+    )
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    assert "private-coral-source" not in json.dumps(report)
+    assert "private review and science rule" not in json.dumps(report)
+    assert before.read_bytes() == baseline_bytes
+    assert after.read_bytes() == candidate_bytes

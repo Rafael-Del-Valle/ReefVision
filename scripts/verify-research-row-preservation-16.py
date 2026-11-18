@@ -237,6 +237,27 @@ def _check_constraint_contracts(connection: sqlite3.Connection, table: str) -> s
     return contracts
 
 
+
+def _trigger_contracts(connection: sqlite3.Connection, table: str) -> dict[str, tuple[str, ...]]:
+    """Protect original per-table scientific and reviewer audit trigger rules.
+
+    A trigger can enforce append-only review events or measurement validity
+    without changing existing row values. Normalize only SQL whitespace,
+    comments and unquoted keyword case; preserve quoted strings and the
+    full trigger name, target, event, WHEN clause and body.
+    """
+    contracts: dict[str, tuple[str, ...]] = {}
+    for name, statement in connection.execute(
+        "SELECT name, sql FROM sqlite_master "
+        "WHERE type = 'trigger' AND tbl_name = ?",
+        (table,),
+    ):
+        if not isinstance(statement, str):
+            raise ValueError("protected_trigger_ddl_missing")
+        contracts[name] = _ddl_tokens(statement)
+    return contracts
+
+
 def _table_storage_contract(connection: sqlite3.Connection, table: str) -> tuple[int, int]:
     """Retain WITHOUT ROWID and STRICT enforcement of protected tables."""
     row = connection.execute(
@@ -613,6 +634,10 @@ def verify(
                     _check_constraint_contracts(new, table)
                 ):
                     item["status"] = "changed_check_constraint_contract"
+                elif not _trigger_contracts(old, table).items() <= _trigger_contracts(
+                    new, table
+                ).items():
+                    item["status"] = "changed_trigger_contract"
                 else:
                     order_by = old_primary_key or old_columns
                     old_count, old_sha = _fingerprint(old, table, old_columns, order_by)
