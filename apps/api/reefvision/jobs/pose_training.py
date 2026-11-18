@@ -187,7 +187,9 @@ def _verify_pose_export_frame_pairs(source_root: Path, *, class_count: int) -> N
                 or re.fullmatch(r"(0|[1-9][0-9]*)", tokens[0]) is None
                 or int(tokens[0]) >= class_count
             ):
-                raise ValidationError("Ultralytics pose export contains an invalid label class index")
+                raise ValidationError(
+                    "Ultralytics pose export contains an invalid label class index"
+                )
 
 
 def _copy_split(
