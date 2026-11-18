@@ -108,3 +108,85 @@ def test_envelope_saved_workflow_matches_standalone(client: TestClient) -> None:
     assert payload["provenance"] == expected["provenance"]
     assert payload["project_id"] == project_id
     assert payload["measurement_status"] == "caller_supplied_unverified"
+
+
+def test_signed_point_centroid_cancellation_standalone_and_saved_replay(
+    client: TestClient,
+) -> None:
+    """Small signed offsets must survive large opposing survey coordinates."""
+    params = {
+        "points": [
+            [1_000_000_000.0, -1_000_000_000.0, 0.0],
+            [1e-8, -1e-8, 0.0],
+            [-1_000_000_000.0, 1_000_000_000.0, 0.0],
+        ],
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic survey coordinates; not field verified",
+        "relative_scale_uncertainty": 0.1,
+    }
+    target = [1e-10 / 3.0, -1e-10 / 3.0, 0.0]
+    direct = measure_point_cloud_preview(**params)
+    assert direct["arithmetic_centroid_in_source_frame_m"] == pytest.approx(
+        target, rel=1e-12, abs=1e-20
+    )
+    assert direct["measurement_status"] == "caller_supplied_unverified"
+    assert direct["provenance"]["calibration_verified"] is False
+
+    project_id = str(create_project(client, "Signed centroid cancellation")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    assert expected["arithmetic_centroid_in_source_frame_m"] == pytest.approx(
+        target, rel=1e-12, abs=1e-20
+    )
+    graph = {
+        "graph_id": "signed-point-centroid-cancellation-v15",
+        "name": "Reproducible signed point centroid",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    planned = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert planned.status_code == 200, planned.text
+    assert planned.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "point_cloud_measurement_preview"
+        )
+        result = artifact["payload_json"]
+        assert result["arithmetic_centroid_in_source_frame_m"] == pytest.approx(
+            target, rel=1e-12, abs=1e-20
+        )
+        assert result["provenance"] == expected["provenance"]
+        assert result["measurement_status"] == "caller_supplied_unverified"
+        assert result["surface_area_m2"] is None
+        assert result["branch_length_m"] is None
+        hashes.append(artifact["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
