@@ -256,23 +256,19 @@ def _trigger_contracts(connection: sqlite3.Connection, table: str) -> dict[str, 
     return contracts
 
 
-def _generated_column_ddl_contracts(
+def _table_column_ddl_declarations(
     connection: sqlite3.Connection, table: str
 ) -> dict[str, tuple[str, ...]]:
-    """Retain generated-column formulas, not merely current computed values.
+    """Parse protected column declarations without mistaking table constraints for columns.
 
-    Current rows can all contain zero or NULL, hiding a changed expression that
-    would reinterpret future measurements. Tokenize each generated column's
-    complete DDL declaration, allowing unrelated additive columns and harmless
-    SQL whitespace changes. Ambiguous parsing must fail closed, not certify.
+    SQLite PRAGMA table_xinfo omits declared COLLATE semantics. Compare original
+    column DDL so an upgrade cannot silently change subsequent scientific
+    identifier comparisons despite identical existing observation rows.
     """
-    generated = {
+    names = {
         row[1].casefold(): row[1]
         for row in connection.execute(f"PRAGMA table_xinfo({_quote(table)})")
-        if row[6] in (2, 3)
     }
-    if not generated:
-        return {}
     result = connection.execute(
         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
     ).fetchone()
@@ -282,7 +278,7 @@ def _generated_column_ddl_contracts(
     try:
         opening = tokens.index("(")
     except ValueError as exc:
-        raise ValueError("generated_column_ddl_ambiguous") from exc
+        raise ValueError("protected_column_ddl_ambiguous") from exc
     depth = 1
     start = opening + 1
     definitions: list[tuple[str, ...]] = []
@@ -298,23 +294,69 @@ def _generated_column_ddl_contracts(
         if depth == 0:
             break
     if depth != 0:
-        raise ValueError("generated_column_ddl_ambiguous")
-    contracts: dict[str, tuple[str, ...]] = {}
+        raise ValueError("protected_column_ddl_ambiguous")
+    declarations: dict[str, tuple[str, ...]] = {}
     for definition in definitions:
         if not definition:
             continue
         raw_name = definition[0]
-        if raw_name.startswith(('"', "`", "[")):
+        if raw_name.startswith(('"', "`", "[", "'")):
             closing = "]" if raw_name[0] == "[" else raw_name[0]
             raw_name = raw_name[1:-1].replace(closing * 2, closing)
-        canonical_name = generated.get(raw_name.casefold())
-        if canonical_name is not None:
-            if canonical_name in contracts:
-                raise ValueError("generated_column_ddl_ambiguous")
-            contracts[canonical_name] = tuple(definition[1:])
-    if len(contracts) != len(generated):
-        raise ValueError("generated_column_ddl_ambiguous")
+        name = names.get(raw_name.casefold())
+        if name is not None:
+            if name in declarations:
+                raise ValueError("protected_column_ddl_ambiguous")
+            declarations[name] = tuple(definition[1:])
+    if len(declarations) != len(names):
+        raise ValueError("protected_column_ddl_ambiguous")
+    return declarations
+
+
+def _column_collation_contracts(connection: sqlite3.Connection, table: str) -> dict[str, str]:
+    """Preserve effective column-level collation, including implicit BINARY.
+
+    A NOCASE-to-BINARY change can silently reinterpret future sample IDs or
+    scientific labels while all current rows and PRAGMA table_xinfo match.
+    Nested COLLATE terms inside CHECK or generated expressions are not the
+    column's declared comparison semantics.
+    """
+    contracts: dict[str, str] = {}
+    for name, declaration in _table_column_ddl_declarations(connection, table).items():
+        depth = 0
+        declared: str | None = None
+        for index, token in enumerate(declaration):
+            if token == "(":
+                depth += 1
+            elif token == ")":
+                depth -= 1
+            elif token == "COLLATE" and depth == 0:
+                if index + 1 >= len(declaration):
+                    raise ValueError("protected_column_collation_ambiguous")
+                raw = declaration[index + 1]
+                if raw.startswith(('"', "`", "[", "'")):
+                    closing = "]" if raw[0] == "[" else raw[0]
+                    raw = raw[1:-1].replace(closing * 2, closing)
+                if declared is not None:
+                    raise ValueError("protected_column_collation_ambiguous")
+                declared = raw.upper()
+        contracts[name] = declared or "BINARY"
     return contracts
+
+
+def _generated_column_ddl_contracts(
+    connection: sqlite3.Connection, table: str
+) -> dict[str, tuple[str, ...]]:
+    """Retain original generated-column formulas, not merely current values."""
+    generated = {
+        row[1]
+        for row in connection.execute(f"PRAGMA table_xinfo({_quote(table)})")
+        if row[6] in (2, 3)
+    }
+    if not generated:
+        return {}
+    declarations = _table_column_ddl_declarations(connection, table)
+    return {name: declarations[name] for name in generated}
 
 
 def _table_storage_contract(connection: sqlite3.Connection, table: str) -> tuple[int, int]:
@@ -681,6 +723,12 @@ def verify(
                 }:
                     # Do not disclose SQL defaults or row values in the report.
                     item["status"] = "changed_column_contract"
+                elif _column_collation_contracts(old, table) != {
+                    name: contract
+                    for name, contract in _column_collation_contracts(new, table).items()
+                    if name in old_columns
+                }:
+                    item["status"] = "changed_column_collation_contract"
                 elif not _foreign_key_contracts(old, table).issubset(
                     _foreign_key_contracts(new, table)
                 ):

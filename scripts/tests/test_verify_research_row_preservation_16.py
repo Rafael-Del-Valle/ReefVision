@@ -1301,3 +1301,81 @@ def test_generated_scientific_formula_parsing_supports_quoted_column_name(
         for item in report["tables"]
     )
     assert report["upgrade_authorized"] is False
+
+
+@pytest.mark.parametrize(
+    ("original", "candidate", "expected"),
+    [
+        ("TEXT COLLATE NOCASE", "TEXT COLLATE BINARY", "changed_column_collation_contract"),
+        ("TEXT COLLATE NOCASE", "TEXT COLLATE RTRIM", "changed_column_collation_contract"),
+        ("TEXT", "TEXT COLLATE NOCASE", "changed_column_collation_contract"),
+        ("TEXT", "TEXT COLLATE BINARY", "preserved"),
+        ("TEXT COLLATE NOCASE", 'TEXT COLLATE "nocase"', "preserved"),
+        ("TEXT COLLATE NOCASE", "TEXT COLLATE NOCASE", "preserved"),
+    ],
+)
+def test_protected_label_column_collation_preserved_for_future_observations(
+    tmp_path: Path, original: str, candidate: str, expected: str
+) -> None:
+    """Existing equal observations cannot certify the next label comparison semantics."""
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    for path, declaration in ((before, original), (after, candidate)):
+        with sqlite3.connect(path) as connection:
+            connection.execute(
+                "CREATE TABLE scientific_records "
+                f"(id INTEGER PRIMARY KEY, label {declaration}, measurement REAL)"
+            )
+            connection.execute(
+                "INSERT INTO scientific_records VALUES (1, 'Coral-A', 3.5)"
+            )
+    with sqlite3.connect(before) as a, sqlite3.connect(after) as b:
+        assert a.execute("SELECT * FROM scientific_records").fetchall() == b.execute(
+            "SELECT * FROM scientific_records"
+        ).fetchall()
+        if expected != "preserved":
+            original_matches = a.execute(
+                "SELECT COUNT(*) FROM scientific_records WHERE label = 'coral-a'"
+            ).fetchone()[0]
+            candidate_matches = b.execute(
+                "SELECT COUNT(*) FROM scientific_records WHERE label = 'coral-a'"
+            ).fetchone()[0]
+            if (original, candidate) != ("TEXT COLLATE NOCASE", "TEXT COLLATE RTRIM"):
+                assert original_matches != candidate_matches
+    old_bytes, new_bytes = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+    assert code == (0 if expected == "preserved" else 2)
+    assert report["status"] == (
+        "PASS_PRESERVATION_ONLY" if expected == "preserved" else "HOLD"
+    )
+    assert any(
+        item["table"] == "scientific_records" and item["status"] == expected
+        for item in report["tables"]
+    )
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    assert "Coral-A" not in json.dumps(report)
+    assert before.read_bytes() == old_bytes
+    assert after.read_bytes() == new_bytes
+
+
+def test_column_collation_does_not_confuse_nested_check_expression(
+    tmp_path: Path,
+) -> None:
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    statement = (
+        "CREATE TABLE scientific_records (id INTEGER PRIMARY KEY, "
+        "label TEXT CHECK (label COLLATE NOCASE <> ''), measurement REAL)"
+    )
+    for path in (before, after):
+        with sqlite3.connect(path) as connection:
+            connection.execute(statement)
+            connection.execute(
+                "INSERT INTO scientific_records VALUES (1, 'Coral-A', 3.5)"
+            )
+    code, report = _run(before, after)
+    assert code == 0
+    assert report["status"] == "PASS_PRESERVATION_ONLY"
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
