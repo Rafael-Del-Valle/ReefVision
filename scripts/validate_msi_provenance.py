@@ -71,8 +71,11 @@ def validate_bundle(
     # A normal-looking bundle can still traverse a linked parent directory.
     # Refuse all linked ancestors before opening any provenance or artifact file.
     for ancestor in (directory, *directory.parents):
-        if _is_redirected(ancestor):
-            _reject("Installer bundle path contains a symlink/junction ancestor")
+        try:
+            if _is_redirected(ancestor):
+                _reject("Installer bundle path contains a symlink/junction ancestor")
+        except OSError as exc:
+            raise BundleValidationError("Installer bundle path cannot be verified") from exc
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", expected_version):
         _reject("Expected version must be a three-component numeric version")
     manifest_path = directory / "build-provenance.json"
@@ -94,8 +97,10 @@ def validate_bundle(
         )
     except BundleValidationError:
         raise
-    except (ValueError, UnicodeError) as exc:
-        raise BundleValidationError("build-provenance.json is not valid JSON") from exc
+    except (OSError, ValueError, UnicodeError) as exc:
+        raise BundleValidationError(
+            "build-provenance.json is not valid JSON or cannot be read"
+        ) from exc
     if not isinstance(manifest, dict):
         _reject("Build provenance must be an object")
     if manifest.get("version") != expected_version:
@@ -145,10 +150,13 @@ def validate_bundle(
         if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", digest):
             _reject(f"Invalid SHA-256 for {name}")
         path = directory / name
-        if _is_redirected(path) or not path.is_file() or path.stat().st_size <= 0:
-            _reject(f"Missing, linked, or empty installer artifact: {name}")
-        if _sha256(path) != digest.lower():
-            _reject(f"SHA-256 mismatch for {name}")
+        try:
+            if _is_redirected(path) or not path.is_file() or path.stat().st_size <= 0:
+                _reject(f"Missing, linked, or empty installer artifact: {name}")
+            if _sha256(path) != digest.lower():
+                _reject(f"SHA-256 mismatch for {name}")
+        except OSError as exc:
+            raise BundleValidationError(f"Installer artifact cannot be read: {name}") from exc
         if name.lower().endswith(".msi"):
             msi.append(name)
         else:
@@ -156,9 +164,9 @@ def validate_bundle(
 
     if len(msi) != 1 or not cabinets:
         _reject("Bundle must have exactly one MSI and at least one CAB")
-    if len(cabinets) != len(media_names) or {
-        name.casefold() for name in cabinets
-    } != set(media_names):
+    if len(cabinets) != len(media_names) or {name.casefold() for name in cabinets} != set(
+        media_names
+    ):
         _reject("MSI Media cabinet inventory differs from bundled CAB records")
     if not re.fullmatch(
         rf"ReefVision_{re.escape(expected_version)}_[A-Za-z0-9_.-]+\.msi",
@@ -166,22 +174,29 @@ def validate_bundle(
         re.I,
     ):
         _reject("MSI filename does not match expected ReefVision version")
-    physical_files = [
-        item.name.casefold()
-        for item in directory.iterdir()
-        if item.suffix.lower() in {".msi", ".cab"}
-    ]
+    try:
+        physical_files = [
+            item.name.casefold()
+            for item in directory.iterdir()
+            if item.suffix.lower() in {".msi", ".cab"}
+        ]
+    except OSError as exc:
+        raise BundleValidationError("Cannot inspect installer artifact inventory") from exc
     # A set comparison alone hides case-colliding filenames in ZIPs and on
     # case-sensitive filesystems; reject even if the manifest lists one copy.
     if len(physical_files) != len(names) or set(physical_files) != names:
         _reject("Unexpected, duplicated, or unlisted MSI/CAB files in bundle directory")
+    try:
+        manifest_checksum = _sha256(manifest_path)
+    except OSError as exc:
+        raise BundleValidationError("Cannot read provenance manifest for SHA-256") from exc
     return {
         "version": expected_version,
         "source_commit": commit.lower(),
         "installer": msi[0],
         "external_cabinets": sorted(cabinets),
         "artifact_count": len(records),
-        "manifest_sha256": _sha256(manifest_path),
+        "manifest_sha256": manifest_checksum,
     }
 
 

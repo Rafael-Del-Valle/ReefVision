@@ -343,3 +343,72 @@ def test_clean_runner_binds_installer_and_acceptance_to_checkout_version() -> No
     assert "--expected-version $version --expected-upgrade skipped" in acceptance
     assert "-SkipUpgrade -DisposableTest -KeepArtifacts" in acceptance
     assert "C:\\reefvision-disposable-acceptance" in acceptance
+
+@pytest.mark.parametrize(
+    ("operation", "expected"),
+    [
+        ("manifest_read", "not valid JSON or cannot be read"),
+        ("manifest_hash", "Cannot read provenance manifest"),
+        ("cab_hash", "Installer artifact cannot be read"),
+        ("bundle_inventory", "Cannot inspect installer artifact inventory"),
+        ("bundle_ancestor", "Installer bundle path cannot be verified"),
+    ],
+)
+def test_unreadable_installer_preflight_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+    expected: str,
+) -> None:
+    """I/O failures must fail closed without leaking private OS errors or editing bytes."""
+    directory, _ = make_bundle(tmp_path)
+    cab = directory / "rv1.cab"
+    manifest_path = directory / "build-provenance.json"
+    original_cab = cab.read_bytes()
+    original_manifest = manifest_path.read_bytes()
+    detail = "PRIVATE-MACHINE-STUDY-PATH"
+    with monkeypatch.context() as patch:
+        if operation == "manifest_read":
+            original = Path.read_text
+
+            def deny_read(self: Path, *args: object, **kwargs: object) -> str:
+                if self == manifest_path:
+                    raise PermissionError(detail)
+                return original(self, *args, **kwargs)
+
+            patch.setattr(Path, "read_text", deny_read)
+        elif operation in {"manifest_hash", "cab_hash"}:
+            original_open = Path.open
+            blocked = manifest_path if operation == "manifest_hash" else cab
+
+            def deny_open(self: Path, *args: object, **kwargs: object):
+                if self == blocked:
+                    raise PermissionError(detail)
+                return original_open(self, *args, **kwargs)
+
+            patch.setattr(Path, "open", deny_open)
+        elif operation == "bundle_inventory":
+            original_iterdir = Path.iterdir
+
+            def deny_iterdir(self: Path):
+                if self == directory:
+                    raise PermissionError(detail)
+                return original_iterdir(self)
+
+            patch.setattr(Path, "iterdir", deny_iterdir)
+        else:
+            original_lstat = Path.lstat
+
+            def deny_lstat(self: Path, *args: object, **kwargs: object):
+                if self == directory:
+                    raise PermissionError(detail)
+                return original_lstat(self, *args, **kwargs)
+
+            patch.setattr(Path, "lstat", deny_lstat)
+
+        with pytest.raises(validator.BundleValidationError, match=expected) as error:
+            verify(directory)
+        assert detail not in str(error.value)
+
+    assert cab.read_bytes() == original_cab
+    assert manifest_path.read_bytes() == original_manifest
