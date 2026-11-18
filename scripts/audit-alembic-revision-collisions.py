@@ -260,8 +260,7 @@ def parent_revisions_from_source(path: Path, source: bytes) -> tuple[str, ...]:
         ):
             raise ValueError(f"{path}: declaration rebinds down_revision")
         if isinstance(node, (ast.Import, ast.ImportFrom)) and any(
-            (alias.asname or alias.name.split(".")[0]) == "down_revision"
-            for alias in node.names
+            (alias.asname or alias.name.split(".")[0]) == "down_revision" for alias in node.names
         ):
             raise ValueError(f"{path}: import rebinds down_revision")
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
@@ -301,7 +300,7 @@ def audit_parent_graph(entries: list[tuple[str, tuple[str, ...]]]) -> dict:
     def visit(revision: str, stack: tuple[str, ...]) -> None:
         state = colors.get(revision, 0)
         if state == 1:
-            cycles.update(stack[stack.index(revision):])
+            cycles.update(stack[stack.index(revision) :])
             return
         if state == 2:
             return
@@ -314,11 +313,7 @@ def audit_parent_graph(entries: list[tuple[str, tuple[str, ...]]]) -> dict:
     for revision in sorted(parents):
         visit(revision, ())
     consistent = (
-        len(bases) == 1
-        and len(heads) == 1
-        and not missing
-        and not cycles
-        and not duplicates
+        len(bases) == 1 and len(heads) == 1 and not missing and not cycles and not duplicates
     )
     return {
         "consistent": consistent,
