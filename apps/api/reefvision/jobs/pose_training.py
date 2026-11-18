@@ -232,7 +232,7 @@ def materialize_pose_training_exports(
     if (
         len(top_level) != 6
         or top_level[:3] != ["path: .", "train: images/train", "val: images/train"]
-        or re.fullmatch(r"kpt_shape: \\[[1-9]\\d*, 3\\]", top_level[3]) is None
+        or re.fullmatch(r"kpt_shape: \[[1-9]\d*, 3\]", top_level[3]) is None
         or top_level[4:] != ["names:", "reefvision_keypoint_names:"]
     ):
         raise ValidationError("Ultralytics pose export has a noncanonical data.yaml")
