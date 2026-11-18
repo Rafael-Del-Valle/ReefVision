@@ -96,16 +96,20 @@ def test_invalid_late_coordinate_does_not_mutate_caller_colors() -> None:
             "PLY float32 value underflows declared range",
         ),
         (
-            PLY.replace("property float x", "property double x").replace(
-                "1 2 3", "1e-9999 2 3"
-            ),
+            PLY.replace("property float x", "property double x").replace("1 2 3", "1e-9999 2 3"),
             "Point-cloud coordinate underflows float precision",
         ),
         (
-            PLY.replace("property float x", "property float64 x").replace(
-                "1 2 3", "-1e-9999 2 3"
-            ),
+            PLY.replace("property float x", "property float64 x").replace("1 2 3", "-1e-9999 2 3"),
             "Point-cloud coordinate underflows float precision",
+        ),
+        (
+            PLY.replace("0 0 0", "1 0 0").replace("1 2 3", "1.00000000000000001 2 3"),
+            "Distinct point-cloud decimal coordinates collapse at float64 precision",
+        ),
+        (
+            PLY.replace("0 0 0", "-1 0 0").replace("1 2 3", "-1.00000000000000001 2 3"),
+            "Distinct point-cloud decimal coordinates collapse at float64 precision",
         ),
         (
             PLY.replace("1 2 3", "1\x002 3"),
@@ -162,16 +166,28 @@ def test_standalone_and_saved_graph_reject_invalid_ply_without_artifact(
     )
 
 
-def test_valid_ply_standalone_and_persisted_graph_replay_parity(client: TestClient) -> None:
+@pytest.mark.parametrize(
+    ("valid", "expected_dimensions"),
+    [
+        (PLY.replace("1 2 3", "+1. .25 1e-2"), [0.01, 0.0025, 0.0001]),
+        (
+            PLY.replace("0 0 0", "1.0 0 0").replace("1 2 3", "+1e0 2 3"),
+            [0.0, 0.02, 0.03],
+        ),
+    ],
+)
+def test_valid_ply_standalone_and_persisted_graph_replay_parity(
+    client: TestClient, valid: str, expected_dimensions: list[float]
+) -> None:
     project_id = str(create_project(client, "PLY decimal exponent replay")["id"])
     base = f"/api/v1/projects/{project_id}"
-    valid = PLY.replace("1 2 3", "+1. .25 1e-2")
     params = {**PARAMS, "ply_text": valid}
     standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
-    assert expected["axis_aligned_dimensions_m"] == pytest.approx([0.01, 0.0025, 0.0001])
+    assert expected["axis_aligned_dimensions_m"] == pytest.approx(expected_dimensions)
     assert expected["provenance"]["calibration_verified"] is False
+    assert expected["provenance"]["coordinate_registration_verified"] is False
 
     graph = {
         "graph_id": "ply-valid-numeric-v14",
@@ -192,18 +208,25 @@ def test_valid_ply_standalone_and_persisted_graph_replay_parity(client: TestClie
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
-    assert run.status_code == 202, run.text
-    app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
-    )
-    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
-    assert detail.status_code == 200, detail.text
-    assert detail.json()["run"]["status"] == "succeeded"
-    artifact = next(
-        a for a in detail.json()["artifacts"] if a["data_type"] == "point_cloud_measurement_preview"
-    )
-    assert artifact["payload_json"] == expected
-    assert artifact["payload_json"]["surface_area_m2"] is None
-    assert artifact["payload_json"]["branch_length_m"] is None
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            a
+            for a in detail.json()["artifacts"]
+            if a["data_type"] == "point_cloud_measurement_preview"
+        )
+        assert artifact["payload_json"] == expected
+        assert artifact["payload_json"]["surface_area_m2"] is None
+        assert artifact["payload_json"]["branch_length_m"] is None
+        hashes.append(artifact["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
