@@ -6,6 +6,7 @@ import hashlib
 import json
 from collections import Counter
 from datetime import UTC
+from decimal import Decimal
 from fractions import Fraction
 from math import dist, fsum, isfinite
 from re import fullmatch
@@ -154,6 +155,9 @@ def parse_ascii_ply_points(
     points: list[list[float]] = []
     # Stage RGB until every vertex passes validation: never leak partial colors.
     staged_colors: list[list[int]] = []
+    # Distinct source decimals must not silently become identical binary64
+    # coordinates and fabricate duplicate observations or a zero axis span.
+    source_decimals_by_axis: list[dict[float, Decimal]] = [{}, {}, {}]
     for row in rows:
         values = row.split()
         if len(values) != len(properties):
@@ -178,6 +182,14 @@ def parse_ascii_ply_points(
                 validate_ply_float32_range(value)
         if any(not isfinite(value) or abs(value) > 1_000_000_000 for value in parsed):
             raise ValueError("Point-cloud coordinates must be finite and bounded")
+        for axis, (token, value) in enumerate(zip(tokens, parsed, strict=True)):
+            exact_decimal = Decimal(token)
+            previous = source_decimals_by_axis[axis].get(value)
+            if previous is not None and previous != exact_decimal:
+                raise ValueError(
+                    "Distinct point-cloud decimal coordinates collapse at float64 precision"
+                )
+            source_decimals_by_axis[axis][value] = exact_decimal
         for channel in ("red", "green", "blue"):
             if channel in properties:
                 token = values[properties.index(channel)]
