@@ -45,6 +45,7 @@ from reefvision.ml.providers import resolve_torch_device
 from reefvision.services.pose_training_exports import (
     PoseTrainingExportService,
 )
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import (
     resolve_managed_project_path,
 )
@@ -381,6 +382,40 @@ def process_pose_training_job(
                 validation_dataset is None or validation_dataset.project_id != run.project_id
             ):
                 raise ValidationError("Pose validation dataset is unavailable")
+
+            # A saved Workflow Builder job seals the exact frozen source and
+            # split digests at queue time. Verify them before exporting a single
+            # training image or starting the GPU, not only after completion.
+            if job.project_id != run.project_id or run.job_id != job.id:
+                raise ValidationError("Queued pose training job ownership changed")
+            request = job.request_json
+            snapshot = run.draft_snapshot_json
+            sealed_digest = (
+                snapshot.get("pose_child_job_request_sha256")
+                if isinstance(snapshot, dict)
+                else None
+            )
+            if sealed_digest is not None and (
+                not isinstance(sealed_digest, str)
+                or sealed_digest != canonical_json_sha256(request)
+            ):
+                raise ValidationError("Queued pose training child job request checksum changed")
+            expected_lineage = {
+                "pose_training_dataset_id": training_dataset.id,
+                "pose_training_dataset_manifest_sha256": training_dataset.manifest_sha256,
+                "pose_validation_dataset_id": (
+                    validation_dataset.id if validation_dataset is not None else None
+                ),
+                "pose_validation_dataset_manifest_sha256": (
+                    validation_dataset.manifest_sha256 if validation_dataset is not None else None
+                ),
+                "pose_split_manifest_sha256": run.split_manifest_sha256,
+            }
+            for field, expected_value in expected_lineage.items():
+                if (sealed_digest is not None and field not in request) or (
+                    field in request and request[field] != expected_value
+                ):
+                    raise ValidationError("Queued pose training frozen dataset lineage changed")
 
             project = session.get(
                 Project,
