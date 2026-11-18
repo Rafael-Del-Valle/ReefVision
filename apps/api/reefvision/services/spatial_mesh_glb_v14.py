@@ -6,7 +6,7 @@ import base64
 import binascii
 import json
 import struct
-from math import isclose, isfinite
+from math import isfinite
 from typing import Any
 
 from reefvision.services.spatial_mesh_obj_v14 import MAX_FACES, MAX_VERTICES
@@ -334,11 +334,12 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         ):
             raise ValueError("GLB position bounds require three bounded finite numbers")
         actual = [reducer(row[axis] for row in vertices) for axis in range(3)]
-        # An absolute 1e-8 tolerance can conceal an entirely missing
-        # submicron extremum. Only allow relative float32-export rounding;
-        # exact-zero source axes must not accept nonzero declared bounds.
+        # JSON extrema describe float32 BIN positions. Accept decimal exporter
+        # spellings only when they round back to the exact stored float32, not
+        # a relative tolerance that can hide several distinct float32 values
+        # (and an entire small axis span). This is source QC, not calibration.
         if any(
-            not isclose(value, expected, rel_tol=1e-6, abs_tol=0.0)
+            struct.unpack("<f", struct.pack("<f", value))[0] != expected
             for value, expected in zip(declared, actual, strict=True)
         ):
             raise ValueError("GLB position bounds conflict with decoded geometry")
