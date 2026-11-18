@@ -495,7 +495,6 @@ def _column_collation_contracts(connection: sqlite3.Connection, table: str) -> d
     return contracts
 
 
-
 def _table_conflict_policy_contracts(
     connection: sqlite3.Connection, table: str
 ) -> tuple[dict[str, tuple[str, ...]], dict[tuple[str, ...], tuple[str, ...]], tuple[str, ...]]:
@@ -586,12 +585,10 @@ def _conflict_policy_preserved(
     new_columns, new_constraints, new_policies = _table_conflict_policy_contracts(new, table)
     return (
         old_policies == new_policies
-        and old_columns == {
-            name: policy for name, policy in new_columns.items() if name in original_columns
-        }
+        and old_columns
+        == {name: policy for name, policy in new_columns.items() if name in original_columns}
         and old_constraints.items() <= new_constraints.items()
     )
-
 
 
 def _generated_column_ddl_contracts(

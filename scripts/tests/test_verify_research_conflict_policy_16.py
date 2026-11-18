@@ -62,6 +62,26 @@ def _run(before: Path, after: Path) -> tuple[int, dict]:
     return completed.returncode, json.loads(completed.stdout)
 
 
+def _semantic_index_contracts(connection: sqlite3.Connection) -> list[tuple]:
+    """Compare effective constraints, not SQLite-generated autoindex names/order.
+
+    SQLite can reorder PRAGMA index_list when ON CONFLICT changes, even when
+    unique-key columns, collation and index origins remain unchanged.
+    """
+    contracts = []
+    for _, name, unique, origin, partial in connection.execute(
+        "PRAGMA index_list(scientific_records)"
+    ):
+        escaped = name.replace('"', '""')
+        keys = tuple(
+            (column[2], column[3], column[4])
+            for column in connection.execute(f'PRAGMA index_xinfo("{escaped}")')
+            if column[5]
+        )
+        contracts.append((unique, origin, partial, keys))
+    return sorted(contracts)
+
+
 @pytest.mark.parametrize(
     ("style", "before_policy", "after_policy"),
     [
@@ -81,15 +101,15 @@ def test_changed_sqlite_conflict_policy_holds_without_writing_data(
     _seed(before, style=style, policy=before_policy)
     _seed(after, style=style, policy=after_policy)
     with sqlite3.connect(before) as old, sqlite3.connect(after) as new:
-        assert old.execute("SELECT * FROM scientific_records").fetchall() == new.execute(
-            "SELECT * FROM scientific_records"
-        ).fetchall()
-        assert old.execute("PRAGMA table_xinfo(scientific_records)").fetchall() == new.execute(
-            "PRAGMA table_xinfo(scientific_records)"
-        ).fetchall()
-        assert old.execute("PRAGMA index_list(scientific_records)").fetchall() == new.execute(
-            "PRAGMA index_list(scientific_records)"
-        ).fetchall()
+        assert (
+            old.execute("SELECT * FROM scientific_records").fetchall()
+            == new.execute("SELECT * FROM scientific_records").fetchall()
+        )
+        assert (
+            old.execute("PRAGMA table_xinfo(scientific_records)").fetchall()
+            == new.execute("PRAGMA table_xinfo(scientific_records)").fetchall()
+        )
+        assert _semantic_index_contracts(old) == _semantic_index_contracts(new)
     original_before, original_after = before.read_bytes(), after.read_bytes()
 
     status, report = _run(before, after)

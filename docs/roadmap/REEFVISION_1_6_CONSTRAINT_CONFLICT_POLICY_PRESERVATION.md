@@ -35,3 +35,14 @@ retry semantics and approval gates must still pass their separate CI tests.
 reconciliation, complete exact-head backend/frontend/E2E, representative
 biological and saved-workflow checks, real Windows MSI/CAB installation,
 upgrade/rollback, installed GUI, and explicit researcher authorization.
+
+## Native Windows/Linux regression metadata
+
+SQLite can assign different `sqlite_autoindex` names and `PRAGMA index_list`
+positions to identical PRIMARY KEY and UNIQUE key definitions when their
+`ON CONFLICT` policies differ. The regression therefore compares effective
+index contracts (uniqueness, origin, partial status, indexed key order,
+collation, and sort direction) using `PRAGMA index_xinfo`, not generated names
+or enumeration order. This prevents a false test failure without weakening the
+verifier's explicit conflict-policy HOLD decision. The same tests execute on
+Linux and native Windows.
