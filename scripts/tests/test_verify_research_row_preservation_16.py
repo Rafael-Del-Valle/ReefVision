@@ -1212,6 +1212,7 @@ def test_protected_scientific_and_reviewer_triggers_survive_upgrade(
     assert before.read_bytes() == baseline_bytes
     assert after.read_bytes() == candidate_bytes
 
+
 @pytest.mark.parametrize("storage", ["VIRTUAL", "STORED"])
 @pytest.mark.parametrize(
     ("variant", "expected"),
@@ -1250,8 +1251,7 @@ def test_generated_scientific_formula_not_silently_changed_when_values_match(
     elif variant == "additional_generated_column":
         candidate_sql = candidate_sql.replace(
             f" {storage})",
-            f" {storage}, other_length REAL "
-            "GENERATED ALWAYS AS (raw_length * 4) VIRTUAL)",
+            f" {storage}, other_length REAL GENERATED ALWAYS AS (raw_length * 4) VIRTUAL)",
         )
 
     for path, sql in ((before, original_sql), (after, candidate_sql)):
@@ -1263,19 +1263,13 @@ def test_generated_scientific_formula_not_silently_changed_when_values_match(
             )
 
     with sqlite3.connect(before) as original, sqlite3.connect(after) as candidate:
-        projection = (
-            "SELECT id, raw_length, derived_length FROM scientific_records ORDER BY id"
-        )
+        projection = "SELECT id, raw_length, derived_length FROM scientific_records ORDER BY id"
         # Existing values can be identical even when future computations differ.
-        assert original.execute(projection).fetchall() == candidate.execute(
-            projection
-        ).fetchall()
+        assert original.execute(projection).fetchall() == candidate.execute(projection).fetchall()
     before_bytes, after_bytes = before.read_bytes(), after.read_bytes()
     code, report = _run(before, after)
     assert code == (2 if expected != "preserved" else 0)
-    assert report["status"] == (
-        "HOLD" if expected != "preserved" else "PASS_PRESERVATION_ONLY"
-    )
+    assert report["status"] == ("HOLD" if expected != "preserved" else "PASS_PRESERVATION_ONLY")
     assert any(
         item["table"] == "scientific_records" and item["status"] == expected
         for item in report["tables"]
@@ -1297,9 +1291,7 @@ def test_generated_scientific_formula_parsing_supports_quoted_column_name(
                 'CREATE TABLE scientific_records ("raw length" REAL, '
                 f'"derived length" REAL AS ("raw length" * {multiplier}) VIRTUAL)'
             )
-            connection.execute(
-                'INSERT INTO scientific_records ("raw length") VALUES (0)'
-            )
+            connection.execute('INSERT INTO scientific_records ("raw length") VALUES (0)')
     code, report = _run(before, after)
     assert code == 2
     assert report["status"] == "HOLD"
