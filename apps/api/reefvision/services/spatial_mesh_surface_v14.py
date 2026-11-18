@@ -217,6 +217,15 @@ def measure_mesh_preview(
         for axis in range(3)
     ]
     dimensions = [dimension * scale for dimension in source_dimensions]
+    # A genuine source-coordinate extent can vanish after calibration even
+    # when another axis keeps the total triangular area representable. Do not
+    # report a falsely planar reconstructed mesh or collapse the render bounds.
+    if any(
+        span > 0
+        and (dimensions[axis] == 0.0 or preview_min_m[axis] == preview_max_m[axis])
+        for axis, span in enumerate(source_dimensions)
+    ):
+        raise ValueError("Nonzero mesh axis span collapses after calibration")
     # A scale-invariant reconstruction shape diagnostic. Use source units to
     # avoid squaring a potentially underflowed calibrated bounding diagonal.
     # Global-axis bounds are orientation-sensitive and include gaps between
@@ -448,17 +457,29 @@ def measure_mesh_preview(
     ]
     # Extents use only vertices belonging to each edge-connected patch.
     # These are global-axis bounds, not branch lengths or organism identities.
-    patch_dimensions_m = [
+    patch_source_dimensions = [
         [
-            (
-                max(points[index][axis] for index in patch_vertex_indices[patch])
-                - min(points[index][axis] for index in patch_vertex_indices[patch])
-            )
-            * scale
+            max(points[index][axis] for index in patch_vertex_indices[patch])
+            - min(points[index][axis] for index in patch_vertex_indices[patch])
             for axis in range(3)
         ]
         for patch in ordered_patches
     ]
+    patch_dimensions_m = [
+        [dimension * scale for dimension in dimensions]
+        for dimensions in patch_source_dimensions
+    ]
+    # A disconnected small patch may lose its local span even while a larger
+    # patch preserves the whole-mesh bounds and area. Never publish false
+    # zero local dimensions as measured biological structure.
+    if any(
+        original > 0 and calibrated == 0.0
+        for source_dims, calibrated_dims in zip(
+            patch_source_dimensions, patch_dimensions_m, strict=True
+        )
+        for original, calibrated in zip(source_dims, calibrated_dims, strict=True)
+    ):
+        raise ValueError("Nonzero mesh patch axis span collapses after calibration")
     # Triangle-area-weighted centroids are coordinates in the imported source
     # frame, not registered positions or evidence of organism identity.
     # A zero-area patch has no mathematically defined surface centroid.
