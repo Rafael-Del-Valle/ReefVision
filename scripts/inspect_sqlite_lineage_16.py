@@ -116,6 +116,9 @@ def inspect(path: Path) -> dict:
                     not isinstance(raw_stamps[0], str)
                     or not raw_stamps[0]
                     or raw_stamps[0] != raw_stamps[0].strip()
+                    # Literal escape sequences are not revision identifiers.
+                    # A stored backslash-n can look like a newline in logs.
+                    or "\\" in raw_stamps[0]
                     or any(ord(char) < 32 or ord(char) == 127 for char in raw_stamps[0])
                 ):
                     if alembic_stamp_validation_error is None:

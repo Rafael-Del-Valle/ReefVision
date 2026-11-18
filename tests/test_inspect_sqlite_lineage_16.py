@@ -439,6 +439,8 @@ def test_cli_integrity_gate_rejects_malformed_alembic_metadata(tmp_path: Path) -
         ([], "expected_exactly_one_revision_row"),
         (["0037", "0038"], "expected_exactly_one_revision_row"),
         ([" 0038"], "invalid_revision_marker_type_or_value"),
+        (["0038\n"], "invalid_revision_marker_type_or_value"),
+        # The literal two-character escape also cannot identify a revision.
         (["0038\\n"], "invalid_revision_marker_type_or_value"),
         ([None], "invalid_revision_marker_type_or_value"),
         ([38], "invalid_revision_marker_type_or_value"),
@@ -730,7 +732,7 @@ def test_revision_comparison_gate_detects_equal_schema_different_lineage(
     reference = tmp_path / "reference.sqlite"
     for path, stamp in ((current, current_stamp), (reference, reference_stamp)):
         with sqlite3.connect(path) as db:
-            db.execute("CREATE TABLE alembic_version (version_num TEXT)")
+            db.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)")
             db.execute("INSERT INTO alembic_version VALUES (?)", (stamp,))
             db.execute("CREATE TABLE scientific_records (id INTEGER, note TEXT)")
             db.execute("INSERT INTO scientific_records VALUES (1, 'private observation')")
