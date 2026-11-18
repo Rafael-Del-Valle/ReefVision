@@ -430,6 +430,8 @@ def _pose_export_zip(
                 "kpt_shape: [1, 3]\n"
                 "names:\n"
                 '  0: "animal"\n'
+                "reefvision_keypoint_names:\n"
+                '  - "keypoint"\n'
             ),
         )
 
