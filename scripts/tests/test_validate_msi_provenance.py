@@ -380,10 +380,16 @@ def test_unreadable_installer_preflight_fails_closed(
         elif operation in {"manifest_hash", "cab_hash"}:
             original_open = Path.open
             blocked = manifest_path if operation == "manifest_hash" else cab
+            matching_opens = 0
 
             def deny_open(self: Path, *args: object, **kwargs: object):
+                nonlocal matching_opens
                 if self == blocked:
-                    raise PermissionError(detail)
+                    matching_opens += 1
+                    # Path.read_text calls Path.open. Allow the JSON read
+                    # and fail only on the subsequent manifest hash open.
+                    if operation == "cab_hash" or matching_opens > 1:
+                        raise PermissionError(detail)
                 return original_open(self, *args, **kwargs)
 
             patch.setattr(Path, "open", deny_open)
