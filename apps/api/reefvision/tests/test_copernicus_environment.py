@@ -349,7 +349,17 @@ def test_valid_provider_grid_spacing_is_retained_as_unassessed_provenance(
     )
 
 
-@pytest.mark.parametrize("damage", ["oversized", "nonfinite", "recursive"])
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "oversized",
+        "unicode_oversized",
+        "key_amplification",
+        "nonfinite",
+        "recursive",
+        "nontext_toolbox_version",
+    ],
+)
 def test_invalid_provider_provenance_preserves_validated_offline_snapshot(
     client, test_settings, monkeypatch, damage
 ):
@@ -365,6 +375,15 @@ def test_invalid_provider_provenance_preserves_validated_offline_snapshot(
     damaged = deepcopy(valid)
     if damage == "oversized":
         damaged["dataset_metadata"]["vendor_history"] = "x" * 20_000
+    elif damage == "unicode_oversized":
+        # Metadata budget is UTF-8 bytes, not Unicode code points.
+        damaged["dataset_metadata"]["vendor_history"] = "🐙" * 5_000
+    elif damage == "key_amplification":
+        damaged["dataset_metadata"].update(
+            {f"vendor_{index:04d}": "x" for index in range(1_500)}
+        )
+    elif damage == "nontext_toolbox_version":
+        damaged["toolbox_version"] = {"unverified": "1.2"}
     elif damage == "nonfinite":
         damaged["dataset_metadata"]["uncertain_error"] = float("nan")
     else:
@@ -372,8 +391,9 @@ def test_invalid_provider_provenance_preserves_validated_offline_snapshot(
         recursive["self"] = recursive
         damaged["dataset_metadata"]["vendor_history"] = recursive
 
-    with client.app.state.session_factory() as session, pytest.raises(
-        ValidationError, match="Copernicus provider metadata"
+    with (
+        client.app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="Copernicus provider metadata"),
     ):
         CopernicusEnvironmentService(
             session,
