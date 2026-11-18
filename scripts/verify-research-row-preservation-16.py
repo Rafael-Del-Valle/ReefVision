@@ -434,9 +434,7 @@ def _protected_autoincrement_sequences(
 # Win32 reserves these device names even when followed by an extension. The
 # superscript digits are also reserved by the Windows device-name parser.
 _WINDOWS_DEVICE_NAMES = {"CON", "PRN", "AUX", "NUL"} | {
-    f"{prefix}{suffix}"
-    for prefix in ("COM", "LPT")
-    for suffix in "123456789¹²³"
+    f"{prefix}{suffix}" for prefix in ("COM", "LPT") for suffix in "123456789¹²³"
 }
 
 

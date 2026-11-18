@@ -1508,6 +1508,7 @@ def test_research_asset_similarly_named_folders_are_not_ambiguous(tmp_path: Path
     assert report["research_assets"]["missing_files"] == 0
     assert report["research_assets"]["missing_directories"] == 0
 
+
 @pytest.mark.skipif(os.name == "nt", reason="Win32 cannot create invalid asset names")
 @pytest.mark.parametrize("scope", ["both", "candidate"])
 @pytest.mark.parametrize(
