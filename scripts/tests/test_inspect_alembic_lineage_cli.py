@@ -1311,9 +1311,9 @@ def test_0038_scientific_cache_and_declared_type_contracts(
         assert "temperature_c" not in completed.stdout + completed.stderr
         assert database.read_bytes() == original
     with sqlite3.connect(database) as connection:
-        assert connection.execute(
-            "SELECT payload_json FROM scientific_records"
-        ).fetchone() == ('{"count":7,"private":"reef site A"}',)
+        assert connection.execute("SELECT payload_json FROM scientific_records").fetchone() == (
+            '{"count":7,"private":"reef site A"}',
+        )
         assert connection.execute(
             "SELECT payload_json FROM environmental_cache_entries"
         ).fetchone() == ('{"temperature_c":20.2}',)
