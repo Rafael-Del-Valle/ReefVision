@@ -33,7 +33,14 @@ def tiny_triangle(axis: int, sign: int) -> dict:
 @pytest.mark.parametrize(
     ("axis", "sign"),
     [(0, 1), (0, -1), (1, 1), (1, -1), (2, 1), (2, -1)],
-    ids=["x-positive", "x-negative", "y-positive", "y-negative", "z-positive", "z-negative"],
+    ids=[
+        "x-positive",
+        "x-negative",
+        "y-positive",
+        "y-negative",
+        "z-positive",
+        "z-negative",
+    ],
 )
 def test_representable_subnormal_area_weighted_centroid_replays(
     client: TestClient, axis: int, sign: int
@@ -45,7 +52,9 @@ def test_representable_subnormal_area_weighted_centroid_replays(
     assert direct["surface_area_m2"] == pytest.approx(5e-221, rel=1e-12, abs=0)
     assert centroid[axis] == pytest.approx(expected, rel=1e-12, abs=0)
     assert centroid[(axis + 1) % 3] == pytest.approx(1e-110 / 3, rel=1e-12, abs=0)
-    assert direct["edge_connected_patch_area_weighted_surface_centroids_m"] == [centroid]
+    assert direct["edge_connected_patch_area_weighted_surface_centroids_m"] == [
+        centroid
+    ]
     assert direct["area_weighted_centroid_scale_uncertainty_m"][axis] == pytest.approx(
         abs(expected) * 0.1, rel=1e-12, abs=0
     )
@@ -79,7 +88,11 @@ def test_representable_subnormal_area_weighted_centroid_replays(
         "name": "Unverified mesh centroid numerical integrity",
         "nodes": [
             {"node_id": "p", "node_type": "project_source"},
-            {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": payload},
+            {
+                "node_id": "m",
+                "node_type": "mesh_surface_preview",
+                "parameters": payload,
+            },
         ],
         "edges": [
             {
@@ -100,7 +113,9 @@ def test_representable_subnormal_area_weighted_centroid_replays(
     app = cast(FastAPI, client.app)
     hashes: list[str] = []
     for _ in range(2):
-        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        run = client.post(
+            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+        )
         assert run.status_code == 202, run.text
         assert process_workflow_run_job(
             app.state.settings, app.state.session_factory, str(run.json()["job_id"])
