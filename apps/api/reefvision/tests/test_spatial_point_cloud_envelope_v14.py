@@ -110,25 +110,42 @@ def test_envelope_saved_workflow_matches_standalone(client: TestClient) -> None:
     assert payload["measurement_status"] == "caller_supplied_unverified"
 
 
+@pytest.mark.parametrize(
+    ("points", "meters_per_unit", "target"),
+    [
+        (
+            [
+                [1_000_000_000.0, -1_000_000_000.0, 0.0],
+                [1e-8, -1e-8, 0.0],
+                [-1_000_000_000.0, 1_000_000_000.0, 0.0],
+            ],
+            0.01,
+            [1e-10 / 3.0, -1e-10 / 3.0, 0.0],
+        ),
+        (
+            [[5e-324, -5e-324, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+            1_000_000.0,
+            [(5e-324 * 1_000_000.0) / 3, -(5e-324 * 1_000_000.0) / 3, 0.0],
+        ),
+    ],
+)
 def test_signed_point_centroid_cancellation_standalone_and_saved_replay(
     client: TestClient,
+    points: list[list[float]],
+    meters_per_unit: float,
+    target: list[float],
 ) -> None:
-    """Small signed offsets must survive large opposing survey coordinates."""
+    """Preserve signed survey offsets and calibrated subnormal centroid values."""
     params = {
-        "points": [
-            [1_000_000_000.0, -1_000_000_000.0, 0.0],
-            [1e-8, -1e-8, 0.0],
-            [-1_000_000_000.0, 1_000_000_000.0, 0.0],
-        ],
-        "meters_per_unit": 0.01,
+        "points": points,
+        "meters_per_unit": meters_per_unit,
         "calibration_method": "ruler",
         "calibration_evidence": "Synthetic survey coordinates; not field verified",
         "relative_scale_uncertainty": 0.1,
     }
-    target = [1e-10 / 3.0, -1e-10 / 3.0, 0.0]
     direct = measure_point_cloud_preview(**params)
     assert direct["arithmetic_centroid_in_source_frame_m"] == pytest.approx(
-        target, rel=1e-12, abs=1e-20
+        target, rel=1e-12, abs=0.0
     )
     assert direct["measurement_status"] == "caller_supplied_unverified"
     assert direct["provenance"]["calibration_verified"] is False
@@ -139,7 +156,7 @@ def test_signed_point_centroid_cancellation_standalone_and_saved_replay(
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     assert expected["arithmetic_centroid_in_source_frame_m"] == pytest.approx(
-        target, rel=1e-12, abs=1e-20
+        target, rel=1e-12, abs=0.0
     )
     graph = {
         "graph_id": "signed-point-centroid-cancellation-v15",
@@ -181,7 +198,7 @@ def test_signed_point_centroid_cancellation_standalone_and_saved_replay(
         )
         result = artifact["payload_json"]
         assert result["arithmetic_centroid_in_source_frame_m"] == pytest.approx(
-            target, rel=1e-12, abs=1e-20
+            target, rel=1e-12, abs=0.0
         )
         assert result["provenance"] == expected["provenance"]
         assert result["measurement_status"] == "caller_supplied_unverified"
