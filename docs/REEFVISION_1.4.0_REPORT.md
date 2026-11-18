@@ -53,6 +53,21 @@ API, and twice-executed typed saved Workflow Builder regressions cover these
 boundaries for both geometry families. Full CI and representative field review
 remain separate release gates.
 
+### ASCII PLY source-decimal collision and schema-order QC
+
+A distinct ASCII source decimal may round to the same binary64 coordinate
+as a different vertex value. Mesh and point-cloud previews reject this
+ambiguity rather than calculate false zero extents, degenerate topology,
+or calibrated surface measurements from collapsed source locations.
+Equivalent decimal spellings remain permitted. A synthetic mesh regression
+also checks a leading non-coordinate color field and nonstandard Z/X/Y
+property order: precision collisions on each actual coordinate axis must
+fail through direct parsing, the standalone project API, and a saved,
+executable typed Workflow Builder graph without a measurement artifact.
+The CI gate for this new fixture is not yet established; source text,
+calibration, organism identity, geometry registration, and reconstruction
+remain independently unverified until the scientific acceptance gates pass.
+
 ### Bounded mesh-preview surface visibility QC
 
 A decimated preview can omit a complete edge-connected mesh patch even when
