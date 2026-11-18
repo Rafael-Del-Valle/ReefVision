@@ -152,9 +152,13 @@ def parse_copernicus(
     except (TypeError, ValueError, OverflowError, RecursionError) as exc:
         raise ValidationError("Copernicus provider metadata must be finite JSON") from exc
     if len(metadata_json.encode("utf-8")) > MAX_PROVIDER_METADATA_BYTES:
-        raise ValidationError(
-            "Copernicus provider metadata exceeds the 16 KiB provenance budget"
-        )
+        raise ValidationError("Copernicus provider metadata exceeds the 16 KiB provenance budget")
+    # The Toolbox worker identifies its software version as text. Accept a
+    # missing legacy version, but never persist provider-controlled structured
+    # objects that could be mistaken for a trustworthy software identifier.
+    toolbox_version = raw.get("toolbox_version")
+    if toolbox_version is not None and not isinstance(toolbox_version, str):
+        raise ValidationError("Copernicus provider metadata requires a textual Toolbox version")
     # Resolution is scientific provenance, not arbitrary provider decoration.
     # A zero, negative, nonfinite or coerced string/bool axis spacing would
     # fabricate grid sampling precision or an invalid temporal resolution.
