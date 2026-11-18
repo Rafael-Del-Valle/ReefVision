@@ -761,7 +761,10 @@ def verify(
                 missing = [column for column in old_columns if column not in new_columns]
                 if missing:
                     item["status"] = "removed_columns"
-                    item["removed_columns"] = missing
+                    # Column identifiers in restored scientific databases may
+                    # contain private researcher or sample information. Report
+                    # counts only; never emit raw schema names into CI logs.
+                    item["removed_column_count"] = len(missing)
                 elif old_primary_key != new_primary_key:
                     item["status"] = "changed_primary_key"
                 elif _table_storage_contract(old, table) != _table_storage_contract(new, table):

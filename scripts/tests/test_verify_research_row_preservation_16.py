@@ -103,6 +103,51 @@ def test_detects_modified_science_qc_class_and_workflow_evidence(
     assert after.read_bytes() == modified
 
 
+@pytest.mark.parametrize(
+    "table",
+    [
+        "scientific_records",
+        "review_queue_item_events",
+        "class_visibility_preferences",
+        "workflow_graph_records",
+    ],
+)
+def test_removed_scientific_column_names_remain_private(
+    tmp_path: Path, table: str
+) -> None:
+    """Schema-drift diagnostics must not disclose researcher-defined identifiers."""
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    _seed(before)
+    private_column = "private_researcher_donor_identifier_0123"
+    with sqlite3.connect(before) as connection:
+        connection.execute(f'ALTER TABLE "{table}" ADD COLUMN "{private_column}" TEXT')
+        connection.execute(
+            f'UPDATE "{table}" SET "{private_column}" = ?',
+            ("nonpublic-biological-identification",),
+        )
+    shutil.copyfile(before, after)
+    with sqlite3.connect(after) as connection:
+        connection.execute(f'ALTER TABLE "{table}" DROP COLUMN "{private_column}"')
+
+    original, candidate = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+
+    assert code == 2
+    assert report["status"] == "HOLD"
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    entry = next(item for item in report["tables"] if item["table"] == table)
+    assert entry["status"] == "removed_columns"
+    assert entry["removed_column_count"] == 1
+    assert "removed_columns" not in entry
+    public_report = json.dumps(report, ensure_ascii=False)
+    assert private_column not in public_report
+    assert "nonpublic-biological-identification" not in public_report
+    assert before.read_bytes() == original
+    assert after.read_bytes() == candidate
+
+
 def test_rebuilt_qc_history_cannot_silently_reorder_review_actions(tmp_path: Path) -> None:
     """Identical UUID-keyed rows may have different SQLite append chronology."""
     before = tmp_path / "before.sqlite"
