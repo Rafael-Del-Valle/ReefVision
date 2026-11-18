@@ -247,8 +247,7 @@ def _trigger_contracts(connection: sqlite3.Connection, table: str) -> dict[str, 
     """
     contracts: dict[str, tuple[str, ...]] = {}
     for name, statement in connection.execute(
-        "SELECT name, sql FROM sqlite_master "
-        "WHERE type = 'trigger' AND tbl_name = ?",
+        "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = ?",
         (table,),
     ):
         if not isinstance(statement, str):
@@ -633,9 +632,10 @@ def verify(
                     _check_constraint_contracts(new, table)
                 ):
                     item["status"] = "changed_check_constraint_contract"
-                elif not _trigger_contracts(old, table).items() <= _trigger_contracts(
-                    new, table
-                ).items():
+                elif (
+                    not _trigger_contracts(old, table).items()
+                    <= _trigger_contracts(new, table).items()
+                ):
                     item["status"] = "changed_trigger_contract"
                 else:
                     order_by = old_primary_key or old_columns

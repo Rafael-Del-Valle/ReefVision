@@ -1170,9 +1170,7 @@ def test_protected_scientific_and_reviewer_triggers_survive_upgrade(
             connection.execute(
                 f"CREATE TABLE {table} (id TEXT PRIMARY KEY, measurement_mm REAL NOT NULL)"
             )
-            connection.execute(
-                f"INSERT INTO {table} VALUES (?, ?)", ("private-coral-source", 3.5)
-            )
+            connection.execute(f"INSERT INTO {table} VALUES (?, ?)", ("private-coral-source", 3.5))
             statement: str | None = baseline
             if candidate:
                 if mode == "removed":
@@ -1180,18 +1178,14 @@ def test_protected_scientific_and_reviewer_triggers_survive_upgrade(
                 elif mode == "changed_event":
                     statement = baseline.replace("BEFORE UPDATE", "BEFORE DELETE")
                 elif mode == "conditional":
-                    statement = baseline.replace(
-                        " BEGIN ", " WHEN NEW.measurement_mm < 0 BEGIN "
-                    )
+                    statement = baseline.replace(" BEGIN ", " WHEN NEW.measurement_mm < 0 BEGIN ")
                 elif mode == "inert_body":
                     statement = baseline.replace(
                         "SELECT RAISE(ABORT, 'private review and science rule')",
                         "SELECT 1",
                     )
                 elif mode == "formatted":
-                    statement = baseline.replace(
-                        " BEFORE UPDATE ", "   before   update   "
-                    )
+                    statement = baseline.replace(" BEFORE UPDATE ", "   before   update   ")
             if statement is not None:
                 connection.execute(statement)
             if candidate and mode == "additional_guard":
