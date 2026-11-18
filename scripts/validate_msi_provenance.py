@@ -3,6 +3,7 @@
 Does not install, extract, download, or modify any artifact. Windows Installer
 Media-table/ProductVersion verification is separate and remains mandatory.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -53,9 +54,7 @@ def _is_windows_device_name(name: str) -> bool:
     Check before any artifact existence, stat, or hash operation.
     """
     stem = name.split(".", 1)[0].upper()
-    return stem in {"CON", "PRN", "AUX", "NUL"} or bool(
-        re.fullmatch(r"(?:COM|LPT)[1-9]", stem)
-    )
+    return stem in {"CON", "PRN", "AUX", "NUL"} or bool(re.fullmatch(r"(?:COM|LPT)[1-9]", stem))
 
 
 def validate_bundle(
@@ -140,9 +139,11 @@ def validate_bundle(
         if not isinstance(record, dict):
             _reject("Build provenance contains a non-object file record")
         name, digest = record.get("name"), record.get("sha256")
-        if not isinstance(name, str) or not re.fullmatch(
-            r"[A-Za-z0-9_-][A-Za-z0-9_.-]*\.(?:msi|cab)", name, re.I
-        ) or _is_windows_device_name(name):
+        if (
+            not isinstance(name, str)
+            or not re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9_.-]*\.(?:msi|cab)", name, re.I)
+            or _is_windows_device_name(name)
+        ):
             _reject("Build provenance contains an unsafe filename")
         if name.casefold() in names:
             _reject("Build provenance contains duplicate filenames")
