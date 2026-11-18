@@ -440,9 +440,7 @@ def test_glb_extras_extension_label_is_not_a_gltf_extension() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    "invalid_selector", ["bounds_tiny_positive", "bounds_tiny_negative"]
-)
+@pytest.mark.parametrize("invalid_selector", ["bounds_tiny_positive", "bounds_tiny_negative"])
 def test_rejects_glb_position_extrema_false_at_nanoscale(invalid_selector: str) -> None:
     """A 1e-9 false extremum is not valid merely because 1e-8 was the old floor."""
     with pytest.raises(ValueError, match="position bounds conflict"):
