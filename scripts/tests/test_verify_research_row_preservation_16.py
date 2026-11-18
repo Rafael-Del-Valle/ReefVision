@@ -1627,3 +1627,82 @@ def test_portable_windows_research_asset_names_remain_supported(tmp_path: Path) 
     assert report["research_assets"]["added_files"] == 1
     assert report["upgrade_authorized"] is False
     assert report["requires_researcher_approval"] is True
+
+
+@pytest.mark.parametrize(
+    ("baseline_autoincrement", "candidate_autoincrement", "expected_hold"),
+    [
+        (True, False, True),
+        (False, True, True),
+        (True, True, False),
+        (False, False, False),
+    ],
+)
+@pytest.mark.parametrize("populated", [False, True])
+def test_empty_and_populated_scientific_autoincrement_contract(
+    tmp_path: Path,
+    baseline_autoincrement: bool,
+    candidate_autoincrement: bool,
+    expected_hold: bool,
+    populated: bool,
+) -> None:
+    """Matching current rows do not prove future biological IDs cannot be reused.
+
+    Empty tables have no sqlite_sequence entry even when they were declared
+    AUTOINCREMENT. A default literal and quoted name containing the keyword
+    must not produce false positives when the actual contract is unchanged.
+    """
+    before, after = tmp_path / "before.sqlite", tmp_path / "after.sqlite"
+    for path, use_autoincrement in (
+        (before, baseline_autoincrement),
+        (after, candidate_autoincrement),
+    ):
+        modifier = " AUTOINCREMENT" if use_autoincrement else ""
+        with sqlite3.connect(path) as connection:
+            connection.execute(
+                "CREATE TABLE scientific_records ("
+                f"id INTEGER PRIMARY KEY{modifier}, "
+                '"autoincrement" TEXT DEFAULT \'AUTOINCREMENT\', '
+                "measurement_mm REAL)"
+            )
+            if populated:
+                connection.execute(
+                    'INSERT INTO scientific_records (id, "autoincrement", measurement_mm) '
+                    "VALUES (7, 'private-coral', 0.0)"
+                )
+
+    with sqlite3.connect(before) as old, sqlite3.connect(after) as new:
+        assert list(old.execute("PRAGMA table_xinfo(scientific_records)")) == list(
+            new.execute("PRAGMA table_xinfo(scientific_records)")
+        )
+        assert old.execute("SELECT * FROM scientific_records").fetchall() == new.execute(
+            "SELECT * FROM scientific_records"
+        ).fetchall()
+        if not populated:
+            # The existing sequence-counter guard alone cannot distinguish
+            # the two declarations before any biological observation exists.
+            for connection in (old, new):
+                if connection.execute(
+                    "SELECT 1 FROM sqlite_master WHERE name = 'sqlite_sequence'"
+                ).fetchone():
+                    assert connection.execute("SELECT * FROM sqlite_sequence").fetchall() == []
+
+    old_bytes, new_bytes = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+    expected_status = "HOLD" if expected_hold else "PASS_PRESERVATION_ONLY"
+    assert code == (2 if expected_hold else 0)
+    assert report["status"] == expected_status
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    item = next(row for row in report["tables"] if row["table"] == "scientific_records")
+    assert item["status"] == (
+        "changed_autoincrement_contract" if expected_hold else "preserved"
+    )
+    if expected_hold:
+        assert "scientific_records:changed_autoincrement_contract" in report["problems"]
+    else:
+        assert not report["problems"]
+    public = json.dumps(report)
+    assert "private-coral" not in public
+    assert before.read_bytes() == old_bytes
+    assert after.read_bytes() == new_bytes
