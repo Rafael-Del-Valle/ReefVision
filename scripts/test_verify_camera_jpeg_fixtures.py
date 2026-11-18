@@ -499,6 +499,93 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                 self.assertEqual((root / name).read_bytes(), original_bytes[name])
             json.dumps(records, allow_nan=False)
 
+    def test_conflicting_exif_exposure_or_orphan_offset_is_qc_rejected(self) -> None:
+        """Camera clocks need unambiguous IFD provenance, not invented timestamps."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; camera exposure conflict QC unverified")
+        original_getexif = Image.Image.getexif
+        original_get_ifd = Image.Exif.get_ifd
+        cases = (
+            (
+                "conflict",
+                {36867: "2026:04:03 14:00:00", 36881: "+00:00"},
+                {36867: "2026:04:04 14:00:00", 36881: "+01:00"},
+                "conflicting EXIF camera exposure metadata between IFD0 and Exif IFD: DSC_0001.JPG",
+                True,
+                False,
+            ),
+            (
+                "orphan",
+                {36881: "+00:00"},
+                {},
+                "EXIF camera offset without original exposure time: DSC_0001.JPG",
+                False,
+                True,
+            ),
+        )
+        for label, top_tags, nested_tags, expected_error, conflict, orphan in cases:
+            with self.subTest(label=label):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    path = root / "DSC_0001.JPG"
+                    Image.new("RGB", (12, 8), (30, 70, 90)).save(
+                        path, format="JPEG"
+                    )
+                    original = path.read_bytes()
+
+                    def forged_exif(image):
+                        exif = original_getexif(image)
+                        for tag, value in top_tags.items():
+                            exif[tag] = value
+                        return exif
+
+                    def forged_ifd(exif, tag):
+                        if tag == 34665:
+                            return nested_tags
+                        return original_get_ifd(exif, tag)
+
+                    with (
+                        mock.patch.object(Image.Image, "getexif", forged_exif),
+                        mock.patch.object(Image.Exif, "get_ifd", forged_ifd),
+                    ):
+                        records, errors = MODULE.inventory(root, verify_decode=True)
+                    self.assertEqual(errors, [expected_error])
+                    self.assertEqual(len(records), 1)
+                    record = records[0]
+                    self.assertTrue(record["jpeg_decodable"])
+                    self.assertEqual(record["jpeg_exif_exposure_ifd_conflict"], conflict)
+                    self.assertEqual(
+                        record["jpeg_exif_offset_without_datetime_original"], orphan
+                    )
+                    self.assertIsNone(record["jpeg_exif_datetime_original_local"])
+                    if conflict:
+                        self.assertIsNone(record["jpeg_exif_offset_time_original"])
+                    json.dumps(records, allow_nan=False)
+                    self.assertEqual(path.read_bytes(), original)
+
+    def test_malformed_exif_sub_ifd_fails_decode_without_crashing_inventory(self) -> None:
+        """A malformed camera IFD must not abort other camera fixtures."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; malformed EXIF IFD QC unverified")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "DSC_0001.JPG"
+            Image.new("RGB", (12, 8), (30, 70, 90)).save(
+                path, format="JPEG"
+            )
+            original = path.read_bytes()
+            with mock.patch.object(Image.Exif, "get_ifd", return_value=[]):
+                records, errors = MODULE.inventory(root, verify_decode=True)
+            self.assertEqual(errors, ["JPEG decode failed: DSC_0001.JPG: ValueError"])
+            self.assertEqual(len(records), 1)
+            self.assertFalse(records[0]["jpeg_decodable"])
+            self.assertNotIn("jpeg_exif_datetime_original_local", records[0])
+            self.assertEqual(path.read_bytes(), original)
+
     def test_malformed_camera_exposure_tags_fail_qc_without_mutating_capture(self) -> None:
         """Invalid timestamps and offsets cannot become trusted acquisition times."""
         try:
