@@ -992,9 +992,12 @@ def test_scientific_uniqueness_survives_migration(
     code, report = _run(before, after)
     assert code == (0 if expected == "preserved" else 2)
     assert report["status"] == ("PASS_PRESERVATION_ONLY" if expected == "preserved" else "HOLD")
-    assert next(
-        entry["status"] for entry in report["tables"] if entry["table"] == "scientific_records"
-    ) == expected
+    assert (
+        next(
+            entry["status"] for entry in report["tables"] if entry["table"] == "scientific_records"
+        )
+        == expected
+    )
     assert report["upgrade_authorized"] is False
     assert report["requires_researcher_approval"] is True
     assert "private-1" not in json.dumps(report)
@@ -1018,9 +1021,7 @@ def test_additional_unique_constraint_is_preservation_compatible(tmp_path: Path)
         )
     shutil.copyfile(before, after)
     with sqlite3.connect(after) as connection:
-        connection.execute(
-            "CREATE UNIQUE INDEX uq_status ON scientific_records(status)"
-        )
+        connection.execute("CREATE UNIQUE INDEX uq_status ON scientific_records(status)")
     original, candidate = before.read_bytes(), after.read_bytes()
     code, report = _run(before, after)
     assert code == 0
