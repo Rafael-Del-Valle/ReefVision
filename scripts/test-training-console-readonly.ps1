@@ -308,7 +308,7 @@ foreach ($terminalStatus in @('failed', 'cancelled')) {
         throw "Cancelled-run monitor concealed missing scientific measurement: $expected"
       }
     }
-    if ($terminalOutput -match '(?:train|val)/(?:box|cls|dfl)_loss\\s+[-+]?\\d') {
+    if ($terminalOutput -match '(?:train|val)/(?:box|cls|dfl)_loss\s+[-+]?\d') {
       throw 'Cancelled-run monitor fabricated numeric loss metrics.'
     }
   }
