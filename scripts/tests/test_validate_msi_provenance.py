@@ -236,7 +236,7 @@ def test_private_duplicate_manifest_key_is_not_echoed(tmp_path: Path) -> None:
     private_key = "PRIVATE_CORAL_STUDY_INTERNAL_IDENTIFIER"
     contents = manifest.read_text(encoding="utf-8")
     duplicate = json.dumps(private_key)
-    manifest.write_text(contents[:-1] + f', {duplicate}: 1, {duplicate}: 2}}')
+    manifest.write_text(contents[:-1] + f", {duplicate}: 1, {duplicate}: 2}}")
     original_manifest = manifest.read_bytes()
     with pytest.raises(
         validator.BundleValidationError, match="Duplicate provenance"
