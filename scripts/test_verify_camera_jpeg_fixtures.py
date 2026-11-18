@@ -463,7 +463,7 @@ class CameraFixtureInventoryTests(unittest.TestCase):
         original_getexif = Image.Image.getexif
         invalid_labels = (
             (b"Canon", "EOS R5"),
-            ("Sony", "line\\nbreak"),
+            ("Sony", "line\nbreak"),
             ("X" * 129, "model"),
             ("", "model"),
             ("Canon", b"EOS"),
