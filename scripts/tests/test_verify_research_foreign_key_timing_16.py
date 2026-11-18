@@ -1,7 +1,6 @@
 """Non-destructive 1.6 regression for scientific FK timing across offline upgrades."""
 
 import json
-import shutil
 import sqlite3
 import subprocess
 import sys
