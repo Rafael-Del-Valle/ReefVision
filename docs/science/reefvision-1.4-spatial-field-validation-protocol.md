@@ -25,6 +25,8 @@ Record physical scale standard, units, standard uncertainty, measurement method,
 
 Test extreme but finite coordinates, malformed indices, nonfinite values, adversarial file sizes, unsupported binary PLY, invalid GLB chunks, and source metadata tampering. Bound memory, vertex/face counts, and parse time. A preview is not evidence of a validated reconstruction.
 
+For ASCII PLY point-cloud coordinates, preserve the declaration's floating-point width when reporting a rejected source token: `float`/`float32` underflow is a binary32 range failure, while `double`/`float64` tokens below binary64 resolution have a distinct precision-underflow failure. Test both signs of an unrepresentably small nonzero decimal through the project API and a saved executable typed graph; both must reject the input with no measurement artifact. A zero produced by parsing is not evidence of a physical zero. Retain separately tested valid subnormal and exact-zero behavior. Neither diagnostic establishes physical uncertainty.
+
 ## Anatomical measurements
 
 A selected surface-edge path is not automatically a coral branch centerline. For anatomical branch length, document branch endpoints, skeletonization or centerline algorithm, branch/junction rules, ambiguity handling, and repeatability across at least two blinded annotators. Report uncertainty from scale, endpoint placement, reconstruction, and repeat segmentation independently. Do not label surface paths as validated branch lengths until an independent specimen reference and repeatability study pass.
