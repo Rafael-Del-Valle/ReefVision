@@ -100,3 +100,30 @@ must preserve review and biological sentinel rows and database bytes.
 This check does **not** validate arbitrary CHECK clauses, SQLite type
 affinities, row-level provenance, or compatibility with the 1.1 migration
 branch; no upgrade is authorized.
+
+## Source-declared type and environmental-cache audit (2026-11-18)
+
+The opt-in read-only `--verify-structural-contracts` preflight now covers **both**
+1.1 revision-0038 tables, not only `scientific_records`: it also checks
+`environmental_cache_entries` against the source-audited `0038_scientific_data.py`
+declaration. Its eight columns, required nullability, `projects.id ON DELETE CASCADE`
+link and `UNIQUE(project_id, cache_key)` are verified. Unique-key inspection
+rejects partial indexes, changed collation and descending keys, while unrelated
+non-unique lookup indexes remain compatible. The independent scientific and QC
+migration branches have **not** been merged or restamped.
+
+For both scientific tables and the already-audited 1.6
+`review_queue_item_events` table, the preflight also compares source-declared
+SQLite column types including `VARCHAR(36)` identifiers, `JSON` payloads,
+`DATETIME` timestamps and `VARCHAR` lengths. Equal historical values and
+column names can conceal changed storage semantics. Type-token case and
+whitespace are normalized. Drift returns fixed privacy-safe `mismatch`
+diagnostics and a nonzero strict exit, never raw DDL or biological data.
+
+Eleven populated disposable-SQLite variants cover the canonical pair, a
+permitted additional lookup index, altered JSON/time/length contracts, lost
+or case-insensitive cache uniqueness, changed FK delete policy, repeated
+read-only runs and unchanged database bytes. This is **diagnostic evidence**
+only. Matching shapes do not prove migration provenance or authorize upgrade.
+An approved integrated migration, representative biology and saved-workflow
+acceptance, and installed Windows MSI/GUI upgrade and rollback remain blocked.
