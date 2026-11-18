@@ -698,9 +698,9 @@ def test_valid_glb_position_bounds_match_unannotated_geometry() -> None:
 
 def test_glb_position_bounds_accept_exact_float32_decimal_roundtrip() -> None:
     """Equivalent decimal extrema cannot change decoded source geometry."""
-    assert parse_glb_triangles(
-        make_glb(invalid_selector="bounds_float32_roundtrip")
-    ) == parse_glb_triangles(make_glb())
+    expected = parse_glb_triangles(make_glb())
+    actual = parse_glb_triangles(make_glb(invalid_selector="bounds_float32_roundtrip"))
+    assert actual == expected
 
 
 @pytest.mark.parametrize(
