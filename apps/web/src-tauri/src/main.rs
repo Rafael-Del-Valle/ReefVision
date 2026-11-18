@@ -336,7 +336,11 @@ while ($true) {
     }
     $trainingLosses = @('train/box_loss', 'train/cls_loss', 'train/dfl_loss', 'train/seg_loss', 'train/loss')
     $validationLosses = @('val/box_loss', 'val/cls_loss', 'val/dfl_loss', 'val/seg_loss', 'val/loss')
-    if (@($trainingLosses | Where-Object { $latestMetrics.ContainsKey($_) -or $unmeasuredLosses.ContainsKey($_) }).Count -gt 0) {
+    # Display missing numeric measurements explicitly. Plain worker-log text
+    # may mention box/cls/dfl losses, but it is never a verified metrics source.
+    $hasTrainingLoss = @($trainingLosses | Where-Object { $latestMetrics.ContainsKey($_) -or $unmeasuredLosses.ContainsKey($_) }).Count -gt 0
+    $hasValidationLoss = @($validationLosses | Where-Object { $latestMetrics.ContainsKey($_) -or $unmeasuredLosses.ContainsKey($_) }).Count -gt 0
+    if ($hasTrainingLoss) {
       Write-Host ''
       Write-Host 'Training losses'
       foreach ($key in $trainingLosses) {
@@ -348,8 +352,11 @@ while ($true) {
           Write-Host ('  {0,-20} unavailable{1}' -f (Format-SafeText $key), $unmeasuredLosses[$key])
         }
       }
+    } else {
+      Write-Host ''
+      Write-Host 'Training losses: no persisted measurements available (worker logs are not metric evidence).'
     }
-    if (@($validationLosses | Where-Object { $latestMetrics.ContainsKey($_) -or $unmeasuredLosses.ContainsKey($_) }).Count -gt 0) {
+    if ($hasValidationLoss) {
       Write-Host ''
       Write-Host 'Validation losses'
       foreach ($key in $validationLosses) {
@@ -361,6 +368,9 @@ while ($true) {
           Write-Host ('  {0,-20} unavailable{1}' -f (Format-SafeText $key), $unmeasuredLosses[$key])
         }
       }
+    } else {
+      Write-Host ''
+      Write-Host 'Validation losses: no persisted measurements available (worker logs are not metric evidence).'
     }
     $otherMetrics = @($latestMetrics.Keys | Where-Object {
       $_ -notin ($trainingLosses + $validationLosses) -and $_ -ne 'epoch' -and $_ -ne 'time'
