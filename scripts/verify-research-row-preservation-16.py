@@ -256,6 +256,67 @@ def _trigger_contracts(connection: sqlite3.Connection, table: str) -> dict[str, 
     return contracts
 
 
+def _generated_column_ddl_contracts(
+    connection: sqlite3.Connection, table: str
+) -> dict[str, tuple[str, ...]]:
+    """Retain generated-column formulas, not merely current computed values.
+
+    Current rows can all contain zero or NULL, hiding a changed expression that
+    would reinterpret future measurements. Tokenize each generated column's
+    complete DDL declaration, allowing unrelated additive columns and harmless
+    SQL whitespace changes. Ambiguous parsing must fail closed, not certify.
+    """
+    generated = {
+        row[1].casefold(): row[1]
+        for row in connection.execute(f"PRAGMA table_xinfo({_quote(table)})")
+        if row[6] in (2, 3)
+    }
+    if not generated:
+        return {}
+    result = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+    ).fetchone()
+    if result is None or not isinstance(result[0], str):
+        raise ValueError("protected_table_ddl_missing")
+    tokens = _ddl_tokens(result[0])
+    try:
+        opening = tokens.index("(")
+    except ValueError as exc:
+        raise ValueError("generated_column_ddl_ambiguous") from exc
+    depth = 1
+    start = opening + 1
+    definitions: list[tuple[str, ...]] = []
+    for index in range(start, len(tokens)):
+        token = tokens[index]
+        if token == "(":
+            depth += 1
+        elif token == ")":
+            depth -= 1
+        if (token == "," and depth == 1) or depth == 0:
+            definitions.append(tokens[start:index])
+            start = index + 1
+        if depth == 0:
+            break
+    if depth != 0:
+        raise ValueError("generated_column_ddl_ambiguous")
+    contracts: dict[str, tuple[str, ...]] = {}
+    for definition in definitions:
+        if not definition:
+            continue
+        raw_name = definition[0]
+        if raw_name.startswith(('"', "`", "[")):
+            closing = "]" if raw_name[0] == "[" else raw_name[0]
+            raw_name = raw_name[1:-1].replace(closing * 2, closing)
+        canonical_name = generated.get(raw_name.casefold())
+        if canonical_name is not None:
+            if canonical_name in contracts:
+                raise ValueError("generated_column_ddl_ambiguous")
+            contracts[canonical_name] = tuple(definition[1:])
+    if len(contracts) != len(generated):
+        raise ValueError("generated_column_ddl_ambiguous")
+    return contracts
+
+
 def _table_storage_contract(connection: sqlite3.Connection, table: str) -> tuple[int, int]:
     """Retain WITHOUT ROWID and STRICT enforcement of protected tables."""
     row = connection.execute(
@@ -628,6 +689,10 @@ def verify(
                     _unique_index_contracts(new, table)
                 ):
                     item["status"] = "changed_unique_index_contract"
+                elif not _generated_column_ddl_contracts(old, table).items() <= (
+                    _generated_column_ddl_contracts(new, table).items()
+                ):
+                    item["status"] = "changed_generated_column_contract"
                 elif not _check_constraint_contracts(old, table).issubset(
                     _check_constraint_contracts(new, table)
                 ):
