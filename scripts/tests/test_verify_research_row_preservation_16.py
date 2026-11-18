@@ -1807,3 +1807,104 @@ def test_new_candidate_only_media_source_table_remains_additive(tmp_path: Path) 
     assert not report["problems"]
     assert before.read_bytes() == baseline_bytes
     assert after.read_bytes() == candidate_bytes
+
+
+# Independent inventory from the existing pose, skeleton, and behavior SQLAlchemy
+# models; intentionally NOT imported from the verifier's protected-table list.
+POSE_BEHAVIOR_LINEAGE_TABLES = (
+    "pose_landmark_schemas",
+    "pose_landmark_schema_revisions",
+    "pose_model_schema_bindings",
+    "pose_landmark_tracks",
+    "pose_landmark_observations",
+    "pose_landmark_association_decisions",
+    "pose_landmark_association_candidates",
+    "pose_landmark_corrections",
+    "pose_landmark_identity_breaks",
+    "pose_training_datasets",
+    "pose_training_dataset_items",
+    "pose_active_learning_rounds",
+    "pose_active_learning_candidates",
+    "skeleton_analysis_revisions",
+    "behavior_ethogram_revisions",
+    "behavior_state_definitions",
+    "behavior_bout_revisions",
+    "behavior_classifier_models",
+    "behavior_predictions",
+)
+
+
+def _seed_pose_behavior_lineage(path: Path) -> None:
+    with sqlite3.connect(path) as connection:
+        for table in POSE_BEHAVIOR_LINEAGE_TABLES:
+            connection.execute(
+                f'CREATE TABLE "{table}" (id TEXT PRIMARY KEY, evidence BLOB NOT NULL)'
+            )
+            connection.execute(
+                f'INSERT INTO "{table}" (id, evidence) VALUES (?, ?)',
+                ("private-field-observation", b"reviewed biological evidence"),
+            )
+
+
+@pytest.mark.parametrize("changed_table", POSE_BEHAVIOR_LINEAGE_TABLES)
+def test_existing_pose_behavior_evidence_cannot_change_unnoticed(
+    tmp_path: Path, changed_table: str
+) -> None:
+    """A saved pose/behavior measurement must not disappear behind a clean QC graph."""
+    before = tmp_path / "original.sqlite"
+    after = tmp_path / "upgraded.sqlite"
+    _seed_pose_behavior_lineage(before)
+    shutil.copyfile(before, after)
+    with sqlite3.connect(after) as connection:
+        connection.execute(
+            f'UPDATE "{changed_table}" SET evidence = ?',
+            (b"altered biological measurement",),
+        )
+    original_bytes, candidate_bytes = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+    assert code == 2
+    assert report["status"] == "HOLD"
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    assert report["protected_tables_examined"] == len(POSE_BEHAVIOR_LINEAGE_TABLES)
+    assert changed_table + ":changed_records" in report["problems"]
+    assert next(
+        item["status"] for item in report["tables"] if item["table"] == changed_table
+    ) == "changed_records"
+    assert "private-field-observation" not in json.dumps(report)
+    assert "reviewed biological evidence" not in json.dumps(report)
+    assert "altered biological measurement" not in json.dumps(report)
+    assert before.read_bytes() == original_bytes
+    assert after.read_bytes() == candidate_bytes
+
+
+@pytest.mark.parametrize(
+    ("changed_table", "mutation", "expected"),
+    [
+        ("pose_landmark_observations", "DROP TABLE pose_landmark_observations", "removed_table"),
+        (
+            "behavior_bout_revisions",
+            "ALTER TABLE behavior_bout_revisions ADD COLUMN temporary_note TEXT",
+            "preserved",
+        ),
+    ],
+)
+def test_pose_and_behavior_lineage_structure_or_addition(
+    tmp_path: Path, changed_table: str, mutation: str, expected: str
+) -> None:
+    before = tmp_path / "original.sqlite"
+    after = tmp_path / "upgraded.sqlite"
+    _seed_pose_behavior_lineage(before)
+    shutil.copyfile(before, after)
+    with sqlite3.connect(after) as connection:
+        connection.execute(mutation)
+    original_bytes, candidate_bytes = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+    entry = next(item for item in report["tables"] if item["table"] == changed_table)
+    assert entry["status"] == expected
+    assert report["status"] == ("PASS_PRESERVATION_ONLY" if expected == "preserved" else "HOLD")
+    assert code == (0 if expected == "preserved" else 2)
+    assert report["requires_researcher_approval"] is True
+    assert report["upgrade_authorized"] is False
+    assert before.read_bytes() == original_bytes
+    assert after.read_bytes() == candidate_bytes
