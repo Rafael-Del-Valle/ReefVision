@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -13,6 +14,33 @@ from reefvision.schemas.environmental_context import NOAAImportRequest, NOAATide
 from reefvision.schemas.scientific_data import ScientificRecordCreate
 
 NOAA_URL = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter"
+NOAA_SOURCE_METADATA_MAX_BYTES = 16 * 1024
+
+
+def _bounded_source_metadata(
+    item: dict[str, Any], station: dict[str, Any], **context: str
+) -> dict[str, Any]:
+    """Reject unbounded or malformed NOAA evidence before record duplication.
+
+    A daily response can contain thousands of samples, each copying station
+    metadata. Preserve original evidence intact or reject the entire refresh:
+    silently truncating provider metadata would invalidate provenance.
+    """
+    evidence = {**item, "station": station, **context}
+    try:
+        encoded = json.dumps(
+            evidence,
+            ensure_ascii=False,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    except (TypeError, ValueError, OverflowError, RecursionError) as exc:
+        raise ValueError("NOAA source metadata is not finite, JSON-compatible UTF-8") from exc
+    if len(encoded) > NOAA_SOURCE_METADATA_MAX_BYTES:
+        raise ValueError("NOAA source metadata exceeds 16 KiB per observation")
+    return evidence
+
 
 
 def noaa_request_url(request: NOAAImportRequest) -> str:
@@ -116,7 +144,7 @@ def parse_noaa(
                             ),
                             "acquired_at": acquired_at,
                             "temporal_resolution_s": 360,
-                            "source_metadata": {**item, "station": metadata},
+                            "source_metadata": _bounded_source_metadata(item, metadata),
                             "processing_parameters": {
                                 "units": "metric",
                                 "time_zone": "gmt",
@@ -202,12 +230,9 @@ def parse_noaa_tides(
                             ),
                             "acquired_at": acquired_at,
                             "temporal_resolution_s": 360,
-                            "source_metadata": {
-                                **item,
-                                "station": metadata,
-                                "datum": request.datum,
-                                "product": request.product,
-                            },
+                            "source_metadata": _bounded_source_metadata(
+                                item, metadata, datum=request.datum, product=request.product
+                            ),
                             "processing_parameters": {
                                 "units": "metric",
                                 "time_zone": "gmt",

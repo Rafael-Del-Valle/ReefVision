@@ -560,3 +560,103 @@ def test_noaa_duplicate_timestamp_refresh_keeps_prior_offline_snapshot(client):
     assert offline.cache_status == "stale_offline"
     assert [item.id for item in offline.items] == [item.id for item in original.items]
     assert client.get(f"/api/v1/projects/{project['id']}/scientific-records").json()["total"] == 2
+
+
+@pytest.mark.parametrize("product", ["temperature", "water_level", "predictions"])
+@pytest.mark.parametrize("overflow", ["station", "observation", "many_station_keys"])
+def test_noaa_rejects_unbounded_provider_metadata_without_replacing_offline_cache(
+    client, product, overflow
+):
+    """Reject oversize NOAA evidence without replacing previously validated records."""
+    from reefvision.domain.errors import ValidationError
+    from reefvision.schemas.environmental_context import (
+        NOAAImportRequest,
+        NOAATideImportRequest,
+    )
+    from reefvision.services.environmental_context import EnvironmentalContextService
+
+    project = create_project(client, "NOAA provenance budget")
+    if product == "temperature":
+        request = NOAAImportRequest(station_id="8665530", day="2026-04-03")
+        initial = noaa_fixture()
+        import_method = "import_noaa"
+    else:
+        request = NOAATideImportRequest(
+            station_id="8665530", day="2026-04-03", product=product, datum="MLLW"
+        )
+        key = "predictions" if product == "predictions" else "data"
+        initial = {
+            "metadata": noaa_fixture()["metadata"],
+            key: [{"t": "2026-04-03 13:00", "v": "0.24", "s": "0.05", "f": "0,0,0"}],
+        }
+        import_method = "import_noaa_tides"
+    state = {"raw": initial}
+    calls = []
+
+    def transport(req):
+        calls.append(req)
+        return httpx.Response(200, json=state["raw"])
+
+    start = datetime(2026, 4, 4, tzinfo=UTC)
+    with (
+        client.app.state.session_factory() as session,
+        httpx.Client(transport=httpx.MockTransport(transport)) as http,
+    ):
+        first = getattr(
+            EnvironmentalContextService(session, http=http, now=start), import_method
+        )(project["id"], request)
+        invalid = deepcopy(initial)
+        rows = invalid["predictions" if product == "predictions" else "data"]
+        if overflow == "station":
+            invalid["metadata"]["provider_note"] = "A" * 17000
+        elif overflow == "observation":
+            rows[0]["provider_note"] = "B" * 17000
+        else:
+            invalid["metadata"].update(
+                {f"field_{index:04d}": "ABCD" for index in range(1800)}
+            )
+        state["raw"] = invalid
+        service = EnvironmentalContextService(
+            session, http=http, now=start + timedelta(days=2)
+        )
+        with pytest.raises(ValidationError, match="NOAA source metadata exceeds 16 KiB"):
+            getattr(service, import_method)(project["id"], request)
+        offline = getattr(service, import_method)(
+            project["id"], request.model_copy(update={"offline": True})
+        )
+    assert offline.cache_status == "stale_offline"
+    assert [item.id for item in offline.items] == [item.id for item in first.items]
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize(
+    "invalid", [float("nan"), "\ud800"], ids=["nonfinite", "invalid_utf8"]
+)
+@pytest.mark.parametrize("product", ["temperature", "predictions"])
+def test_noaa_rejects_non_json_or_non_utf8_provenance_before_persistence(invalid, product):
+    """Direct parsers must reject malformed provider data, not truncate or coerce it."""
+    from reefvision.domain.errors import ValidationError
+    from reefvision.schemas.environmental_context import (
+        NOAAImportRequest,
+        NOAATideImportRequest,
+    )
+    from reefvision.services.noaa_environment import parse_noaa, parse_noaa_tides
+
+    station = noaa_fixture()["metadata"]
+    station["provider_note"] = invalid
+    now = datetime(2026, 4, 4, tzinfo=UTC)
+    if product == "temperature":
+        raw = {"metadata": station, "data": noaa_fixture()["data"]}
+        request = NOAAImportRequest(station_id="8665530", day="2026-04-03")
+        parser = parse_noaa
+    else:
+        raw = {
+            "metadata": station,
+            "predictions": [{"t": "2026-04-03 13:00", "v": "0.24"}],
+        }
+        request = NOAATideImportRequest(
+            station_id="8665530", day="2026-04-03", product="predictions", datum="MLLW"
+        )
+        parser = parse_noaa_tides
+    with pytest.raises(ValidationError, match="NOAA source metadata is not finite"):
+        parser(raw, request, now, "https://api.tidesandcurrents.noaa.gov/test")
