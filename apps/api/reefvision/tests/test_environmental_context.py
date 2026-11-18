@@ -602,9 +602,9 @@ def test_noaa_rejects_unbounded_provider_metadata_without_replacing_offline_cach
         client.app.state.session_factory() as session,
         httpx.Client(transport=httpx.MockTransport(transport)) as http,
     ):
-        first = getattr(
-            EnvironmentalContextService(session, http=http, now=start), import_method
-        )(project["id"], request)
+        first = getattr(EnvironmentalContextService(session, http=http, now=start), import_method)(
+            project["id"], request
+        )
         invalid = deepcopy(initial)
         rows = invalid["predictions" if product == "predictions" else "data"]
         if overflow == "station":
@@ -612,13 +612,9 @@ def test_noaa_rejects_unbounded_provider_metadata_without_replacing_offline_cach
         elif overflow == "observation":
             rows[0]["provider_note"] = "B" * 17000
         else:
-            invalid["metadata"].update(
-                {f"field_{index:04d}": "ABCD" for index in range(1800)}
-            )
+            invalid["metadata"].update({f"field_{index:04d}": "ABCD" for index in range(1800)})
         state["raw"] = invalid
-        service = EnvironmentalContextService(
-            session, http=http, now=start + timedelta(days=2)
-        )
+        service = EnvironmentalContextService(session, http=http, now=start + timedelta(days=2))
         with pytest.raises(ValidationError, match="NOAA source metadata exceeds 16 KiB"):
             getattr(service, import_method)(project["id"], request)
         offline = getattr(service, import_method)(
@@ -629,9 +625,7 @@ def test_noaa_rejects_unbounded_provider_metadata_without_replacing_offline_cach
     assert len(calls) == 2
 
 
-@pytest.mark.parametrize(
-    "invalid", [float("nan"), "\ud800"], ids=["nonfinite", "invalid_utf8"]
-)
+@pytest.mark.parametrize("invalid", [float("nan"), "\ud800"], ids=["nonfinite", "invalid_utf8"])
 @pytest.mark.parametrize("product", ["temperature", "predictions"])
 def test_noaa_rejects_non_json_or_non_utf8_provenance_before_persistence(invalid, product):
     """Direct parsers must reject malformed provider data, not truncate or coerce it."""

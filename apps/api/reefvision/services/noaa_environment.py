@@ -42,7 +42,6 @@ def _bounded_source_metadata(
     return evidence
 
 
-
 def noaa_request_url(request: NOAAImportRequest) -> str:
     return str(
         httpx.URL(
