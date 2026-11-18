@@ -128,6 +128,39 @@ def _foreign_key_contracts(connection: sqlite3.Connection, table: str) -> set[tu
     return {tuple(sorted(group)) for group in groups.values()}
 
 
+def _unique_index_contracts(connection: sqlite3.Connection, table: str) -> set[tuple]:
+    """Retain original uniqueness semantics for future scientific observations.
+
+    SQLite's index_list/xinfo expose ordinary, auto-generated and expression
+    indexes. Include key order, collation, direction and partial predicates;
+    compare SQL only when the predicate or key expression cannot be recovered
+    structurally. Never include this private SQL in the public report.
+    """
+    contracts: set[tuple] = set()
+    for _seq, index, unique, origin, partial in connection.execute(
+        f"PRAGMA index_list({_quote(table)})"
+    ):
+        if not unique:
+            continue
+        components = tuple(
+            (entry[1], entry[2], entry[3], entry[4])
+            for entry in connection.execute(f"PRAGMA index_xinfo({_quote(index)})")
+            if entry[5]
+        )
+        definition = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?", (index,)
+        ).fetchone()
+        sql = definition[0] if definition else None
+        # Index names are not scientific constraints: allow an equivalent
+        # ordinary index to be renamed, but reject changed WHERE predicates
+        # and functional expressions that index_xinfo cannot fully describe.
+        expression_or_predicate = bool(partial) or any(part[0] == -2 for part in components)
+        contracts.add(
+            (origin, bool(partial), components, sql if expression_or_predicate else None)
+        )
+    return contracts
+
+
 def _encode_row(row: tuple) -> bytes:
     typed = []
     for value in row:
@@ -485,6 +518,10 @@ def verify(
                     _foreign_key_contracts(new, table)
                 ):
                     item["status"] = "changed_foreign_key_contract"
+                elif not _unique_index_contracts(old, table).issubset(
+                    _unique_index_contracts(new, table)
+                ):
+                    item["status"] = "changed_unique_index_contract"
                 else:
                     order_by = old_primary_key or old_columns
                     old_count, old_sha = _fingerprint(old, table, old_columns, order_by)
