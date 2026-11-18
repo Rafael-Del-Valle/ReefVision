@@ -412,6 +412,91 @@ describe("TrainingRunDetail", () => {
     expect(screen.getByText("Best epoch").parentElement).toHaveTextContent("2");
   });
 
+  it("keeps a read-only training result accessible when provider rows are malformed", () => {
+    render(
+      <TrainingRunDetail
+        run={{
+          ...run,
+          artifact_manifest: {
+            ...run.artifact_manifest,
+            native_results_rows: [
+              null,
+              ["invalid"],
+              { epoch: 4, "train/box_loss": 0.25 },
+            ],
+          } as unknown as TrainingRun["artifact_manifest"],
+        }}
+        registering={false}
+        onCancel={vi.fn()}
+        onRegister={vi.fn()}
+      />,
+    );
+    const rows = screen.getByRole("table").querySelectorAll("tbody tr");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent("0.25");
+    expect(
+      screen.getByText(/2 malformed row\(s\) omitted from the preview/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Configuration and provenance"),
+    ).toBeInTheDocument();
+  });
+
+  it("bounds the provider epoch table preview without altering measured results", () => {
+    const recordedRows = Array.from({ length: 240 }, (_, index) => ({
+      epoch: index + 1,
+      "train/box_loss": index / 100,
+    }));
+    render(
+      <TrainingRunDetail
+        run={{
+          ...run,
+          artifact_manifest: {
+            ...run.artifact_manifest,
+            native_results_rows: recordedRows,
+          } as TrainingRun["artifact_manifest"],
+        }}
+        registering={false}
+        onCancel={vi.fn()}
+        onRegister={vi.fn()}
+      />,
+    );
+    const rows = screen.getByRole("table").querySelectorAll("tbody tr");
+    expect(rows).toHaveLength(200);
+    expect(rows[0]).toHaveTextContent("41");
+    expect(rows[199]).toHaveTextContent("240");
+    expect(
+      screen.getByText(/Previewing the latest 200 of 240 stored rows/i),
+    ).toBeInTheDocument();
+    expect(recordedRows).toHaveLength(240);
+    expect(recordedRows[0].epoch).toBe(1);
+  });
+
+  it("bounds excessive provider result columns without losing persisted values", () => {
+    const recordedRow = Object.fromEntries(
+      Array.from({ length: 50 }, (_, index) => [`metric_${index}`, index]),
+    );
+    render(
+      <TrainingRunDetail
+        run={{
+          ...run,
+          artifact_manifest: {
+            ...run.artifact_manifest,
+            native_results_rows: [recordedRow],
+          } as TrainingRun["artifact_manifest"],
+        }}
+        registering={false}
+        onCancel={vi.fn()}
+        onRegister={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("table").querySelectorAll("th")).toHaveLength(40);
+    expect(
+      screen.getByText(/Preview limited to 40 of 50 columns/i),
+    ).toBeInTheDocument();
+    expect(recordedRow.metric_49).toBe(49);
+  });
+
   it("renders long finite training histories without overflowing function argument limits", () => {
     const values = Array.from(
       { length: 150_000 },

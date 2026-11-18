@@ -295,9 +295,21 @@ export function TrainingRunDetail({
     : [];
   const tuningResults = manifest.tuning_results as
     TuningResults | null | undefined;
-  const nativeRows = Array.isArray(manifest.native_results_rows)
-    ? (manifest.native_results_rows as Array<Record<string, unknown>>)
+  // Imported provider tables can be malformed or very large. Bound only
+  // the WebView2 preview; never modify the persisted per-epoch results.
+  const nativeRowsRaw = Array.isArray(manifest.native_results_rows)
+    ? (manifest.native_results_rows as unknown[])
     : [];
+  const displayedCandidates = nativeRowsRaw.slice(-200);
+  const nativeRows = displayedCandidates.filter(
+    (row): row is Record<string, unknown> =>
+      row !== null && typeof row === "object" && !Array.isArray(row),
+  );
+  const nativeAllColumns = Object.keys(nativeRows[0] ?? {});
+  const nativeColumns = nativeAllColumns.slice(0, 40);
+  const truncatedRows = nativeRowsRaw.length - displayedCandidates.length;
+  const malformedRows = displayedCandidates.length - nativeRows.length;
+  const truncatedColumns = nativeAllColumns.length - nativeColumns.length;
   const bestCheckpoint = artifacts.find((item) => item.name === "best.pt");
   const lastCheckpoint = artifacts.find((item) => item.name === "last.pt");
   const active = [
@@ -416,12 +428,25 @@ export function TrainingRunDetail({
       ) : (
         <section>
           <h5>Per-epoch metrics</h5>
+          {(truncatedRows > 0 ||
+            malformedRows > 0 ||
+            truncatedColumns > 0) && (
+            <p className="system-subtle" role="status">
+              {truncatedRows > 0 &&
+                `Previewing the latest ${displayedCandidates.length} of ${nativeRowsRaw.length} stored rows. `}
+              {malformedRows > 0 &&
+                `${malformedRows} malformed row(s) omitted from the preview. `}
+              {truncatedColumns > 0 &&
+                `Preview limited to ${nativeColumns.length} of ${nativeAllColumns.length} columns. `}
+              Saved training results remain unchanged.
+            </p>
+          )}
           {nativeRows.length ? (
             <div className="training-table-wrap">
               <table>
                 <thead>
                   <tr>
-                    {Object.keys(nativeRows[0]).map((key) => (
+                    {nativeColumns.map((key) => (
                       <th key={key}>{key}</th>
                     ))}
                   </tr>
@@ -429,7 +454,7 @@ export function TrainingRunDetail({
                 <tbody>
                   {nativeRows.map((row, index) => (
                     <tr key={index}>
-                      {Object.keys(nativeRows[0]).map((key) => (
+                      {nativeColumns.map((key) => (
                         <td key={key}>
                           {row[key] == null ? "—" : String(row[key])}
                         </td>
@@ -441,7 +466,9 @@ export function TrainingRunDetail({
             </div>
           ) : (
             <p className="system-subtle">
-              The provider did not preserve a per-epoch results table.
+              {nativeRowsRaw.length
+                ? "No valid provider result rows are available for preview."
+                : "The provider did not preserve a per-epoch results table."}
             </p>
           )}
         </section>
