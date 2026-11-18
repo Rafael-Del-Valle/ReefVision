@@ -338,11 +338,15 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         # spellings only when they round back to the exact stored float32, not
         # a relative tolerance that can hide several distinct float32 values
         # (and an entire small axis span). This is source QC, not calibration.
-        if any(
-            struct.unpack("<f", struct.pack("<f", value))[0] != expected
-            for value, expected in zip(declared, actual, strict=True)
-        ):
-            raise ValueError("GLB position bounds conflict with decoded geometry")
+        for value, expected in zip(declared, actual, strict=True):
+            source_float32 = struct.unpack("<f", struct.pack("<f", value))[0]
+            # A nonzero JSON extremum must not disappear merely because it is
+            # smaller than binary32 can represent. A genuine stored subnormal
+            # remains valid; this rejects only collapse all the way to zero.
+            if value != 0.0 and source_float32 == 0.0:
+                raise ValueError("GLB position bounds underflow float32 precision")
+            if source_float32 != expected:
+                raise ValueError("GLB position bounds conflict with decoded geometry")
     if "indices" in primitive:
         indices = [int(row[0]) for row in read_accessor(primitive["indices"], position=False)]
         if any(index >= len(vertices) for index in indices):
