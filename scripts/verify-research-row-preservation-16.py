@@ -278,6 +278,7 @@ def _foreign_key_timing_contracts(connection: sqlite3.Connection, table: str) ->
         contracts[key] = timing
     return contracts
 
+
 def _unique_index_contracts(connection: sqlite3.Connection, table: str) -> set[tuple]:
     """Retain original uniqueness semantics for future scientific observations.
 
