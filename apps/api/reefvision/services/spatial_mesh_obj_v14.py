@@ -85,15 +85,11 @@ def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
                 raise ValueError(f"OBJ line {line_number}: invalid vertex") from exc
             if not all(isfinite(value) for value in point):
                 raise ValueError(f"OBJ line {line_number}: coordinates must be finite")
-            for axis, (coordinate, token) in enumerate(
-                zip(point, fields[1:4], strict=True)
-            ):
+            for axis, (coordinate, token) in enumerate(zip(point, fields[1:4], strict=True)):
                 previous = source_tokens_by_axis[axis].get(coordinate)
                 if previous is not None:
                     # Fractions avoid Decimal's context rounding for W division.
-                    previous_exact = Fraction(Decimal(previous[0])) / Fraction(
-                        Decimal(previous[1])
-                    )
+                    previous_exact = Fraction(Decimal(previous[0])) / Fraction(Decimal(previous[1]))
                     current_exact = Fraction(Decimal(token)) / Fraction(Decimal(weight_token))
                     if previous_exact != current_exact:
                         raise ValueError(
