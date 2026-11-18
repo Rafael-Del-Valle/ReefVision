@@ -427,6 +427,25 @@ def process_pose_training_job(
                 ):
                     raise ValidationError("Queued pose training frozen dataset lineage changed")
 
+            # The sealed request also has to agree with its persisted run and
+            # scientist-reviewed snapshot. A queued run's source manifest can
+            # otherwise drift independently of the child job request.
+            if sealed_digest is not None and (
+                run.dataset_manifest_sha256 != training_dataset.manifest_sha256
+                or snapshot.get("pose_training_dataset_id") != training_dataset.id
+                or snapshot.get("pose_training_dataset_manifest_sha256")
+                != training_dataset.manifest_sha256
+                or snapshot.get("pose_validation_dataset_id")
+                != (validation_dataset.id if validation_dataset is not None else None)
+                or snapshot.get("pose_validation_dataset_manifest_sha256")
+                != (
+                    validation_dataset.manifest_sha256
+                    if validation_dataset is not None
+                    else None
+                )
+            ):
+                raise ValidationError("Queued pose training frozen snapshot lineage changed")
+
             project = session.get(
                 Project,
                 run.project_id,
