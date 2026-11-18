@@ -583,6 +583,8 @@ def test_pose_materialization_rejects_unmapped_frozen_class_labels(
         ("0 0.5 0.5 0.5 0.5 0.5 0.5", "invalid landmark layout"),
         ("0 nan 0.5 0.5 0.5 0.5 0.5 2", "invalid label coordinates"),
         ("0 0.5 0.5 0.5 0.5 0.5 0.5 3", "invalid label coordinates"),
+        ("0 0.95 0.5 0.4 0.5 0.5 0.5 2", "invalid label coordinates"),
+        ("0 0.5 0.05 0.5 0.4 0.5 0.5 2", "invalid label coordinates"),
     ),
 )
 def test_pose_materialization_rejects_malformed_frozen_pose_rows(
