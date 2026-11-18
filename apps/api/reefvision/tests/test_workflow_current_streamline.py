@@ -215,11 +215,13 @@ def test_current_streamline_rejects_antimeridian_extent_in_saved_graph(
     )
     parameters = _parameters(record_ids)
     app = cast(FastAPI, client.app)
-    with app.state.session_factory() as session:
-        with pytest.raises(ValidationError, match="antimeridian-spanning"):
-            CurrentFieldService(session).preview(
-                project["id"], CurrentFieldAnalysisRequest.model_validate(parameters)
-            )
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="antimeridian-spanning"),
+    ):
+        CurrentFieldService(session).preview(
+            project["id"], CurrentFieldAnalysisRequest.model_validate(parameters)
+        )
 
     queued = save_and_queue(client, project["id"], _graph(parameters))
     assert not process_workflow_run_job(
@@ -231,6 +233,20 @@ def test_current_streamline_rejects_antimeridian_extent_in_saved_graph(
         item["data_type"] == "environmental_analysis_result"
         for item in detail["artifacts"]
     )
+    # Rejected geographic inputs must not leave persisted definitions or results.
+    with app.state.session_factory() as session:
+        definition_count = session.scalar(
+            select(func.count())
+            .select_from(EnvironmentalAnalysisDefinition)
+            .where(EnvironmentalAnalysisDefinition.project_id == project["id"])
+        )
+        result_count = session.scalar(
+            select(func.count())
+            .select_from(EnvironmentalAnalysisResult)
+            .where(EnvironmentalAnalysisResult.project_id == project["id"])
+        )
+        assert definition_count == 0
+        assert result_count == 0
 
 
 def test_failed_current_streamline_workflow_is_atomic(client: TestClient) -> None:
