@@ -189,3 +189,83 @@ def test_representable_small_patch_survives_standalone_and_saved_graph(
         artifact["surface_area_scale_interval_m2"] == (standalone["surface_area_scale_interval_m2"])
     )
     assert artifact["provenance"] == standalone["provenance"]
+
+
+@pytest.mark.parametrize(
+    ("vertices", "faces", "expected_error"),
+    [
+        pytest.param(
+            [[0.0, 0.0, 0.0], [0.0, 2.0, 0.0], [1e-320, 0.0, 2.0]],
+            [[0, 1, 2]],
+            "Nonzero mesh axis span collapses after calibration",
+            id="whole-mesh-axis",
+        ),
+        pytest.param(
+            [
+                [1.0, 0.0, 0.0],
+                [2.0, 0.0, 0.0],
+                [1.0, 2.0, 0.0],
+                [0.0, 10.0, 0.0],
+                [0.0, 12.0, 0.0],
+                [1e-320, 10.0, 2.0],
+            ],
+            [[0, 1, 2], [3, 4, 5]],
+            "Nonzero mesh patch axis span collapses after calibration",
+            id="small-disconnected-patch",
+        ),
+    ],
+)
+def test_positive_mesh_axis_span_cannot_disappear_after_calibration(
+    client: TestClient,
+    vertices: list[list[float]],
+    faces: list[list[int]],
+    expected_error: str,
+) -> None:
+    # Surface area remains finite and positive, but a genuine X-axis extent
+    # becomes zero in meters. Neither the standalone API nor a persisted
+    # scientific graph may publish misleading geometry or measurement artifacts.
+    params = {**mesh_params(1e-10), "vertices": vertices, "faces": faces}
+    with pytest.raises(ValueError, match=expected_error):
+        measure_mesh_preview(**params)
+
+    project_id = str(create_project(client, "Mesh calibrated axis integrity")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert response.status_code == 400, response.text
+    assert expected_error in response.text
+
+    detail = saved_mesh_result(client, base, params)
+    assert detail["run"]["status"] == "failed"
+    assert not any(
+        item["data_type"] == "mesh_measurement_preview" for item in detail["artifacts"]
+    )
+
+
+def test_representable_narrow_mesh_axis_has_standalone_saved_workflow_parity(
+    client: TestClient,
+) -> None:
+    # A small but representable extent is not rejected merely for being narrow.
+    params = {
+        **mesh_params(1e-10),
+        "vertices": [[0.0, 0.0, 0.0], [0.0, 2.0, 0.0], [1e-100, 0.0, 2.0]],
+    }
+    project_id = str(create_project(client, "Resolvable mesh axis")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert response.status_code == 200, response.text
+    standalone = response.json()
+    assert standalone["surface_area_m2"] > 0
+    assert standalone["axis_aligned_dimensions_m"][0] == pytest.approx(
+        1e-110, rel=1e-12, abs=0
+    )
+    assert standalone["measurement_status"] == "caller_supplied_unverified"
+    assert standalone["provenance"]["calibration_verified"] is False
+    assert standalone["preview_coordinate_registration_verified"] is False
+
+    detail = saved_mesh_result(client, base, params)
+    assert detail["run"]["status"] == "succeeded"
+    artifact = next(
+        item for item in detail["artifacts"] if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["payload_json"] == standalone
+    assert len(artifact["payload_sha256"]) == 64
