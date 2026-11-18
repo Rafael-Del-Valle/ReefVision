@@ -243,7 +243,7 @@ def measure_mesh_preview(
     patch_face_counts: dict[int, int] = {}
     patch_degenerate_faces: Counter[int] = Counter()
     patch_vertex_indices: dict[int, set[int]] = {}
-    patch_centroid_moment_terms: dict[int, list[list[float]]] = {}
+    patch_face_indices: dict[int, list[int]] = {}
     patch_triangles: dict[int, list[list[tuple[float, float, float]]]] = {}
     patch_faces: dict[int, list[list[int]]] = {}
     for face_index, face_area in enumerate(face_areas):
@@ -253,14 +253,7 @@ def measure_mesh_preview(
         if face_area == 0:
             patch_degenerate_faces[patch] += 1
         patch_vertex_indices.setdefault(patch, set()).update(faces[face_index])
-        # Retain signed vertex coordinates smaller than the ULP of another
-        # coordinate (including cancellation), before weighting each triangle.
-        # Patch and complete-mesh moment reductions also use fsum below.
-        moment_terms = patch_centroid_moment_terms.setdefault(patch, [[], [], []])
-        for axis in range(3):
-            moment_terms[axis].append(
-                face_area * fsum(points[index][axis] for index in faces[face_index]) / 3
-            )
+        patch_face_indices.setdefault(patch, []).append(face_index)
         patch_triangles.setdefault(patch, []).append(
             sorted(points[index] for index in faces[face_index])
         )
@@ -270,10 +263,6 @@ def measure_mesh_preview(
     # complete mesh already uses fsum; per-patch areas must use the same
     # arithmetic or patch totals, coverage and fractions can contradict it.
     patch_area_mesh_units = {patch: fsum(areas) for patch, areas in patch_area_terms.items()}
-    patch_centroid_moments = {
-        patch: [fsum(axis_terms) for axis_terms in moments]
-        for patch, moments in patch_centroid_moment_terms.items()
-    }
     ordered_patches = sorted(patch_area_mesh_units, key=patch_first_face.__getitem__)
     # Separate edge-connected patches can still touch at source vertices. Such
     # a union is not a regular closed surface, even if every patch is closed.
@@ -478,32 +467,29 @@ def measure_mesh_preview(
         for original, calibrated in zip(source_dims, calibrated_dims, strict=True)
     ):
         raise ValueError("Nonzero mesh patch axis span collapses after calibration")
-    # Triangle-area-weighted centroids are coordinates in the imported source
-    # frame, not registered positions or evidence of organism identity.
-    # A zero-area patch has no mathematically defined surface centroid.
-    patch_centroids_m = [
-        (
-            [
-                moment * scale / patch_area_mesh_units[patch]
-                for moment in patch_centroid_moments[patch]
-            ]
-            if patch_area_mesh_units[patch] > 0
-            else None
-        )
-        for patch in ordered_patches
-    ]
-    centroid_m = (
-        [
-            (
-                fsum(patch_centroid_moments[patch][axis] for patch in ordered_patches)
-                * scale
-                / raw_area
+    # Normalize triangle areas before multiplying by vertex positions.
+    # Area * coordinate can underflow to zero even when the source area and
+    # surface centroid are both representable (e.g. 1e-220 * 1e-110).
+    # Compensated vertex and face sums preserve signed-coordinate cancellation.
+    # These are provisional source-frame positions, not biological identities.
+    def area_weighted_centroid_m(face_indices: list[int], total_area: float) -> list[float] | None:
+        if total_area == 0:
+            return None
+        return [
+            fsum(
+                (face_areas[index] / total_area)
+                * (fsum(points[vertex][axis] for vertex in faces[index]) / 3)
+                for index in face_indices
             )
+            * scale
             for axis in range(3)
         ]
-        if raw_area > 0
-        else None
-    )
+
+    patch_centroids_m = [
+        area_weighted_centroid_m(patch_face_indices[patch], patch_area_mesh_units[patch])
+        for patch in ordered_patches
+    ]
+    centroid_m = area_weighted_centroid_m(list(range(len(faces))), raw_area)
     # Only common multiplicative scale error is represented. No registration,
     # origin, reconstruction, or positioning uncertainty is estimated.
     patch_centroid_uncertainties_m = (
