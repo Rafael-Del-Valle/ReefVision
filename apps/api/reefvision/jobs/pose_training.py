@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import io
+import json
 import re
 import shutil
 import stat
@@ -266,6 +267,37 @@ def materialize_pose_training_exports(
         or top_level[4:] != ["names:", "reefvision_keypoint_names:"]
     ):
         raise ValidationError("Ultralytics pose export has a noncanonical data.yaml")
+
+    # Require the nested class map and ordered landmarks to match the
+    # canonical frozen exporter too. The six outer YAML keys alone do not
+    # detect duplicate class indices or extra keypoints within a section.
+    yaml_lines = yaml_text.splitlines()
+    landmark_header = yaml_lines.index("reefvision_keypoint_names:")
+    class_lines = yaml_lines[5:landmark_header]
+    landmark_lines = yaml_lines[landmark_header + 1 :]
+    expected_landmarks = int(top_level[3].split("[", 1)[1].split(",", 1)[0])
+    if not class_lines or len(landmark_lines) != expected_landmarks:
+        raise ValidationError("Ultralytics pose export has noncanonical class/keypoint metadata")
+
+    try:
+        for index, line in enumerate(class_lines):
+            prefix = f"  {index}: "
+            if not line.startswith(prefix):
+                raise ValueError("Unexpected class index")
+            display_name = json.loads(line[len(prefix) :])
+            if not isinstance(display_name, str) or json.dumps(display_name) != line[len(prefix) :]:
+                raise ValueError("Unexpected class display name")
+
+        for line in landmark_lines:
+            if not line.startswith("  - "):
+                raise ValueError("Unexpected landmark entry")
+            landmark_name = json.loads(line[4:])
+            if not isinstance(landmark_name, str) or json.dumps(landmark_name) != line[4:]:
+                raise ValueError("Unexpected landmark name")
+    except ValueError as exc:
+        raise ValidationError(
+            "Ultralytics pose export has noncanonical class/keypoint metadata"
+        ) from exc
 
     _verify_pose_export_frame_pairs(destination)
 
