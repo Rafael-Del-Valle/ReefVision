@@ -1250,7 +1250,8 @@ def test_generated_scientific_formula_not_silently_changed_when_values_match(
     elif variant == "additional_generated_column":
         candidate_sql = candidate_sql.replace(
             f" {storage})",
-            f" {storage}, other_length REAL GENERATED ALWAYS AS (raw_length * 4) VIRTUAL)",
+            f" {storage}, other_length REAL "
+            "GENERATED ALWAYS AS (raw_length * 4) VIRTUAL)",
         )
 
     for path, sql in ((before, original_sql), (after, candidate_sql)):
@@ -1262,8 +1263,10 @@ def test_generated_scientific_formula_not_silently_changed_when_values_match(
             )
 
     with sqlite3.connect(before) as original, sqlite3.connect(after) as candidate:
-        projection = "SELECT id, raw_length, derived_length FROM scientific_records ORDER BY id"
-        # This is the critical blind spot: identical current values under different rules.
+        projection = (
+            "SELECT id, raw_length, derived_length FROM scientific_records ORDER BY id"
+        )
+        # Existing values can be identical even when future computations differ.
         assert original.execute(projection).fetchall() == candidate.execute(
             projection
         ).fetchall()
