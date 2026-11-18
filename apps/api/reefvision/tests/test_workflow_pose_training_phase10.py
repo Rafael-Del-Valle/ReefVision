@@ -548,17 +548,22 @@ def test_pose_materialization_rejects_unpaired_reviewed_frames(
 
 
 @pytest.mark.parametrize(
-    "extra_yaml",
+    ("extra_yaml", "expected_error"),
     (
-        "train: /outside-of-frozen-export\n",
-        "val: /outside-of-frozen-export\n",
-        "path: /outside-of-frozen-export\n",
-        "'train': /outside-of-frozen-export\n",
+        ("train: /outside-of-frozen-export\n", r"noncanonical data\.yaml"),
+        ("val: /outside-of-frozen-export\n", r"noncanonical data\.yaml"),
+        ("path: /outside-of-frozen-export\n", r"noncanonical data\.yaml"),
+        ("'train': /outside-of-frozen-export\n", r"noncanonical data\.yaml"),
+        (
+            '  - "unreviewed-landmark"\n',
+            "noncanonical class/keypoint metadata",
+        ),
     ),
 )
 def test_pose_materialization_rejects_overridden_frozen_dataset_paths(
     tmp_path: Path,
     extra_yaml: str,
+    expected_error: str,
 ) -> None:
     # The same frozen pose ZIP fixture must never accept a later YAML key that
     # overrides its reviewed training/validation directory or managed root.
@@ -573,7 +578,7 @@ def test_pose_materialization_rejects_overridden_frozen_dataset_paths(
                 content += extra_yaml.encode("utf-8")
             modified.writestr(entry, content)
 
-    with pytest.raises(ValidationError, match=r"noncanonical data\.yaml"):
+    with pytest.raises(ValidationError, match=expected_error):
         materialize_pose_training_exports(
             training_content=stream.getvalue(),
             validation_content=None,
