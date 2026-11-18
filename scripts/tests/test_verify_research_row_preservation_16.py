@@ -1662,7 +1662,7 @@ def test_empty_and_populated_scientific_autoincrement_contract(
             connection.execute(
                 "CREATE TABLE scientific_records ("
                 f"id INTEGER PRIMARY KEY{modifier}, "
-                '"autoincrement" TEXT DEFAULT \'AUTOINCREMENT\', '
+                "\"autoincrement\" TEXT DEFAULT 'AUTOINCREMENT', "
                 "measurement_mm REAL)"
             )
             if populated:
@@ -1675,9 +1675,10 @@ def test_empty_and_populated_scientific_autoincrement_contract(
         assert list(old.execute("PRAGMA table_xinfo(scientific_records)")) == list(
             new.execute("PRAGMA table_xinfo(scientific_records)")
         )
-        assert old.execute("SELECT * FROM scientific_records").fetchall() == new.execute(
-            "SELECT * FROM scientific_records"
-        ).fetchall()
+        assert (
+            old.execute("SELECT * FROM scientific_records").fetchall()
+            == new.execute("SELECT * FROM scientific_records").fetchall()
+        )
         if not populated:
             # The existing sequence-counter guard alone cannot distinguish
             # the two declarations before any biological observation exists.
@@ -1695,9 +1696,7 @@ def test_empty_and_populated_scientific_autoincrement_contract(
     assert report["upgrade_authorized"] is False
     assert report["requires_researcher_approval"] is True
     item = next(row for row in report["tables"] if row["table"] == "scientific_records")
-    assert item["status"] == (
-        "changed_autoincrement_contract" if expected_hold else "preserved"
-    )
+    assert item["status"] == ("changed_autoincrement_contract" if expected_hold else "preserved")
     if expected_hold:
         assert "scientific_records:changed_autoincrement_contract" in report["problems"]
     else:
