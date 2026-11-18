@@ -99,6 +99,7 @@ $report = [ordered]@{
     webview2 = New-ReefVisionEvidenceResult
     schema_migration = New-ReefVisionEvidenceResult
     model_policy = New-ReefVisionEvidenceResult
+    provider_manifests = New-ReefVisionEvidenceResult
     sam2_live = if ($LiveSam2Acceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real SAM 2.1 packaged runtime acceptance not requested' }
     external_annotation_imports = New-ReefVisionEvidenceResult
     camera_jpeg = if ($CameraFixturePath) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real camera JPEG fixture not supplied' }
@@ -298,6 +299,36 @@ try {
     New-Item -ItemType Directory -Path $RunRoot,$DataRoot -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $RunRoot '.reefvision-acceptance-run') -Value $Token
     Set-Content -LiteralPath (Join-Path $DataRoot '.reefvision-clean-install-acceptance') -Value $Token
+
+    # Seed a declarative record before launch so the installed candidate, not
+    # a source checkout, proves the inspect-only discovery boundary. Earlier
+    # upgrade baselines may ignore this directory; only the final candidate is
+    # allowed to mark provider_manifests PASS below.
+    $providerManifestDirectory = Join-Path $DataRoot 'provider-manifests'
+    $providerManifestPath = Join-Path $providerManifestDirectory 'local-acceptance.json'
+    New-Item -ItemType Directory -Path $providerManifestDirectory -Force | Out-Null
+    $providerManifestJson = @{
+        manifest_version = 1
+        provider_id = 'local_acceptance'
+        display_name = 'Installed acceptance manifest'
+        provider_version = '0.1.0'
+        description = 'Declarative installed-app acceptance record with no executable adapter.'
+        capabilities = @('image_semantic_segmentation', 'cpu_inference')
+        supported_tasks = @('relative_depth')
+        availability = @{
+            status = 'unavailable'
+            reason = 'Installed acceptance deliberately supplies no executable adapter.'
+        }
+        code_license = 'Apache-2.0'
+        weight_license = 'No weights supplied'
+        notes = @('Inspection only')
+    } | ConvertTo-Json -Depth 8
+    [IO.File]::WriteAllText(
+        $providerManifestPath,
+        $providerManifestJson,
+        [Text.UTF8Encoding]::new($false)
+    )
+    $providerManifestHash = (Get-FileHash -LiteralPath $providerManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
 
     $initialInstaller = if ($PreviousInstallerPath -and -not $SkipUpgrade) { $PreviousInstallerPath } else { $InstallerPath }
     $exitCode = Run-Msi -Action Install -PackageOrProduct $initialInstaller -LogName 'install.log' -TargetRoot $InstallRoot
@@ -578,6 +609,41 @@ try {
     $api = "http://127.0.0.1:$port/api/v1"
     $finalMigration = Assert-AcceptancePackagedBackend -Api $api -ExpectedAppVersion $ProductVersion -ExpectedRevision $ExpectedSchemaRevision
     $report.schema_migration = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Packaged database reached $($finalMigration.current_schema_revision)."
+    $providerManifestResponse = Invoke-RestMethod "$api/advanced-providers/manifests"
+    $localProviderRecords = @(
+        foreach ($manifest in $providerManifestResponse) {
+            if ($null -ne $manifest -and
+                $manifest.PSObject.Properties['provider_id'] -and
+                $manifest.provider_id -eq 'local_acceptance') {
+                $manifest
+            }
+        }
+    )
+    if ($localProviderRecords.Count -ne 1) {
+        throw "Installed provider catalog returned $($localProviderRecords.Count) local acceptance records instead of one."
+    }
+    $localProviderRecord = $localProviderRecords[0]
+    if ($localProviderRecord.source_kind -ne 'local_manifest' -or
+        $localProviderRecord.discovery_status -ne 'valid' -or
+        $localProviderRecord.source_filename -ne 'local-acceptance.json' -or
+        $localProviderRecord.source_sha256 -cne $providerManifestHash -or
+        $localProviderRecord.execution_supported -ne $false -or
+        $localProviderRecord.execution_surface -ne 'blocked') {
+        throw "Installed provider manifest lost its inspect-only identity: $($localProviderRecord | ConvertTo-Json -Depth 6 -Compress)"
+    }
+    $providerPreflight = Invoke-RestMethod "$api/projects/$projectId/advanced-providers/local_acceptance/preflight" -Method Post -ContentType 'application/json' -Body (@{
+        task = 'relative_depth'
+        device = 'cpu'
+        prompt_fields = @{ image_id = 'must-not-execute' }
+    } | ConvertTo-Json -Depth 6)
+    $inspectOnlyBlockers = @($providerPreflight.blockers | Where-Object { [string]$_ -match 'inspect-only' })
+    if ($providerPreflight.ready -ne $false -or
+        $providerPreflight.execution_supported -ne $false -or
+        $providerPreflight.execution_surface -ne 'blocked' -or
+        $inspectOnlyBlockers.Count -lt 1) {
+        throw "Installed local provider preflight did not fail closed: $($providerPreflight | ConvertTo-Json -Depth 6 -Compress)"
+    }
+    $report.provider_manifests = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed packaged API discovered local-acceptance.json at SHA256 $providerManifestHash and returned inspect-only blocked preflight."
     $persisted = Invoke-RestMethod "$api/projects/$projectId"
     if ($persisted.id -ne $projectId) { throw 'Project ID changed across restart.' }
     $persistedAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"

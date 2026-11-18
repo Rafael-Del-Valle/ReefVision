@@ -77,6 +77,7 @@ WorkflowDataType = Literal[
     "temporal_reefpose_evaluation",
     "results_package",
     "project_exchange_package",
+    "provider_manifest_snapshot",
 ]
 
 
