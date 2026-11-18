@@ -69,7 +69,9 @@ def validate_bundle(
         if not directory.is_dir():
             _reject("Installer bundle directory is missing")
     except OSError as exc:
-        raise BundleValidationError("Installer bundle directory cannot be inspected") from exc
+        raise BundleValidationError(
+            "Installer bundle directory cannot be inspected"
+        ) from exc
     # A normal-looking bundle can still traverse a linked parent directory.
     # Refuse all linked ancestors before opening any provenance or artifact file.
     for ancestor in (directory, *directory.parents):
@@ -85,7 +87,9 @@ def validate_bundle(
         if _is_redirected(manifest_path) or not manifest_path.is_file():
             _reject("build-provenance.json is missing or is a symlink")
     except OSError as exc:
-        raise BundleValidationError("build-provenance.json cannot be inspected") from exc
+        raise BundleValidationError(
+            "build-provenance.json cannot be inspected"
+        ) from exc
 
     def reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
         result: dict[str, object] = {}
