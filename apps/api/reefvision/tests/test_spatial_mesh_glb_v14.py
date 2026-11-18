@@ -47,7 +47,12 @@ def make_glb(
     elif invalid_selector == "stride_overlap":
         position_stride = 16
         position_leading_bytes = 8
-    z_value = -(2**-149) if negative_subnormal_z else (2**-149 if subnormal_z else (1e-9 if tiny_z else 0.0))
+    if negative_subnormal_z:
+        z_value = -(2**-149)
+    elif subnormal_z:
+        z_value = 2**-149
+    else:
+        z_value = 1e-9 if tiny_z else 0.0
     positions = struct.pack("<9f", 0, 0, 0, 2, 0, 0, 0, 3, z_value)
     if type(position_stride) is int and position_stride >= 12:
         positions = b"".join(
