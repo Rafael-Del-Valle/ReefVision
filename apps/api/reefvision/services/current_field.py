@@ -133,7 +133,14 @@ class CurrentFieldService:
                     length_m=line.length_m,
                 )
             )
-        snapshot = [record.model_dump(mode="json") for record in records]
+        # The current grid is defined by its paired coordinates, not by the
+        # order in which a caller lists its source records. Hash a canonical
+        # record set so reordering the same immutable evidence cannot change
+        # its scientific input fingerprint or invalidate reproducibility.
+        snapshot = [
+            record.model_dump(mode="json")
+            for record in sorted(records, key=lambda record: str(record.id))
+        ]
         first = records[0]
         methodological_notes = [
             "Streamlines describe a frozen Eulerian current field; "

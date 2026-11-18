@@ -163,6 +163,39 @@ def test_current_streamline_workflow_executes_with_lineage_and_replays(
             )
 
 
+
+def test_current_streamline_input_hash_is_independent_of_record_order(
+    client: TestClient,
+) -> None:
+    """Equivalent paired current grids must have identical source fingerprints.
+
+    Workflow callers may select the same immutable scientific records in a
+    different order. Record order is not a physical property of the grid.
+    The response may preserve requested ID order, but the input digest and
+    numerical streamline must remain stable without rewriting source data.
+    """
+    project = create_project(client, "Order-independent current provenance")
+    record_ids = _current_records(client, project["id"])
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        service = CurrentFieldService(session)
+        original = service.preview(
+            project["id"],
+            CurrentFieldAnalysisRequest.model_validate(_parameters(record_ids)),
+        )
+        reversed_records = service.preview(
+            project["id"],
+            CurrentFieldAnalysisRequest.model_validate(_parameters(record_ids[::-1])),
+        )
+
+    assert original.source_record_ids != reversed_records.source_record_ids
+    assert original.input_sha256 == reversed_records.input_sha256
+    assert original.latitudes == reversed_records.latitudes
+    assert original.longitudes == reversed_records.longitudes
+    assert original.streamlines == reversed_records.streamlines
+    assert original.methodological_notes == reversed_records.methodological_notes
+
+
 def test_failed_current_streamline_workflow_is_atomic(client: TestClient) -> None:
     project = create_project(client, "Incomplete workflow current")
     incomplete_ids = _current_records(client, project["id"])[:1]
