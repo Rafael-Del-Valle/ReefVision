@@ -28,6 +28,7 @@ def make_glb(
     position_leading_bytes: int = 0,
     position_bounds: bool = False,
     index_bounds: bool = False,
+    tiny_z: bool = False,
 ) -> str:
     if invalid_selector == "misaligned_position_view":
         position_offset = 2
@@ -44,7 +45,7 @@ def make_glb(
     elif invalid_selector == "stride_overlap":
         position_stride = 16
         position_leading_bytes = 8
-    positions = struct.pack("<9f", 0, 0, 0, 2, 0, 0, 0, 3, 0)
+    positions = struct.pack("<9f", 0, 0, 0, 2, 0, 0, 0, 3, 1e-9 if tiny_z else 0)
     if type(position_stride) is int and position_stride >= 12:
         positions = b"".join(
             b"\x00" * position_leading_bytes
@@ -118,7 +119,7 @@ def make_glb(
         doc["bufferViews"][0]["byteLength"] = 36
     if position_bounds:
         doc["accessors"][0]["min"] = [0.0, 0.0, 0.0]
-        doc["accessors"][0]["max"] = [2.0, 3.0, 0.0]
+        doc["accessors"][0]["max"] = [2.0, 3.0, 1e-9 if tiny_z else 0.0]
     if invalid_selector == "bounds_short":
         doc["accessors"][0]["min"] = [0.0, 0.0]
     elif invalid_selector == "bounds_boolean":
@@ -127,6 +128,10 @@ def make_glb(
         doc["accessors"][0]["min"] = [0.0, float("nan"), 0.0]
     elif invalid_selector == "bounds_mismatch":
         doc["accessors"][0]["max"] = [3.0, 3.0, 0.0]
+    elif invalid_selector == "bounds_tiny_positive":
+        doc["accessors"][0]["max"] = [2.0, 3.0, 1e-9]
+    elif invalid_selector == "bounds_tiny_negative":
+        doc["accessors"][0]["min"] = [-1e-9, 0.0, 0.0]
     if index_bounds:
         doc["accessors"][1]["min"] = [0]
         doc["accessors"][1]["max"] = [2]
@@ -433,6 +438,22 @@ def test_glb_extras_extension_label_is_not_a_gltf_extension() -> None:
     assert parse_glb_triangles(make_glb(invalid_selector="extras_nested_extension_label")) == (
         parse_glb_triangles(make_glb())
     )
+
+
+@pytest.mark.parametrize(
+    "invalid_selector", ["bounds_tiny_positive", "bounds_tiny_negative"]
+)
+def test_rejects_glb_position_extrema_false_at_nanoscale(invalid_selector: str) -> None:
+    """A 1e-9 false extremum is not valid merely because 1e-8 was the old floor."""
+    with pytest.raises(ValueError, match="position bounds conflict"):
+        parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
+
+
+def test_valid_nanoscale_position_extremum_remains_supported() -> None:
+    """The declared bound may differ by ordinary binary32 textual rounding."""
+    vertices, faces = parse_glb_triangles(make_glb(position_bounds=True, tiny_z=True))
+    assert vertices[2][2] > 0.0
+    assert faces == [[0, 1, 2]]
 
 
 def test_single_glb_triangle() -> None:
