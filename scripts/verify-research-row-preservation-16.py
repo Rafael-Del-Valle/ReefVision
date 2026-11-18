@@ -155,9 +155,7 @@ def _unique_index_contracts(connection: sqlite3.Connection, table: str) -> set[t
         # ordinary index to be renamed, but reject changed WHERE predicates
         # and functional expressions that index_xinfo cannot fully describe.
         expression_or_predicate = bool(partial) or any(part[0] == -2 for part in components)
-        contracts.add(
-            (origin, bool(partial), components, sql if expression_or_predicate else None)
-        )
+        contracts.add((origin, bool(partial), components, sql if expression_or_predicate else None))
     return contracts
 
 
