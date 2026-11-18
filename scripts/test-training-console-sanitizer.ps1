@@ -79,8 +79,14 @@ if ((Format-SafeText $unterminatedOsc) -cne 'prefix ') {
 # not only the run name and metric metadata. Keep this source assertion next
 # to the executable formatter regression so removing the call fails Windows CI.
 $tailLoop = [regex]::Match($source, '(?ms)foreach \(\$line in \(\$logLines \| Select-Object -Last 20\)\) \{(?<body>.*?)^\s*\}')
-if (-not $tailLoop.Success -or $tailLoop.Groups['body'].Value -notmatch 'Write-Host\s+\(Format-SafeText\s+\$line\)') {
+# The display copy can be prefixed to identify untrusted worker evidence,
+# but it must still sanitize the actual log record immediately before output.
+$tailBody = $tailLoop.Groups['body'].Value
+if (-not $tailLoop.Success -or $tailBody -notmatch 'Write-Host[^\r\n]*\(Format-SafeText\s+\$line\)') {
   throw 'Persisted training log tail must pass through Format-SafeText before Write-Host.'
+}
+if ($tailBody -notmatch '\[worker log\]') {
+  throw 'Untrusted worker log records must be distinguished from monitor status and losses.'
 }
 $unsafeLog = 'train/box_loss=0.25' + [char]0x001B + '[2J' + [char]0x001B + ']0;spoofed log title' + [char]0x0007 + [char]0x202E + ' epoch 4'
 $safeLog = Format-SafeText $unsafeLog
