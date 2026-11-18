@@ -518,6 +518,7 @@ def test_pose_materialization_rejects_overridden_frozen_dataset_paths(
         ("frozen_dataset", "frozen dataset lineage changed"),
         ("run_manifest", "frozen snapshot lineage changed"),
         ("snapshot_manifest", "frozen snapshot lineage changed"),
+        ("snapshot_split", "frozen split manifest changed"),
     ),
 )
 def test_pose_worker_checks_frozen_lineage_before_export(
@@ -558,7 +559,15 @@ def test_pose_worker_checks_frozen_lineage_before_export(
                     run.dataset_manifest_sha256 = "0" * 64
                 else:
                     snapshot = dict(run.draft_snapshot_json or {})
-                    snapshot["pose_training_dataset_manifest_sha256"] = "0" * 64
+                    if tampered_field == "snapshot_split":
+                        split_manifest = snapshot.get("split_manifest")
+                        assert isinstance(split_manifest, dict)
+                        snapshot["split_manifest"] = {
+                            **split_manifest,
+                            "unreviewed_test_field": True,
+                        }
+                    else:
+                        snapshot["pose_training_dataset_manifest_sha256"] = "0" * 64
                     run.draft_snapshot_json = snapshot
             session.commit()
 
