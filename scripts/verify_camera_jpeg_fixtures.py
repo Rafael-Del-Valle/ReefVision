@@ -22,6 +22,22 @@ JPEG_SOI = b"\xff\xd8"
 JPEG_EOI = b"\xff\xd9"
 
 
+def _camera_exif_label(value: object) -> tuple[str | None, bool]:
+    """Return optional camera-declared Make/Model without accepting malformed tags.
+
+    These are untrusted descriptive EXIF labels, not proof of camera origin;
+    omit serial numbers, owner fields, location and original EXIF payloads.
+    """
+    if value is None:
+        return None, False
+    if type(value) is not str:
+        return None, True
+    label = value.rstrip("\x00").strip()
+    if not label or len(label) > 128 or not label.isprintable():
+        return None, True
+    return label, False
+
+
 def _file_fingerprint(stat: os.stat_result) -> tuple[int, ...]:
     """Compare file identity/content metadata from path and open-handle stat."""
     stable = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
@@ -258,6 +274,8 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                             # Native camera pixels are not EXIF-transposed.
                             exif = decoded.getexif()
                             orientation = exif.get(274)
+                            camera_make, invalid_make = _camera_exif_label(exif.get(271))
+                            camera_model, invalid_model = _camera_exif_label(exif.get(272))
                             if orientation is not None and (
                                 not isinstance(orientation, int)
                                 or orientation not in range(1, 9)
@@ -330,6 +348,10 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                                 "jpeg_display_height": display_height,
                                 "jpeg_color_mode": decoded.mode,
                                 "jpeg_exif_orientation": orientation,
+                                "jpeg_exif_camera_make": camera_make,
+                                "jpeg_exif_camera_model": camera_model,
+                                "jpeg_exif_camera_make_malformed": invalid_make,
+                                "jpeg_exif_camera_model_malformed": invalid_model,
                                 # Malformed EXIF scalar tags can decode as bytes,
                                 # tuples, or strings. A raw bytes object breaks the
                                 # JSON acceptance manifest; do not coerce it into
@@ -389,6 +411,11 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                     errors.append(f"JPEG fixture changed during decoding: {relative}")
                 else:
                     decoded_ok = True
+                    if (
+                        decoded_metadata["jpeg_exif_camera_make_malformed"]
+                        or decoded_metadata["jpeg_exif_camera_model_malformed"]
+                    ):
+                        errors.append(f"invalid EXIF camera Make/Model metadata: {relative}")
                     if decoded_metadata["jpeg_exif_ifd0_dimension_conflict"]:
                         errors.append(
                             "conflicting EXIF pixel dimensions between IFD0 and Exif IFD: "
