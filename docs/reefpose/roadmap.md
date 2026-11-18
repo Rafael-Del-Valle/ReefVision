@@ -26,6 +26,10 @@ Updated: 2026-11-12
   and validation review. Engineering fixtures are available. Empirical validation is
   pending independently annotated recordings.
 
+- ReefVision 1.3 temporal cycle analysis — training-data preparation is available
+  through the API. See the [1.3 release conditions](../roadmap/REEFVISION_1_3.md)
+  for annotation, model training, review, and held-out acceptance.
+
 Recommended research milestone: freeze a blinded multi-species pilot with disjoint
 training, development and test recording groups. Estimate observer variability,
 calibration sensitivity, and event agreement, then run the locked held-out comparison.
