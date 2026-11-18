@@ -110,9 +110,7 @@ def test_distinct_ply_mesh_decimals_cannot_collapse_into_measurements(
 def test_equivalent_ply_mesh_decimals_replay_saved_graph_without_false_qc(
     client: TestClient, baseline: str, equivalent: str
 ) -> None:
-    valid = PLY.replace(
-        "0 0 0\n2 0 0\n", f"{baseline} 0 0\n{equivalent} 2 0\n"
-    )
+    valid = PLY.replace("0 0 0\n2 0 0\n", f"{baseline} 0 0\n{equivalent} 2 0\n")
     vertices, faces = parse_ply_triangles(valid)
     assert vertices[0][0] == vertices[1][0]
     assert faces == [[0, 1, 2]]
