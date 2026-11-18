@@ -123,12 +123,8 @@ def _foreign_key_contracts(connection: sqlite3.Connection, table: str) -> set[tu
     ON DELETE and ON UPDATE actions must survive unchanged.
     """
     groups: dict[int, list[tuple]] = {}
-    for identifier, sequence, parent, source, target, on_update, on_delete, match in connection.execute(
-        f"PRAGMA foreign_key_list({_quote(table)})"
-    ):
-        groups.setdefault(identifier, []).append(
-            (sequence, parent, source, target, on_update, on_delete, match)
-        )
+    for row in connection.execute(f"PRAGMA foreign_key_list({_quote(table)})"):
+        groups.setdefault(row[0], []).append(tuple(row[1:]))
     return {tuple(sorted(group)) for group in groups.values()}
 
 
