@@ -248,6 +248,23 @@ test("initial image and gallery scrolling", async ({ page }) => {
   };
 
   await assertDecodedAndContained(1600, 1200);
+  // A compositor-handled touch or trackpad gesture must not scroll the page
+  // behind the initially loaded, fixed scientific camera preview.
+  const previewGesturePolicy = await workbench
+    .locator(".rv-media-canvas")
+    .evaluate((element) => {
+      const style = window.getComputedStyle(element);
+      return {
+        touchAction: style.touchAction,
+        overscrollX: style.overscrollBehaviorX,
+        overscrollY: style.overscrollBehaviorY,
+      };
+    });
+  expect(previewGesturePolicy).toEqual({
+    touchAction: "none",
+    overscrollX: "contain",
+    overscrollY: "contain",
+  });
   await expect(
     workbench.getByRole("listitem", { name: "Focus camera-01.JPEG" }),
   ).toHaveAttribute("aria-current", "true");

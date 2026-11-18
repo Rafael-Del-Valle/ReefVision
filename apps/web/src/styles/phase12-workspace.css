@@ -816,6 +816,10 @@
   place-items: center;
   padding: 1rem;
   overflow: hidden;
+  /* WebView2 touch/precision gestures can bypass cancelable wheel handlers.
+     This scientific preview is fixed, not a pan/zoom surface. */
+  overscroll-behavior: contain;
+  touch-action: none;
   background:
     linear-gradient(45deg, rgba(255, 255, 255, 0.015) 25%, transparent 25%),
     linear-gradient(-45deg, rgba(255, 255, 255, 0.015) 25%, transparent 25%),
