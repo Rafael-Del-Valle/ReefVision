@@ -495,6 +495,105 @@ def _column_collation_contracts(connection: sqlite3.Connection, table: str) -> d
     return contracts
 
 
+
+def _table_conflict_policy_contracts(
+    connection: sqlite3.Connection, table: str
+) -> tuple[dict[str, tuple[str, ...]], dict[tuple[str, ...], tuple[str, ...]], tuple[str, ...]]:
+    """Preserve SQLite constraint conflict behavior for future scientific writes.
+
+    PRAGMA table_xinfo/index_list omit ON CONFLICT IGNORE/REPLACE policies.
+    Even when all original rows and UNIQUE index metadata agree, a rebuilt
+    table can silently skip or overwrite subsequent biological observations.
+    Capture column clauses, table-constraint identities and all clause order.
+    """
+    row = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+    ).fetchone()
+    if row is None or not isinstance(row[0], str):
+        raise ValueError("protected_table_ddl_missing")
+    tokens = _ddl_tokens(row[0])
+
+    def policies(statement: tuple[str, ...]) -> tuple[str, ...]:
+        found: list[str] = []
+        for index in range(len(statement) - 1):
+            if statement[index : index + 2] != ("ON", "CONFLICT"):
+                continue
+            if index + 2 >= len(statement) or statement[index + 2] not in {
+                "ABORT",
+                "FAIL",
+                "IGNORE",
+                "REPLACE",
+                "ROLLBACK",
+            }:
+                raise ValueError("protected_constraint_conflict_ambiguous")
+            found.append(statement[index + 2])
+        return tuple(found)
+
+    column_policies = {
+        name: policies(declaration)
+        for name, declaration in _table_column_ddl_declarations(connection, table).items()
+    }
+    try:
+        opening = tokens.index("(")
+    except ValueError as exc:
+        raise ValueError("protected_constraint_conflict_ambiguous") from exc
+    depth, start = 1, opening + 1
+    constraints: dict[tuple[str, ...], tuple[str, ...]] = {}
+    for index in range(start, len(tokens)):
+        if tokens[index] == "(":
+            depth += 1
+        elif tokens[index] == ")":
+            depth -= 1
+        if (tokens[index] == "," and depth == 1) or depth == 0:
+            definition = tokens[start:index]
+            start = index + 1
+            position = 2 if definition[:1] == ("CONSTRAINT",) else 0
+            if definition[position : position + 1] in (
+                ("PRIMARY",),
+                ("UNIQUE",),
+                ("CHECK",),
+            ):
+                # Match the exact original table constraint, excluding just
+                # the ON CONFLICT action. Added unrelated constraints remain
+                # legal; renamed or reinterpreted original rules require HOLD.
+                key: list[str] = []
+                cursor = 0
+                while cursor < len(definition):
+                    if definition[cursor : cursor + 2] == ("ON", "CONFLICT"):
+                        cursor += 3
+                        continue
+                    key.append(definition[cursor])
+                    cursor += 1
+                identity = tuple(key)
+                if identity in constraints:
+                    raise ValueError("protected_constraint_conflict_ambiguous")
+                constraints[identity] = policies(definition)
+        if depth == 0:
+            break
+    if depth != 0:
+        raise ValueError("protected_constraint_conflict_ambiguous")
+    return column_policies, constraints, policies(tokens)
+
+
+def _conflict_policy_preserved(
+    old: sqlite3.Connection,
+    new: sqlite3.Connection,
+    table: str,
+    original_columns: list[str],
+) -> bool:
+    """Fail closed on moved/reordered policies without exposing private DDL."""
+    old_columns, old_constraints, old_policies = _table_conflict_policy_contracts(old, table)
+    new_columns, new_constraints, new_policies = _table_conflict_policy_contracts(new, table)
+    return (
+        old_policies == new_policies
+        and old_columns == {
+            name: policy for name, policy in new_columns.items() if name in original_columns
+        }
+        and old_constraints.items() <= new_constraints.items()
+    )
+
+
+
 def _generated_column_ddl_contracts(
     connection: sqlite3.Connection, table: str
 ) -> dict[str, tuple[str, ...]]:
@@ -988,6 +1087,8 @@ def verify(
                     _unique_index_contracts(new, table)
                 ):
                     item["status"] = "changed_unique_index_contract"
+                elif not _conflict_policy_preserved(old, new, table, old_columns):
+                    item["status"] = "changed_constraint_conflict_policy"
                 elif not _generated_column_ddl_contracts(old, table).items() <= (
                     _generated_column_ddl_contracts(new, table).items()
                 ):
