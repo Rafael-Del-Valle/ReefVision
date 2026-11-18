@@ -1411,9 +1411,7 @@ def test_research_asset_empty_directory_preservation(
     code, report = _run(before, after, original, candidate)
 
     assert code == (0 if expected_missing == 0 else 2)
-    assert report["status"] == (
-        "PASS_PRESERVATION_ONLY" if expected_missing == 0 else "HOLD"
-    )
+    assert report["status"] == ("PASS_PRESERVATION_ONLY" if expected_missing == 0 else "HOLD")
     evidence = report["research_assets"]
     assert evidence["baseline_files"] == evidence["candidate_files"] == 1
     assert evidence["missing_files"] == evidence["changed_files"] == 0
@@ -1421,9 +1419,7 @@ def test_research_asset_empty_directory_preservation(
     assert evidence["candidate_directories"] == 4 - expected_missing
     assert evidence["missing_directories"] == expected_missing
     assert evidence["added_directories"] == 1
-    assert ("research_directories_missing" in report["problems"]) == (
-        expected_missing > 0
-    )
+    assert ("research_directories_missing" in report["problems"]) == (expected_missing > 0)
     assert report["requires_researcher_approval"] is True
     assert report["upgrade_authorized"] is False
     for private_name in ("future-observations", "unscored", "coral.raw"):
