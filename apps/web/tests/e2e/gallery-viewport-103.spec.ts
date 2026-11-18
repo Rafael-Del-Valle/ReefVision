@@ -822,6 +822,43 @@ test("single-image camera gallery cold-start keeps pixels and wheel isolated", a
   await expect.poll(pageScroll).toEqual(beforeScroll);
   expect(await focused.boundingBox()).toEqual(beforeBounds);
 
+  // Even a one-image project must contain compositor-driven touch scrolling.
+  // A normal wheel assertion cannot catch a touch-pan that bypasses the JS
+  // listener; the document scroll probe makes such a regression observable.
+  // This uses Chromium's real input path while preserving the camera pixels.
+  const beforeTouchBounds = await focused.boundingBox();
+  expect(beforeTouchBounds).not.toBeNull();
+  const beforeTouchScroll = await pageScroll();
+  const touchSession = await page.context().newCDPSession(page);
+  try {
+    await touchSession.send("Input.synthesizeScrollGesture", {
+      x: Math.round(beforeTouchBounds!.x + beforeTouchBounds!.width / 2),
+      y: Math.round(beforeTouchBounds!.y + beforeTouchBounds!.height / 2),
+      yDistance: -340,
+      gestureSourceType: "touch",
+      speed: 800,
+    });
+  } finally {
+    await touchSession.detach();
+  }
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  await expect.poll(pageScroll).toEqual(beforeTouchScroll);
+  expect(await focused.boundingBox()).toEqual(beforeTouchBounds);
+  await expect
+    .poll(() =>
+      focused.evaluate((img: HTMLImageElement) => ({
+        complete: img.complete,
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+      })),
+    )
+    .toEqual({ complete: true, width: 1600, height: 1200 });
+
   await filmstrip.hover();
   const beforeStripScroll = await pageScroll();
   const beforeStrip = await filmstrip.evaluate((element) => element.scrollLeft);
