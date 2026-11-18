@@ -152,7 +152,7 @@ def test_disconnected_small_patch_centroid_does_not_collapse_to_origin(
     assert direct["edge_connected_patch_count"] == 2
     assert direct["provenance"]["calibration_verified"] is False
 
-    project_id = str(create_project(client, "Disconnected mesh centroid evidence")["id"])
+    project_id = str(create_project(client, "Disconnected mesh evidence")["id"])
     base = f"/api/v1/projects/{project_id}"
     payload = {
         **params,
