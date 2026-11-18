@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import re
 import shutil
 import stat
@@ -155,7 +156,12 @@ def _safe_extract_zip(
                 )
 
 
-def _verify_pose_export_frame_pairs(source_root: Path, *, class_count: int) -> None:
+def _verify_pose_export_frame_pairs(
+    source_root: Path,
+    *,
+    class_count: int,
+    keypoint_count: int,
+) -> None:
     """Require one exported annotation file for each frozen PNG frame."""
 
     images = source_root / "images" / "train"
@@ -191,6 +197,30 @@ def _verify_pose_export_frame_pairs(source_root: Path, *, class_count: int) -> N
                     "Ultralytics pose export contains an invalid label class index"
                 )
 
+            # Each reviewed pose must have class, normalized box geometry,
+            # and exactly three values for every frozen schema landmark.
+            if len(tokens) != 5 + 3 * keypoint_count:
+                raise ValidationError("Ultralytics pose export has invalid landmark layout")
+            try:
+                numbers = [float(value) for value in tokens[1:]]
+            except ValueError as exc:
+                raise ValidationError("Ultralytics pose export has invalid label coordinates") from exc
+            if (
+                not all(math.isfinite(value) for value in numbers)
+                or not all(0 <= value <= 1 for value in numbers[:4])
+                or numbers[2] <= 0
+                or numbers[3] <= 0
+                or any(
+                    not (
+                        0 <= numbers[index] <= 1
+                        and 0 <= numbers[index + 1] <= 1
+                        and numbers[index + 2] in (0, 1, 2)
+                    )
+                    for index in range(4, len(numbers), 3)
+                )
+            ):
+                raise ValidationError("Ultralytics pose export has invalid label coordinates")
+
 
 def _copy_split(
     source_root: Path,
@@ -198,6 +228,7 @@ def _copy_split(
     *,
     split_name: str,
     class_count: int,
+    keypoint_count: int,
 ) -> None:
     """Copy one exported Ultralytics train split into another named split."""
 
@@ -210,7 +241,11 @@ def _copy_split(
     if not source_labels.is_dir():
         raise ValidationError("Ultralytics pose export is missing labels/train")
 
-    _verify_pose_export_frame_pairs(source_root, class_count=class_count)
+    _verify_pose_export_frame_pairs(
+        source_root,
+        class_count=class_count,
+        keypoint_count=keypoint_count,
+    )
 
     target_images = destination_root / "images" / split_name
     target_labels = destination_root / "labels" / split_name
@@ -318,7 +353,11 @@ def materialize_pose_training_exports(
             "Ultralytics pose export has noncanonical class/keypoint metadata"
         ) from exc
 
-    _verify_pose_export_frame_pairs(destination, class_count=len(class_lines))
+    _verify_pose_export_frame_pairs(
+        destination,
+        class_count=len(class_lines),
+        keypoint_count=expected_landmarks,
+    )
 
     validation_mode = "none"
 
@@ -353,6 +392,7 @@ def materialize_pose_training_exports(
                 destination,
                 split_name="val",
                 class_count=len(class_lines),
+                keypoint_count=expected_landmarks,
             )
         finally:
             shutil.rmtree(

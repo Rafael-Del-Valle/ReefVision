@@ -576,6 +576,45 @@ def test_pose_materialization_rejects_unmapped_frozen_class_labels(
     assert not (destination / "images" / "val").exists()
 
 
+@pytest.mark.parametrize("altered_split", ("training", "validation"))
+@pytest.mark.parametrize(
+    ("altered_label", "expected_error"),
+    (
+        ("0 0.5 0.5 0.5 0.5 0.5 0.5", "invalid landmark layout"),
+        ("0 nan 0.5 0.5 0.5 0.5 0.5 2", "invalid label coordinates"),
+        ("0 0.5 0.5 0.5 0.5 0.5 0.5 3", "invalid label coordinates"),
+    ),
+)
+def test_pose_materialization_rejects_malformed_frozen_pose_rows(
+    tmp_path: Path,
+    altered_split: str,
+    altered_label: str,
+    expected_error: str,
+) -> None:
+    # Reuse the same frozen export fixture for training and separate validation.
+    # A row that cannot encode the reviewed schema must fail before val copying.
+    reviewed = _pose_export_zip(b"reviewed")
+    altered = io.BytesIO()
+    with (
+        zipfile.ZipFile(io.BytesIO(reviewed)) as original,
+        zipfile.ZipFile(altered, "w", compression=zipfile.ZIP_DEFLATED) as modified,
+    ):
+        for member in original.namelist():
+            content = original.read(member)
+            if member == "labels/train/frame_00000001.txt":
+                content = (altered_label + "\n").encode("utf-8")
+            modified.writestr(member, content)
+
+    destination = tmp_path / "pose-invalid-row"
+    with pytest.raises(ValidationError, match=expected_error):
+        materialize_pose_training_exports(
+            training_content=altered.getvalue() if altered_split == "training" else reviewed,
+            validation_content=altered.getvalue() if altered_split == "validation" else reviewed,
+            destination=destination,
+        )
+    assert not (destination / "images" / "val").exists()
+
+
 @pytest.mark.parametrize(
     ("extra_yaml", "expected_error"),
     (
