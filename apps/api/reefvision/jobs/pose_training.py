@@ -262,6 +262,18 @@ def materialize_pose_training_exports(
                 validation_stage,
             )
 
+            # A separate frozen split must use exactly the training export's
+            # landmark ordering and class map. Otherwise Ultralytics silently
+            # interprets validation labels using the wrong scientific schema.
+            validation_yaml = validation_stage / "data.yaml"
+            if (
+                not validation_yaml.is_file()
+                or validation_yaml.read_text(encoding="utf-8") != yaml_text
+            ):
+                raise ValidationError(
+                    "Ultralytics pose validation export has incompatible data.yaml"
+                )
+
             _copy_split(
                 validation_stage,
                 destination,
