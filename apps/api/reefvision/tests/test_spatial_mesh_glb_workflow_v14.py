@@ -166,8 +166,9 @@ def test_valid_nanoscale_glb_bounds_standalone_and_replayed_graph(
         assert detail.status_code == 200, detail.text
         assert detail.json()["run"]["status"] == "succeeded"
         artifacts = [
-            a for a in detail.json()["artifacts"]
-            if a["data_type"] == "mesh_measurement_preview"
+            artifact
+            for artifact in detail.json()["artifacts"]
+            if artifact["data_type"] == "mesh_measurement_preview"
         ]
         assert len(artifacts) == 1
         assert artifacts[0]["payload_json"] == expected
