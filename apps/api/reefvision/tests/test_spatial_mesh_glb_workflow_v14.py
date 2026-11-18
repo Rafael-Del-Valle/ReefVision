@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.tests.test_annotations import create_project
-from reefvision.tests.test_spatial_mesh_glb_v14 import make_glb
+from reefvision.tests.test_spatial_mesh_glb_v14 import FLOAT32_UNDERFLOW_SELECTORS, make_glb
 
 
 @pytest.mark.parametrize(
@@ -118,19 +118,20 @@ def test_saved_glb(
     )
 
 
-@pytest.mark.parametrize("variant", ["nanoscale", "float32_decimal_roundtrip"])
-def test_valid_glb_bounds_standalone_and_replayed_graph(
-    client: TestClient, variant: str
-) -> None:
+@pytest.mark.parametrize(
+    "variant", ["nanoscale", "float32_subnormal", "float32_decimal_roundtrip"]
+)
+def test_valid_glb_bounds_standalone_and_replayed_graph(client: TestClient, variant: str) -> None:
     """Accept representable bounds; two runs must save identical evidence."""
     pid = create_project(client, f"GLB {variant} bounds")
     project_id = str(pid["id"])
     base = f"/api/v1/projects/{project_id}"
-    sample = (
-        make_glb(position_bounds=True, tiny_z=True)
-        if variant == "nanoscale"
-        else make_glb(invalid_selector="bounds_float32_roundtrip")
-    )
+    if variant == "nanoscale":
+        sample = make_glb(position_bounds=True, tiny_z=True)
+    elif variant == "float32_subnormal":
+        sample = make_glb(position_bounds=True, subnormal_z=True)
+    else:
+        sample = make_glb(invalid_selector="bounds_float32_roundtrip")
     params = {
         "glb_base64": sample,
         "meters_per_unit": 0.01,
@@ -221,6 +222,7 @@ def test_valid_glb_bounds_standalone_and_replayed_graph(
         "bounds_nan",
         "bounds_mismatch",
         "bounds_float32_near_mismatch",
+        *FLOAT32_UNDERFLOW_SELECTORS,
         "bounds_tiny_positive",
         "bounds_tiny_negative",
         "stride_too_small",
