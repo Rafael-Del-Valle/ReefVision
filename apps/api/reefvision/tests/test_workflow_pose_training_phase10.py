@@ -501,16 +501,25 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
 
 
 @pytest.mark.parametrize(
-    ("tampered_split", "missing_member"),
+    ("tampered_split", "missing_member", "expected_error"),
     (
-        ("training", "labels/train/frame_00000001.txt"),
-        ("validation", "images/train/frame_00000001.png"),
+        (
+            "training",
+            "labels/train/frame_00000001.txt",
+            "missing frame images or labels",
+        ),
+        (
+            "validation",
+            "images/train/frame_00000001.png",
+            "missing images/train",
+        ),
     ),
 )
 def test_pose_materialization_rejects_unpaired_reviewed_frames(
     tmp_path: Path,
     tampered_split: str,
     missing_member: str,
+    expected_error: str,
 ) -> None:
     # Exercise the existing frozen export fixture without replacing its
     # independent validation frames with training images or labels.
@@ -526,7 +535,9 @@ def test_pose_materialization_rejects_unpaired_reviewed_frames(
 
     altered = missing_frame_partner.getvalue()
     destination = tmp_path / "pose-unpaired-frames"
-    with pytest.raises(ValidationError, match="unmatched image/label frame sets"):
+    # One-frame exports lose a whole split directory when its only file is removed.
+    # Check the actual early rejection, before any validation frame is copied.
+    with pytest.raises(ValidationError, match=expected_error):
         materialize_pose_training_exports(
             training_content=altered if tampered_split == "training" else reviewed,
             validation_content=altered if tampered_split == "validation" else reviewed,
