@@ -1,0 +1,11 @@
+# ReefVision 1.6 — biological media lineage preservation
+
+2026-11-18; Track D, isolated draft PR #77.
+
+**Audit and actual gap.** Earlier 1.0–1.5 releases already implement images, videos, model registration, prediction proposals, biological observations, QC and saved executable Workflow Builder. The 1.6 read-only upgrade verifier protected downstream annotation, dataset, reviewer and saved graph records but did not check many *upstream* source tables. Changed media checksums or source observations could therefore pass preservation while a saved workflow and its prior reviewed annotations still matched.
+
+**Implementation.** Extend only the bounded offline preflight table list with `images`, `videos`, `video_tracks`, `model_registrations`, `prediction_proposals`, `image_labels`, `quality_control_issues`, `geo_referenced_observations`, `active_learning_rounds`. Every name was checked against its current SQLAlchemy model. Existing database migration, original media, user models, APIs, QC and Workflow Builder runtime code are unchanged.
+
+**Regression.** Nine disposable populated SQLite cases tamper with one source table while a saved `workflow_graph_records` entry and reviewer history are individually preserved. Two delete an original images/videos table. One ensures a newly introduced candidate-only media table remains permitted. Exercise the real read-only CLI, assert HOLD for source drift, explicitly retain researcher approval, redact private biological identifiers and verify baseline and candidate bytes do not change during checks. The native Windows and Linux existing research-preservation CI suite includes these cases through its current test module.
+
+**Boundary.** This is an offline migration safeguard, not a redundant Workflow Builder analysis node; it protects existing typed, saved and executable QC workflow evidence. PASS_PRESERVATION_ONLY is never upgrade approval. External file bytes need independently supplied asset roots; unlisted tables and real biological interpretation are outside this limited proof. Release HOLD pending independent 1.1/1.6 Alembic-0038 reconciliation, exact-head backend/frontend/E2E and Windows CI, real biological and saved-workflow acceptance, genuine installed MSI/CAB GUI clean-install/upgrade/rollback, and explicit researcher signoff. Do not merge, tag, release or deploy.

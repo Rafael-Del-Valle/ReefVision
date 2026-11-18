@@ -1705,3 +1705,116 @@ def test_empty_and_populated_scientific_autoincrement_contract(
     assert "private-coral" not in public
     assert before.read_bytes() == old_bytes
     assert after.read_bytes() == new_bytes
+
+
+# Source tables implemented in earlier versions must survive the offline
+# upgrade even when saved reviewed QC workflows remain byte-for-byte intact.
+_MEDIA_SOURCE_TABLES = (
+    "images",
+    "videos",
+    "video_tracks",
+    "model_registrations",
+    "prediction_proposals",
+    "image_labels",
+    "quality_control_issues",
+    "geo_referenced_observations",
+    "active_learning_rounds",
+)
+
+
+@pytest.mark.parametrize("table", _MEDIA_SOURCE_TABLES)
+def test_biological_media_source_lineage_protected(tmp_path: Path, table: str) -> None:
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    _seed(before)
+    with sqlite3.connect(before) as connection:
+        connection.execute(
+            f'CREATE TABLE "{table}" (id TEXT PRIMARY KEY, source_evidence BLOB NOT NULL)'
+        )
+        connection.execute(
+            f'INSERT INTO "{table}" VALUES (?, ?)',
+            ("private-coral-site-001", b"\x00original-digest\xff"),
+        )
+    shutil.copyfile(before, after)
+    with sqlite3.connect(after) as connection:
+        connection.execute(
+            f'UPDATE "{table}" SET source_evidence = ? WHERE id = ?',
+            (b"\x00modified-digest\xff", "private-coral-site-001"),
+        )
+    baseline_bytes, candidate_bytes = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+
+    assert code == 2
+    assert report["status"] == "HOLD"
+    assert report["protected_tables_examined"] == 6
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    assert any(
+        item["table"] == table and item["status"] == "changed_records"
+        for item in report["tables"]
+    )
+    assert next(
+        item for item in report["tables"] if item["table"] == "workflow_graph_records"
+    )["status"] == "preserved"
+    assert next(
+        item for item in report["tables"] if item["table"] == "review_queue_item_events"
+    )["status"] == "preserved"
+    public_report = json.dumps(report)
+    assert "private-coral-site-001" not in public_report
+    assert "original-digest" not in public_report
+    assert "modified-digest" not in public_report
+    assert before.read_bytes() == baseline_bytes
+    assert after.read_bytes() == candidate_bytes
+
+
+@pytest.mark.parametrize("table", ("images", "videos"))
+def test_removed_biological_media_source_table_requires_hold(
+    tmp_path: Path, table: str
+) -> None:
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    _seed(before)
+    with sqlite3.connect(before) as connection:
+        connection.execute(f'CREATE TABLE "{table}" (id TEXT PRIMARY KEY)')
+        connection.execute(f'INSERT INTO "{table}" VALUES (?)', ("coral-source",))
+    shutil.copyfile(before, after)
+    with sqlite3.connect(after) as connection:
+        connection.execute(f'DROP TABLE "{table}"')
+    baseline_bytes, candidate_bytes = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+
+    assert code == 2
+    assert report["status"] == "HOLD"
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    assert any(
+        item["table"] == table and item["status"] == "removed_table"
+        for item in report["tables"]
+    )
+    assert "coral-source" not in json.dumps(report)
+    assert before.read_bytes() == baseline_bytes
+    assert after.read_bytes() == candidate_bytes
+
+
+def test_new_candidate_only_media_source_table_remains_additive(tmp_path: Path) -> None:
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    _seed(before)
+    shutil.copyfile(before, after)
+    with sqlite3.connect(after) as connection:
+        connection.execute("CREATE TABLE videos (id TEXT PRIMARY KEY, sha256 TEXT NOT NULL)")
+        connection.execute("INSERT INTO videos VALUES (?, ?)", ("new-video", "synthetic-sha"))
+    baseline_bytes, candidate_bytes = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+
+    assert code == 0
+    assert report["status"] == "PASS_PRESERVATION_ONLY"
+    assert report["protected_tables_examined"] == 5
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    assert next(item for item in report["tables"] if item["table"] == "videos")[
+        "status"
+    ] == "not_in_baseline"
+    assert not report["problems"]
+    assert before.read_bytes() == baseline_bytes
+    assert after.read_bytes() == candidate_bytes
