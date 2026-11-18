@@ -31,6 +31,7 @@ from reefvision.db.models import (
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.pose_training import (
     materialize_pose_training_exports,
+    process_pose_training_job,
 )
 from reefvision.jobs.training import (
     _complete_training_run,
@@ -472,6 +473,78 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
     assert exploratory["validation_mode"] == "none"
 
     assert exploratory["validation_image_count"] == 0
+
+
+@pytest.mark.parametrize(
+    ("tampered_field", "expected_error"),
+    (
+        ("job_request", "child job request checksum changed"),
+        ("frozen_dataset", "frozen dataset lineage changed"),
+    ),
+)
+def test_pose_worker_checks_frozen_lineage_before_export(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    tampered_field: str,
+    expected_error: str,
+) -> None:
+    # Exercise the actual queued worker using an API-frozen, scientist-reviewed
+    # pose dataset. It must fail before export or provider/GPU initialization.
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    project_id = str(project["id"])
+
+    def tampered_worker(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        with factory() as session:
+            job = session.get(Job, job_id)
+            assert job is not None
+            request = dict(job.request_json)
+            if tampered_field == "job_request":
+                job.request_json = {
+                    **request,
+                    "pose_training_dataset_manifest_sha256": "0" * 64,
+                }
+            else:
+                frozen = session.get(PoseTrainingDataset, str(dataset["id"]))
+                assert frozen is not None
+                frozen.manifest_sha256 = "0" * 64
+            session.commit()
+
+        assert process_pose_training_job(settings, factory, job_id) is False
+        with factory() as session:
+            job = session.get(Job, job_id)
+            assert job is not None and job.status == "failed"
+            assert expected_error in (job.error_message or "")
+            materialized = resolve_managed_project_path(
+                settings,
+                f"{project['storage_root']}/training/{request['training_run_id']}/pose-dataset",
+            )
+            assert not (materialized / "data.yaml").exists()
+        return False
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="Pose training child job did not complete"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload={
+                "project_id": project_id,
+                "dataset_id": dataset["id"],
+                "manifest_sha256": dataset["manifest_sha256"],
+            },
+            parameters={"training_config": {"epochs": 1}},
+            workflow_run_id="saved-pose-lineage-run",
+            workflow_node_run_id="saved-pose-lineage-node",
+            processor=tampered_worker,
+        )
 
 
 @pytest.mark.parametrize(
