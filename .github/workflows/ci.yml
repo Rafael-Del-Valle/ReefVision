@@ -148,6 +148,9 @@ jobs:
       - name: Check read-only Alembic parent-graph regressions on Windows
         shell: pwsh
         run: python -m pytest scripts/tests/test_audit_alembic_parent_graph_16.py -v
+      - name: Reject reserved Win32 installer cabinet names before file access
+        shell: pwsh
+        run: python -m pytest scripts/tests/test_validate_msi_provenance.py -v
       - name: Verify installed start/restart process isolation
         shell: pwsh
         run: ./scripts/test-reefvision-start-process-scope.ps1
