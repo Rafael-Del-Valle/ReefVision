@@ -193,7 +193,9 @@ def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
                     mantissa = value.lower().split("e", 1)[0]
                     if number == 0.0 and any(d in "123456789" for d in mantissa):
                         if scalar_type in {"float", "float32"}:
-                            raise PlyFloat32RangeError("PLY float32 value underflows declared range")
+                            raise PlyFloat32RangeError(
+                                "PLY float32 value underflows declared range"
+                            )
                         raise ValueError("PLY float underflows precision")
                     if scalar_type in {"float", "float32"}:
                         validate_ply_float32_range(number)
