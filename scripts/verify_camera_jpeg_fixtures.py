@@ -41,33 +41,57 @@ def _camera_exif_label(value: object) -> tuple[str | None, bool]:
 
 
 
+def _normalized_exif_ascii(value: object) -> str | None:
+    """Canonicalize ASCII EXIF text or NUL-padded bytes without guessing values.
+
+    Pillow and camera firmware can expose the same EXIF tag as a string in
+    IFD0 and as an ASCII byte sequence in ExifIFD. Only strip outer ASCII
+    padding; undecodable bytes, interior NULs and non-text types remain
+    untrusted. This matches the read-only application import validator.
+    """
+    if isinstance(value, bytes):
+        try:
+            value = value.decode("ascii")
+        except UnicodeDecodeError:
+            return None
+    return value.strip(" \\t\\r\\n\\x00") if isinstance(value, str) else None
+
+
+def _camera_exif_fields_agree(left: object, right: object) -> bool:
+    """Require unambiguous matching exposure fields across EXIF directories."""
+    normalized_left = _normalized_exif_ascii(left)
+    return normalized_left is not None and normalized_left == _normalized_exif_ascii(right)
+
+
 def _camera_exif_datetime_original(value: object) -> tuple[str | None, bool]:
     """Validate camera-local EXIF exposure time without inventing a UTC instant."""
     if value is None:
         return None, False
-    if type(value) is not str or len(value) != 19:
+    normalized = _normalized_exif_ascii(value)
+    if normalized is None or len(normalized) != 19:
         return None, True
-    if re.fullmatch(r"[0-9]{4}:[0-9]{2}:[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}", value) is None:
+    if re.fullmatch(r"[0-9]{4}:[0-9]{2}:[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}", normalized) is None:
         return None, True
     try:
-        datetime.strptime(value, "%Y:%m:%d %H:%M:%S")
+        datetime.strptime(normalized, "%Y:%m:%d %H:%M:%S")
     except ValueError:
         return None, True
-    return value, False
+    return normalized, False
 
 
 def _camera_exif_offset_time_original(value: object) -> tuple[str | None, bool]:
     """Validate an explicit EXIF exposure offset; absence is not UTC."""
     if value is None:
         return None, False
-    if type(value) is not str or len(value) != 6:
+    normalized = _normalized_exif_ascii(value)
+    if normalized is None or len(normalized) != 6:
         return None, True
-    if re.fullmatch(r"[+-][0-9]{2}:[0-9]{2}", value) is None:
+    if re.fullmatch(r"[+-][0-9]{2}:[0-9]{2}", normalized) is None:
         return None, True
-    hours, minutes = int(value[1:3]), int(value[4:6])
+    hours, minutes = int(normalized[1:3]), int(normalized[4:6])
     if hours > 14 or minutes > 59 or (hours == 14 and minutes != 0):
         return None, True
-    return value, False
+    return normalized, False
 
 
 def _file_fingerprint(stat: os.stat_result) -> tuple[int, ...]:
@@ -346,7 +370,7 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                             exposure_ifd_conflict = any(
                                 nested is not None
                                 and top is not None
-                                and nested != top
+                                and not _camera_exif_fields_agree(nested, top)
                                 for nested, top in (
                                     (nested_local, top_local),
                                     (nested_offset, top_offset),
