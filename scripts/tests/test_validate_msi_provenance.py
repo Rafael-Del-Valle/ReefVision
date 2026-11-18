@@ -229,6 +229,39 @@ def test_duplicate_manifest_key(tmp_path: Path) -> None:
         verify(directory)
 
 
+def test_private_duplicate_manifest_key_is_not_echoed(tmp_path: Path) -> None:
+    """A corrupt/untrusted JSON key must never become a diagnostic."""
+    directory, _ = make_bundle(tmp_path)
+    manifest = directory / "build-provenance.json"
+    private_key = "PRIVATE_CORAL_STUDY_INTERNAL_IDENTIFIER"
+    contents = manifest.read_text(encoding="utf-8")
+    duplicate = json.dumps(private_key)
+    manifest.write_text(contents[:-1] + f', {duplicate}: 1, {duplicate}: 2}}')
+    original_manifest = manifest.read_bytes()
+    with pytest.raises(validator.BundleValidationError, match="Duplicate provenance") as error:
+        verify(directory)
+    assert private_key not in str(error.value)
+    assert manifest.read_bytes() == original_manifest
+
+
+def test_tampered_private_artifact_name_is_not_echoed(tmp_path: Path) -> None:
+    """A failed hash must not expose study labels embedded in an artifact name."""
+    directory, manifest = make_bundle(tmp_path)
+    private_name = "PRIVATE_CORAL_STUDY_INTERNAL_IDENTIFIER.cab"
+    original = directory / "rv1.cab"
+    original.rename(directory / private_name)
+    manifest["media_cabinets"] = [private_name]
+    manifest["files"][1]["name"] = private_name
+    save(directory, manifest)
+    (directory / private_name).write_bytes(b"invalid payload")
+    original_manifest = (directory / "build-provenance.json").read_bytes()
+    with pytest.raises(validator.BundleValidationError, match="SHA-256 mismatch") as error:
+        verify(directory)
+    assert private_name not in str(error.value)
+    assert (directory / "build-provenance.json").read_bytes() == original_manifest
+    assert (directory / private_name).read_bytes() == b"invalid payload"
+
+
 def test_case_colliding_cab(tmp_path: Path) -> None:
     directory, manifest = make_bundle(tmp_path)
     original_cab = (directory / "rv1.cab").read_bytes()
@@ -336,6 +369,8 @@ def test_clean_runner_binds_installer_and_acceptance_to_checkout_version() -> No
         ("cab_hash", "Installer artifact cannot be read"),
         ("bundle_inventory", "Cannot inspect installer artifact inventory"),
         ("bundle_ancestor", "Installer bundle path cannot be verified"),
+        ("bundle_directory", "Installer bundle directory cannot be inspected"),
+        ("manifest_metadata", "build-provenance.json cannot be inspected"),
     ],
 )
 def test_unreadable_installer_preflight_fails_closed(
@@ -352,7 +387,25 @@ def test_unreadable_installer_preflight_fails_closed(
     original_manifest = manifest_path.read_bytes()
     detail = "PRIVATE-MACHINE-STUDY-PATH"
     with monkeypatch.context() as patch:
-        if operation == "manifest_read":
+        if operation == "bundle_directory":
+            original_is_dir = Path.is_dir
+
+            def deny_is_dir(self: Path) -> bool:
+                if self == directory:
+                    raise PermissionError(detail)
+                return original_is_dir(self)
+
+            patch.setattr(Path, "is_dir", deny_is_dir)
+        elif operation == "manifest_metadata":
+            original_is_file = Path.is_file
+
+            def deny_is_file(self: Path) -> bool:
+                if self == manifest_path:
+                    raise PermissionError(detail)
+                return original_is_file(self)
+
+            patch.setattr(Path, "is_file", deny_is_file)
+        elif operation == "manifest_read":
             original = Path.read_text
 
             def deny_read(self: Path, *args: object, **kwargs: object) -> str:
