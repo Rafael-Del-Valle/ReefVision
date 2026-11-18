@@ -81,3 +81,20 @@ For fixed geometry with positive scale `s` meters/source-unit, independently cal
 Use two calibration standards spanning the same specimen, including a deliberately conflicting pair, to test that nonuniform scale and disagreement are flagged rather than averaged into false precision. Challenge zero/negative scale, inverted bounds, missing units, calibration tied to another acquisition, and changed calibration metadata after a saved graph is created. Standalone results and reloaded executable graphs must agree on values, physical units, provenance, QC state, and rejection behavior. Preserve raw source-unit measurements even when a physical-unit claim is withheld.
 
 Separate uncertainty contributions in the validation record: scale-standard measurement, camera/reconstruction, manual landmark or endpoint placement, and temporal registration. Only the first contribution is represented by a scale-only interval. For paired longitudinal observations, do not assume calibration errors are independent: record whether the same standard, instrument and calibration session were reused and evaluate correlated versus independent-error sensitivity. Require reviewer sign-off before interpreting physical-unit changes as biological change.
+
+## OBJ decimal-collapse source integrity (provisional)
+
+Before accepting OBJ source measurements, challenge coordinates on all three axes
+with distinct decimal literals that round to the same binary64 position (for
+example, `1` and `1.00000000000000001`). Repeat with homogeneous `v x y z w`
+records whose **exact rational** `x/w`, `y/w` or `z/w` values differ but whose
+computed floats coincide. Such source collisions must fail in the parser, the
+standalone mesh-preview API, and a saved typed Workflow Builder execution without
+creating a measurement artifact. Equivalently represented locations (for
+example, `1`, `+1e0` and `2/2`) remain legitimate and must replay with identical
+measurement payloads and artifact SHA-256 hashes across two executions of the
+**same persisted graph**. Preserve separate raw-source bytes and calibration,
+coordinate-registration and biological-identity review states; numeric source
+integrity alone never verifies a reconstruction or an organism. The dedicated
+regressions are in `test_spatial_mesh_obj_numeric_integrity_v14.py`. This
+section defines testable behavior, not a field-validation acceptance claim.
