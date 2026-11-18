@@ -510,6 +510,29 @@ def test_pose_materialization_rejects_aliased_archive_entries(
     assert not (destination / "images" / "train" / "frame_00000001.png").exists()
 
 
+@pytest.mark.parametrize("alias", ("images", "labels/train"))
+def test_pose_materialization_rejects_file_directory_archive_collisions(
+    tmp_path: Path,
+    alias: str,
+) -> None:
+    # Valid frame bytes are present, but a later member declares one of their
+    # parent directories to be a regular file. Preflight must reject the ZIP
+    # before any scientist-reviewed frame is extracted.
+    stream = io.BytesIO(_pose_export_zip(b"reviewed"))
+    with zipfile.ZipFile(stream, "a", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(alias, b"not a directory")
+
+    destination = tmp_path / "pose-file-directory-collision"
+    with pytest.raises(ValidationError, match="file-directory archive collision"):
+        materialize_pose_training_exports(
+            training_content=stream.getvalue(),
+            validation_content=None,
+            destination=destination,
+        )
+
+    assert not (destination / "images" / "train" / "frame_00000001.png").exists()
+
+
 def test_pose_materialization_rejects_symlinked_export_destinations(
     tmp_path: Path,
 ) -> None:

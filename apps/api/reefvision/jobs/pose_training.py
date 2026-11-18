@@ -68,6 +68,7 @@ def _safe_extract_zip(
         # ./data.yaml and data.yaml otherwise overwrite the same scientific
         # artifact, while case-only aliases behave differently on Windows.
         seen_paths: set[str] = set()
+        file_paths: set[str] = set()
         windows_device_names = {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
         for prefix in ("COM", "LPT"):
             for digit in "123456789¹²³":
@@ -92,6 +93,21 @@ def _safe_extract_zip(
             if not key or key in seen_paths:
                 raise ValidationError("Pose training export contains a duplicate archive path")
             seen_paths.add(key)
+            if not item.is_dir():
+                file_paths.add(key)
+
+        # A file cannot also be a parent directory, even when that directory
+        # appears only implicitly in another ZIP entry. Check all paths before
+        # writing any verified training data.
+        for key in seen_paths:
+            components = key.split("/")
+            if any(
+                "/".join(components[:index]) in file_paths
+                for index in range(1, len(components))
+            ):
+                raise ValidationError(
+                    "Pose training export contains a file-directory archive collision"
+                )
 
         for item in archive.infolist():
             normalized = item.filename.replace(
