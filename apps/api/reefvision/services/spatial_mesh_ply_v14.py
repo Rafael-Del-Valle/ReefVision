@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from math import isfinite
 from re import fullmatch
+from struct import pack, unpack
 
 from reefvision.services.spatial_mesh_obj_v14 import MAX_FACES, MAX_VERTICES
 
@@ -43,6 +44,24 @@ _INTEGER_BOUNDS = {
     "uint": (0, 4294967295),
     "uint32": (0, 4294967295),
 }
+
+
+def validate_ply_float32_range(value: float) -> None:
+    """Bound declared float/float32 ASCII PLY scalars to binary32 range.
+
+    Ordinary representable rounding is allowed, and source decimal values
+    remain unquantized; this prevents silent overflow or collapse to zero.
+    """
+    if not isfinite(value):
+        raise ValueError("PLY float32 value must be finite")
+    try:
+        rounded = unpack("!f", pack("!f", value))[0]
+    except OverflowError as exc:
+        raise ValueError("PLY float32 value exceeds declared range") from exc
+    if not isfinite(rounded):
+        raise ValueError("PLY float32 value exceeds declared range")
+    if value != 0.0 and rounded == 0.0:
+        raise ValueError("PLY float32 value underflows declared range")
 
 
 def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
@@ -170,6 +189,8 @@ def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
                     mantissa = value.lower().split("e", 1)[0]
                     if number == 0.0 and any(d in "123456789" for d in mantissa):
                         raise ValueError("PLY float underflows precision")
+                    if scalar_type in {"float", "float32"}:
+                        validate_ply_float32_range(number)
                 numeric.append(float(number))
         except (ValueError, OverflowError) as exc:
             raise ValueError("Invalid or out-of-range PLY vertex value") from exc

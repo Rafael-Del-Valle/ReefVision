@@ -37,6 +37,22 @@ inventory must agree with it. A broad 1.4 gate cannot close an individual entry.
 re-identification across long gaps or videos. The latter remains its own 2.0
 inventory entry.
 
+### Declared ASCII PLY numeric-width integrity
+
+Mesh and point-cloud ASCII PLY imports now check each declared `float` or
+`float32` coordinate against its actual IEEE-754 binary32 range. A finite
+decimal that would overflow binary32 or round a nonzero coordinate to zero is
+rejected before any scientific measurement or saved-workflow artifact can
+succeed. The `double`/`float64` declarations retain binary64 parsing;
+representable float32 subnormals and ordinary decimal rounding remain
+permitted. Extra numeric mesh vertex properties obey their declared width.
+Original PLY text remains bound in source provenance: passing this range check
+does not certify source authenticity, camera calibration, specimen identity,
+reconstruction error, or biological surface area. Synthetic import, standalone
+API, and twice-executed typed saved Workflow Builder regressions cover these
+boundaries for both geometry families. Full CI and representative field review
+remain separate release gates.
+
 ### Bounded mesh-preview surface visibility QC
 
 A decimated preview can omit a complete edge-connected mesh patch even when

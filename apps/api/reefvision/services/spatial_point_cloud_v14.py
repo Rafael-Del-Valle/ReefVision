@@ -13,6 +13,7 @@ from typing import Any
 
 from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvidence
 from reefvision.services.spatial_mesh_obj_v14 import MAX_VERTICES
+from reefvision.services.spatial_mesh_ply_v14 import validate_ply_float32_range
 
 MAX_PLY_BYTES = 256_000
 MAX_PREVIEW_POINTS = 512
@@ -87,6 +88,7 @@ def parse_ascii_ply_points(
     format_seen = False
     vertex_count: int | None = None
     properties: list[str] = []
+    property_types: list[str] = []
     header_end: int | None = None
     for position, raw in enumerate(lines[1:], 1):
         if position > 128:
@@ -128,6 +130,7 @@ def parse_ascii_ply_points(
             else:
                 raise ValueError("Unsupported point-cloud PLY property")
             properties.append(property_name)
+            property_types.append(property_type)
         else:
             raise ValueError("Unsupported point-cloud PLY header directive")
     allowed_properties = (
@@ -165,6 +168,9 @@ def parse_ascii_ply_points(
             mantissa = token.lower().split("e", 1)[0]
             if value == 0.0 and any(digit in "123456789" for digit in mantissa):
                 raise ValueError("Point-cloud coordinate underflows float precision")
+        for index, value in zip(xyz, parsed, strict=True):
+            if property_types[index] in {"float", "float32"}:
+                validate_ply_float32_range(value)
         if any(not isfinite(value) or abs(value) > 1_000_000_000 for value in parsed):
             raise ValueError("Point-cloud coordinates must be finite and bounded")
         for channel in ("red", "green", "blue"):
