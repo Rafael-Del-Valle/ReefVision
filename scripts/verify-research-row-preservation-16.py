@@ -504,14 +504,11 @@ def verify(
                     item["removed_columns"] = missing
                 elif old_primary_key != new_primary_key:
                     item["status"] = "changed_primary_key"
-                elif (
-                    _column_contracts(old, table)
-                    != {
-                        name: contract
-                        for name, contract in _column_contracts(new, table).items()
-                        if name in old_columns
-                    }
-                ):
+                elif _column_contracts(old, table) != {
+                    name: contract
+                    for name, contract in _column_contracts(new, table).items()
+                    if name in old_columns
+                }:
                     # Do not disclose SQL defaults or row values in the report.
                     item["status"] = "changed_column_contract"
                 elif not _foreign_key_contracts(old, table).issubset(
