@@ -557,10 +557,20 @@ def test_compensated_patch_area_reconciles_mixed_scale_faces_in_saved_workflow(
     expected_raw_area = fsum([0.5] + [0.5 * height for height in heights])
     assert expected_raw_area > 0.5
     expected_area_m2 = expected_raw_area * 0.01 * 0.01
+    # Independent compensated area-weighted x moment. Every tiny face's
+    # contribution is below an ULP of the dominant triangle's x moment,
+    # but the 300 contributions together measurably move the centroid.
+    expected_x_centroid_m = fsum([0.5 / 3] + [0.25 * height for height in heights])
+    expected_x_centroid_m *= 0.01 / expected_raw_area
     direct = measure_mesh_preview(**params)
     assert direct["surface_area_m2"] == expected_area_m2
     assert direct["edge_connected_patch_count"] == 1
     assert direct["edge_connected_patch_surface_areas_m2"] == [expected_area_m2]
+    assert direct["area_weighted_surface_centroid_m"][0] == expected_x_centroid_m
+    assert direct["area_weighted_surface_centroid_m"][0] > 0.01 / 3
+    assert direct["edge_connected_patch_area_weighted_surface_centroids_m"] == [
+        direct["area_weighted_surface_centroid_m"]
+    ]
     assert direct["edge_connected_patch_surface_area_fractions"] == [1.0]
     assert direct["preview_surface_area_fraction"] == 1.0
     assert direct["preview_edge_connected_patch_surface_area_coverage_fractions"] == [1.0]
@@ -575,6 +585,8 @@ def test_compensated_patch_area_reconciles_mixed_scale_faces_in_saved_workflow(
     for field in (
         "surface_area_m2",
         "edge_connected_patch_surface_areas_m2",
+        "area_weighted_surface_centroid_m",
+        "edge_connected_patch_area_weighted_surface_centroids_m",
         "edge_connected_patch_surface_area_fractions",
         "preview_edge_connected_patch_surface_area_coverage_fractions",
         "qc_warnings",
@@ -624,6 +636,8 @@ def test_compensated_patch_area_reconciles_mixed_scale_faces_in_saved_workflow(
         for field in (
             "surface_area_m2",
             "edge_connected_patch_surface_areas_m2",
+            "area_weighted_surface_centroid_m",
+            "edge_connected_patch_area_weighted_surface_centroids_m",
             "edge_connected_patch_surface_area_fractions",
             "preview_edge_connected_patch_surface_area_coverage_fractions",
             "qc_warnings",

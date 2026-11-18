@@ -69,6 +69,20 @@ integrity, not reconstruction accuracy, organism identity, tissue area,
 anatomical branch length, or uncertainty beyond supplied scale error.
 
 
+### Compensated area-weighted mesh surface centroids
+
+Both per-patch and complete-mesh reconstructed surface centroids now reduce
+signed triangle area moments using compensated summation. A dominant face
+previously could discard many individually sub-ULP but collectively
+representable face contributions, shifting the reported centroid even when
+complete and per-patch surface areas reconciled correctly. The same
+300-sliver synthetic nonmanifold fixture tests an independently computed
+reference centroid and verifies direct, standalone API and twice-run typed,
+persisted Workflow Builder artifact parity and provisional provenance.
+These centroids are in the imported, unregistered source coordinate frame;
+they do not imply coral identity, registration, tissue localization or
+positioning accuracy beyond the caller-supplied common scale.
+
 ### Compensated disconnected-patch boundary perimeter
 
 Patch boundary-edge lengths and the total calibrated boundary perimeter now

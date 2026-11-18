@@ -235,7 +235,7 @@ def measure_mesh_preview(
     patch_face_counts: dict[int, int] = {}
     patch_degenerate_faces: Counter[int] = Counter()
     patch_vertex_indices: dict[int, set[int]] = {}
-    patch_centroid_moments: dict[int, list[float]] = {}
+    patch_centroid_moment_terms: dict[int, list[list[float]]] = {}
     patch_triangles: dict[int, list[list[tuple[float, float, float]]]] = {}
     patch_faces: dict[int, list[list[int]]] = {}
     for face_index, face_area in enumerate(face_areas):
@@ -245,9 +245,13 @@ def measure_mesh_preview(
         if face_area == 0:
             patch_degenerate_faces[patch] += 1
         patch_vertex_indices.setdefault(patch, set()).update(faces[face_index])
-        moment = patch_centroid_moments.setdefault(patch, [0.0, 0.0, 0.0])
+        # A few dominant faces can otherwise swallow many sub-ULP centroid
+        # moment contributions, even after patch surface area uses fsum.
+        moment_terms = patch_centroid_moment_terms.setdefault(patch, [[], [], []])
         for axis in range(3):
-            moment[axis] += face_area * sum(points[index][axis] for index in faces[face_index]) / 3
+            moment_terms[axis].append(
+                face_area * sum(points[index][axis] for index in faces[face_index]) / 3
+            )
         patch_triangles.setdefault(patch, []).append(
             sorted(points[index] for index in faces[face_index])
         )
@@ -257,6 +261,10 @@ def measure_mesh_preview(
     # complete mesh already uses fsum; per-patch areas must use the same
     # arithmetic or patch totals, coverage and fractions can contradict it.
     patch_area_mesh_units = {patch: fsum(areas) for patch, areas in patch_area_terms.items()}
+    patch_centroid_moments = {
+        patch: [fsum(axis_terms) for axis_terms in moments]
+        for patch, moments in patch_centroid_moment_terms.items()
+    }
     ordered_patches = sorted(patch_area_mesh_units, key=patch_first_face.__getitem__)
     # Separate edge-connected patches can still touch at source vertices. Such
     # a union is not a regular closed surface, even if every patch is closed.
@@ -466,7 +474,7 @@ def measure_mesh_preview(
     ]
     centroid_m = (
         [
-            sum(patch_centroid_moments[patch][axis] for patch in ordered_patches) * scale / raw_area
+            fsum(patch_centroid_moments[patch][axis] for patch in ordered_patches) * scale / raw_area
             for axis in range(3)
         ]
         if raw_area > 0
