@@ -414,6 +414,90 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             for name, content in originals.items():
                 self.assertEqual((root / name).read_bytes(), content)
 
+    def test_camera_declared_exif_make_model_is_optional_and_not_origin_proof(self) -> None:
+        """Keep bounded Sony/Canon labels but do not invent absent camera provenance."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; EXIF camera Make/Model unverified")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            expected = {
+                "sony.JPG": ("Sony", "ILCE-7RM3"),
+                "canon.JPEG": ("Canon", "EOS R5"),
+                "untagged.jfif": (None, None),
+            }
+            originals = {}
+            for index, (name, labels) in enumerate(expected.items()):
+                image = Image.new("RGB", (12, 8), (20 + index * 40, 60, 100))
+                exif = Image.Exif()
+                if labels[0] is not None:
+                    exif[271], exif[272] = labels
+                path = root / name
+                image.save(path, format="JPEG", exif=exif)
+                originals[name] = path.read_bytes()
+
+            records, errors = MODULE.inventory(root, verify_decode=True)
+            self.assertEqual(errors, [])
+            self.assertEqual(len(records), 3)
+            by_path = {record["path"]: record for record in records}
+            for name, (make, model) in expected.items():
+                record = by_path[name]
+                self.assertTrue(record["jpeg_decodable"])
+                self.assertEqual(record["jpeg_exif_camera_make"], make)
+                self.assertEqual(record["jpeg_exif_camera_model"], model)
+                self.assertFalse(record["jpeg_exif_camera_make_malformed"])
+                self.assertFalse(record["jpeg_exif_camera_model_malformed"])
+                self.assertEqual((root / name).read_bytes(), originals[name])
+            # Only non-identifying camera labels are surfaced, not owner,
+            # camera serial number, GPS coordinates or arbitrary EXIF fields.
+            self.assertNotIn("camera_serial", json.dumps(records).lower())
+            json.dumps(records, allow_nan=False)
+
+    def test_malformed_camera_make_model_tags_fail_qc_without_rewriting_images(self) -> None:
+        """Malformed EXIF identifiers are flagged without mislabeling JPEG pixels."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; malformed camera Make/Model unverified")
+        original_getexif = Image.Image.getexif
+        invalid_labels = (
+            (b"Canon", "EOS R5"),
+            ("Sony", "line\\nbreak"),
+            ("X" * 129, "model"),
+            ("", "model"),
+            ("Canon", b"EOS"),
+        )
+        for make, model in invalid_labels:
+            with self.subTest(make=repr(make)[:20], model=repr(model)[:20]):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    path = root / "camera.JPG"
+                    Image.new("RGB", (12, 8), (30, 70, 90)).save(
+                        path, format="JPEG"
+                    )
+                    original = path.read_bytes()
+
+                    def forged_exif(image):
+                        exif = original_getexif(image)
+                        exif[271], exif[272] = make, model
+                        return exif
+
+                    with mock.patch.object(Image.Image, "getexif", forged_exif):
+                        records, errors = MODULE.inventory(root, verify_decode=True)
+                    self.assertEqual(
+                        errors, ["invalid EXIF camera Make/Model metadata: camera.JPG"]
+                    )
+                    self.assertEqual(len(records), 1)
+                    record = records[0]
+                    self.assertTrue(record["jpeg_decodable"])
+                    self.assertTrue(
+                        record["jpeg_exif_camera_make_malformed"]
+                        or record["jpeg_exif_camera_model_malformed"]
+                    )
+                    json.dumps(record, allow_nan=False)
+                    self.assertEqual(path.read_bytes(), original)
+
     def test_opt_in_decode_records_multisegment_icc_payload_provenance(self) -> None:
         """Fingerprint assembled ICC payloads without claiming calibrated camera color."""
         import hashlib
