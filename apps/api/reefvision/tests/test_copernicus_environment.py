@@ -357,6 +357,8 @@ def test_valid_provider_grid_spacing_is_retained_as_unassessed_provenance(
         "key_amplification",
         "nonfinite",
         "recursive",
+        "invalid_unicode_metadata",
+        "invalid_unicode_toolbox",
         "nontext_toolbox_version",
     ],
 )
@@ -379,9 +381,12 @@ def test_invalid_provider_provenance_preserves_validated_offline_snapshot(
         # Metadata budget is UTF-8 bytes, not Unicode code points.
         damaged["dataset_metadata"]["vendor_history"] = "🐙" * 5_000
     elif damage == "key_amplification":
-        damaged["dataset_metadata"].update(
-            {f"vendor_{index:04d}": "x" for index in range(1_500)}
-        )
+        damaged["dataset_metadata"].update({f"vendor_{index:04d}": "x" for index in range(1_500)})
+    elif damage == "invalid_unicode_metadata":
+        # Unpaired surrogate escapes are legal in JSON but cannot form valid UTF-8.
+        damaged["dataset_metadata"]["vendor_history"] = "bad\ud800"
+    elif damage == "invalid_unicode_toolbox":
+        damaged["toolbox_version"] = "version\ud800"
     elif damage == "nontext_toolbox_version":
         damaged["toolbox_version"] = {"unverified": "1.2"}
     elif damage == "nonfinite":

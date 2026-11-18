@@ -149,9 +149,10 @@ def parse_copernicus(
             allow_nan=False,
             separators=(",", ":"),
         )
-    except (TypeError, ValueError, OverflowError, RecursionError) as exc:
-        raise ValidationError("Copernicus provider metadata must be finite JSON") from exc
-    if len(metadata_json.encode("utf-8")) > MAX_PROVIDER_METADATA_BYTES:
+        metadata_size_bytes = len(metadata_json.encode("utf-8"))
+    except (TypeError, ValueError, OverflowError, RecursionError, UnicodeError) as exc:
+        raise ValidationError("Copernicus provider metadata must be finite UTF-8 JSON") from exc
+    if metadata_size_bytes > MAX_PROVIDER_METADATA_BYTES:
         raise ValidationError("Copernicus provider metadata exceeds the 16 KiB provenance budget")
     # The Toolbox worker identifies its software version as text. Accept a
     # missing legacy version, but never persist provider-controlled structured
