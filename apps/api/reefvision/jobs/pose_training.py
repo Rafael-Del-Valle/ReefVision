@@ -102,8 +102,7 @@ def _safe_extract_zip(
         for key in seen_paths:
             components = key.split("/")
             if any(
-                "/".join(components[:index]) in file_paths
-                for index in range(1, len(components))
+                "/".join(components[:index]) in file_paths for index in range(1, len(components))
             ):
                 raise ValidationError(
                     "Pose training export contains a file-directory archive collision"
