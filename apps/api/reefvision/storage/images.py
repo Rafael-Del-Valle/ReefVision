@@ -393,9 +393,7 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                     exposure_ifd_conflicts = [
                         tag
                         for tag in (36867, 36881, 37521)
-                        if tag in exif
-                        and tag in nested_exif
-                        and exif[tag] != nested_exif[tag]
+                        if tag in exif and tag in nested_exif and exif[tag] != nested_exif[tag]
                     ]
                     exif.update(nested_exif)
                 except (
