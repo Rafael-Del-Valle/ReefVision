@@ -6,6 +6,7 @@ from __future__ import annotations
 import io
 import re
 import shutil
+import stat
 import sys
 import zipfile
 from contextlib import suppress
@@ -76,6 +77,14 @@ def _safe_extract_zip(
             for digit in "123456789¹²³":
                 windows_device_names.add(f"{prefix}{digit}")
         for item in archive.infolist():
+            # Reviewed exports contain only regular files and directories.
+            # A Unix link or device entry must never masquerade as image truth.
+            if item.create_system == 3 and stat.S_IFMT(item.external_attr >> 16) not in (
+                0,
+                stat.S_IFREG,
+                stat.S_IFDIR,
+            ):
+                raise ValidationError("Pose training export contains a special archive member")
             relative = Path(item.filename.replace("\\", "/"))
             if relative.is_absolute() or ".." in relative.parts:
                 raise ValidationError("Pose training export contains an unsafe archive path")
