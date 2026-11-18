@@ -238,7 +238,9 @@ def test_private_duplicate_manifest_key_is_not_echoed(tmp_path: Path) -> None:
     duplicate = json.dumps(private_key)
     manifest.write_text(contents[:-1] + f', {duplicate}: 1, {duplicate}: 2}}')
     original_manifest = manifest.read_bytes()
-    with pytest.raises(validator.BundleValidationError, match="Duplicate provenance") as error:
+    with pytest.raises(
+        validator.BundleValidationError, match="Duplicate provenance"
+    ) as error:
         verify(directory)
     assert private_key not in str(error.value)
     assert manifest.read_bytes() == original_manifest
@@ -255,7 +257,9 @@ def test_tampered_private_artifact_name_is_not_echoed(tmp_path: Path) -> None:
     save(directory, manifest)
     (directory / private_name).write_bytes(b"invalid payload")
     original_manifest = (directory / "build-provenance.json").read_bytes()
-    with pytest.raises(validator.BundleValidationError, match="SHA-256 mismatch") as error:
+    with pytest.raises(
+        validator.BundleValidationError, match="SHA-256 mismatch"
+    ) as error:
         verify(directory)
     assert private_name not in str(error.value)
     assert (directory / "build-provenance.json").read_bytes() == original_manifest
