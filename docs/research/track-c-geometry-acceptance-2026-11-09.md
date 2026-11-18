@@ -45,3 +45,29 @@ For every row above, record an immutable fixture identifier and SHA-256, units, 
 **Statistical 1.5 handoff:** Before enabling a study-package export, include fixtures with repeated fragments nested within tanks, multiple reviewers scoring the same observations, and held-out model predictions. The experimental unit must be declared (e.g., tank for a tank-level feeding treatment), with pseudoreplication checks; ICC model/type and single-versus-average rating must be specified; Bland–Altman must report pairing, bias, limits of agreement and assumptions; model comparisons must use the same held-out samples and identify leakage. Saved workflows must retain design, randomization, missingness, analysis configuration, multiplicity decisions, and QC, with no unreviewed significance or causality claim.
 
 **Pass evidence:** Link exact-head CI job and fixture output for backend/frontend/E2E/migrations/scientific checks, then separately document Windows MSI/CAB construction, fresh-install GUI interactions, persisted reopen, and actual CPU/GPU inference. A passing packaging workflow does not establish successful installed-GUI or hardware acceptance.
+
+
+### Track C winding/provenance parity regression (2026-11-17)
+
+A synthetic three-vertex triangle with signed-coordinate cancellation now has a
+regression asserting that reversing face winding preserves reconstructed surface
+area, its compensated area-weighted centroid, and the winding-independent
+edge-connected patch geometry fingerprint, but **changes the original source
+geometry SHA-256**. The original indexing/winding remains significant for
+source integrity even when the reconstructed geometric measurements agree.
+
+Both windings are supplied to the standalone project-scoped API and to separate
+**executable, typed, persisted Workflow Builder graphs**, with two job executions
+per saved graph. The tests assert agreement of geometry and QC with direct
+scientific measurement; equality of standalone and workflow provenance; stable
+artifact SHA-256 within each winding; and distinct artifact SHA-256 across
+different source windings. Source-supplied specimen/observation labels and frame
+metadata must remain unverified, as must the ruler scale. Neither equivalent
+patch geometry nor reproducible workflow artifacts establish that two scans
+represent the same coral, share a registered coordinate frame, or have an
+independently validated calibration.
+
+The same iteration corrects the prior GitHub backend Ruff format-check failure
+in the winding assertions. **These are regression contracts pending final-head
+CI verification**, not newly verified biological reference data or evidence
+of installed-GUI, physical GPU, or Windows release acceptance.
