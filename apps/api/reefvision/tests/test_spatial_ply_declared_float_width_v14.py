@@ -41,6 +41,34 @@ def _source(kind: str, declared: str, scalar: str) -> str:
     )
 
 
+
+@pytest.mark.parametrize(
+    ("token", "diagnostic"),
+    [
+        ("1e-50", "PLY float32 value underflows declared range"),
+        ("1e40", "PLY float32 value exceeds declared range"),
+        ("malformed", "Invalid or out-of-range PLY vertex value"),
+    ],
+)
+def test_mesh_declared_width_diagnostics_preserve_safe_precision_reason(
+    token: str, diagnostic: str
+) -> None:
+    with pytest.raises(ValueError, match=diagnostic):
+        parse_ply_triangles(_source("mesh", "float32", token))
+
+
+def test_mesh_additional_float32_vertex_property_rejects_underflow() -> None:
+    source = MESH_PLY.replace(
+        "property float z\n",
+        "property float z\nproperty float confidence\n",
+    ).replace(
+        "end_header\n0 0 0\n2 0 0\n0 3 0\n",
+        "end_header\n0 0 0 1e-50\n2 0 0 1\n0 3 0 1\n",
+    )
+    with pytest.raises(ValueError, match="PLY float32 value underflows declared range"):
+        parse_ply_triangles(source)
+
+
 def _graph(kind: str, params: dict) -> dict:
     node_type = "mesh_surface_preview" if kind == "mesh" else "point_cloud_preview"
     return {
