@@ -594,6 +594,8 @@ def verify(
                     item["removed_columns"] = missing
                 elif old_primary_key != new_primary_key:
                     item["status"] = "changed_primary_key"
+                elif _table_storage_contract(old, table) != _table_storage_contract(new, table):
+                    item["status"] = "changed_table_storage_contract"
                 elif _column_contracts(old, table) != {
                     name: contract
                     for name, contract in _column_contracts(new, table).items()
@@ -613,8 +615,6 @@ def verify(
                     _check_constraint_contracts(new, table)
                 ):
                     item["status"] = "changed_check_constraint_contract"
-                elif _table_storage_contract(old, table) != _table_storage_contract(new, table):
-                    item["status"] = "changed_table_storage_contract"
                 else:
                     order_by = old_primary_key or old_columns
                     old_count, old_sha = _fingerprint(old, table, old_columns, order_by)

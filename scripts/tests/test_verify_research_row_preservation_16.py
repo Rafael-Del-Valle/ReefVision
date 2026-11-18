@@ -1123,9 +1123,7 @@ def test_scientific_storage_rules_survive_migration(
                 "CREATE TABLE scientific_records "
                 "(id TEXT PRIMARY KEY, measurement REAL)" + suffix
             )
-            connection.execute(
-                "INSERT INTO scientific_records VALUES ('private-coral', 3.5)"
-            )
+            connection.execute("INSERT INTO scientific_records VALUES ('private-coral', 3.5)")
     original, candidate = before.read_bytes(), after.read_bytes()
     code, report = _run(before, after)
     valid = expected == "preserved"
