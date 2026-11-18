@@ -204,7 +204,10 @@ def parent_revisions_from_source(path: Path, source: bytes) -> tuple[str, ...]:
         matching = [
             target
             for target in targets
-            if any(isinstance(node, ast.Name) and node.id == "down_revision" for node in ast.walk(target))
+            if any(
+                isinstance(node, ast.Name) and node.id == "down_revision"
+                for node in ast.walk(target)
+            )
         ]
         if not matching:
             continue
@@ -251,15 +254,16 @@ def parent_revisions_from_source(path: Path, source: bytes) -> tuple[str, ...]:
             raise ValueError(f"{path}: pattern rebinds down_revision")
         if isinstance(node, ast.ExceptHandler) and node.name == "down_revision":
             raise ValueError(f"{path}: exception rebinds down_revision")
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            if node.name == "down_revision":
-                raise ValueError(f"{path}: declaration rebinds down_revision")
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            if any(
-                (alias.asname or alias.name.split(".")[0]) == "down_revision"
-                for alias in node.names
-            ):
-                raise ValueError(f"{path}: import rebinds down_revision")
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            and node.name == "down_revision"
+        ):
+            raise ValueError(f"{path}: declaration rebinds down_revision")
+        if isinstance(node, (ast.Import, ast.ImportFrom)) and any(
+            (alias.asname or alias.name.split(".")[0]) == "down_revision"
+            for alias in node.names
+        ):
+            raise ValueError(f"{path}: import rebinds down_revision")
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
             parameters = node.args
             named = [
