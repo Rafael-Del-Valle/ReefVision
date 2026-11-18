@@ -159,6 +159,98 @@ def _unique_index_contracts(connection: sqlite3.Connection, table: str) -> set[t
     return contracts
 
 
+def _ddl_tokens(sql: str) -> tuple[str, ...]:
+    """Tokenize stored table DDL without confusing quoted text with SQL rules.
+
+    Reworded but logically equivalent CHECK expressions require manual review
+    rather than an automatic preservation PASS.
+    """
+    tokens: list[str] = []
+    index = 0
+    while index < len(sql):
+        char = sql[index]
+        if char.isspace():
+            index += 1
+            continue
+        if sql.startswith("--", index):
+            newline = sql.find("\n", index + 2)
+            index = len(sql) if newline < 0 else newline + 1
+            continue
+        if sql.startswith("/*", index):
+            end = sql.find("*/", index + 2)
+            if end < 0:
+                raise ValueError("unterminated_table_ddl_comment")
+            index = end + 2
+            continue
+        if char in ("'", '"', chr(96), "["):
+            closing = "]" if char == "[" else char
+            end = index + 1
+            while end < len(sql):
+                if sql[end] == closing:
+                    if closing != "]" and end + 1 < len(sql) and sql[end + 1] == closing:
+                        end += 2
+                        continue
+                    end += 1
+                    break
+                end += 1
+            else:
+                raise ValueError("unterminated_table_ddl_quote")
+            tokens.append(sql[index:end])
+            index = end
+            continue
+        if char.isalnum() or char in ("_", "$"):
+            end = index + 1
+            while end < len(sql) and (sql[end].isalnum() or sql[end] in ("_", "$")):
+                end += 1
+            tokens.append(sql[index:end].upper())
+            index = end
+            continue
+        tokens.append(char)
+        index += 1
+    return tuple(tokens)
+
+
+def _check_constraint_contracts(
+    connection: sqlite3.Connection, table: str
+) -> set[tuple[str, ...]]:
+    """Preserve existing nested CHECK predicates without exposing private DDL."""
+    definition = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table,),
+    ).fetchone()
+    if definition is None or not isinstance(definition[0], str):
+        raise ValueError("protected_table_ddl_missing")
+    tokens = _ddl_tokens(definition[0])
+    contracts: set[tuple[str, ...]] = set()
+    for index, token in enumerate(tokens[:-1]):
+        if token != "CHECK" or tokens[index + 1] != "(":
+            continue
+        depth = 0
+        for end in range(index + 1, len(tokens)):
+            if tokens[end] == "(":
+                depth += 1
+            elif tokens[end] == ")":
+                depth -= 1
+                if depth == 0:
+                    contracts.add(tokens[index + 1 : end + 1])
+                    break
+        else:
+            raise ValueError("unterminated_table_check_constraint")
+    return contracts
+
+
+def _table_storage_contract(connection: sqlite3.Connection, table: str) -> tuple[int, int]:
+    """Retain WITHOUT ROWID and STRICT enforcement of protected tables."""
+    row = connection.execute(
+        "SELECT wr, strict FROM pragma_table_list "
+        "WHERE schema = 'main' AND type = 'table' AND name = ?",
+        (table,),
+    ).fetchone()
+    if row is None:
+        raise ValueError("protected_table_storage_unknown")
+    return (row[0], row[1])
+
+
 def _encode_row(row: tuple) -> bytes:
     typed = []
     for value in row:
@@ -517,6 +609,12 @@ def verify(
                     _unique_index_contracts(new, table)
                 ):
                     item["status"] = "changed_unique_index_contract"
+                elif not _check_constraint_contracts(old, table).issubset(
+                    _check_constraint_contracts(new, table)
+                ):
+                    item["status"] = "changed_check_constraint_contract"
+                elif _table_storage_contract(old, table) != _table_storage_contract(new, table):
+                    item["status"] = "changed_table_storage_contract"
                 else:
                     order_by = old_primary_key or old_columns
                     old_count, old_sha = _fingerprint(old, table, old_columns, order_by)

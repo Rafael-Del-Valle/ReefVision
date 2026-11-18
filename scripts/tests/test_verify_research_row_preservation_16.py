@@ -1030,3 +1030,112 @@ def test_additional_unique_constraint_is_preservation_compatible(tmp_path: Path)
     assert report["requires_researcher_approval"] is True
     assert before.read_bytes() == original
     assert after.read_bytes() == candidate
+
+
+@pytest.mark.parametrize(
+    ("candidate_check", "expected"),
+    [
+        ("", "changed_check_constraint_contract"),
+        ("CHECK (measurement >= -100)", "changed_check_constraint_contract"),
+        ("CHECK (measurement > -100)", "changed_check_constraint_contract"),
+        ("CHECK (measurement >= 0)", "preserved"),
+        ("CHECK (measurement >= 0) CHECK (measurement < 100)", "preserved"),
+    ],
+)
+def test_scientific_check_constraints_survive_migration(
+    tmp_path: Path, candidate_check: str, expected: str
+) -> None:
+    """Identical measured data cannot excuse relaxed future CHECK enforcement."""
+    before, after = tmp_path / "before.sqlite", tmp_path / "after.sqlite"
+    for path, check_sql in (
+        (before, "CHECK (measurement >= 0)"),
+        (after, candidate_check),
+    ):
+        with sqlite3.connect(path) as connection:
+            # The default literal contains CHECK( but is not a DDL constraint.
+            connection.execute(
+                "CREATE TABLE scientific_records "
+                "(id TEXT PRIMARY KEY, measurement REAL "
+                + check_sql
+                + ", note TEXT DEFAULT 'CHECK(not_a_constraint)')"
+            )
+            connection.execute(
+                "INSERT INTO scientific_records (id, measurement) VALUES (?, ?)",
+                ("private-coral", 3.5),
+            )
+    original, candidate = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+    valid = expected == "preserved"
+    assert code == (0 if valid else 2)
+    assert report["status"] == ("PASS_PRESERVATION_ONLY" if valid else "HOLD")
+    assert next(
+        entry["status"] for entry in report["tables"] if entry["table"] == "scientific_records"
+    ) == expected
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    assert "private-coral" not in json.dumps(report)
+    assert "not_a_constraint" not in json.dumps(report)
+    assert before.read_bytes() == original
+    assert after.read_bytes() == candidate
+
+
+def test_additive_column_preserves_existing_scientific_check(tmp_path: Path) -> None:
+    """Extra columns do not invalidate unchanged CHECK predicates."""
+    before, after = tmp_path / "before.sqlite", tmp_path / "after.sqlite"
+    with sqlite3.connect(before) as connection:
+        connection.execute(
+            "CREATE TABLE scientific_records "
+            "(id TEXT PRIMARY KEY, measurement REAL CHECK (measurement >= 0))"
+        )
+        connection.execute(
+            "INSERT INTO scientific_records VALUES ('private-coral', 3.5)"
+        )
+    shutil.copyfile(before, after)
+    with sqlite3.connect(after) as connection:
+        connection.execute("ALTER TABLE scientific_records ADD COLUMN note TEXT")
+    original, candidate = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+    assert code == 0, report["problems"]
+    assert report["status"] == "PASS_PRESERVATION_ONLY"
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    assert before.read_bytes() == original
+    assert after.read_bytes() == candidate
+
+
+@pytest.mark.parametrize(
+    ("baseline_suffix", "candidate_suffix", "expected"),
+    [
+        (" STRICT", "", "changed_table_storage_contract"),
+        (" WITHOUT ROWID", "", "changed_table_storage_contract"),
+        (" STRICT", " STRICT", "preserved"),
+        (" WITHOUT ROWID", " WITHOUT ROWID", "preserved"),
+    ],
+)
+def test_scientific_storage_rules_survive_migration(
+    tmp_path: Path, baseline_suffix: str, candidate_suffix: str, expected: str
+) -> None:
+    """Retain SQLite strict typing and rowid allocation behavior."""
+    before, after = tmp_path / "before.sqlite", tmp_path / "after.sqlite"
+    for path, suffix in ((before, baseline_suffix), (after, candidate_suffix)):
+        with sqlite3.connect(path) as connection:
+            connection.execute(
+                "CREATE TABLE scientific_records "
+                "(id TEXT PRIMARY KEY, measurement REAL)" + suffix
+            )
+            connection.execute(
+                "INSERT INTO scientific_records VALUES ('private-coral', 3.5)"
+            )
+    original, candidate = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+    valid = expected == "preserved"
+    assert code == (0 if valid else 2)
+    assert report["status"] == ("PASS_PRESERVATION_ONLY" if valid else "HOLD")
+    assert next(
+        entry["status"] for entry in report["tables"] if entry["table"] == "scientific_records"
+    ) == expected
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    assert "private-coral" not in json.dumps(report)
+    assert before.read_bytes() == original
+    assert after.read_bytes() == candidate
