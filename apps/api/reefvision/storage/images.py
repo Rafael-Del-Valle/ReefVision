@@ -472,15 +472,12 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
             # above remains the authoritative capture-byte fingerprint.
             embedded_icc = image.info.get("icc_profile")
             if isinstance(embedded_icc, bytes) and embedded_icc:
-                metadata["embedded_icc_profile_sha256"] = hashlib.sha256(
-                    embedded_icc
-                ).hexdigest()
+                metadata["embedded_icc_profile_sha256"] = hashlib.sha256(embedded_icc).hexdigest()
                 metadata["embedded_icc_profile_size_bytes"] = len(embedded_icc)
                 metadata["embedded_icc_profile_validation"] = "not-validated"
             elif embedded_icc is not None:
                 metadata["embedded_icc_profile_warning"] = (
-                    "ICC metadata is empty or not a byte payload; "
-                    "profile fingerprint unavailable"
+                    "ICC metadata is empty or not a byte payload; profile fingerprint unavailable"
                 )
             capture_timestamp = (
                 None

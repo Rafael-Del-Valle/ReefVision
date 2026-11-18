@@ -29,9 +29,7 @@ def test_camera_icc_profile_fingerprint_does_not_modify_original(
     # This deliberately opaque payload tests byte fidelity, not ICC validity.
     icc_payload = b"reefvision-test-icc-payload\x00binary\xff-not-calibration"
     color = (30, 75, 125, 10) if mode == "CMYK" else (30, 75, 125)
-    Image.new(mode, (31, 17), color).save(
-        path, format="JPEG", icc_profile=icc_payload
-    )
+    Image.new(mode, (31, 17), color).save(path, format="JPEG", icc_profile=icc_payload)
     original = path.read_bytes()
     digest = hashlib.sha256(original).hexdigest()
 
@@ -41,9 +39,9 @@ def test_camera_icc_profile_fingerprint_does_not_modify_original(
     assert inspected.extension == ".jpg"
     assert inspected.media_type == "image/jpeg"
     assert (inspected.width_px, inspected.height_px) == (31, 17)
-    assert inspected.metadata["embedded_icc_profile_sha256"] == hashlib.sha256(
-        icc_payload
-    ).hexdigest()
+    assert (
+        inspected.metadata["embedded_icc_profile_sha256"] == hashlib.sha256(icc_payload).hexdigest()
+    )
     assert inspected.metadata["embedded_icc_profile_size_bytes"] == len(icc_payload)
     assert inspected.metadata["embedded_icc_profile_validation"] == "not-validated"
     assert "icc_profile" not in inspected.metadata["info"]
@@ -58,9 +56,7 @@ def test_camera_without_icc_does_not_invent_color_profile(tmp_path) -> None:
     Image.new("RGB", (19, 13), (12, 35, 90)).save(path, format="JPEG")
     original = path.read_bytes()
 
-    inspected = inspect_staged_image(
-        path, hashlib.sha256(original).hexdigest(), len(original)
-    )
+    inspected = inspect_staged_image(path, hashlib.sha256(original).hexdigest(), len(original))
 
     assert "embedded_icc_profile_sha256" not in inspected.metadata
     assert "embedded_icc_profile_size_bytes" not in inspected.metadata
