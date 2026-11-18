@@ -187,3 +187,68 @@ def test_camera_exif_explicit_offset_converts_to_utc_without_rewriting_capture(
     assert inspected.extension == ".jpg"
     assert inspected.metadata["exif"]["DateTimeOriginal"] == "2026:04:03 14:25:30"
     assert path.read_bytes() == original
+@pytest.mark.parametrize(
+    ("nested_override", "conflict_field"),
+    [
+        ({36867: "2026:10:02 12:30:00"}, "DateTimeOriginal"),
+        ({36881: "+01:00"}, "OffsetTimeOriginal"),
+        ({37521: "999"}, "SubsecTimeOriginal"),
+        ({}, None),
+    ],
+)
+def test_camera_import_never_promotes_conflicting_ifd0_exposure_to_utc(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+    nested_override: dict[int, str],
+    conflict_field: str | None,
+) -> None:
+    """Inconsistent camera IFDs remain read-only QC evidence, not UTC observations."""
+    path = tmp_path / "DSC_CONFLICT.JPEG"
+    Image.new("RGB", (23, 17), (30, 65, 115)).save(path, format="JPEG")
+    original = path.read_bytes()
+    top_tags = {
+        36867: "2026:10:01 12:30:00",
+        36881: "-04:00",
+        37521: "123",
+    }
+    nested_tags = {**top_tags, **nested_override}
+    original_getexif = Image.Image.getexif
+    original_get_ifd = Image.Exif.get_ifd
+
+    def camera_getexif(image: Image.Image) -> Image.Exif:
+        exif = original_getexif(image)
+        exif.update(top_tags)
+        return exif
+
+    def camera_get_ifd(exif: Image.Exif, tag: int):
+        if tag == 34665:
+            return nested_tags
+        return original_get_ifd(exif, tag)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Image.Image, "getexif", camera_getexif)
+        patch.setattr(Image.Exif, "get_ifd", camera_get_ifd)
+        inspected = inspect_staged_image(
+            path, hashlib.sha256(original).hexdigest(), len(original)
+        )
+
+    assert inspected.sha256 == hashlib.sha256(original).hexdigest()
+    assert inspected.media_type == "image/jpeg"
+    assert (inspected.width_px, inspected.height_px) == (23, 17)
+    if conflict_field is None:
+        assert inspected.capture_timestamp is not None
+        assert (
+            inspected.capture_timestamp.isoformat()
+            == "2026-10-01T16:30:00.123000+00:00"
+        )
+        assert "exif_exposure_ifd_conflict_fields" not in inspected.metadata
+    else:
+        assert inspected.capture_timestamp is None
+        assert inspected.metadata["exif_exposure_ifd_conflict_fields"] == [
+            conflict_field
+        ]
+        assert (
+            "UTC capture timestamp not inferred"
+            in inspected.metadata["capture_time_warning"]
+        )
+    assert path.read_bytes() == original

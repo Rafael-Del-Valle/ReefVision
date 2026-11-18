@@ -365,6 +365,7 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
             # Never infer exposure time from DateTime when the acquisition IFD
             # could not be read: that tag may describe a later file modification.
             exif_warning: str | None = None
+            exposure_ifd_conflicts: list[int] = []
             try:
                 image_exif = image.getexif()
                 exif = dict(image_exif)
@@ -384,7 +385,19 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                 try:
                     # DateTimeOriginal and OffsetTimeOriginal are typically
                     # nested, rather than exposed in the top-level EXIF dict.
-                    exif.update(image_exif.get_ifd(ExifTags.IFD.Exif))
+                    nested_exif = image_exif.get_ifd(ExifTags.IFD.Exif)
+                    # Camera exporters sometimes duplicate acquisition tags
+                    # between IFD0 and ExifIFD. A contradictory exposure,
+                    # offset, or fractional second must never become a
+                    # fabricated verified UTC timestamp on import.
+                    exposure_ifd_conflicts = [
+                        tag
+                        for tag in (36867, 36881, 37521)
+                        if tag in exif
+                        and tag in nested_exif
+                        and exif[tag] != nested_exif[tag]
+                    ]
+                    exif.update(nested_exif)
                 except (
                     OSError,
                     SyntaxError,
@@ -425,7 +438,11 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                 "info": safe_info,
                 "exif": named_exif,
             }
-            capture_timestamp = None if exif_warning is not None else _capture_timestamp(exif)
+            capture_timestamp = (
+                None
+                if exif_warning is not None or exposure_ifd_conflicts
+                else _capture_timestamp(exif)
+            )
             # An EXIF exposure can have a trustworthy UTC second but an
             # untrustworthy or over-precise fractional field. Never silently
             # imply that a malformed fraction was measured as exactly zero.
@@ -450,9 +467,17 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                         "EXIF SubsecTimeOriginal exceeds microsecond precision; "
                         "UTC capture time retains only the first six fractional digits"
                     )
+            if exposure_ifd_conflicts:
+                metadata["exif_exposure_ifd_conflict_fields"] = [
+                    ExifTags.TAGS.get(tag, str(tag)) for tag in exposure_ifd_conflicts
+                ]
+                metadata["capture_time_warning"] = (
+                    "Conflicting exposure EXIF metadata between IFD0 and Exif IFD; "
+                    "UTC capture timestamp not inferred"
+                )
             if exif_warning is not None:
                 metadata["exif_warning"] = exif_warning
-            elif capture_timestamp is None:
+            elif capture_timestamp is None and not exposure_ifd_conflicts:
                 if exif.get(36867) is not None:
                     if not exif.get(36881):
                         metadata["capture_time_warning"] = (
