@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+from fractions import Fraction
 from math import isfinite
 from re import fullmatch
 
@@ -43,6 +45,9 @@ def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
     faces: list[list[int]] = []
     texture_coordinate_count = 0
     normal_count = 0
+    # Preserve exact OBJ source-coordinate distinctions when different decimal
+    # exports map to the same binary64 XYZ value, including homogeneous W.
+    source_tokens_by_axis: list[dict[float, tuple[str, str]]] = [{}, {}, {}]
     for line_number, line in enumerate(text.splitlines(), 1):
         # OBJ permits trailing # comments on geometry records. Strip only
         # parser tokens; the original bytes remain bound in source provenance.
@@ -56,6 +61,7 @@ def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
                 raise ValueError(f"OBJ line {line_number}: unsupported vertex layout")
             try:
                 point = [_parse_obj_float(value) for value in fields[1:4]]
+                weight_token = fields[4] if len(fields) in {5, 8} else "1"
                 if len(fields) in {5, 8}:
                     weight = _parse_obj_float(fields[4])
                     if not isfinite(weight) or weight == 0:
@@ -79,6 +85,23 @@ def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
                 raise ValueError(f"OBJ line {line_number}: invalid vertex") from exc
             if not all(isfinite(value) for value in point):
                 raise ValueError(f"OBJ line {line_number}: coordinates must be finite")
+            for axis, (coordinate, token) in enumerate(
+                zip(point, fields[1:4], strict=True)
+            ):
+                previous = source_tokens_by_axis[axis].get(coordinate)
+                if previous is not None:
+                    # Fractions avoid Decimal's context rounding for W division.
+                    previous_exact = Fraction(Decimal(previous[0])) / Fraction(
+                        Decimal(previous[1])
+                    )
+                    current_exact = Fraction(Decimal(token)) / Fraction(Decimal(weight_token))
+                    if previous_exact != current_exact:
+                        raise ValueError(
+                            f"OBJ line {line_number}: distinct source coordinates "
+                            "collapse at float64 precision"
+                        )
+                else:
+                    source_tokens_by_axis[axis][coordinate] = (token, weight_token)
             vertices.append(point)
             if len(vertices) > MAX_VERTICES:
                 raise ValueError("OBJ preview exceeds vertex limit")
