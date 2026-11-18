@@ -478,10 +478,10 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
 @pytest.mark.parametrize(
     "extra_yaml",
     (
-        "train: /outside-of-frozen-export\\n",
-        "val: /outside-of-frozen-export\\n",
-        "path: /outside-of-frozen-export\\n",
-        "'train': /outside-of-frozen-export\\n",
+        "train: /outside-of-frozen-export\n",
+        "val: /outside-of-frozen-export\n",
+        "path: /outside-of-frozen-export\n",
+        "'train': /outside-of-frozen-export\n",
     ),
 )
 def test_pose_materialization_rejects_overridden_frozen_dataset_paths(
