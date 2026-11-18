@@ -232,10 +232,24 @@ def test_duplicate_manifest_key(tmp_path: Path) -> None:
 
 
 def test_case_colliding_cab(tmp_path: Path) -> None:
-    directory, _ = make_bundle(tmp_path)
-    (directory / "RV1.CAB").write_bytes(b"extra")
-    with pytest.raises(validator.BundleValidationError, match="Unexpected"):
-        verify(directory)
+    directory, manifest = make_bundle(tmp_path)
+    original_cab = (directory / "rv1.cab").read_bytes()
+    case_alias = directory / "RV1.CAB"
+    if case_alias.exists():
+        # NTFS commonly aliases these names. Never overwrite the fixture's
+        # actual cabinet to manufacture a second physical file.
+        manifest["files"].append(
+            {"name": "RV1.CAB", "sha256": manifest["files"][1]["sha256"]}
+        )
+        save(directory, manifest)
+        with pytest.raises(validator.BundleValidationError, match="duplicate filenames"):
+            verify(directory)
+    else:
+        # Case-sensitive filesystems can represent two physical files.
+        case_alias.write_bytes(b"extra")
+        with pytest.raises(validator.BundleValidationError, match="Unexpected"):
+            verify(directory)
+    assert (directory / "rv1.cab").read_bytes() == original_cab
 
 
 def test_linked_cab(tmp_path: Path) -> None:
