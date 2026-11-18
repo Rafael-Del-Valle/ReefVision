@@ -481,6 +481,11 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
         ("IMAGES/TRAIN/FRAME_00000001.PNG", "duplicate archive path"),
         ("images/train/frame_00000001.png.", "noncanonical archive path"),
         ("images/train/frame_00000001.png ", "noncanonical archive path"),
+        ("images/train/CON.png", "Windows-unsafe archive path"),
+        ("images/train/com¹.txt", "Windows-unsafe archive path"),
+        ("images/train/frame:alternate.png", "Windows-unsafe archive path"),
+        ("images/train/frame?.png", "Windows-unsafe archive path"),
+        ("images/train/\x01frame.png", "Windows-unsafe archive path"),
     ),
 )
 def test_pose_materialization_rejects_aliased_archive_entries(

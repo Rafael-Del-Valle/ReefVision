@@ -68,6 +68,10 @@ def _safe_extract_zip(
         # ./data.yaml and data.yaml otherwise overwrite the same scientific
         # artifact, while case-only aliases behave differently on Windows.
         seen_paths: set[str] = set()
+        windows_device_names = {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
+        for prefix in ("COM", "LPT"):
+            for digit in "123456789¹²³":
+                windows_device_names.add(f"{prefix}{digit}")
         for item in archive.infolist():
             relative = Path(item.filename.replace("\\", "/"))
             if relative.is_absolute() or ".." in relative.parts:
@@ -76,6 +80,14 @@ def _safe_extract_zip(
             # Reject these aliases before any reviewed image bytes are written.
             if any(part.rstrip(" .") != part for part in relative.parts):
                 raise ValidationError("Pose training export contains a noncanonical archive path")
+            # NTFS device names, alternate data streams and invalid path
+            # characters must never alter reviewed training artifacts.
+            if any(
+                any(ord(char) < 32 or char in '<>:"|?*' for char in part)
+                or part.split(".", 1)[0].upper() in windows_device_names
+                for part in relative.parts
+            ):
+                raise ValidationError("Pose training export contains a Windows-unsafe archive path")
             key = "/".join(relative.parts).casefold()
             if not key or key in seen_paths:
                 raise ValidationError("Pose training export contains a duplicate archive path")
