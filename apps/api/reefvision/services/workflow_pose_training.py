@@ -1440,9 +1440,7 @@ def create_pose_workflow_training_result(
     else:
         run_name = requested_run_name.strip()
         if run_name and run_name != requested_run_name:
-            raise ValidationError(
-                "Pose training run_name must not contain surrounding whitespace"
-            )
+            raise ValidationError("Pose training run_name must not contain surrounding whitespace")
 
     if not run_name:
         raise ValidationError("Pose training run_name cannot be blank")
