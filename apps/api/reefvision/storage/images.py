@@ -447,6 +447,11 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                     named_exif[name] = converted
             safe_info: dict[str, object] = {}
             for info_key, value in image.info.items():
+                # JPEG ICC payloads are binary, can be large, and are not
+                # human-readable EXIF. Preserve only a fingerprint below,
+                # never duplicate the raw profile into project JSON records.
+                if info_key == "icc_profile":
+                    continue
                 name = _safe_metadata_key(info_key)
                 if name is None:
                     continue
@@ -459,6 +464,24 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                 "info": safe_info,
                 "exif": named_exif,
             }
+            # Camera JPEGs can embed ICC color profiles that Pillow exposes
+            # as decoded binary payloads. A digest/length lets downstream
+            # scientific QC distinguish color-profile variants without
+            # duplicating profile bytes, assuming colorimetric validity, or
+            # rewriting immutable source pixels. The original file checksum
+            # above remains the authoritative capture-byte fingerprint.
+            embedded_icc = image.info.get("icc_profile")
+            if isinstance(embedded_icc, bytes) and embedded_icc:
+                metadata["embedded_icc_profile_sha256"] = hashlib.sha256(
+                    embedded_icc
+                ).hexdigest()
+                metadata["embedded_icc_profile_size_bytes"] = len(embedded_icc)
+                metadata["embedded_icc_profile_validation"] = "not-validated"
+            elif embedded_icc is not None:
+                metadata["embedded_icc_profile_warning"] = (
+                    "ICC metadata is empty or not a byte payload; "
+                    "profile fingerprint unavailable"
+                )
             capture_timestamp = (
                 None
                 if exif_warning is not None or exposure_ifd_conflicts
