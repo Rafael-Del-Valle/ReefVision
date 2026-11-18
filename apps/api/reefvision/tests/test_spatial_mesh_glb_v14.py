@@ -132,6 +132,12 @@ def make_glb(
         doc["accessors"][0]["max"] = [2.0, 3.0, 1e-9]
     elif invalid_selector == "bounds_tiny_negative":
         doc["accessors"][0]["min"] = [-1e-9, 0.0, 0.0]
+    elif invalid_selector == "bounds_float32_near_mismatch":
+        # Within the former relative tolerance, but not the same BIN float32.
+        doc["accessors"][0]["max"] = [2.0000002, 3.0, 0.0]
+    elif invalid_selector == "bounds_float32_roundtrip":
+        # Decimal exporter spelling still rounds to the stored 2.0 float32.
+        doc["accessors"][0]["max"] = [2.00000001, 3.0, 0.0]
     if index_bounds:
         doc["accessors"][1]["min"] = [0]
         doc["accessors"][1]["max"] = [2]
@@ -690,9 +696,22 @@ def test_valid_glb_position_bounds_match_unannotated_geometry() -> None:
     assert parse_glb_triangles(make_glb(position_bounds=True)) == parse_glb_triangles(make_glb())
 
 
+def test_glb_position_bounds_accept_exact_float32_decimal_roundtrip() -> None:
+    """Equivalent decimal extrema cannot change decoded source geometry."""
+    assert parse_glb_triangles(
+        make_glb(invalid_selector="bounds_float32_roundtrip")
+    ) == parse_glb_triangles(make_glb())
+
+
 @pytest.mark.parametrize(
     "invalid_selector",
-    ["bounds_short", "bounds_boolean", "bounds_nan", "bounds_mismatch"],
+    [
+        "bounds_short",
+        "bounds_boolean",
+        "bounds_nan",
+        "bounds_mismatch",
+        "bounds_float32_near_mismatch",
+    ],
 )
 def test_rejects_invalid_or_contradictory_glb_position_bounds(invalid_selector: str) -> None:
     """Untrusted min/max metadata must not contradict the decoded geometry."""
