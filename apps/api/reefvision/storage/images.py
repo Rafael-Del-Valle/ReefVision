@@ -261,7 +261,7 @@ def _exif_exposure_fields_match(left: object, right: object) -> bool:
                 value = value.decode("ascii")
             except UnicodeDecodeError:
                 return None
-        return value.strip(" \\t\\r\\n\\x00") if isinstance(value, str) else None
+        return value.strip(" \t\r\n\x00") if isinstance(value, str) else None
 
     canonical_left = normalized(left)
     return canonical_left is not None and canonical_left == normalized(right)
