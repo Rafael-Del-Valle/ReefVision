@@ -319,6 +319,40 @@ test("initial image and gallery scrolling", async ({ page }) => {
   ).toEqual(initialPageScroll);
   await assertDecodedAndContained(1600, 1200);
 
+  // Computed touch-action styles and synthetic WheelEvents do not prove that
+  // Chromium's compositor contains a finger-pan gesture over the first camera
+  // image. Exercise that native path with a document that can really scroll.
+  // This is browser acceptance only; no scientific source image is altered.
+  const touchStart = await focused.boundingBox();
+  expect(touchStart).not.toBeNull();
+  const pageBeforeTouch = await page.evaluate(() => ({
+    x: window.scrollX,
+    y: window.scrollY,
+  }));
+  const touchSession = await page.context().newCDPSession(page);
+  try {
+    await touchSession.send("Input.synthesizeScrollGesture", {
+      x: Math.round(touchStart!.x + touchStart!.width / 2),
+      y: Math.round(touchStart!.y + touchStart!.height / 2),
+      yDistance: -380,
+      gestureSourceType: "touch",
+      speed: 800,
+    });
+  } finally {
+    await touchSession.detach();
+  }
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  expect(
+    await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY })),
+  ).toEqual(pageBeforeTouch);
+  expect(await focused.boundingBox()).toEqual(touchStart);
+  await assertDecodedAndContained(1600, 1200);
+
   // Exercise the native non-passive listener in a real Chromium page, not just
   // jsdom. Prevent wheel-driven WebView2 page movement over the preview while
   // leaving browser zoom modifiers and zero-delta events untouched.
