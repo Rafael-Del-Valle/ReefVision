@@ -238,9 +238,7 @@ def test_private_duplicate_manifest_key_is_not_echoed(tmp_path: Path) -> None:
     duplicate = json.dumps(private_key)
     manifest.write_text(contents[:-1] + f", {duplicate}: 1, {duplicate}: 2}}")
     original_manifest = manifest.read_bytes()
-    with pytest.raises(
-        validator.BundleValidationError, match="Duplicate provenance"
-    ) as error:
+    with pytest.raises(validator.BundleValidationError, match="Duplicate provenance") as error:
         verify(directory)
     assert private_key not in str(error.value)
     assert manifest.read_bytes() == original_manifest
@@ -257,13 +255,37 @@ def test_tampered_private_artifact_name_is_not_echoed(tmp_path: Path) -> None:
     save(directory, manifest)
     (directory / private_name).write_bytes(b"invalid payload")
     original_manifest = (directory / "build-provenance.json").read_bytes()
-    with pytest.raises(
-        validator.BundleValidationError, match="SHA-256 mismatch"
-    ) as error:
+    with pytest.raises(validator.BundleValidationError, match="SHA-256 mismatch") as error:
         verify(directory)
     assert private_name not in str(error.value)
     assert (directory / "build-provenance.json").read_bytes() == original_manifest
     assert (directory / private_name).read_bytes() == b"invalid payload"
+
+
+
+@pytest.mark.parametrize(
+    "invalid_value",
+    ["NaN", "Infinity", "-Infinity", "[NaN]", '{"nested": -Infinity}'],
+)
+def test_reject_nonstandard_numeric_constants_in_nested_provenance(
+    tmp_path: Path, invalid_value: str
+) -> None:
+    """Even unknown future fields must not hide non-JSON numerical evidence."""
+    directory, _ = make_bundle(tmp_path)
+    manifest_path = directory / "build-provenance.json"
+    original = manifest_path.read_text(encoding="utf-8")
+    manifest_path.write_text(original[:-1] + f', "future_evidence": {invalid_value}}}')
+    original_manifest = manifest_path.read_bytes()
+    original_msi = (directory / "ReefVision_1.0.2_x64_en-US.msi").read_bytes()
+    original_cab = (directory / "rv1.cab").read_bytes()
+    with pytest.raises(
+        validator.BundleValidationError, match="non-standard JSON numeric constant"
+    ) as error:
+        verify(directory)
+    assert invalid_value not in str(error.value)
+    assert manifest_path.read_bytes() == original_manifest
+    assert (directory / "ReefVision_1.0.2_x64_en-US.msi").read_bytes() == original_msi
+    assert (directory / "rv1.cab").read_bytes() == original_cab
 
 
 def test_case_colliding_cab(tmp_path: Path) -> None:

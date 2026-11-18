@@ -12,6 +12,7 @@ The previous validator echoed a duplicated, attacker-supplied JSON key and some 
 
 - Denied directory metadata, manifest metadata, manifest decoding and MSI/CAB file access fail closed with fixed, privacy-safe `BundleValidationError` reasons. No filesystem exception text is included in CLI diagnostics.
 - Duplicate JSON keys remain forbidden, but the untrusted key itself is never included in the error.
+- Python's permissive JSON parser must not accept non-JSON `NaN`, `Infinity` or `-Infinity` tokens, including within nested or as-yet-unrecognized provenance fields. Such evidence fails closed with a fixed privacy-safe diagnostic; the verifier never normalizes the manifest or installer payload bytes.
 - Failed artifact digest, missing, empty and unreadable artifact diagnostics do not echo manifest-derived filenames. Valid successful reports may still include the installer and cabinet names as deliberate provenance outputs.
 - Verification does not install, extract, rename, delete or repair artifacts. Failure means **HOLD**, not authorization to skip provenance, Media-table inspection, MSI installation, SQLite migration or installed-GUI tests.
 - Fault-injection regressions exercise denied metadata in addition to existing denied reads/hashes/inventory/ancestor checks, and test that private manifest keys/artifact labels are absent from error strings and original fixture bytes remain unchanged.
