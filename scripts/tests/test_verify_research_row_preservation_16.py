@@ -1868,9 +1868,10 @@ def test_existing_pose_behavior_evidence_cannot_change_unnoticed(
     assert report["requires_researcher_approval"] is True
     assert report["protected_tables_examined"] == len(POSE_BEHAVIOR_LINEAGE_TABLES)
     assert changed_table + ":changed_records" in report["problems"]
-    assert next(
-        item["status"] for item in report["tables"] if item["table"] == changed_table
-    ) == "changed_records"
+    assert (
+        next(item["status"] for item in report["tables"] if item["table"] == changed_table)
+        == "changed_records"
+    )
     assert "private-field-observation" not in json.dumps(report)
     assert "reviewed biological evidence" not in json.dumps(report)
     assert "altered biological measurement" not in json.dumps(report)
