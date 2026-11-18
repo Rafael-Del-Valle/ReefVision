@@ -476,6 +476,40 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
 
 
 @pytest.mark.parametrize(
+    "extra_yaml",
+    (
+        "train: /outside-of-frozen-export\\n",
+        "val: /outside-of-frozen-export\\n",
+        "path: /outside-of-frozen-export\\n",
+        "'train': /outside-of-frozen-export\\n",
+    ),
+)
+def test_pose_materialization_rejects_overridden_frozen_dataset_paths(
+    tmp_path: Path,
+    extra_yaml: str,
+) -> None:
+    # The same frozen pose ZIP fixture must never accept a later YAML key that
+    # overrides its reviewed training/validation directory or managed root.
+    stream = io.BytesIO()
+    with (
+        zipfile.ZipFile(io.BytesIO(_pose_export_zip(b"reviewed"))) as original,
+        zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED) as modified,
+    ):
+        for entry in original.namelist():
+            content = original.read(entry)
+            if entry == "data.yaml":
+                content += extra_yaml.encode("utf-8")
+            modified.writestr(entry, content)
+
+    with pytest.raises(ValidationError, match="noncanonical data.yaml"):
+        materialize_pose_training_exports(
+            training_content=stream.getvalue(),
+            validation_content=None,
+            destination=tmp_path / "pose-dataset",
+        )
+
+
+@pytest.mark.parametrize(
     ("tampered_field", "expected_error"),
     (
         ("job_request", "child job request checksum changed"),
