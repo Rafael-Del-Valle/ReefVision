@@ -29,7 +29,18 @@ def _seed(
         "not_null": f"id TEXT PRIMARY KEY, sample TEXT NOT NULL{clause}",
     }[style]
     if extra_column:
-        columns += ", additional_measurement_mm REAL"
+        # SQLite requires all column declarations before table-level
+        # constraints; insert the additive field ahead of those constraints.
+        if style == "table_unique":
+            columns = columns.replace(
+                ", UNIQUE(sample)", ", additional_measurement_mm REAL, UNIQUE(sample)", 1
+            )
+        elif style == "table_primary":
+            columns = columns.replace(
+                ", PRIMARY KEY(id)", ", additional_measurement_mm REAL, PRIMARY KEY(id)", 1
+            )
+        else:
+            columns += ", additional_measurement_mm REAL"
     if extra_unique:
         columns += ", UNIQUE(id, sample)"
     with sqlite3.connect(path) as db:
