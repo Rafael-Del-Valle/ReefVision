@@ -213,9 +213,7 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
     quoted = '"' + table.replace('"', '""') + '"'
     columns = list(db.execute(f"PRAGMA table_xinfo({quoted})"))
     by_name = {row[1]: row for row in columns}
-    declared_types = {
-        name: " ".join(str(row[2]).upper().split()) for name, row in by_name.items()
-    }
+    declared_types = {name: " ".join(str(row[2]).upper().split()) for name, row in by_name.items()}
     if (
         set(by_name) != contract["columns"]
         or declared_types != contract["types"]
