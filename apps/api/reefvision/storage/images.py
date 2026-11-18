@@ -464,6 +464,26 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                 "info": safe_info,
                 "exif": named_exif,
             }
+            # EXIF Orientation is a display instruction, not a change to
+            # immutable source pixels. The inspected width/height and saved
+            # annotation coordinates remain in the original JPEG pixel grid;
+            # a browser or image viewer may nevertheless display them rotated
+            # or mirrored. Flag that uncertainty before scientific measurement.
+            if 274 in exif:
+                orientation = exif[274]
+                if type(orientation) is int and 2 <= orientation <= 8:
+                    metadata["exif_orientation_qc"] = "display-transformation-not-validated"
+                    metadata["exif_orientation_warning"] = (
+                        "Camera EXIF requests a rotated or mirrored display; source pixels "
+                        "and coordinate dimensions were not transformed during import. "
+                        "Verify the displayed orientation before spatial measurement."
+                    )
+                elif type(orientation) is not int or orientation != 1:
+                    metadata["exif_orientation_qc"] = "invalid-or-unrecognized"
+                    metadata["exif_orientation_warning"] = (
+                        "Camera EXIF Orientation is invalid or unrecognized; source pixels "
+                        "were not transformed and the displayed orientation is uncertain."
+                    )
             # Camera JPEGs can embed ICC color profiles that Pillow exposes
             # as decoded binary payloads. A digest/length lets downstream
             # scientific QC distinguish color-profile variants without

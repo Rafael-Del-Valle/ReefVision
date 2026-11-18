@@ -14,9 +14,25 @@ from PIL import Image
 from reefvision.storage.images import inspect_staged_image
 
 
-@pytest.mark.parametrize("orientation", [1, 3, 6, 8])
-def test_camera_jpeg_exif_orientation_and_icc_are_read_only(tmp_path, orientation: int) -> None:
-    path = tmp_path / f"camera_orientation_{orientation}.JPG"
+@pytest.mark.parametrize(
+    ("orientation", "suffix"),
+    [
+        (1, ".JPG"),
+        (2, ".jpeg"),
+        (3, ".JPEG"),
+        (4, ".JFIF"),
+        (5, ".JPE"),
+        (6, ".JIF"),
+        (7, ".JFI"),
+        (8, ".JPG"),
+        (0, ".JPG"),
+        (9, ".JPG"),
+    ],
+)
+def test_camera_jpeg_exif_orientation_and_icc_are_read_only(
+    tmp_path, orientation: int, suffix: str
+) -> None:
+    path = tmp_path / f"camera_orientation_{orientation}{suffix}"
     exif = Image.Exif()
     exif[271] = "Synthetic Camera"
     exif[274] = orientation
@@ -40,4 +56,28 @@ def test_camera_jpeg_exif_orientation_and_icc_are_read_only(tmp_path, orientatio
     assert inspected.media_type == "image/jpeg"
     assert inspected.metadata["exif"]["Orientation"] == orientation
     assert inspected.metadata["exif"]["Make"] == "Synthetic Camera"
+    assert inspected.metadata["embedded_icc_profile_sha256"] == hashlib.sha256(
+        icc_payload
+    ).hexdigest()
+    if orientation == 1:
+        assert "exif_orientation_qc" not in inspected.metadata
+        assert "exif_orientation_warning" not in inspected.metadata
+    elif 2 <= orientation <= 8:
+        assert inspected.metadata["exif_orientation_qc"] == "display-transformation-not-validated"
+        assert "before spatial measurement" in inspected.metadata["exif_orientation_warning"]
+    else:
+        assert inspected.metadata["exif_orientation_qc"] == "invalid-or-unrecognized"
+        assert "displayed orientation is uncertain" in inspected.metadata["exif_orientation_warning"]
+    assert path.read_bytes() == original
+
+
+def test_camera_without_orientation_does_not_invent_orientation_qc(tmp_path) -> None:
+    path = tmp_path / "no_orientation.JPEG"
+    Image.new("RGB", (17, 11), (12, 23, 34)).save(path, format="JPEG")
+    original = path.read_bytes()
+    inspected = inspect_staged_image(path, hashlib.sha256(original).hexdigest(), len(original))
+
+    assert "exif_orientation_qc" not in inspected.metadata
+    assert "exif_orientation_warning" not in inspected.metadata
+    assert (inspected.width_px, inspected.height_px) == (17, 11)
     assert path.read_bytes() == original
