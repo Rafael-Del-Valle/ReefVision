@@ -212,6 +212,12 @@ def _verify_pose_export_frame_pairs(
                 or not all(0 <= value <= 1 for value in numbers[:4])
                 or numbers[2] <= 0
                 or numbers[3] <= 0
+                # A normalized center and size can individually be in [0, 1]
+                # while the reviewed box still extends beyond the frame.
+                or numbers[0] - numbers[2] / 2 < -1e-6
+                or numbers[0] + numbers[2] / 2 > 1 + 1e-6
+                or numbers[1] - numbers[3] / 2 < -1e-6
+                or numbers[1] + numbers[3] / 2 > 1 + 1e-6
                 or any(
                     not (
                         0 <= numbers[index] <= 1
