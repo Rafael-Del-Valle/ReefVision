@@ -360,6 +360,22 @@ def _generated_column_ddl_contracts(
     return {name: declarations[name] for name in generated}
 
 
+def _table_autoincrement_contract(connection: sqlite3.Connection, table: str) -> bool:
+    """Preserve future row-ID allocation semantics even before the first insert.
+
+    sqlite_sequence does not necessarily contain an entry for an empty
+    AUTOINCREMENT table. Comparing counters alone misses a rebuild that drops
+    the keyword but leaves every historical observation unchanged.
+    """
+    row = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table,),
+    ).fetchone()
+    if row is None or not isinstance(row[0], str):
+        raise ValueError("protected_table_ddl_missing")
+    return "AUTOINCREMENT" in _ddl_tokens(row[0])
+
+
 def _table_storage_contract(connection: sqlite3.Connection, table: str) -> tuple[int, int]:
     """Retain WITHOUT ROWID and STRICT enforcement of protected tables."""
     row = connection.execute(
@@ -793,6 +809,10 @@ def verify(
                     item["status"] = "changed_primary_key"
                 elif _table_storage_contract(old, table) != _table_storage_contract(new, table):
                     item["status"] = "changed_table_storage_contract"
+                elif _table_autoincrement_contract(old, table) != _table_autoincrement_contract(
+                    new, table
+                ):
+                    item["status"] = "changed_autoincrement_contract"
                 elif _column_contracts(old, table) != {
                     name: contract
                     for name, contract in _column_contracts(new, table).items()
