@@ -149,7 +149,7 @@ def test_disconnected_small_patch_centroid_does_not_collapse_to_origin(
     assert centroids[1][0] == pytest.approx(-1e-110 / 3, rel=1e-12, abs=0)
     assert centroids[1][1] == pytest.approx(1e-110 / 3, rel=1e-12, abs=0)
     assert direct["edge_connected_patch_surface_areas_m2"][1] > 0
-    assert direct["edge_connected_surface_patch_count"] == 2
+    assert direct["edge_connected_patch_count"] == 2
     assert direct["provenance"]["calibration_verified"] is False
 
     project_id = str(create_project(client, "Disconnected mesh centroid evidence")["id"])
@@ -167,7 +167,7 @@ def test_disconnected_small_patch_centroid_does_not_collapse_to_origin(
         "area_weighted_surface_centroid_m",
         "edge_connected_patch_area_weighted_surface_centroids_m",
         "edge_connected_patch_surface_areas_m2",
-        "edge_connected_surface_patch_count",
+        "edge_connected_patch_count",
     ):
         assert standalone[key] == direct[key]
     assert standalone["provenance"]["specimen_identity_verified"] is False
