@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC
-from math import dist, isfinite
+from math import dist, fsum, isfinite
 from re import fullmatch
 from typing import Any
 
@@ -290,7 +290,13 @@ def measure_point_cloud_preview(
                     ),
                 }
             )
-    centroid = [sum(p[axis] for p in vertices) / len(vertices) * scale for axis in range(3)]
+    # Compensate cancellation before averaging calibrated coordinates. A large
+    # positive/negative survey pair must not hide a small but resolvable
+    # offset. The arithmetic point centroid is provisional, not a biological
+    # tissue centroid or an independently registered specimen position.
+    centroid = [
+        fsum(point[axis] * scale for point in vertices) / len(vertices) for axis in range(3)
+    ]
     diagonal = dist((0.0, 0.0, 0.0), dimensions)
     envelope_volume = dimensions[0] * dimensions[1] * dimensions[2]
     envelope_scale_interval = (
