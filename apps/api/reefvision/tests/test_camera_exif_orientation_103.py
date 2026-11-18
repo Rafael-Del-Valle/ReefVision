@@ -67,7 +67,9 @@ def test_camera_jpeg_exif_orientation_and_icc_are_read_only(
         assert "before spatial measurement" in inspected.metadata["exif_orientation_warning"]
     else:
         assert inspected.metadata["exif_orientation_qc"] == "invalid-or-unrecognized"
-        assert "displayed orientation is uncertain" in inspected.metadata["exif_orientation_warning"]
+        assert (
+            "displayed orientation is uncertain" in inspected.metadata["exif_orientation_warning"]
+        )
     assert path.read_bytes() == original
 
 
