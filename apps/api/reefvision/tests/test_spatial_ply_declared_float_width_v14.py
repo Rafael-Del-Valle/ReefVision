@@ -41,11 +41,12 @@ def _source(kind: str, declared: str, scalar: str) -> str:
     )
 
 
-
 @pytest.mark.parametrize(
     ("token", "diagnostic"),
     [
         ("1e-50", "PLY float32 value underflows declared range"),
+        ("1e-400", "PLY float32 value underflows declared range"),
+        ("-1e-400", "PLY float32 value underflows declared range"),
         ("1e40", "PLY float32 value exceeds declared range"),
         ("malformed", "Invalid or out-of-range PLY vertex value"),
     ],
@@ -109,6 +110,8 @@ def _execute(client: TestClient, project_id: str, saved_id: str) -> dict:
     [
         ("float", "1e-50", False),
         ("float32", "1e40", False),
+        ("float32", "1e-400", False),
+        ("float32", "-1e-400", False),
         ("float", "1e-40", True),
         ("double", "1e-50", True),
     ],
