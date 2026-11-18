@@ -499,6 +499,82 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                 self.assertEqual((root / name).read_bytes(), original_bytes[name])
             json.dumps(records, allow_nan=False)
 
+    def test_padded_ascii_exif_fields_agree_across_ifd0_and_nested(self) -> None:
+        """NUL-padded vendor bytes must not create false camera-clock conflicts."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; JPEG EXIF equivalence unverified")
+
+        exposure = "2026:04:03 14:25:30"
+        offset = "-04:00"
+        original_getexif = Image.Image.getexif
+        original_get_ifd = Image.Exif.get_ifd
+        cases = (
+            (
+                "equivalent padded bytes",
+                {36867: exposure, 36881: offset},
+                {36867: exposure.encode("ascii") + b"\x00", 36881: b"-04:00\x00"},
+                False,
+            ),
+            (
+                "nested ASCII bytes only",
+                {},
+                {36867: exposure.encode("ascii"), 36881: offset.encode("ascii")},
+                False,
+            ),
+            (
+                "genuinely conflicting padded offset",
+                {36867: exposure, 36881: offset},
+                {36867: exposure.encode("ascii") + b"\x00", 36881: b"+01:00\x00"},
+                True,
+            ),
+        )
+        for label, top_tags, nested_tags, conflict in cases:
+            with self.subTest(label=label):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    path = root / "DSC_EQUIVALENT.JPEG"
+                    Image.new("RGB", (19, 11), (20, 65, 130)).save(path, format="JPEG")
+                    original = path.read_bytes()
+
+                    def forged_exif(image):
+                        exif = original_getexif(image)
+                        exif.update(top_tags)
+                        return exif
+
+                    def forged_ifd(exif, tag):
+                        if tag == 34665:
+                            return nested_tags
+                        return original_get_ifd(exif, tag)
+
+                    with (
+                        mock.patch.object(Image.Image, "getexif", forged_exif),
+                        mock.patch.object(Image.Exif, "get_ifd", forged_ifd),
+                    ):
+                        records, errors = MODULE.inventory(root, verify_decode=True)
+                    expected = (
+                        ["conflicting EXIF camera exposure metadata between IFD0 and Exif IFD: DSC_EQUIVALENT.JPEG"]
+                        if conflict else []
+                    )
+                    self.assertEqual(errors, expected)
+                    self.assertEqual(len(records), 1)
+                    record = records[0]
+                    self.assertTrue(record["jpeg_decodable"])
+                    self.assertEqual(record["jpeg_exif_exposure_ifd_conflict"], conflict)
+                    self.assertEqual(
+                        record["jpeg_exif_datetime_original_local"],
+                        None if conflict else exposure,
+                    )
+                    self.assertEqual(
+                        record["jpeg_exif_offset_time_original"],
+                        None if conflict else offset,
+                    )
+                    self.assertFalse(record["jpeg_exif_datetime_original_malformed"])
+                    self.assertFalse(record["jpeg_exif_offset_time_original_malformed"])
+                    json.dumps(records, allow_nan=False)
+                    self.assertEqual(path.read_bytes(), original)
+
     def test_conflicting_exif_exposure_or_orphan_offset_is_qc_rejected(self) -> None:
         """Camera clocks need unambiguous IFD provenance, not invented timestamps."""
         try:
@@ -597,7 +673,8 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             ("2026:02:30 14:00:00", "+00:00"),
             ("2026:04:03 14:00:00", "+14:30"),
             ("2026:04:03 14:00:00", "-99:00"),
-            (b"2026:04:03 14:00:00", "+00:00"),
+            (b"\xff", "+00:00"),
+            (b"2026:04:03 14:\x000:00", "+00:00"),
             ("2026:04:03 14:00:00", "not UTC"),
         )
         for captured, offset in invalid_cases:
