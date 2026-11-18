@@ -67,9 +67,7 @@ def test_valid_bundle(tmp_path: Path) -> None:
         ("files", [], "must list"),
     ],
 )
-def test_reject_invalid_manifest(
-    tmp_path: Path, field: str, value: object, message: str
-) -> None:
+def test_reject_invalid_manifest(tmp_path: Path, field: str, value: object, message: str) -> None:
     directory, manifest = make_bundle(tmp_path)
     manifest[field] = value
     save(directory, manifest)
@@ -139,9 +137,7 @@ def test_reserved_manifest_artifact_rejected_before_file_access(
 def test_native_windows_build_and_clean_runner_reject_device_stems() -> None:
     root = Path(__file__).resolve().parents[2]
     build_script = (root / "scripts/build-desktop.ps1").read_text(encoding="utf-8")
-    workflow = (root / ".github/workflows/build-desktop.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (root / ".github/workflows/build-desktop.yml").read_text(encoding="utf-8")
     acceptance = workflow.split("  windows-clean-install-acceptance:", 1)[1]
     for evidence in (
         "CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]",
@@ -226,7 +222,9 @@ def test_reject_hashed_stale_cab_not_in_msi_media(tmp_path: Path) -> None:
 def test_duplicate_manifest_key(tmp_path: Path) -> None:
     directory, _ = make_bundle(tmp_path)
     manifest = directory / "build-provenance.json"
-    manifest.write_text(manifest.read_text().replace('"version":', '"version": "1.0.2", "version":'))
+    manifest.write_text(
+        manifest.read_text().replace('"version":', '"version": "1.0.2", "version":')
+    )
     with pytest.raises(validator.BundleValidationError, match="Duplicate provenance"):
         verify(directory)
 
@@ -238,9 +236,7 @@ def test_case_colliding_cab(tmp_path: Path) -> None:
     if case_alias.exists():
         # NTFS commonly aliases these names. Never overwrite the fixture's
         # actual cabinet to manufacture a second physical file.
-        manifest["files"].append(
-            {"name": "RV1.CAB", "sha256": manifest["files"][1]["sha256"]}
-        )
+        manifest["files"].append({"name": "RV1.CAB", "sha256": manifest["files"][1]["sha256"]})
         save(directory, manifest)
         with pytest.raises(validator.BundleValidationError, match="duplicate filenames"):
             verify(directory)
@@ -273,39 +269,28 @@ def test_linked_parent_directory(tmp_path: Path) -> None:
 def test_invalid_expected_commit(tmp_path: Path) -> None:
     directory, _ = make_bundle(tmp_path)
     with pytest.raises(validator.BundleValidationError, match="Expected source commit"):
-        validator.validate_bundle(
-            directory, expected_version=VERSION, expected_commit="short"
-        )
+        validator.validate_bundle(directory, expected_version=VERSION, expected_commit="short")
 
 
 def test_foreign_checkout_commit_is_rejected_before_install(tmp_path: Path) -> None:
     """Valid CAB hashes do not excuse a bundle built from a different commit."""
     directory, _ = make_bundle(tmp_path)
-    assert (
-        validator.validate_bundle(directory, expected_version=VERSION)["source_commit"]
-        == COMMIT
-    )
+    assert validator.validate_bundle(directory, expected_version=VERSION)["source_commit"] == COMMIT
     original_msi = (directory / "ReefVision_1.0.2_x64_en-US.msi").read_bytes()
     with pytest.raises(validator.BundleValidationError, match="differs from expected HEAD"):
-        validator.validate_bundle(
-            directory, expected_version=VERSION, expected_commit="b" * 40
-        )
+        validator.validate_bundle(directory, expected_version=VERSION, expected_commit="b" * 40)
     assert (directory / "ReefVision_1.0.2_x64_en-US.msi").read_bytes() == original_msi
 
 
 def test_disposable_windows_ci_checks_bundle_provenance_before_install() -> None:
     """A passing build-runner check alone must not authorize a fresh-runner install."""
     repo_root = Path(__file__).resolve().parents[2]
-    workflow = (repo_root / ".github/workflows/build-desktop.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (repo_root / ".github/workflows/build-desktop.yml").read_text(encoding="utf-8")
     acceptance = workflow.split("  windows-clean-install-acceptance:", 1)[1]
     guard = acceptance.index(
         "- name: Verify downloaded MSI/CAB provenance against clean-runner checkout"
     )
-    media = acceptance.index(
-        "- name: Verify MSI-declared cabinet payload before any install"
-    )
+    media = acceptance.index("- name: Verify MSI-declared cabinet payload before any install")
     install = acceptance.index("- name: Test isolated MSI installation")
     assert guard < media < install
     preinstall = acceptance[guard:media]
@@ -314,7 +299,7 @@ def test_disposable_windows_ci_checks_bundle_provenance_before_install() -> None
     assert "--expected-commit $expectedCommit" in preinstall
     assert "(git rev-parse HEAD).Trim()" in preinstall
     assert "$LASTEXITCODE -ne 0" in preinstall
-    assert "python-version: \"3.12\"" in acceptance[:guard]
+    assert 'python-version: "3.12"' in acceptance[:guard]
 
 
 def test_rejection_preserves_user_artifacts(tmp_path: Path) -> None:
@@ -330,9 +315,7 @@ def test_rejection_preserves_user_artifacts(tmp_path: Path) -> None:
 def test_clean_runner_binds_installer_and_acceptance_to_checkout_version() -> None:
     """Do not accidentally accept a fixed historical MSI in a newer checkout."""
     repo_root = Path(__file__).resolve().parents[2]
-    workflow = (repo_root / ".github/workflows/build-desktop.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (repo_root / ".github/workflows/build-desktop.yml").read_text(encoding="utf-8")
     acceptance = workflow.split("  windows-clean-install-acceptance:", 1)[1]
     assert "1.0.2" not in acceptance
     assert acceptance.count("reefvision-installer") >= 4
@@ -343,6 +326,7 @@ def test_clean_runner_binds_installer_and_acceptance_to_checkout_version() -> No
     assert "--expected-version $version --expected-upgrade skipped" in acceptance
     assert "-SkipUpgrade -DisposableTest -KeepArtifacts" in acceptance
     assert "C:\\reefvision-disposable-acceptance" in acceptance
+
 
 @pytest.mark.parametrize(
     ("operation", "expected"),
