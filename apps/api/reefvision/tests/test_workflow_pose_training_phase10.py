@@ -501,7 +501,7 @@ def test_pose_materialization_rejects_overridden_frozen_dataset_paths(
                 content += extra_yaml.encode("utf-8")
             modified.writestr(entry, content)
 
-    with pytest.raises(ValidationError, match="noncanonical data.yaml"):
+    with pytest.raises(ValidationError, match=r"noncanonical data\.yaml"):
         materialize_pose_training_exports(
             training_content=stream.getvalue(),
             validation_content=None,
