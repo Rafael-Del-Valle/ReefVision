@@ -192,11 +192,146 @@ def revision_from_source(path: Path, source: bytes | None = None) -> str | None:
     return revisions[0] if revisions else None
 
 
-def audit(roots: list[Path]) -> dict:
+def parent_revisions_from_source(path: Path, source: bytes) -> tuple[str, ...]:
+    """Read literal Alembic parent links without importing executable migrations."""
+    tree = ast.parse(source, filename=str(path))
+    assignments: list[tuple[str, ...]] = []
+    permitted_targets: set[int] = set()
+    for statement in tree.body:
+        if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+        matching = [
+            target
+            for target in targets
+            if any(isinstance(node, ast.Name) and node.id == "down_revision" for node in ast.walk(target))
+        ]
+        if not matching:
+            continue
+        if (
+            len(targets) != 1
+            or not isinstance(targets[0], ast.Name)
+            or targets[0].id != "down_revision"
+        ):
+            raise ValueError(f"{path}: down_revision must use a direct literal assignment")
+        permitted_targets.add(id(targets[0]))
+        value = statement.value
+        if isinstance(value, ast.Constant) and value.value is None:
+            parents: tuple[str, ...] = ()
+        elif isinstance(value, ast.Constant) and isinstance(value.value, str):
+            parents = (value.value,)
+        elif isinstance(value, (ast.Tuple, ast.List)) and value.elts:
+            if not all(
+                isinstance(element, ast.Constant) and isinstance(element.value, str)
+                for element in value.elts
+            ):
+                raise ValueError(f"{path}: parent revisions must be literal strings")
+            parents = tuple(element.value for element in value.elts)
+        else:
+            raise ValueError(f"{path}: down_revision must be a literal parent or None")
+        if any(not parent or parent != parent.strip() for parent in parents):
+            raise ValueError(f"{path}: noncanonical down_revision")
+        if len(parents) != len(set(parents)):
+            raise ValueError(f"{path}: duplicate down_revision parent")
+        assignments.append(parents)
+
+    # A nested assignment, loop target, deletion or walrus expression can
+    # replace the literal after import. Do not execute it to find out.
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Name)
+            and node.id == "down_revision"
+            and isinstance(node.ctx, (ast.Store, ast.Del))
+            and id(node) not in permitted_targets
+        ):
+            raise ValueError(f"{path}: dynamic down_revision rebinding")
+        if isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name == "down_revision":
+            raise ValueError(f"{path}: pattern rebinds down_revision")
+        if isinstance(node, ast.MatchMapping) and node.rest == "down_revision":
+            raise ValueError(f"{path}: pattern rebinds down_revision")
+        if isinstance(node, ast.ExceptHandler) and node.name == "down_revision":
+            raise ValueError(f"{path}: exception rebinds down_revision")
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if node.name == "down_revision":
+                raise ValueError(f"{path}: declaration rebinds down_revision")
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            if any(
+                (alias.asname or alias.name.split(".")[0]) == "down_revision"
+                for alias in node.names
+            ):
+                raise ValueError(f"{path}: import rebinds down_revision")
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            parameters = node.args
+            named = [
+                *parameters.posonlyargs,
+                *parameters.args,
+                *parameters.kwonlyargs,
+            ]
+            if any(arg.arg == "down_revision" for arg in named) or any(
+                arg is not None and arg.arg == "down_revision"
+                for arg in (parameters.vararg, parameters.kwarg)
+            ):
+                raise ValueError(f"{path}: parameter shadows down_revision")
+    if len(assignments) != 1:
+        raise ValueError(f"{path}: exactly one literal down_revision is required")
+    return assignments[0]
+
+
+def audit_parent_graph(entries: list[tuple[str, tuple[str, ...]]]) -> dict:
+    """Check a single complete migration directory as an isolated DAG."""
+    parents: dict[str, tuple[str, ...]] = {}
+    duplicates: set[str] = set()
+    for revision, links in entries:
+        if revision in parents:
+            duplicates.add(revision)
+        else:
+            parents[revision] = links
+
+    all_parents = {parent for links in parents.values() for parent in links}
+    missing = sorted(all_parents - parents.keys())
+    bases = sorted(revision for revision, links in parents.items() if not links)
+    heads = sorted(parents.keys() - all_parents)
+    colors: dict[str, int] = {}
+    cycles: set[str] = set()
+
+    def visit(revision: str, stack: tuple[str, ...]) -> None:
+        state = colors.get(revision, 0)
+        if state == 1:
+            cycles.update(stack[stack.index(revision):])
+            return
+        if state == 2:
+            return
+        colors[revision] = 1
+        for parent in parents[revision]:
+            if parent in parents:
+                visit(parent, (*stack, revision))
+        colors[revision] = 2
+
+    for revision in sorted(parents):
+        visit(revision, ())
+    consistent = (
+        len(bases) == 1
+        and len(heads) == 1
+        and not missing
+        and not cycles
+        and not duplicates
+    )
+    return {
+        "consistent": consistent,
+        "root_revisions": bases,
+        "head_revisions": heads,
+        "missing_parent_revisions": missing,
+        "cycle_revisions": sorted(cycles),
+        "duplicate_revision_ids": sorted(duplicates),
+    }
+
+
+def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
     by_revision: dict[str, list[str]] = defaultdict(list)
     source_sha256: dict[str, str] = {}
     migration_files = 0
     seen_roots: set[Path] = set()
+    parent_graphs: dict[str, dict] = {}
     for root in roots:
         # A repeated directory must not manufacture a revision collision.
         # Check each path component before resolving so symlinked ancestors
@@ -221,6 +356,7 @@ def audit(roots: list[Path]) -> dict:
         for entry in root.rglob("*"):
             if entry.is_symlink():
                 raise ValueError(f"Migration tree contains a symbolic link: {entry}")
+        root_entries: list[tuple[str, tuple[str, ...]]] = []
         for path in sorted(root.rglob("*.py")):
             if path.is_symlink():
                 raise ValueError(f"Migration file is a symbolic link: {path}")
@@ -233,14 +369,18 @@ def audit(roots: list[Path]) -> dict:
                 raise ValueError(f"{path}: missing literal revision assignment")
             if not revision.strip() or revision != revision.strip():
                 raise ValueError(f"{path}: noncanonical revision")
+            if verify_parent_graph:
+                root_entries.append((revision, parent_revisions_from_source(path, source)))
             by_revision[revision].append(str(path))
             source_sha256[str(path)] = hashlib.sha256(source).hexdigest()
+        if verify_parent_graph:
+            parent_graphs[str(root)] = audit_parent_graph(root_entries)
     if migration_files == 0:
         raise ValueError("No migration revision files found")
     collisions = {
         revision: paths for revision, paths in sorted(by_revision.items()) if len(paths) > 1
     }
-    return {
+    report = {
         "safe_to_reconcile_automatically": False,
         "revision_count": len(by_revision),
         "collisions": collisions,
@@ -250,18 +390,27 @@ def audit(roots: list[Path]) -> dict:
         },
         "collision_free": not bool(collisions),
     }
+    if verify_parent_graph:
+        report["parent_graphs"] = parent_graphs
+        report["parent_graph_consistent"] = all(
+            graph["consistent"] for graph in parent_graphs.values()
+        )
+    return report
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("migration_dirs", nargs="+", type=Path)
+    parser.add_argument("--verify-parent-graph", action="store_true")
     args = parser.parse_args()
     try:
-        report = audit(args.migration_dirs)
+        report = audit(args.migration_dirs, verify_parent_graph=args.verify_parent_graph)
     except (OSError, SyntaxError, ValueError) as exc:
         parser.error(str(exc))
     print(json.dumps(report, indent=2, sort_keys=True))
-    if not report["collision_free"]:
+    if not report["collision_free"] or (
+        args.verify_parent_graph and not report["parent_graph_consistent"]
+    ):
         raise SystemExit(2)
 
 
