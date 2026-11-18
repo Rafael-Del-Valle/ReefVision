@@ -64,6 +64,19 @@ def _safe_extract_zip(
     root = destination.resolve()
 
     with zipfile.ZipFile(io.BytesIO(content)) as archive:
+        # Preflight every entry before extracting any files. Aliases such as
+        # ./data.yaml and data.yaml otherwise overwrite the same scientific
+        # artifact, while case-only aliases behave differently on Windows.
+        seen_paths: set[str] = set()
+        for item in archive.infolist():
+            relative = Path(item.filename.replace("\\", "/"))
+            if relative.is_absolute() or ".." in relative.parts:
+                raise ValidationError("Pose training export contains an unsafe archive path")
+            key = "/".join(relative.parts).casefold()
+            if not key or key in seen_paths:
+                raise ValidationError("Pose training export contains a duplicate archive path")
+            seen_paths.add(key)
+
         for item in archive.infolist():
             normalized = item.filename.replace(
                 "\\",
@@ -71,9 +84,6 @@ def _safe_extract_zip(
             )
 
             relative = Path(normalized)
-
-            if relative.is_absolute() or ".." in relative.parts:
-                raise ValidationError("Pose training export contains an unsafe archive path")
 
             target = (destination / relative).resolve()
 
