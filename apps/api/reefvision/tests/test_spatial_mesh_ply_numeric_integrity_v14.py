@@ -111,9 +111,9 @@ def test_distinct_ply_mesh_decimals_cannot_collapse_into_measurements(
 def test_non_x_mesh_coordinate_precision_collapse_fails_standalone_and_workflow(
     client: TestClient, axis: str, replacement_rows: str, coordinate_type: str
 ) -> None:
-    invalid = PLY.replace(
-        f"property float {axis}", f"property {coordinate_type} {axis}"
-    ).replace("0 0 0\n2 0 0\n", replacement_rows)
+    invalid = PLY.replace(f"property float {axis}", f"property {coordinate_type} {axis}").replace(
+        "0 0 0\n2 0 0\n", replacement_rows
+    )
     with pytest.raises(ValueError, match="Distinct PLY mesh decimal coordinates collapse"):
         parse_ply_triangles(invalid)
 
@@ -125,6 +125,48 @@ def test_non_x_mesh_coordinate_precision_collapse_fails_standalone_and_workflow(
     )
     assert standalone.status_code == 400, standalone.text
     assert "Distinct PLY mesh decimal coordinates collapse" in standalone.json()["detail"]
+
+    workflow = _run_saved_graph(client, project_id, invalid)
+    assert workflow["run"]["status"] == "failed"
+    assert not any(
+        item["data_type"] == "mesh_measurement_preview" for item in workflow["artifacts"]
+    )
+
+
+REORDERED_PLY = (
+    "ply\nformat ascii 1.0\nelement vertex 3\n"
+    "property uchar red\nproperty double z\n"
+    "property double x\nproperty double y\n"
+    "element face 1\nproperty list uchar int vertex_indices\n"
+    "end_header\n255 0 0 0\n255 0 2 0\n255 0 0 3\n3 0 1 2\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("axis", "rows"),
+    [
+        ("x", "255 0 1 0\n255 0 1.00000000000000001 2\n"),
+        ("y", "255 0 0 -1\n255 0 2 -1.00000000000000001\n"),
+        ("z", "255 1 0 0\n255 1.00000000000000001 2 0\n"),
+    ],
+)
+def test_reordered_ply_mesh_coordinates_reject_decimal_collisions_in_saved_workflow(
+    client: TestClient, axis: str, rows: str
+) -> None:
+    # A leading color field and Z/X/Y storage order must not bypass XYZ
+    # source-precision QC before a calibrated scientific measurement.
+    invalid = REORDERED_PLY.replace("255 0 0 0\n255 0 2 0\n", rows)
+    with pytest.raises(ValueError, match="Distinct PLY mesh decimal coordinates collapse"):
+        parse_ply_triangles(invalid)
+
+    project_id = str(create_project(client, f"PLY reordered {axis} collision")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(
+        f"{base}/spatial/mesh-preview",
+        json={**PARAMS, "ply_text": invalid},
+    )
+    assert response.status_code == 400, response.text
+    assert "Distinct PLY mesh decimal coordinates collapse" in response.json()["detail"]
 
     workflow = _run_saved_graph(client, project_id, invalid)
     assert workflow["run"]["status"] == "failed"
