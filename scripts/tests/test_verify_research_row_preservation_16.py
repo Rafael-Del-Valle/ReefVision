@@ -112,9 +112,7 @@ def test_detects_modified_science_qc_class_and_workflow_evidence(
         "workflow_graph_records",
     ],
 )
-def test_removed_scientific_column_names_remain_private(
-    tmp_path: Path, table: str
-) -> None:
+def test_removed_scientific_column_names_remain_private(tmp_path: Path, table: str) -> None:
     """Schema-drift diagnostics must not disclose researcher-defined identifiers."""
     before = tmp_path / "before.sqlite"
     after = tmp_path / "after.sqlite"
