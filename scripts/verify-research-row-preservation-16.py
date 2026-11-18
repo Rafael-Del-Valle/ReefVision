@@ -666,12 +666,8 @@ def _compare_assets(before_root: Path, after_root: Path) -> dict:
     # Empty directories carry project/export organization but have no file
     # checksum. They must be compared explicitly; additions are permitted.
     # "." is the root of each independent copy, not a research subdirectory.
-    missing_directories = sum(
-        path != "." and path not in candidate_dirs for path in baseline_dirs
-    )
-    added_directories = sum(
-        path != "." and path not in baseline_dirs for path in candidate_dirs
-    )
+    missing_directories = sum(path != "." and path not in candidate_dirs for path in baseline_dirs)
+    added_directories = sum(path != "." and path not in baseline_dirs for path in candidate_dirs)
     return {
         "checked": True,
         "baseline_files": len(baseline),
