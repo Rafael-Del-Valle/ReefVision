@@ -6,7 +6,9 @@ import path from "node:path";
 // a vacuous assertion: the browser had nowhere to scroll in the first place.
 // Add a test-only, non-interactive overflow probe below the application so a
 // leaked wheel event would produce measurable native document movement.
-const enableDocumentScrollProbe = async (page: import("@playwright/test").Page) => {
+const enableDocumentScrollProbe = async (
+  page: import("@playwright/test").Page,
+) => {
   await page.evaluate(() => {
     const probe = document.createElement("div");
     probe.setAttribute("aria-hidden", "true");
