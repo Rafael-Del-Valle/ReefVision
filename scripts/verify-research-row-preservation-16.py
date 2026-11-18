@@ -103,6 +103,35 @@ def _table_columns(
     return columns, primary_key
 
 
+def _column_contracts(connection: sqlite3.Connection, table: str) -> dict[str, tuple]:
+    """Preserve the interpretation of every existing scientific column.
+
+    Equal current values cannot prove that an upgrade retained NOT NULL,
+    declared type/affinity, defaults, primary-key positions or generated-column
+    flags for observations written after the migration.
+    """
+    return {
+        row[1]: (row[2].strip().upper(), row[3], row[4], row[5], row[6])
+        for row in connection.execute(f"PRAGMA table_xinfo({_quote(table)})")
+    }
+
+
+def _foreign_key_contracts(connection: sqlite3.Connection, table: str) -> set[tuple]:
+    """Compare complete original FK groups, including composite-key order.
+
+    New constraints are allowed, but existing scientific parent relationships,
+    ON DELETE and ON UPDATE actions must survive unchanged.
+    """
+    groups: dict[int, list[tuple]] = {}
+    for identifier, sequence, parent, source, target, on_update, on_delete, match in connection.execute(
+        f"PRAGMA foreign_key_list({_quote(table)})"
+    ):
+        groups.setdefault(identifier, []).append(
+            (sequence, parent, source, target, on_update, on_delete, match)
+        )
+    return {tuple(sorted(group)) for group in groups.values()}
+
+
 def _encode_row(row: tuple) -> bytes:
     typed = []
     for value in row:
@@ -446,6 +475,20 @@ def verify(
                     item["removed_columns"] = missing
                 elif old_primary_key != new_primary_key:
                     item["status"] = "changed_primary_key"
+                elif (
+                    _column_contracts(old, table)
+                    != {
+                        name: contract
+                        for name, contract in _column_contracts(new, table).items()
+                        if name in old_columns
+                    }
+                ):
+                    # Do not disclose SQL defaults or row values in the report.
+                    item["status"] = "changed_column_contract"
+                elif not _foreign_key_contracts(old, table).issubset(
+                    _foreign_key_contracts(new, table)
+                ):
+                    item["status"] = "changed_foreign_key_contract"
                 else:
                     order_by = old_primary_key or old_columns
                     old_count, old_sha = _fingerprint(old, table, old_columns, order_by)
