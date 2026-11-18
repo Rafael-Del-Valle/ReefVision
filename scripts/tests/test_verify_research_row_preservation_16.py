@@ -1068,9 +1068,12 @@ def test_scientific_check_constraints_survive_migration(
     valid = expected == "preserved"
     assert code == (0 if valid else 2)
     assert report["status"] == ("PASS_PRESERVATION_ONLY" if valid else "HOLD")
-    assert next(
-        entry["status"] for entry in report["tables"] if entry["table"] == "scientific_records"
-    ) == expected
+    assert (
+        next(
+            entry["status"] for entry in report["tables"] if entry["table"] == "scientific_records"
+        )
+        == expected
+    )
     assert report["upgrade_authorized"] is False
     assert report["requires_researcher_approval"] is True
     assert "private-coral" not in json.dumps(report)
@@ -1087,9 +1090,7 @@ def test_additive_column_preserves_existing_scientific_check(tmp_path: Path) -> 
             "CREATE TABLE scientific_records "
             "(id TEXT PRIMARY KEY, measurement REAL CHECK (measurement >= 0))"
         )
-        connection.execute(
-            "INSERT INTO scientific_records VALUES ('private-coral', 3.5)"
-        )
+        connection.execute("INSERT INTO scientific_records VALUES ('private-coral', 3.5)")
     shutil.copyfile(before, after)
     with sqlite3.connect(after) as connection:
         connection.execute("ALTER TABLE scientific_records ADD COLUMN note TEXT")
@@ -1120,8 +1121,7 @@ def test_scientific_storage_rules_survive_migration(
     for path, suffix in ((before, baseline_suffix), (after, candidate_suffix)):
         with sqlite3.connect(path) as connection:
             connection.execute(
-                "CREATE TABLE scientific_records "
-                "(id TEXT PRIMARY KEY, measurement REAL)" + suffix
+                "CREATE TABLE scientific_records (id TEXT PRIMARY KEY, measurement REAL)" + suffix
             )
             connection.execute("INSERT INTO scientific_records VALUES ('private-coral', 3.5)")
     original, candidate = before.read_bytes(), after.read_bytes()
@@ -1129,9 +1129,12 @@ def test_scientific_storage_rules_survive_migration(
     valid = expected == "preserved"
     assert code == (0 if valid else 2)
     assert report["status"] == ("PASS_PRESERVATION_ONLY" if valid else "HOLD")
-    assert next(
-        entry["status"] for entry in report["tables"] if entry["table"] == "scientific_records"
-    ) == expected
+    assert (
+        next(
+            entry["status"] for entry in report["tables"] if entry["table"] == "scientific_records"
+        )
+        == expected
+    )
     assert report["upgrade_authorized"] is False
     assert report["requires_researcher_approval"] is True
     assert "private-coral" not in json.dumps(report)

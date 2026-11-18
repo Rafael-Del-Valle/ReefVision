@@ -210,9 +210,7 @@ def _ddl_tokens(sql: str) -> tuple[str, ...]:
     return tuple(tokens)
 
 
-def _check_constraint_contracts(
-    connection: sqlite3.Connection, table: str
-) -> set[tuple[str, ...]]:
+def _check_constraint_contracts(connection: sqlite3.Connection, table: str) -> set[tuple[str, ...]]:
     """Preserve existing nested CHECK predicates without exposing private DDL."""
     definition = connection.execute(
         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
