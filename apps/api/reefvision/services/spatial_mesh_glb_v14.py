@@ -334,8 +334,11 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         ):
             raise ValueError("GLB position bounds require three bounded finite numbers")
         actual = [reducer(row[axis] for row in vertices) for axis in range(3)]
+        # An absolute 1e-8 tolerance can conceal an entirely missing
+        # submicron extremum. Only allow relative float32-export rounding;
+        # exact-zero source axes must not accept nonzero declared bounds.
         if any(
-            not isclose(value, expected, rel_tol=1e-6, abs_tol=1e-8)
+            not isclose(value, expected, rel_tol=1e-6, abs_tol=0.0)
             for value, expected in zip(declared, actual, strict=True)
         ):
             raise ValueError("GLB position bounds conflict with decoded geometry")
