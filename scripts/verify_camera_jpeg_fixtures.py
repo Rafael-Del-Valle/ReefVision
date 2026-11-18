@@ -54,7 +54,7 @@ def _normalized_exif_ascii(value: object) -> str | None:
             value = value.decode("ascii")
         except UnicodeDecodeError:
             return None
-    return value.strip(" \\t\\r\\n\\x00") if isinstance(value, str) else None
+    return value.strip(" \t\r\n\x00") if isinstance(value, str) else None
 
 
 def _camera_exif_fields_agree(left: object, right: object) -> bool:
