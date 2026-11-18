@@ -12,6 +12,7 @@ import pytest
 SCRIPT = Path(__file__).resolve().parents[1] / "verify-research-row-preservation-16.py"
 PRIVATE_VIEW = "private_field_site_reef_survey"
 
+
 def _seed(path: Path, *, select_star: bool = False) -> None:
     with sqlite3.connect(path) as connection:
         connection.execute(
@@ -28,6 +29,7 @@ def _seed(path: Path, *, select_star: bool = False) -> None:
             else "SELECT id, length_mm * 1.0 AS adjusted_mm FROM scientific_records"
         )
         connection.execute(f'CREATE VIEW "{PRIVATE_VIEW}" AS {expression}')
+
 
 def _run(before: Path, after: Path) -> tuple[int, dict]:
     completed = subprocess.run(
@@ -73,8 +75,7 @@ def test_preexisting_scientific_view_contract_must_survive(
                 )
             elif mutation == "rename":
                 connection.execute(
-                    "CREATE VIEW a_different_view AS "
-                    "SELECT id, length_mm FROM scientific_records"
+                    "CREATE VIEW a_different_view AS SELECT id, length_mm FROM scientific_records"
                 )
 
     if mutation == "replace_formula":
@@ -107,9 +108,7 @@ def test_preexisting_scientific_view_contract_must_survive(
 
 
 @pytest.mark.parametrize("mutation", ["unchanged", "additional_view", "spacing_only"])
-def test_preserved_or_additive_views_are_compatible(
-    tmp_path: Path, mutation: str
-) -> None:
+def test_preserved_or_additive_views_are_compatible(tmp_path: Path, mutation: str) -> None:
     before, after = tmp_path / "before.sqlite", tmp_path / "after.sqlite"
     _seed(before)
     shutil.copyfile(before, after)
