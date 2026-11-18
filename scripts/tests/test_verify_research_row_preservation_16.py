@@ -882,14 +882,13 @@ def test_upgrade_preserves_original_scientific_column_contracts(
     before_bytes, after_bytes = before.read_bytes(), after.read_bytes()
     code, report = _run(before, after)
     assert code == (0 if expected == "preserved" else 2)
-    assert report["status"] == (
-        "PASS_PRESERVATION_ONLY" if expected == "preserved" else "HOLD"
+    assert report["status"] == ("PASS_PRESERVATION_ONLY" if expected == "preserved" else "HOLD")
+    assert (
+        next(
+            entry["status"] for entry in report["tables"] if entry["table"] == "scientific_records"
+        )
+        == expected
     )
-    assert next(
-        entry["status"]
-        for entry in report["tables"]
-        if entry["table"] == "scientific_records"
-    ) == expected
     assert report["upgrade_authorized"] is False
     assert report["requires_researcher_approval"] is True
     assert "private-coral-1" not in json.dumps(report)
@@ -924,13 +923,109 @@ def test_upgrade_preserves_scientific_foreign_key_delete_policy(
     assert code == (0 if valid else 2)
     assert report["status"] == ("PASS_PRESERVATION_ONLY" if valid else "HOLD")
     assert next(
-        entry["status"]
-        for entry in report["tables"]
-        if entry["table"] == "scientific_records"
+        entry["status"] for entry in report["tables"] if entry["table"] == "scientific_records"
     ) == ("preserved" if valid else "changed_foreign_key_contract")
     assert report["upgrade_authorized"] is False
     assert report["requires_researcher_approval"] is True
     assert "private-coral" not in json.dumps(report)
     assert "private-project" not in json.dumps(report)
+    assert before.read_bytes() == original
+    assert after.read_bytes() == candidate
+
+
+@pytest.mark.parametrize(
+    ("baseline_index", "candidate_index", "expected"),
+    [
+        (
+            "UNIQUE INDEX uq_species ON scientific_records(species COLLATE NOCASE)",
+            "UNIQUE INDEX uq_species ON scientific_records(species COLLATE NOCASE)",
+            "preserved",
+        ),
+        (
+            "UNIQUE INDEX uq_species ON scientific_records(species COLLATE NOCASE)",
+            None,
+            "changed_unique_index_contract",
+        ),
+        (
+            "UNIQUE INDEX uq_species ON scientific_records(species COLLATE NOCASE)",
+            "INDEX uq_species ON scientific_records(species COLLATE NOCASE)",
+            "changed_unique_index_contract",
+        ),
+        (
+            "UNIQUE INDEX uq_species ON scientific_records(species COLLATE NOCASE)",
+            "UNIQUE INDEX uq_species ON scientific_records(species COLLATE BINARY)",
+            "changed_unique_index_contract",
+        ),
+        (
+            "UNIQUE INDEX uq_species ON scientific_records(species) WHERE status = 'verified'",
+            "UNIQUE INDEX uq_species ON scientific_records(species) WHERE status = 'draft'",
+            "changed_unique_index_contract",
+        ),
+        (
+            "UNIQUE INDEX uq_species ON scientific_records(lower(species))",
+            "UNIQUE INDEX uq_species ON scientific_records(substr(species, 1, 1))",
+            "changed_unique_index_contract",
+        ),
+    ],
+)
+def test_scientific_uniqueness_survives_migration(
+    tmp_path: Path,
+    baseline_index: str,
+    candidate_index: str | None,
+    expected: str,
+) -> None:
+    """Preserved old rows do not prove later duplicate observations are rejected."""
+    before, after = tmp_path / "before.sqlite", tmp_path / "after.sqlite"
+    for path, definition in ((before, baseline_index), (after, candidate_index)):
+        with sqlite3.connect(path) as connection:
+            connection.execute(
+                "CREATE TABLE scientific_records "
+                "(id TEXT PRIMARY KEY, species TEXT, status TEXT NOT NULL)"
+            )
+            if definition is not None:
+                connection.execute("CREATE " + definition)
+            connection.executemany(
+                "INSERT INTO scientific_records (id, species, status) VALUES (?, ?, ?)",
+                [("private-1", "Swiftia", "verified"), ("private-2", "Thesea", "verified")],
+            )
+    original, candidate = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+    assert code == (0 if expected == "preserved" else 2)
+    assert report["status"] == ("PASS_PRESERVATION_ONLY" if expected == "preserved" else "HOLD")
+    assert next(
+        entry["status"] for entry in report["tables"] if entry["table"] == "scientific_records"
+    ) == expected
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    assert "private-1" not in json.dumps(report)
+    assert "verified" not in json.dumps(report)
+    assert before.read_bytes() == original
+    assert after.read_bytes() == candidate
+
+
+def test_additional_unique_constraint_is_preservation_compatible(tmp_path: Path) -> None:
+    """New science-specific uniqueness may be additive without deleting old guarantees."""
+    before, after = tmp_path / "before.sqlite", tmp_path / "after.sqlite"
+    with sqlite3.connect(before) as connection:
+        connection.execute(
+            "CREATE TABLE scientific_records (id TEXT PRIMARY KEY, species TEXT, status TEXT)"
+        )
+        connection.execute(
+            "CREATE UNIQUE INDEX uq_species ON scientific_records(species COLLATE NOCASE)"
+        )
+        connection.execute(
+            "INSERT INTO scientific_records VALUES ('private-science', 'Swiftia', 'verified')"
+        )
+    shutil.copyfile(before, after)
+    with sqlite3.connect(after) as connection:
+        connection.execute(
+            "CREATE UNIQUE INDEX uq_status ON scientific_records(status)"
+        )
+    original, candidate = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+    assert code == 0
+    assert report["status"] == "PASS_PRESERVATION_ONLY"
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
     assert before.read_bytes() == original
     assert after.read_bytes() == candidate
