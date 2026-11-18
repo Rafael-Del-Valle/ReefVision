@@ -1749,16 +1749,10 @@ def test_biological_media_source_lineage_protected(tmp_path: Path, table: str) -
     assert report["protected_tables_examined"] == 6
     assert report["upgrade_authorized"] is False
     assert report["requires_researcher_approval"] is True
-    assert any(
-        item["table"] == table and item["status"] == "changed_records"
-        for item in report["tables"]
-    )
-    assert next(
-        item for item in report["tables"] if item["table"] == "workflow_graph_records"
-    )["status"] == "preserved"
-    assert next(
-        item for item in report["tables"] if item["table"] == "review_queue_item_events"
-    )["status"] == "preserved"
+    statuses = {item["table"]: item["status"] for item in report["tables"]}
+    assert statuses[table] == "changed_records"
+    assert statuses["workflow_graph_records"] == "preserved"
+    assert statuses["review_queue_item_events"] == "preserved"
     public_report = json.dumps(report)
     assert "private-coral-site-001" not in public_report
     assert "original-digest" not in public_report
@@ -1768,9 +1762,7 @@ def test_biological_media_source_lineage_protected(tmp_path: Path, table: str) -
 
 
 @pytest.mark.parametrize("table", ("images", "videos"))
-def test_removed_biological_media_source_table_requires_hold(
-    tmp_path: Path, table: str
-) -> None:
+def test_removed_biological_media_source_table_requires_hold(tmp_path: Path, table: str) -> None:
     before = tmp_path / "before.sqlite"
     after = tmp_path / "after.sqlite"
     _seed(before)
@@ -1787,10 +1779,8 @@ def test_removed_biological_media_source_table_requires_hold(
     assert report["status"] == "HOLD"
     assert report["upgrade_authorized"] is False
     assert report["requires_researcher_approval"] is True
-    assert any(
-        item["table"] == table and item["status"] == "removed_table"
-        for item in report["tables"]
-    )
+    statuses = {item["table"]: item["status"] for item in report["tables"]}
+    assert statuses[table] == "removed_table"
     assert "coral-source" not in json.dumps(report)
     assert before.read_bytes() == baseline_bytes
     assert after.read_bytes() == candidate_bytes
@@ -1812,9 +1802,8 @@ def test_new_candidate_only_media_source_table_remains_additive(tmp_path: Path) 
     assert report["protected_tables_examined"] == 5
     assert report["upgrade_authorized"] is False
     assert report["requires_researcher_approval"] is True
-    assert next(item for item in report["tables"] if item["table"] == "videos")[
-        "status"
-    ] == "not_in_baseline"
+    statuses = {item["table"]: item["status"] for item in report["tables"]}
+    assert statuses["videos"] == "not_in_baseline"
     assert not report["problems"]
     assert before.read_bytes() == baseline_bytes
     assert after.read_bytes() == candidate_bytes
