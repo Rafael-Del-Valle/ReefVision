@@ -23,8 +23,7 @@ def _migration(root: Path, name: str, revision: str, parent_source: str) -> Path
     root.mkdir(parents=True, exist_ok=True)
     path = root / name
     path.write_text(
-        f'revision: str = "{revision}"\n'
-        f"down_revision: str | None = {parent_source}\n",
+        f'revision: str = "{revision}"\ndown_revision: str | None = {parent_source}\n',
         encoding="utf-8",
     )
     return path
@@ -107,9 +106,7 @@ def test_cycle_refused_without_running_migration(tmp_path: Path) -> None:
         "[]",
     ],
 )
-def test_dynamic_or_noncanonical_parents_are_refused(
-    tmp_path: Path, parent_source: str
-) -> None:
+def test_dynamic_or_noncanonical_parents_are_refused(tmp_path: Path, parent_source: str) -> None:
     root = tmp_path / "versions"
     _migration(root, "0001.py", "0001", "None")
     file = _migration(root, "0002.py", "0002", parent_source)
@@ -126,7 +123,7 @@ def test_dynamic_or_noncanonical_parents_are_refused(
         'down_revision += "forged"\n',
         "del down_revision\n",
         'for down_revision in ("forged",):\n    pass\n',
-        'import json as down_revision\n',
+        "import json as down_revision\n",
         'def down_revision():\n    return "forged"\n',
     ],
 )
