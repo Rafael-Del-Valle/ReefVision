@@ -1326,13 +1326,12 @@ def test_protected_label_column_collation_preserved_for_future_observations(
                 "CREATE TABLE scientific_records "
                 f"(id INTEGER PRIMARY KEY, label {declaration}, measurement REAL)"
             )
-            connection.execute(
-                "INSERT INTO scientific_records VALUES (1, 'Coral-A', 3.5)"
-            )
+            connection.execute("INSERT INTO scientific_records VALUES (1, 'Coral-A', 3.5)")
     with sqlite3.connect(before) as a, sqlite3.connect(after) as b:
-        assert a.execute("SELECT * FROM scientific_records").fetchall() == b.execute(
-            "SELECT * FROM scientific_records"
-        ).fetchall()
+        assert (
+            a.execute("SELECT * FROM scientific_records").fetchall()
+            == b.execute("SELECT * FROM scientific_records").fetchall()
+        )
         if expected != "preserved":
             original_matches = a.execute(
                 "SELECT COUNT(*) FROM scientific_records WHERE label = 'coral-a'"
@@ -1345,9 +1344,7 @@ def test_protected_label_column_collation_preserved_for_future_observations(
     old_bytes, new_bytes = before.read_bytes(), after.read_bytes()
     code, report = _run(before, after)
     assert code == (0 if expected == "preserved" else 2)
-    assert report["status"] == (
-        "PASS_PRESERVATION_ONLY" if expected == "preserved" else "HOLD"
-    )
+    assert report["status"] == ("PASS_PRESERVATION_ONLY" if expected == "preserved" else "HOLD")
     assert any(
         item["table"] == "scientific_records" and item["status"] == expected
         for item in report["tables"]
@@ -1371,9 +1368,7 @@ def test_column_collation_does_not_confuse_nested_check_expression(
     for path in (before, after):
         with sqlite3.connect(path) as connection:
             connection.execute(statement)
-            connection.execute(
-                "INSERT INTO scientific_records VALUES (1, 'Coral-A', 3.5)"
-            )
+            connection.execute("INSERT INTO scientific_records VALUES (1, 'Coral-A', 3.5)")
     code, report = _run(before, after)
     assert code == 0
     assert report["status"] == "PASS_PRESERVATION_ONLY"
