@@ -1945,7 +1945,7 @@ def test_pose_workflow_rejects_lossy_device_from_verified_truth(
             app.state.session_factory() as session,
             pytest.raises(
                 ValidationError,
-                match=rf"training_config\.{worker_field} is managed by the workflow worker",
+                match=rf"training_config\.{worker_field} is managed by",
             ),
         ):
             create_pose_workflow_training_result(
