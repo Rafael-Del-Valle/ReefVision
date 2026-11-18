@@ -250,15 +250,25 @@ DISPLAY_CHORD_ROUNDING_PARAMS = {
     "surface_trace_vertex_paths": [[0, 1, 2]],
 }
 
-# The first real indexed edge has a positive calibrated length, but separately
-# scaled absolute positions round to the same displayed point. This is a
-# preview-representation defect, distinct from an edge-length underflow.
-DISPLAY_SEGMENT_ROUNDING_PARAMS = {
+# This isolated thin triangle has a real source X span that is erased
+# when its absolute coordinate extrema are independently calibrated. It must
+# fail closed rather than publishing a false zero extent or renderer bounds.
+COLLAPSED_BOUNDING_AXIS_PARAMS = {
     **PARAMS,
     "vertices": [[100.0, 0, 0], [100.00000000000001, 0, 0], [100.0, 2, 0]],
     "faces": [[0, 1, 2]],
     "meters_per_unit": 1e-100,
     "surface_trace_vertex_paths": [[0, 1, 2]],
+}
+
+# The selected first edge still has a positive calibrated length and both
+# displayed endpoints coincide. A connected second triangle widens the
+# measured mesh X bounds so this valid preview does NOT silently weaken the
+# calibrated bounding-span integrity check to exercise the trace warning.
+DISPLAY_SEGMENT_ROUNDING_PARAMS = {
+    **COLLAPSED_BOUNDING_AXIS_PARAMS,
+    "vertices": [*COLLAPSED_BOUNDING_AXIS_PARAMS["vertices"], [99.0, 2, 0]],
+    "faces": [[0, 1, 2], [0, 2, 3]],
 }
 
 
@@ -1411,6 +1421,59 @@ def test_surface_trace_flags_real_segment_erased_from_display_positions() -> Non
     assert "surface_trace_segment_display_coordinate_collapse" in trace["qc_warnings"]
     assert "calibrated_surface_trace_segment_underflow" not in trace["qc_warnings"]
     assert trace["human_review_verified"] is False
+
+
+def test_collapsed_calibrated_mesh_bounds_fail_standalone_and_saved_graph(
+    client: TestClient,
+) -> None:
+    # The same short edge is not independently valid as an isolated mesh:
+    # calibrating its source X extrema erases its nonzero global X extent.
+    params = COLLAPSED_BOUNDING_AXIS_PARAMS
+    diagnostic = "Nonzero mesh axis span collapses after calibration"
+    with pytest.raises(ValueError, match=diagnostic):
+        measure_mesh_preview(**params)
+
+    project_id = str(create_project(client, "Collapsed calibrated mesh bounds")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == 400
+    assert diagnostic in standalone.text
+
+    graph = {
+        "graph_id": "mesh-calibrated-bounds-collapse-v14",
+        "name": "Reject false zero calibrated mesh bounds",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-to-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert (
+        process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        is False
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert not any(
+        artifact["data_type"] == "mesh_measurement_preview"
+        for artifact in detail.json()["artifacts"]
+    )
 
 
 def test_finite_source_detour_survives_calibrated_chord_underflow() -> None:
