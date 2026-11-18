@@ -442,6 +442,15 @@ def process_pose_training_job(
             ):
                 raise ValidationError("Queued pose training frozen snapshot lineage changed")
 
+            # A sealed Workflow Builder child must also retain the frozen
+            # train/validation split definition, not just its stored digest.
+            # Detect changed snapshot contents before exporting reviewed frames.
+            if sealed_digest is not None and (
+                not isinstance(snapshot.get("split_manifest"), dict)
+                or canonical_json_sha256(snapshot["split_manifest"]) != run.split_manifest_sha256
+            ):
+                raise ValidationError("Queued pose training frozen split manifest changed")
+
             project = session.get(
                 Project,
                 run.project_id,
