@@ -159,7 +159,6 @@ def _foreign_key_contracts(connection: sqlite3.Connection, table: str) -> set[tu
     return {tuple(sorted(group)) for group in groups.values()}
 
 
-
 def _foreign_key_timing_contracts(connection: sqlite3.Connection, table: str) -> dict[tuple, tuple]:
     """Protect SQLite FK deferral semantics missing from PRAGMA foreign_key_list.
 
