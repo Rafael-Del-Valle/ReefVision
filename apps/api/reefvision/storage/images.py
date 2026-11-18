@@ -246,6 +246,27 @@ def _json_safe(
     return _bounded_metadata_text(text, _budget)
 
 
+def _exif_exposure_fields_match(left: object, right: object) -> bool:
+    """Treat equal ASCII EXIF exposure text as equal across bytes and padding.
+
+    Some camera decoders return the same tag as padded ASCII bytes in ExifIFD
+    and as text in IFD0. Preserve UTC when the values actually agree, but
+    reject undecodable/non-text duplicates rather than trust an ambiguous
+    exposure value. The camera original and raw metadata stay unchanged.
+    """
+
+    def normalized(value: object) -> str | None:
+        if isinstance(value, bytes):
+            try:
+                value = value.decode("ascii")
+            except UnicodeDecodeError:
+                return None
+        return value.strip(" \\t\\r\\n\\x00") if isinstance(value, str) else None
+
+    canonical_left = normalized(left)
+    return canonical_left is not None and canonical_left == normalized(right)
+
+
 def _capture_timestamp(exif: dict[int, Any]) -> datetime | None:
     """Return verified UTC exposure time, never digitization or file-modification time."""
 
@@ -393,7 +414,9 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                     exposure_ifd_conflicts = [
                         tag
                         for tag in (36867, 36881, 37521)
-                        if tag in exif and tag in nested_exif and exif[tag] != nested_exif[tag]
+                        if tag in exif
+                        and tag in nested_exif
+                        and not _exif_exposure_fields_match(exif[tag], nested_exif[tag])
                     ]
                     exif.update(nested_exif)
                 except (
