@@ -191,6 +191,8 @@ def test_representable_small_patch_survives_standalone_and_saved_graph(
     assert artifact["provenance"] == standalone["provenance"]
 
 
+@pytest.mark.parametrize("axis", [0, 1, 2], ids=["x", "y", "z"])
+@pytest.mark.parametrize("sign", [-1, 1], ids=["negative", "positive"])
 @pytest.mark.parametrize(
     ("vertices", "faces", "expected_error"),
     [
@@ -215,16 +217,25 @@ def test_representable_small_patch_survives_standalone_and_saved_graph(
         ),
     ],
 )
-def test_positive_mesh_axis_span_cannot_disappear_after_calibration(
+def test_signed_mesh_axis_span_cannot_disappear_after_calibration(
     client: TestClient,
     vertices: list[list[float]],
     faces: list[list[int]],
     expected_error: str,
+    axis: int,
+    sign: int,
 ) -> None:
-    # Surface area remains finite and positive, but a genuine X-axis extent
-    # becomes zero in meters. Neither the standalone API nor a persisted
-    # scientific graph may publish misleading geometry or measurement artifacts.
-    params = {**mesh_params(1e-10), "vertices": vertices, "faces": faces}
+    # Surface area remains positive while a signed, nonzero source extent
+    # on any axis would become zero in meters. Exercise all coordinate axes
+    # through the standalone API and an executable persisted workflow.
+    rotated_vertices: list[list[float]] = []
+    for vertex in vertices:
+        rotated = vertex.copy()
+        rotated[0], rotated[axis] = rotated[axis], rotated[0]
+        if abs(rotated[axis]) == 1e-320:
+            rotated[axis] *= sign
+        rotated_vertices.append(rotated)
+    params = {**mesh_params(1e-10), "vertices": rotated_vertices, "faces": faces}
     with pytest.raises(ValueError, match=expected_error):
         measure_mesh_preview(**params)
 
@@ -236,9 +247,7 @@ def test_positive_mesh_axis_span_cannot_disappear_after_calibration(
 
     detail = saved_mesh_result(client, base, params)
     assert detail["run"]["status"] == "failed"
-    assert not any(
-        item["data_type"] == "mesh_measurement_preview" for item in detail["artifacts"]
-    )
+    assert not any(item["data_type"] == "mesh_measurement_preview" for item in detail["artifacts"])
 
 
 def test_representable_narrow_mesh_axis_has_standalone_saved_workflow_parity(
@@ -255,9 +264,7 @@ def test_representable_narrow_mesh_axis_has_standalone_saved_workflow_parity(
     assert response.status_code == 200, response.text
     standalone = response.json()
     assert standalone["surface_area_m2"] > 0
-    assert standalone["axis_aligned_dimensions_m"][0] == pytest.approx(
-        1e-110, rel=1e-12, abs=0
-    )
+    assert standalone["axis_aligned_dimensions_m"][0] == pytest.approx(1e-110, rel=1e-12, abs=0)
     assert standalone["measurement_status"] == "caller_supplied_unverified"
     assert standalone["provenance"]["calibration_verified"] is False
     assert standalone["preview_coordinate_registration_verified"] is False
