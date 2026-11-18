@@ -213,14 +213,14 @@ def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
         if not all(isfinite(value) for value in numeric):
             raise ValueError("PLY vertex properties must be finite")
         for axis, index in enumerate(xyz):
-            value = numeric[index]
+            coordinate = numeric[index]
             source_decimal = Decimal(values[index])
-            previous = source_decimals_by_axis[axis].get(value)
+            previous = source_decimals_by_axis[axis].get(coordinate)
             if previous is not None and previous != source_decimal:
                 raise ValueError(
                     "Distinct PLY mesh decimal coordinates collapse at float64 precision"
                 )
-            source_decimals_by_axis[axis][value] = source_decimal
+            source_decimals_by_axis[axis][coordinate] = source_decimal
         vertices.append([numeric[index] for index in xyz])
 
     # The declared face index width is part of the source schema. Do not
