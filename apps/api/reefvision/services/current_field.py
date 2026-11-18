@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from itertools import pairwise
-
 from sqlalchemy.orm import Session
 
 from reefvision.db.models.scientific_record import ScientificRecord
@@ -84,9 +82,13 @@ class CurrentFieldService:
         longitudes = sorted({record.location.longitude for record in records if record.location})
         if len(latitudes) < 2 or len(longitudes) < 2:
             raise ValidationError("Current field requires at least a 2 by 2 paired component grid")
-        if any(right - left > 180.0 for left, right in pairwise(longitudes)):
+        # Checking only adjacent gaps misses a wide grid such as
+        # [-170, 0, 170]: neither step exceeds 180 degrees, but the field
+        # spans 340 degrees and crosses the antimeridian. Cartesian
+        # interpolation on that grid would invent unmeasured ocean currents.
+        if longitudes[-1] - longitudes[0] > 180.0:
             raise ValidationError(
-                "Current longitude gap exceeds 180 degrees; "
+                "Current longitude extent exceeds 180 degrees; "
                 "antimeridian-spanning grids require regridding before integration"
             )
         indexed: dict[tuple[float, float, str], ScientificRecordResponse] = {}
