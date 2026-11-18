@@ -118,6 +118,64 @@ def test_saved_glb(
     )
 
 
+def test_valid_nanoscale_glb_bounds_standalone_and_replayed_graph(
+    client: TestClient,
+) -> None:
+    """Accept true tiny surface extent with identical twice-run persisted evidence."""
+    pid = create_project(client, "GLB nanoscale bounds")
+    project_id = str(pid["id"])
+    base = f"/api/v1/projects/{project_id}"
+    params = {
+        "glb_base64": make_glb(position_bounds=True, tiny_z=True),
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic control, pending independent review",
+    }
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    assert expected["provenance"]["calibration_verified"] is False
+    graph = {
+        "graph_id": "glb-nanoscale-extrema-v14",
+        "name": "Nanoscale GLB exporter bounds",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "m",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifacts = [
+            a for a in detail.json()["artifacts"]
+            if a["data_type"] == "mesh_measurement_preview"
+        ]
+        assert len(artifacts) == 1
+        assert artifacts[0]["payload_json"] == expected
+        hashes.append(artifacts[0]["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
+
+
 @pytest.mark.parametrize(
     "invalid_selector",
     [
@@ -155,6 +213,8 @@ def test_saved_glb(
         "bounds_boolean",
         "bounds_nan",
         "bounds_mismatch",
+        "bounds_tiny_positive",
+        "bounds_tiny_negative",
         "stride_too_small",
         "stride_unaligned",
         "stride_oversize",
