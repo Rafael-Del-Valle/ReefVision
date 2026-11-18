@@ -65,6 +65,90 @@ def _run_saved_graph(client: TestClient, project_id: str, ply: str) -> dict:
     return detail.json()
 
 
+@pytest.mark.parametrize("coordinate_type", ["float", "double"])
+@pytest.mark.parametrize(
+    ("baseline", "rounded_collision"),
+    [
+        ("1", "1.00000000000000001"),
+        ("-1", "-1.00000000000000001"),
+    ],
+)
+def test_distinct_ply_mesh_decimals_cannot_collapse_into_measurements(
+    client: TestClient,
+    coordinate_type: str,
+    baseline: str,
+    rounded_collision: str,
+) -> None:
+    invalid = PLY.replace("property float x", f"property {coordinate_type} x").replace(
+        "0 0 0\n2 0 0\n",
+        f"{baseline} 0 0\n{rounded_collision} 2 0\n",
+    )
+    with pytest.raises(ValueError, match="Distinct PLY mesh decimal coordinates collapse"):
+        parse_ply_triangles(invalid)
+    project_id = str(create_project(client, "PLY mesh decimal collision")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(
+        f"{base}/spatial/mesh-preview",
+        json={**PARAMS, "ply_text": invalid},
+    )
+    assert standalone.status_code == 400, standalone.text
+    assert "Distinct PLY mesh decimal coordinates collapse" in standalone.json()["detail"]
+    workflow = _run_saved_graph(client, project_id, invalid)
+    assert workflow["run"]["status"] == "failed"
+    assert not any(
+        item["data_type"] == "mesh_measurement_preview" for item in workflow["artifacts"]
+    )
+
+
+@pytest.mark.parametrize(
+    ("baseline", "equivalent"),
+    [
+        ("1.0", "+1e0"),
+        ("-1.0", "-1e0"),
+    ],
+)
+def test_equivalent_ply_mesh_decimals_replay_saved_graph_without_false_qc(
+    client: TestClient, baseline: str, equivalent: str
+) -> None:
+    valid = PLY.replace(
+        "0 0 0\n2 0 0\n", f"{baseline} 0 0\n{equivalent} 2 0\n"
+    )
+    vertices, faces = parse_ply_triangles(valid)
+    assert vertices[0][0] == vertices[1][0]
+    assert faces == [[0, 1, 2]]
+    project_id = str(create_project(client, "PLY equivalent decimal replay")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    params = {**PARAMS, "ply_text": valid}
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    assert expected["surface_area_m2"] == pytest.approx(0.0001)
+    assert expected["provenance"]["calibration_verified"] is False
+    assert expected["provenance"]["coordinate_registration_verified"] is False
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": _graph(valid)})
+    assert saved.status_code == 201, saved.text
+    hashes: list[str] = []
+    app = cast(FastAPI, client.app)
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        )
+        assert artifact["payload_json"] == expected
+        hashes.append(artifact["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
+
+
 @pytest.mark.parametrize(
     "invalid",
     [
