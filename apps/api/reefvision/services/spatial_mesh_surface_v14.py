@@ -291,7 +291,7 @@ def measure_mesh_preview(
     patch_boundary_edges: Counter[int] = Counter()
     patch_nonmanifold_edges: Counter[int] = Counter()
     patch_winding_edges: Counter[int] = Counter()
-    patch_boundary_lengths_mesh_units: dict[int, float] = {}
+    patch_boundary_length_terms: dict[int, list[float]] = {}
     patch_boundary_graph_edges: dict[int, list[tuple[int, int]]] = {}
     for (a, b), incidents in edge_faces.items():
         patch = root(incidents[0][0])
@@ -299,9 +299,7 @@ def measure_mesh_preview(
         if len(incidents) == 1:
             patch_boundary_edges[patch] += 1
             patch_boundary_graph_edges.setdefault(patch, []).append((a, b))
-            patch_boundary_lengths_mesh_units[patch] = patch_boundary_lengths_mesh_units.get(
-                patch, 0.0
-            ) + dist(points[a], points[b])
+            patch_boundary_length_terms.setdefault(patch, []).append(dist(points[a], points[b]))
         elif len(incidents) > 2:
             patch_nonmanifold_edges[patch] += 1
         elif incidents[0][1] == incidents[1][1]:
@@ -345,10 +343,12 @@ def measure_mesh_preview(
     ]
     patch_nonmanifold_edge_counts = [patch_nonmanifold_edges[patch] for patch in ordered_patches]
     patch_winding_edge_counts = [patch_winding_edges[patch] for patch in ordered_patches]
+    # Retain sub-ULP source-edge lengths when a large edge shares a patch,
+    # and reconcile the total over disconnected patches without order loss.
     patch_boundary_lengths_m = [
-        patch_boundary_lengths_mesh_units.get(patch, 0.0) * scale for patch in ordered_patches
+        fsum(patch_boundary_length_terms.get(patch, [])) * scale for patch in ordered_patches
     ]
-    boundary_length_m = sum(patch_boundary_lengths_m)
+    boundary_length_m = fsum(patch_boundary_lengths_m)
     # Only report provisional enclosed volume for closed, consistently wound,
     # nondegenerate edge-connected patches. This is not a biological volume:
     # self-intersections and reconstruction completeness remain unverified.

@@ -68,6 +68,24 @@ calibration provenance, and stable artifact hashes. This improves arithmetic
 integrity, not reconstruction accuracy, organism identity, tissue area,
 anatomical branch length, or uncertainty beyond supplied scale error.
 
+
+### Compensated disconnected-patch boundary perimeter
+
+Patch boundary-edge lengths and the total calibrated boundary perimeter now
+use compensated summation. Ordinary accumulation could discard small positive
+boundary contributions when a source mesh contains one large reconstructed
+surface patch and many tiny disconnected patches. This is a geometry-derived
+boundary metric, not a coral anatomical branch length or tissue perimeter.
+
+A synthetic 301-patch case (one dominant triangle and 300 sub-ULP tiny
+triangles) verifies that calibrated boundary length includes representable
+small-patch contributions and exactly reconciles with the compensated sum of
+per-patch lengths. The standalone project API and two executions of a persisted,
+typed Workflow Builder graph must match the same values, scale-only uncertainty
+intervals, provisional calibration provenance and stable artifact hashes.
+Scientific validation against real reconstruction and anatomy references remains
+blocked.
+
 ### Partially visible patch coverage
 
 The bounded preview now distinguishes completely hidden edge-connected mesh
