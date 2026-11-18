@@ -54,6 +54,9 @@ jobs:
           python -m ruff check scripts/verify-research-row-preservation-16.py scripts/tests/test_verify_research_row_preservation_16.py
           python -m ruff format --check scripts/verify-research-row-preservation-16.py scripts/tests/test_verify_research_row_preservation_16.py
           python -m pytest scripts/tests/test_verify_research_row_preservation_16.py -v
+      - name: Explain research preservation Ruff formatting mismatch
+        if: failure()
+        run: python -m ruff format --diff scripts/verify-research-row-preservation-16.py scripts/tests/test_verify_research_row_preservation_16.py
       - run: python -m mypy -p reefvision
       - run: python -m pytest apps/api/reefvision/tests
       - name: Test offline MSI/CAB provenance verifier (Python 3.11)
