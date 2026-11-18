@@ -477,6 +477,28 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
 
     assert exploratory["validation_image_count"] == 0
 
+    # Even independently frozen validation labels cannot be copied into a
+    # training run whose class map interprets those label indices differently.
+    mismatched = io.BytesIO()
+    with (
+        zipfile.ZipFile(io.BytesIO(validation)) as original,
+        zipfile.ZipFile(mismatched, "w", compression=zipfile.ZIP_DEFLATED) as modified,
+    ):
+        for member in original.namelist():
+            content = original.read(member)
+            if member == "data.yaml":
+                content = content.replace(b'"animal"', b'"different-animal"')
+            modified.writestr(member, content)
+
+    mismatched_destination = tmp_path / "pose-incompatible-validation"
+    with pytest.raises(ValidationError, match=r"incompatible data\\.yaml"):
+        materialize_pose_training_exports(
+            training_content=training,
+            validation_content=mismatched.getvalue(),
+            destination=mismatched_destination,
+        )
+    assert not (mismatched_destination / "images" / "val").exists()
+
 
 @pytest.mark.parametrize(
     "extra_yaml",
