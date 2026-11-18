@@ -516,6 +516,8 @@ def test_pose_materialization_rejects_overridden_frozen_dataset_paths(
     (
         ("job_request", "child job request checksum changed"),
         ("frozen_dataset", "frozen dataset lineage changed"),
+        ("run_manifest", "frozen snapshot lineage changed"),
+        ("snapshot_manifest", "frozen snapshot lineage changed"),
     ),
 )
 def test_pose_worker_checks_frozen_lineage_before_export(
@@ -545,10 +547,19 @@ def test_pose_worker_checks_frozen_lineage_before_export(
                     **request,
                     "pose_training_dataset_manifest_sha256": "0" * 64,
                 }
-            else:
+            elif tampered_field == "frozen_dataset":
                 frozen = session.get(PoseTrainingDataset, str(dataset["id"]))
                 assert frozen is not None
                 frozen.manifest_sha256 = "0" * 64
+            else:
+                run = session.get(TrainingRun, str(request["training_run_id"]))
+                assert run is not None
+                if tampered_field == "run_manifest":
+                    run.dataset_manifest_sha256 = "0" * 64
+                else:
+                    snapshot = dict(run.draft_snapshot_json or {})
+                    snapshot["pose_training_dataset_manifest_sha256"] = "0" * 64
+                    run.draft_snapshot_json = snapshot
             session.commit()
 
         assert process_pose_training_job(settings, factory, job_id) is False
