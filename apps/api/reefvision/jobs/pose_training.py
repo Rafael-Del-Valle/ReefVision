@@ -495,6 +495,17 @@ def process_pose_training_job(
             ):
                 raise ValidationError("Queued pose training frozen split manifest changed")
 
+            # Independently verify the scientist-reviewed snapshot's landmark
+            # schema before exporting data or starting the GPU. Dataset identity
+            # alone cannot detect an altered saved keypoint definition.
+            if sealed_digest is not None and (
+                snapshot.get("pose_schema_id") != training_dataset.pose_schema_id
+                or snapshot.get("pose_schema_revision") != training_dataset.pose_schema_revision
+                or snapshot.get("pose_schema_content_hash")
+                != training_dataset.pose_schema_content_hash
+            ):
+                raise ValidationError("Queued pose training frozen schema lineage changed")
+
             project = session.get(
                 Project,
                 run.project_id,
