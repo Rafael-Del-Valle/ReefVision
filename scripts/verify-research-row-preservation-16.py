@@ -663,6 +663,15 @@ def _compare_assets(before_root: Path, after_root: Path) -> dict:
         path in candidate and candidate[path] != checksum for path, checksum in baseline.items()
     )
     added = sum(path not in baseline for path in candidate)
+    # Empty directories carry project/export organization but have no file
+    # checksum. They must be compared explicitly; additions are permitted.
+    # "." is the root of each independent copy, not a research subdirectory.
+    missing_directories = sum(
+        path != "." and path not in candidate_dirs for path in baseline_dirs
+    )
+    added_directories = sum(
+        path != "." and path not in baseline_dirs for path in candidate_dirs
+    )
     return {
         "checked": True,
         "baseline_files": len(baseline),
@@ -670,6 +679,10 @@ def _compare_assets(before_root: Path, after_root: Path) -> dict:
         "missing_files": missing,
         "changed_files": changed,
         "added_files": added,
+        "baseline_directories": len(baseline_dirs) - 1,
+        "candidate_directories": len(candidate_dirs) - 1,
+        "missing_directories": missing_directories,
+        "added_directories": added_directories,
     }
 
 
@@ -797,6 +810,8 @@ def verify(
                 problems.append("research_assets_missing")
             if asset_evidence["changed_files"]:
                 problems.append("research_assets_changed")
+            if asset_evidence["missing_directories"]:
+                problems.append("research_directories_missing")
         # Sidecars can appear or disappear while reading a WAL database. Even
         # successful snapshots are not approval to copy a live DB's main file.
         if sidecars_before or _sidecars(before) or _sidecars(after):
