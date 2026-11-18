@@ -11,6 +11,18 @@ import pytest
 from reefvision.services.spatial_mesh_glb_v14 import parse_glb_triangles
 
 
+FLOAT32_UNDERFLOW_SELECTORS = (
+    "bounds_float32_underflow_min_x_positive",
+    "bounds_float32_underflow_min_x_negative",
+    "bounds_float32_underflow_min_y_positive",
+    "bounds_float32_underflow_min_y_negative",
+    "bounds_float32_underflow_min_z_positive",
+    "bounds_float32_underflow_min_z_negative",
+    "bounds_float32_underflow_max_z_positive",
+    "bounds_float32_underflow_max_z_negative",
+)
+
+
 def make_glb(
     *,
     translated: bool = False,
@@ -29,6 +41,7 @@ def make_glb(
     position_bounds: bool = False,
     index_bounds: bool = False,
     tiny_z: bool = False,
+    subnormal_z: bool = False,
 ) -> str:
     if invalid_selector == "misaligned_position_view":
         position_offset = 2
@@ -45,7 +58,8 @@ def make_glb(
     elif invalid_selector == "stride_overlap":
         position_stride = 16
         position_leading_bytes = 8
-    positions = struct.pack("<9f", 0, 0, 0, 2, 0, 0, 0, 3, 1e-9 if tiny_z else 0)
+    z_value = 2**-149 if subnormal_z else (1e-9 if tiny_z else 0.0)
+    positions = struct.pack("<9f", 0, 0, 0, 2, 0, 0, 0, 3, z_value)
     if type(position_stride) is int and position_stride >= 12:
         positions = b"".join(
             b"\x00" * position_leading_bytes
@@ -119,7 +133,7 @@ def make_glb(
         doc["bufferViews"][0]["byteLength"] = 36
     if position_bounds:
         doc["accessors"][0]["min"] = [0.0, 0.0, 0.0]
-        doc["accessors"][0]["max"] = [2.0, 3.0, 1e-9 if tiny_z else 0.0]
+        doc["accessors"][0]["max"] = [2.0, 3.0, z_value]
     if invalid_selector == "bounds_short":
         doc["accessors"][0]["min"] = [0.0, 0.0]
     elif invalid_selector == "bounds_boolean":
@@ -138,6 +152,13 @@ def make_glb(
     elif invalid_selector == "bounds_float32_roundtrip":
         # Decimal exporter spelling still rounds to the stored 2.0 float32.
         doc["accessors"][0]["max"] = [2.00000001, 3.0, 0.0]
+    elif invalid_selector in FLOAT32_UNDERFLOW_SELECTORS:
+        # A nonzero JSON extremum near zero can round to BIN float32 zero.
+        # The metadata must not claim a distinction absent from the vertices.
+        _, _, _, field, axis, sign = invalid_selector.split("_")
+        declared = [0.0, 0.0, 0.0] if field == "min" else [2.0, 3.0, 0.0]
+        declared[{"x": 0, "y": 1, "z": 2}[axis]] = -1e-60 if sign == "negative" else 1e-60
+        doc["accessors"][0][field] = declared
     if index_bounds:
         doc["accessors"][1]["min"] = [0]
         doc["accessors"][1]["max"] = [2]
@@ -451,6 +472,20 @@ def test_rejects_glb_position_extrema_false_at_nanoscale(invalid_selector: str) 
     """A 1e-9 false extremum is not valid merely because 1e-8 was the old floor."""
     with pytest.raises(ValueError, match="position bounds conflict"):
         parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
+
+
+@pytest.mark.parametrize("invalid_selector", FLOAT32_UNDERFLOW_SELECTORS)
+def test_rejects_float32_underflow_of_nonzero_glb_bounds(invalid_selector: str) -> None:
+    """A declared source extremum may not silently collapse to BIN zero."""
+    with pytest.raises(ValueError, match="underflow float32 precision"):
+        parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
+
+
+def test_valid_float32_subnormal_extremum_preserves_geometry() -> None:
+    """A genuinely representable subnormal must not be rejected as zero."""
+    vertices, faces = parse_glb_triangles(make_glb(position_bounds=True, subnormal_z=True))
+    assert vertices[2][2] == 2**-149
+    assert faces == [[0, 1, 2]]
 
 
 def test_valid_nanoscale_position_extremum_remains_supported() -> None:
