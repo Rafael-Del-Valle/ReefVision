@@ -155,7 +155,7 @@ def _safe_extract_zip(
                 )
 
 
-def _verify_pose_export_frame_pairs(source_root: Path) -> None:
+def _verify_pose_export_frame_pairs(source_root: Path, *, class_count: int) -> None:
     """Require one exported annotation file for each frozen PNG frame."""
 
     images = source_root / "images" / "train"
@@ -173,12 +173,29 @@ def _verify_pose_export_frame_pairs(source_root: Path) -> None:
     ):
         raise ValidationError("Ultralytics pose export has unmatched image/label frame sets")
 
+    # An annotation referring to an absent class would be silently
+    # misinterpreted or fail only after an expensive offline GPU launch.
+    # Check both frozen training truth and independently reviewed validation.
+    for label_path in label_files:
+        rows = label_path.read_text(encoding="utf-8").splitlines()
+        if not rows:
+            raise ValidationError("Ultralytics pose export contains an invalid label class index")
+        for row in rows:
+            tokens = row.split()
+            if (
+                not tokens
+                or re.fullmatch(r"(0|[1-9][0-9]*)", tokens[0]) is None
+                or int(tokens[0]) >= class_count
+            ):
+                raise ValidationError("Ultralytics pose export contains an invalid label class index")
+
 
 def _copy_split(
     source_root: Path,
     destination_root: Path,
     *,
     split_name: str,
+    class_count: int,
 ) -> None:
     """Copy one exported Ultralytics train split into another named split."""
 
@@ -191,7 +208,7 @@ def _copy_split(
     if not source_labels.is_dir():
         raise ValidationError("Ultralytics pose export is missing labels/train")
 
-    _verify_pose_export_frame_pairs(source_root)
+    _verify_pose_export_frame_pairs(source_root, class_count=class_count)
 
     target_images = destination_root / "images" / split_name
     target_labels = destination_root / "labels" / split_name
@@ -299,7 +316,7 @@ def materialize_pose_training_exports(
             "Ultralytics pose export has noncanonical class/keypoint metadata"
         ) from exc
 
-    _verify_pose_export_frame_pairs(destination)
+    _verify_pose_export_frame_pairs(destination, class_count=len(class_lines))
 
     validation_mode = "none"
 
@@ -333,6 +350,7 @@ def materialize_pose_training_exports(
                 validation_stage,
                 destination,
                 split_name="val",
+                class_count=len(class_lines),
             )
         finally:
             shutil.rmtree(
