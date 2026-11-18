@@ -472,9 +472,8 @@ def measure_mesh_preview(
     # surface centroid are both representable (e.g. 1e-220 * 1e-110).
     # Compensated vertex and face sums preserve signed-coordinate cancellation.
     # These are provisional source-frame positions, not biological identities.
-    def area_weighted_centroid_m(
-        face_indices: list[int], total_area: float
-    ) -> list[float] | None:
+
+    def area_weighted_centroid_m(face_indices: list[int], total_area: float) -> list[float] | None:
         if total_area == 0:
             return None
         return [
