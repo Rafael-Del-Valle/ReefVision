@@ -293,6 +293,9 @@ while ($true) {
     # shown below is a previously recorded sample, not a current-epoch value.
     # Keep the persisted history unchanged and disclose that age in the view.
     $staleMetricSamples = @{}
+    # A completely unmeasured history must be visible without inventing a
+    # zero or misclassifying reserved null epochs as corrupt observations.
+    $unmeasuredLosses = @{}
     if ($null -ne $run.metrics) {
       foreach ($metric in $run.metrics.PSObject.Properties) {
         if (Test-FiniteMetricValue -Value $metric.Value) {
@@ -321,11 +324,19 @@ while ($true) {
         if (-not $foundFiniteSample -and $values.Count -gt 0 -and $latestMetrics.ContainsKey($series.Name)) {
           $staleMetricSamples[$series.Name] = (' [summary fallback; no finite history entry among {0}]' -f $values.Count)
         }
+        if (-not $foundFiniteSample -and $values.Count -gt 0 -and -not $latestMetrics.ContainsKey($series.Name)) {
+          $onlyPlaceholders = @($values | Where-Object { $null -ne $_ }).Count -eq 0
+          $unmeasuredLosses[$series.Name] = if ($onlyPlaceholders) {
+            ' [awaiting first measurement; null history placeholders]'
+          } else {
+            ' [unavailable; recorded history contains no finite numeric measurement]'
+          }
+        }
       }
     }
     $trainingLosses = @('train/box_loss', 'train/cls_loss', 'train/dfl_loss', 'train/seg_loss', 'train/loss')
     $validationLosses = @('val/box_loss', 'val/cls_loss', 'val/dfl_loss', 'val/seg_loss', 'val/loss')
-    if (@($trainingLosses | Where-Object { $latestMetrics.ContainsKey($_) }).Count -gt 0) {
+    if (@($trainingLosses | Where-Object { $latestMetrics.ContainsKey($_) -or $unmeasuredLosses.ContainsKey($_) }).Count -gt 0) {
       Write-Host ''
       Write-Host 'Training losses'
       foreach ($key in $trainingLosses) {
@@ -333,10 +344,12 @@ while ($true) {
           $source = if ($metricSourceNotes.ContainsKey($key)) { $metricSourceNotes[$key] } else { '' }
           $note = if ($staleMetricSamples.ContainsKey($key)) { $staleMetricSamples[$key] } else { '' }
           Write-Host ('  {0,-20} {1}{2}{3}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key]), $source, $note)
+        } elseif ($unmeasuredLosses.ContainsKey($key)) {
+          Write-Host ('  {0,-20} unavailable{1}' -f (Format-SafeText $key), $unmeasuredLosses[$key])
         }
       }
     }
-    if (@($validationLosses | Where-Object { $latestMetrics.ContainsKey($_) }).Count -gt 0) {
+    if (@($validationLosses | Where-Object { $latestMetrics.ContainsKey($_) -or $unmeasuredLosses.ContainsKey($_) }).Count -gt 0) {
       Write-Host ''
       Write-Host 'Validation losses'
       foreach ($key in $validationLosses) {
@@ -344,6 +357,8 @@ while ($true) {
           $source = if ($metricSourceNotes.ContainsKey($key)) { $metricSourceNotes[$key] } else { '' }
           $note = if ($staleMetricSamples.ContainsKey($key)) { $staleMetricSamples[$key] } else { '' }
           Write-Host ('  {0,-20} {1}{2}{3}' -f (Format-SafeText $key), (Format-SafeText $latestMetrics[$key]), $source, $note)
+        } elseif ($unmeasuredLosses.ContainsKey($key)) {
+          Write-Host ('  {0,-20} unavailable{1}' -f (Format-SafeText $key), $unmeasuredLosses[$key])
         }
       }
     }

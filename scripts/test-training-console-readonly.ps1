@@ -32,7 +32,9 @@ $script:active = @'
   "metrics_history": {
     "train/box_loss": [0.50, 0.25, null],
     "train/cls_loss": [0.60, 0.30, null],
-    "train/dfl_loss": [0.20, 0.10, null]
+    "train/dfl_loss": [0.20, 0.10, null],
+    "train/seg_loss": [null, null, null],
+    "val/box_loss": [null, "not measured", null]
   }
 }
 '@ | ConvertFrom-Json
@@ -195,6 +197,15 @@ foreach ($expected in @(
 }
 if ($output -match 'train/box_loss\s+0\.99') {
   throw 'Stale summary loss overrode the latest persisted epoch history.'
+}
+# Reserved epochs and malformed observations are different evidence states:
+# show both, without silently hiding the loss or fabricating a zero value.
+if ($output -notmatch 'train/seg_loss\s+unavailable \[awaiting first measurement; null history placeholders\]' -or
+    $output -notmatch 'val/box_loss\s+unavailable \[unavailable; recorded history contains no finite numeric measurement\]') {
+  throw 'Unmeasured training losses concealed pending or malformed history provenance.'
+}
+if ($output -match 'train/seg_loss\s+0(?:\.0+)?\s' -or $output -match 'val/box_loss\s+0(?:\.0+)?\s') {
+  throw 'Read-only monitor fabricated numeric losses for unmeasured histories.'
 }
 # A fully invalid persisted epoch series cannot validate the summary loss.
 # Display the actual summary with its source uncertainty, not a new value.
