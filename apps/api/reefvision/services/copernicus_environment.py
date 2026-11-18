@@ -27,6 +27,9 @@ from reefvision.services.scientific_data import content_hash
 
 SOURCE_URL = "https://data.marine.copernicus.eu/"
 MAX_SAMPLES = 5000
+# Dataset attributes are copied into every persisted scientific record. Bound
+# provider-supplied provenance before it can multiply across a 5,000-cell grid.
+MAX_PROVIDER_METADATA_BYTES = 16_384
 
 
 def fetch_copernicus(request: CopernicusRequest, settings: Settings) -> dict[str, Any]:
@@ -132,6 +135,26 @@ def parse_copernicus(
     coordinate_resolution = raw.get("coordinate_resolution", {})
     if not isinstance(dataset_metadata, dict) or not isinstance(coordinate_resolution, dict):
         raise ValidationError("Copernicus provider metadata must be JSON objects")
+    # Provider attrs can contain large nested metadata which is duplicated into
+    # every scientific record. Validate the complete provenance block before
+    # persisting anything; reject non-JSON/nonfinite values without truncation.
+    try:
+        metadata_json = json.dumps(
+            {
+                "dataset_metadata": dataset_metadata,
+                "coordinate_resolution": coordinate_resolution,
+                "toolbox_version": raw.get("toolbox_version"),
+            },
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        )
+    except (TypeError, ValueError, OverflowError, RecursionError) as exc:
+        raise ValidationError("Copernicus provider metadata must be finite JSON") from exc
+    if len(metadata_json.encode("utf-8")) > MAX_PROVIDER_METADATA_BYTES:
+        raise ValidationError(
+            "Copernicus provider metadata exceeds the 16 KiB provenance budget"
+        )
     # Resolution is scientific provenance, not arbitrary provider decoration.
     # A zero, negative, nonfinite or coerced string/bool axis spacing would
     # fabricate grid sampling precision or an invalid temporal resolution.

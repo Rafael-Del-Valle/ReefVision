@@ -349,6 +349,54 @@ def test_valid_provider_grid_spacing_is_retained_as_unassessed_provenance(
     )
 
 
+@pytest.mark.parametrize("damage", ["oversized", "nonfinite", "recursive"])
+def test_invalid_provider_provenance_preserves_validated_offline_snapshot(
+    client, test_settings, monkeypatch, damage
+):
+    """Reject amplified or malformed grid metadata before replacing cached science."""
+    project = create_project(client)
+    valid = raw_fixture(monkeypatch)
+    now = datetime(2026, 4, 4, tzinfo=UTC)
+    with client.app.state.session_factory() as session:
+        cached = CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: deepcopy(valid), now=now
+        ).acquire(project["id"], request())
+
+    damaged = deepcopy(valid)
+    if damage == "oversized":
+        damaged["dataset_metadata"]["vendor_history"] = "x" * 20_000
+    elif damage == "nonfinite":
+        damaged["dataset_metadata"]["uncertain_error"] = float("nan")
+    else:
+        recursive = {}
+        recursive["self"] = recursive
+        damaged["dataset_metadata"]["vendor_history"] = recursive
+
+    with client.app.state.session_factory() as session, pytest.raises(
+        ValidationError, match="Copernicus provider metadata"
+    ):
+        CopernicusEnvironmentService(
+            session,
+            test_settings,
+            fetch=lambda *_: damaged,
+            now=now + timedelta(days=2),
+        ).acquire(project["id"], request(refresh=True))
+
+    with client.app.state.session_factory() as session:
+        offline = CopernicusEnvironmentService(
+            session,
+            test_settings,
+            fetch=lambda *_: pytest.fail("offline mode must not contact provider"),
+            now=now + timedelta(days=2),
+        ).acquire(project["id"], request(offline=True))
+    assert offline.cache_status == "stale_offline"
+    assert [item.id for item in offline.items] == [item.id for item in cached.items]
+    assert all(
+        item.provenance.source_metadata["dataset"] == valid["dataset_metadata"]
+        for item in offline.items
+    )
+
+
 def test_missing_copernicus_configuration_fails_without_leaking_secrets(client):
     project = create_project(client)
     response = client.post(
