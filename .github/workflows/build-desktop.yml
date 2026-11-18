@@ -220,6 +220,10 @@ jobs:
             if ($cabinetName -notmatch '^[^\\/:]+\.cab$') {
               throw "Unsafe or unsupported MSI external cabinet name: $cabinetName"
             }
+            # Independent Win32 device-stem gate before artifact file probes.
+            if ($cabinetName -match '^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:[.]|$)') {
+              throw "MSI Media contains a reserved Windows device cabinet name: $cabinetName"
+            }
             $requiredCabs += $cabinetName
           }
           $mediaView.Close()

@@ -70,3 +70,17 @@ This is *not* a 1.6 product version bump, a native Windows execution result,
 or evidence of upgrade/rollback; the current Tauri config remains unchanged.
 An approved release still requires Windows MSI/CAB installation, GUI, real
 upgrade and rollback, migration reconciliation and scientific acceptance.
+
+## Windows device-basename safety (2026-11-18)
+
+The MSI Media inventory and SHA-256 manifest validator now reject Win32
+reserved device stems (CON, PRN, AUX, NUL, COM1–COM9, LPT1–LPT9), including
+additional extensions such as `CON.backup.cab`. These do not name ordinary
+installation files on Windows even if a Linux bundle appears self-consistent.
+Build-time Media inspection, Python provenance preflight, and the independent
+clean-Windows-runner Media check enforce the same rule before artifact probes
+or installation. Regressions cover rejected names and permitted normal names,
+with original MSI/CAB bytes unchanged on failure. This does not modify actual
+installer artifacts, databases, research assets or reviewed decisions, and is
+not proof of real installed-GUI, upgrade or rollback acceptance. RELEASE HOLD
+until exact-head CI, genuine MSI validation and 1.1/1.6 migration reconciliation.

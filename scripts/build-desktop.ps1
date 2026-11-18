@@ -260,6 +260,11 @@ while ($true) {
         $MediaView.Close()
         throw "MSI Media contains an unsafe external cabinet name: $Cabinet"
     }
+    # Win32 reserves device stems even with extensions (e.g. CON.extra.cab).
+    if ($Cabinet -match '^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:[.]|$)') {
+        $MediaView.Close()
+        throw "MSI Media contains a reserved Windows device cabinet name: $Cabinet"
+    }
     if ($Cabinet -in $DeclaredCabinets) {
         $MediaView.Close()
         throw "MSI Media contains a duplicate external cabinet: $Cabinet"

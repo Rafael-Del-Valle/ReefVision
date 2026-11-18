@@ -84,6 +84,83 @@ def test_reject_invalid_manifest(
         ("ReefVision_1.0.2_x64_en-US.msi", "Missing"),
     ],
 )
+
+@pytest.mark.parametrize(
+    ("name", "reserved"),
+    [
+        ("CON.cab", True),
+        ("con.backup.cab", True),
+        ("PRN.cab", True),
+        ("AUX.msi", True),
+        ("NUL.extra.cab", True),
+        ("COM1.cab", True),
+        ("com9.extra.cab", True),
+        ("LPT9.cab", True),
+        ("lpt1.backup.cab", True),
+        ("rv1.cab", False),
+        ("COM10.cab", False),
+        ("LPT0.cab", False),
+        ("AUXILIARY.cab", False),
+        ("ReefVision_1.0.2_x64_en-US.msi", False),
+    ],
+)
+def test_win32_reserved_artifact_name_policy(name: str, reserved: bool) -> None:
+    assert validator._is_windows_device_name(name) is reserved
+
+
+@pytest.mark.parametrize(
+    "reserved_name",
+    ["CON.cab", "con.backup.cab", "NUL.extra.cab", "COM1.cab", "LPT9.more.cab"],
+)
+def test_reserved_media_name_rejected_before_file_access(
+    tmp_path: Path, reserved_name: str
+) -> None:
+    directory, manifest = make_bundle(tmp_path)
+    originals = {
+        name: (directory / name).read_bytes()
+        for name in ("rv1.cab", "ReefVision_1.0.2_x64_en-US.msi")
+    }
+    manifest["media_cabinets"] = [reserved_name]
+    save(directory, manifest)
+    with pytest.raises(validator.BundleValidationError, match="unsafe cabinet"):
+        verify(directory)
+    for name, original in originals.items():
+        assert (directory / name).read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    "reserved_name",
+    ["PRN.cab", "AUX.msi", "COM9.other.cab", "LPT1.cab"],
+)
+def test_reserved_manifest_artifact_rejected_before_file_access(
+    tmp_path: Path, reserved_name: str
+) -> None:
+    directory, manifest = make_bundle(tmp_path)
+    original_cab = (directory / "rv1.cab").read_bytes()
+    manifest["files"][1]["name"] = reserved_name
+    save(directory, manifest)
+    with pytest.raises(validator.BundleValidationError, match="unsafe filename"):
+        verify(directory)
+    assert (directory / "rv1.cab").read_bytes() == original_cab
+
+
+def test_native_windows_build_and_clean_runner_reject_device_stems() -> None:
+    root = Path(__file__).resolve().parents[2]
+    build_script = (root / "scripts/build-desktop.ps1").read_text(encoding="utf-8")
+    workflow = (root / ".github/workflows/build-desktop.yml").read_text(
+        encoding="utf-8"
+    )
+    acceptance = workflow.split("  windows-clean-install-acceptance:", 1)[1]
+    for evidence in (
+        "CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]",
+        "reserved Windows device cabinet name",
+    ):
+        assert evidence in build_script
+        assert evidence in acceptance
+    assert acceptance.index("reserved Windows device cabinet name") < acceptance.index(
+        "- name: Test isolated MSI installation"
+    )
+
 def test_missing_file(tmp_path: Path, name: str, expected: str) -> None:
     directory, _ = make_bundle(tmp_path)
     (directory / name).unlink()

@@ -46,6 +46,18 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _is_windows_device_name(name: str) -> bool:
+    """Reject Win32 device stems, including names with another extension.
+
+    CON.cab and CON.extra.cab are Windows devices, not ordinary files.
+    Check before any artifact existence, stat, or hash operation.
+    """
+    stem = name.split(".", 1)[0].upper()
+    return stem in {"CON", "PRN", "AUX", "NUL"} or bool(
+        re.fullmatch(r"(?:COM|LPT)[1-9]", stem)
+    )
+
+
 def validate_bundle(
     directory: Path,
     *,
@@ -104,6 +116,7 @@ def validate_bundle(
     if any(
         not isinstance(name, str)
         or not re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9_.-]*\.cab", name, re.I)
+        or _is_windows_device_name(name)
         for name in media_cabinets
     ):
         _reject("Media cabinet inventory contains an unsafe cabinet name")
@@ -124,7 +137,7 @@ def validate_bundle(
         name, digest = record.get("name"), record.get("sha256")
         if not isinstance(name, str) or not re.fullmatch(
             r"[A-Za-z0-9_-][A-Za-z0-9_.-]*\.(?:msi|cab)", name, re.I
-        ):
+        ) or _is_windows_device_name(name):
             _reject("Build provenance contains an unsafe filename")
         if name.casefold() in names:
             _reject("Build provenance contains duplicate filenames")
