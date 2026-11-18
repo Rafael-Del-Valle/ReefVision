@@ -972,3 +972,29 @@ a `mesh_measurement_preview` artifact. This input-integrity guarantee does
 **not** verify instrument calibration, reconstructed surface completeness,
 biological specimen identity, or independent human review. Existing source
 fingerprints, provisional status, and local-only checkpoints remain unchanged.
+
+## Normalized surface-centroid accumulation (provisional; Track C)
+
+Calibrated reconstructed-mesh centroids are now computed by normalizing each
+triangle's **source-frame surface area** against the relevant edge-connected
+patch or full-mesh area *before* weighting signed triangle vertex coordinates.
+The previous order multiplied tiny area by tiny position first; those products
+could underflow to binary64 zero even when both the positive source area and
+the intended centroid position were representable. Source-coordinate sums and
+face reductions retain compensated summation. Zero-area patches still have
+undefined rather than invented centroids.
+
+The scientific regression uses six signed X/Y/Z triangles of positive area
+around 5e-221 source units squared, for which the true centroid coordinate
+magnitude is approximately 3.333e-111 source units. It checks direct
+measurement, project-scoped standalone API, typed persisted executable
+`mesh_surface_preview` workflows replayed twice, identical artifact hashes,
+and source-frame scale-only uncertainty. A disconnected-patch control
+checks that a small component's centroid does not disappear next to a large
+component.
+
+This is floating-point numerical integrity, **not** independent coordinate
+registration, physical calibration, reconstruction completeness, uncertainty
+outside caller-supplied scale, biological identity, coral health, or validated
+anatomical branch length. Model and field acceptance and Windows/GPU release
+gates remain open.
