@@ -204,7 +204,9 @@ def _verify_pose_export_frame_pairs(
             try:
                 numbers = [float(value) for value in tokens[1:]]
             except ValueError as exc:
-                raise ValidationError("Ultralytics pose export has invalid label coordinates") from exc
+                raise ValidationError(
+                    "Ultralytics pose export has invalid label coordinates"
+                ) from exc
             if (
                 not all(math.isfinite(value) for value in numbers)
                 or not all(0 <= value <= 1 for value in numbers[:4])
