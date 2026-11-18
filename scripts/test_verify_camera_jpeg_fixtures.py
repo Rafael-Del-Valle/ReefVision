@@ -505,7 +505,7 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             from PIL import Image
         except ImportError:
             self.skipTest("Pillow unavailable; invalid EXIF exposure QC unverified")
-        original_getexif = Image.Image.getexif
+        original_get_ifd = Image.Exif.get_ifd
         invalid_cases = (
             ("2026:02:30 14:00:00", "+00:00"),
             ("2026:04:03 14:00:00", "+14:30"),
@@ -523,12 +523,16 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                     )
                     original = path.read_bytes()
 
-                    def forged_exif(image):
-                        exif = original_getexif(image)
-                        exif[34665] = {36867: captured, 36881: offset}
-                        return exif
+                    def forged_ifd(exif, tag):
+                        # Simulate a malformed nested EXIF IFD without
+                        # forging a numeric offset in the live Exif object.
+                        # Pillow interprets a direct dict assignment to tag
+                        # 34665 as a file offset and fails before our parser.
+                        if tag == 34665:
+                            return {36867: captured, 36881: offset}
+                        return original_get_ifd(exif, tag)
 
-                    with mock.patch.object(Image.Image, "getexif", forged_exif):
+                    with mock.patch.object(Image.Exif, "get_ifd", forged_ifd):
                         records, errors = MODULE.inventory(root, verify_decode=True)
                     self.assertEqual(
                         errors, ["invalid EXIF camera exposure time metadata: DSC_0001.JPG"]
