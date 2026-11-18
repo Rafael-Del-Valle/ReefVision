@@ -95,6 +95,13 @@ $script:logText += ([string][char]13) + 'before-osc' + ([string][char]0x001B) + 
 $script:logText += ([string][char]13) + 'train/box_loss=0.00' + ([string][char]0x0007) + ' after-osc'
 $script:logText += ([string][char]13) + 'before-dcs' + ([string][char]0x0090) + 'forged title'
 $script:logText += ([string][char]10) + 'train/dfl_loss=0.00' + ([string][char]0x009C) + ' after-dcs'
+# Windows worker progress bars can split CSI control codes over CR-only
+# updates. Numeric CSI continuations must not become separate log records.
+$script:logText += ([string][char]13) + 'before-csi' + ([string][char]0x001B) + '['
+$script:logText += ([string][char]13) + '31m color-reset'
+$script:logText += ([string][char]13) + 'before-c1-csi' + ([string][char]0x009B)
+$script:logText += ([string][char]13) + '2K line-reset'
+$script:logText += ([string][char]13) + 'train/cls_loss=0.44'
 
 function Invoke-RestMethod {
   param([string]$Uri, [string]$Method, [int]$TimeoutSec, [int]$MaximumRedirection = -1)
@@ -230,6 +237,11 @@ if (-not $output.Contains('worker-progress-24') -or
     -not $output.Contains('after-osc') -or
     -not $output.Contains('before-dcs') -or
     -not $output.Contains('after-dcs') -or
+    -not $output.Contains('before-csi') -or
+    -not $output.Contains('before-c1-csi') -or
+    -not $output.Contains('train/cls_loss=0.44') -or
+    $output.Contains('31m color-reset') -or
+    $output.Contains('2K line-reset') -or
     $output.Contains('train/box_loss=0.00') -or
     $output.Contains('train/dfl_loss=0.00') -or
     $output.Contains('forged title')) {

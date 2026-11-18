@@ -390,6 +390,16 @@ while ($true) {
         $safeTail = [string]$tail.text
         $safeTail = [regex]::Replace($safeTail, '\x1b[\]PX^_][\s\S]*?(?:\x07|\x9c|\x1b\\|$)', '')
         $safeTail = [regex]::Replace($safeTail, '[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)', '')
+        # Progress-bar CR/LF updates can interrupt CSI sequences mid-command.
+        # Strip numeric ESC/C1 CSI continuations before splitting the log into
+        # lines; otherwise an ANSI parameter (e.g., 31m) could masquerade as
+        # the beginning of a separate scientific training log record.
+        # Preserve the original persisted worker log and later real losses.
+        $safeTail = [regex]::Replace(
+          $safeTail,
+          '(?:\x1b\[|\x9b)[0-?]*[ -/]*(?:\r\n|\r|\n)+[0-9;?][0-?]*[ -/]*[@-~]',
+          ''
+        )
         $logLines = @($safeTail -split '\r\n|\r|\n' | Where-Object { $_ -ne '' })
         foreach ($line in ($logLines | Select-Object -Last 20)) {
           # Training logs are untrusted terminal text, just like run metadata.
