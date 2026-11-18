@@ -850,3 +850,87 @@ def test_windows_ctime_handle_normalization_keeps_all_other_identity_checks() ->
         changed_value = stat.S_IFDIR if key == "st_mode" else fields[key] + 1
         changed = SimpleNamespace(**{**fields, key: changed_value})
         assert identity(first) != identity(changed), key
+
+
+@pytest.mark.parametrize(
+    ("candidate_definition", "expected"),
+    [
+        ("measurement REAL DEFAULT 1", "changed_column_contract"),
+        ("measurement NUMERIC NOT NULL DEFAULT 1", "changed_column_contract"),
+        ("measurement REAL NOT NULL DEFAULT 2", "changed_column_contract"),
+        ("measurement REAL NOT NULL DEFAULT 1", "preserved"),
+    ],
+)
+def test_upgrade_preserves_original_scientific_column_contracts(
+    tmp_path: Path, candidate_definition: str, expected: str
+) -> None:
+    """Unchanged coral measurements cannot justify weakened future write rules."""
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    for path, definition in (
+        (before, "measurement REAL NOT NULL DEFAULT 1"),
+        (after, candidate_definition),
+    ):
+        with sqlite3.connect(path) as connection:
+            connection.execute(
+                f"CREATE TABLE scientific_records (id TEXT PRIMARY KEY, {definition})"
+            )
+            connection.execute(
+                "INSERT INTO scientific_records (id, measurement) VALUES (?, ?)",
+                ("private-coral-1", 3.5),
+            )
+    before_bytes, after_bytes = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+    assert code == (0 if expected == "preserved" else 2)
+    assert report["status"] == (
+        "PASS_PRESERVATION_ONLY" if expected == "preserved" else "HOLD"
+    )
+    assert next(
+        entry["status"]
+        for entry in report["tables"]
+        if entry["table"] == "scientific_records"
+    ) == expected
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    assert "private-coral-1" not in json.dumps(report)
+    assert before.read_bytes() == before_bytes
+    assert after.read_bytes() == after_bytes
+
+
+@pytest.mark.parametrize("candidate_delete", ["RESTRICT", "CASCADE", "SET NULL"])
+def test_upgrade_preserves_scientific_foreign_key_delete_policy(
+    tmp_path: Path, candidate_delete: str
+) -> None:
+    """Equal present rows cannot authorize orphaning or cascading later observations."""
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    for path, delete_action in ((before, "RESTRICT"), (after, candidate_delete)):
+        with sqlite3.connect(path) as connection:
+            connection.execute("CREATE TABLE projects (id TEXT PRIMARY KEY)")
+            connection.execute(
+                "CREATE TABLE scientific_records "
+                "(id TEXT PRIMARY KEY, project_id TEXT NOT NULL, "
+                f"FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE {delete_action})"
+            )
+            connection.execute("INSERT INTO projects (id) VALUES ('private-project')")
+            connection.execute(
+                "INSERT INTO scientific_records (id, project_id) VALUES (?, ?)",
+                ("private-coral", "private-project"),
+            )
+            assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    original, candidate = before.read_bytes(), after.read_bytes()
+    code, report = _run(before, after)
+    valid = candidate_delete == "RESTRICT"
+    assert code == (0 if valid else 2)
+    assert report["status"] == ("PASS_PRESERVATION_ONLY" if valid else "HOLD")
+    assert next(
+        entry["status"]
+        for entry in report["tables"]
+        if entry["table"] == "scientific_records"
+    ) == ("preserved" if valid else "changed_foreign_key_contract")
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    assert "private-coral" not in json.dumps(report)
+    assert "private-project" not in json.dumps(report)
+    assert before.read_bytes() == original
+    assert after.read_bytes() == candidate
