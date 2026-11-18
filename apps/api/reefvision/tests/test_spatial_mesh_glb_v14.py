@@ -11,18 +11,6 @@ import pytest
 from reefvision.services.spatial_mesh_glb_v14 import parse_glb_triangles
 
 
-FLOAT32_UNDERFLOW_SELECTORS = (
-    "bounds_float32_underflow_min_x_positive",
-    "bounds_float32_underflow_min_x_negative",
-    "bounds_float32_underflow_min_y_positive",
-    "bounds_float32_underflow_min_y_negative",
-    "bounds_float32_underflow_min_z_positive",
-    "bounds_float32_underflow_min_z_negative",
-    "bounds_float32_underflow_max_z_positive",
-    "bounds_float32_underflow_max_z_negative",
-)
-
-
 def make_glb(
     *,
     translated: bool = False,
@@ -42,6 +30,7 @@ def make_glb(
     index_bounds: bool = False,
     tiny_z: bool = False,
     subnormal_z: bool = False,
+    negative_subnormal_z: bool = False,
 ) -> str:
     if invalid_selector == "misaligned_position_view":
         position_offset = 2
@@ -58,7 +47,7 @@ def make_glb(
     elif invalid_selector == "stride_overlap":
         position_stride = 16
         position_leading_bytes = 8
-    z_value = 2**-149 if subnormal_z else (1e-9 if tiny_z else 0.0)
+    z_value = -(2**-149) if negative_subnormal_z else (2**-149 if subnormal_z else (1e-9 if tiny_z else 0.0))
     positions = struct.pack("<9f", 0, 0, 0, 2, 0, 0, 0, 3, z_value)
     if type(position_stride) is int and position_stride >= 12:
         positions = b"".join(
@@ -132,8 +121,8 @@ def make_glb(
     if invalid_selector == "stride_truncated":
         doc["bufferViews"][0]["byteLength"] = 36
     if position_bounds:
-        doc["accessors"][0]["min"] = [0.0, 0.0, 0.0]
-        doc["accessors"][0]["max"] = [2.0, 3.0, z_value]
+        doc["accessors"][0]["min"] = [0.0, 0.0, min(0.0, z_value)]
+        doc["accessors"][0]["max"] = [2.0, 3.0, max(0.0, z_value)]
     if invalid_selector == "bounds_short":
         doc["accessors"][0]["min"] = [0.0, 0.0]
     elif invalid_selector == "bounds_boolean":
@@ -387,6 +376,22 @@ def make_glb(
     return base64.b64encode(glb).decode()
 
 
+FLOAT32_UNDERFLOW_SELECTORS = (
+    "bounds_float32_underflow_min_x_positive",
+    "bounds_float32_underflow_min_x_negative",
+    "bounds_float32_underflow_min_y_positive",
+    "bounds_float32_underflow_min_y_negative",
+    "bounds_float32_underflow_min_z_positive",
+    "bounds_float32_underflow_min_z_negative",
+    "bounds_float32_underflow_max_x_positive",
+    "bounds_float32_underflow_max_x_negative",
+    "bounds_float32_underflow_max_y_positive",
+    "bounds_float32_underflow_max_y_negative",
+    "bounds_float32_underflow_max_z_positive",
+    "bounds_float32_underflow_max_z_negative",
+)
+
+
 def test_bounded_glb_json_integer_metadata_preserves_geometry() -> None:
     """Opaque bounded JSON integers must not alter decoded scientific geometry."""
     assert parse_glb_triangles(make_glb(invalid_selector="json_extras_bounded_integer")) == (
@@ -481,10 +486,13 @@ def test_rejects_float32_underflow_of_nonzero_glb_bounds(invalid_selector: str) 
         parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
 
 
-def test_valid_float32_subnormal_extremum_preserves_geometry() -> None:
-    """A genuinely representable subnormal must not be rejected as zero."""
-    vertices, faces = parse_glb_triangles(make_glb(position_bounds=True, subnormal_z=True))
-    assert vertices[2][2] == 2**-149
+@pytest.mark.parametrize("negative", [False, True])
+def test_valid_float32_subnormal_extremum_preserves_geometry(negative: bool) -> None:
+    """Signed representable float32 subnormals must retain their source depth."""
+    vertices, faces = parse_glb_triangles(
+        make_glb(position_bounds=True, subnormal_z=not negative, negative_subnormal_z=negative)
+    )
+    assert vertices[2][2] == (-(2**-149) if negative else 2**-149)
     assert faces == [[0, 1, 2]]
 
 
