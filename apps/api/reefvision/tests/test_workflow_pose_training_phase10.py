@@ -491,7 +491,7 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
             modified.writestr(member, content)
 
     mismatched_destination = tmp_path / "pose-incompatible-validation"
-    with pytest.raises(ValidationError, match=r"incompatible data\\.yaml"):
+    with pytest.raises(ValidationError, match=r"incompatible data\.yaml"):
         materialize_pose_training_exports(
             training_content=training,
             validation_content=mismatched.getvalue(),
