@@ -1507,3 +1507,79 @@ def test_research_asset_similarly_named_folders_are_not_ambiguous(tmp_path: Path
     assert report["upgrade_authorized"] is False
     assert report["research_assets"]["missing_files"] == 0
     assert report["research_assets"]["missing_directories"] == 0
+
+@pytest.mark.skipif(os.name == "nt", reason="Win32 cannot create invalid asset names")
+@pytest.mark.parametrize("scope", ["both", "candidate"])
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "CON.raw",
+        "com1.dat",
+        "LPT¹.log",
+        "sample.raw.",
+        "sample.raw ",
+        "sample:raw",
+        "bad?.raw",
+        "NUL/field.raw",
+        "study /frame.raw",
+        "\\x01field.raw",
+    ],
+)
+def test_windows_unrepresentable_research_asset_paths_fail_closed(
+    tmp_path: Path, scope: str, relative_path: str
+) -> None:
+    """Equal hashes cannot approve a copy whose field-study names Windows cannot preserve."""
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    _seed(before)
+    shutil.copyfile(before, after)
+    original = tmp_path / "original"
+    candidate = tmp_path / "candidate"
+    original.mkdir()
+    baseline_file = original / "original-observation.bin"
+    baseline_file.write_bytes(b"unchanged private biological observation")
+    shutil.copytree(original, candidate)
+    for root in (original, candidate) if scope == "both" else (candidate,):
+        invalid = root / relative_path
+        invalid.parent.mkdir(parents=True, exist_ok=True)
+        invalid.write_bytes(b"additional private field data")
+
+    before_bytes, after_bytes = before.read_bytes(), after.read_bytes()
+    original_bytes = baseline_file.read_bytes()
+    code, report = _run(before, after, original, candidate)
+
+    assert code == 2
+    assert report["status"] == "HOLD"
+    assert "asset_windows_incompatible_name" in report["problems"]
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True
+    assert relative_path not in json.dumps(report)
+    assert "original-observation.bin" not in json.dumps(report)
+    assert before.read_bytes() == before_bytes
+    assert after.read_bytes() == after_bytes
+    assert baseline_file.read_bytes() == original_bytes
+    assert (candidate / "original-observation.bin").read_bytes() == original_bytes
+
+
+def test_portable_windows_research_asset_names_remain_supported(tmp_path: Path) -> None:
+    """Do not reject legitimate multi-dot filenames or COM10/LPT10 observations."""
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    _seed(before)
+    shutil.copyfile(before, after)
+    original = tmp_path / "original"
+    (original / "Study_A").mkdir(parents=True)
+    (original / "Study_A" / "reef.v1.6.raw").write_bytes(b"original")
+    (original / "COM10.raw").write_bytes(b"ordinary specimen name")
+    candidate = tmp_path / "candidate"
+    shutil.copytree(original, candidate)
+    (candidate / "LPT10.raw").write_bytes(b"new field image")
+    (candidate / "new-study").mkdir()
+
+    code, report = _run(before, after, original, candidate)
+    assert code == 0
+    assert report["status"] == "PASS_PRESERVATION_ONLY"
+    assert report["research_assets"]["missing_files"] == 0
+    assert report["research_assets"]["added_files"] == 1
+    assert report["upgrade_authorized"] is False
+    assert report["requires_researcher_approval"] is True

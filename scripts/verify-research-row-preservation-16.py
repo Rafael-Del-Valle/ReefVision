@@ -431,6 +431,31 @@ def _protected_autoincrement_sequences(
     return counters
 
 
+# Win32 reserves these device names even when followed by an extension. The
+# superscript digits are also reserved by the Windows device-name parser.
+_WINDOWS_DEVICE_NAMES = {"CON", "PRN", "AUX", "NUL"} | {
+    f"{prefix}{suffix}"
+    for prefix in ("COM", "LPT")
+    for suffix in "123456789¹²³"
+}
+
+
+def _is_unportable_windows_asset_path(relative_path: str) -> bool:
+    """Refuse paths that cannot be represented as distinct ordinary Windows files."""
+    for component in relative_path.split("/"):
+        if (
+            not component
+            or component in {".", ".."}
+            or component.endswith((" ", "."))
+            or any(ord(char) < 32 or char in '<>:"\\|?*' for char in component)
+        ):
+            return True
+        device_stem = component.split(".", 1)[0].rstrip(" ").upper()
+        if device_stem in _WINDOWS_DEVICE_NAMES:
+            return True
+    return False
+
+
 def _is_unsafe_asset_link(path: Path, info: os.stat_result | None = None) -> bool:
     """Reject links and Windows junctions/reparse points, not merely symlinks.
 
@@ -586,6 +611,10 @@ def _asset_inventory(
     for relative_path in (*directory_states, *file_states):
         if relative_path == ".":
             continue
+        # An unrepresentable original or newly introduced candidate name is
+        # already an unsafe offline upgrade, even if its bytes hash equally.
+        if _is_unportable_windows_asset_path(relative_path):
+            raise ValueError("asset_windows_incompatible_name")
         portable_key = unicodedata.normalize("NFC", relative_path.casefold())
         if portable_key in portable_names:
             raise ValueError("asset_portable_path_collision")
