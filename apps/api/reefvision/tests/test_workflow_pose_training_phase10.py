@@ -501,6 +501,42 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
 
 
 @pytest.mark.parametrize(
+    ("tampered_split", "missing_member"),
+    (
+        ("training", "labels/train/frame_00000001.txt"),
+        ("validation", "images/train/frame_00000001.png"),
+    ),
+)
+def test_pose_materialization_rejects_unpaired_reviewed_frames(
+    tmp_path: Path,
+    tampered_split: str,
+    missing_member: str,
+) -> None:
+    # Exercise the existing frozen export fixture without replacing its
+    # independent validation frames with training images or labels.
+    reviewed = _pose_export_zip(b"reviewed")
+    missing_frame_partner = io.BytesIO()
+    with (
+        zipfile.ZipFile(io.BytesIO(reviewed)) as original,
+        zipfile.ZipFile(missing_frame_partner, "w", compression=zipfile.ZIP_DEFLATED) as modified,
+    ):
+        for member in original.namelist():
+            if member != missing_member:
+                modified.writestr(member, original.read(member))
+
+    altered = missing_frame_partner.getvalue()
+    destination = tmp_path / "pose-unpaired-frames"
+    with pytest.raises(ValidationError, match="unmatched image/label frame sets"):
+        materialize_pose_training_exports(
+            training_content=altered if tampered_split == "training" else reviewed,
+            validation_content=altered if tampered_split == "validation" else reviewed,
+            destination=destination,
+        )
+
+    assert not (destination / "images" / "val").exists()
+
+
+@pytest.mark.parametrize(
     "extra_yaml",
     (
         "train: /outside-of-frozen-export\n",
