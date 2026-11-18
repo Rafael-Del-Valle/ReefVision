@@ -310,3 +310,15 @@ annotation, calibration, anatomy, identity, growth, or condition evidence.
   disposable Windows installation passed.
 - No 1.4 release-complete claim is made. No merge, tag, or publication was
   performed.
+
+## Track C: signed-centroid identity provenance regression (2026-11-17)
+
+Synthetic centroid acceptance now binds caller-supplied specimen, observation,
+UTC timepoint and coordinate-frame labels through the standalone project API
+and two executions of a persisted typed Workflow Builder graph. Both paths
+must preserve the labels while retaining explicit false values for specimen
+identity, observation-metadata and coordinate-registration verification. A
+separate face-winding regression distinguishes source fingerprint changes from
+winding-invariant reconstructed geometry/centroids. Neither test independently
+verifies anatomy, organism identity, source acquisition or field calibration.
+The exact-head CI outcome must be checked after this report is committed.

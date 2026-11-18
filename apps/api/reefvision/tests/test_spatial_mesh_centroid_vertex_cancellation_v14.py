@@ -43,7 +43,15 @@ def test_signed_vertex_cancellation_preserves_centroid_in_saved_workflow(
 
     project_id = str(create_project(client, "Signed centroid vertex cancellation")["id"])
     base = f"/api/v1/projects/{project_id}"
-    response = client.post(f"{base}/spatial/mesh-preview", json=params)
+    # Source labels are caller-supplied metadata, not verified biological identity.
+    api_params = {
+        **params,
+        "specimen_id": "synthetic-coral-1",
+        "observation_id": "scan-A",
+        "observed_at_utc": "2026-11-17T17:00:00Z",
+        "coordinate_frame_id": "camera-frame-A",
+    }
+    response = client.post(f"{base}/spatial/mesh-preview", json=api_params)
     assert response.status_code == 200, response.text
     standalone = response.json()
     for field in (
@@ -55,14 +63,22 @@ def test_signed_vertex_cancellation_preserves_centroid_in_saved_workflow(
         "qc_warnings",
     ):
         assert standalone[field] == direct[field]
-    assert standalone["provenance"]["calibration_verified"] is False
+    provenance = standalone["provenance"]
+    assert provenance["calibration_verified"] is False
+    assert provenance["specimen_id"] == api_params["specimen_id"]
+    assert provenance["observation_id"] == api_params["observation_id"]
+    assert provenance["observed_at_utc"] == api_params["observed_at_utc"]
+    assert provenance["coordinate_frame_id"] == api_params["coordinate_frame_id"]
+    assert provenance["specimen_identity_verified"] is False
+    assert provenance["observation_metadata_verified"] is False
+    assert provenance["coordinate_registration_verified"] is False
 
     graph = {
         "graph_id": "signed-mesh-centroid-v14",
         "name": "Signed mesh surface centroid",
         "nodes": [
             {"node_id": "p", "node_type": "project_source"},
-            {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": params},
+            {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": api_params},
         ],
         "edges": [
             {
@@ -82,9 +98,7 @@ def test_signed_vertex_cancellation_preserves_centroid_in_saved_workflow(
     app = cast(FastAPI, client.app)
     artifact_hashes: list[str] = []
     for _ in range(2):
-        run = client.post(
-            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-        )
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
         assert process_workflow_run_job(
             app.state.settings, app.state.session_factory, str(run.json()["job_id"])
@@ -109,3 +123,30 @@ def test_signed_vertex_cancellation_preserves_centroid_in_saved_workflow(
             assert artifact["payload_json"][field] == standalone[field]
         artifact_hashes.append(artifact["payload_sha256"])
     assert len(set(artifact_hashes)) == 1
+
+
+def test_signed_mesh_centroid_winding_does_not_prove_source_identity() -> None:
+    """Face winding cannot alter geometry, but it changes its source fingerprint."""
+    vertices = [[1e9, 0.0, 0.0], [1e-8, 1.0, 0.0], [-1e9, 0.0, 1.0]]
+    options = {
+        "vertices": vertices,
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic reconstruction without external scale review",
+    }
+    original = measure_mesh_preview(faces=[[0, 1, 2]], **options)
+    reversed_winding = measure_mesh_preview(faces=[[0, 2, 1]], **options)
+    assert original["area_weighted_surface_centroid_m"] == pytest.approx(
+        reversed_winding["area_weighted_surface_centroid_m"]
+    )
+    assert original["surface_area_m2"] == pytest.approx(reversed_winding["surface_area_m2"])
+    assert original["edge_connected_patch_geometry_sha256"] == (
+        reversed_winding["edge_connected_patch_geometry_sha256"]
+    )
+    # Source-order integrity and geometry-equivalence are distinct contracts;
+    # neither certifies specimen identity, registration, or human review.
+    assert original["provenance"]["geometry_sha256"] != (
+        reversed_winding["provenance"]["geometry_sha256"]
+    )
+    assert original["provenance"]["calibration_verified"] is False
+    assert reversed_winding["provenance"]["calibration_verified"] is False
