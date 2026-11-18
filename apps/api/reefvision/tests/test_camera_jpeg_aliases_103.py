@@ -195,13 +195,25 @@ def test_camera_exif_explicit_offset_converts_to_utc_without_rewriting_capture(
         ({36867: "2026:10:02 12:30:00"}, "DateTimeOriginal"),
         ({36881: "+01:00"}, "OffsetTimeOriginal"),
         ({37521: "999"}, "SubsecTimeOriginal"),
+        # Real camera EXIF decoders may expose the *same* ASCII exposure
+        # field as NUL-padded bytes in ExifIFD and as text in IFD0.
+        # That representation difference must not erase a verified UTC time.
+        ({36867: b"2026:10:01 12:30:00\x00"}, None),
+        ({36881: b"-04:00\x00"}, None),
+        ({37521: b"123\x00"}, None),
+        # Decoding to comparable text must still reject actual conflicts
+        # and undecodable vendor values, never fabricated camera instants.
+        ({36867: b"2026:10:02 12:30:00\x00"}, "DateTimeOriginal"),
+        ({36881: b"+01:00\x00"}, "OffsetTimeOriginal"),
+        ({37521: b"999\x00"}, "SubsecTimeOriginal"),
+        ({36867: b"\xff"}, "DateTimeOriginal"),
         ({}, None),
     ],
 )
 def test_camera_import_never_promotes_conflicting_ifd0_exposure_to_utc(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
-    nested_override: dict[int, str],
+    nested_override: dict[int, str | bytes],
     conflict_field: str | None,
 ) -> None:
     """Inconsistent camera IFDs remain read-only QC evidence, not UTC observations."""
