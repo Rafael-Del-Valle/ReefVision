@@ -223,7 +223,11 @@ def test_generated_scientific_column_preserved(
     code, report = _run(before, after)
     assert code == 2
     assert report["status"] == "HOLD"
-    expected = "changed_records" if candidate == "changed_expression" else "removed_columns"
+    expected = (
+        "changed_generated_column_contract"
+        if candidate == "changed_expression"
+        else "removed_columns"
+    )
     assert any(
         item["table"] == "scientific_records" and item["status"] == expected
         for item in report["tables"]
