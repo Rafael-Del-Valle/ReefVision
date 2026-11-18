@@ -547,6 +547,35 @@ def test_pose_materialization_rejects_unpaired_reviewed_frames(
     assert not (destination / "images" / "val").exists()
 
 
+@pytest.mark.parametrize("altered_split", ("training", "validation"))
+def test_pose_materialization_rejects_unmapped_frozen_class_labels(
+    tmp_path: Path,
+    altered_split: str,
+) -> None:
+    # Reuse the frozen pose fixture, changing only the numeric class ID in
+    # its label; neither training nor validation may reinterpret that truth.
+    reviewed = _pose_export_zip(b"reviewed")
+    altered = io.BytesIO()
+    with (
+        zipfile.ZipFile(io.BytesIO(reviewed)) as original,
+        zipfile.ZipFile(altered, "w", compression=zipfile.ZIP_DEFLATED) as modified,
+    ):
+        for member in original.namelist():
+            content = original.read(member)
+            if member == "labels/train/frame_00000001.txt":
+                content = content.replace(b"0 0.5", b"1 0.5", 1)
+            modified.writestr(member, content)
+
+    destination = tmp_path / "pose-unmapped-class"
+    with pytest.raises(ValidationError, match="invalid label class index"):
+        materialize_pose_training_exports(
+            training_content=altered.getvalue() if altered_split == "training" else reviewed,
+            validation_content=altered.getvalue() if altered_split == "validation" else reviewed,
+            destination=destination,
+        )
+    assert not (destination / "images" / "val").exists()
+
+
 @pytest.mark.parametrize(
     ("extra_yaml", "expected_error"),
     (
