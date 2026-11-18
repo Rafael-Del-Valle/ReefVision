@@ -154,6 +154,25 @@ def _safe_extract_zip(
                 )
 
 
+def _verify_pose_export_frame_pairs(source_root: Path) -> None:
+    """Require one exported annotation file for each frozen PNG frame."""
+
+    images = source_root / "images" / "train"
+    labels = source_root / "labels" / "train"
+    if not images.is_dir() or not labels.is_dir():
+        raise ValidationError("Ultralytics pose export is missing frame images or labels")
+
+    image_files = list(images.iterdir())
+    label_files = list(labels.iterdir())
+    if (
+        not image_files
+        or any(not path.is_file() or path.suffix != ".png" for path in image_files)
+        or any(not path.is_file() or path.suffix != ".txt" for path in label_files)
+        or {path.stem for path in image_files} != {path.stem for path in label_files}
+    ):
+        raise ValidationError("Ultralytics pose export has unmatched image/label frame sets")
+
+
 def _copy_split(
     source_root: Path,
     destination_root: Path,
@@ -170,6 +189,8 @@ def _copy_split(
 
     if not source_labels.is_dir():
         raise ValidationError("Ultralytics pose export is missing labels/train")
+
+    _verify_pose_export_frame_pairs(source_root)
 
     target_images = destination_root / "images" / split_name
     target_labels = destination_root / "labels" / split_name
@@ -245,6 +266,8 @@ def materialize_pose_training_exports(
         or top_level[4:] != ["names:", "reefvision_keypoint_names:"]
     ):
         raise ValidationError("Ultralytics pose export has a noncanonical data.yaml")
+
+    _verify_pose_export_frame_pairs(destination)
 
     validation_mode = "none"
 
