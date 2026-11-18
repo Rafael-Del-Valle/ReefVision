@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from math import isfinite
 from re import fullmatch
 from struct import pack, unpack
@@ -170,6 +171,10 @@ def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
         raise ValueError("PLY body length does not match declared element counts")
 
     xyz = [vertex_properties.index(axis) for axis in ("x", "y", "z")]
+    # Preserve source-coordinate distinctions that binary64 could erase.
+    # Comparing decimals only at a shared rounded value bounds the QC work
+    # while treating equivalent source spellings as the same location.
+    source_decimals_by_axis: list[dict[float, Decimal]] = [{}, {}, {}]
     vertices: list[list[float]] = []
     for row in rows[: counts["vertex"]]:
         values = row.split()
@@ -207,6 +212,15 @@ def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
             raise ValueError("Invalid or out-of-range PLY vertex value") from exc
         if not all(isfinite(value) for value in numeric):
             raise ValueError("PLY vertex properties must be finite")
+        for axis, index in enumerate(xyz):
+            value = numeric[index]
+            source_decimal = Decimal(values[index])
+            previous = source_decimals_by_axis[axis].get(value)
+            if previous is not None and previous != source_decimal:
+                raise ValueError(
+                    "Distinct PLY mesh decimal coordinates collapse at float64 precision"
+                )
+            source_decimals_by_axis[axis][value] = source_decimal
         vertices.append([numeric[index] for index in xyz])
 
     # The declared face index width is part of the source schema. Do not
