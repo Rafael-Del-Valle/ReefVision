@@ -1930,6 +1930,37 @@ def test_pose_workflow_rejects_lossy_device_from_verified_truth(
                 processor=_fake_pose_processor,
             )
 
+    # The real offline worker forcibly replaces these Ultralytics args,
+    # so a frozen workflow must not persist contradictory scientific inputs.
+    for worker_field, worker_value in (
+        ("data", "/tmp/alternate.yaml"),
+        ("device", "cuda:0"),
+        ("project", "/tmp/alternate"),
+        ("name", "alternate-run"),
+        ("exist_ok", False),
+        ("save", False),
+        ("verbose", True),
+    ):
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(
+                ValidationError,
+                match=rf"training_config\.{worker_field} is managed by the workflow worker",
+            ),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                test_settings,
+                project_id=str(project["id"]),
+                dataset_payload=dataset_payload,
+                parameters={
+                    **parameters,
+                    "device": "cpu",
+                    "training_config": {"epochs": 1, worker_field: worker_value},
+                },
+                processor=_fake_pose_processor,
+            )
+
     with app.state.session_factory() as session:
         assert (
             session.scalar(
