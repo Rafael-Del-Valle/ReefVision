@@ -438,11 +438,7 @@ def process_pose_training_job(
                 or snapshot.get("pose_validation_dataset_id")
                 != (validation_dataset.id if validation_dataset is not None else None)
                 or snapshot.get("pose_validation_dataset_manifest_sha256")
-                != (
-                    validation_dataset.manifest_sha256
-                    if validation_dataset is not None
-                    else None
-                )
+                != (validation_dataset.manifest_sha256 if validation_dataset is not None else None)
             ):
                 raise ValidationError("Queued pose training frozen snapshot lineage changed")
 
