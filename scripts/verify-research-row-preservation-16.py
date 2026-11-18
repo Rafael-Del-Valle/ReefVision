@@ -237,7 +237,6 @@ def _check_constraint_contracts(connection: sqlite3.Connection, table: str) -> s
     return contracts
 
 
-
 def _trigger_contracts(connection: sqlite3.Connection, table: str) -> dict[str, tuple[str, ...]]:
     """Protect original per-table scientific and reviewer audit trigger rules.
 

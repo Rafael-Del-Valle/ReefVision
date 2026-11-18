@@ -1190,7 +1190,7 @@ def test_protected_scientific_and_reviewer_triggers_survive_upgrade(
                     )
                 elif mode == "formatted":
                     statement = baseline.replace(
-                        " BEFORE UPDATE ", "\\n before update \\n"
+                        " BEFORE UPDATE ", "   before   update   "
                     )
             if statement is not None:
                 connection.execute(statement)
