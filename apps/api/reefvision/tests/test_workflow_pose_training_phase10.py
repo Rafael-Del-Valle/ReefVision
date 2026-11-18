@@ -475,15 +475,18 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
 
 
 @pytest.mark.parametrize(
-    "alias",
+    ("alias", "expected_error"),
     (
-        "./images/train/frame_00000001.png",
-        "IMAGES/TRAIN/FRAME_00000001.PNG",
+        ("./images/train/frame_00000001.png", "duplicate archive path"),
+        ("IMAGES/TRAIN/FRAME_00000001.PNG", "duplicate archive path"),
+        ("images/train/frame_00000001.png.", "noncanonical archive path"),
+        ("images/train/frame_00000001.png ", "noncanonical archive path"),
     ),
 )
 def test_pose_materialization_rejects_aliased_archive_entries(
     tmp_path: Path,
     alias: str,
+    expected_error: str,
 ) -> None:
     # A single frozen export must not overwrite verified image bytes through
     # a second ZIP member, including aliases that collide only on Windows.
@@ -492,7 +495,7 @@ def test_pose_materialization_rejects_aliased_archive_entries(
         archive.writestr(alias, b"substituted")
 
     destination = tmp_path / "pose-ambiguous"
-    with pytest.raises(ValidationError, match="duplicate archive path"):
+    with pytest.raises(ValidationError, match=expected_error):
         materialize_pose_training_exports(
             training_content=stream.getvalue(),
             validation_content=None,

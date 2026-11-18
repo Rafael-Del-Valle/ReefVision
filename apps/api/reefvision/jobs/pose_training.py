@@ -72,6 +72,10 @@ def _safe_extract_zip(
             relative = Path(item.filename.replace("\\", "/"))
             if relative.is_absolute() or ".." in relative.parts:
                 raise ValidationError("Pose training export contains an unsafe archive path")
+            # Windows ignores trailing dots and spaces in ordinary file paths.
+            # Reject these aliases before any reviewed image bytes are written.
+            if any(part.rstrip(" .") != part for part in relative.parts):
+                raise ValidationError("Pose training export contains a noncanonical archive path")
             key = "/".join(relative.parts).casefold()
             if not key or key in seen_paths:
                 raise ValidationError("Pose training export contains a duplicate archive path")
