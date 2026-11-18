@@ -14,7 +14,9 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import warnings
+from datetime import datetime
 from pathlib import Path
 
 JPEG_SUFFIXES = {".jpg", ".jpeg", ".jpe", ".jfif", ".jfi", ".jif"}
@@ -36,6 +38,36 @@ def _camera_exif_label(value: object) -> tuple[str | None, bool]:
     if not label or len(label) > 128 or not label.isprintable():
         return None, True
     return label, False
+
+
+
+def _camera_exif_datetime_original(value: object) -> tuple[str | None, bool]:
+    """Validate camera-local EXIF exposure time without inventing a UTC instant."""
+    if value is None:
+        return None, False
+    if type(value) is not str or len(value) != 19:
+        return None, True
+    if re.fullmatch(r"[0-9]{4}:[0-9]{2}:[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}", value) is None:
+        return None, True
+    try:
+        datetime.strptime(value, "%Y:%m:%d %H:%M:%S")
+    except ValueError:
+        return None, True
+    return value, False
+
+
+def _camera_exif_offset_time_original(value: object) -> tuple[str | None, bool]:
+    """Validate an explicit EXIF exposure offset; absence is not UTC."""
+    if value is None:
+        return None, False
+    if type(value) is not str or len(value) != 6:
+        return None, True
+    if re.fullmatch(r"[+-][0-9]{2}:[0-9]{2}", value) is None:
+        return None, True
+    hours, minutes = int(value[1:3]), int(value[4:6])
+    if hours > 14 or minutes > 59 or (hours == 14 and minutes != 0):
+        return None, True
+    return value, False
 
 
 def _file_fingerprint(stat: os.stat_result) -> tuple[int, ...]:
@@ -302,6 +334,19 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                             # Some exporters store these tags in IFD0; prefer
                             # the standard nested Exif IFD when available.
                             exif_ifd = exif.get_ifd(34665)
+                            # DateTimeOriginal is camera-local unless a valid
+                            # OffsetTimeOriginal is explicitly recorded. Report
+                            # the raw evidence; never assume UTC from the host.
+                            capture_local, invalid_capture_local = (
+                                _camera_exif_datetime_original(
+                                    exif_ifd.get(36867, exif.get(36867))
+                                )
+                            )
+                            capture_offset, invalid_capture_offset = (
+                                _camera_exif_offset_time_original(
+                                    exif_ifd.get(36881, exif.get(36881))
+                                )
+                            )
                             ifd0_width = exif.get(40962)
                             ifd0_height = exif.get(40963)
                             exif_pixel_width = exif_ifd.get(40962, ifd0_width)
@@ -352,6 +397,13 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                                 "jpeg_exif_camera_model": camera_model,
                                 "jpeg_exif_camera_make_malformed": invalid_make,
                                 "jpeg_exif_camera_model_malformed": invalid_model,
+                                "jpeg_exif_datetime_original_local": capture_local,
+                                "jpeg_exif_offset_time_original": capture_offset,
+                                "jpeg_exif_datetime_original_malformed": invalid_capture_local,
+                                "jpeg_exif_offset_time_original_malformed": invalid_capture_offset,
+                                "jpeg_exif_capture_timezone_unknown": (
+                                    capture_local is not None and capture_offset is None
+                                ),
                                 # Malformed EXIF scalar tags can decode as bytes,
                                 # tuples, or strings. A raw bytes object breaks the
                                 # JSON acceptance manifest; do not coerce it into
@@ -416,6 +468,11 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                         or decoded_metadata["jpeg_exif_camera_model_malformed"]
                     ):
                         errors.append(f"invalid EXIF camera Make/Model metadata: {relative}")
+                    if (
+                        decoded_metadata["jpeg_exif_datetime_original_malformed"]
+                        or decoded_metadata["jpeg_exif_offset_time_original_malformed"]
+                    ):
+                        errors.append(f"invalid EXIF camera exposure time metadata: {relative}")
                     if decoded_metadata["jpeg_exif_ifd0_dimension_conflict"]:
                         errors.append(
                             "conflicting EXIF pixel dimensions between IFD0 and Exif IFD: "

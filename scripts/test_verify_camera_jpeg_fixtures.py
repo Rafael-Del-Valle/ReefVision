@@ -454,6 +454,95 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertNotIn("camera_serial", json.dumps(records).lower())
             json.dumps(records, allow_nan=False)
 
+
+    def test_camera_exif_exposure_time_is_local_unless_offset_is_explicit(self) -> None:
+        """Preserve EXIF clock evidence and uncertainty without inventing UTC."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; EXIF exposure provenance unverified")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            captures = {
+                "sony.JPG": ("2026:04:03 14:25:30", "-04:00"),
+                "canon.JPEG": ("2026:04:04 09:10:11", None),
+                "without_clock.jfif": (None, None),
+            }
+            original_bytes = {}
+            for name, (captured, offset) in captures.items():
+                exif = Image.Exif()
+                if captured is not None:
+                    exif[34665] = {
+                        36867: captured,
+                        **({36881: offset} if offset is not None else {}),
+                    }
+                path = root / name
+                Image.new("RGB", (12, 8), (30, 80, 120)).save(
+                    path, format="JPEG", exif=exif
+                )
+                original_bytes[name] = path.read_bytes()
+            records, errors = MODULE.inventory(root, verify_decode=True)
+            self.assertEqual(errors, [])
+            self.assertEqual(len(records), 3)
+            by_path = {record["path"]: record for record in records}
+            for name, (captured, offset) in captures.items():
+                record = by_path[name]
+                self.assertTrue(record["jpeg_decodable"])
+                self.assertEqual(record["jpeg_exif_datetime_original_local"], captured)
+                self.assertEqual(record["jpeg_exif_offset_time_original"], offset)
+                self.assertEqual(
+                    record["jpeg_exif_capture_timezone_unknown"],
+                    captured is not None and offset is None,
+                )
+                self.assertFalse(record["jpeg_exif_datetime_original_malformed"])
+                self.assertFalse(record["jpeg_exif_offset_time_original_malformed"])
+                self.assertEqual((root / name).read_bytes(), original_bytes[name])
+            json.dumps(records, allow_nan=False)
+
+    def test_malformed_camera_exposure_tags_fail_qc_without_mutating_capture(self) -> None:
+        """Invalid timestamps and offsets cannot become trusted acquisition times."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; invalid EXIF exposure QC unverified")
+        original_getexif = Image.Image.getexif
+        invalid_cases = (
+            ("2026:02:30 14:00:00", "+00:00"),
+            ("2026:04:03 14:00:00", "+14:30"),
+            ("2026:04:03 14:00:00", "-99:00"),
+            (b"2026:04:03 14:00:00", "+00:00"),
+            ("2026:04:03 14:00:00", "not UTC"),
+        )
+        for captured, offset in invalid_cases:
+            with self.subTest(captured=repr(captured), offset=repr(offset)):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    path = root / "DSC_0001.JPG"
+                    Image.new("RGB", (12, 8), (20, 60, 100)).save(
+                        path, format="JPEG"
+                    )
+                    original = path.read_bytes()
+
+                    def forged_exif(image):
+                        exif = original_getexif(image)
+                        exif[34665] = {36867: captured, 36881: offset}
+                        return exif
+
+                    with mock.patch.object(Image.Image, "getexif", forged_exif):
+                        records, errors = MODULE.inventory(root, verify_decode=True)
+                    self.assertEqual(
+                        errors, ["invalid EXIF camera exposure time metadata: DSC_0001.JPG"]
+                    )
+                    self.assertEqual(len(records), 1)
+                    self.assertTrue(records[0]["jpeg_decodable"])
+                    self.assertTrue(
+                        records[0]["jpeg_exif_datetime_original_malformed"]
+                        or records[0]["jpeg_exif_offset_time_original_malformed"]
+                    )
+                    json.dumps(records, allow_nan=False)
+                    self.assertEqual(path.read_bytes(), original)
+
+
     def test_malformed_camera_make_model_tags_fail_qc_without_rewriting_images(self) -> None:
         """Malformed EXIF identifiers are flagged without mislabeling JPEG pixels."""
         try:
