@@ -153,6 +153,7 @@ def test_native_windows_build_and_clean_runner_reject_device_stems() -> None:
         "- name: Test isolated MSI installation"
     )
 
+
 @pytest.mark.parametrize(
     ("name", "expected"),
     [
