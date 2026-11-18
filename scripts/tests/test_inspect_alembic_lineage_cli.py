@@ -1156,3 +1156,164 @@ def test_0038_qc_structural_audit_rejects_unreviewed_unique_index_semantics(
         assert connection.execute("SELECT note FROM biological_sentinel").fetchone() == (
             "private original coral observation",
         )
+
+
+@pytest.mark.parametrize(
+    ("variant", "mismatch_table"),
+    [
+        ("canonical", None),
+        ("extra_cache_lookup_index", None),
+        ("cache_json_as_text", "environmental_cache_entries"),
+        ("cache_expiry_as_integer", "environmental_cache_entries"),
+        ("cache_source_url_shortened", "environmental_cache_entries"),
+        ("cache_missing_unique", "environmental_cache_entries"),
+        ("cache_unique_nocase", "environmental_cache_entries"),
+        ("cache_fk_restrict", "environmental_cache_entries"),
+        ("science_json_as_text", "scientific_records"),
+        ("science_observed_as_integer", "scientific_records"),
+        ("science_variable_shortened", "scientific_records"),
+    ],
+)
+def test_0038_scientific_cache_and_declared_type_contracts(
+    tmp_path: Path, variant: str, mismatch_table: str | None
+) -> None:
+    """Classify both source-audited 1.1 0038 tables without trusting equal stamps."""
+    database = tmp_path / "scientific-lineage.sqlite"
+    science_sql = (
+        "CREATE TABLE scientific_records ("
+        "id VARCHAR(36) NOT NULL PRIMARY KEY, "
+        "project_id VARCHAR(36) NOT NULL REFERENCES projects(id) ON DELETE CASCADE, "
+        "variable VARCHAR(100) NOT NULL, source_kind VARCHAR(30) NOT NULL, "
+        "observed_at DATETIME NOT NULL, "
+        "image_id VARCHAR(36) REFERENCES images(id) ON DELETE RESTRICT, "
+        "video_id VARCHAR(36) REFERENCES videos(id) ON DELETE RESTRICT, "
+        "track_id VARCHAR(36) REFERENCES video_tracks(id) ON DELETE RESTRICT, "
+        "model_run_id VARCHAR(36) REFERENCES jobs(id) ON DELETE RESTRICT, "
+        "payload_json JSON NOT NULL, content_sha256 VARCHAR(64) NOT NULL, "
+        "created_at DATETIME NOT NULL)"
+    )
+    cache_sql = (
+        "CREATE TABLE environmental_cache_entries ("
+        "id VARCHAR(36) NOT NULL PRIMARY KEY, "
+        "project_id VARCHAR(36) NOT NULL REFERENCES projects(id) ON DELETE CASCADE, "
+        "cache_key VARCHAR(64) NOT NULL, source_url VARCHAR(2000) NOT NULL, "
+        "payload_json JSON NOT NULL, content_sha256 VARCHAR(64) NOT NULL, "
+        "fetched_at DATETIME NOT NULL, expires_at DATETIME NOT NULL, "
+        "UNIQUE (project_id, cache_key))"
+    )
+    replacements = {
+        "science_json_as_text": ("payload_json JSON NOT NULL", "payload_json TEXT NOT NULL"),
+        "science_observed_as_integer": (
+            "observed_at DATETIME NOT NULL",
+            "observed_at INTEGER NOT NULL",
+        ),
+        "science_variable_shortened": (
+            "variable VARCHAR(100) NOT NULL",
+            "variable VARCHAR(10) NOT NULL",
+        ),
+        "cache_json_as_text": ("payload_json JSON NOT NULL", "payload_json TEXT NOT NULL"),
+        "cache_expiry_as_integer": (
+            "expires_at DATETIME NOT NULL",
+            "expires_at INTEGER NOT NULL",
+        ),
+        "cache_source_url_shortened": (
+            "source_url VARCHAR(2000) NOT NULL",
+            "source_url VARCHAR(200) NOT NULL",
+        ),
+        "cache_missing_unique": (", UNIQUE (project_id, cache_key)", ""),
+        "cache_unique_nocase": (
+            "UNIQUE (project_id, cache_key)",
+            "UNIQUE (project_id, cache_key COLLATE NOCASE)",
+        ),
+        "cache_fk_restrict": (
+            "project_id VARCHAR(36) NOT NULL REFERENCES projects(id) ON DELETE CASCADE",
+            "project_id VARCHAR(36) NOT NULL REFERENCES projects(id) ON DELETE RESTRICT",
+        ),
+    }
+    if variant in replacements:
+        old, new = replacements[variant]
+        target = science_sql if variant.startswith("science_") else cache_sql
+        assert target.count(old) == 1
+        if variant.startswith("science_"):
+            science_sql = target.replace(old, new)
+        else:
+            cache_sql = target.replace(old, new)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)"
+        )
+        connection.execute("INSERT INTO alembic_version VALUES ('0039')")
+        for parent in ("projects", "images", "videos", "video_tracks", "jobs"):
+            connection.execute(f'CREATE TABLE "{parent}" (id VARCHAR(36) PRIMARY KEY)')
+        connection.execute(science_sql)
+        connection.execute(cache_sql)
+        connection.execute(
+            "CREATE INDEX ix_scientific_project_variable_time "
+            "ON scientific_records (project_id, variable, observed_at)"
+        )
+        if variant == "extra_cache_lookup_index":
+            connection.execute(
+                "CREATE INDEX extra_cache_lookup ON environmental_cache_entries (fetched_at)"
+            )
+        connection.execute("INSERT INTO projects VALUES ('project-1')")
+        connection.execute(
+            "INSERT INTO scientific_records "
+            "(id, project_id, variable, source_kind, observed_at, payload_json, "
+            "content_sha256, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "science-1",
+                "project-1",
+                "coral_polyp_count",
+                "manual",
+                "2026-11-18 12:00:00",
+                '{"count":7,"private":"reef site A"}',
+                "a" * 64,
+                "2026-11-18 12:01:00",
+            ),
+        )
+        connection.execute(
+            "INSERT INTO environmental_cache_entries VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "cache-1",
+                "project-1",
+                "local-observation",
+                "https://invalid.example/private",
+                '{"temperature_c":20.2}',
+                "b" * 64,
+                "2026-11-18 12:02:00",
+                "2026-11-18 12:03:00",
+            ),
+        )
+    original = database.read_bytes()
+    for _ in range(2):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--verify-structural-contracts",
+                "--fail-on-warning",
+                str(database),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert completed.returncode == (2 if mismatch_table else 0), completed.stderr
+        report = json.loads(completed.stdout)
+        assert report["upgrade_authorized"] is False
+        assert report["lineage_hint"] == "scientific"
+        for table in ("scientific_records", "environmental_cache_entries"):
+            expected = "mismatch" if table == mismatch_table else "matches"
+            assert report["structural_contracts"][table] == expected
+            warning = f"lineage_table_contract_mismatch_{table}"
+            assert (warning in report["warnings"]) is (table == mismatch_table)
+        assert "reef site A" not in completed.stdout + completed.stderr
+        assert "temperature_c" not in completed.stdout + completed.stderr
+        assert database.read_bytes() == original
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT payload_json FROM scientific_records"
+        ).fetchone() == ('{"count":7,"private":"reef site A"}',)
+        assert connection.execute(
+            "SELECT payload_json FROM environmental_cache_entries"
+        ).fetchone() == ('{"temperature_c":20.2}',)
