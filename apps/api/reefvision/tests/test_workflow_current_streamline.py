@@ -25,10 +25,15 @@ from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_workflow_computed_metrics import save_and_queue
 
 
-def _current_records(client: TestClient, project_id: str) -> list[str]:
+def _current_records(
+    client: TestClient,
+    project_id: str,
+    *,
+    longitudes: tuple[float, ...] = (-1.0, 1.0),
+) -> list[str]:
     records = []
     for latitude in (-1.0, 1.0):
-        for longitude in (-1.0, 1.0):
+        for longitude in longitudes:
             for variable, value in (
                 ("current_eastward_velocity", 1.0),
                 ("current_northward_velocity", 0.0),
@@ -193,6 +198,39 @@ def test_current_streamline_input_hash_is_independent_of_record_order(
     assert original.longitudes == reversed_records.longitudes
     assert original.streamlines == reversed_records.streamlines
     assert original.methodological_notes == reversed_records.methodological_notes
+
+
+def test_current_streamline_rejects_antimeridian_extent_in_saved_graph(
+    client: TestClient,
+) -> None:
+    """A three-column grid can cross 180° without a large adjacent gap.
+
+    Naive adjacent-gap checks accept [-170, 0, 170], causing bilinear
+    interpolation across unmeasured longitudes. Reject the complete extent
+    before generating an executable scientific workflow artifact.
+    """
+    project = create_project(client, "Antimeridian current rejection")
+    record_ids = _current_records(
+        client, project["id"], longitudes=(-170.0, 0.0, 170.0)
+    )
+    parameters = _parameters(record_ids)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        with pytest.raises(ValidationError, match="antimeridian-spanning"):
+            CurrentFieldService(session).preview(
+                project["id"], CurrentFieldAnalysisRequest.model_validate(parameters)
+            )
+
+    queued = save_and_queue(client, project["id"], _graph(parameters))
+    assert not process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(queued["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued['id']}").json()
+    assert detail["run"]["status"] == "failed"
+    assert not any(
+        item["data_type"] == "environmental_analysis_result"
+        for item in detail["artifacts"]
+    )
 
 
 def test_failed_current_streamline_workflow_is_atomic(client: TestClient) -> None:
