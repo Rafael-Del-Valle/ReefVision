@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import stat
 import zipfile
 from datetime import timedelta
 from pathlib import Path
@@ -653,6 +654,31 @@ def test_pose_materialization_rejects_file_directory_archive_collisions(
 
     destination = tmp_path / "pose-file-directory-collision"
     with pytest.raises(ValidationError, match="file-directory archive collision"):
+        materialize_pose_training_exports(
+            training_content=stream.getvalue(),
+            validation_content=None,
+            destination=destination,
+        )
+
+    assert not (destination / "images" / "train" / "frame_00000001.png").exists()
+
+
+@pytest.mark.parametrize("special_type", (stat.S_IFLNK, stat.S_IFIFO))
+def test_pose_materialization_rejects_special_archive_members(
+    tmp_path: Path,
+    special_type: int,
+) -> None:
+    # Use the existing reviewed pose export fixture. Unix symlink/device
+    # entries must fail preflight before any verified frame is written.
+    stream = io.BytesIO(_pose_export_zip(b"reviewed"))
+    member = zipfile.ZipInfo("images/train/unreviewed.png")
+    member.create_system = 3
+    member.external_attr = (special_type | 0o777) << 16
+    with zipfile.ZipFile(stream, "a", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(member, b"not-an-image")
+
+    destination = tmp_path / "pose-special-member"
+    with pytest.raises(ValidationError, match="special archive member"):
         materialize_pose_training_exports(
             training_content=stream.getvalue(),
             validation_content=None,
