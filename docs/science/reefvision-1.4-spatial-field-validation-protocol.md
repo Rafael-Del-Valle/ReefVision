@@ -20,6 +20,7 @@ Record physical scale standard, units, standard uncertainty, measurement method,
 | Closed tetrahedral surface | Independent analytical surface and signed-volume references | Volume only when watertight and topology permits; no biological volume claim |
 | Open, nonmanifold, duplicate-face and zero-area surfaces | Explicit QC expectations | No fabricated enclosed volume, hidden topology failures, or misleading precision |
 | Equivalent OBJ, ASCII PLY and GLB meshes | Equal geometric references within declared numerical tolerance | Preserve source-format and byte-provenance distinctions while comparing geometry |
+| GLB coordinate extrema at nanoscale (decoded Z max 0 vs declared 1e-9, and a genuine binary32 Z max near 1e-9) | Reject false exporter extrema despite tiny absolute differences; accept true extrema within relative float32 textual rounding | API and saved typed Workflow Builder graphs reject mismatched source bounds without artifacts and replay valid unverified measurements with stable source and artifact hashes |
 | Point cloud with known extrema and sparse sampling | Independent axis extents; no inferred watertight surface | Distinguish observed envelope from reconstructed surface and warn about sampling limitations |
 
 Test extreme but finite coordinates, malformed indices, nonfinite values, adversarial file sizes, unsupported binary PLY, invalid GLB chunks, and source metadata tampering. Bound memory, vertex/face counts, and parse time. A preview is not evidence of a validated reconstruction.
