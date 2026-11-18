@@ -44,8 +44,8 @@ FAMILIES = {
 }
 
 
-# The two independent revision-0038 migrations create distinct tables. This
-# optional read-only structural audit checks their recorded SQLite DDL shapes
+# The two independent revision-0038 migrations create distinct table families. This
+# optional read-only structural audit checks their declared SQLite column types and DDL shapes
 # to help a researcher assess provenance, not to authorize a migration. The
 # post-0038 scientific metrics and QC registry require separate reconciliation.
 _POST_0037_TABLE_CONTRACTS = {
@@ -66,6 +66,20 @@ _POST_0037_TABLE_CONTRACTS = {
                 "created_at",
             }
         ),
+        "types": {
+            "id": "VARCHAR(36)",
+            "project_id": "VARCHAR(36)",
+            "variable": "VARCHAR(100)",
+            "source_kind": "VARCHAR(30)",
+            "observed_at": "DATETIME",
+            "image_id": "VARCHAR(36)",
+            "video_id": "VARCHAR(36)",
+            "track_id": "VARCHAR(36)",
+            "model_run_id": "VARCHAR(36)",
+            "payload_json": "JSON",
+            "content_sha256": "VARCHAR(64)",
+            "created_at": "DATETIME",
+        },
         "required": frozenset(
             {
                 "id",
@@ -93,6 +107,44 @@ _POST_0037_TABLE_CONTRACTS = {
             }
         ),
     },
+    "environmental_cache_entries": {
+        "columns": frozenset(
+            {
+                "id",
+                "project_id",
+                "cache_key",
+                "source_url",
+                "payload_json",
+                "content_sha256",
+                "fetched_at",
+                "expires_at",
+            }
+        ),
+        "types": {
+            "id": "VARCHAR(36)",
+            "project_id": "VARCHAR(36)",
+            "cache_key": "VARCHAR(64)",
+            "source_url": "VARCHAR(2000)",
+            "payload_json": "JSON",
+            "content_sha256": "VARCHAR(64)",
+            "fetched_at": "DATETIME",
+            "expires_at": "DATETIME",
+        },
+        "required": frozenset(
+            {
+                "id",
+                "project_id",
+                "cache_key",
+                "source_url",
+                "payload_json",
+                "content_sha256",
+                "fetched_at",
+                "expires_at",
+            }
+        ),
+        "foreign_keys": frozenset({("project_id", "projects", "id", "CASCADE")}),
+        "indexes": frozenset({(("project_id", "cache_key"), True)}),
+    },
     "review_queue_item_events": {
         "columns": frozenset(
             {
@@ -108,6 +160,18 @@ _POST_0037_TABLE_CONTRACTS = {
                 "created_at",
             }
         ),
+        "types": {
+            "id": "VARCHAR(36)",
+            "review_queue_id": "VARCHAR(36)",
+            "review_queue_item_id": "VARCHAR(36)",
+            "project_id": "VARCHAR(36)",
+            "client_request_id": "VARCHAR(36)",
+            "event_type": "VARCHAR(20)",
+            "actor": "VARCHAR(100)",
+            "comment": "TEXT",
+            "assignee": "VARCHAR(100)",
+            "created_at": "DATETIME",
+        },
         "required": frozenset(
             {
                 "id",
@@ -149,8 +213,12 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
     quoted = '"' + table.replace('"', '""') + '"'
     columns = list(db.execute(f"PRAGMA table_xinfo({quoted})"))
     by_name = {row[1]: row for row in columns}
+    declared_types = {
+        name: " ".join(str(row[2]).upper().split()) for name, row in by_name.items()
+    }
     if (
         set(by_name) != contract["columns"]
+        or declared_types != contract["types"]
         or any(row[6] != 0 for row in columns)
         or any(not by_name[name][3] for name in contract["required"])
         or [row[1] for row in columns if row[5] > 0] != ["id"]
