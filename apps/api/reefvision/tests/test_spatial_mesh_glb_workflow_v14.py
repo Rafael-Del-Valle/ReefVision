@@ -118,7 +118,10 @@ def test_saved_glb(
     )
 
 
-@pytest.mark.parametrize("variant", ["nanoscale", "float32_subnormal", "float32_decimal_roundtrip"])
+@pytest.mark.parametrize(
+    "variant",
+    ["nanoscale", "float32_subnormal", "float32_negative_subnormal", "float32_decimal_roundtrip"],
+)
 def test_valid_glb_bounds_standalone_and_replayed_graph(client: TestClient, variant: str) -> None:
     """Accept representable bounds; two runs must save identical evidence."""
     pid = create_project(client, f"GLB {variant} bounds")
@@ -128,6 +131,8 @@ def test_valid_glb_bounds_standalone_and_replayed_graph(client: TestClient, vari
         sample = make_glb(position_bounds=True, tiny_z=True)
     elif variant == "float32_subnormal":
         sample = make_glb(position_bounds=True, subnormal_z=True)
+    elif variant == "float32_negative_subnormal":
+        sample = make_glb(position_bounds=True, negative_subnormal_z=True)
     else:
         sample = make_glb(invalid_selector="bounds_float32_roundtrip")
     params = {
