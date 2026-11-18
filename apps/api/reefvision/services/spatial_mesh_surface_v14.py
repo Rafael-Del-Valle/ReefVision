@@ -245,12 +245,13 @@ def measure_mesh_preview(
         if face_area == 0:
             patch_degenerate_faces[patch] += 1
         patch_vertex_indices.setdefault(patch, set()).update(faces[face_index])
-        # A few dominant faces can otherwise swallow many sub-ULP centroid
-        # moment contributions, even after patch surface area uses fsum.
+        # Retain signed vertex coordinates smaller than the ULP of another
+        # coordinate (including cancellation), before weighting each triangle.
+        # Patch and complete-mesh moment reductions also use fsum below.
         moment_terms = patch_centroid_moment_terms.setdefault(patch, [[], [], []])
         for axis in range(3):
             moment_terms[axis].append(
-                face_area * sum(points[index][axis] for index in faces[face_index]) / 3
+                face_area * fsum(points[index][axis] for index in faces[face_index]) / 3
             )
         patch_triangles.setdefault(patch, []).append(
             sorted(points[index] for index in faces[face_index])
@@ -474,7 +475,11 @@ def measure_mesh_preview(
     ]
     centroid_m = (
         [
-            fsum(patch_centroid_moments[patch][axis] for patch in ordered_patches) * scale / raw_area
+            (
+                fsum(patch_centroid_moments[patch][axis] for patch in ordered_patches)
+                * scale
+                / raw_area
+            )
             for axis in range(3)
         ]
         if raw_area > 0

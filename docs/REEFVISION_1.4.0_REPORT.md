@@ -83,6 +83,20 @@ These centroids are in the imported, unregistered source coordinate frame;
 they do not imply coral identity, registration, tissue localization or
 positioning accuracy beyond the caller-supplied common scale.
 
+### Signed source-coordinate cancellation in mesh centroids
+
+Even after compensated reduction of triangle moments, an ordinary sum of three
+signed source-vertex coordinates could erase a small representable coordinate
+when combined with opposing coordinates near the mesh's supported bounds.
+Per-face centroid moments now use compensated summation of the three
+coordinates before area weighting. A synthetic triangular mesh with x
+coordinates +1e9, +1e-8 and -1e9 verifies preservation of the small positive
+surface-centroid contribution, together with standalone project API parity and
+two persisted typed Workflow Builder executions. Assertions retain provisional
+calibration status, source provenance and stable scientific artifact hashes.
+This is floating-point arithmetic QC, not registration, tissue localization,
+biological identity or independently established coordinate accuracy.
+
 ### Compensated disconnected-patch boundary perimeter
 
 Patch boundary-edge lengths and the total calibrated boundary perimeter now
