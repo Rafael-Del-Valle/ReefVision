@@ -232,6 +232,121 @@ def test_representable_weighted_coordinate_preserves_standalone_workflow_parity(
     assert len(artifact["payload_sha256"]) == 64
 
 
+def _precision_collision_obj(axis: int, *, weighted: bool) -> str:
+    rows = [["0", "0", "0"], ["2", "0", "0"], ["0", "3", "0"]]
+    rows[0][axis] = "1"
+    rows[1][axis] = "1.00000000000000001"
+    if weighted:
+        # Decimal multiplication preserves the source difference before OBJ
+        # homogeneous division, whereas binary64 would erase it.
+        from decimal import Decimal
+
+        vertices = [
+            "v " + " ".join(str(Decimal(value) * 2) for value in row) + " 2"
+            for row in rows
+        ]
+    else:
+        vertices = ["v " + " ".join(row) for row in rows]
+    return "\\n".join([*vertices, "f 1 2 3", ""])
+
+
+@pytest.mark.parametrize("axis", [0, 1, 2], ids=["x", "y", "z"])
+@pytest.mark.parametrize("weighted", [False, True], ids=["plain", "homogeneous"])
+def test_distinct_obj_source_decimals_fail_standalone_and_saved_workflow(
+    client: TestClient, axis: int, weighted: bool
+) -> None:
+    invalid = _precision_collision_obj(axis, weighted=weighted)
+    with pytest.raises(ValueError, match="distinct source coordinates collapse"):
+        parse_obj_triangles(invalid)
+
+    project_id = str(create_project(client, "OBJ source-decimal precision integrity")["id"])
+    standalone = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-preview",
+        json={**PARAMS, "obj_text": invalid},
+    )
+    assert standalone.status_code == 400, standalone.text
+    assert "distinct source coordinates collapse" in standalone.json()["detail"]
+
+    detail = _run_saved(client, project_id, invalid)
+    assert detail["run"]["status"] == "failed"
+    assert not any(
+        artifact["data_type"] == "mesh_measurement_preview"
+        for artifact in detail["artifacts"]
+    )
+
+
+@pytest.mark.parametrize(
+    "valid",
+    [
+        "v 1 0 0\\nv +1e0 2 0\\nv 0 0 3\\nf 1 2 3\\n",
+        "v 1 0 0\\nv 2 4 0 2\\nv 0 0 3\\nf 1 2 3\\n",
+    ],
+    ids=["equivalent-decimal-spellings", "equivalent-homogeneous-coordinates"],
+)
+def test_equivalent_obj_sources_preserve_two_replays_and_provisional_provenance(
+    client: TestClient, valid: str
+) -> None:
+    vertices, faces = parse_obj_triangles(valid)
+    assert vertices == [[1.0, 0.0, 0.0], [1.0, 2.0, 0.0], [0.0, 0.0, 3.0]]
+    assert faces == [[0, 1, 2]]
+    project_id = str(create_project(client, "OBJ equivalent exact source coordinates")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(
+        f"{base}/spatial/mesh-preview", json={**PARAMS, "obj_text": valid}
+    )
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    assert expected["measurement_status"] == "caller_supplied_unverified"
+    assert expected["provenance"]["calibration_verified"] is False
+    assert expected["provenance"]["coordinate_registration_verified"] is False
+
+    graph = {
+        "graph_id": "obj-source-decimal-replay-v14",
+        "name": "Reproducible provisional OBJ source precision",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "mesh",
+                "node_type": "mesh_surface_preview",
+                "parameters": {**PARAMS, "obj_text": valid},
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(
+            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+        )
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        )
+        assert artifact["payload_json"] == expected
+        hashes.append(artifact["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
+
+
 @pytest.mark.parametrize(
     "directive",
     [
