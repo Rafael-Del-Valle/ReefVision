@@ -428,9 +428,7 @@ export function TrainingRunDetail({
       ) : (
         <section>
           <h5>Per-epoch metrics</h5>
-          {(truncatedRows > 0 ||
-            malformedRows > 0 ||
-            truncatedColumns > 0) && (
+          {(truncatedRows > 0 || malformedRows > 0 || truncatedColumns > 0) && (
             <p className="system-subtle" role="status">
               {truncatedRows > 0 &&
                 `Previewing the latest ${displayedCandidates.length} of ${nativeRowsRaw.length} stored rows. `}
