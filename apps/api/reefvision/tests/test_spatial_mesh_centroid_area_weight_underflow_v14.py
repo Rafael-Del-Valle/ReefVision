@@ -52,9 +52,7 @@ def test_representable_subnormal_area_weighted_centroid_replays(
     assert direct["surface_area_m2"] == pytest.approx(5e-221, rel=1e-12, abs=0)
     assert centroid[axis] == pytest.approx(expected, rel=1e-12, abs=0)
     assert centroid[(axis + 1) % 3] == pytest.approx(1e-110 / 3, rel=1e-12, abs=0)
-    assert direct["edge_connected_patch_area_weighted_surface_centroids_m"] == [
-        centroid
-    ]
+    assert direct["edge_connected_patch_area_weighted_surface_centroids_m"] == [centroid]
     assert direct["area_weighted_centroid_scale_uncertainty_m"][axis] == pytest.approx(
         abs(expected) * 0.1, rel=1e-12, abs=0
     )
@@ -113,9 +111,7 @@ def test_representable_subnormal_area_weighted_centroid_replays(
     app = cast(FastAPI, client.app)
     hashes: list[str] = []
     for _ in range(2):
-        run = client.post(
-            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-        )
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
         assert process_workflow_run_job(
             app.state.settings, app.state.session_factory, str(run.json()["job_id"])
@@ -135,7 +131,10 @@ def test_representable_subnormal_area_weighted_centroid_replays(
     assert hashes[0] == hashes[1]
 
 
-def test_disconnected_small_patch_centroid_does_not_collapse_to_origin() -> None:
+def test_disconnected_small_patch_centroid_does_not_collapse_to_origin(
+    client: TestClient,
+) -> None:
+    """Standalone and saved workflow must retain a tiny disconnected patch."""
     params = tiny_triangle(0, -1)
     params["vertices"] = [
         [10.0, 10.0, 0.0],
@@ -144,10 +143,82 @@ def test_disconnected_small_patch_centroid_does_not_collapse_to_origin() -> None
         *params["vertices"],
     ]
     params["faces"] = [[0, 1, 2], [3, 4, 5]]
-    result = measure_mesh_preview(**params)
-    centroids = result["edge_connected_patch_area_weighted_surface_centroids_m"]
+    direct = measure_mesh_preview(**params)
+    centroids = direct["edge_connected_patch_area_weighted_surface_centroids_m"]
     assert centroids[0][:2] == pytest.approx([10 + 1 / 3, 10 + 1 / 3])
     assert centroids[1][0] == pytest.approx(-1e-110 / 3, rel=1e-12, abs=0)
     assert centroids[1][1] == pytest.approx(1e-110 / 3, rel=1e-12, abs=0)
-    assert result["edge_connected_patch_surface_areas_m2"][1] > 0
-    assert result["provenance"]["calibration_verified"] is False
+    assert direct["edge_connected_patch_surface_areas_m2"][1] > 0
+    assert direct["edge_connected_surface_patch_count"] == 2
+    assert direct["provenance"]["calibration_verified"] is False
+
+    project_id = str(create_project(client, "Disconnected mesh centroid evidence")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    payload = {
+        **params,
+        "specimen_id": "two-patches-not-identified",
+        "observation_id": "scan-disconnected-A",
+        "coordinate_frame_id": "unregistered-disconnected-frame",
+    }
+    response = client.post(f"{base}/spatial/mesh-preview", json=payload)
+    assert response.status_code == 200, response.text
+    standalone = response.json()
+    for key in (
+        "area_weighted_surface_centroid_m",
+        "edge_connected_patch_area_weighted_surface_centroids_m",
+        "edge_connected_patch_surface_areas_m2",
+        "edge_connected_surface_patch_count",
+    ):
+        assert standalone[key] == direct[key]
+    assert standalone["provenance"]["specimen_identity_verified"] is False
+    assert standalone["provenance"]["coordinate_registration_verified"] is False
+    assert standalone["provenance"]["calibration_verified"] is False
+
+    graph = {
+        "graph_id": "two-patch-subnormal-centroid-v14",
+        "name": "Unverified disconnected mesh centroid evidence",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {
+                "node_id": "m",
+                "node_type": "mesh_surface_preview",
+                "parameters": payload,
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "m",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+
+    app = cast(FastAPI, client.app)
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifacts = [
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        ]
+        assert len(artifacts) == 1
+        assert artifacts[0]["payload_json"] == standalone
+        hashes.append(artifacts[0]["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
