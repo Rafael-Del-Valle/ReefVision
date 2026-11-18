@@ -89,3 +89,35 @@ while an unchanged independent copied database still passes preservation-only.
 These are synthetic acceptance checks; the 1.1/1.6 Alembic-0038 collision,
 representative research data, native Windows MSI/CAB installation and installed
 GUI still require separate independent acceptance and researcher approval.
+
+
+## Protect empty-table AUTOINCREMENT contracts (2026-11-18)
+
+Preserving populated `sqlite_sequence` entries is not sufficient to protect
+future scientific record identity allocation. SQLite does not insert a
+`sqlite_sequence` row until an AUTOINCREMENT table receives its first row.
+An offline rebuild can silently replace an empty protected
+`id INTEGER PRIMARY KEY AUTOINCREMENT` table with ordinary
+`id INTEGER PRIMARY KEY`, or vice versa. In both cases SQLite
+`PRAGMA table_xinfo`, current rows and sequence entries can be identical
+despite changed future row-ID reuse semantics.
+
+The read-only preservation verifier now compares the original and candidate
+`AUTOINCREMENT` keyword contract in each preexisting protected table's
+stored `CREATE TABLE` DDL. Existing SQL tokenization ignores comments and
+quoted literal/identifier occurrences, preventing false positives from a
+research note or column named `autoincrement`. Either semantic change yields
+`changed_autoincrement_contract` and **HOLD**, even with no saved records.
+Unchanged empty and populated controls must still return
+`PASS_PRESERVATION_ONLY`; no approval, database write, renumbering, or
+scientific content disclosure occurs.
+
+Eight disposable SQLite regressions cover both drift directions and both
+preserved controls with empty and populated scientific tables. The independent
+unit reproduction confirms that the pre-change SQLite metadata and row
+comparisons cannot distinguish the empty-table drift. The added tests run
+under the existing registered Linux backend and native-Windows research
+preservation gates. Passing these tests is not lineage reconciliation or
+installed-MSI acceptance. The conflicting 1.1/1.6 Alembic-0038 histories,
+representative biology/saved-workflow tests, installed Windows GUI, and
+researcher approval remain release blockers.
