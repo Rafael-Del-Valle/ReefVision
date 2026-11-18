@@ -372,6 +372,29 @@ def _table_storage_contract(connection: sqlite3.Connection, table: str) -> tuple
     return (row[0], row[1])
 
 
+def _view_contracts(connection: sqlite3.Connection) -> dict[str, tuple]:
+    """Retain researcher-defined SQL views and their evaluated column contracts.
+
+    Matching protected rows are insufficient when a saved SQL view changes
+    interpretation or SELECT * expands after an otherwise additive migration.
+    Names, source SQL, and projected column labels stay private to this process.
+    """
+    contracts: dict[str, tuple] = {}
+    for name, definition in connection.execute(
+        "SELECT name, sql FROM sqlite_master WHERE type = 'view'"
+    ):
+        if not isinstance(definition, str) or not definition:
+            raise ValueError("invalid_research_view_definition")
+        columns = tuple(
+            tuple(row[1:])
+            for row in connection.execute(f"PRAGMA table_xinfo({_quote(name)})")
+        )
+        if not columns:
+            raise ValueError("invalid_research_view_shape")
+        contracts[name] = (_ddl_tokens(definition), columns)
+    return contracts
+
+
 def _encode_row(row: tuple) -> bytes:
     typed = []
     for value in row:
@@ -742,6 +765,8 @@ def verify(
         new = _open_snapshot(after, stack)
         old_sequences = _protected_autoincrement_sequences(old)
         new_sequences = _protected_autoincrement_sequences(new)
+        old_views = _view_contracts(old)
+        new_views = _view_contracts(new)
         tables = []
         problems = []
         covered = 0
@@ -841,6 +866,27 @@ def verify(
             if item["status"] != "preserved":
                 problems.append(table + ":" + item["status"])
             tables.append(item)
+        # Views are scientific query definitions, even when all materialized
+        # rows of their underlying tables are unchanged. Preserve every original
+        # view and its evaluated output shape; newly added views are permitted.
+        # Report aggregate counts only: view names and SQL can be private.
+        missing_views = sum(name not in new_views for name in old_views)
+        changed_views = sum(
+            name in new_views and contract != new_views[name]
+            for name, contract in old_views.items()
+        )
+        view_evidence = {
+            "checked": True,
+            "baseline_views": len(old_views),
+            "candidate_views": len(new_views),
+            "missing_views": missing_views,
+            "changed_views": changed_views,
+            "added_views": sum(name not in old_views for name in new_views),
+        }
+        if missing_views:
+            problems.append("research_views_missing")
+        if changed_views:
+            problems.append("research_view_contract_changed")
         if covered == 0:
             problems.append("no_protected_baseline_tables")
         asset_evidence = {"checked": False}
@@ -861,6 +907,7 @@ def verify(
             "upgrade_authorized": False,
             "requires_researcher_approval": True,
             "protected_tables_examined": covered,
+            "research_views": view_evidence,
             "research_assets": asset_evidence,
             "problems": problems,
             "tables": tables,
