@@ -221,8 +221,7 @@ def measure_mesh_preview(
     # when another axis keeps the total triangular area representable. Do not
     # report a falsely planar reconstructed mesh or collapse the render bounds.
     if any(
-        span > 0
-        and (dimensions[axis] == 0.0 or preview_min_m[axis] == preview_max_m[axis])
+        span > 0 and (dimensions[axis] == 0.0 or preview_min_m[axis] == preview_max_m[axis])
         for axis, span in enumerate(source_dimensions)
     ):
         raise ValueError("Nonzero mesh axis span collapses after calibration")
@@ -466,8 +465,7 @@ def measure_mesh_preview(
         for patch in ordered_patches
     ]
     patch_dimensions_m = [
-        [dimension * scale for dimension in dimensions]
-        for dimensions in patch_source_dimensions
+        [dimension * scale for dimension in dimensions] for dimensions in patch_source_dimensions
     ]
     # A disconnected small patch may lose its local span even while a larger
     # patch preserves the whole-mesh bounds and area. Never publish false
