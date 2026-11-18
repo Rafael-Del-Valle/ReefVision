@@ -118,15 +118,21 @@ def test_saved_glb(
     )
 
 
-def test_valid_nanoscale_glb_bounds_standalone_and_replayed_graph(
-    client: TestClient,
+@pytest.mark.parametrize("variant", ["nanoscale", "float32_decimal_roundtrip"])
+def test_valid_glb_bounds_standalone_and_replayed_graph(
+    client: TestClient, variant: str
 ) -> None:
-    """Accept true tiny surface extent with identical twice-run persisted evidence."""
-    pid = create_project(client, "GLB nanoscale bounds")
+    """Accept representable bounds; two runs must save identical evidence."""
+    pid = create_project(client, f"GLB {variant} bounds")
     project_id = str(pid["id"])
     base = f"/api/v1/projects/{project_id}"
+    sample = (
+        make_glb(position_bounds=True, tiny_z=True)
+        if variant == "nanoscale"
+        else make_glb(invalid_selector="bounds_float32_roundtrip")
+    )
     params = {
-        "glb_base64": make_glb(position_bounds=True, tiny_z=True),
+        "glb_base64": sample,
         "meters_per_unit": 0.01,
         "calibration_method": "ruler",
         "calibration_evidence": "Synthetic control, pending independent review",
@@ -136,8 +142,8 @@ def test_valid_nanoscale_glb_bounds_standalone_and_replayed_graph(
     expected = standalone.json()
     assert expected["provenance"]["calibration_verified"] is False
     graph = {
-        "graph_id": "glb-nanoscale-extrema-v14",
-        "name": "Nanoscale GLB exporter bounds",
+        "graph_id": f"glb-{variant}-extrema-v14",
+        "name": "Verified float32 source-bound representation",
         "nodes": [
             {"node_id": "p", "node_type": "project_source"},
             {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": params},
@@ -214,6 +220,7 @@ def test_valid_nanoscale_glb_bounds_standalone_and_replayed_graph(
         "bounds_boolean",
         "bounds_nan",
         "bounds_mismatch",
+        "bounds_float32_near_mismatch",
         "bounds_tiny_positive",
         "bounds_tiny_negative",
         "stride_too_small",
