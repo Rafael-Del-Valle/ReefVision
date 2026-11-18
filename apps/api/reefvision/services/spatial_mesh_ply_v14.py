@@ -46,6 +46,10 @@ _INTEGER_BOUNDS = {
 }
 
 
+class PlyFloat32RangeError(ValueError):
+    """Safe, specific diagnostic for an invalid declared binary32 PLY scalar."""
+
+
 def validate_ply_float32_range(value: float) -> None:
     """Bound declared float/float32 ASCII PLY scalars to binary32 range.
 
@@ -53,15 +57,15 @@ def validate_ply_float32_range(value: float) -> None:
     remain unquantized; this prevents silent overflow or collapse to zero.
     """
     if not isfinite(value):
-        raise ValueError("PLY float32 value must be finite")
+        raise PlyFloat32RangeError("PLY float32 value must be finite")
     try:
         rounded = unpack("!f", pack("!f", value))[0]
     except OverflowError as exc:
-        raise ValueError("PLY float32 value exceeds declared range") from exc
+        raise PlyFloat32RangeError("PLY float32 value exceeds declared range") from exc
     if not isfinite(rounded):
-        raise ValueError("PLY float32 value exceeds declared range")
+        raise PlyFloat32RangeError("PLY float32 value exceeds declared range")
     if value != 0.0 and rounded == 0.0:
-        raise ValueError("PLY float32 value underflows declared range")
+        raise PlyFloat32RangeError("PLY float32 value underflows declared range")
 
 
 def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
@@ -192,6 +196,9 @@ def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
                     if scalar_type in {"float", "float32"}:
                         validate_ply_float32_range(number)
                 numeric.append(float(number))
+        except PlyFloat32RangeError:
+            # Preserve declared-precision QC; mask all other malformed vertex values.
+            raise
         except (ValueError, OverflowError) as exc:
             raise ValueError("Invalid or out-of-range PLY vertex value") from exc
         if not all(isfinite(value) for value in numeric):
