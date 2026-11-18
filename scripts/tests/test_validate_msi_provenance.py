@@ -78,14 +78,6 @@ def test_reject_invalid_manifest(
 
 
 @pytest.mark.parametrize(
-    ("name", "expected"),
-    [
-        ("rv1.cab", "Missing"),
-        ("ReefVision_1.0.2_x64_en-US.msi", "Missing"),
-    ],
-)
-
-@pytest.mark.parametrize(
     ("name", "reserved"),
     [
         ("CON.cab", True),
@@ -161,6 +153,13 @@ def test_native_windows_build_and_clean_runner_reject_device_stems() -> None:
         "- name: Test isolated MSI installation"
     )
 
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("rv1.cab", "Missing"),
+        ("ReefVision_1.0.2_x64_en-US.msi", "Missing"),
+    ],
+)
 def test_missing_file(tmp_path: Path, name: str, expected: str) -> None:
     directory, _ = make_bundle(tmp_path)
     (directory / name).unlink()
