@@ -404,7 +404,10 @@ while ($true) {
         foreach ($line in ($logLines | Select-Object -Last 20)) {
           # Training logs are untrusted terminal text, just like run metadata.
           # Sanitize the displayed copy; never rewrite persisted log bytes.
-          Write-Host (Format-SafeText $line)
+          # Prefix every untrusted worker record. A training log may contain
+          # text such as "Status: completed" or a forged loss, but must never
+          # appear as the monitor's authoritative run status or metric table.
+          Write-Host ('  [worker log] {0}' -f (Format-SafeText $line))
         }
       } else {
         Write-Host 'No persisted training job log available yet.'

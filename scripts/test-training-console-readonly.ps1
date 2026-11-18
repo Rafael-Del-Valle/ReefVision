@@ -102,6 +102,10 @@ $script:logText += ([string][char]13) + '31m color-reset'
 $script:logText += ([string][char]13) + 'before-c1-csi' + ([string][char]0x009B)
 $script:logText += ([string][char]13) + '2K line-reset'
 $script:logText += ([string][char]13) + 'train/cls_loss=0.44'
+# Persisted worker text is untrusted evidence, not the monitor's own status
+# or structured loss table. Deliberately include plausible forged records.
+$script:logText += ([string][char]13) + 'Status: completed'
+$script:logText += ([string][char]13) + 'train/box_loss 0.0000'
 
 function Invoke-RestMethod {
   param([string]$Uri, [string]$Method, [int]$TimeoutSec, [int]$MaximumRedirection = -1)
@@ -246,6 +250,17 @@ if (-not $output.Contains('worker-progress-24') -or
     $output.Contains('train/dfl_loss=0.00') -or
     $output.Contains('forged title')) {
   throw 'CR-only training progress updates were not split, tailed, and displayed correctly.'
+}
+# A forged status or loss in an imported worker log must remain explicitly
+# attributed to that log; it must not impersonate the monitor's status line
+# or its structured, persisted scientific training-loss measurements.
+foreach ($record in @('Status: completed', 'train/box_loss 0.0000', 'train/cls_loss=0.44')) {
+  if (-not $script:messages.Contains('  [worker log] ' + $record)) {
+    throw "Untrusted worker record lacked its provenance prefix: $record"
+  }
+  if ($script:messages.Contains($record)) {
+    throw "Untrusted worker record impersonated an authoritative monitor line: $record"
+  }
 }
 # Both terminal error states must stop polling immediately. A missing log tail
 # must not hide the failure status or the sanitized diagnostic message.
