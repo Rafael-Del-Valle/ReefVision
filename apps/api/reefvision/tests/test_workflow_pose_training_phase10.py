@@ -1862,6 +1862,9 @@ def test_pose_workflow_rejects_lossy_run_names_from_verified_truth(
         ({}, "run_name must be a string"),
         ("", "run_name cannot be blank"),
         ("   ", "run_name cannot be blank"),
+        (" phase10-pose-retrain", "run_name must not contain surrounding whitespace"),
+        ("phase10-pose-retrain ", "run_name must not contain surrounding whitespace"),
+        ("\tphase10-pose-retrain", "run_name must not contain surrounding whitespace"),
     ):
         with (
             app.state.session_factory() as session,
