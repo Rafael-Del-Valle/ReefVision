@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import cast
 
 import pytest
@@ -239,15 +240,13 @@ def _precision_collision_obj(axis: int, *, weighted: bool) -> str:
     if weighted:
         # Decimal multiplication preserves the source difference before OBJ
         # homogeneous division, whereas binary64 would erase it.
-        from decimal import Decimal
-
         vertices = [
             "v " + " ".join(str(Decimal(value) * 2) for value in row) + " 2"
             for row in rows
         ]
     else:
         vertices = ["v " + " ".join(row) for row in rows]
-    return "\\n".join([*vertices, "f 1 2 3", ""])
+    return "\n".join([*vertices, "f 1 2 3", ""])
 
 
 @pytest.mark.parametrize("axis", [0, 1, 2], ids=["x", "y", "z"])
@@ -278,8 +277,8 @@ def test_distinct_obj_source_decimals_fail_standalone_and_saved_workflow(
 @pytest.mark.parametrize(
     "valid",
     [
-        "v 1 0 0\\nv +1e0 2 0\\nv 0 0 3\\nf 1 2 3\\n",
-        "v 1 0 0\\nv 2 4 0 2\\nv 0 0 3\\nf 1 2 3\\n",
+        "v 1 0 0\nv +1e0 2 0\nv 0 0 3\nf 1 2 3\n",
+        "v 1 0 0\nv 2 4 0 2\nv 0 0 3\nf 1 2 3\n",
     ],
     ids=["equivalent-decimal-spellings", "equivalent-homogeneous-coordinates"],
 )
