@@ -25,8 +25,7 @@ def _seed(
         db.execute("INSERT INTO projects VALUES ('site-1')")
         if style == "inline":
             columns = (
-                "id TEXT PRIMARY KEY, "
-                f"{PRIVATE_COLUMN} TEXT REFERENCES projects(id) {first_timing}"
+                f"id TEXT PRIMARY KEY, {PRIVATE_COLUMN} TEXT REFERENCES projects(id) {first_timing}"
             )
             if second_timing is not None:
                 columns += f", secondary_site TEXT REFERENCES projects(id) {second_timing}"
@@ -38,13 +37,9 @@ def _seed(
                 columns += ", secondary_site TEXT"
             if extra_reference:
                 columns += ", new_reference TEXT"
-            columns += (
-                f", FOREIGN KEY ({PRIVATE_COLUMN}) REFERENCES projects(id) {first_timing}"
-            )
+            columns += f", FOREIGN KEY ({PRIVATE_COLUMN}) REFERENCES projects(id) {first_timing}"
             if second_timing is not None:
-                columns += (
-                    f", FOREIGN KEY (secondary_site) REFERENCES projects(id) {second_timing}"
-                )
+                columns += f", FOREIGN KEY (secondary_site) REFERENCES projects(id) {second_timing}"
             if extra_reference:
                 columns += ", FOREIGN KEY (new_reference) REFERENCES projects(id)"
         db.execute(f"CREATE TABLE scientific_records ({columns})")
@@ -117,9 +112,7 @@ def test_scientific_fk_timing_is_preserved(
     baseline_bytes, candidate_bytes = before.read_bytes(), after.read_bytes()
 
     code, report = _verify(before, after)
-    scientific = next(
-        row for row in report["tables"] if row["table"] == "scientific_records"
-    )
+    scientific = next(row for row in report["tables"] if row["table"] == "scientific_records")
     assert scientific["status"] == expected_status
     assert report["status"] == (
         "PASS_PRESERVATION_ONLY" if expected_status == "preserved" else "HOLD"
@@ -153,9 +146,7 @@ def test_swapping_two_fk_timing_contracts_is_not_hidden_by_an_equal_policy_set(
     )
     baseline_bytes, candidate_bytes = before.read_bytes(), after.read_bytes()
     code, report = _verify(before, after)
-    scientific = next(
-        row for row in report["tables"] if row["table"] == "scientific_records"
-    )
+    scientific = next(row for row in report["tables"] if row["table"] == "scientific_records")
     assert code == 2
     assert report["status"] == "HOLD"
     assert scientific["status"] == "changed_foreign_key_timing_contract"
