@@ -233,16 +233,15 @@ def test_representable_weighted_coordinate_preserves_standalone_workflow_parity(
     assert len(artifact["payload_sha256"]) == 64
 
 
-def _precision_collision_obj(axis: int, *, weighted: bool) -> str:
+def _precision_collision_obj(axis: int, *, weighted: bool, sign: int) -> str:
     rows = [["0", "0", "0"], ["2", "0", "0"], ["0", "3", "0"]]
-    rows[0][axis] = "1"
-    rows[1][axis] = "1.00000000000000001"
+    rows[0][axis] = "1" if sign > 0 else "-1"
+    rows[1][axis] = "1.00000000000000001" if sign > 0 else "-1.00000000000000001"
     if weighted:
         # Decimal multiplication preserves the source difference before OBJ
         # homogeneous division, whereas binary64 would erase it.
         vertices = [
-            "v " + " ".join(str(Decimal(value) * 2) for value in row) + " 2"
-            for row in rows
+            "v " + " ".join(str(Decimal(value) * 2) for value in row) + " 2" for row in rows
         ]
     else:
         vertices = ["v " + " ".join(row) for row in rows]
@@ -251,10 +250,11 @@ def _precision_collision_obj(axis: int, *, weighted: bool) -> str:
 
 @pytest.mark.parametrize("axis", [0, 1, 2], ids=["x", "y", "z"])
 @pytest.mark.parametrize("weighted", [False, True], ids=["plain", "homogeneous"])
+@pytest.mark.parametrize("sign", [1, -1], ids=["positive", "negative"])
 def test_distinct_obj_source_decimals_fail_standalone_and_saved_workflow(
-    client: TestClient, axis: int, weighted: bool
+    client: TestClient, axis: int, weighted: bool, sign: int
 ) -> None:
-    invalid = _precision_collision_obj(axis, weighted=weighted)
+    invalid = _precision_collision_obj(axis, weighted=weighted, sign=sign)
     with pytest.raises(ValueError, match="distinct source coordinates collapse"):
         parse_obj_triangles(invalid)
 
@@ -269,8 +269,7 @@ def test_distinct_obj_source_decimals_fail_standalone_and_saved_workflow(
     detail = _run_saved(client, project_id, invalid)
     assert detail["run"]["status"] == "failed"
     assert not any(
-        artifact["data_type"] == "mesh_measurement_preview"
-        for artifact in detail["artifacts"]
+        artifact["data_type"] == "mesh_measurement_preview" for artifact in detail["artifacts"]
     )
 
 
@@ -290,9 +289,7 @@ def test_equivalent_obj_sources_preserve_two_replays_and_provisional_provenance(
     assert faces == [[0, 1, 2]]
     project_id = str(create_project(client, "OBJ equivalent exact source coordinates")["id"])
     base = f"/api/v1/projects/{project_id}"
-    standalone = client.post(
-        f"{base}/spatial/mesh-preview", json={**PARAMS, "obj_text": valid}
-    )
+    standalone = client.post(f"{base}/spatial/mesh-preview", json={**PARAMS, "obj_text": valid})
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     assert expected["measurement_status"] == "caller_supplied_unverified"
@@ -325,9 +322,7 @@ def test_equivalent_obj_sources_preserve_two_replays_and_provisional_provenance(
     app = cast(FastAPI, client.app)
     hashes: list[str] = []
     for _ in range(2):
-        run = client.post(
-            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-        )
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
         assert process_workflow_run_job(
             app.state.settings, app.state.session_factory, str(run.json()["job_id"])
