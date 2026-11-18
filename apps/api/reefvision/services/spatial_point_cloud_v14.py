@@ -13,7 +13,10 @@ from typing import Any
 
 from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvidence
 from reefvision.services.spatial_mesh_obj_v14 import MAX_VERTICES
-from reefvision.services.spatial_mesh_ply_v14 import validate_ply_float32_range
+from reefvision.services.spatial_mesh_ply_v14 import (
+    PlyFloat32RangeError,
+    validate_ply_float32_range,
+)
 
 MAX_PLY_BYTES = 256_000
 MAX_PREVIEW_POINTS = 512
@@ -164,9 +167,11 @@ def parse_ascii_ply_points(
             raise ValueError("Invalid point-cloud coordinate") from exc
         # A nonzero decimal that rounds to zero would silently collapse
         # reconstructed geometry. Reject it rather than claim a measured zero.
-        for token, value in zip(tokens, parsed, strict=True):
+        for token, value, index in zip(tokens, parsed, xyz, strict=True):
             mantissa = token.lower().split("e", 1)[0]
             if value == 0.0 and any(digit in "123456789" for digit in mantissa):
+                if property_types[index] in {"float", "float32"}:
+                    raise PlyFloat32RangeError("PLY float32 value underflows declared range")
                 raise ValueError("Point-cloud coordinate underflows float precision")
         for index, value in zip(xyz, parsed, strict=True):
             if property_types[index] in {"float", "float32"}:
