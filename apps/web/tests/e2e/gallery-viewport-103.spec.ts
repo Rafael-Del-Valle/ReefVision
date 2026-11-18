@@ -2,6 +2,27 @@ import { expect, test } from "@playwright/test";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
+// An otherwise short gallery can make "wheel did not scroll the document"
+// a vacuous assertion: the browser had nowhere to scroll in the first place.
+// Add a test-only, non-interactive overflow probe below the application so a
+// leaked wheel event would produce measurable native document movement.
+const enableDocumentScrollProbe = async (page: import("@playwright/test").Page) => {
+  await page.evaluate(() => {
+    const probe = document.createElement("div");
+    probe.setAttribute("aria-hidden", "true");
+    probe.style.height = "1600px";
+    probe.style.pointerEvents = "none";
+    document.body.appendChild(probe);
+  });
+  const remainingScroll = () =>
+    page.evaluate(() => {
+      const document = window.document.scrollingElement;
+      if (!document) return 0;
+      return document.scrollHeight - document.clientHeight - document.scrollTop;
+    });
+  await expect.poll(remainingScroll).toBeGreaterThan(400);
+};
+
 // Browser-generated JPEG bytes exercise the real camera-image decoder path
 // without network fixtures or changing scientific source-image metadata.
 test("initial image and gallery scrolling", async ({ page }) => {
@@ -268,6 +289,8 @@ test("initial image and gallery scrolling", async ({ page }) => {
   await expect(
     workbench.getByRole("listitem", { name: "Focus camera-01.JPEG" }),
   ).toHaveAttribute("aria-current", "true");
+  // This first-open check must be capable of failing when the browser scrolls.
+  await enableDocumentScrollProbe(page);
   // Synthetic WheelEvent assertions below only prove that preventDefault was
   // called. Exercise real mouse-wheel input over the *first* loaded image to
   // catch compositor scrolling that partially displaces the camera preview.
@@ -747,6 +770,8 @@ test("single-image camera gallery cold-start keeps pixels and wheel isolated", a
   await expect(filmstrip.locator('[aria-current="true"]')).toHaveCount(1);
   expect(displayRequests).toContain(image.id);
 
+  // Make the one-image cold start scrollable before testing for wheel leakage.
+  await enableDocumentScrollProbe(page);
   // Real input, not a synthetic WheelEvent, catches document scroll-through
   // when the strip has only one item and the first image just loaded.
   const pageScroll = () =>
