@@ -101,6 +101,39 @@ def test_distinct_ply_mesh_decimals_cannot_collapse_into_measurements(
 
 
 @pytest.mark.parametrize(
+    ("axis", "replacement_rows"),
+    [
+        ("y", "0 1 0\n2 1.00000000000000001 0\n"),
+        ("z", "0 0 -1\n2 0 -1.00000000000000001\n"),
+    ],
+)
+@pytest.mark.parametrize("coordinate_type", ["float32", "float64"])
+def test_non_x_mesh_coordinate_precision_collapse_fails_standalone_and_workflow(
+    client: TestClient, axis: str, replacement_rows: str, coordinate_type: str
+) -> None:
+    invalid = PLY.replace(
+        f"property float {axis}", f"property {coordinate_type} {axis}"
+    ).replace("0 0 0\n2 0 0\n", replacement_rows)
+    with pytest.raises(ValueError, match="Distinct PLY mesh decimal coordinates collapse"):
+        parse_ply_triangles(invalid)
+
+    project_id = str(create_project(client, "PLY mesh non-X coordinate collision")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(
+        f"{base}/spatial/mesh-preview",
+        json={**PARAMS, "ply_text": invalid},
+    )
+    assert standalone.status_code == 400, standalone.text
+    assert "Distinct PLY mesh decimal coordinates collapse" in standalone.json()["detail"]
+
+    workflow = _run_saved_graph(client, project_id, invalid)
+    assert workflow["run"]["status"] == "failed"
+    assert not any(
+        item["data_type"] == "mesh_measurement_preview" for item in workflow["artifacts"]
+    )
+
+
+@pytest.mark.parametrize(
     ("baseline", "equivalent"),
     [
         ("1.0", "+1e0"),
