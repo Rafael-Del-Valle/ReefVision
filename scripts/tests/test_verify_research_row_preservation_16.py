@@ -373,6 +373,10 @@ def test_upgrade_asset_inventory_preserves_original_media_and_allows_additions(
         "missing_files": 0,
         "changed_files": 0,
         "added_files": 1,
+        "baseline_directories": 1,
+        "candidate_directories": 1,
+        "missing_directories": 0,
+        "added_directories": 0,
     }
     assert report["upgrade_authorized"] is False
     assert report["requires_researcher_approval"] is True
@@ -1374,3 +1378,57 @@ def test_column_collation_does_not_confuse_nested_check_expression(
     assert report["status"] == "PASS_PRESERVATION_ONLY"
     assert report["upgrade_authorized"] is False
     assert report["requires_researcher_approval"] is True
+
+
+@pytest.mark.parametrize(
+    ("removed_level", "expected_missing"),
+    [("none", 0), ("leaf", 1), ("tree", 2)],
+)
+def test_research_asset_empty_directory_preservation(
+    tmp_path: Path, removed_level: str, expected_missing: int
+) -> None:
+    """Offline upgrade copies must retain empty scientific collection folders."""
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    _seed(before)
+    shutil.copyfile(before, after)
+    original = tmp_path / "original"
+    candidate = tmp_path / "candidate"
+    private_collection = original / "study" / "unscored" / "future-observations"
+    private_collection.mkdir(parents=True)
+    (original / "study" / "coral.raw").write_bytes(b"unaltered observation")
+    shutil.copytree(original, candidate)
+    # Additional collections are allowed; dropping existing empty directories
+    # should not masquerade as a successful full research-asset preservation.
+    (candidate / "new-study").mkdir()
+    if removed_level in ("leaf", "tree"):
+        (candidate / "study" / "unscored" / "future-observations").rmdir()
+    if removed_level == "tree":
+        (candidate / "study" / "unscored").rmdir()
+    old_db, new_db = before.read_bytes(), after.read_bytes()
+    old_asset = (original / "study" / "coral.raw").read_bytes()
+
+    code, report = _run(before, after, original, candidate)
+
+    assert code == (0 if expected_missing == 0 else 2)
+    assert report["status"] == (
+        "PASS_PRESERVATION_ONLY" if expected_missing == 0 else "HOLD"
+    )
+    evidence = report["research_assets"]
+    assert evidence["baseline_files"] == evidence["candidate_files"] == 1
+    assert evidence["missing_files"] == evidence["changed_files"] == 0
+    assert evidence["baseline_directories"] == 3
+    assert evidence["candidate_directories"] == 4 - expected_missing
+    assert evidence["missing_directories"] == expected_missing
+    assert evidence["added_directories"] == 1
+    assert ("research_directories_missing" in report["problems"]) == (
+        expected_missing > 0
+    )
+    assert report["requires_researcher_approval"] is True
+    assert report["upgrade_authorized"] is False
+    for private_name in ("future-observations", "unscored", "coral.raw"):
+        assert private_name not in json.dumps(report)
+    assert before.read_bytes() == old_db
+    assert after.read_bytes() == new_db
+    assert (original / "study" / "coral.raw").read_bytes() == old_asset
+    assert (candidate / "study" / "coral.raw").read_bytes() == old_asset
