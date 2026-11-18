@@ -386,8 +386,7 @@ def _view_contracts(connection: sqlite3.Connection) -> dict[str, tuple]:
         if not isinstance(definition, str) or not definition:
             raise ValueError("invalid_research_view_definition")
         columns = tuple(
-            tuple(row[1:])
-            for row in connection.execute(f"PRAGMA table_xinfo({_quote(name)})")
+            tuple(row[1:]) for row in connection.execute(f"PRAGMA table_xinfo({_quote(name)})")
         )
         if not columns:
             raise ValueError("invalid_research_view_shape")
