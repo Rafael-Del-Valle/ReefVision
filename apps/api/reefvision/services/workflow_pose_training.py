@@ -1355,6 +1355,15 @@ def create_pose_workflow_training_result(
             "Pose training_config.val must match the separate frozen validation dataset"
         )
 
+    # The pose worker sets these arguments at launch, overriding any
+    # identically named Ultralytics configuration. Reject their presence
+    # rather than persist scientific settings that were never executed.
+    for worker_field in ("data", "device", "project", "name", "exist_ok", "save", "verbose"):
+        if worker_field in supplied_config:
+            raise ValidationError(
+                f"Pose training_config.{worker_field} is managed by the workflow worker"
+            )
+
     # Offline pose workers disable AMP unconditionally. A saved workflow
     # must not claim that AMP was enabled when the worker actually used fp32.
     if "amp" in supplied_config and supplied_config["amp"] is not False:
