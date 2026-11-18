@@ -90,9 +90,7 @@ def test_ply_declared_float_width_across_saved_workflow(
 ) -> None:
     ply = _source(kind, declared, scalar)
     if accepted:
-        coordinates = (
-            parse_ply_triangles(ply)[0] if kind == "mesh" else parse_ascii_ply_points(ply)
-        )
+        coordinates = parse_ply_triangles(ply)[0] if kind == "mesh" else parse_ascii_ply_points(ply)
         assert coordinates[1][0] > 0.0
     else:
         with pytest.raises(ValueError, match="PLY float32"):
@@ -123,16 +121,12 @@ def test_ply_declared_float_width_across_saved_workflow(
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
     artifact_type = (
-        "mesh_measurement_preview"
-        if kind == "mesh"
-        else "point_cloud_measurement_preview"
+        "mesh_measurement_preview" if kind == "mesh" else "point_cloud_measurement_preview"
     )
     sha_values: list[str] = []
     for _ in range(2 if accepted else 1):
         detail = _execute(client, project_id, str(saved.json()["id"]))
-        matching = [
-            entry for entry in detail["artifacts"] if entry["data_type"] == artifact_type
-        ]
+        matching = [entry for entry in detail["artifacts"] if entry["data_type"] == artifact_type]
         if not accepted:
             assert detail["run"]["status"] == "failed"
             assert not matching
