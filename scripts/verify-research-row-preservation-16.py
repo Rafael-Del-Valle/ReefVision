@@ -17,6 +17,7 @@ import json
 import os
 import sqlite3
 import stat
+import unicodedata
 from contextlib import ExitStack
 from pathlib import Path
 
@@ -576,6 +577,19 @@ def _asset_inventory(
             file_states[relative_path] = _asset_state(final)
             if final.st_ino:
                 file_identities.add((final.st_dev, final.st_ino))
+    # A copy made on a case-sensitive filesystem may contain separate names
+    # that collapse on a case-insensitive or Unicode-normalizing destination.
+    # The same spelling may occur at different depths; only a collision of
+    # *complete relative paths* is ambiguous. Check both files and folders,
+    # including empty folders, before reporting any preservation-only PASS.
+    portable_names: set[str] = set()
+    for relative_path in (*directory_states, *file_states):
+        if relative_path == ".":
+            continue
+        portable_key = unicodedata.normalize("NFC", relative_path.casefold())
+        if portable_key in portable_names:
+            raise ValueError("asset_portable_path_collision")
+        portable_names.add(portable_key)
     return inventory, file_identities, file_states, directory_states
 
 

@@ -1428,3 +1428,82 @@ def test_research_asset_empty_directory_preservation(
     assert after.read_bytes() == new_db
     assert (original / "study" / "coral.raw").read_bytes() == old_asset
     assert (candidate / "study" / "coral.raw").read_bytes() == old_asset
+
+
+@pytest.mark.parametrize("scope", ["both", "candidate"])
+@pytest.mark.parametrize("kind", ["file_case", "directory_case", "file_unicode"])
+def test_research_asset_portable_name_collisions_fail_closed(
+    tmp_path: Path, scope: str, kind: str
+) -> None:
+    """A portable upgrade must never collapse separate field-study assets."""
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    _seed(before)
+    shutil.copyfile(before, after)
+    original = tmp_path / "original"
+    candidate = tmp_path / "candidate"
+    original.mkdir()
+    (original / "original-observation.bin").write_bytes(b"private baseline observation")
+    shutil.copytree(original, candidate)
+    names = {
+        "file_case": ("Frame.JPG", "frame.jpg"),
+        "directory_case": ("Study", "study"),
+        "file_unicode": ("caf\u00e9.raw", "cafe\u0301.raw"),
+    }
+    first_name, second_name = names[kind]
+    roots = (original, candidate) if scope == "both" else (candidate,)
+    for root in roots:
+        first, second = root / first_name, root / second_name
+        if kind == "directory_case":
+            first.mkdir()
+        else:
+            first.write_bytes(b"first independent image")
+        # Case-insensitive/normalizing hosts cannot construct this synthetic
+        # collision; the portable-name guard is exercised on capable hosts.
+        if second.exists():
+            pytest.skip("filesystem already aliases these names")
+        if kind == "directory_case":
+            second.mkdir()
+        else:
+            second.write_bytes(b"second independent image")
+        assert first != second
+
+    before_db, after_db = before.read_bytes(), after.read_bytes()
+    original_bytes = (original / "original-observation.bin").read_bytes()
+    code, report = _run(before, after, original, candidate)
+
+    assert code == 2
+    assert report["status"] == "HOLD"
+    assert "asset_portable_path_collision" in report["problems"]
+    assert report["requires_researcher_approval"] is True
+    assert report["upgrade_authorized"] is False
+    report_text = json.dumps(report)
+    for private_name in ("original-observation", first_name, second_name):
+        assert private_name not in report_text
+    assert before.read_bytes() == before_db
+    assert after.read_bytes() == after_db
+    assert (original / "original-observation.bin").read_bytes() == original_bytes
+    assert (candidate / "original-observation.bin").read_bytes() == original_bytes
+
+
+def test_research_asset_similarly_named_folders_are_not_ambiguous(tmp_path: Path) -> None:
+    """Distinct portable names and additive directories remain compatible."""
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    _seed(before)
+    shutil.copyfile(before, after)
+    original = tmp_path / "original"
+    (original / "Study_A").mkdir(parents=True)
+    (original / "Study_B").mkdir()
+    (original / "Study_A" / "frame_1.raw").write_bytes(b"first")
+    (original / "Study_B" / "frame_2.raw").write_bytes(b"second")
+    candidate = tmp_path / "candidate"
+    shutil.copytree(original, candidate)
+    (candidate / "new-study").mkdir()
+    code, report = _run(before, after, original, candidate)
+
+    assert code == 0
+    assert report["status"] == "PASS_PRESERVATION_ONLY"
+    assert report["upgrade_authorized"] is False
+    assert report["research_assets"]["missing_files"] == 0
+    assert report["research_assets"]["missing_directories"] == 0
