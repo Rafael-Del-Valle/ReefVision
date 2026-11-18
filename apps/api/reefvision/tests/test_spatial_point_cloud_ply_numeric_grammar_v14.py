@@ -90,9 +90,7 @@ def test_invalid_late_coordinate_does_not_mutate_caller_colors() -> None:
             "PLY float32 value underflows declared range",
         ),
         (
-            PLY.replace("property float x", "property float32 x").replace(
-                "1 2 3", "-1e-9999 2 3"
-            ),
+            PLY.replace("property float x", "property float32 x").replace("1 2 3", "-1e-9999 2 3"),
             "PLY float32 value underflows declared range",
         ),
         (
