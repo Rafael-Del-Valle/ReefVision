@@ -294,8 +294,23 @@ foreach ($terminalStatus in @('failed', 'cancelled')) {
         $terminalOutput.Contains('spoofed error title')) {
       throw 'Failed-run diagnostics were hidden or terminal escape text was not sanitized.'
     }
-  } elseif (-not $terminalOutput.Contains('No persisted training job log available yet.')) {
-    throw 'Cancelled-run monitor did not handle an unavailable persisted log.'
+  } else {
+    if (-not $terminalOutput.Contains('No persisted training job log available yet.')) {
+      throw 'Cancelled-run monitor did not handle an unavailable persisted log.'
+    }
+    # A cancelled worker with no persisted numeric losses must not appear to
+    # have zero losses or silently omit the missing-measurement disclosure.
+    foreach ($expected in @(
+      'Training losses: no persisted measurements available (worker logs are not metric evidence).',
+      'Validation losses: no persisted measurements available (worker logs are not metric evidence).'
+    )) {
+      if (-not $script:messages.Contains($expected)) {
+        throw "Cancelled-run monitor concealed missing scientific measurement: $expected"
+      }
+    }
+    if ($terminalOutput -match '(?:train|val)/(?:box|cls|dfl)_loss\\s+[-+]?\\d') {
+      throw 'Cancelled-run monitor fabricated numeric loss metrics.'
+    }
   }
 }
 # A temporary loopback/API outage must never cancel or interrupt the
