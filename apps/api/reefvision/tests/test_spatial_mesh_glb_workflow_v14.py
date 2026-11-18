@@ -118,9 +118,7 @@ def test_saved_glb(
     )
 
 
-@pytest.mark.parametrize(
-    "variant", ["nanoscale", "float32_subnormal", "float32_decimal_roundtrip"]
-)
+@pytest.mark.parametrize("variant", ["nanoscale", "float32_subnormal", "float32_decimal_roundtrip"])
 def test_valid_glb_bounds_standalone_and_replayed_graph(client: TestClient, variant: str) -> None:
     """Accept representable bounds; two runs must save identical evidence."""
     pid = create_project(client, f"GLB {variant} bounds")
