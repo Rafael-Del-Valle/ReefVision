@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import io
+import re
 import shutil
 import sys
 import zipfile
@@ -224,8 +225,17 @@ def materialize_pose_training_exports(
         encoding="utf-8",
     )
 
-    if "train: images/train" not in yaml_text:
-        raise ValidationError("Ultralytics pose export has an unexpected training path")
+    # The internal frozen-data exporter writes a canonical dataset header.
+    # A substring check could accept comments or duplicate YAML keys, allowing
+    # a later train/val/path declaration to silently redirect scientific data.
+    top_level = [line for line in yaml_text.splitlines() if line and not line[0].isspace()]
+    if (
+        len(top_level) != 6
+        or top_level[:3] != ["path: .", "train: images/train", "val: images/train"]
+        or re.fullmatch(r"kpt_shape: \\[[1-9]\\d*, 3\\]", top_level[3]) is None
+        or top_level[4:] != ["names:", "reefvision_keypoint_names:"]
+    ):
+        raise ValidationError("Ultralytics pose export has a noncanonical data.yaml")
 
     validation_mode = "none"
 
