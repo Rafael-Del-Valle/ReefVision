@@ -59,8 +59,14 @@ jobs:
         run: python -m ruff format --diff scripts/verify-research-row-preservation-16.py scripts/tests/test_verify_research_row_preservation_16.py scripts/tests/test_verify_research_view_preservation_16.py scripts/tests/test_verify_research_foreign_key_timing_16.py scripts/tests/test_verify_research_conflict_policy_16.py
       - run: python -m mypy -p reefvision
       - run: python -m pytest apps/api/reefvision/tests
-      - name: Test offline MSI/CAB provenance verifier (Python 3.11)
-        run: python -m pytest scripts/tests/test_validate_msi_provenance.py
+      - name: Lint and test offline MSI/CAB provenance verifier (Python 3.11)
+        run: |
+          python -m ruff check scripts/validate_msi_provenance.py scripts/tests/test_validate_msi_provenance.py
+          python -m ruff format --check scripts/validate_msi_provenance.py scripts/tests/test_validate_msi_provenance.py
+          python -m pytest scripts/tests/test_validate_msi_provenance.py -v
+      - name: Explain MSI/CAB provenance Ruff formatting mismatch
+        if: failure()
+        run: python -m ruff format --diff scripts/validate_msi_provenance.py scripts/tests/test_validate_msi_provenance.py
       - name: Verify installed Windows upgrade evidence contract (no MSI required)
         run: python -m unittest discover -s scripts/tests -p test_validate_windows_acceptance_report.py -v
       - name: Verify migrations
