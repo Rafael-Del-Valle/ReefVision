@@ -159,6 +159,126 @@ def _foreign_key_contracts(connection: sqlite3.Connection, table: str) -> set[tu
     return {tuple(sorted(group)) for group in groups.values()}
 
 
+
+def _foreign_key_timing_contracts(connection: sqlite3.Connection, table: str) -> dict[tuple, tuple]:
+    """Protect SQLite FK deferral semantics missing from PRAGMA foreign_key_list.
+
+    A changed INITIALLY DEFERRED/IMMEDIATE or DEFERRABLE declaration can
+    change whether valid multi-step biological/reviewer writes are possible,
+    despite equal historical rows and identical PRAGMA foreign_key_list output.
+    Match each original reference by local columns and remote table/columns.
+    New unrelated references are permitted; ambiguous DDL fails closed.
+    """
+    row = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+    ).fetchone()
+    if row is None or not isinstance(row[0], str):
+        raise ValueError("protected_table_ddl_missing")
+    tokens = _ddl_tokens(row[0])
+    try:
+        opening = tokens.index("(")
+    except ValueError as exc:
+        raise ValueError("protected_foreign_key_timing_ambiguous") from exc
+
+    def _identifier(token: str) -> str:
+        if token.startswith(('"', "`", "[", "'")):
+            closing = "]" if token[0] == "[" else token[0]
+            token = token[1:-1].replace(closing * 2, closing)
+        return token.upper()
+
+    def _identifiers(part: tuple[str, ...], index: int) -> tuple[tuple[str, ...], int]:
+        if index >= len(part) or part[index] != "(":
+            raise ValueError("protected_foreign_key_timing_ambiguous")
+        names: list[str] = []
+        for end in range(index + 1, len(part)):
+            if part[end] == ")":
+                if not names:
+                    break
+                return tuple(names), end + 1
+            if part[end] == ",":
+                continue
+            if part[end] == "(":
+                break
+            names.append(_identifier(part[end]))
+        raise ValueError("protected_foreign_key_timing_ambiguous")
+
+    definitions: list[tuple[str, ...]] = []
+    depth, start = 1, opening + 1
+    for index in range(start, len(tokens)):
+        if tokens[index] == "(":
+            depth += 1
+        elif tokens[index] == ")":
+            depth -= 1
+        if (tokens[index] == "," and depth == 1) or depth == 0:
+            definitions.append(tokens[start:index])
+            start = index + 1
+        if depth == 0:
+            break
+    if depth != 0:
+        raise ValueError("protected_foreign_key_timing_ambiguous")
+
+    contracts: dict[tuple, tuple] = {}
+    for definition in definitions:
+        reference_positions = [i for i, token in enumerate(definition) if token == "REFERENCES"]
+        if not reference_positions:
+            continue
+        if len(reference_positions) != 1:
+            raise ValueError("protected_foreign_key_timing_ambiguous")
+        ref_index = reference_positions[0]
+        if ref_index + 1 >= len(definition):
+            raise ValueError("protected_foreign_key_timing_ambiguous")
+
+        table_fk = next(
+            (
+                index
+                for index in range(len(definition) - 1)
+                if definition[index : index + 2] == ("FOREIGN", "KEY")
+            ),
+            None,
+        )
+        if table_fk is not None:
+            local_columns, _ = _identifiers(definition, table_fk + 2)
+        elif definition:
+            local_columns = (_identifier(definition[0]),)
+        else:
+            raise ValueError("protected_foreign_key_timing_ambiguous")
+
+        remote_table = _identifier(definition[ref_index + 1])
+        reference_end = ref_index + 2
+        remote_columns: tuple[str, ...] = ()
+        if reference_end < len(definition) and definition[reference_end] == "(":
+            remote_columns, reference_end = _identifiers(definition, reference_end)
+        tail = definition[reference_end:]
+        deferrable_positions = [i for i, token in enumerate(tail) if token == "DEFERRABLE"]
+        initially_positions = [i for i, token in enumerate(tail) if token == "INITIALLY"]
+        if len(deferrable_positions) > 1 or len(initially_positions) > 1:
+            raise ValueError("protected_foreign_key_timing_ambiguous")
+        if initially_positions and (
+            not deferrable_positions
+            or initially_positions[0] + 1 >= len(tail)
+            or tail[initially_positions[0] + 1] not in ("DEFERRED", "IMMEDIATE")
+        ):
+            raise ValueError("protected_foreign_key_timing_ambiguous")
+
+        not_deferrable = not deferrable_positions or (
+            deferrable_positions[0] > 0 and tail[deferrable_positions[0] - 1] == "NOT"
+        )
+        timing = (
+            ("NOT_DEFERRABLE",)
+            if not_deferrable
+            else (
+                "DEFERRABLE",
+                "DEFERRED"
+                if initially_positions and tail[initially_positions[0] + 1] == "DEFERRED"
+                else "IMMEDIATE",
+            )
+        )
+        key = (local_columns, remote_table, remote_columns)
+        if key in contracts:
+            raise ValueError("protected_foreign_key_timing_ambiguous")
+        contracts[key] = timing
+    return contracts
+
 def _unique_index_contracts(connection: sqlite3.Connection, table: str) -> set[tuple]:
     """Retain original uniqueness semantics for future scientific observations.
 
@@ -860,6 +980,10 @@ def verify(
                     _foreign_key_contracts(new, table)
                 ):
                     item["status"] = "changed_foreign_key_contract"
+                elif not _foreign_key_timing_contracts(old, table).items() <= (
+                    _foreign_key_timing_contracts(new, table).items()
+                ):
+                    item["status"] = "changed_foreign_key_timing_contract"
                 elif not _unique_index_contracts(old, table).issubset(
                     _unique_index_contracts(new, table)
                 ):
