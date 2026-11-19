@@ -42,7 +42,14 @@ def _saved_snapshot(
             annotation_count=1,
             per_class_counts_json={"swiftia": 1},
             annotation_snapshot_json=[
-                {"id": "polyp-1", "label_class_id": "swiftia", "x_min": 5, "y_min": 6, "x_max": 10, "y_max": 12}
+                {
+                    "id": "polyp-1",
+                    "label_class_id": "swiftia",
+                    "x_min": 5,
+                    "y_min": 6,
+                    "x_max": 10,
+                    "y_max": 12,
+                }
             ],
             mask_annotation_count=len(masks),
             per_mask_class_counts_json={"swiftia": 1} if with_mask else {},
