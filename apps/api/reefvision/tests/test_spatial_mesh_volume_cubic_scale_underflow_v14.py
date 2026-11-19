@@ -71,7 +71,9 @@ def test_subnormal_volume_interval_qc_replays_in_saved_typed_workflow(
         "observation_id": "subnormal-volume-interval-review",
         "coordinate_frame_id": "unregistered-import-frame",
     }
-    direct = measure_mesh_preview(**_params(1e-115), relative_scale_uncertainty=uncertainty)
+    direct = measure_mesh_preview(
+        **{**_params(1e-115), "relative_scale_uncertainty": uncertainty}
+    )
     project_id = str(create_project(client, "Subnormal provisional volume interval")["id"])
     base = f"/api/v1/projects/{project_id}"
     response = client.post(f"{base}/spatial/mesh-preview", json=params)
