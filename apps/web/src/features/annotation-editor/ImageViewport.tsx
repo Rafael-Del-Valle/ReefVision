@@ -128,9 +128,17 @@ export function ImageViewport({
     // ResizeObserver constructor exists. Fall back to window resize rather
     // than crashing the initial image viewport during first launch.
     if (typeof ResizeObserver === "function") {
-      const observer = new ResizeObserver(updateSize);
-      observer.observe(frame);
-      return () => observer.disconnect();
+      let observer: ResizeObserver | null = null;
+      try {
+        observer = new ResizeObserver(updateSize);
+        observer.observe(frame);
+        return () => observer?.disconnect();
+      } catch {
+        // An embedded WebView2 may expose a constructor that throws when
+        // initialized or observed. Clean up partial registration and keep
+        // first-image fitting available through window resize instead.
+        observer?.disconnect();
+      }
     }
     globalThis.addEventListener("resize", updateSize);
     return () => globalThis.removeEventListener("resize", updateSize);
