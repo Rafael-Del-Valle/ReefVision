@@ -72,3 +72,28 @@ re-signed mask geometry, measurement values, counts and schema downgrade.
 The existing real API and saved Workflow Builder regressions exercise both
 routes; full exact-head CI and real installed Windows acceptance are required
 before lifting the release hold.
+
+## Independent detection census and diagnostic ordering (CI #44467738435)
+
+After schema-parity repairs, the comprehensive backend job passed 2,152 tests
+but exposed six previously written lineage assertions that expected the old
+producer diagnostic after tampered frozen rows. The stricter manifest guard
+correctly rejects those records first. Regression expectations now distinguish
+direct frozen-row integrity errors from forged upstream producer-binding errors,
+without relaxing either fail-closed path.
+
+A separate census check also reconstructs the count and per-class distribution
+from the original frozen annotation records for both supported manifest schemas.
+A local actor cannot make contradictory detection counts valid merely by
+recomputing an item's SHA-256 and the encompassing manifest SHA-256. Synthetic
+tests re-sign both layers while preserving old completed QC evidence, then
+require standalone and persisted typed Workflow Builder QC to reject both a
+forged annotation total and forged taxonomic class counts. The original review
+queue is replayed after a transaction rollback, and no reviewer action is
+implicitly approved.
+
+Checksums still cannot provide authenticity against a database writer who
+rewrites *all* logically consistent evidence: independent read-only backups
+or authenticated external provenance would be required for that threat model.
+The Windows-installed GUI, real MSI upgrade/rollback, 1.1/1.6 Alembic lineage
+reconciliation and researcher approval remain outstanding release gates.
