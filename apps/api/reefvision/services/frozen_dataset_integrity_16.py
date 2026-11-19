@@ -76,7 +76,7 @@ def validate_frozen_dataset_manifest(
             raise ValidationError(message)
         seen.add(item.image_id)
         payload = _item_payload(item)
-        # A mask-bearing schema must have its own complete, signed mask
+        # A mask-bearing schema must have its own complete, checksummed mask
         # contract. This legacy manifest contains only detection annotations.
         if (
             item.mask_annotation_count != 0
