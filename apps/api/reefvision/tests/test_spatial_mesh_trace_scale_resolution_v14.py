@@ -53,8 +53,9 @@ def test_roundoff_withholds_trace_intervals_but_keeps_nominal_geometry() -> None
     _check_resolution_limited_trace(direct[0])
     preview = measure_mesh_preview(**PARAMS)
     _check_resolution_limited_trace(preview["surface_edge_traces"][0])
-    assert "path_scale_interval_below_numeric_resolution" in (
-        preview["surface_edge_paths"][0]["path_qc_warnings"]
+    assert (
+        "path_scale_interval_below_numeric_resolution"
+        in (preview["surface_edge_paths"][0]["path_qc_warnings"])
     )
 
 
@@ -65,11 +66,7 @@ def test_absent_zero_and_full_scale_uncertainty_are_distinct(
     result = measure_mesh_preview(**{**PARAMS, "relative_scale_uncertainty": uncertainty})
     trace = result["surface_edge_traces"][0]
     assert "surface_trace_scale_interval_below_numeric_resolution" not in trace["qc_warnings"]
-    expected = (
-        None
-        if uncertainty is None
-        else [0.01 * (1 - uncertainty), 0.01 * (1 + uncertainty)]
-    )
+    expected = None if uncertainty is None else [0.01 * (1 - uncertainty), 0.01 * (1 + uncertainty)]
     if expected is None:
         assert trace["length_scale_only_interval_m"] is None
         assert trace["segment_length_scale_only_intervals_m"] is None
@@ -140,7 +137,8 @@ def test_subresolution_trace_survives_standalone_and_two_persisted_runs(
         assert detail.status_code == 200, detail.text
         assert detail.json()["run"]["status"] == "succeeded"
         artifacts = [
-            item for item in detail.json()["artifacts"]
+            item
+            for item in detail.json()["artifacts"]
             if item["data_type"] == "mesh_measurement_preview"
         ]
         assert len(artifacts) == 1
