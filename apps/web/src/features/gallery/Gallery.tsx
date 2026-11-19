@@ -558,6 +558,9 @@ function GalleryContent({
   // Count only batches for which the API returned a complete response.
   // A failed request may still have committed on the server.
   const confirmedImportCount = useRef(0);
+  // Keep the last server-confirmed camera image from completed batches.
+  // After refreshing, focus this image instead of an older one on the page.
+  const confirmedImportFocusId = useRef<string | null>(null);
   const initialPreference = useRef(readBrowserGalleryPreference(project.id));
   const activeThumbnail = useRef<HTMLButtonElement | null>(null);
   const filmstripRef = useRef<HTMLDivElement | null>(null);
@@ -664,6 +667,7 @@ function GalleryContent({
       setReport(null);
       setUnconfirmedImport(null);
       confirmedImportCount.current = 0;
+      confirmedImportFocusId.current = null;
       setImportProgress({ processed: 0, total: files.length });
 
       for (
@@ -677,6 +681,9 @@ function GalleryContent({
         combined.duplicates.push(...result.duplicates);
         combined.unsupported.push(...result.unsupported);
         combined.failed.push(...result.failed);
+        for (const imported of result.successful) {
+          if (imported.image_id) confirmedImportFocusId.current = imported.image_id;
+        }
 
         const processed = Math.min(index + batch.length, files.length);
         confirmedImportCount.current = processed;
@@ -700,6 +707,8 @@ function GalleryContent({
       // polling budget. A new camera import starts a fresh batch of thumbnail
       // jobs, so reset the cached query's success count before refetching.
       await queryClient.resetQueries({ queryKey: ["images", project.id] });
+      // Cached pre-import images must not steal the new observation's focus.
+      setFocusedImageId(confirmedImportFocusId.current);
     },
     onError: async (_error, files) => {
       setUnconfirmedImport({
@@ -712,6 +721,8 @@ function GalleryContent({
       // while retaining the partial import report and the failure warning.
       showLatestImports();
       await queryClient.resetQueries({ queryKey: ["images", project.id] });
+      // Focus only a confirmed image, never one from the uncertain batch.
+      setFocusedImageId(confirmedImportFocusId.current);
     },
     onSettled: () => {
       importInFlight.current = false;

@@ -702,9 +702,11 @@ describe("Gallery", () => {
       if (url.pathname.endsWith(`/projects/${project.id}/images`)) {
         const filename = url.searchParams.get("filename") ?? "";
         requestedFilters.push(filename);
-        const items = persisted.filter((item) =>
-          item.original_filename.toLowerCase().includes(filename.toLowerCase()),
-        );
+        const items = persisted
+          .filter((item) =>
+            item.original_filename.toLowerCase().includes(filename.toLowerCase()),
+          )
+          .reverse(); // Match the gallery API's newest-first default.
         return jsonResponse({
           items,
           total: items.length,
@@ -738,6 +740,22 @@ describe("Gallery", () => {
     expect(screen.getByPlaceholderText("Search filenames")).toHaveValue("");
     expect(requestedFilters.at(-1)).toBe("");
     expect(screen.getByText("1 imported")).toBeInTheDocument();
+    // The older study image remains on page one; focus the confirmed import.
+    expect(
+      screen.getByRole("article", { name: /swiftia-01\.png/ }),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.getByAltText("Focused project image: DSC_0001.JPEG"),
+      ).toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(
+        JSON.parse(
+          window.localStorage.getItem(`reefvision.gallery.${project.id}.v1`) ?? "{}",
+        ),
+      ).toMatchObject({ imageId: "camera-2", page: 1 }),
+    );
   });
 
   it("serializes camera imports across file and folder pickers", async () => {
@@ -982,6 +1000,13 @@ describe("Gallery", () => {
       screen.getByRole("article", { name: /coral-01\.JPG/ }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("article", { name: /coral-11\.JPG/ })).toBeNull();
+    // A failed second batch must focus the most recently confirmed JPEG,
+    // not invent a successful import for the eleventh, uncertain file.
+    await waitFor(() =>
+      expect(
+        screen.getByAltText("Focused project image: coral-10.JPEG"),
+      ).toBeInTheDocument(),
+    );
   });
 
   it("does not claim camera files were imported when the first batch has no response", async () => {
