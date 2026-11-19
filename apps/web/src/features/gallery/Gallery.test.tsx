@@ -811,7 +811,7 @@ describe("Gallery", () => {
       });
 
       renderGallery();
-      await screen.findByRole("article", { name: /DSC_0002\\.JPG/ });
+      await screen.findByRole("article", { name: /DSC_0002\.JPG/ });
       await userEvent.click(
         screen.getByRole("listitem", { name: "Focus DSC_0002.JPG" }),
       );
