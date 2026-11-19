@@ -4,6 +4,8 @@ import hashlib
 import io
 import shutil
 import stat
+import subprocess
+import sys
 import zipfile
 from datetime import timedelta
 from pathlib import Path
@@ -1104,6 +1106,36 @@ def test_pose_run_output_rejects_redirect_into_another_managed_run(
     assert (
         _resolve_unlinked_pose_run_path(settings, relative) == (current_run / output_name).resolve()
     )
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="NTFS junctions require Windows")
+def test_pose_run_output_rejects_windows_junction_into_another_run(tmp_path: Path) -> None:
+    # A genuine Windows directory junction is not a symbolic link.
+    # Training must never follow it into an earlier registered-model run.
+    settings = Settings(data_dir=tmp_path / "managed")
+    training_root = settings.resolved_data_dir / "projects" / "p1" / "training"
+    prior_output = training_root / "prior-run" / "runs"
+    prior_output.mkdir(parents=True)
+    checkpoint = prior_output / "registered-model-checkpoint.pt"
+    checkpoint.write_bytes(b"preserve-registered-pose-weights")
+
+    current_run = training_root / "current-run"
+    current_run.mkdir()
+    junction = current_run / "runs"
+    subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(junction), str(prior_output)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    try:
+        assert not junction.is_symlink()
+        relative = "projects/p1/training/current-run/runs/pose"
+        with pytest.raises(ValidationError, match="output path contains a Windows junction"):
+            _resolve_unlinked_pose_run_path(settings, relative)
+        assert checkpoint.read_bytes() == b"preserve-registered-pose-weights"
+    finally:
+        junction.rmdir()
 
 
 def test_pose_training_output_cleanup_rejects_locked_previous_checkpoint(
