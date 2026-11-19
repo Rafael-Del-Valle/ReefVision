@@ -583,4 +583,7 @@ def test_resigned_colony_split_leakage_blocks_standalone_and_saved_qc(
     after = client.get(queue_url)
     assert after.status_code == 200, after.text
     assert after.json() == before.json()
-    assert _queue_item(client, standalone.json()["id"])["review_state"] == "pending"
+    standalone_items = client.get(f"/api/v1/review-queues/{standalone.json()['id']}/items")
+    assert standalone_items.status_code == 200, standalone_items.text
+    assert standalone_items.json()["total"] == 2
+    assert all(item["review_state"] == "pending" for item in standalone_items.json()["items"])
