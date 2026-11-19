@@ -151,12 +151,11 @@ def test_preview_missing_face_area_underflow_is_flagged_and_replayable(
     assert flag in direct["qc_warnings"]
     assert "surface_area_scale_interval_numeric_unrepresentable" in direct["qc_warnings"]
 
-    unspecified = measure_mesh_preview(
-        **{**direct_params, "relative_scale_uncertainty": None}
-    )
+    unspecified = measure_mesh_preview(**{**direct_params, "relative_scale_uncertainty": None})
     assert flag in unspecified["qc_warnings"]
     assert "surface_area_scale_interval_numeric_unrepresentable" not in unspecified["qc_warnings"]
     assert unspecified["surface_area_scale_interval_m2"] is None
+    assert unspecified["preview_partially_sampled_patch_missing_area_scale_interval_m2"] is None
 
     project_id = str(create_project(client, "Synthetic sampled-area underflow")["id"])
     base = f"/api/v1/projects/{project_id}"
@@ -169,6 +168,28 @@ def test_preview_missing_face_area_underflow_is_flagged_and_replayable(
     assert standalone["provenance"]["coordinate_registration_verified"] is False
     assert standalone["provenance"]["specimen_identity_verified"] is False
     assert standalone["confidence_interval"] is None
+
+    # Missing calibration uncertainty must stay absent across the project API
+    # and a persisted graph, without suppressing the preview-only underflow QC.
+    no_uncertainty_params = {
+        key: value for key, value in params.items() if key != "relative_scale_uncertainty"
+    }
+    no_uncertainty_response = client.post(f"{base}/spatial/mesh-preview", json=no_uncertainty_params)
+    assert no_uncertainty_response.status_code == 200, no_uncertainty_response.text
+    no_uncertainty_expected = no_uncertainty_response.json()
+    assert flag in no_uncertainty_expected["qc_warnings"]
+    assert (
+        "surface_area_scale_interval_numeric_unrepresentable"
+        not in no_uncertainty_expected["qc_warnings"]
+    )
+    assert no_uncertainty_expected["surface_area_scale_interval_m2"] is None
+    assert no_uncertainty_expected["preview_partially_sampled_patch_missing_area_m2"] is None
+    assert (
+        no_uncertainty_expected["preview_partially_sampled_patch_missing_area_scale_interval_m2"]
+        is None
+    )
+    assert no_uncertainty_expected["provenance"]["calibration_verified"] is False
+    assert no_uncertainty_expected["provenance"]["specimen_identity_verified"] is False
 
     graph = {
         "graph_id": "preview-missing-face-area-underflow-v14",
@@ -195,9 +216,7 @@ def test_preview_missing_face_area_underflow_is_flagged_and_replayable(
     app = cast(FastAPI, client.app)
     hashes: list[str] = []
     for _ in range(2):
-        run = client.post(
-            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-        )
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
         assert process_workflow_run_job(
             app.state.settings, app.state.session_factory, str(run.json()["job_id"])
@@ -215,3 +234,44 @@ def test_preview_missing_face_area_underflow_is_flagged_and_replayable(
         hashes.append(artifacts[0]["payload_sha256"])
     assert len(hashes[0]) == 64
     assert hashes[0] == hashes[1]
+
+    uncalibrated_graph = {
+        **graph,
+        "graph_id": "preview-missing-face-area-no-uncertainty-v14",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "mesh",
+                "node_type": "mesh_surface_preview",
+                "parameters": no_uncertainty_params,
+            },
+        ],
+    }
+    uncalibrated_plan = client.post(f"{base}/workflow-graphs/plan", json=uncalibrated_graph)
+    assert uncalibrated_plan.status_code == 200, uncalibrated_plan.text
+    assert uncalibrated_plan.json()["executable"] is True
+    uncalibrated_saved = client.post(f"{base}/workflow-graphs", json={"graph": uncalibrated_graph})
+    assert uncalibrated_saved.status_code == 201, uncalibrated_saved.text
+    uncalibrated_hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(
+            f"{base}/workflow-runs",
+            json={"graph_record_id": uncalibrated_saved.json()["id"]},
+        )
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        )
+        assert artifact["payload_json"] == no_uncertainty_expected
+        uncalibrated_hashes.append(artifact["payload_sha256"])
+    assert len(uncalibrated_hashes[0]) == 64
+    assert uncalibrated_hashes[0] == uncalibrated_hashes[1]
+    assert uncalibrated_hashes[0] != hashes[0]
