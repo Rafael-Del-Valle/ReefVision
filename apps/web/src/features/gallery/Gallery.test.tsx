@@ -704,7 +704,9 @@ describe("Gallery", () => {
         requestedFilters.push(filename);
         const items = persisted
           .filter((item) =>
-            item.original_filename.toLowerCase().includes(filename.toLowerCase()),
+            item.original_filename
+              .toLowerCase()
+              .includes(filename.toLowerCase()),
           )
           .reverse(); // Match the gallery API's newest-first default.
         return jsonResponse({
@@ -752,7 +754,8 @@ describe("Gallery", () => {
     await waitFor(() =>
       expect(
         JSON.parse(
-          window.localStorage.getItem(`reefvision.gallery.${project.id}.v1`) ?? "{}",
+          window.localStorage.getItem(`reefvision.gallery.${project.id}.v1`) ??
+            "{}",
         ),
       ).toMatchObject({ imageId: "camera-2", page: 1 }),
     );

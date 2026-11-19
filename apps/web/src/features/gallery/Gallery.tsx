@@ -682,7 +682,8 @@ function GalleryContent({
         combined.unsupported.push(...result.unsupported);
         combined.failed.push(...result.failed);
         for (const imported of result.successful) {
-          if (imported.image_id) confirmedImportFocusId.current = imported.image_id;
+          if (imported.image_id)
+            confirmedImportFocusId.current = imported.image_id;
         }
 
         const processed = Math.min(index + batch.length, files.length);
