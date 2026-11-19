@@ -927,14 +927,14 @@ def test_pose_materialization_rejects_special_archive_members(
     assert not (destination / "images" / "train" / "frame_00000001.png").exists()
 
 
-@pytest.mark.parametrize("output_name", ("pose-dataset", "ultralytics"))
+@pytest.mark.parametrize("output_name", ("pose-dataset", "ultralytics", "runs"))
 def test_pose_run_output_rejects_redirect_into_another_managed_run(
     tmp_path: Path,
     output_name: str,
 ) -> None:
     # The generic managed-path resolver follows symlinks inside data_root.
-    # A symlinked dataset/log root must never cause recursive cleanup to
-    # replace another scientific run's training data.
+    # A symlinked dataset/log/GPU project root must never redirect cleanup,
+    # training outputs, or checkpoint writes into another scientific run.
     settings = Settings(data_dir=tmp_path / "managed")
     training_root = settings.resolved_data_dir / "projects" / "p1" / "training"
     prior_run = training_root / "prior-run"
