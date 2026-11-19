@@ -290,6 +290,10 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
         "wrong_polygon_area",
         "non_numeric_polygon",
         "degenerate_polygon",
+        "raster_missing_path",
+        "raster_missing_digest",
+        "raster_outside_box",
+        "raster_impossible_area",
     ],
 )
 def test_resigned_mask_review_provenance_fails_standalone_and_saved_qc(
@@ -348,8 +352,21 @@ def test_resigned_mask_review_provenance_fails_standalone_and_saved_qc(
             masks[0]["area_pixels"] += 1
         elif tamper == "non_numeric_polygon":
             masks[0]["polygon_json"][0][0] = "invalid coordinate"
-        else:
+        elif tamper == "degenerate_polygon":
             masks[0]["polygon_json"] = [[8, 8], [18, 8], [28, 8]]
+        else:
+            masks[0]["geometry_kind"] = "raster_mask"
+            masks[0]["polygon_json"] = None
+            masks[0]["mask_path"] = "projects/example/masks/coral.png"
+            masks[0]["mask_content_sha256"] = "a" * 64
+            if tamper == "raster_missing_path":
+                masks[0]["mask_path"] = None
+            elif tamper == "raster_missing_digest":
+                masks[0]["mask_content_sha256"] = None
+            elif tamper == "raster_outside_box":
+                masks[0]["x_max"] = item.width_px + 1
+            else:
+                masks[0]["area_pixels"] = item.width_px * item.height_px + 1
         item.mask_annotation_snapshot_json = masks
 
         # Both stored checksums are recomputed; the scientific review-state
