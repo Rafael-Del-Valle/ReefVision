@@ -534,9 +534,7 @@ def test_pose_materialization_fails_closed_when_prior_cleanup_is_blocked(
     # materialized training or independent validation dataset.
     destination = tmp_path / "pose-dataset"
     blocked_path = (
-        destination
-        if blocked_area == "dataset"
-        else tmp_path / ".pose-dataset-validation"
+        destination if blocked_area == "dataset" else tmp_path / ".pose-dataset-validation"
     )
     blocked_path.mkdir(parents=True)
     previous = blocked_path / "prior-science.txt"
@@ -553,9 +551,7 @@ def test_pose_materialization_fails_closed_when_prior_cleanup_is_blocked(
         materialize_pose_training_exports(
             training_content=_pose_export_zip(b"new-training"),
             validation_content=(
-                _pose_export_zip(b"new-validation")
-                if blocked_area == "validation_stage"
-                else None
+                _pose_export_zip(b"new-validation") if blocked_area == "validation_stage" else None
             ),
             destination=destination,
         )
