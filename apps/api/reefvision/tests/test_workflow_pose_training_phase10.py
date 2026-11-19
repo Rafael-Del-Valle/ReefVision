@@ -11,9 +11,9 @@ from types import SimpleNamespace
 from typing import Any, cast
 from uuid import uuid4
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
