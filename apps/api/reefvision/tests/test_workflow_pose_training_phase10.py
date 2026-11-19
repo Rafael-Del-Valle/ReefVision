@@ -11,9 +11,9 @@ from types import SimpleNamespace
 from typing import Any, cast
 from uuid import uuid4
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -35,8 +35,8 @@ from reefvision.jobs.pose_training import (
     _prepare_clean_pose_training_output,
     _require_empty_pose_gpu_output,
     _resolve_unlinked_pose_run_path,
-    _verify_prelaunch_pose_dataset,
     _verified_pose_trainer_save_dir,
+    _verify_prelaunch_pose_dataset,
     materialize_pose_training_exports,
     process_pose_training_job,
 )
