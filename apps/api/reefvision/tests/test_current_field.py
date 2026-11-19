@@ -166,3 +166,30 @@ def test_domain_rejects_wide_multicolumn_current_field_without_adjacent_gap(long
             east=((1.0, 1.0, 1.0), (1.0, 1.0, 1.0)),
             north=((0.0, 0.0, 0.0), (0.0, 0.0, 0.0)),
         )
+
+
+@pytest.mark.parametrize("invalid", ["1.0", None, 1j, 10**500])
+def test_untrusted_numeric_inputs_fail_scientific_qc_without_runtime_type_errors(invalid):
+    """Malformed saved graphs must fail closed, not crash numeric validation.
+
+    This covers nonnumeric strings, explicit missing values, complex scalars,
+    and integers too large for a floating-point current or coordinate.
+    """
+    with pytest.raises(ValueError, match="Axes require"):
+        CurrentField(
+            latitudes=(0.0, invalid),
+            longitudes=(0.0, 1.0),
+            east=((1.0, 1.0), (1.0, 1.0)),
+            north=((0.0, 0.0), (0.0, 0.0)),
+        )
+    with pytest.raises(ValueError, match="Component values must be finite"):
+        CurrentField(
+            latitudes=(0.0, 1.0),
+            longitudes=(0.0, 1.0),
+            east=((invalid, 1.0), (1.0, 1.0)),
+            north=((0.0, 0.0), (0.0, 0.0)),
+        )
+    with pytest.raises(ValueError, match="Seed must be finite"):
+        integrate_streamline(uniform(), invalid, 0.0)
+    with pytest.raises(ValueError, match="Integration limits must be finite"):
+        integrate_streamline(uniform(), 0.0, 0.0, step_seconds=invalid)
