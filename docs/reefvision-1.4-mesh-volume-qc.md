@@ -79,6 +79,34 @@ executed Workflow Builder graph. No persistent mesh-asset registry, verified
 biological branch-length inference, or longitudinal organism matching is
 implied by this slice.
 
+## Numeric volume underflow and calibrated recovery
+
+A positive, physically representable provisional volume can be lost in either
+order of arithmetic: a tiny scale cubed in advance may underflow, or the
+source-unit oriented tetrahedron sum may underflow before multiplication by
+a large calibration scale. The engine therefore multiplies an existing
+source volume by the meter scale in stages. When source-unit volume is zero
+and `meters_per_unit > 1`, it makes one bounded second evaluation using
+the edge-connected patch's calibrated coordinates rather than interpreting
+the source zero as demonstrated absence of enclosed space.
+
+If the second evaluation produces a positive, finite volume, the regular
+volume and scale-only uncertainty fields are exposed alongside the QC flag
+`enclosed_volume_source_unit_numeric_recovery`. The flag means that the
+result depended on a numerical recovery path; it is **not** independent
+evidence of a watertight specimen, measured tissue volume, or verified
+calibration. If even calibrated coordinates cannot represent the enclosed
+volume, `enclosed_volume_m3` remains `null` with
+`enclosed_volume_zero_or_underflow` instead of a false measured zero.
+
+Synthetic tetrahedra at opposite calibration extremes and opposite face
+windings are covered by
+`test_spatial_mesh_volume_cubic_scale_underflow_v14.py`. The recovery case
+also passes through the standalone project API and twice-replayed, persisted,
+typed Workflow Builder execution with provisional provenance and matching
+measurement artifact hashes. No new model checkpoints or inferred organism
+identities are involved.
+
 ## Caller-supplied specimen and observation provenance
 
 The standalone mesh preview and persisted `mesh_surface_preview` Workflow
