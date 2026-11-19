@@ -703,7 +703,11 @@ function GalleryContent({
     onSuccess: async (result) => {
       setUnconfirmedImport(null);
       setReport(result);
-      showLatestImports();
+      // Duplicate, rejected, or unsupported files do not create a new
+      // scientific observation. Keep the reviewer's page and filters.
+      if (confirmedImportFocusId.current !== null) {
+        showLatestImports();
+      }
       // An earlier gallery session may have exhausted the bounded thumbnail
       // polling budget. A new camera import starts a fresh batch of thumbnail
       // jobs, so reset the cached query's success count before refetching.
@@ -723,7 +727,11 @@ function GalleryContent({
       // earlier camera originals are already safely imported. Refresh the
       // gallery so those successful files remain visible and reviewable,
       // while retaining the partial import report and the failure warning.
-      showLatestImports();
+      // Do not disturb the current review location when no server-confirmed
+      // new image exists; an uncertain outcome is not a confirmed import.
+      if (confirmedImportFocusId.current !== null) {
+        showLatestImports();
+      }
       await queryClient.resetQueries({ queryKey: ["images", project.id] });
       // Preserve the current reviewed image if no batch confirmed a new
       // observation. Never focus an image from an uncertain failed batch.
