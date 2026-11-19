@@ -39,7 +39,6 @@ def _valid_detection_box(snapshot: dict[str, Any], width_px: Any, height_px: Any
     return 0 <= x_min < x_max <= width and 0 <= y_min < y_max <= height
 
 
-
 def _valid_frozen_polygon(snapshot: dict[str, Any], width_px: Any, height_px: Any) -> bool:
     """Check a frozen polygon against the source-pixel editor's saved geometry."""
     if not _valid_detection_box(snapshot, width_px, height_px):
@@ -71,8 +70,7 @@ def _valid_frozen_polygon(snapshot: dict[str, Any], width_px: Any, height_px: An
         points.append((x, y))
 
     if len(set(points)) < 3 or any(
-        points[index] == points[(index + 1) % len(points)]
-        for index in range(len(points))
+        points[index] == points[(index + 1) % len(points)] for index in range(len(points))
     ):
         return False
     if (
@@ -82,13 +80,15 @@ def _valid_frozen_polygon(snapshot: dict[str, Any], width_px: Any, height_px: An
         or max(point[1] for point in points) != snapshot["y_max"]
     ):
         return False
-    area = abs(
-        sum(
-            x * points[(index + 1) % len(points)][1]
-            - points[(index + 1) % len(points)][0] * y
-            for index, (x, y) in enumerate(points)
+    area = (
+        abs(
+            sum(
+                x * points[(index + 1) % len(points)][1] - points[(index + 1) % len(points)][0] * y
+                for index, (x, y) in enumerate(points)
+            )
         )
-    ) / 2.0
+        / 2.0
+    )
     return isfinite(area) and area >= 1.0 and area_pixels == max(1, round(area))
 
 
