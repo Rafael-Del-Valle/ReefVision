@@ -269,6 +269,26 @@ def _reject_overlapping_pose_validation_frames(
         raise ValidationError("Ultralytics pose validation export reuses a frozen training frame")
 
 
+def _materialized_pose_dataset_sha256(destination: Path) -> str:
+    """Fingerprint the exact local scientific files prepared for GPU training."""
+
+    files: list[dict[str, str]] = []
+    for member in sorted(destination.rglob("*")):
+        if member.is_symlink():
+            raise ValidationError("Materialized pose training dataset contains a symbolic link")
+        if not member.is_file():
+            continue
+        with member.open("rb") as stream:
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+        files.append(
+            {
+                "path": member.relative_to(destination).as_posix(),
+                "sha256": digest,
+            }
+        )
+    return canonical_json_sha256(files)
+
+
 def _copy_split(
     source_root: Path,
     destination_root: Path,
@@ -476,6 +496,7 @@ def materialize_pose_training_exports(
     return {
         "validation_mode": validation_mode,
         "data_yaml": str(yaml_path),
+        "materialized_dataset_sha256": _materialized_pose_dataset_sha256(destination),
         "training_image_count": len(list((destination / "images" / "train").glob("*"))),
         "validation_image_count": (
             len(list((destination / "images" / "val").glob("*")))
