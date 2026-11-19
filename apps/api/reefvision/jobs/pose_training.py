@@ -90,6 +90,20 @@ def _prepare_clean_pose_training_output(save_root: Path) -> None:
     save_root.mkdir(parents=True, exist_ok=False)
 
 
+def _require_empty_pose_gpu_output(output_root: Path) -> None:
+    """Never overwrite or mix files from a prior Ultralytics pose run.
+
+    Registered checkpoints can still reference the prior output, so reject
+    reuse rather than deleting even apparently stale GPU training artifacts.
+    """
+    if output_root.is_symlink():
+        raise ValidationError("Pose training GPU output directory is a symbolic link")
+    if output_root.exists() and (not output_root.is_dir() or any(output_root.iterdir())):
+        raise ValidationError(
+            "Pose training GPU output already exists; refusing to reuse previous artifacts"
+        )
+
+
 def _safe_extract_zip(
     content: bytes,
     destination: Path,
@@ -998,6 +1012,16 @@ def process_pose_training_job(
             validation_mode = str(
                 dict(run.artifact_manifest_json or {}).get("validation_mode") or "none"
             )
+
+            # Ultralytics writes checkpoints to runs/pose, not the separate
+            # ultralytics/ log directory cleaned during materialization.
+            # Refuse a reused run name before any GPU write, keeping any
+            # previous user-trained weights intact for scientific review.
+            pose_gpu_output = _resolve_unlinked_pose_run_path(
+                settings,
+                f"{base_relative}/runs/pose",
+            )
+            _require_empty_pose_gpu_output(pose_gpu_output)
 
             train_args.update(
                 {
