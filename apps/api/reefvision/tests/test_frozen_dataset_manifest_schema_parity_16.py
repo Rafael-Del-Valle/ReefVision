@@ -101,6 +101,81 @@ def test_original_frozen_manifest_formats_remain_valid(
     validate_frozen_dataset_manifest(version, [item])
 
 
+def _saved_raster_snapshot() -> tuple[DatasetVersion, DatasetVersionItem]:
+    """Use the 0007 producer's managed raster-path and content-digest fields."""
+    version, item = _saved_snapshot("0007", with_mask=True)
+    mask = deepcopy(item.mask_annotation_snapshot_json[0])
+    mask.update(
+        geometry_kind="raster_mask",
+        mask_path="projects/example/masks/swiftia.png",
+        mask_content_sha256="b" * 64,
+        polygon_json=None,
+        x_min=2,
+        y_min=3,
+        x_max=6,
+        y_max=7,
+        area_pixels=12,
+    )
+    item.mask_annotation_snapshot_json = [mask]
+    payload = _item_payload(item, schema_version="0007")
+    item.snapshot_sha256 = canonical_json_sha256(payload)
+    manifest = deepcopy(version.manifest_json)
+    manifest["items"] = [{**payload, "snapshot_sha256": item.snapshot_sha256}]
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+    return version, item
+
+
+def test_original_0007_raster_snapshot_retains_traced_content() -> None:
+    version, item = _saved_raster_snapshot()
+    validate_frozen_dataset_manifest(version, [item])
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        "missing_path",
+        "blank_path",
+        "missing_digest",
+        "short_digest",
+        "uppercase_digest",
+        "outside_bbox",
+        "zero_area",
+        "oversized_area",
+    ],
+)
+def test_resigned_raster_metadata_cannot_create_untraceable_observations(tamper: str) -> None:
+    version, item = _saved_raster_snapshot()
+    mask = deepcopy(item.mask_annotation_snapshot_json[0])
+    if tamper == "missing_path":
+        mask.pop("mask_path")
+    elif tamper == "blank_path":
+        mask["mask_path"] = "   "
+    elif tamper == "missing_digest":
+        mask["mask_content_sha256"] = None
+    elif tamper == "short_digest":
+        mask["mask_content_sha256"] = "a" * 63
+    elif tamper == "uppercase_digest":
+        mask["mask_content_sha256"] = "A" * 64
+    elif tamper == "outside_bbox":
+        mask["x_max"] = item.width_px + 1
+    elif tamper == "zero_area":
+        mask["area_pixels"] = 0
+    else:
+        mask["area_pixels"] = item.width_px * item.height_px + 1
+    item.mask_annotation_snapshot_json = [mask]
+
+    # Even an internally rehashed item and manifest cannot supply missing
+    # raster provenance or physically impossible source-pixel measurements.
+    payload = _item_payload(item, schema_version="0007")
+    item.snapshot_sha256 = canonical_json_sha256(payload)
+    manifest = deepcopy(version.manifest_json)
+    manifest["items"] = [{**payload, "snapshot_sha256": item.snapshot_sha256}]
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+    with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+        validate_frozen_dataset_manifest(version, [item])
+
 @pytest.mark.parametrize(
     "tamper",
     [
