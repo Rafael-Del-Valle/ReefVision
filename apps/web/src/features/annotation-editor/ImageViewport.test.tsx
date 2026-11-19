@@ -105,13 +105,17 @@ describe("ImageViewport", () => {
       const originalPoints = polygon?.getAttribute("points");
 
       fireEvent.resize(window);
-      const expectedFit = fitTransform({ width: 1600, height: 1200 }, dimensions);
-      expect(transform.style.transform).toContain(`scale(${expectedFit.scale})`);
+      const expectedFit = fitTransform(
+        { width: 1600, height: 1200 },
+        dimensions,
+      );
+      expect(transform.style.transform).toContain(
+        `scale(${expectedFit.scale})`,
+      );
 
       fireEvent.wheel(frame, { deltaY: -120, clientX: 480, clientY: 320 });
-      const manualScale = transform.style.transform.match(
-        /scale\(([^)]+)\)/,
-      )?.[1];
+      const manualScale =
+        transform.style.transform.match(/scale\(([^)]+)\)/)?.[1];
       expect(manualScale).toBeDefined();
       dimensions.width = 1100;
       dimensions.height = 720;
