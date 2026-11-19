@@ -296,12 +296,18 @@ def _verify_prelaunch_pose_dataset(
     """Reject post-materialization edits before starting GPU training."""
 
     if not isinstance(materialization, dict):
-        raise ValidationError("Pose training run is missing materialized dataset provenance")
+        raise ValidationError(
+            "Pose training run is missing materialized dataset provenance"
+        )
     expected = materialization.get("materialized_dataset_sha256")
     if not isinstance(expected, str) or re.fullmatch(r"[0-9a-f]{64}", expected) is None:
-        raise ValidationError("Pose training run has an invalid materialized dataset fingerprint")
+        raise ValidationError(
+            "Pose training run has an invalid materialized dataset fingerprint"
+        )
     if _materialized_pose_dataset_sha256(destination) != expected:
-        raise ValidationError("Materialized pose training dataset changed before GPU training")
+        raise ValidationError(
+            "Materialized pose training dataset changed before GPU training"
+        )
 
 
 def _copy_split(
