@@ -266,9 +266,7 @@ def _reject_overlapping_pose_validation_frames(
 
     training_hashes = {frame_digest(frame) for frame in training_images.glob("*.png")}
     if any(frame_digest(frame) in training_hashes for frame in validation_images.glob("*.png")):
-        raise ValidationError(
-            "Ultralytics pose validation export reuses a frozen training frame"
-        )
+        raise ValidationError("Ultralytics pose validation export reuses a frozen training frame")
 
 
 def _copy_split(
