@@ -13,7 +13,6 @@ from fastapi.testclient import TestClient
 from reefvision.db.models import ImageAsset
 from reefvision.schemas.dataset_versions import DatasetVersionPreviewRequest
 from reefvision.services.dataset_versions import CandidateImage, DatasetVersionService
-
 from reefvision.tests.test_annotations import create_project, import_one
 from reefvision.tests.test_dataset_versions import save_annotations, update_image
 from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
@@ -158,3 +157,105 @@ def test_collision_safe_seeded_group_random_is_independent_of_candidate_order() 
     assert forward.assignments == backward.assignments
     assert set(forward.assignments.values()) == {"train", "validation"}
     assert forward.missing_group_key_count == backward.missing_group_key_count == 1
+
+
+def test_manual_assignments_cannot_silently_ignore_ineligible_images_or_mutate_saved_qc(
+    client: TestClient,
+) -> None:
+    """Rejected explicit split choices never alter an existing reviewed study."""
+    project = create_project(client, "Explicit colony selection")
+    project_id = project["id"]
+    other_project = create_project(client, "Different independent study")
+    reviewed_id = import_one(
+        client,
+        project_id,
+        filename="reviewed.png",
+        relative_path="cohort/reviewed.png",
+        size=(80, 60),
+    )["successful"][0]["image_id"]
+    excluded_id = import_one(
+        client,
+        project_id,
+        filename="excluded.png",
+        relative_path="cohort/excluded.png",
+        size=(80, 60),
+    )["successful"][0]["image_id"]
+    foreign_id = import_one(
+        client,
+        other_project["id"],
+        filename="foreign.png",
+        relative_path="foreign/foreign.png",
+        size=(80, 60),
+    )["successful"][0]["image_id"]
+    save_annotations(
+        client,
+        reviewed_id,
+        base_revision=0,
+        annotation_status="reviewed",
+        annotations=[
+            {
+                "id": str(uuid4()),
+                "label_class_id": project["label_classes"][0]["id"],
+                "x_min": 5,
+                "y_min": 5,
+                "x_max": 25,
+                "y_max": 25,
+            }
+        ],
+    )
+    update_image(client, reviewed_id, group_key=None, annotation_status="reviewed")
+    update_image(client, excluded_id, group_key=None, annotation_status="excluded")
+    update_image(client, foreign_id, group_key=None, annotation_status="reviewed")
+
+    valid_request = {
+        "eligible_annotation_statuses": ["reviewed"],
+        "split_method": "manual",
+        "manual_assignments": [{"image_id": reviewed_id, "split": "train"}],
+    }
+    preview_url = f"/api/v1/projects/{project_id}/dataset-version-previews"
+    version_url = f"/api/v1/projects/{project_id}/dataset-versions"
+    valid_preview = client.post(preview_url, json=valid_request)
+    assert valid_preview.status_code == 200, valid_preview.text
+    assert len(valid_preview.json()["images"]) == 1
+    created = client.post(version_url, json={**valid_request, "name": "Approved subset"})
+    assert created.status_code == 201, created.text
+    version_id = created.json()["id"]
+
+    graph = _frozen_graph(version_id)
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["valid"] and plan.json()["executable"]
+    saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    first_run, first_output = _run_frozen_graph(client, project_id, saved.json()["id"])
+
+    for invalid_id in (str(uuid4()), excluded_id, foreign_id):
+        request = {
+            **valid_request,
+            "manual_assignments": [
+                {"image_id": reviewed_id, "split": "train"},
+                {"image_id": invalid_id, "split": "test"},
+            ],
+        }
+        for endpoint, payload in (
+            (preview_url, request),
+            (version_url, {**request, "name": "Reject invalid cohort"}),
+        ):
+            rejected = client.post(endpoint, json=payload)
+            assert rejected.status_code == 400, rejected.text
+            assert "eligible images" in rejected.json()["detail"]
+
+    versions = client.get(version_url)
+    assert versions.status_code == 200, versions.text
+    assert [version["id"] for version in versions.json()] == [version_id]
+    second_run, second_output = _run_frozen_graph(client, project_id, saved.json()["id"])
+    assert second_run != first_run
+    assert second_output["dataset_manifest_sha256"] == first_output["dataset_manifest_sha256"]
+    assert second_output["dataset_version_id"] == first_output["dataset_version_id"] == version_id
+    for output in (first_output, second_output):
+        assert output["priority_score_unit"] == "dimensionless"
+        assert output["review_status"] == "requires_researcher_review"
+        queued = client.get(f"/api/v1/review-queues/{output['queue_id']}/items")
+        assert queued.status_code == 200, queued.text
+        assert queued.json()["total"] == 1
+        assert queued.json()["items"][0]["review_state"] == "pending"
