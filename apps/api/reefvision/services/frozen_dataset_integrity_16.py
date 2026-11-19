@@ -130,8 +130,8 @@ def validate_frozen_dataset_manifest(
                 raise ValidationError(message)
 
         payload = _item_payload(item, schema_version=schema_version)
-        if (
-            canonical_json_sha256(payload) != item.snapshot_sha256
-            or entries.get(item.image_id) != {**payload, "snapshot_sha256": item.snapshot_sha256}
-        ):
+        if canonical_json_sha256(payload) != item.snapshot_sha256 or entries.get(item.image_id) != {
+            **payload,
+            "snapshot_sha256": item.snapshot_sha256,
+        }:
             raise ValidationError(message)
