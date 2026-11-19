@@ -381,3 +381,25 @@ artifact equality and repeatable SHA-256 hashes, while preserving unverified
 specimen and coordinate-frame provenance. Until the exact-head CI results
 and external representative coral/Windows/GPU review are available, 1.4
 remains **RELEASE HOLD**.
+
+## Track C: hidden preview-face area below numeric precision (2026-11-19)
+
+A bounded renderer can omit a very small positive triangle within an otherwise
+large, visible edge-connected patch. The **complete mesh** can retain a valid
+calibrated area while the calibrated *preview-only missing-face area* underflows
+to binary64 zero. The preview now returns `null`, not a false measured zero,
+for `preview_partially_sampled_patch_missing_area_m2` and adds
+`preview_partially_sampled_missing_area_numeric_unrepresentable` to QC.
+This flag is emitted even when scale uncertainty was not supplied. When it
+was supplied, the unrepresentable omission interval also carries
+`surface_area_scale_interval_numeric_unrepresentable`; an otherwise valid
+whole-mesh area interval remains available.
+
+A 513-face synthetic single-patch case (512 sampled display faces) checks the
+exact omitted source face, the standalone project API, unverified calibration
+and specimen/registration provenance, and two executions of a persisted,
+executable typed Workflow Builder graph with matching measurement artifacts
+and SHA-256 hashes. These are *numeric/display integrity* checks, not estimates
+of missing coral tissue, measurement confidence, or field-validated calibration.
+CI and installed Windows/GPU/representative-coral acceptance remain separate
+release gates.
