@@ -210,11 +210,17 @@ def test_current_streamline_rejects_antimeridian_extent_in_saved_graph(
     before generating an executable scientific workflow artifact.
     """
     project = create_project(client, "Antimeridian current rejection")
-    record_ids = _current_records(
-        client, project["id"], longitudes=(-170.0, 0.0, 170.0)
-    )
+    record_ids = _current_records(client, project["id"], longitudes=(-170.0, 0.0, 170.0))
     parameters = _parameters(record_ids)
     app = cast(FastAPI, client.app)
+    # Failure must leave the original scientific observations and digests untouched.
+    original_source_hashes: dict[str, str] = {}
+    with app.state.session_factory() as session:
+        for record_id in record_ids:
+            source = session.get(ScientificRecord, record_id)
+            assert source is not None
+            original_source_hashes[record_id] = source.content_sha256
+
     with (
         app.state.session_factory() as session,
         pytest.raises(ValidationError, match="antimeridian-spanning"),
@@ -230,8 +236,7 @@ def test_current_streamline_rejects_antimeridian_extent_in_saved_graph(
     detail = client.get(f"/api/v1/workflow-runs/{queued['id']}").json()
     assert detail["run"]["status"] == "failed"
     assert not any(
-        item["data_type"] == "environmental_analysis_result"
-        for item in detail["artifacts"]
+        item["data_type"] == "environmental_analysis_result" for item in detail["artifacts"]
     )
     # Rejected geographic inputs must not leave persisted definitions or results.
     with app.state.session_factory() as session:
@@ -247,6 +252,10 @@ def test_current_streamline_rejects_antimeridian_extent_in_saved_graph(
         )
         assert definition_count == 0
         assert result_count == 0
+        for record_id, original_hash in original_source_hashes.items():
+            source = session.get(ScientificRecord, record_id)
+            assert source is not None
+            assert source.content_sha256 == original_hash
 
 
 def test_failed_current_streamline_workflow_is_atomic(client: TestClient) -> None:
