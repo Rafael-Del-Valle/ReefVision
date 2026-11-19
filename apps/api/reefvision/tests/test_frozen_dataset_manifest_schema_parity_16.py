@@ -176,6 +176,7 @@ def test_resigned_raster_metadata_cannot_create_untraceable_observations(tamper:
     with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
         validate_frozen_dataset_manifest(version, [item])
 
+
 @pytest.mark.parametrize(
     "tamper",
     [
