@@ -65,7 +65,7 @@ def _cubic_volume_scale_interval_m3(
 def _quadratic_area_scale_interval_m2(
     area_m2: float, uncertainty: float | None
 ) -> list[float] | None:
-    """Scale-only area bounds; never misreport positive underflow as zero."""
+    """Withhold positive area bounds lost to underflow or binary64 rounding."""
     if uncertainty is None:
         return None
     bounds = [
@@ -76,7 +76,10 @@ def _quadratic_area_scale_interval_m2(
         return None
     # A zero lower limit is physically valid at 100% relative scale error
     # or for a true zero-area surface, but not from floating-point underflow.
-    if area_m2 > 0 and uncertainty < 1 and bounds[0] == 0:
+    if area_m2 > 0 and (
+        (uncertainty < 1 and bounds[0] == 0)
+        or (uncertainty > 0 and bounds[0] == bounds[1])
+    ):
         return None
     return bounds
 
