@@ -318,7 +318,7 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
         # frozen-integrity validator first. Both paths must fail closed.
         expected_error = (
             "Frozen dataset item snapshot"
-            if tamper == "eligible_status_manifest_drift"
+            if tamper in {"eligible_status_manifest_drift", "split_seed_row_drift"}
             else "QC Review Queue dataset version or manifest does not match"
         )
         with pytest.raises(ValidationError, match=expected_error):
