@@ -136,7 +136,17 @@ def test_frozen_item_evidence_cannot_change_under_standalone_or_saved_qc(
 
 
 @pytest.mark.parametrize(
-    "tamper", ["annotation_total", "class_census", "reused_identity", "empty_identity"]
+    "tamper",
+    [
+        "annotation_total",
+        "class_census",
+        "reused_identity",
+        "empty_identity",
+        "negative_box",
+        "zero_area_box",
+        "outside_image_box",
+        "nonfinite_box",
+    ],
 )
 def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
     client: TestClient, tamper: str
@@ -181,8 +191,16 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
                 version.annotation_count += 1
                 class_id = str(annotations[0]["label_class_id"])
                 item.per_class_counts_json = {class_id: item.annotation_count}
-            else:
+            elif tamper == "empty_identity":
                 annotations[0]["id"] = ""
+            elif tamper == "negative_box":
+                annotations[0]["x_min"] = -1.0
+            elif tamper == "zero_area_box":
+                annotations[0]["x_max"] = annotations[0]["x_min"]
+            elif tamper == "outside_image_box":
+                annotations[0]["y_max"] = item.height_px + 1.0
+            else:
+                annotations[0]["x_max"] = float("inf")
             item.annotation_snapshot_json = annotations
 
         # Re-sign both levels so validation checks biological evidence,
