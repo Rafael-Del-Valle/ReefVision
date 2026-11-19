@@ -14,7 +14,7 @@ from PIL import Image
 from reefvision.storage.images import create_thumbnail
 
 
-@pytest.mark.parametrize("orientation", [1, 3, 6, 8])
+@pytest.mark.parametrize("orientation", [1, 2, 3, 4, 5, 6, 7, 8])
 def test_thumbnail_keeps_raw_camera_axes_and_source_bytes(tmp_path, orientation: int) -> None:
     source = tmp_path / f"camera_{orientation}.JPG"
     thumbnail = tmp_path / f"thumb_{orientation}.jpg"
