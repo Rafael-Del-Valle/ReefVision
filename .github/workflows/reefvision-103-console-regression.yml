@@ -15,6 +15,14 @@ on:
       - apps/api/reefvision/tests/test_training_log_tail_103.py
       - scripts/test-training-console-readonly.ps1
       - scripts/test-training-console-sanitizer.ps1
+      # The desktop UI is the only intended launch surface. Changes here must
+      # rerun Windows-specific launcher and loss-display regressions too.
+      - apps/web/src/runtime.ts
+      - apps/web/src/runtime.test.ts
+      - apps/web/src/components/layout/ProjectTrainingMonitor.tsx
+      - apps/web/src/components/layout/ProjectTrainingMonitor.test.tsx
+      - apps/web/package.json
+      - apps/web/package-lock.json
   workflow_dispatch:
 
 permissions:
@@ -45,3 +53,35 @@ jobs:
       - name: Verify read-only polling, live box/cls/dfl losses, and terminal states
         shell: pwsh
         run: ./scripts/test-training-console-readonly.ps1
+
+  windows-desktop-launcher:
+    name: Windows desktop console launcher and scientific loss UI
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert the exact source revision under test
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne $env:GITHUB_SHA) {
+            throw "Checkout SHA $actual does not match workflow SHA $env:GITHUB_SHA"
+          }
+          Write-Output "ReefVision 1.0.3 desktop launcher source SHA: $actual"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install pinned frontend dependencies
+        working-directory: apps/web
+        shell: pwsh
+        run: npm ci
+      - name: Verify typed launcher and read-only training monitor on Windows
+        working-directory: apps/web
+        shell: pwsh
+        run: |
+          npm run typecheck
+          if ($LASTEXITCODE -ne 0) { throw 'Frontend typecheck failed.' }
+          npx vitest run --config vite.config.mjs --configLoader runner src/runtime.test.ts src/components/layout/ProjectTrainingMonitor.test.tsx
+          if ($LASTEXITCODE -ne 0) { throw 'Desktop training monitor regressions failed.' }
