@@ -507,10 +507,11 @@ def materialize_pose_training_exports(
                 keypoint_count=expected_landmarks,
             )
         finally:
-            shutil.rmtree(
-                validation_stage,
-                ignore_errors=True,
-            )
+            # A failed holdout-stage cleanup must fail the materialization,
+            # rather than reporting an immutable dataset while leaving raw
+            # independently reviewed frames in a reusable staging directory.
+            if validation_stage.exists() or validation_stage.is_symlink():
+                shutil.rmtree(validation_stage)
 
         if "val: images/train" in yaml_text:
             yaml_text = yaml_text.replace(
