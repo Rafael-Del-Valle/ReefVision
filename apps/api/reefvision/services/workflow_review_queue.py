@@ -27,6 +27,7 @@ from reefvision.schemas.review_queues import (
     ReviewQueueCreateRequest,
     parse_workflow_review_weights,
 )
+from reefvision.services.frozen_dataset_integrity_16 import validate_frozen_dataset_manifest
 from reefvision.services.review_queues import ReviewQueueService
 from reefvision.services.workflow_review_queue_integrity import (
     validate_saved_queue_snapshot,
@@ -171,6 +172,11 @@ def create_review_queue_workflow_artifact(
             .where(DatasetVersionItem.dataset_version_id == candidate_id)
             .order_by(DatasetVersionItem.id)
         ).all()
+        # A checksummed producer and matching aggregate counts cannot detect
+        # changed individual coral geometry, per-class counts or split labels.
+        # Validate the original item SHA and signed manifest before replaying
+        # an existing review queue or producing a new one.
+        validate_frozen_dataset_manifest(dataset_version, frozen_items)
         expected_image_ids = [item.image_id for item in frozen_items]
         frozen_split_by_image_id = {item.image_id: item.split for item in frozen_items}
         expected_split_counts = dict(Counter(str(item.split) for item in frozen_items))
