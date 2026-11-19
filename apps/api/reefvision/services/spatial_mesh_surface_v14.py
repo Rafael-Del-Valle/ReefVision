@@ -195,6 +195,12 @@ def measure_mesh_preview(
     # These describe mesh tessellation concentration, not independent
     # biological observations or a calibrated reconstruction error model.
     area_shares = [area / raw_area for area in face_areas] if raw_area > 0 else []
+    # A positive source triangle can be too small relative to another to
+    # express its area share in binary64. A displayed zero is then a
+    # numerical precision limit, not evidence of zero reconstructed surface.
+    face_area_fraction_underflow = any(
+        area > 0 and share == 0 for area, share in zip(face_areas, area_shares, strict=True)
+    )
     largest_triangle_area_fraction = max(area_shares) if area_shares else None
     area_share_squares = fsum(share * share for share in area_shares)
     area_weighted_effective_triangle_count = (
@@ -421,6 +427,15 @@ def measure_mesh_preview(
         [patch_area_mesh_units[patch] / raw_area for patch in ordered_patches]
         if raw_area > 0
         else None
+    )
+    # Preserve the existing numeric fractions for backward compatibility,
+    # but disclose when a positive patch has rounded to a zero share.
+    patch_area_fraction_underflow = (
+        patch_area_fractions is not None
+        and any(
+            patch_area_mesh_units[patch] > 0 and fraction == 0
+            for patch, fraction in zip(ordered_patches, patch_area_fractions, strict=True)
+        )
     )
     largest_patch_index = (
         max(range(len(ordered_patches)), key=lambda index: patch_area_fractions[index])
@@ -926,6 +941,16 @@ def measure_mesh_preview(
         "qc_warnings": (
             sorted(volume_qc_warnings)
             + (["degenerate_triangles_present"] if degenerate else [])
+            + (
+                ["mesh_face_area_fraction_underflow"]
+                if face_area_fraction_underflow
+                else []
+            )
+            + (
+                ["mesh_patch_area_fraction_underflow"]
+                if patch_area_fraction_underflow
+                else []
+            )
             + (["mesh_shape_ratio_unavailable_zero_extent"] if source_diagonal == 0 else [])
             + (
                 ["mesh_shape_ratio_unavailable_numeric_underflow"]
