@@ -868,9 +868,9 @@ def test_pose_run_output_rejects_redirect_into_another_managed_run(
     assert marker.read_bytes() == b"preserve-existing-user-trained-weights"
 
     linked_output.unlink()
-    assert _resolve_unlinked_pose_run_path(settings, relative) == (
-        current_run / output_name
-    ).resolve()
+    assert (
+        _resolve_unlinked_pose_run_path(settings, relative) == (current_run / output_name).resolve()
+    )
 
 
 def test_pose_materialization_rejects_symlinked_export_destinations(
