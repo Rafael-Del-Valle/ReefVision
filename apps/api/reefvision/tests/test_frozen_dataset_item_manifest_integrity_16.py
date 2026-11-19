@@ -151,6 +151,9 @@ def test_frozen_item_evidence_cannot_change_under_standalone_or_saved_qc(
         "zero_area_box",
         "outside_image_box",
         "nonfinite_box",
+        "class_name_drift",
+        "class_index_drift",
+        "unknown_class_id",
     ],
 )
 def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
@@ -204,6 +207,13 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
                 annotations[0]["x_max"] = annotations[0]["x_min"]
             elif tamper == "outside_image_box":
                 annotations[0]["y_max"] = item.height_px + 1.0
+            elif tamper == "class_name_drift":
+                annotations[0]["class_name"] = "Incorrect coral taxon"
+            elif tamper == "class_index_drift":
+                annotations[0]["class_index"] = 999
+            elif tamper == "unknown_class_id":
+                annotations[0]["label_class_id"] = "foreign-coral-class"
+                item.per_class_counts_json = {"foreign-coral-class": 1}
             else:
                 annotations[0]["x_max"] = float("inf")
             item.annotation_snapshot_json = annotations
@@ -294,6 +304,9 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
         "raster_missing_digest",
         "raster_outside_box",
         "raster_impossible_area",
+        "mask_class_name_drift",
+        "mask_class_index_drift",
+        "mask_unknown_class_id",
     ],
 )
 def test_resigned_mask_review_provenance_fails_standalone_and_saved_qc(
@@ -354,6 +367,13 @@ def test_resigned_mask_review_provenance_fails_standalone_and_saved_qc(
             masks[0]["polygon_json"][0][0] = "invalid coordinate"
         elif tamper == "degenerate_polygon":
             masks[0]["polygon_json"] = [[8, 8], [18, 8], [28, 8]]
+        elif tamper == "mask_class_name_drift":
+            masks[0]["class_name"] = "Incorrect coral taxon"
+        elif tamper == "mask_class_index_drift":
+            masks[0]["class_index"] = 999
+        elif tamper == "mask_unknown_class_id":
+            masks[0]["label_class_id"] = "foreign-coral-class"
+            item.per_mask_class_counts_json = {"foreign-coral-class": 1}
         else:
             masks[0]["geometry_kind"] = "raster_mask"
             masks[0]["polygon_json"] = None
