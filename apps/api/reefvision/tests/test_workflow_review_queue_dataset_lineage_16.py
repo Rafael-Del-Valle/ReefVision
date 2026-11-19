@@ -254,7 +254,24 @@ def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, t
 
         session.flush()
         qc_node = by_type["qc_review_queue"]
-        with pytest.raises(ValidationError, match="dataset producer provenance"):
+        # The immutable-item validator now runs before producer-lineage checks.
+        # Both independent checks fail closed; historical producer binding
+        # failures retain their original diagnostic, while direct frozen-row
+        # corruption gets the more specific manifest-integrity diagnostic.
+        frozen_row_tampering = {
+            "version_manifest_body",
+            "version_resigned_image_count",
+            "version_resigned_annotation_count",
+            "version_resigned_mask_count",
+            "item_annotation_count",
+            "item_mask_count",
+        }
+        expected_failure = (
+            "Frozen dataset item snapshot does not match its original manifest"
+            if tamper in frozen_row_tampering
+            else "dataset producer provenance"
+        )
+        with pytest.raises(ValidationError, match=expected_failure):
             create_review_queue_workflow_artifact(
                 session,
                 app.state.settings,
