@@ -998,3 +998,30 @@ registration, physical calibration, reconstruction completeness, uncertainty
 outside caller-supplied scale, biological identity, coral health, or validated
 anatomical branch length. Model and field acceptance and Windows/GPU release
 gates remain open.
+
+## Positive mesh-area share underflow QC (provisional; Track C)
+
+The full reconstruction may contain a positive-area triangle or disconnected
+patch many orders of magnitude smaller than another. Binary64 may represent
+both source areas individually while rounding the smaller **dimensionless
+fraction** to zero during division by the total. A numeric zero fraction in
+this case **does not mean the reconstructed area or the biological tissue
+is absent**.
+
+The measurement service now adds `mesh_face_area_fraction_underflow` and/or
+`mesh_patch_area_fraction_underflow` to `qc_warnings` when a **positive**
+source-frame face or patch area has a rounded zero share. Truly zero-area
+degenerate triangles do not trigger these precision warnings; they retain
+separate degenerate-geometry QC. Existing numeric fractions, patch ordering,
+and effective counts are preserved for API compatibility, but consumers must
+consult the QC flags before interpreting zero shares as true absence.
+
+A synthetic reference combines a large triangle (5e17 source units squared)
+and a disconnected minimally positive subnormal-area triangle. It checks
+direct measurement, a standalone project API response, and two executions
+of the same saved typed `mesh_surface_preview` Workflow Builder graph,
+including deterministic artifact hashes and unverified calibration,
+registration, and specimen identity. This is a numerical transparency
+improvement, not a validation of reconstruction completeness or living
+coral area; independent reference scans and Windows/GPU acceptance remain
+outstanding.
