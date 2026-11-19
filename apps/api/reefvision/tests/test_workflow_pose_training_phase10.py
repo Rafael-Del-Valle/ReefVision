@@ -486,6 +486,7 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
         ]
     )
     assert independent["materialized_dataset_sha256"] == expected_digest
+    assert independent["materialized_dataset_fingerprint_algorithm"] == "relative-posix-path-v1"
     replay = materialize_pose_training_exports(
         training_content=training,
         validation_content=validation,
@@ -551,6 +552,34 @@ def test_pose_materialized_fingerprint_uses_portable_path_order(tmp_path: Path) 
         ]
     )
     assert _materialized_pose_dataset_sha256(root) == expected
+
+    # Earlier Windows runs sorted Path objects case-insensitively. Preserve
+    # those original scientific inputs without rewriting their saved digest.
+    legacy_windows = canonical_json_sha256(
+        [
+            {
+                "path": relative,
+                "sha256": hashlib.sha256(reviewed_files[relative]).hexdigest(),
+            }
+            for relative in sorted(reviewed_files, key=str.casefold)
+        ]
+    )
+    assert legacy_windows != expected
+    _verify_prelaunch_pose_dataset(root, {"materialized_dataset_sha256": legacy_windows})
+
+    # Newly versioned materializations cannot silently fall back to legacy
+    # ordering. Nor can a historical manifest excuse edited frozen inputs.
+    with pytest.raises(ValidationError, match="changed before GPU training"):
+        _verify_prelaunch_pose_dataset(
+            root,
+            {
+                "materialized_dataset_sha256": legacy_windows,
+                "materialized_dataset_fingerprint_algorithm": "relative-posix-path-v1",
+            },
+        )
+    (root / "Z_review" / "pose.png").write_bytes(b"altered-pose")
+    with pytest.raises(ValidationError, match="changed before GPU training"):
+        _verify_prelaunch_pose_dataset(root, {"materialized_dataset_sha256": legacy_windows})
 
 
 @pytest.mark.parametrize("blocked_area", ("dataset", "validation_stage"))
