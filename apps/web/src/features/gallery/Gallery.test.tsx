@@ -843,9 +843,7 @@ describe("Gallery", () => {
         screen.getByPlaceholderText("Search filenames"),
         "DSC_0002",
       );
-      await waitFor(() =>
-        expect(requestedFilters.at(-1)).toBe("DSC_0002"),
-      );
+      await waitFor(() => expect(requestedFilters.at(-1)).toBe("DSC_0002"));
 
       const fileInput = screen.getByLabelText(
         "Import files",
