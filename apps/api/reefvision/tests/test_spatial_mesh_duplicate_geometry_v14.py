@@ -298,3 +298,112 @@ def test_coincident_vertices_distinct_faces_persist_without_false_duplicate_qc(
     assert artifacts[0]["payload_json"] == standalone
     assert len(artifacts[0]["payload_sha256"]) == 64
     assert artifacts[0]["payload_json"]["provenance"]["calibration_verified"] is False
+
+@pytest.mark.parametrize(
+    ("vertices", "expected_area", "expected_fractions"),
+    [
+        pytest.param(
+            [[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0], [4, 0, 0], [5, 0, 0]],
+            0.0,
+            None,
+            id="all-degenerate",
+        ),
+        pytest.param(
+            [[0, 0, 0], [1, 0, 0], [2, 0, 0], [0, 1, 0], [1, 1, 0], [0, 2, 0]],
+            0.5,
+            [0.0, 1.0],
+            id="degenerate-and-positive",
+        ),
+    ],
+)
+def test_zero_area_tessellation_fractions_survive_persisted_workflow(
+    client: TestClient,
+    vertices: list[list[float]],
+    expected_area: float,
+    expected_fractions: list[float] | None,
+) -> None:
+    """A true zero-area face is not positive area lost to binary64 precision."""
+    params = {
+        **DUPLICATED,
+        "vertices": vertices,
+        "faces": [[0, 1, 2], [3, 4, 5]],
+        "meters_per_unit": 1.0,
+    }
+    direct = measure_mesh_preview(**params)
+    assert direct["surface_area_m2"] == expected_area
+    assert direct["degenerate_face_count"] == 2 if expected_area == 0 else 1
+    assert direct["edge_connected_patch_surface_area_fractions"] == expected_fractions
+    assert direct["largest_triangle_area_fraction"] == (
+        None if expected_area == 0 else 1.0
+    )
+    assert direct["area_weighted_effective_triangle_count"] == (
+        None if expected_area == 0 else 1.0
+    )
+    assert "degenerate_triangles_present" in direct["qc_warnings"]
+    assert "mesh_face_area_fraction_underflow" not in direct["qc_warnings"]
+    assert "mesh_patch_area_fraction_underflow" not in direct["qc_warnings"]
+    assert direct["measurement_status"] == "caller_supplied_unverified"
+    assert direct["provenance"]["calibration_verified"] is False
+
+    project_id = str(create_project(client, "Zero-area face fraction integrity")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    assert standalone.json()["surface_area_m2"] == expected_area
+    assert standalone.json()["provenance"]["calibration_verified"] is False
+
+    graph = {
+        "graph_id": "zero-area-tessellation-fractions-v14",
+        "name": "Degenerate geometry numerical QC",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(run.json()["job_id"]),
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        )
+        payload = artifact["payload_json"]
+        for field in (
+            "surface_area_m2",
+            "degenerate_face_count",
+            "largest_triangle_area_fraction",
+            "area_weighted_effective_triangle_count",
+            "edge_connected_patch_surface_area_fractions",
+            "qc_warnings",
+            "provenance",
+            "measurement_status",
+        ):
+            assert payload[field] == standalone.json()[field]
+        assert payload["provenance"]["calibration_verified"] is False
+        hashes.append(artifact["payload_sha256"])
+    assert len(set(hashes)) == 1
