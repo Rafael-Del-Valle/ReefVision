@@ -377,6 +377,17 @@ def test_parent_reuse_refuses_modified_frozen_holdout_and_preserves_saved_qc(
     assert initial.status_code == 200, initial.text
     assert initial.json()["images"][0]["proposed_split"] == original_split
 
+    # An explicitly cited parent is lineage evidence even if the descendant
+    # does not borrow a single train/test assignment from that parent.
+    lineage_only_request = {
+        **request,
+        "reuse_parent_assignments": False,
+        "split_method": "manual",
+    }
+    lineage_preview = client.post(preview_url, json=lineage_only_request)
+    assert lineage_preview.status_code == 200, lineage_preview.text
+    assert lineage_preview.json()["images"][0]["proposed_split"] == "unassigned"
+
     standalone = client.post(f"/api/v1/dataset-versions/{parent_id}/review-queues", json={})
     assert standalone.status_code == 201, standalone.text
     graph = _frozen_graph(parent_id)
@@ -399,14 +410,16 @@ def test_parent_reuse_refuses_modified_frozen_holdout_and_preserves_saved_qc(
         parent_item.split = "test" if original_split != "test" else "train"
         session.commit()
 
-    # A forged complete parent cannot silently supply a child holdout.
-    for endpoint, payload in (
-        (preview_url, request),
-        (versions_url, {**request, "name": "Forged inherited holdout"}),
-    ):
-        rejected = client.post(endpoint, json=payload)
-        assert rejected.status_code == 400, rejected.text
-        assert "original manifest" in rejected.json()["detail"]
+    # A forged complete parent cannot supply child holdouts OR silently serve
+    # as authenticated lineage for an independently assigned child study.
+    for selected_request in (request, lineage_only_request):
+        for endpoint, payload in (
+            (preview_url, selected_request),
+            (versions_url, {**selected_request, "name": "Forged parent lineage"}),
+        ):
+            rejected = client.post(endpoint, json=payload)
+            assert rejected.status_code == 400, rejected.text
+            assert "original manifest" in rejected.json()["detail"]
     versions = client.get(versions_url)
     assert versions.status_code == 200, versions.text
     assert [item["id"] for item in versions.json()] == [parent_id]
@@ -431,6 +444,17 @@ def test_parent_reuse_refuses_modified_frozen_holdout_and_preserves_saved_qc(
     child_items = client.get(f"/api/v1/dataset-versions/{child.json()['id']}/items")
     assert child_items.status_code == 200, child_items.text
     assert child_items.json()[0]["split"] == original_split
+    lineage_child = client.post(
+        versions_url,
+        json={**lineage_only_request, "name": "Verified independent child splits"},
+    )
+    assert lineage_child.status_code == 201, lineage_child.text
+    assert lineage_child.json()["parent_version_id"] == parent_id
+    independent_items = client.get(
+        f"/api/v1/dataset-versions/{lineage_child.json()['id']}/items"
+    )
+    assert independent_items.status_code == 200, independent_items.text
+    assert independent_items.json()[0]["split"] == "unassigned"
     second_run, second_output = _run_frozen_graph(client, project_id, saved.json()["id"])
     assert first_run != second_run
     assert first_output["dataset_version_id"] == second_output["dataset_version_id"] == parent_id

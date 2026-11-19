@@ -280,6 +280,13 @@ class DatasetVersionService:
         parent = self._version(parent_version_id)
         if parent.project_id != project_id:
             raise ValidationError("Parent dataset version must belong to the same project")
+        # A selected parent is scientific provenance even when split assignments
+        # are not reused. A "complete" status alone does not authenticate its
+        # historical biological observations or train/test split evidence.
+        if parent.status == "complete":
+            validate_frozen_dataset_manifest(
+                parent, self.versions.items_for_version(parent.id)
+            )
         return parent
 
     def _parent_items(
@@ -294,10 +301,8 @@ class DatasetVersionService:
         if parent.status != "complete":
             raise ValidationError("Only complete parent versions may contribute split assignments")
         items = self.versions.items_for_version(parent.id)
-        # A completed version is not proof that its biological holdout
-        # evidence survived unchanged. Authenticate the original frozen
-        # manifest before inheriting any parent train/test assignment.
-        validate_frozen_dataset_manifest(parent, items)
+        # _parent_version already authenticated completed parent evidence,
+        # whether or not a descendant is reusing its split assignments.
         return {item.image_id: item for item in items}
 
     def _manual_assignment_map(self, request: DatasetVersionPreviewRequest) -> dict[str, str]:
