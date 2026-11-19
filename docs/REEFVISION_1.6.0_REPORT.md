@@ -89,3 +89,24 @@ Full pytest, Ruff, mypy, frontend/E2E and native Windows installed-GUI
 acceptance must be checked against the exact PR head before release.
 The independent 1.1/1.6 Alembic revision-0038 collision remains unresolved;
 do not merge unaccepted version branches or rewrite installed migrations.
+
+
+## 2026-11-18 — updater options preserve saved repository configuration (Track D)
+
+The managed `update-reefvision` command previously saved `--configure-repo PATH`
+before rejecting mutually exclusive command options. Even
+`--dry-run --configure-repo PATH` changed the repository used for a later
+scientific MSI build. The updater now rejects dry-run configuration changes
+and validates incompatible setup/build/install flags **before** any saved
+repository preference is written. Deliberate standalone `--configure-repo`
+continues to work.
+
+The native-Windows MSI test suite invokes four rejected combinations in real
+child PowerShell processes with disposable `LOCALAPPDATA`, verifies nonzero
+exit and the expected diagnostic, and requires byte-identical command JSON.
+No build, installation, network access or researcher-data mutation is needed.
+This command preflight is outside scientific Workflow Builder; saved typed QC
+workflows, approval gates and provenance are untouched. Real Windows MSI/CAB
+clean-install, upgrade/rollback, installed GUI, representative biological and
+saved-workflow tests, independent 1.1/1.6 Alembic-0038 reconciliation and
+researcher release approval remain outstanding.

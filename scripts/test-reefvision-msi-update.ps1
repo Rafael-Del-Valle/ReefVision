@@ -354,6 +354,39 @@ try {
     }
     $passed++
 
+    # Rejected CLI options must never change persistent repository choice.
+    # Each actual updater subprocess runs with disposable LOCALAPPDATA.
+    $previousLocalAppData = $env:LOCALAPPDATA
+    $commandLocalAppData = Join-Path $root 'command-option-config-isolation'
+    $commandConfig = Join-Path $commandLocalAppData 'ReefVision\config\commands.json'
+    New-Item -ItemType Directory -Path (Split-Path -Parent $commandConfig) -Force | Out-Null
+    Set-Content -LiteralPath $commandConfig -Value '{"repo_path":"original-preserved","installed_app_path":"sentinel"}' -Encoding UTF8
+    $beforeCommandConfig = (Get-FileHash -LiteralPath $commandConfig -Algorithm SHA256).Hash
+    try {
+        $env:LOCALAPPDATA = $commandLocalAppData
+        $realRepoPath = Split-Path -Parent $PSScriptRoot
+        foreach ($case in @(
+            @{ Args = @('--dry-run', '--configure-repo', $realRepoPath); Message = '--dry-run cannot be combined with --configure-repo' },
+            @{ Args = @('--build-only', '--install-only', '--configure-repo', $realRepoPath); Message = '--build-only and --install-only cannot be used together' },
+            @{ Args = @('--setup', '--skip-setup', '--configure-repo', $realRepoPath); Message = '--setup and --skip-setup cannot be used together' },
+            @{ Args = @('--install-only', '--setup', '--configure-repo', $realRepoPath); Message = '--install-only cannot be combined with --setup' }
+        )) {
+            $commandArgs = @($case.Args)
+            $commandOutput = & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'update-reefvision.ps1') @commandArgs 2>&1 | Out-String
+            $commandExit = $LASTEXITCODE
+            if ($commandExit -eq 0 -or -not $commandOutput.Contains($case.Message)) {
+                throw "Rejected updater invocation had unexpected exit/diagnostic: $commandExit; $commandOutput"
+            }
+            if ((Get-FileHash -LiteralPath $commandConfig -Algorithm SHA256).Hash -ne $beforeCommandConfig) {
+                throw 'Rejected updater invocation modified the saved repository configuration.'
+            }
+            $passed++
+        }
+    }
+    finally {
+        $env:LOCALAPPDATA = $previousLocalAppData
+    }
+
     $verificationPosition = $updateScript.LastIndexOf('Assert-ReefVisionMsiPayload')
     $stopPosition = $updateScript.IndexOf('Stop-ReefVisionRunningProcesses', $verificationPosition)
     if ($verificationPosition -lt 0 -or $stopPosition -le $verificationPosition) {

@@ -282,14 +282,6 @@ if ($showHelp) {
     exit 0
 }
 
-if ($configureRepoPath) {
-    $resolved = Set-ReefVisionRepoPath -RepoPath $configureRepoPath
-    Write-ReefVisionCommandNote "Configured ReefVision repository: $resolved"
-    if (-not $showStatus) {
-        exit 0
-    }
-}
-
 if ($buildOnly -and $installOnly) {
     throw "--build-only and --install-only cannot be used together."
 }
@@ -300,6 +292,20 @@ if ($runSetup -and $skipSetup) {
 
 if ($installOnly -and $runSetup) {
     throw "--install-only cannot be combined with --setup. Run setup separately before installing a pinned MSI."
+}
+
+# Refuse incompatible operations before saving a repository override.
+# Dry-run must never change the target of a later scientific MSI build.
+if ($dryRun -and $null -ne $configureRepoPath) {
+    throw "--dry-run cannot be combined with --configure-repo because dry-run must not change saved configuration."
+}
+
+if ($configureRepoPath) {
+    $resolved = Set-ReefVisionRepoPath -RepoPath $configureRepoPath
+    Write-ReefVisionCommandNote "Configured ReefVision repository: $resolved"
+    if (-not $showStatus) {
+        exit 0
+    }
 }
 
 $repoPath = Resolve-ReefVisionRepoPath
