@@ -32,6 +32,7 @@ from reefvision.db.models import (
 )
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.pose_training import (
+    _prepare_clean_pose_training_output,
     _resolve_unlinked_pose_run_path,
     _verify_prelaunch_pose_dataset,
     materialize_pose_training_exports,
@@ -1017,6 +1018,38 @@ def test_pose_run_output_rejects_redirect_into_another_managed_run(
     assert (
         _resolve_unlinked_pose_run_path(settings, relative) == (current_run / output_name).resolve()
     )
+
+
+def test_pose_training_output_cleanup_rejects_locked_previous_checkpoint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A locked checkpoint from a failed Windows run must never be mixed with
+    # the next training attempt's weights and misleading experiment provenance.
+    output_root = tmp_path / "training" / "current-run" / "ultralytics"
+    old_checkpoint = output_root / "runs" / "pose" / "weights" / "best.pt"
+    old_checkpoint.parent.mkdir(parents=True)
+    old_checkpoint.write_bytes(b"checkpoint-from-interrupted-attempt")
+    original_rmtree = shutil.rmtree
+
+    def locked_cleanup(path: Path, *args: Any, **kwargs: Any) -> None:
+        if Path(path) == output_root:
+            raise PermissionError("prior checkpoint is locked")
+        original_rmtree(path, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(shutil, "rmtree", locked_cleanup)
+        with pytest.raises(PermissionError, match="prior checkpoint is locked"):
+            _prepare_clean_pose_training_output(output_root)
+
+    assert old_checkpoint.read_bytes() == b"checkpoint-from-interrupted-attempt"
+
+    # Once the operating system releases the lock, the next attempt starts
+    # with an empty output directory rather than silently reusing old weights.
+    _prepare_clean_pose_training_output(output_root)
+    assert output_root.is_dir()
+    assert not old_checkpoint.exists()
+    assert list(output_root.iterdir()) == []
 
 
 def test_pose_materialization_rejects_symlinked_export_destinations(
