@@ -76,10 +76,21 @@ def _saved_snapshot(
     if schema_version == "0007":
         summary["mask_annotation_count"] = len(masks)
     class_map = [{"id": "swiftia", "class_index": 0, "name": "Swiftia"}]
+    split_config = {
+        "requested_split_method": "manual",
+        "resolved_split_method": "manual",
+        "requested_ratios": None,
+        "achieved_ratios": {"train": 1.0, "validation": 0.0, "test": 0.0},
+        "split_seed": None,
+        "reuse_parent_assignments": False,
+        "eligible_annotation_statuses": ["reviewed"],
+        "warnings": [],
+        "missing_group_key_count": 0,
+    }
     manifest = {
         "schema_version": schema_version,
         "class_map": class_map,
-        "split_config": {"eligible_annotation_statuses": ["reviewed"]},
+        "split_config": split_config,
         "summary": summary,
         "items": [{**payload, "snapshot_sha256": item.snapshot_sha256}],
     }
@@ -89,6 +100,14 @@ def _saved_snapshot(
             schema_version=schema_version,
             class_map_json=class_map,
             eligible_annotation_statuses_json=["reviewed"],
+            requested_split_method="manual",
+            resolved_split_method="manual",
+            requested_ratios_json=None,
+            achieved_ratios_json=split_config["achieved_ratios"],
+            split_seed=None,
+            reuse_parent_assignments=False,
+            warnings_json=[],
+            missing_group_key_count=0,
             manifest_json=manifest,
             manifest_sha256=canonical_json_sha256(manifest),
             image_count=1,
@@ -489,6 +508,8 @@ def test_resigned_biological_group_cannot_cross_dataset_splits(
     second.group_key = first.group_key if same_group else None
     version.image_count = 2
     version.annotation_count = 2
+    version.achieved_ratios_json = {"train": 0.5, "validation": 0.0, "test": 0.5}
+    version.missing_group_key_count = 0 if same_group else 1
 
     first_payload = _item_payload(first, schema_version=schema_version)
     second_payload = _item_payload(second, schema_version=schema_version)
@@ -496,6 +517,8 @@ def test_resigned_biological_group_cannot_cross_dataset_splits(
     manifest = deepcopy(version.manifest_json)
     manifest["summary"]["image_count"] = 2
     manifest["summary"]["annotation_count"] = 2
+    manifest["split_config"]["achieved_ratios"] = version.achieved_ratios_json
+    manifest["split_config"]["missing_group_key_count"] = version.missing_group_key_count
     manifest["items"] = [
         {**first_payload, "snapshot_sha256": first.snapshot_sha256},
         {**second_payload, "snapshot_sha256": second.snapshot_sha256},
@@ -653,5 +676,46 @@ def test_resigned_frozen_status_selection_must_match_original_eligibility(
     version.manifest_json = manifest
     version.manifest_sha256 = canonical_json_sha256(manifest)
 
+    with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+        validate_frozen_dataset_manifest(version, [item])
+
+
+@pytest.mark.parametrize("schema_version", ["0006", "0007"])
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        "method_row_drift",
+        "seed_row_drift",
+        "ratios_manifest_drift",
+        "invented_missing_group_count",
+        "invented_achieved_ratios",
+    ],
+)
+def test_resigned_split_protocol_and_group_census_are_reconciled(
+    schema_version: str, tamper: str
+) -> None:
+    """Neither manifest re-signing nor DB row edits may fabricate study splitting."""
+    version, item = _saved_snapshot(schema_version, with_mask=False)
+    validate_frozen_dataset_manifest(version, [item])
+    manifest = deepcopy(version.manifest_json)
+    if tamper == "method_row_drift":
+        version.requested_split_method = "random"
+    elif tamper == "seed_row_drift":
+        version.split_seed = 42
+    elif tamper == "ratios_manifest_drift":
+        manifest["split_config"]["requested_ratios"] = {
+            "train": 0.9,
+            "validation": 0.1,
+            "test": 0.0,
+        }
+    elif tamper == "invented_missing_group_count":
+        version.missing_group_key_count = 1
+        manifest["split_config"]["missing_group_key_count"] = 1
+    else:
+        ratios = {"train": 0.5, "validation": 0.25, "test": 0.25}
+        version.achieved_ratios_json = ratios
+        manifest["split_config"]["achieved_ratios"] = ratios
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
     with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
         validate_frozen_dataset_manifest(version, [item])

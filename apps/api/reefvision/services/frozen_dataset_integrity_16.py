@@ -199,6 +199,31 @@ def validate_frozen_dataset_manifest(
     ):
         raise ValidationError(message)
 
+    # Split-method settings and biological grouping provenance are frozen
+    # alongside annotations. The original 0006/0007 producers write all of
+    # these fields on both the version row and its manifest; rehashing only
+    # the manifest must never silently change the study's split protocol.
+    split_contract = {
+        "requested_split_method": version.requested_split_method,
+        "resolved_split_method": version.resolved_split_method,
+        "requested_ratios": version.requested_ratios_json,
+        "achieved_ratios": version.achieved_ratios_json,
+        "split_seed": version.split_seed,
+        "reuse_parent_assignments": version.reuse_parent_assignments,
+        "warnings": version.warnings_json,
+        "missing_group_key_count": version.missing_group_key_count,
+    }
+    if (
+        not items
+        or any(
+            key not in split_config or split_config[key] != recorded
+            for key, recorded in split_contract.items()
+        )
+        or type(version.missing_group_key_count) is not int
+        or version.missing_group_key_count != sum(item.group_key is None for item in items)
+    ):
+        raise ValidationError(message)
+
     # The manifest binds the original frozen taxonomic dictionary, not the
     # project's potentially renamed live classes. Require both the version
     # record and every observation to agree with that immutable dictionary.
@@ -253,6 +278,7 @@ def validate_frozen_dataset_manifest(
     seen_annotation_ids: set[str] = set()
     seen_mask_annotation_ids: set[str] = set()
     group_splits: dict[str, str] = {}
+    split_census: Counter[str] = Counter()
     for item in items:
         if item.image_id in seen:
             raise ValidationError(message)
@@ -282,6 +308,7 @@ def validate_frozen_dataset_manifest(
             or (item.group_key is not None and type(item.group_key) is not str)
         ):
             raise ValidationError(message)
+        split_census[item.split] += 1
         if item.group_key is not None:
             previous_split = group_splits.setdefault(item.group_key, item.split)
             if previous_split != item.split:
@@ -372,3 +399,21 @@ def validate_frozen_dataset_manifest(
             "snapshot_sha256": item.snapshot_sha256,
         }:
             raise ValidationError(message)
+
+    # The source producer calculates achieved ratios from *image* membership,
+    # not the annotation count. Re-signed metadata must not imply an invented
+    # train/validation/test allocation or conceal excluded unassigned images.
+    achieved = version.achieved_ratios_json
+    expected_splits = {"train", "validation", "test"}
+    if (
+        not isinstance(achieved, dict)
+        or set(achieved) != expected_splits
+        or any(
+            type(achieved[split]) not in (int, float)
+            or not isfinite(achieved[split])
+            or abs(achieved[split] - split_census[split] / len(items)) > 1e-12
+            for split in expected_splits
+        )
+    ):
+        raise ValidationError(message)
+

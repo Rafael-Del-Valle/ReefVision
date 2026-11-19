@@ -159,6 +159,9 @@ def test_frozen_item_evidence_cannot_change_under_standalone_or_saved_qc(
         "ineligible_status",
         "eligible_status_manifest_drift",
         "unknown_eligible_status",
+        "split_seed_row_drift",
+        "missing_group_count_forged",
+        "achieved_ratios_forged",
     ],
 )
 def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
@@ -206,6 +209,15 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             version.eligible_annotation_statuses_json = ["reviewed", "annotated"]
         elif tamper == "unknown_eligible_status":
             version.eligible_annotation_statuses_json = ["reviewed", "not_a_real_status"]
+        elif tamper == "split_seed_row_drift":
+            version.split_seed = 42 if version.split_seed is None else version.split_seed + 1
+        elif tamper == "missing_group_count_forged":
+            version.missing_group_key_count += 1
+        elif tamper == "achieved_ratios_forged":
+            version.achieved_ratios_json = {
+                **version.achieved_ratios_json,
+                "train": 0.123456,
+            }
         else:
             annotations = [dict(annotation) for annotation in item.annotation_snapshot_json]
             if tamper == "reused_identity":
@@ -246,11 +258,24 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
                 **version.manifest_json["summary"],
                 "annotation_count": version.annotation_count,
             }
-        if tamper == "unknown_eligible_status":
+        if tamper in {
+            "unknown_eligible_status",
+            "missing_group_count_forged",
+            "achieved_ratios_forged",
+        }:
             manifest["split_config"] = {
                 **version.manifest_json["split_config"],
-                "eligible_annotation_statuses": list(version.eligible_annotation_statuses_json),
             }
+            if tamper == "unknown_eligible_status":
+                manifest["split_config"]["eligible_annotation_statuses"] = list(
+                    version.eligible_annotation_statuses_json
+                )
+            elif tamper == "missing_group_count_forged":
+                manifest["split_config"]["missing_group_key_count"] = (
+                    version.missing_group_key_count
+                )
+            else:
+                manifest["split_config"]["achieved_ratios"] = version.achieved_ratios_json
         version.manifest_json = manifest
         version.manifest_sha256 = canonical_json_sha256(manifest)
         session.flush()
@@ -287,12 +312,16 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             "__workflow_node_run_id": qc_node.id,
         }
         inputs = {"project": [project_artifact], "dataset": [dataset_artifact]}
-        # The saved typed dataset source still records the *original* manifest
-        # digest. Its earlier producer-binding gate must reject re-signed data
-        # before it could reach the independent frozen-item validation.
-        with pytest.raises(
-            ValidationError, match="QC Review Queue dataset version or manifest does not match"
-        ):
+        # The saved typed source still records the original manifest digest.
+        # Most re-signed mutations are stopped by its producer-binding gate,
+        # but a row-only drift with unchanged selection can hit the shared
+        # frozen-integrity validator first. Both paths must fail closed.
+        expected_error = (
+            "Frozen dataset item snapshot"
+            if tamper == "eligible_status_manifest_drift"
+            else "QC Review Queue dataset version or manifest does not match"
+        )
+        with pytest.raises(ValidationError, match=expected_error):
             create_review_queue_workflow_artifact(
                 session, app.state.settings, project_id, params, inputs
             )

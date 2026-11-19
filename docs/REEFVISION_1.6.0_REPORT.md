@@ -138,3 +138,27 @@ Native-Windows CI #44446182081 revealed that Windows PowerShell's common
 parser. The updater now also reads `$PSBoundParameters['Verbose']` so the
 configure-only exclusivity guard covers that invocation; diagnostics name
 the offending regression case. Exact-head Windows rerun is required.
+
+
+## 2026-11-19 — Frozen study split-protocol and grouping reconciliation (Track D)
+
+The original 0006 and 0007 dataset producers record the requested and
+resolved split method, ratios, random seed, parent-assignment reuse, warnings
+and biological missing-group count on both the dataset version and its
+immutable manifest. Frozen scientific QC now verifies that this split
+configuration agrees at both persistence layers, independently recomputes
+the count of ungrouped images, and verifies the *achieved image ratios*
+for train/validation/test from actual frozen membership. This prevents
+re-signed metadata from falsely claiming group protection or different
+train/test allocations without authorizing any alteration of original
+annotations. Grouped parent-colony separation remains an independent gate.
+
+Synthetic historical-schema and real database tests cover protocol drift,
+forged missing-group counts and achieved ratios, standalone QC, executable
+saved typed Workflow Builder refusal, rollback, replay and preservation of
+pending researcher review. A prior CI assertion also reflects the actual
+shared-validator-first failure for the row-only eligible-status-drift case.
+These checks validate frozen metadata, **not original image bytes**, and
+do not solve the independent 1.1/1.6 Alembic-0038 collision. Real Windows
+MSI/GUI installation, migration reconciliation, full scientific CI and
+explicit researcher release approval remain mandatory.
