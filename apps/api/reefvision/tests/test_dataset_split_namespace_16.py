@@ -166,6 +166,8 @@ def test_manual_assignments_cannot_silently_ignore_ineligible_images_or_mutate_s
     project = create_project(client, "Explicit colony selection")
     project_id = project["id"]
     other_project = create_project(client, "Different independent study")
+    # The import helper produces identical bytes for identical dimensions.
+    # Use distinct source images so content-deduplication cannot drop one.
     reviewed_id = import_one(
         client,
         project_id,
@@ -178,14 +180,14 @@ def test_manual_assignments_cannot_silently_ignore_ineligible_images_or_mutate_s
         project_id,
         filename="excluded.png",
         relative_path="cohort/excluded.png",
-        size=(80, 60),
+        size=(81, 60),
     )["successful"][0]["image_id"]
     foreign_id = import_one(
         client,
         other_project["id"],
         filename="foreign.png",
         relative_path="foreign/foreign.png",
-        size=(80, 60),
+        size=(82, 60),
     )["successful"][0]["image_id"]
     save_annotations(
         client,
@@ -244,6 +246,27 @@ def test_manual_assignments_cannot_silently_ignore_ineligible_images_or_mutate_s
             rejected = client.post(endpoint, json=payload)
             assert rejected.status_code == 400, rejected.text
             assert "eligible images" in rejected.json()["detail"]
+
+    # Even identical split values must not quietly collapse duplicate
+    # researcher instructions into a single immutable cohort decision.
+    for repeated_split, expected_error in (
+        ("train", "duplicate image"),
+        ("test", "conflict"),
+    ):
+        duplicate_request = {
+            **valid_request,
+            "manual_assignments": [
+                {"image_id": reviewed_id, "split": "train"},
+                {"image_id": reviewed_id, "split": repeated_split},
+            ],
+        }
+        for endpoint, payload in (
+            (preview_url, duplicate_request),
+            (version_url, {**duplicate_request, "name": "Reject duplicate intent"}),
+        ):
+            rejected = client.post(endpoint, json=payload)
+            assert rejected.status_code == 400, rejected.text
+            assert expected_error in rejected.json()["detail"]
 
     versions = client.get(version_url)
     assert versions.status_code == 200, versions.text
