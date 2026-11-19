@@ -55,7 +55,6 @@ from reefvision.storage.projects import (
 )
 
 
-
 def _resolve_unlinked_pose_run_path(settings: Settings, relative_path: str) -> Path:
     """Resolve training outputs without following in-root links to another run.
 
