@@ -104,6 +104,21 @@ def _require_empty_pose_gpu_output(output_root: Path) -> None:
         )
 
 
+
+def _verified_pose_trainer_save_dir(actual: Path, expected: Path) -> Path:
+    """Register results only from the exact run directory allocated before training.
+
+    Ultralytics may choose a different output directory. Never attribute those
+    checkpoints or metrics to this frozen scientific run without verifying it.
+    """
+    if actual.is_symlink() or any(parent.is_symlink() for parent in actual.parents):
+        raise ValidationError("Pose trainer output path contains a symbolic link")
+    save_dir = actual.resolve()
+    if save_dir != expected:
+        raise ValidationError("Pose trainer output does not match queued training run")
+    return save_dir
+
+
 def _safe_extract_zip(
     content: bytes,
     destination: Path,
@@ -1077,7 +1092,14 @@ def process_pose_training_job(
             if trainer is None:
                 raise RuntimeError("Ultralytics pose trainer unavailable after execution")
 
-            save_dir = Path(str(trainer.save_dir)).resolve()
+            expected_save_dir = _resolve_unlinked_pose_run_path(
+                settings,
+                f"{project.storage_root}/training/{run.id}/runs/pose",
+            )
+            save_dir = _verified_pose_trainer_save_dir(
+                Path(str(trainer.save_dir)),
+                expected_save_dir,
+            )
 
             results_csv = save_dir / "results.csv"
 
