@@ -569,7 +569,8 @@ export function parseMeshRenderArtifact(
       (typeof relativeScaleUncertainty !== "number" ||
         !Number.isFinite(relativeScaleUncertainty) ||
         relativeScaleUncertainty < 0 ||
-        relativeScaleUncertainty >= 1))
+        // Exactly 100% permits a mathematically valid zero lower scale bound.
+        relativeScaleUncertainty > 1))
   ) {
     return null;
   }
