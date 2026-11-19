@@ -371,6 +371,14 @@ class DatasetVersionService:
         request: DatasetVersionPreviewRequest,
     ) -> SplitPlan:
         manual_assignments = self._manual_assignment_map(request)
+        # Reject explicitly requested split decisions for images absent from the
+        # eligible study cohort. Silently ignoring a foreign, excluded or stale
+        # image ID could change a researcher's intended train/test separation.
+        eligible_ids = {candidate.image.id for candidate in candidates}
+        if set(manual_assignments).difference(eligible_ids):
+            raise ValidationError(
+                "Manual split assignments must reference eligible images in this project"
+            )
         parent_items = (
             self._parent_items(candidates[0].image.project_id, request) if candidates else {}
         )
