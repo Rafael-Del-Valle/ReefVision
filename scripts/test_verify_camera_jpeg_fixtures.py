@@ -1768,6 +1768,75 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                                 and "PermissionError" in error for error in errors))
             self.assertEqual(image.read_bytes(), original)
 
+    def test_fractional_exif_exposure_qc_read_only(self) -> None:
+        """Preserve fractional precision; reject malformed and orphaned EXIF tags."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; EXIF fractional exposure QC unverified")
+
+        original_get_ifd = Image.Exif.get_ifd
+        cases = (
+            (
+                "valid padded fraction",
+                {36867: "2026:04:03 14:25:30", 37521: b"000123\x00"},
+                "000123",
+                False,
+                False,
+                [],
+            ),
+            (
+                "malformed fraction",
+                {36867: "2026:04:03 14:25:30", 37521: b"1\x002"},
+                None,
+                True,
+                False,
+                ["invalid EXIF camera exposure time metadata: CAMERA.JPG"],
+            ),
+            (
+                "orphan fraction",
+                {37521: "123"},
+                "123",
+                False,
+                True,
+                [
+                    "EXIF camera fractional seconds without original exposure time: "
+                    "CAMERA.JPG"
+                ],
+            ),
+        )
+        for label, exif_tags, fraction, malformed, orphan, expected_errors in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                path = root / "CAMERA.JPG"
+                Image.new("RGB", (12, 8), (30, 70, 90)).save(path, format="JPEG")
+                original = path.read_bytes()
+
+                def forged_ifd(exif, tag):
+                    if tag == 34665:
+                        return exif_tags
+                    return original_get_ifd(exif, tag)
+
+                with mock.patch.object(Image.Exif, "get_ifd", forged_ifd):
+                    records, errors = MODULE.inventory(root, verify_decode=True)
+
+                self.assertEqual(errors, expected_errors)
+                self.assertEqual(len(records), 1)
+                record = records[0]
+                self.assertTrue(record["jpeg_decodable"])
+                self.assertEqual(record["jpeg_exif_subsec_time_original"], fraction)
+                self.assertEqual(
+                    record["jpeg_exif_subsec_time_original_malformed"], malformed
+                )
+                self.assertEqual(
+                    record["jpeg_exif_subsec_without_datetime_original"], orphan
+                )
+                self.assertEqual(
+                    record["jpeg_exif_capture_timezone_unknown"], not orphan
+                )
+                self.assertEqual(path.read_bytes(), original)
+                json.dumps(records, allow_nan=False)
+
 
 if __name__ == "__main__":
     unittest.main()
