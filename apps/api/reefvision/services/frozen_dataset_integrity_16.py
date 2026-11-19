@@ -114,6 +114,22 @@ def _valid_frozen_raster_mask(snapshot: dict[str, Any], width_px: Any, height_px
     )
 
 
+def _matches_frozen_class(
+    snapshot: dict[str, Any], classes: dict[str, tuple[int, str]]
+) -> bool:
+    """A saved observation must use its frozen class ID, index and name."""
+    class_id = snapshot.get("label_class_id")
+    if type(class_id) is not str or class_id not in classes:
+        return False
+    class_index, class_name = classes[class_id]
+    return (
+        type(snapshot.get("class_index")) is int
+        and snapshot["class_index"] == class_index
+        and type(snapshot.get("class_name")) is str
+        and snapshot["class_name"] == class_name
+    )
+
+
 def _item_payload(item: DatasetVersionItem, *, schema_version: str) -> dict[str, Any]:
     """Reconstruct exactly the schema recorded by the version's producer."""
     payload: dict[str, Any] = {
@@ -166,6 +182,26 @@ def validate_frozen_dataset_manifest(
     ):
         raise ValidationError(message)
 
+    # The manifest binds the original frozen taxonomic dictionary, not the
+    # project's potentially renamed live classes. Require both the version
+    # record and every observation to agree with that immutable dictionary.
+    class_map = version.class_map_json
+    if not isinstance(class_map, list) or manifest.get("class_map") != class_map:
+        raise ValidationError(message)
+    classes: dict[str, tuple[int, str]] = {}
+    for entry in class_map:
+        if (
+            not isinstance(entry, dict)
+            or type(entry.get("id")) is not str
+            or not entry["id"]
+            or entry["id"] in classes
+            or type(entry.get("class_index")) is not int
+            or type(entry.get("name")) is not str
+            or not entry["name"]
+        ):
+            raise ValidationError(message)
+        classes[entry["id"]] = (entry["class_index"], entry["name"])
+
     entries: dict[str, dict[str, Any]] = {}
     for record in manifest["items"]:
         if (
@@ -216,8 +252,7 @@ def validate_frozen_dataset_manifest(
                 or item.mask_annotation_count != len(mask_snapshots)
                 or any(
                     not isinstance(snapshot, dict)
-                    or type(snapshot.get("label_class_id")) is not str
-                    or not snapshot["label_class_id"]
+                    or not _matches_frozen_class(snapshot, classes)
                     or snapshot.get("status") != "verified"
                     or type(snapshot.get("geometry_kind")) is not str
                     or snapshot["geometry_kind"] not in {"polygon", "raster_mask"}
@@ -257,7 +292,7 @@ def validate_frozen_dataset_manifest(
             or item.annotation_count != len(annotations)
             or any(
                 not isinstance(annotation, dict)
-                or type(annotation.get("label_class_id")) is not str
+                or not _matches_frozen_class(annotation, classes)
                 or not _valid_detection_box(annotation, item.width_px, item.height_px)
                 for annotation in annotations
             )
