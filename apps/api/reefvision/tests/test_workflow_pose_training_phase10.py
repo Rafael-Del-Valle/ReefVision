@@ -582,11 +582,10 @@ def test_pose_materialization_rejects_unmapped_frozen_class_labels(
     # its label; neither training nor validation may reinterpret that truth.
     reviewed = _pose_export_zip(b"reviewed")
     independent_validation = _pose_export_zip(b"independent-validation")
+    source_export = reviewed if altered_split == "training" else independent_validation
     altered = io.BytesIO()
     with (
-        zipfile.ZipFile(
-            io.BytesIO(reviewed if altered_split == "training" else independent_validation)
-        ) as original,
+        zipfile.ZipFile(io.BytesIO(source_export)) as original,
         zipfile.ZipFile(altered, "w", compression=zipfile.ZIP_DEFLATED) as modified,
     ):
         for member in original.namelist():
@@ -635,11 +634,10 @@ def test_pose_materialization_rejects_malformed_frozen_pose_rows(
     # A row that cannot encode the reviewed schema must fail before val copying.
     reviewed = _pose_export_zip(b"reviewed")
     independent_validation = _pose_export_zip(b"independent-validation")
+    source_export = reviewed if altered_split == "training" else independent_validation
     altered = io.BytesIO()
     with (
-        zipfile.ZipFile(
-            io.BytesIO(reviewed if altered_split == "training" else independent_validation)
-        ) as original,
+        zipfile.ZipFile(io.BytesIO(source_export)) as original,
         zipfile.ZipFile(altered, "w", compression=zipfile.ZIP_DEFLATED) as modified,
     ):
         for member in original.namelist():
