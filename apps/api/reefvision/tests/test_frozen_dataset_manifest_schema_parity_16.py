@@ -23,6 +23,8 @@ def _saved_snapshot(
     mask = {
         "id": "mask-1",
         "label_class_id": "swiftia",
+        "class_index": 0,
+        "class_name": "Swiftia",
         "geometry_kind": "polygon",
         "status": "verified",
         # Match the original 0007 producer's source-pixel polygon contract.
@@ -54,6 +56,8 @@ def _saved_snapshot(
                 {
                     "id": "polyp-1",
                     "label_class_id": "swiftia",
+                    "class_index": 0,
+                    "class_name": "Swiftia",
                     "x_min": 5,
                     "y_min": 6,
                     "x_max": 10,
@@ -71,8 +75,10 @@ def _saved_snapshot(
     summary = {"image_count": 1, "annotation_count": 1}
     if schema_version == "0007":
         summary["mask_annotation_count"] = len(masks)
+    class_map = [{"id": "swiftia", "class_index": 0, "name": "Swiftia"}]
     manifest = {
         "schema_version": schema_version,
+        "class_map": class_map,
         "summary": summary,
         "items": [{**payload, "snapshot_sha256": item.snapshot_sha256}],
     }
@@ -80,6 +86,7 @@ def _saved_snapshot(
         DatasetVersion,
         SimpleNamespace(
             schema_version=schema_version,
+            class_map_json=class_map,
             manifest_json=manifest,
             manifest_sha256=canonical_json_sha256(manifest),
             image_count=1,
@@ -386,6 +393,78 @@ def test_fully_resigned_mask_must_remain_verified_and_supported(tamper: str) -> 
     payload = _item_payload(item, schema_version="0007")
     item.snapshot_sha256 = canonical_json_sha256(payload)
     manifest = deepcopy(version.manifest_json)
+    manifest["items"] = [{**payload, "snapshot_sha256": item.snapshot_sha256}]
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+
+    with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+        validate_frozen_dataset_manifest(version, [item])
+
+
+@pytest.mark.parametrize(
+    ("schema_version", "with_mask"),
+    [("0006", False), ("0007", False), ("0007", True)],
+)
+@pytest.mark.parametrize(
+    "tamper",
+    ["detection_name", "detection_index", "detection_unknown_class", "map_relabel"],
+)
+def test_resigned_detection_taxonomy_must_match_frozen_class_dictionary(
+    schema_version: str, with_mask: bool, tamper: str
+) -> None:
+    """An observation's taxon is its frozen ID/index/name, not live metadata."""
+    version, item = _saved_snapshot(schema_version, with_mask=with_mask)
+    validate_frozen_dataset_manifest(version, [item])
+    detections = deepcopy(item.annotation_snapshot_json)
+    if tamper == "detection_name":
+        detections[0]["class_name"] = "Thesea"
+    elif tamper == "detection_index":
+        detections[0]["class_index"] = 1
+    elif tamper == "detection_unknown_class":
+        detections[0]["label_class_id"] = "unknown-taxon"
+        item.per_class_counts_json = {"unknown-taxon": 1}
+    else:
+        version.class_map_json = [
+            {"id": "swiftia", "class_index": 0, "name": "Thesea"}
+        ]
+    item.annotation_snapshot_json = detections
+
+    payload = _item_payload(item, schema_version=schema_version)
+    item.snapshot_sha256 = canonical_json_sha256(payload)
+    manifest = deepcopy(version.manifest_json)
+    manifest["class_map"] = version.class_map_json
+    manifest["items"] = [{**payload, "snapshot_sha256": item.snapshot_sha256}]
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+
+    with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+        validate_frozen_dataset_manifest(version, [item])
+
+
+@pytest.mark.parametrize(
+    "tamper", ["mask_name", "mask_index", "mask_unknown_class", "duplicate_class"]
+)
+def test_resigned_mask_taxonomy_must_match_frozen_class_dictionary(tamper: str) -> None:
+    version, item = _saved_snapshot("0007", with_mask=True)
+    validate_frozen_dataset_manifest(version, [item])
+    masks = deepcopy(item.mask_annotation_snapshot_json)
+    if tamper == "mask_name":
+        masks[0]["class_name"] = "Muricea"
+    elif tamper == "mask_index":
+        masks[0]["class_index"] = 5
+    elif tamper == "mask_unknown_class":
+        masks[0]["label_class_id"] = "unknown-taxon"
+        item.per_mask_class_counts_json = {"unknown-taxon": 1}
+    else:
+        version.class_map_json = [
+            *version.class_map_json,
+            {"id": "swiftia", "class_index": 2, "name": "Conflicting Swiftia"},
+        ]
+    item.mask_annotation_snapshot_json = masks
+    payload = _item_payload(item, schema_version="0007")
+    item.snapshot_sha256 = canonical_json_sha256(payload)
+    manifest = deepcopy(version.manifest_json)
+    manifest["class_map"] = version.class_map_json
     manifest["items"] = [{**payload, "snapshot_sha256": item.snapshot_sha256}]
     version.manifest_json = manifest
     version.manifest_sha256 = canonical_json_sha256(manifest)
