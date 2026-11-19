@@ -486,10 +486,7 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
         ]
     )
     assert independent["materialized_dataset_sha256"] == expected_digest
-    assert (
-        independent["materialized_dataset_fingerprint_algorithm"]
-        == "relative-posix-path-v1"
-    )
+    assert independent["materialized_dataset_fingerprint_algorithm"] == "relative-posix-path-v1"
     replay = materialize_pose_training_exports(
         training_content=training,
         validation_content=validation,
