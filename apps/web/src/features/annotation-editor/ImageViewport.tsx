@@ -143,11 +143,12 @@ export function ImageViewport({
       if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) {
         return;
       }
-      updateView({
-        ...drag.view,
-        offsetX: drag.view.offsetX + event.clientX - drag.x,
-        offsetY: drag.view.offsetY + event.clientY - drag.y,
-      });
+      const offsetX = drag.view.offsetX + event.clientX - drag.x;
+      const offsetY = drag.view.offsetY + event.clientY - drag.y;
+      // Finite WebView2 coordinates can still overflow when subtracting a
+      // very distant drag anchor. Never poison image/annotation transforms.
+      if (!Number.isFinite(offsetX) || !Number.isFinite(offsetY)) return;
+      updateView({ ...drag.view, offsetX, offsetY });
     };
     const cancelPointer = (event: PointerEvent) => {
       if (dragRef.current?.pointerId === event.pointerId) {

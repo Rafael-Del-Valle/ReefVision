@@ -494,6 +494,57 @@ describe("ImageViewport", () => {
     expect(polygon).toHaveAttribute("points", sourcePoints);
   });
 
+  it("rejects finite pan coordinates whose offset arithmetic overflows", () => {
+    render(
+      <ImageViewport width={1600} height={1200} label="Overflow pan viewport">
+        <svg data-testid="overflow-pan-overlay" viewBox="0 0 1600 1200">
+          <polygon points="10,10 50,10 50,50" />
+        </svg>
+      </ImageViewport>,
+    );
+    const frame = screen.getByRole("region", { name: "Overflow pan viewport" });
+    const transform = screen.getByTestId("image-viewport-transform");
+    const polygon = screen
+      .getByTestId("overflow-pan-overlay")
+      .querySelector("polygon");
+    const sourcePoints = polygon?.getAttribute("points");
+    const original = transform.style.transform;
+
+    const pointer = (
+      target: Element | Window,
+      type: string,
+      clientX: number,
+      clientY: number,
+    ) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperties(event, {
+        pointerId: { value: 57 },
+        button: { value: 0 },
+        altKey: { value: true },
+        clientX: { value: clientX },
+        clientY: { value: clientY },
+      });
+      fireEvent(target, event);
+    };
+
+    // The coordinates are individually finite, but subtraction of the
+    // opposite extremes overflows. Neither axis may corrupt the viewport.
+    pointer(frame, "pointerdown", -1e308, -1e308);
+    pointer(window, "pointermove", 1e308, -1e308);
+    expect(transform.style.transform).toBe(original);
+    pointer(window, "pointermove", -1e308, 1e308);
+    expect(transform.style.transform).toBe(original);
+    expect(polygon).toHaveAttribute("points", sourcePoints);
+
+    // A new ordinary drag must still pan the same unmodified source image.
+    pointer(window, "pointerup", -1e308, -1e308);
+    pointer(frame, "pointerdown", 50, 60);
+    pointer(window, "pointermove", 90, 110);
+    expect(transform.style.transform).not.toBe(original);
+    expect(transform.style.transform).not.toMatch(/NaN|Infinity/);
+    expect(polygon).toHaveAttribute("points", sourcePoints);
+  });
+
   it("preserves wheel zoom when a prior pan pointer keeps moving", () => {
     render(
       <ImageViewport
