@@ -31,6 +31,7 @@ from reefvision.db.models import (
 )
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.pose_training import (
+    _resolve_unlinked_pose_run_path,
     materialize_pose_training_exports,
     process_pose_training_job,
 )
@@ -833,6 +834,45 @@ def test_pose_materialization_rejects_special_archive_members(
         )
 
     assert not (destination / "images" / "train" / "frame_00000001.png").exists()
+
+
+
+@pytest.mark.parametrize("output_name", ("pose-dataset", "ultralytics"))
+def test_pose_run_output_rejects_redirect_into_another_managed_run(
+    tmp_path: Path,
+    output_name: str,
+) -> None:
+    # The generic managed-path resolver follows symlinks inside data_root.
+    # A symlinked dataset/log root must never cause recursive cleanup to
+    # replace another scientific run's training data.
+    settings = Settings(data_dir=tmp_path / "managed")
+    training_root = settings.resolved_data_dir / "projects" / "p1" / "training"
+    prior_run = training_root / "prior-run"
+    prior_run.mkdir(parents=True)
+    marker = prior_run / "registered-model-checkpoint.pt"
+    marker.write_bytes(b"preserve-existing-user-trained-weights")
+
+    current_run = training_root / "current-run"
+    current_run.mkdir()
+    linked_output = current_run / output_name
+    try:
+        linked_output.symlink_to(prior_run, target_is_directory=True)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"Symlink creation is unavailable on this host: {exc}")
+
+    relative = f"projects/p1/training/current-run/{output_name}"
+    # This would previously resolve to the prior-run directory, making
+    # shutil.rmtree() and training.log writes target preserved user data.
+    assert resolve_managed_project_path(settings, relative) == prior_run.resolve()
+    with pytest.raises(ValidationError, match="output path contains a symbolic link"):
+        _resolve_unlinked_pose_run_path(settings, relative)
+    assert marker.read_bytes() == b"preserve-existing-user-trained-weights"
+
+    linked_output.unlink()
+    assert _resolve_unlinked_pose_run_path(settings, relative) == (
+        current_run / output_name
+    ).resolve()
+
 
 
 def test_pose_materialization_rejects_symlinked_export_destinations(
