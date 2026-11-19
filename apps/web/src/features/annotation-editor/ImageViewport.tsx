@@ -205,17 +205,32 @@ export function ImageViewport({
       }
 
       const rect = frame.getBoundingClientRect();
+      const focus = {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      };
+      // A transient WebView2 rectangle may be malformed even when the
+      // wheel pointer itself is finite. Also reject finite operands whose
+      // subtraction or zoom arithmetic overflows, instead of persisting
+      // NaN/Infinity into the pixel-aligned scientific viewport.
+      if (!Number.isFinite(focus.x) || !Number.isFinite(focus.y)) return;
+      const nextView = zoomAtPoint(
+        viewRef.current,
+        focus,
+        viewRef.current.scale * (deltaY > 0 ? 1 / 1.08 : 1.08),
+      );
+      if (
+        !Number.isFinite(nextView.scale) ||
+        !Number.isFinite(nextView.offsetX) ||
+        !Number.isFinite(nextView.offsetY)
+      ) {
+        return;
+      }
       // A pending pan still holds a pre-zoom transform. A later pointermove
       // must not overwrite the scientist's new zoom with that stale view.
       dragRef.current = null;
       manualViewRef.current = true;
-      updateView(
-        zoomAtPoint(
-          viewRef.current,
-          { x: event.clientX - rect.left, y: event.clientY - rect.top },
-          viewRef.current.scale * (deltaY > 0 ? 1 / 1.08 : 1.08),
-        ),
-      );
+      updateView(nextView);
     };
     frame.addEventListener("wheel", handleNativeWheel, { passive: false });
     return () => frame.removeEventListener("wheel", handleNativeWheel);

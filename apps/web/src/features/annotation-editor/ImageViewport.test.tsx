@@ -669,6 +669,53 @@ describe("ImageViewport", () => {
     ).toHaveAttribute("points", originalGeometry);
   });
 
+  it("contains malformed WebView2 viewport rectangles and overflowing zoom arithmetic", () => {
+    render(
+      <ImageViewport width={1600} height={1200} label="Camera zoom geometry">
+        <svg data-testid="camera-zoom-overlay" viewBox="0 0 1600 1200">
+          <polygon points="10,10 50,10 50,50" />
+        </svg>
+      </ImageViewport>,
+    );
+    const frame = screen.getByRole("region", { name: "Camera zoom geometry" });
+    const transform = screen.getByTestId("image-viewport-transform");
+    const polygon = screen
+      .getByTestId("camera-zoom-overlay")
+      .querySelector("polygon");
+    const originalPoints = polygon?.getAttribute("points");
+    const originalTransform = transform.style.transform;
+    const originalRect = frame.getBoundingClientRect();
+    const rectSpy = vi.spyOn(frame, "getBoundingClientRect");
+
+    const wheelAt = (clientX: number, rectLeft: number) => {
+      rectSpy.mockReturnValue({ ...originalRect, left: rectLeft } as DOMRect);
+      const wheel = new WheelEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        deltaY: -120,
+        clientX: 200,
+        clientY: 180,
+      });
+      Object.defineProperty(wheel, "clientX", { value: clientX });
+      fireEvent(frame, wheel);
+      // Invalid native input is contained so the surrounding page does not
+      // scroll, but no scientifically meaningful pixel transform is made.
+      expect(wheel.defaultPrevented).toBe(true);
+      expect(transform.style.transform).toBe(originalTransform);
+      expect(polygon).toHaveAttribute("points", originalPoints);
+    };
+
+    wheelAt(200, Number.NaN);
+    wheelAt(1e308, -1e308); // finite operands overflow to Infinity
+    wheelAt(Number.MAX_VALUE, 0); // zoomAtPoint overflows after subtraction
+    rectSpy.mockRestore();
+
+    // Invalid input must not disable a subsequent genuine camera zoom.
+    fireEvent.wheel(frame, { deltaY: -120, clientX: 200, clientY: 180 });
+    expect(transform.style.transform).not.toBe(originalTransform);
+    expect(polygon).toHaveAttribute("points", originalPoints);
+  });
+
   it("preserves Alt-modified polygon vertex gestures", () => {
     const onPointerDown = vi.fn();
     render(
