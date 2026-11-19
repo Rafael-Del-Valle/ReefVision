@@ -501,6 +501,32 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
     assert not (mismatched_destination / "images" / "val").exists()
 
 
+
+def test_pose_materialization_rejects_identical_frames_in_independent_validation(
+    tmp_path: Path,
+) -> None:
+    # Reuse the reviewed export fixture but rename the holdout frame. Different
+    # file names must not conceal train/validation leakage of identical bytes.
+    reviewed = _pose_export_zip(b"same-reviewed-frame")
+    holdout = io.BytesIO()
+    with (
+        zipfile.ZipFile(io.BytesIO(reviewed)) as original,
+        zipfile.ZipFile(holdout, "w", compression=zipfile.ZIP_DEFLATED) as modified,
+    ):
+        for member in original.namelist():
+            renamed = member.replace("frame_00000001", "frame_00000002")
+            modified.writestr(renamed, original.read(member))
+
+    destination = tmp_path / "pose-overlapping-splits"
+    with pytest.raises(ValidationError, match="reuses a frozen training frame"):
+        materialize_pose_training_exports(
+            training_content=reviewed,
+            validation_content=holdout.getvalue(),
+            destination=destination,
+        )
+    assert not (destination / "images" / "val").exists()
+
+
 @pytest.mark.parametrize(
     ("tampered_split", "missing_member", "expected_error"),
     (
