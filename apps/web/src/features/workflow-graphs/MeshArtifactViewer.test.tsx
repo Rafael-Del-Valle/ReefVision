@@ -771,7 +771,10 @@ describe("MeshArtifactViewer", () => {
 
     const exactScale = {
       ...artifact,
-      provenance: { calibration_verified: false, relative_scale_uncertainty: 0 },
+      provenance: {
+        calibration_verified: false,
+        relative_scale_uncertainty: 0,
+      },
     };
     expect(
       parseMeshRenderArtifact(exactScale)?.routeInspections[0],
@@ -787,7 +790,10 @@ describe("MeshArtifactViewer", () => {
 
     const maximalUncertainty = {
       ...artifact,
-      provenance: { calibration_verified: false, relative_scale_uncertainty: 1 },
+      provenance: {
+        calibration_verified: false,
+        relative_scale_uncertainty: 1,
+      },
       surface_edge_paths: [
         {
           ...artifact.surface_edge_paths[0],
