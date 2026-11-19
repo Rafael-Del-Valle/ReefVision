@@ -25,7 +25,15 @@ def _saved_snapshot(
         "label_class_id": "swiftia",
         "geometry_kind": "polygon",
         "status": "verified",
-        "vertices": [[2, 3], [4, 3], [3, 5]],
+        # Match the original 0007 producer's source-pixel polygon contract.
+        "polygon_json": [[2, 3], [4, 3], [3, 5]],
+        "x_min": 2,
+        "y_min": 3,
+        "x_max": 4,
+        "y_max": 5,
+        "area_pixels": 2,
+        "mask_path": None,
+        "mask_content_sha256": None,
         "measurement_json": {"length_mm": 4.5},
     }
     masks = [mask] if with_mask else []
@@ -109,7 +117,7 @@ def test_mask_aware_frozen_manifest_rejects_corrupt_or_resigned_evidence(tamper:
     version, item = _saved_snapshot("0007", with_mask=True)
     if tamper == "resigned_mask_geometry":
         item.mask_annotation_snapshot_json = deepcopy(item.mask_annotation_snapshot_json)
-        item.mask_annotation_snapshot_json[0]["vertices"][0][0] = 71
+        item.mask_annotation_snapshot_json[0]["polygon_json"][0][0] = 71
     elif tamper == "resigned_mask_measurement":
         item.mask_annotation_snapshot_json = deepcopy(item.mask_annotation_snapshot_json)
         item.mask_annotation_snapshot_json[0]["measurement_json"]["length_mm"] = 99.0
