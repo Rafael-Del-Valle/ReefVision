@@ -80,17 +80,26 @@ if ($showHelp) {
     exit 0
 }
 
+# Validate every action before Set-ReefVisionRepoPath writes persistent state.
+# Previously --configure-repo --restart (and several other actions) silently
+# saved the repository and returned 0 without performing the requested action.
+$selectedDevModes = @($devMode, $webDevMode, $apiOnly) | Where-Object { $_ }
+if (@($selectedDevModes).Count -gt 1) {
+    throw "Choose only one development mode at a time."
+}
+if ($configureRepoPath -and ($restart -or $safeMode -or $showLogs -or $runDiagnostics -or $noWait)) {
+    throw "--configure-repo cannot be combined with start, restart, log, or diagnostic options."
+}
+if ($configureRepoPath -and $showStatus -and @($selectedDevModes).Count -gt 0) {
+    throw "--status cannot be combined with a development mode when configuring a repository."
+}
+
 if ($configureRepoPath) {
     $resolved = Set-ReefVisionRepoPath -RepoPath $configureRepoPath
     Write-ReefVisionCommandNote "Configured ReefVision repository: $resolved"
     if (-not ($showStatus -or $devMode -or $webDevMode -or $apiOnly)) {
         exit 0
     }
-}
-
-$selectedDevModes = @($devMode, $webDevMode, $apiOnly) | Where-Object { $_ }
-if (@($selectedDevModes).Count -gt 1) {
-    throw "Choose only one development mode at a time."
 }
 
 $repoPath = Resolve-ReefVisionRepoPath
