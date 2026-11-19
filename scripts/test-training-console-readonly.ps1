@@ -38,6 +38,12 @@ $script:active = @'
   }
 }
 '@ | ConvertFrom-Json
+# A worker can persist hostile metric labels or nonfinite measurements.
+# Neither may become a terminal control sequence or a claimed scientific loss.
+$maliciousMetricName = 'metrics/' + [char]0x001B + ']0;forged metric title' + [char]0x0007 + 'scientific_qc'
+$script:active.metrics | Add-Member -NotePropertyName $maliciousMetricName -NotePropertyValue 0.42
+$script:active.metrics | Add-Member -NotePropertyName 'metrics/nonfinite_nan' -NotePropertyValue ([double]::NaN)
+$script:active.metrics | Add-Member -NotePropertyName 'metrics/nonfinite_infinity' -NotePropertyValue ([double]::PositiveInfinity)
 $script:completed = @'
 {
   "run_name": "Coral model",
@@ -233,6 +239,14 @@ if ($output -notmatch 'train/box_loss\s+0\.25 \[history entry 2/3; epoch associa
 }
 if ($output.Contains('spoofed console title') -or $output.Contains('spoofed log title')) {
   throw 'Untrusted run metadata or persisted logs escaped display sanitization.'
+}
+# Numeric API values are not always valid physical measurements. Inf/NaN
+# must never appear as recorded losses; hostile labels are display-sanitized.
+if ($output.Contains('forged metric title') -or
+    $output -notmatch 'metrics/scientific_qc\s+0\.42 \[summary metric; epoch association unverified\]' -or
+    $output.Contains('metrics/nonfinite_nan') -or
+    $output.Contains('metrics/nonfinite_infinity')) {
+  throw 'Monitor presented a forged metric label or nonfinite scientific measurement.'
 }
 if (-not $output.Contains('worker-progress-24') -or
     $output.Contains('worker-progress-8') -or
