@@ -46,8 +46,9 @@ def test_representable_tiny_volume_preserves_exact_cubic_scale_bounds() -> None:
     assert result["enclosed_volume_scale_interval_m3"] == pytest.approx(
         [expected * 0.9**3, expected * 1.1**3], rel=1e-12, abs=0
     )
-    assert result["edge_connected_patch_enclosed_volume_scale_intervals_m3"][0] == (
-        pytest.approx([expected * 0.9**3, expected * 1.1**3], rel=1e-12, abs=0)
+    patch_interval = result["edge_connected_patch_enclosed_volume_scale_intervals_m3"][0]
+    assert patch_interval == pytest.approx(
+        [expected * 0.9**3, expected * 1.1**3], rel=1e-12, abs=0
     )
     assert result["surface_to_enclosed_volume_ratio_per_m"] is not None
     assert "enclosed_volume_zero_or_underflow" not in result["qc_warnings"]
