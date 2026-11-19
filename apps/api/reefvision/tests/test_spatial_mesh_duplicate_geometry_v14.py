@@ -331,7 +331,7 @@ def test_zero_area_tessellation_fractions_survive_persisted_workflow(
     }
     direct = measure_mesh_preview(**params)
     assert direct["surface_area_m2"] == expected_area
-    assert direct["degenerate_face_count"] == 2 if expected_area == 0 else 1
+    assert direct["degenerate_face_count"] == (2 if expected_area == 0 else 1)
     assert direct["edge_connected_patch_surface_area_fractions"] == expected_fractions
     assert direct["largest_triangle_area_fraction"] == (
         None if expected_area == 0 else 1.0
