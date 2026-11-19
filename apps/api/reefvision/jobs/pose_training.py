@@ -980,7 +980,7 @@ def process_pose_training_job(
                     "data": str(dataset_root / "data.yaml"),
                     "device": (resolve_torch_device(run.device)),
                     "project": str(
-                        resolve_managed_project_path(
+                        _resolve_unlinked_pose_run_path(
                             settings,
                             f"{base_relative}/runs",
                         )
