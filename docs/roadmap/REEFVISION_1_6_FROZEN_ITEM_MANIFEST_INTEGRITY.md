@@ -254,3 +254,30 @@ CI, independent 1.1/1.6 migration-lineage reconciliation, representative
 biological research validation, Windows MSI/CAB installed-GUI clean
 installation/upgrade/rollback and explicit researcher approval still gate
 release.
+
+
+## Frozen image review eligibility and selected-status lineage (2026-11-19, Track D)
+
+The original 0006 detection-only and 0007 mask-aware snapshot producers select images
+by explicit `eligible_annotation_statuses`, persist the exact selection in the
+`DatasetVersion` record and `manifest.split_config`, and freeze each source
+image's status in its item payload. Previously, a locally rehashed frozen item
+could report an excluded or otherwise unselected annotation status while
+retaining consistent image and observation counts. The shared read-only QC
+validator now requires a nonempty, unique, producer-supported eligible-status
+selection identical to the manifest configuration, with every frozen image's
+status included in that selection. This is **selection provenance**, not a
+requirement that all images be reviewed: an investigator may explicitly select
+other producer-supported statuses in the dataset-version request.
+
+The same validator protects standalone version QC and the existing executable
+saved `project_source → dataset_version_source → qc_review_queue` Workflow
+Builder path. Synthetic two-schema, mask-aware rehashed cases test excluded,
+unknown, duplicated and contradictory selections; database-backed saved-graph
+and standalone regressions test rejection, persisted provenance, deterministic
+replay, rollback and unchanged human-review state. No duplicate node, new
+migration, automatic approval, asset mutation or pretrained-model access is
+introduced. SHA-256 is an **unkeyed consistency checksum**, not a cryptographic
+attestation of a study's original researcher decisions. Exact-head CI, real
+Windows clean install/upgrade/rollback and independently reconciled Alembic
+lineage remain release gates.
