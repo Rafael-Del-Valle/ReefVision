@@ -621,6 +621,24 @@ def process_pose_training_job(
                 raise ValidationError("Queued pose training job ownership changed")
             request = job.request_json
             snapshot = run.draft_snapshot_json
+            # Newer saved pose-workflow snapshots must retain the exact child
+            # job identity, even if an older snapshot predates request sealing.
+            # Without this check a legacy job could silently lose its workflow
+            # node attribution while keeping the same frozen dataset IDs.
+            if isinstance(snapshot, dict) and snapshot.get("schema_version") in {
+                "pose-workflow-training-snapshot-0002",
+                "pose-workflow-training-snapshot-0003",
+                "pose-workflow-training-snapshot-0004",
+            }:
+                if (
+                    request.get("created_by_workflow") is not True
+                    or request.get("training_run_id") != run.id
+                    or request.get("workflow_run_id") != snapshot.get("workflow_run_id")
+                    or request.get("workflow_node_run_id") != snapshot.get("workflow_node_run_id")
+                ):
+                    raise ValidationError(
+                        "Queued pose training workflow child job lineage changed"
+                    )
             sealed_digest = (
                 snapshot.get("pose_child_job_request_sha256")
                 if isinstance(snapshot, dict)
