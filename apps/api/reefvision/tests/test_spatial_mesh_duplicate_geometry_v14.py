@@ -299,6 +299,7 @@ def test_coincident_vertices_distinct_faces_persist_without_false_duplicate_qc(
     assert len(artifacts[0]["payload_sha256"]) == 64
     assert artifacts[0]["payload_json"]["provenance"]["calibration_verified"] is False
 
+
 @pytest.mark.parametrize(
     ("vertices", "expected_area", "expected_fractions"),
     [
