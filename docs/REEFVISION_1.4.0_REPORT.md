@@ -353,3 +353,31 @@ separate face-winding regression distinguishes source fingerprint changes from
 winding-invariant reconstructed geometry/centroids. Neither test independently
 verifies anatomy, organism identity, source acquisition or field calibration.
 The exact-head CI outcome must be checked after this report is committed.
+
+
+## Track C: calibrated mesh-area interval precision (2026-11-19)
+
+An extremely small but positive calibrated surface area can remain
+representable in IEEE-754 binary64 while the positive lower bound of its
+scale-only uncertainty interval underflows to zero. For
+`relative_scale_uncertainty < 1`, ReefVision now retains the nominal
+provisional area but withholds the unrepresentable interval as `null`
+rather than reporting zero as an observed lower limit. The
+`surface_area_scale_interval_numeric_unrepresentable` QC warning
+identifies the loss. At exactly 100% scale uncertainty, a zero lower bound
+is mathematically valid; a genuinely zero-area degenerate triangle also
+retains a valid zero interval. Unknown uncertainty never fabricates bounds.
+
+The safeguard is shared by global and edge-connected-patch calibrated
+surface areas and by the displayed-preview omitted/partially sampled area
+intervals. A valid larger-patch interval is preserved if a separate tiny
+patch's lower limit is unrepresentable. All these results remain unverified,
+scale-only geometric measurements, not confidence intervals, biological
+condition, branch-length validation, or evidence of independent calibration.
+
+A synthetic subnormal-area regression covers standalone API measurements,
+typed executable Workflow Builder planning and persisted execution twice,
+artifact equality and repeatable SHA-256 hashes, while preserving unverified
+specimen and coordinate-frame provenance. Until the exact-head CI results
+and external representative coral/Windows/GPU review are available, 1.4
+remains **RELEASE HOLD**.
