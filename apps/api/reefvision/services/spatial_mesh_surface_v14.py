@@ -42,6 +42,26 @@ def _inverse_scale_interval_per_m(
     return bounds if all(isfinite(bound) for bound in bounds) else None
 
 
+def _cubic_volume_scale_interval_m3(
+    volume_m3: float | None, uncertainty: float | None
+) -> list[float] | None:
+    """Scale-only bounds; withhold numerically unrepresentable positive limits."""
+    if volume_m3 is None or uncertainty is None:
+        return None
+    bounds = [
+        volume_m3 * (1 - uncertainty) ** 3,
+        volume_m3 * (1 + uncertainty) ** 3,
+    ]
+    # At 100% uncertainty a zero lower bound is mathematically valid. Below
+    # 100%, a computed zero from a positive nominal volume is numerical loss,
+    # not a claim that the lower bound is physically zero.
+    if not all(isfinite(bound) for bound in bounds):
+        return None
+    if volume_m3 > 0 and uncertainty < 1 and bounds[0] == 0:
+        return None
+    return bounds
+
+
 def _sample_mesh_display_geometry(
     points: list[tuple[float, float, float]],
     faces: list[list[int]],
@@ -646,34 +666,39 @@ def measure_mesh_preview(
         else None
         for patch in ordered_patches
     ]
+    volume_scale_interval_m3 = _cubic_volume_scale_interval_m3(
+        enclosed_volume_m3, relative_scale_uncertainty
+    )
+    patch_volume_scale_intervals_m3 = (
+        [
+            _cubic_volume_scale_interval_m3(volume, relative_scale_uncertainty)
+            for volume in patch_volumes_m3
+        ]
+        if relative_scale_uncertainty is not None
+        else None
+    )
+    if relative_scale_uncertainty is not None and (
+        (enclosed_volume_m3 is not None and volume_scale_interval_m3 is None)
+        or (
+            patch_volume_scale_intervals_m3 is not None
+            and any(
+                volume is not None and interval is None
+                for volume, interval in zip(
+                    patch_volumes_m3, patch_volume_scale_intervals_m3, strict=True
+                )
+            )
+        )
+    ):
+        volume_qc_warnings.add("enclosed_volume_scale_interval_numeric_unrepresentable")
     return {
         "schema_version": "mesh-preview-0001",
         "surface_area_m2": area_m2,
         "surface_area_to_bounding_diagonal_squared_ratio": shape_ratio,
         "enclosed_volume_m3": enclosed_volume_m3,
         "edge_connected_patch_enclosed_volumes_m3": patch_volumes_m3,
-        "enclosed_volume_scale_interval_m3": (
-            [
-                enclosed_volume_m3 * (1 - relative_scale_uncertainty) ** 3,
-                enclosed_volume_m3 * (1 + relative_scale_uncertainty) ** 3,
-            ]
-            if enclosed_volume_m3 is not None and relative_scale_uncertainty is not None
-            else None
-        ),
+        "enclosed_volume_scale_interval_m3": volume_scale_interval_m3,
         "edge_connected_patch_enclosed_volume_scale_intervals_m3": (
-            [
-                (
-                    [
-                        volume * (1 - relative_scale_uncertainty) ** 3,
-                        volume * (1 + relative_scale_uncertainty) ** 3,
-                    ]
-                    if volume is not None
-                    else None
-                )
-                for volume in patch_volumes_m3
-            ]
-            if relative_scale_uncertainty is not None
-            else None
+            patch_volume_scale_intervals_m3
         ),
         "enclosed_volume_is_provisional": True,
         "surface_to_enclosed_volume_ratio_per_m": surface_volume_ratio_per_m,
