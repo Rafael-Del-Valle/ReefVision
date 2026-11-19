@@ -120,3 +120,102 @@ def test_two_edge_route_retains_segment_geometry_and_uncertainty() -> None:
     assert route["path_cumulative_lengths_m"][-1] == pytest.approx(route["length_m"])
     assert result["measurement_status"] == "caller_supplied_unverified"
     assert result["provenance"]["calibration_verified"] is False
+
+
+@pytest.mark.parametrize("uncertainty", [0.0, 1.0])
+def test_mesh_route_exact_and_mathematical_zero_bounds_are_distinct(
+    uncertainty: float,
+) -> None:
+    """Exact scale and 100% uncertainty must retain valid route bounds."""
+    result = measure_mesh_preview(**PARAMS, relative_scale_uncertainty=uncertainty)
+    route = result["surface_edge_paths"][0]
+    expected = [0.01 * (1 - uncertainty), 0.01 * (1 + uncertainty)]
+    assert route["length_scale_interval_m"] == expected
+    assert route["endpoint_chord_scale_interval_m"] == expected
+    assert route["path_edge_length_scale_intervals_m"] == [expected]
+    assert route["path_cumulative_length_scale_intervals_m"] == [
+        [0.0, 0.0],
+        expected,
+    ]
+    assert "path_scale_interval_below_numeric_resolution" not in route["path_qc_warnings"]
+
+
+def test_unresolvable_mesh_edge_path_bounds_standalone_and_replayed(
+    client: TestClient,
+) -> None:
+    """Do not serialize an apparently exact measured route with nonzero uncertainty."""
+    parameters = {**PARAMS, "relative_scale_uncertainty": 1e-20}
+    direct = measure_mesh_preview(**parameters)
+    connected = direct["surface_edge_paths"][0]
+    assert connected["status"] == "connected"
+    assert connected["length_m"] == 0.01
+    assert connected["length_scale_interval_m"] is None
+    assert connected["endpoint_chord_scale_interval_m"] is None
+    assert connected["scale_uncertainty_m"] is None
+    assert connected["endpoint_chord_scale_uncertainty_m"] is None
+    assert connected["geometric_excess_scale_interval_m"] == [0.0, 0.0]
+    assert connected["path_edge_length_scale_intervals_m"] == [None]
+    assert connected["path_cumulative_length_scale_intervals_m"] == [
+        [0.0, 0.0],
+        None,
+    ]
+    assert "path_scale_interval_below_numeric_resolution" in connected["path_qc_warnings"]
+    assert direct["provenance"]["calibration_verified"] is False
+
+    project_id = str(create_project(client, "Unverified sub-resolution mesh route bounds")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/mesh-preview", json=parameters)
+    assert response.status_code == 200, response.text
+    expected = response.json()
+    assert expected["surface_edge_paths"] == direct["surface_edge_paths"]
+    assert expected["provenance"]["specimen_identity_verified"] is False
+    assert expected["provenance"]["coordinate_registration_verified"] is False
+    assert expected["confidence_interval"] is None
+
+    graph = {
+        "graph_id": "sub-resolution-route-intervals-v14",
+        "name": "Unverified mesh route numeric uncertainty review",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "mesh",
+                "node_type": "mesh_surface_preview",
+                "parameters": parameters,
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifacts = [
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        ]
+        assert len(artifacts) == 1
+        assert artifacts[0]["payload_json"] == expected
+        hashes.append(artifacts[0]["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
