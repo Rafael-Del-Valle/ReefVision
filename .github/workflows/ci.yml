@@ -151,6 +151,9 @@ jobs:
       - name: Reject reserved Win32 installer cabinet names before file access
         shell: pwsh
         run: python -m pytest scripts/tests/test_validate_msi_provenance.py -v
+      - name: Test managed MSI updater preflight and saved-config isolation
+        shell: pwsh
+        run: ./scripts/test-reefvision-msi-update.ps1
       - name: Verify installed start/restart process isolation
         shell: pwsh
         run: ./scripts/test-reefvision-start-process-scope.ps1
