@@ -57,6 +57,15 @@ class CurrentField:
                 "Current longitude gap exceeds 180 degrees; "
                 "antimeridian-spanning grids require regridding before integration"
             )
+        # An adjacent-gap-only guard misses wide multicolumn grids such as
+        # [-170, 0, 170], which spans 340 degrees with gaps of only 170.
+        # The domain kernel must apply the same scientific extent restriction
+        # as the API service: callers can integrate fields directly.
+        if ordered_lon[-1] - ordered_lon[0] > 180.0:
+            raise ValueError(
+                "Current longitude extent exceeds 180 degrees; "
+                "antimeridian-spanning grids require regridding before integration"
+            )
         matrices = []
         for values in (self.east, self.north):
             rows = tuple(tuple(row) for row in values)

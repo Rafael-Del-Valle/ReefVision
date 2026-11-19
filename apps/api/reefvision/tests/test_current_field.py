@@ -146,3 +146,23 @@ def test_dateline_grid_rejected_before_false_global_interpolation(longitudes):
             east=((1.0, 1.0), (1.0, 1.0)),
             north=((0.0, 0.0), (0.0, 0.0)),
         )
+
+
+@pytest.mark.parametrize(
+    "longitudes",
+    [(-170.0, 0.0, 170.0), (170.0, 0.0, -170.0)],
+)
+def test_domain_rejects_wide_multicolumn_current_field_without_adjacent_gap(longitudes):
+    """Direct domain callers must not interpolate a false 340-degree ocean cell.
+
+    Every adjacent spacing is only 170 degrees, so checking gaps alone misses
+    this scientifically invalid domain. The service also guards this case,
+    but the public interpolation kernel must independently refuse it.
+    """
+    with pytest.raises(ValueError, match="longitude extent exceeds 180 degrees"):
+        CurrentField(
+            latitudes=(-1.0, 1.0),
+            longitudes=longitudes,
+            east=((1.0, 1.0, 1.0), (1.0, 1.0, 1.0)),
+            north=((0.0, 0.0, 0.0), (0.0, 0.0, 0.0)),
+        )
