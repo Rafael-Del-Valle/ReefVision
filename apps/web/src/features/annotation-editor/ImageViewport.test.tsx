@@ -688,7 +688,7 @@ describe("ImageViewport", () => {
     const rectSpy = vi.spyOn(frame, "getBoundingClientRect");
 
     const wheelAt = (clientX: number, rectLeft: number) => {
-      rectSpy.mockReturnValue({ ...originalRect, left: rectLeft } as DOMRect);
+      rectSpy.mockReturnValue({ ...originalRect, left: rectLeft, top: originalRect.top } as DOMRect);
       const wheel = new WheelEvent("wheel", {
         bubbles: true,
         cancelable: true,
