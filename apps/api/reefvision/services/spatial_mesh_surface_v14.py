@@ -941,16 +941,8 @@ def measure_mesh_preview(
         "qc_warnings": (
             sorted(volume_qc_warnings)
             + (["degenerate_triangles_present"] if degenerate else [])
-            + (
-                ["mesh_face_area_fraction_underflow"]
-                if face_area_fraction_underflow
-                else []
-            )
-            + (
-                ["mesh_patch_area_fraction_underflow"]
-                if patch_area_fraction_underflow
-                else []
-            )
+            + (["mesh_face_area_fraction_underflow"] if face_area_fraction_underflow else [])
+            + (["mesh_patch_area_fraction_underflow"] if patch_area_fraction_underflow else [])
             + (["mesh_shape_ratio_unavailable_zero_extent"] if source_diagonal == 0 else [])
             + (
                 ["mesh_shape_ratio_unavailable_numeric_underflow"]
