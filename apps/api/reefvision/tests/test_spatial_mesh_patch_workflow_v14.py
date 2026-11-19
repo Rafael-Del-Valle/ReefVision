@@ -566,7 +566,11 @@ def test_compensated_patch_area_reconciles_mixed_scale_faces_in_saved_workflow(
     assert direct["surface_area_m2"] == expected_area_m2
     assert direct["edge_connected_patch_count"] == 1
     assert direct["edge_connected_patch_surface_areas_m2"] == [expected_area_m2]
-    assert direct["area_weighted_surface_centroid_m"][0] == expected_x_centroid_m
+    # Normalized, compensated face weights can differ from a separately
+    # accumulated raw-moment control by one binary64 rounding step.
+    assert direct["area_weighted_surface_centroid_m"][0] == pytest.approx(
+        expected_x_centroid_m, rel=1e-15, abs=0.0
+    )
     assert direct["area_weighted_surface_centroid_m"][0] > 0.01 / 3
     assert direct["edge_connected_patch_area_weighted_surface_centroids_m"] == [
         direct["area_weighted_surface_centroid_m"]
