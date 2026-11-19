@@ -24,6 +24,8 @@ def test_path_scale_intervals_survive_saved_workflow(client: TestClient) -> None
     connected = expected[0]
     assert connected["length_scale_interval_m"] == pytest.approx([0.009, 0.011])
     assert connected["endpoint_chord_scale_interval_m"] == pytest.approx([0.009, 0.011])
+    assert connected["scale_uncertainty_m"] == pytest.approx(0.001)
+    assert connected["endpoint_chord_scale_uncertainty_m"] == pytest.approx(0.001)
     assert connected["path_edge_lengths_m"] == pytest.approx([0.01])
     assert connected["path_cumulative_lengths_m"] == pytest.approx([0.0, 0.01])
     assert connected["path_cumulative_length_scale_intervals_m"] == [
@@ -132,6 +134,8 @@ def test_mesh_route_exact_and_mathematical_zero_bounds_are_distinct(
     expected = [0.01 * (1 - uncertainty), 0.01 * (1 + uncertainty)]
     assert route["length_scale_interval_m"] == expected
     assert route["endpoint_chord_scale_interval_m"] == expected
+    assert route["scale_uncertainty_m"] == pytest.approx(0.01 * uncertainty)
+    assert route["endpoint_chord_scale_uncertainty_m"] == pytest.approx(0.01 * uncertainty)
     assert route["path_edge_length_scale_intervals_m"] == [expected]
     assert route["path_cumulative_length_scale_intervals_m"] == [
         [0.0, 0.0],
