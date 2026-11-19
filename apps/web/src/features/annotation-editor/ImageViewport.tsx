@@ -180,12 +180,18 @@ export function ImageViewport({
       if (event.ctrlKey || event.metaKey) return;
       // WebView2 trackpads can supply a malformed axis alongside a real
       // scroll value. Validate independently to avoid stray page movement.
+      const invalidAxis =
+        !Number.isFinite(event.deltaX) || !Number.isFinite(event.deltaY);
       const deltaX = Number.isFinite(event.deltaX) ? event.deltaX : 0;
       const deltaY = Number.isFinite(event.deltaY) ? event.deltaY : 0;
-      if (deltaX === 0 && deltaY === 0) return;
+      // A fully malformed precision-wheel gesture is still an input over
+      // the scientific viewport. Contain it so WebView2 cannot scroll the
+      // document behind the image, but do not change the pixel transform.
+      if (deltaX === 0 && deltaY === 0 && !invalidAxis) return;
 
       event.preventDefault();
       event.stopPropagation();
+      if (deltaX === 0 && deltaY === 0) return;
       // Never zoom scientific overlays on horizontal or Shift scrolling.
       if (event.shiftKey || Math.abs(deltaX) >= Math.abs(deltaY)) {
         return;

@@ -334,7 +334,11 @@ describe("ImageViewport", () => {
     expect(wheel(120, Number.POSITIVE_INFINITY)).toBe(true);
     expect(transform.style.transform).toBe(zoomed);
 
-    expect(wheel(Number.NaN, Number.NEGATIVE_INFINITY)).toBe(false);
+    // No finite axis must still be contained by the desktop viewer:
+    // otherwise WebView2 may scroll the document behind the annotation.
+    expect(wheel(Number.NaN, Number.NEGATIVE_INFINITY)).toBe(true);
+    expect(wheel(Number.NaN, 0)).toBe(true);
+    expect(wheel(0, Number.POSITIVE_INFINITY)).toBe(true);
     expect(transform.style.transform).toBe(zoomed);
     expect(polygon).toHaveAttribute("points", originalPoints);
   });
