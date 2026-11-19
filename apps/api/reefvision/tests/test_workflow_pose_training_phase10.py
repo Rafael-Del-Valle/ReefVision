@@ -33,6 +33,7 @@ from reefvision.db.models import (
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.pose_training import (
     _prepare_clean_pose_training_output,
+    _require_empty_pose_gpu_output,
     _resolve_unlinked_pose_run_path,
     _verify_prelaunch_pose_dataset,
     materialize_pose_training_exports,
@@ -983,7 +984,7 @@ def test_pose_materialization_rejects_special_archive_members(
     assert not (destination / "images" / "train" / "frame_00000001.png").exists()
 
 
-@pytest.mark.parametrize("output_name", ("pose-dataset", "ultralytics", "runs"))
+@pytest.mark.parametrize("output_name", ("pose-dataset", "ultralytics", "runs", "runs/pose"))
 def test_pose_run_output_rejects_redirect_into_another_managed_run(
     tmp_path: Path,
     output_name: str,
@@ -1001,6 +1002,7 @@ def test_pose_run_output_rejects_redirect_into_another_managed_run(
     current_run = training_root / "current-run"
     current_run.mkdir()
     linked_output = current_run / output_name
+    linked_output.parent.mkdir(parents=True, exist_ok=True)
     try:
         linked_output.symlink_to(prior_run, target_is_directory=True)
     except (OSError, NotImplementedError) as exc:
@@ -1050,6 +1052,24 @@ def test_pose_training_output_cleanup_rejects_locked_previous_checkpoint(
     assert output_root.is_dir()
     assert not old_checkpoint.exists()
     assert list(output_root.iterdir()) == []
+
+
+def test_pose_training_refuses_reused_gpu_output_and_preserves_checkpoints(
+    tmp_path: Path,
+) -> None:
+    # The Ultralytics trainer writes under runs/pose, not ultralytics/. A
+    # retried run must neither mix old weights nor erase a registered model.
+    output_root = tmp_path / "runs" / "pose"
+    _require_empty_pose_gpu_output(output_root)
+    output_root.mkdir(parents=True)
+    _require_empty_pose_gpu_output(output_root)
+
+    checkpoint = output_root / "weights" / "best.pt"
+    checkpoint.parent.mkdir()
+    checkpoint.write_bytes(b"preserve-registered-user-trained-weights")
+    with pytest.raises(ValidationError, match="refusing to reuse previous artifacts"):
+        _require_empty_pose_gpu_output(output_root)
+    assert checkpoint.read_bytes() == b"preserve-registered-user-trained-weights"
 
 
 def test_pose_materialization_rejects_symlinked_export_destinations(
