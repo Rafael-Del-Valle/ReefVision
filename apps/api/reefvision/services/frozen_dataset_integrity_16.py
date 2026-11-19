@@ -238,6 +238,20 @@ def validate_frozen_dataset_manifest(
         if item.image_id in seen:
             raise ValidationError(message)
         seen.add(item.image_id)
+        # Source-image provenance and dimensions are required even for a
+        # reviewed *empty* image: an annotation-only geometry check would
+        # otherwise skip that case when both checksums were recomputed.
+        # This verifies the recorded digest format, not on-disk image bytes.
+        if (
+            type(item.image_sha256) is not str
+            or len(item.image_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in item.image_sha256)
+            or type(item.width_px) is not int
+            or item.width_px <= 0
+            or type(item.height_px) is not int
+            or item.height_px <= 0
+        ):
+            raise ValidationError(message)
         # A re-signed manifest cannot turn related biological replicates
         # into independent train/validation/test observations. The original
         # dataset producer assigns each non-null group as one split unit.

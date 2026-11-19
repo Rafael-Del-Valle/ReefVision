@@ -60,3 +60,21 @@ No migration, class renumbering, automatic model weight download, or new
 workflow node is introduced. New synthetic and disposable database tests
 cover valid ungrouped controls, recomputed-checksum group leakage and class
 index collisions, standalone QC refusal and saved graph refusal/retry.
+
+
+## Source-image fingerprint gate for empty biological observations (1.6)
+
+A dataset can legitimately contain reviewed images with **zero detections and
+zero masks**. Earlier checks of detection or mask geometry did not validate
+those images' source dimensions and digest format. The shared read-only QC
+validator now requires a lowercase 64-character hexadecimal source-image
+SHA-256 and strictly positive integer source dimensions for **every** 0006 or
+0007 frozen item, including observation-free images. Invalid source metadata
+cannot be made QC-eligible by recomputing the nested item and manifest hashes.
+
+Synthetic two-schema tests cover valid empty-image controls and seven fully
+rehashed source-metadata corruptions; database-backed tests cover both the
+standalone review-queue API and persisted executable typed Workflow Builder
+with original provenance, rollback, replay, and researcher-approval gates.
+This checks only recorded metadata; it **does not** read, repair, or rehash the
+original image bytes, authenticate local SHA-256 claims, or approve research.

@@ -547,3 +547,62 @@ def test_resigned_frozen_class_indices_remain_unique_and_nonnegative(tamper: str
     version.manifest_sha256 = canonical_json_sha256(manifest)
     with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
         validate_frozen_dataset_manifest(version, [item])
+
+
+@pytest.mark.parametrize("schema_version", ["0006", "0007"])
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        "nonhex_digest",
+        "uppercase_digest",
+        "short_digest",
+        "nonstring_digest",
+        "zero_width",
+        "negative_height",
+        "boolean_width",
+    ],
+)
+def test_fully_resigned_empty_frozen_image_requires_source_identity(
+    schema_version: str, tamper: str
+) -> None:
+    """Even observation-free source images require sane, traceable metadata."""
+    version, item = _saved_snapshot(schema_version, with_mask=False)
+    item.annotation_snapshot_json = []
+    item.annotation_count = 0
+    item.per_class_counts_json = {}
+    version.annotation_count = 0
+    # Establish a *valid*, unchanged observation-free snapshot as a control.
+    payload = _item_payload(item, schema_version=schema_version)
+    item.snapshot_sha256 = canonical_json_sha256(payload)
+    manifest = deepcopy(version.manifest_json)
+    manifest["summary"]["annotation_count"] = 0
+    manifest["items"] = [{**payload, "snapshot_sha256": item.snapshot_sha256}]
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+    validate_frozen_dataset_manifest(version, [item])
+
+    if tamper == "nonhex_digest":
+        item.image_sha256 = "z" * 64
+    elif tamper == "uppercase_digest":
+        item.image_sha256 = "A" * 64
+    elif tamper == "short_digest":
+        item.image_sha256 = "a" * 63
+    elif tamper == "nonstring_digest":
+        item.image_sha256 = None
+    elif tamper == "zero_width":
+        item.width_px = 0
+    elif tamper == "negative_height":
+        item.height_px = -1
+    else:
+        item.width_px = True
+
+    # Recompute the complete historical item and manifest checksums.
+    payload = _item_payload(item, schema_version=schema_version)
+    item.snapshot_sha256 = canonical_json_sha256(payload)
+    manifest = deepcopy(version.manifest_json)
+    manifest["items"] = [{**payload, "snapshot_sha256": item.snapshot_sha256}]
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+
+    with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+        validate_frozen_dataset_manifest(version, [item])

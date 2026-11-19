@@ -154,6 +154,8 @@ def test_frozen_item_evidence_cannot_change_under_standalone_or_saved_qc(
         "class_name_drift",
         "class_index_drift",
         "unknown_class_id",
+        "source_digest_nonhex",
+        "source_width_zero",
     ],
 )
 def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
@@ -191,6 +193,10 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             version.annotation_count += 1
         elif tamper == "class_census":
             item.per_class_counts_json = {"forged_taxon": item.annotation_count}
+        elif tamper == "source_digest_nonhex":
+            item.image_sha256 = "z" * 64
+        elif tamper == "source_width_zero":
+            item.width_px = 0
         else:
             annotations = [dict(annotation) for annotation in item.annotation_snapshot_json]
             if tamper == "reused_identity":
