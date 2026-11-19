@@ -367,6 +367,12 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                             top_offset = exif.get(36881)
                             nested_local = exif_ifd.get(36867)
                             nested_offset = exif_ifd.get(36881)
+                            # SubSecTimeOriginal (37521) is part of the
+                            # exposure timestamp too. Contradictory fractional
+                            # seconds across IFD0 and ExifIFD must invalidate
+                            # acquisition-time provenance, even when the whole
+                            # seconds and UTC offset agree. Mirror the import
+                            # validator's three-field conflict check.
                             exposure_ifd_conflict = any(
                                 nested is not None
                                 and top is not None
@@ -374,6 +380,7 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                                 for nested, top in (
                                     (nested_local, top_local),
                                     (nested_offset, top_offset),
+                                    (exif_ifd.get(37521), exif.get(37521)),
                                 )
                             )
                             capture_local, invalid_capture_local = (
