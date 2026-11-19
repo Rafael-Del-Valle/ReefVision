@@ -42,7 +42,7 @@ def _saved_snapshot(
             annotation_count=1,
             per_class_counts_json={"swiftia": 1},
             annotation_snapshot_json=[
-                {"id": "polyp-1", "label_class_id": "swiftia", "x_min": 5, "x_max": 10}
+                {"id": "polyp-1", "label_class_id": "swiftia", "x_min": 5, "y_min": 6, "x_max": 10, "y_max": 12}
             ],
             mask_annotation_count=len(masks),
             per_mask_class_counts_json={"swiftia": 1} if with_mask else {},
@@ -219,3 +219,39 @@ def test_resigned_mask_identity_cannot_be_reused_across_frozen_images() -> None:
 
     with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
         validate_frozen_dataset_manifest(version, [first, second])
+
+
+@pytest.mark.parametrize("schema_version", ["0006", "0007"])
+@pytest.mark.parametrize(
+    "tamper",
+    ["negative", "zero_area", "outside_image", "nonfinite", "text", "boolean"],
+)
+def test_fully_resigned_invalid_detection_geometry_fails_original_schemas(
+    schema_version: str, tamper: str
+) -> None:
+    """Checksums cannot turn an impossible source-pixel region into a coral."""
+    version, item = _saved_snapshot(schema_version, with_mask=False)
+    snapshot = deepcopy(item.annotation_snapshot_json[0])
+    if tamper == "negative":
+        snapshot["x_min"] = -1.0
+    elif tamper == "zero_area":
+        snapshot["x_max"] = snapshot["x_min"]
+    elif tamper == "outside_image":
+        snapshot["y_max"] = item.height_px + 1.0
+    elif tamper == "nonfinite":
+        snapshot["x_min"] = float("inf")
+    elif tamper == "text":
+        snapshot["y_min"] = "6"
+    else:
+        snapshot["y_min"] = True
+    item.annotation_snapshot_json = [snapshot]
+
+    payload = _item_payload(item, schema_version=schema_version)
+    item.snapshot_sha256 = canonical_json_sha256(payload)
+    manifest = deepcopy(version.manifest_json)
+    manifest["items"] = [{**payload, "snapshot_sha256": item.snapshot_sha256}]
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+
+    with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+        validate_frozen_dataset_manifest(version, [item])
