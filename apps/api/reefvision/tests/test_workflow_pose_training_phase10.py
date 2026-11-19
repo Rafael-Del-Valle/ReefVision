@@ -528,11 +528,9 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
     assert not (mismatched_destination / "images" / "val").exists()
 
 
-
-
 def test_pose_materialized_fingerprint_uses_portable_path_order(tmp_path: Path) -> None:
-    # Mixed-case, independently reviewed artifacts sort differently when
-    # Path comparison follows Windows case-insensitive filename rules.
+    # Mixed-case local artifacts sort differently on Windows, where Path
+    # comparisons follow case-insensitive filename rules.
     root = tmp_path / "frozen-pose-input"
     reviewed_files = {
         "Z_review/pose.png": b"reviewed-upper",
