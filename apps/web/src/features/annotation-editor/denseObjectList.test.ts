@@ -201,13 +201,7 @@ describe("dense object-browser window", () => {
       id: `box-${index}`,
     }));
     const selectedIds = ["box-250", ...Array(200).fill("box-299")];
-    const rows = boundedDenseObjectRows(
-      annotations,
-      [],
-      10,
-      selectedIds,
-      [],
-    );
+    const rows = boundedDenseObjectRows(annotations, [], 10, selectedIds, []);
     expect(rows.map((row) => row.position)).toEqual([
       0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 299,
     ]);
