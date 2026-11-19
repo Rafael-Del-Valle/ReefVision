@@ -72,6 +72,15 @@ def _resolve_unlinked_pose_run_path(settings: Settings, relative_path: str) -> P
         current = current / part
         if current.is_symlink():
             raise ValidationError("Pose training output path contains a symbolic link")
+        if sys.platform == "win32":
+            # NTFS directory junctions are not reported by Path.is_symlink().
+            # The Win32 FILE_ATTRIBUTE_REPARSE_POINT bit works with Python 3.11.
+            try:
+                attributes = getattr(current.lstat(), "st_file_attributes", 0)
+            except (FileNotFoundError, NotADirectoryError):
+                attributes = 0
+            if attributes & 0x400:
+                raise ValidationError("Pose training output path contains a Windows junction")
 
     return resolve_managed_project_path(settings, relative_path)
 
