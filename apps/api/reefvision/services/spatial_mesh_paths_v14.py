@@ -481,6 +481,16 @@ def mesh_edge_paths(
                 for source, calibrated in zip(points[index], vertex, strict=True)
             ):
                 path_qc_warnings.append("calibrated_path_vertex_coordinate_underflow")
+        # Narrow optional nominal lengths before multiplying scale uncertainty.
+        # Missing/unrepresentable bounds must never acquire a fabricated
+        # absolute uncertainty in API or persisted Workflow Builder results.
+        endpoint_chord_scale_uncertainty_m: float | None = None
+        route_scale_uncertainty_m: float | None = None
+        if scale_uncertainty is not None:
+            if chord_m is not None and endpoint_chord_scale_interval_m is not None:
+                endpoint_chord_scale_uncertainty_m = chord_m * scale_uncertainty
+            if meters is not None and length_scale_interval_m is not None:
+                route_scale_uncertainty_m = meters * scale_uncertainty
         results.append(
             {
                 "start_vertex_index": start,
@@ -504,19 +514,11 @@ def mesh_edge_paths(
                 "length_scale_interval_m": length_scale_interval_m,
                 "endpoint_chord_length_m": chord_m,
                 "endpoint_chord_scale_interval_m": endpoint_chord_scale_interval_m,
-                "endpoint_chord_scale_uncertainty_m": (
-                    chord_m * scale_uncertainty
-                    if endpoint_chord_scale_interval_m is not None and scale_uncertainty is not None
-                    else None
-                ),
+                "endpoint_chord_scale_uncertainty_m": endpoint_chord_scale_uncertainty_m,
                 "geometric_detour_ratio": detour_ratio,
                 "geometric_excess_length_m": geometric_excess_m,
                 "geometric_excess_scale_interval_m": geometric_excess_scale_interval_m,
-                "scale_uncertainty_m": (
-                    meters * scale_uncertainty
-                    if length_scale_interval_m is not None and scale_uncertainty is not None
-                    else None
-                ),
+                "scale_uncertainty_m": route_scale_uncertainty_m,
             }
         )
     return results
