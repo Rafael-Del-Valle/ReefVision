@@ -251,7 +251,6 @@ def _verify_pose_export_frame_pairs(
                 raise ValidationError("Ultralytics pose export has invalid label coordinates")
 
 
-
 def _reject_overlapping_pose_validation_frames(
     training_root: Path,
     validation_root: Path,
@@ -270,6 +269,7 @@ def _reject_overlapping_pose_validation_frames(
         raise ValidationError(
             "Ultralytics pose validation export reuses a frozen training frame"
         )
+
 
 def _copy_split(
     source_root: Path,
