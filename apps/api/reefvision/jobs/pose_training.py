@@ -373,10 +373,9 @@ def materialize_pose_training_exports(
     if validation_content is not None and validation_stage.is_symlink():
         raise ValidationError("Pose training validation staging path is a symbolic link")
 
-    shutil.rmtree(
-        destination,
-        ignore_errors=True,
-    )
+    # A failed cleanup must not mix stale scientific frames into a new training run.
+    if destination.exists():
+        shutil.rmtree(destination)
 
     _safe_extract_zip(
         training_content,
@@ -446,10 +445,9 @@ def materialize_pose_training_exports(
     if validation_content is not None:
         validation_stage = destination.parent / f".{destination.name}-validation"
 
-        shutil.rmtree(
-            validation_stage,
-            ignore_errors=True,
-        )
+        # An interrupted prior holdout export must not contaminate this split.
+        if validation_stage.exists():
+            shutil.rmtree(validation_stage)
 
         try:
             _safe_extract_zip(
