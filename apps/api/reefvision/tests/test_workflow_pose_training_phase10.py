@@ -581,9 +581,12 @@ def test_pose_materialization_rejects_unmapped_frozen_class_labels(
     # Reuse the frozen pose fixture, changing only the numeric class ID in
     # its label; neither training nor validation may reinterpret that truth.
     reviewed = _pose_export_zip(b"reviewed")
+    independent_validation = _pose_export_zip(b"independent-validation")
     altered = io.BytesIO()
     with (
-        zipfile.ZipFile(io.BytesIO(reviewed)) as original,
+        zipfile.ZipFile(
+            io.BytesIO(reviewed if altered_split == "training" else independent_validation)
+        ) as original,
         zipfile.ZipFile(altered, "w", compression=zipfile.ZIP_DEFLATED) as modified,
     ):
         for member in original.namelist():
@@ -596,7 +599,9 @@ def test_pose_materialization_rejects_unmapped_frozen_class_labels(
     with pytest.raises(ValidationError, match="invalid label class index"):
         materialize_pose_training_exports(
             training_content=altered.getvalue() if altered_split == "training" else reviewed,
-            validation_content=altered.getvalue() if altered_split == "validation" else reviewed,
+            validation_content=(
+                altered.getvalue() if altered_split == "validation" else independent_validation
+            ),
             destination=destination,
         )
     assert not (destination / "images" / "val").exists()
@@ -622,9 +627,12 @@ def test_pose_materialization_rejects_malformed_frozen_pose_rows(
     # Reuse the same frozen export fixture for training and separate validation.
     # A row that cannot encode the reviewed schema must fail before val copying.
     reviewed = _pose_export_zip(b"reviewed")
+    independent_validation = _pose_export_zip(b"independent-validation")
     altered = io.BytesIO()
     with (
-        zipfile.ZipFile(io.BytesIO(reviewed)) as original,
+        zipfile.ZipFile(
+            io.BytesIO(reviewed if altered_split == "training" else independent_validation)
+        ) as original,
         zipfile.ZipFile(altered, "w", compression=zipfile.ZIP_DEFLATED) as modified,
     ):
         for member in original.namelist():
@@ -637,7 +645,9 @@ def test_pose_materialization_rejects_malformed_frozen_pose_rows(
     with pytest.raises(ValidationError, match=expected_error):
         materialize_pose_training_exports(
             training_content=altered.getvalue() if altered_split == "training" else reviewed,
-            validation_content=altered.getvalue() if altered_split == "validation" else reviewed,
+            validation_content=(
+                altered.getvalue() if altered_split == "validation" else independent_validation
+            ),
             destination=destination,
         )
     assert not (destination / "images" / "val").exists()
