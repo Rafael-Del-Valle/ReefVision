@@ -761,7 +761,7 @@ describe("Gallery", () => {
     );
   });
 
-  it.each(["duplicate", "uncertain"] as const)(
+  it.each(["duplicate", "rejected", "uncertain"] as const)(
     "preserves the focused camera observation after a %s-only import",
     async (outcome) => {
       const camera: ProjectImage = {
@@ -772,6 +772,7 @@ describe("Gallery", () => {
         sha256: "b".repeat(64),
       };
       let imageReads = 0;
+      const requestedFilters: string[] = [];
       vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
         const url = new URL(String(input), "http://localhost");
         if (url.pathname.endsWith(`/projects/${project.id}/imports/images`)) {
@@ -782,23 +783,40 @@ describe("Gallery", () => {
           return jsonResponse({
             project_id: project.id,
             successful: [],
-            duplicates: [
-              {
-                filename: camera.original_filename,
-                relative_path: camera.original_filename,
-                status: "duplicate",
-                detail: "Exact file already exists in this project",
-                image_id: null,
-                duplicate_image_id: camera.id,
-                thumbnail_job_id: null,
-              },
-            ],
+            duplicates:
+              outcome === "duplicate"
+                ? [
+                    {
+                      filename: camera.original_filename,
+                      relative_path: camera.original_filename,
+                      status: "duplicate",
+                      detail: "Exact file already exists in this project",
+                      image_id: null,
+                      duplicate_image_id: camera.id,
+                      thumbnail_job_id: null,
+                    },
+                  ]
+                : [],
             unsupported: [],
-            failed: [],
+            failed:
+              outcome === "rejected"
+                ? [
+                    {
+                      filename: camera.original_filename,
+                      relative_path: camera.original_filename,
+                      status: "failed",
+                      detail: "Corrupt camera payload",
+                      image_id: null,
+                      duplicate_image_id: null,
+                      thumbnail_job_id: null,
+                    },
+                  ]
+                : [],
           });
         }
         if (url.pathname.endsWith(`/projects/${project.id}/images`)) {
           imageReads += 1;
+          requestedFilters.push(url.searchParams.get("filename") ?? "");
           return jsonResponse({
             items: [image, camera],
             total: 2,
@@ -819,12 +837,24 @@ describe("Gallery", () => {
         screen.getByAltText("Focused project image: DSC_0002.JPG"),
       ).toBeInTheDocument();
 
-      const fileInput = screen.getByLabelText("Import files") as HTMLInputElement;
+      // The filename filter is part of the scientist's review location.
+      // Failed or duplicate-only imports must not clear it.
+      await userEvent.type(
+        screen.getByPlaceholderText("Search filenames"),
+        "DSC_0002",
+      );
+      await waitFor(() =>
+        expect(requestedFilters.at(-1)).toBe("DSC_0002"),
+      );
+
+      const fileInput = screen.getByLabelText(
+        "Import files",
+      ) as HTMLInputElement;
       await userEvent.upload(
         fileInput,
         new File(["camera bytes"], "DSC_0002.JPG", { type: "image/jpeg" }),
       );
-      if (outcome === "duplicate") {
+      if (outcome !== "uncertain") {
         await screen.findByText("1 files processed");
       } else {
         await screen.findByText("Images could not be imported");
@@ -834,6 +864,10 @@ describe("Gallery", () => {
 
       // Imports with no confirmed new observations must not silently
       // switch the active scientific image or persisted review location.
+      expect(screen.getByPlaceholderText("Search filenames")).toHaveValue(
+        "DSC_0002",
+      );
+      expect(requestedFilters.at(-1)).toBe("DSC_0002");
       expect(
         screen.getByAltText("Focused project image: DSC_0002.JPG"),
       ).toBeInTheDocument();
