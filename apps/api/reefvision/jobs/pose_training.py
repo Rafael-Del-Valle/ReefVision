@@ -55,6 +55,27 @@ from reefvision.storage.projects import (
 )
 
 
+
+def _resolve_unlinked_pose_run_path(settings: Settings, relative_path: str) -> Path:
+    """Resolve training outputs without following in-root links to another run.
+
+    The ordinary managed-path resolver calls Path.resolve(), which follows a
+    symlink before a later destination.is_symlink() guard can detect it. That
+    may redirect recursive cleanup or training logs into another research run.
+    """
+    relative = Path(relative_path)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValidationError("Pose training output path must be managed and relative")
+
+    current = settings.resolved_data_dir
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise ValidationError("Pose training output path contains a symbolic link")
+
+    return resolve_managed_project_path(settings, relative_path)
+
+
 def _safe_extract_zip(
     content: bytes,
     destination: Path,
@@ -676,7 +697,7 @@ def process_pose_training_job(
 
             dataset_relative = f"{base_relative}/pose-dataset"
 
-            dataset_root = resolve_managed_project_path(
+            dataset_root = _resolve_unlinked_pose_run_path(
                 settings,
                 dataset_relative,
             )
@@ -689,7 +710,7 @@ def process_pose_training_job(
                 destination=dataset_root,
             )
 
-            save_root = resolve_managed_project_path(
+            save_root = _resolve_unlinked_pose_run_path(
                 settings,
                 f"{base_relative}/ultralytics",
             )
