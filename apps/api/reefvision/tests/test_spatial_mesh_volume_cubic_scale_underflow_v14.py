@@ -57,8 +57,9 @@ def test_representable_tiny_volume_preserves_exact_cubic_scale_bounds() -> None:
 
 @pytest.mark.parametrize(
     ("uncertainty", "bounds_available"),
-    [(0.0, True), (0.1, True), (0.8, False), (1.0, True)],
+    [(None, None), (0.0, True), (0.1, True), (0.8, False), (1.0, True)],
     ids=[
+        "unspecified-scale-uncertainty-withholds-bounds",
         "zero-scale-uncertainty-retains-nominal-bounds",
         "ten-percent-scale-uncertainty-retains-positive-bounds",
         "positive-bound-underflow",
@@ -66,7 +67,7 @@ def test_representable_tiny_volume_preserves_exact_cubic_scale_bounds() -> None:
     ],
 )
 def test_subnormal_volume_interval_qc_replays_in_saved_typed_workflow(
-    client: TestClient, uncertainty: float, bounds_available: bool
+    client: TestClient, uncertainty: float | None, bounds_available: bool | None
 ) -> None:
     """A rounded zero lower limit must not masquerade as scale evidence."""
     params = {
@@ -87,7 +88,13 @@ def test_subnormal_volume_interval_qc_replays_in_saved_typed_workflow(
     assert standalone["edge_connected_patch_enclosed_volumes_m3"] == [nominal]
     assert direct["enclosed_volume_m3"] == nominal
     warning = "enclosed_volume_scale_interval_numeric_unrepresentable"
-    if bounds_available:
+    if uncertainty is None:
+        # Missing uncertainty is not equivalent to a verified zero-error scale.
+        assert bounds_available is None
+        assert standalone["enclosed_volume_scale_interval_m3"] is None
+        assert standalone["edge_connected_patch_enclosed_volume_scale_intervals_m3"] == [None]
+        assert warning not in standalone["qc_warnings"]
+    elif bounds_available:
         expected = [nominal * (1 - uncertainty) ** 3, nominal * (1 + uncertainty) ** 3]
         # Zero must mean a genuine 100% lower scale bound, never rounding loss.
         assert (expected[0] == 0.0) is (uncertainty == 1.0)
@@ -100,11 +107,13 @@ def test_subnormal_volume_interval_qc_replays_in_saved_typed_workflow(
         assert standalone["enclosed_volume_scale_interval_m3"] is None
         assert standalone["edge_connected_patch_enclosed_volume_scale_intervals_m3"] == [None]
         assert warning in standalone["qc_warnings"]
-    assert direct["enclosed_volume_scale_interval_m3"] == (
-        standalone["enclosed_volume_scale_interval_m3"]
+    assert (
+        direct["enclosed_volume_scale_interval_m3"]
+        == (standalone["enclosed_volume_scale_interval_m3"])
     )
-    assert direct["edge_connected_patch_enclosed_volume_scale_intervals_m3"] == (
-        standalone["edge_connected_patch_enclosed_volume_scale_intervals_m3"]
+    assert (
+        direct["edge_connected_patch_enclosed_volume_scale_intervals_m3"]
+        == (standalone["edge_connected_patch_enclosed_volume_scale_intervals_m3"])
     )
     assert standalone["measurement_status"] == "caller_supplied_unverified"
     assert standalone["provenance"]["calibration_verified"] is False
