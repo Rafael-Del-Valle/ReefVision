@@ -45,6 +45,7 @@ def test_browser_display_does_not_exif_rotate_camera_pixels(tmp_path, orientatio
     assert source.read_bytes() == original
     assert hashlib.sha256(source.read_bytes()).hexdigest() == original_hash
 
+
 @pytest.mark.parametrize("orientation", [1, 3, 6, 8])
 @pytest.mark.parametrize("mode", ["CMYK", "L"])
 def test_non_rgb_camera_jpeg_displays_without_reorienting_or_changing_original(
