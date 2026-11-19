@@ -65,7 +65,7 @@ def test_frozen_item_evidence_cannot_change_under_standalone_or_saved_qc(
             annotations[0]["x_min"] = float(annotations[0]["x_min"]) + 3.0
             frozen.annotation_snapshot_json = annotations
             if tamper == "resigned_geometry":
-                frozen.snapshot_sha256 = canonical_json_sha256(_item_payload(frozen))
+                frozen.snapshot_sha256 = canonical_json_sha256(_item_payload(frozen, schema_version="0007"))
         elif tamper == "split":
             frozen.split = "train" if frozen.split != "train" else "test"
         elif tamper == "per_class_counts":

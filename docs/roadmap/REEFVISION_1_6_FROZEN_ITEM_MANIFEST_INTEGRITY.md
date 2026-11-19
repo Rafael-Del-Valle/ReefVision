@@ -48,3 +48,27 @@ cryptographic signatures**. This guards against a corrupt or individually
 re-signed row while the original manifest remains intact; an actor who can
 rewrite and rehash every database record must be addressed by independent
 backups or external attestations. No authenticity guarantee is claimed.
+
+
+## Schema-parity correction (CI #44460632911)
+
+Full backend CI uncovered 50 failures because the first check assumed the historical
+detection-only `0006` item format, while the installed dataset API already writes
+`0007` mask-aware manifests even when a study contains no masks. The API uses
+`MeasurementAwareDatasetVersionService`, inheriting mask-aware snapshot creation.
+This was an overstrict validator, not evidence that the original data were altered.
+
+The shared guard now checks the **original recorded version** against the
+manifest schema, accepting only the existing `0006` detection and `0007`
+mask/measurement contracts. For `0007`, the original snapshot hash and
+manifest must match all polygon/raster mask evidence, per-class counts, mask
+counts, and any saved measurement metadata. A `0006` snapshot cannot silently
+gain mask evidence; a changed or unknown schema fails closed. No live
+scientific data, generated dataset version, or reviewer decision is modified.
+
+New standalone format-parity tests cover legacy detection, current mask-free
+and mask-bearing manifests, original scientific measurements and altered/
+re-signed mask geometry, measurement values, counts and schema downgrade.
+The existing real API and saved Workflow Builder regressions exercise both
+routes; full exact-head CI and real installed Windows acceptance are required
+before lifting the release hold.
