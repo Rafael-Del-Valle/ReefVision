@@ -279,7 +279,7 @@ export function ImageViewport({
     if (event.key.toLowerCase() !== "f") return;
     // Do not hijack Ctrl/Cmd+F browser search, menu shortcuts or text being
     // composed in editable scientific labels. Only plain F refits the image.
-    if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing) {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.nativeEvent.isComposing) {
       return;
     }
     if (
