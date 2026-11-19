@@ -392,8 +392,15 @@ def measure_mesh_preview(
             if raw_volume == 0 and scale > 1:
                 patch_indices = sorted(patch_vertex_indices[patch])
                 local_index = {source: index for index, source in enumerate(patch_indices)}
+                # Preserve the fixed XYZ tuple type for the strict typed
+                # volume kernel rather than producing variable-length tuples.
                 calibrated_points = [
-                    tuple(value * scale for value in points[source]) for source in patch_indices
+                    (
+                        points[source][0] * scale,
+                        points[source][1] * scale,
+                        points[source][2] * scale,
+                    )
+                    for source in patch_indices
                 ]
                 calibrated_faces = [
                     [local_index[source] for source in face] for face in patch_faces[patch]
