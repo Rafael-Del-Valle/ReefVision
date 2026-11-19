@@ -71,3 +71,23 @@ The same iteration corrects the prior GitHub backend Ruff format-check failure
 in the winding assertions. **These are regression contracts pending final-head
 CI verification**, not newly verified biological reference data or evidence
 of installed-GUI, physical GPU, or Windows release acceptance.
+
+### Selected surface-edge trace calibration-state replay (2026-11-19)
+
+The synthetic one-edge trace fixture must distinguish an **explicit positive
+scale uncertainty below IEEE-754 resolution** from an **omitted uncertainty**.
+Both preserve nominal geometric trace length and segment/cumulative distances.
+A subresolution positive uncertainty suppresses misleading zero-width length,
+segment, cumulative, and endpoint-chord intervals and emits
+`surface_trace_scale_interval_below_numeric_resolution`. Omitted uncertainty
+also provides no interval, but must **not** emit the subresolution warning;
+unknown uncertainty is not zero uncertainty.
+
+The regression now exercises each mode through the project-scoped standalone
+mesh API and a typed, executable, persisted Workflow Builder graph with two
+independent job executions. It requires full standalone/workflow artifact
+parity, matching SHA-256 replay digests, preserved omitted graph parameters,
+and explicitly **unverified calibration provenance**. This is a synthetic
+software invariant, **not** validated anatomical centerline length or a
+human-reviewed uncertainty estimate. Final-head backend and Windows evidence
+remain required before any release claim.
