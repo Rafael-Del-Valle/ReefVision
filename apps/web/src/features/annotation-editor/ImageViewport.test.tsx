@@ -173,7 +173,10 @@ describe("ImageViewport", () => {
         const originalPoints = polygon?.getAttribute("points");
 
         fireEvent.resize(window);
-        const expected = fitTransform({ width: 1600, height: 1200 }, dimensions);
+        const expected = fitTransform(
+          { width: 1600, height: 1200 },
+          dimensions,
+        );
         expect(transform.style.transform).toContain(`scale(${expected.scale})`);
         expect(polygon).toHaveAttribute("points", originalPoints);
         unmount();
