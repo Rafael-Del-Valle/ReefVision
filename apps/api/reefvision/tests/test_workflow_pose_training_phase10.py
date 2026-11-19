@@ -565,6 +565,36 @@ def test_pose_materialization_fails_closed_when_prior_cleanup_is_blocked(
         assert not (destination / "images" / "val").exists()
 
 
+
+def test_pose_materialization_rejects_failed_final_holdout_cleanup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A locked staging directory after a valid split export must fail the job,
+    # not leave raw reviewed holdout frames while reporting success.
+    destination = tmp_path / "pose-dataset"
+    staging = tmp_path / ".pose-dataset-validation"
+    original_rmtree = shutil.rmtree
+
+    def blocked_final_cleanup(path: Path, *args: Any, **kwargs: Any) -> None:
+        if Path(path) == staging:
+            raise OSError("independent validation staging is locked")
+        original_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(shutil, "rmtree", blocked_final_cleanup)
+
+    with pytest.raises(OSError, match="independent validation staging is locked"):
+        materialize_pose_training_exports(
+            training_content=_pose_export_zip(b"reviewed-training"),
+            validation_content=_pose_export_zip(b"reviewed-holdout"),
+            destination=destination,
+        )
+
+    assert (staging / "images" / "train" / "frame_00000001.png").read_bytes() == (
+        b"reviewed-holdout"
+    )
+
+
 def test_pose_training_rechecks_frozen_holdout_bytes_before_gpu_launch(
     tmp_path: Path,
 ) -> None:
