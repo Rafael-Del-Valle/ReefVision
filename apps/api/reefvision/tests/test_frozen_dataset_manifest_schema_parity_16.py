@@ -79,6 +79,7 @@ def _saved_snapshot(
     manifest = {
         "schema_version": schema_version,
         "class_map": class_map,
+        "split_config": {"eligible_annotation_statuses": ["reviewed"]},
         "summary": summary,
         "items": [{**payload, "snapshot_sha256": item.snapshot_sha256}],
     }
@@ -87,6 +88,7 @@ def _saved_snapshot(
         SimpleNamespace(
             schema_version=schema_version,
             class_map_json=class_map,
+            eligible_annotation_statuses_json=["reviewed"],
             manifest_json=manifest,
             manifest_sha256=canonical_json_sha256(manifest),
             image_count=1,
@@ -601,6 +603,53 @@ def test_fully_resigned_empty_frozen_image_requires_source_identity(
     item.snapshot_sha256 = canonical_json_sha256(payload)
     manifest = deepcopy(version.manifest_json)
     manifest["items"] = [{**payload, "snapshot_sha256": item.snapshot_sha256}]
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+
+    with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+        validate_frozen_dataset_manifest(version, [item])
+
+
+@pytest.mark.parametrize(
+    ("schema_version", "with_mask"),
+    [("0006", False), ("0007", False), ("0007", True)],
+)
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        "ineligible_image",
+        "unknown_image_status",
+        "unknown_eligible_status",
+        "eligibility_manifest_drift",
+        "duplicate_eligible_status",
+    ],
+)
+def test_resigned_frozen_status_selection_must_match_original_eligibility(
+    schema_version: str, with_mask: bool, tamper: str
+) -> None:
+    """Two recomputed hashes cannot make an excluded/unapproved source eligible."""
+    version, item = _saved_snapshot(schema_version, with_mask=with_mask)
+    validate_frozen_dataset_manifest(version, [item])
+
+    if tamper == "ineligible_image":
+        item.image_annotation_status = "excluded"
+    elif tamper == "unknown_image_status":
+        item.image_annotation_status = "not_a_real_status"
+    elif tamper == "unknown_eligible_status":
+        version.eligible_annotation_statuses_json = ["reviewed", "not_a_real_status"]
+    elif tamper == "eligibility_manifest_drift":
+        version.eligible_annotation_statuses_json = ["reviewed", "annotated"]
+    else:
+        version.eligible_annotation_statuses_json = ["reviewed", "reviewed"]
+
+    payload = _item_payload(item, schema_version=schema_version)
+    item.snapshot_sha256 = canonical_json_sha256(payload)
+    manifest = deepcopy(version.manifest_json)
+    manifest["items"] = [{**payload, "snapshot_sha256": item.snapshot_sha256}]
+    if tamper in {"unknown_eligible_status", "duplicate_eligible_status"}:
+        manifest["split_config"]["eligible_annotation_statuses"] = list(
+            version.eligible_annotation_statuses_json
+        )
     version.manifest_json = manifest
     version.manifest_sha256 = canonical_json_sha256(manifest)
 
