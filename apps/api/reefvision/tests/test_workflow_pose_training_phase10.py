@@ -466,6 +466,27 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
 
     assert (destination / "images" / "val" / "frame_00000001.png").read_bytes() == b"validation"
 
+    # The persisted training-run provenance must fingerprint the actual
+    # materialized science input, including rewritten data.yaml and holdout
+    # labels, not only the source ZIP bundle checksums.
+    materialized_files = sorted(path for path in destination.rglob("*") if path.is_file())
+    expected_digest = canonical_json_sha256(
+        [
+            {
+                "path": path.relative_to(destination).as_posix(),
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
+            for path in materialized_files
+        ]
+    )
+    assert independent["materialized_dataset_sha256"] == expected_digest
+    replay = materialize_pose_training_exports(
+        training_content=training,
+        validation_content=validation,
+        destination=tmp_path / "pose-dataset-replay",
+    )
+    assert replay["materialized_dataset_sha256"] == expected_digest
+
     no_validation_root = tmp_path / "pose-no-validation"
 
     exploratory = materialize_pose_training_exports(
