@@ -132,6 +132,7 @@ def test_literal_image_prefix_group_is_independent_in_preview_and_saved_qc(
     assert first_output["priority_score_unit"] == "dimensionless"
     assert first_output["review_status"] == "requires_researcher_review"
 
+
 def test_collision_safe_seeded_group_random_is_independent_of_candidate_order() -> None:
     """An arbitrary import order must not change a seeded study split."""
     singleton_id = "00000000-0000-0000-0000-000000000001"
