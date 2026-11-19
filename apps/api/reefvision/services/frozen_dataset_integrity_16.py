@@ -14,6 +14,7 @@ from math import isfinite
 from typing import Any, cast
 
 from reefvision.db.models import DatasetVersion, DatasetVersionItem
+from reefvision.domain.enums import ANNOTATION_STATUSES
 from reefvision.domain.errors import ValidationError
 from reefvision.storage.datasets import canonical_json_sha256
 
@@ -180,6 +181,24 @@ def validate_frozen_dataset_manifest(
     ):
         raise ValidationError(message)
 
+    # The producer snapshots the requested eligible review statuses separately
+    # in the version record and its manifest. A locally recomputed checksum
+    # cannot authorize an unreviewed or otherwise ineligible biological image.
+    split_config = manifest.get("split_config")
+    eligible_statuses = version.eligible_annotation_statuses_json
+    if (
+        not isinstance(split_config, dict)
+        or not isinstance(eligible_statuses, list)
+        or not eligible_statuses
+        or any(
+            type(status) is not str or status not in ANNOTATION_STATUSES
+            for status in eligible_statuses
+        )
+        or len(set(eligible_statuses)) != len(eligible_statuses)
+        or split_config.get("eligible_annotation_statuses") != eligible_statuses
+    ):
+        raise ValidationError(message)
+
     # The manifest binds the original frozen taxonomic dictionary, not the
     # project's potentially renamed live classes. Require both the version
     # record and every observation to agree with that immutable dictionary.
@@ -243,7 +262,9 @@ def validate_frozen_dataset_manifest(
         # otherwise skip that case when both checksums were recomputed.
         # This verifies the recorded digest format, not on-disk image bytes.
         if (
-            type(item.image_sha256) is not str
+            type(item.image_annotation_status) is not str
+            or item.image_annotation_status not in eligible_statuses
+            or type(item.image_sha256) is not str
             or len(item.image_sha256) != 64
             or any(character not in "0123456789abcdef" for character in item.image_sha256)
             or type(item.width_px) is not int
