@@ -9,7 +9,7 @@ from bisect import bisect_right
 from dataclasses import dataclass
 from itertools import pairwise
 from math import cos, hypot, isfinite, pi, radians, sin, sqrt
-from typing import Literal
+from typing import Literal, cast
 
 ALGORITHM_VERSION = "wgs84-stationary-bilinear-rk4-v1"
 Termination = Literal[
@@ -34,7 +34,8 @@ def _finite(value: object) -> bool:
     if isinstance(value, bool):
         return False
     try:
-        return isfinite(value)
+        # A cast changes only the static type; it must not coerce strings to numbers.
+        return isfinite(cast(float, value))
     except (TypeError, ValueError, OverflowError):
         return False
 
