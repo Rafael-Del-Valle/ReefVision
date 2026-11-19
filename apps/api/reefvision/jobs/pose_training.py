@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import math
@@ -250,6 +251,26 @@ def _verify_pose_export_frame_pairs(
                 raise ValidationError("Ultralytics pose export has invalid label coordinates")
 
 
+
+def _reject_overlapping_pose_validation_frames(
+    training_root: Path,
+    validation_root: Path,
+) -> None:
+    """Reject exact frame-byte reuse across frozen training and validation."""
+
+    training_images = training_root / "images" / "train"
+    validation_images = validation_root / "images" / "train"
+
+    def frame_digest(path: Path) -> bytes:
+        with path.open("rb") as frame:
+            return hashlib.file_digest(frame, "sha256").digest()
+
+    training_hashes = {frame_digest(frame) for frame in training_images.glob("*.png")}
+    if any(frame_digest(frame) in training_hashes for frame in validation_images.glob("*.png")):
+        raise ValidationError(
+            "Ultralytics pose validation export reuses a frozen training frame"
+        )
+
 def _copy_split(
     source_root: Path,
     destination_root: Path,
@@ -415,6 +436,10 @@ def materialize_pose_training_exports(
                     "Ultralytics pose validation export has incompatible data.yaml"
                 )
 
+            _reject_overlapping_pose_validation_frames(
+                destination,
+                validation_stage,
+            )
             _copy_split(
                 validation_stage,
                 destination,
