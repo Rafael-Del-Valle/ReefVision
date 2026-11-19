@@ -71,8 +71,9 @@ def test_genuinely_unrepresentable_cubic_volume_remains_withheld() -> None:
     [(1e8, 1e-110), (1e-110, 1e6)],
     ids=["large-source-tiny-calibration", "tiny-source-large-calibration"],
 )
+@pytest.mark.parametrize("reverse_winding", [False, True], ids=["forward", "reversed"])
 def test_tiny_volume_standalone_and_replayed_saved_graph_preserve_provenance(
-    client: TestClient, coordinate_extent: float, scale: float
+    client: TestClient, coordinate_extent: float, scale: float, reverse_winding: bool
 ) -> None:
     project_id = str(create_project(client, "Small provisional enclosed volume")["id"])
     base = f"/api/v1/projects/{project_id}"
@@ -87,11 +88,19 @@ def test_tiny_volume_standalone_and_replayed_saved_graph_preserve_provenance(
         "specimen_id": "synthetic-unverified-coral",
         "observation_id": "tiny-volume-survey-1",
         "coordinate_frame_id": "imported-unregistered",
+        "faces": [[a, c, b] for a, b, c in CLOSED_FACES] if reverse_winding else CLOSED_FACES,
     }
     standalone_response = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert standalone_response.status_code == 200, standalone_response.text
     standalone = standalone_response.json()
-    assert standalone["enclosed_volume_m3"] > 0
+    expected_volume = (coordinate_extent * scale) ** 3 / 6
+    assert expected_volume > 0
+    assert standalone["enclosed_volume_m3"] == pytest.approx(
+        expected_volume, rel=1e-8, abs=0
+    )
+    assert (
+        "enclosed_volume_source_unit_numeric_recovery" in standalone["qc_warnings"]
+    ) is (coordinate_extent < 1)
     assert standalone["provenance"]["calibration_verified"] is False
     assert standalone["provenance"]["specimen_identity_verified"] is False
     assert standalone["provenance"]["coordinate_registration_verified"] is False
@@ -154,12 +163,8 @@ def test_source_unit_underflow_recovers_volume_with_review_flag(
         [0.0, extent, 0.0],
         [0.0, 0.0, extent],
     ]
-    faces = (
-        [[a, c, b] for a, b, c in CLOSED_FACES] if reverse_winding else CLOSED_FACES
-    )
-    assert (
-        signed_enclosed_volume_mesh_units([tuple(vertex) for vertex in vertices], faces) == 0
-    )
+    faces = [[a, c, b] for a, b, c in CLOSED_FACES] if reverse_winding else CLOSED_FACES
+    assert signed_enclosed_volume_mesh_units([tuple(vertex) for vertex in vertices], faces) == 0
     params = {**_params(1e6), "vertices": vertices, "faces": faces}
     result = measure_mesh_preview(**params)
     expected = (extent * 1e6) ** 3 / 6
