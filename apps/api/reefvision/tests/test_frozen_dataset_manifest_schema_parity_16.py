@@ -470,6 +470,7 @@ def test_resigned_mask_taxonomy_must_match_frozen_class_dictionary(tamper: str) 
     with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
         validate_frozen_dataset_manifest(version, [item])
 
+
 @pytest.mark.parametrize("schema_version", ["0006", "0007"])
 @pytest.mark.parametrize("same_group", [True, False])
 def test_resigned_biological_group_cannot_cross_dataset_splits(

@@ -450,6 +450,7 @@ def test_resigned_mask_review_provenance_fails_standalone_and_saved_qc(
     assert restored_queue.json() == original_queue.json()
     assert _queue_item(client, standalone.json()["id"])["review_state"] == "pending"
 
+
 def test_resigned_colony_split_leakage_blocks_standalone_and_saved_qc(
     client: TestClient,
 ) -> None:
