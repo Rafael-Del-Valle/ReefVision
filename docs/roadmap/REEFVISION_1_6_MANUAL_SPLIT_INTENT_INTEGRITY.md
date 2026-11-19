@@ -17,3 +17,14 @@ A new end-to-end regression tests both repetition types, plus the existing unkno
 The preceding run also passed frontend/E2E and native-Windows research-preservation jobs, backend Ruff, strict mypy and migration preflights. **Exact new-head pytest/CI is required before calling these fixes validated.** A GitHub-hosted job is not a substitute for genuine Windows MSI/CAB clean installation, upgrade and rollback, installed-GUI behavior or representative marine biology acceptance.
 
 **Release HOLD:** independent 1.1/1.6 Alembic-0038 reconciliation, full exact-head CI, human-reviewed biological workflow acceptance, installed Windows validation and explicit researcher authorization. The 1.7 and revised 1.8 branches are untouched. No auto-merge, release, deployment, external weights or user asset changes.
+
+
+## 2026-11-19 — original frozen parent authentication before split reuse
+
+The original dataset producer (1.0–1.5) supports `reuse_parent_assignments`; the existing 1.6 standalone and saved typed Workflow Builder QC already authenticates 0006/0007 immutable manifests. The child dataset preview/create path instead trusted a parent's `complete` status and copied mutable `DatasetVersionItem.split` values without validating the parent's manifest. An externally modified parent holdout could therefore contaminate a new study while the parent's own QC rejected that same corrupted evidence.
+
+Child planning now calls the **same** read-only shared frozen-dataset manifest validator before inheriting split assignments. Forged parent geometry, class, provenance, biological grouping or split data fail closed; valid parent records and existing historical frozen versions are unchanged. No new migration, Workflow Builder node, automatic approval, pretrained weights or data rewriting.
+
+A disposable database regression covers parent creation, valid preview, standalone and persisted executable `project_source → dataset_version_source → qc_review_queue`, an intentionally forged parent split, rejection of both child preview and creation without unintended new versions, explicit test-only restoration, successful child creation and a second saved graph execution. Both graph runs retain provenance, typed dimensionless priority and pending researcher approval.
+
+The preceding [CI #44611181242](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44611181242) passed frontend and native-Windows preservation but failed backend Ruff formatting only. This change also applies the exact CI-provided one-line Ruff correction. New-head integrated backend pytest/lint/type, frontend/E2E, independent 1.1/1.6 migration reconciliation and genuine Windows MSI/CAB/installed-GUI clean-install, upgrade and rollback remain unverified release blockers.

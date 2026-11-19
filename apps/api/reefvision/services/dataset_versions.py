@@ -27,6 +27,7 @@ from reefvision.db.models.project import utc_now
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.repositories.dataset_versions import DatasetVersionRepository, ExportRepository
 from reefvision.repositories.projects import ProjectRepository
+from reefvision.services.frozen_dataset_integrity_16 import validate_frozen_dataset_manifest
 from reefvision.schemas.dataset_versions import (
     DatasetExportCreateRequest,
     DatasetExportCreateResponse,
@@ -292,7 +293,12 @@ class DatasetVersionService:
         assert parent is not None
         if parent.status != "complete":
             raise ValidationError("Only complete parent versions may contribute split assignments")
-        return {item.image_id: item for item in self.versions.items_for_version(parent.id)}
+        items = self.versions.items_for_version(parent.id)
+        # A completed version is not proof that its biological holdout
+        # evidence survived unchanged. Authenticate the original frozen
+        # manifest before inheriting any parent train/test assignment.
+        validate_frozen_dataset_manifest(parent, items)
+        return {item.image_id: item for item in items}
 
     def _manual_assignment_map(self, request: DatasetVersionPreviewRequest) -> dict[str, str]:
         assignments: dict[str, str] = {}
@@ -303,9 +309,7 @@ class DatasetVersionService:
                     raise ValidationError("Manual split assignments conflict for the same image")
                 # Duplicate rows make an explicitly requested study split
                 # ambiguous to audit, even if the repeated value agrees.
-                raise ValidationError(
-                    "Manual split assignments contain a duplicate image"
-                )
+                raise ValidationError("Manual split assignments contain a duplicate image")
             assignments[item.image_id] = item.split
         return assignments
 

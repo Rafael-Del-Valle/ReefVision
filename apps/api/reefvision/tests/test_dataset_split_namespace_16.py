@@ -6,11 +6,14 @@ QC service and by a persisted executable, typed Workflow Builder graph.
 
 from __future__ import annotations
 
+from typing import cast
 from uuid import uuid4
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
-from reefvision.db.models import ImageAsset
+from reefvision.db.models import DatasetVersionItem, ImageAsset
 from reefvision.schemas.dataset_versions import DatasetVersionPreviewRequest
 from reefvision.services.dataset_versions import CandidateImage, DatasetVersionService
 from reefvision.tests.test_annotations import create_project, import_one
@@ -18,6 +21,7 @@ from reefvision.tests.test_dataset_versions import save_annotations, update_imag
 from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
     _frozen_graph,
     _run_frozen_graph,
+    _study,
 )
 
 
@@ -279,6 +283,94 @@ def test_manual_assignments_cannot_silently_ignore_ineligible_images_or_mutate_s
         assert output["priority_score_unit"] == "dimensionless"
         assert output["review_status"] == "requires_researcher_review"
         queued = client.get(f"/api/v1/review-queues/{output['queue_id']}/items")
+        assert queued.status_code == 200, queued.text
+        assert queued.json()["total"] == 1
+        assert queued.json()["items"][0]["review_state"] == "pending"
+
+
+def test_parent_reuse_refuses_modified_frozen_holdout_and_preserves_saved_qc(
+    client: TestClient,
+) -> None:
+    """No child may inherit a forged parent train/test assignment."""
+    project_id, image_id, parent_id, _ = _study(client)
+    request = {
+        "parent_version_id": parent_id,
+        "reuse_parent_assignments": True,
+        "eligible_annotation_statuses": ["reviewed"],
+        "split_method": "group_random",
+        "split_seed": 11,
+    }
+    preview_url = f"/api/v1/projects/{project_id}/dataset-version-previews"
+    versions_url = f"/api/v1/projects/{project_id}/dataset-versions"
+    parent_items = client.get(f"/api/v1/dataset-versions/{parent_id}/items")
+    assert parent_items.status_code == 200, parent_items.text
+    original_split = parent_items.json()[0]["split"]
+    initial = client.post(preview_url, json=request)
+    assert initial.status_code == 200, initial.text
+    assert initial.json()["images"][0]["proposed_split"] == original_split
+
+    standalone = client.post(f"/api/v1/dataset-versions/{parent_id}/review-queues", json={})
+    assert standalone.status_code == 201, standalone.text
+    graph = _frozen_graph(parent_id)
+    planned = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert planned.status_code == 200, planned.text
+    assert planned.json()["valid"] and planned.json()["executable"]
+    saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    first_run, first_output = _run_frozen_graph(client, project_id, saved.json()["id"])
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        parent_item = session.scalar(
+            select(DatasetVersionItem).where(
+                DatasetVersionItem.dataset_version_id == parent_id,
+                DatasetVersionItem.image_id == image_id,
+            )
+        )
+        assert parent_item is not None
+        parent_item.split = "test" if original_split != "test" else "train"
+        session.commit()
+
+    # A forged complete parent cannot silently supply a child holdout.
+    for endpoint, payload in (
+        (preview_url, request),
+        (versions_url, {**request, "name": "Forged inherited holdout"}),
+    ):
+        rejected = client.post(endpoint, json=payload)
+        assert rejected.status_code == 400, rejected.text
+        assert "original manifest" in rejected.json()["detail"]
+    versions = client.get(versions_url)
+    assert versions.status_code == 200, versions.text
+    assert [item["id"] for item in versions.json()] == [parent_id]
+
+    # Restore only the disposable test mutation. Saved QC and child lineage
+    # must use exactly the original evidence and still require a human review.
+    with app.state.session_factory() as session:
+        parent_item = session.scalar(
+            select(DatasetVersionItem).where(
+                DatasetVersionItem.dataset_version_id == parent_id,
+                DatasetVersionItem.image_id == image_id,
+            )
+        )
+        assert parent_item is not None
+        parent_item.split = original_split
+        session.commit()
+    recovered = client.post(preview_url, json=request)
+    assert recovered.status_code == 200, recovered.text
+    assert recovered.json()["images"][0]["proposed_split"] == original_split
+    child = client.post(versions_url, json={**request, "name": "Verified inherited holdout"})
+    assert child.status_code == 201, child.text
+    child_items = client.get(f"/api/v1/dataset-versions/{child.json()['id']}/items")
+    assert child_items.status_code == 200, child_items.text
+    assert child_items.json()[0]["split"] == original_split
+    second_run, second_output = _run_frozen_graph(client, project_id, saved.json()["id"])
+    assert first_run != second_run
+    assert first_output["dataset_version_id"] == second_output["dataset_version_id"] == parent_id
+    assert first_output["dataset_manifest_sha256"] == second_output["dataset_manifest_sha256"]
+    assert first_output["priority_score_unit"] == second_output["priority_score_unit"] == "dimensionless"
+    assert first_output["review_status"] == second_output["review_status"] == "requires_researcher_review"
+    for queue_id in (standalone.json()["id"], first_output["queue_id"], second_output["queue_id"]):
+        queued = client.get(f"/api/v1/review-queues/{queue_id}/items")
         assert queued.status_code == 200, queued.text
         assert queued.json()["total"] == 1
         assert queued.json()["items"][0]["review_state"] == "pending"
