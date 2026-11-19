@@ -430,12 +430,9 @@ def measure_mesh_preview(
     )
     # Preserve the existing numeric fractions for backward compatibility,
     # but disclose when a positive patch has rounded to a zero share.
-    patch_area_fraction_underflow = (
-        patch_area_fractions is not None
-        and any(
-            patch_area_mesh_units[patch] > 0 and fraction == 0
-            for patch, fraction in zip(ordered_patches, patch_area_fractions, strict=True)
-        )
+    patch_area_fraction_underflow = patch_area_fractions is not None and any(
+        patch_area_mesh_units[patch] > 0 and fraction == 0
+        for patch, fraction in zip(ordered_patches, patch_area_fractions, strict=True)
     )
     largest_patch_index = (
         max(range(len(ordered_patches)), key=lambda index: patch_area_fractions[index])
