@@ -33,12 +33,13 @@ def _request(uncertainty: float | None) -> dict:
 
 @pytest.mark.parametrize(
     "uncertainty",
-    [None, 0.1, 0.8, 1.0],
+    [None, 0.1, 0.8, 1.0, 1e-17],
     ids=[
         "unspecified-does-not-invent-interval",
         "representable-positive-lower-bound",
         "positive-lower-bound-underflow",
         "mathematical-zero-lower-bound",
+        "positive-uncertainty-below-binary64-area-resolution",
     ],
 )
 def test_area_bounds_standalone_and_saved_graph_replay(
@@ -68,6 +69,10 @@ def test_area_bounds_standalone_and_saved_graph_replay(
     elif uncertainty == 0.8:
         assert nominal * (1 - uncertainty) ** 2 == 0.0
         expected = None
+    elif uncertainty == 1e-17:
+        assert nominal * (1 - uncertainty) ** 2 == nominal
+        assert nominal * (1 + uncertainty) ** 2 == nominal
+        expected = None
     else:
         expected = [
             nominal * (1 - uncertainty) ** 2,
@@ -79,7 +84,7 @@ def test_area_bounds_standalone_and_saved_graph_replay(
         None if uncertainty is None else [expected]
     )
     assert direct["surface_area_scale_interval_m2"] == expected
-    assert (warning in standalone["qc_warnings"]) is (uncertainty == 0.8)
+    assert (warning in standalone["qc_warnings"]) is (uncertainty in (0.8, 1e-17))
     assert standalone["measurement_status"] == "caller_supplied_unverified"
     assert standalone["provenance"]["calibration_verified"] is False
     assert standalone["provenance"]["coordinate_registration_verified"] is False
@@ -234,3 +239,34 @@ def test_true_zero_area_preserves_valid_zero_uncertainty_interval() -> None:
     assert result["surface_area_scale_interval_m2"] == [0, 0]
     assert result["edge_connected_patch_area_scale_intervals_m2"] == [[0, 0]]
     assert "surface_area_scale_interval_numeric_unrepresentable" not in result["qc_warnings"]
+
+
+
+def test_positive_area_with_subresolution_uncertainty_is_not_falsely_exact() -> None:
+    """An ordinary mesh area must not acquire equal bounds from roundoff."""
+    request = {
+        **_request(1e-17),
+        "vertices": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+        "meters_per_unit": 0.01,
+    }
+    result = measure_mesh_preview(**request)
+    assert result["surface_area_m2"] == pytest.approx(5e-5)
+    assert result["surface_area_scale_interval_m2"] is None
+    assert result["edge_connected_patch_area_scale_intervals_m2"] == [None]
+    assert "surface_area_scale_interval_numeric_unrepresentable" in result["qc_warnings"]
+    assert result["confidence_interval"] is None
+    assert result["provenance"]["calibration_verified"] is False
+
+    # Equal bounds at explicitly zero uncertainty remain mathematically valid.
+    exact = measure_mesh_preview(**{**request, "relative_scale_uncertainty": 0.0})
+    assert exact["surface_area_scale_interval_m2"] == [5e-5, 5e-5]
+    assert "surface_area_scale_interval_numeric_unrepresentable" not in exact["qc_warnings"]
+
+    # A true zero lower limit at 100% uncertainty must not be mistaken for
+    # numerical underflow, and a missing uncertainty does not assert precision.
+    full = measure_mesh_preview(**{**request, "relative_scale_uncertainty": 1.0})
+    assert full["surface_area_scale_interval_m2"] == pytest.approx([0.0, 2e-4])
+    assert "surface_area_scale_interval_numeric_unrepresentable" not in full["qc_warnings"]
+    unknown = measure_mesh_preview(**{**request, "relative_scale_uncertainty": None})
+    assert unknown["surface_area_scale_interval_m2"] is None
+    assert "surface_area_scale_interval_numeric_unrepresentable" not in unknown["qc_warnings"]
