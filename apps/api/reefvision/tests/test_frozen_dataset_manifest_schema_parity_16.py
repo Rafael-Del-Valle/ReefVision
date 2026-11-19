@@ -424,9 +424,7 @@ def test_resigned_detection_taxonomy_must_match_frozen_class_dictionary(
         detections[0]["label_class_id"] = "unknown-taxon"
         item.per_class_counts_json = {"unknown-taxon": 1}
     else:
-        version.class_map_json = [
-            {"id": "swiftia", "class_index": 0, "name": "Thesea"}
-        ]
+        version.class_map_json = [{"id": "swiftia", "class_index": 0, "name": "Thesea"}]
     item.annotation_snapshot_json = detections
 
     payload = _item_payload(item, schema_version=schema_version)
