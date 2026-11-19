@@ -16,7 +16,6 @@ from reefvision.services.spatial_mesh_paths_v14 import mesh_surface_edge_traces
 from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
 from reefvision.tests.test_annotations import create_project
 
-
 PARAMS = {
     "vertices": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
     "faces": [[0, 1, 2]],
@@ -81,15 +80,27 @@ def test_absent_zero_and_full_scale_uncertainty_are_distinct(
         assert trace["endpoint_chord_scale_only_interval_m"] == pytest.approx(expected)
 
 
+@pytest.mark.parametrize("omit_uncertainty", [False, True])
 def test_subresolution_trace_survives_standalone_and_two_persisted_runs(
-    client: TestClient,
+    client: TestClient, omit_uncertainty: bool
 ) -> None:
+    parameters = {**PARAMS}
+    if omit_uncertainty:
+        del parameters["relative_scale_uncertainty"]
     project_id = str(create_project(client, "Surface trace precision QC")["id"])
     base = f"/api/v1/projects/{project_id}"
-    standalone_response = client.post(f"{base}/spatial/mesh-preview", json=PARAMS)
+    standalone_response = client.post(f"{base}/spatial/mesh-preview", json=parameters)
     assert standalone_response.status_code == 200, standalone_response.text
     standalone = standalone_response.json()
-    _check_resolution_limited_trace(standalone["surface_edge_traces"][0])
+    trace = standalone["surface_edge_traces"][0]
+    if omit_uncertainty:
+        assert trace["length_scale_only_interval_m"] is None
+        assert trace["segment_length_scale_only_intervals_m"] is None
+        assert trace["cumulative_length_scale_only_intervals_m"] is None
+        assert trace["endpoint_chord_scale_only_interval_m"] is None
+        assert "surface_trace_scale_interval_below_numeric_resolution" not in trace["qc_warnings"]
+    else:
+        _check_resolution_limited_trace(trace)
     assert standalone["measurement_status"] == "caller_supplied_unverified"
     assert standalone["provenance"]["calibration_verified"] is False
 
@@ -98,7 +109,7 @@ def test_subresolution_trace_survives_standalone_and_two_persisted_runs(
         "name": "Provisional selected surface trace scale precision",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
-            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": PARAMS},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": parameters},
         ],
         "edges": [
             {
@@ -115,7 +126,7 @@ def test_subresolution_trace_survives_standalone_and_two_persisted_runs(
     assert plan.json()["executable"] is True
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    assert saved.json()["graph_json"]["nodes"][1]["parameters"] == PARAMS
+    assert saved.json()["graph_json"]["nodes"][1]["parameters"] == parameters
 
     app = cast(FastAPI, client.app)
     hashes: list[str] = []
