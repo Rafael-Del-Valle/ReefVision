@@ -71,9 +71,14 @@ def test_absent_zero_and_full_scale_uncertainty_are_distinct(
         if uncertainty is None
         else [0.01 * (1 - uncertainty), 0.01 * (1 + uncertainty)]
     )
-    assert trace["length_scale_only_interval_m"] == pytest.approx(expected) if expected is not None else trace["length_scale_only_interval_m"] is None
-    assert trace["segment_length_scale_only_intervals_m"] is None if uncertainty is None else trace["segment_length_scale_only_intervals_m"][0] == pytest.approx(expected)
-    assert trace["endpoint_chord_scale_only_interval_m"] == pytest.approx(expected) if expected is not None else trace["endpoint_chord_scale_only_interval_m"] is None
+    if expected is None:
+        assert trace["length_scale_only_interval_m"] is None
+        assert trace["segment_length_scale_only_intervals_m"] is None
+        assert trace["endpoint_chord_scale_only_interval_m"] is None
+    else:
+        assert trace["length_scale_only_interval_m"] == pytest.approx(expected)
+        assert trace["segment_length_scale_only_intervals_m"][0] == pytest.approx(expected)
+        assert trace["endpoint_chord_scale_only_interval_m"] == pytest.approx(expected)
 
 
 def test_subresolution_trace_survives_standalone_and_two_persisted_runs(
