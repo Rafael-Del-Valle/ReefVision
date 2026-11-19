@@ -289,6 +289,21 @@ def _materialized_pose_dataset_sha256(destination: Path) -> str:
     return canonical_json_sha256(files)
 
 
+def _verify_prelaunch_pose_dataset(
+    destination: Path,
+    materialization: object,
+) -> None:
+    """Reject post-materialization edits before starting GPU training."""
+
+    if not isinstance(materialization, dict):
+        raise ValidationError("Pose training run is missing materialized dataset provenance")
+    expected = materialization.get("materialized_dataset_sha256")
+    if not isinstance(expected, str) or re.fullmatch(r"[0-9a-f]{64}", expected) is None:
+        raise ValidationError("Pose training run has an invalid materialized dataset fingerprint")
+    if _materialized_pose_dataset_sha256(destination) != expected:
+        raise ValidationError("Materialized pose training dataset changed before GPU training")
+
+
 def _copy_split(
     source_root: Path,
     destination_root: Path,
@@ -931,9 +946,13 @@ def process_pose_training_job(
 
             base_relative = f"{project.storage_root}/training/{run.id}"
 
-            dataset_root = resolve_managed_project_path(
+            dataset_root = _resolve_unlinked_pose_run_path(
                 settings,
                 f"{base_relative}/pose-dataset",
+            )
+            _verify_prelaunch_pose_dataset(
+                dataset_root,
+                dict(run.artifact_manifest_json or {}).get("materialization"),
             )
 
             train_args = dict(run.training_config_json or {})
