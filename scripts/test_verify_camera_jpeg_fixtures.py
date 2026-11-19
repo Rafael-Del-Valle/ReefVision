@@ -529,6 +529,22 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                 {36867: exposure.encode("ascii") + b"\x00", 36881: b"+01:00\x00"},
                 True,
             ),
+            (
+                "equivalent padded fractional seconds",
+                {36867: exposure, 36881: offset, 37521: "123456"},
+                {
+                    36867: exposure.encode("ascii") + b"\x00",
+                    36881: b"-04:00\x00",
+                    37521: b"123456\x00",
+                },
+                False,
+            ),
+            (
+                "conflicting fractional seconds with matching UTC offset",
+                {36867: exposure, 36881: offset, 37521: "120000"},
+                {36867: exposure, 36881: offset, 37521: "340000"},
+                True,
+            ),
         )
         for label, top_tags, nested_tags, conflict in cases:
             with self.subTest(label=label):
