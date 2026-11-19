@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Sequence
+from math import isfinite
 from typing import Any
 
 from reefvision.db.models import DatasetVersion, DatasetVersionItem
@@ -19,6 +20,27 @@ from reefvision.storage.datasets import canonical_json_sha256
 # The API currently writes mask/measurement-aware 0007 manifests, including
 # when there are no masks. Historical detection-only 0006 snapshots also exist.
 SUPPORTED_SNAPSHOT_SCHEMAS = frozenset({"0006", "0007"})
+
+
+def _valid_detection_box(snapshot: dict[str, Any], width_px: Any, height_px: Any) -> bool:
+    """Apply the original editor's source-pixel box bounds to frozen evidence."""
+    if (
+        type(width_px) is not int
+        or type(height_px) is not int
+        or width_px <= 0
+        or height_px <= 0
+    ):
+        return False
+    coordinates = [snapshot.get(key) for key in ("x_min", "y_min", "x_max", "y_max")]
+    if any(type(value) not in (int, float) for value in coordinates):
+        return False
+    try:
+        if not all(isfinite(value) for value in coordinates):
+            return False
+    except OverflowError:
+        return False
+    x_min, y_min, x_max, y_max = coordinates
+    return 0 <= x_min < x_max <= width_px and 0 <= y_min < y_max <= height_px
 
 
 def _item_payload(item: DatasetVersionItem, *, schema_version: str) -> dict[str, Any]:
@@ -150,6 +172,7 @@ def validate_frozen_dataset_manifest(
             or any(
                 not isinstance(annotation, dict)
                 or type(annotation.get("label_class_id")) is not str
+                or not _valid_detection_box(annotation, item.width_px, item.height_px)
                 for annotation in annotations
             )
             or item.per_class_counts_json
