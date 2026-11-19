@@ -128,6 +128,62 @@ describe("ImageViewport", () => {
     }
   });
 
+  it.each(["constructor", "observe"] as const)(
+    "falls back to window resize when WebView2 ResizeObserver %s throws",
+    (failure) => {
+      let disconnects = 0;
+      class BrokenResizeObserver {
+        constructor(_callback: ResizeObserverCallback) {
+          if (failure === "constructor") {
+            throw new Error("ResizeObserver initialization unavailable");
+          }
+        }
+        observe() {
+          if (failure === "observe") {
+            throw new Error("ResizeObserver.observe unavailable");
+          }
+        }
+        disconnect() {
+          disconnects += 1;
+        }
+      }
+      vi.stubGlobal("ResizeObserver", BrokenResizeObserver);
+      try {
+        const dimensions = { width: 920, height: 580 };
+        const { unmount } = render(
+          <ImageViewport width={1600} height={1200} label="Broken observer">
+            <svg data-testid="broken-observer-overlay" viewBox="0 0 1600 1200">
+              <polygon points="10,20 40,20 40,60" />
+            </svg>
+          </ImageViewport>,
+        );
+        const frame = screen.getByRole("region", { name: "Broken observer" });
+        Object.defineProperty(frame, "clientWidth", {
+          configurable: true,
+          get: () => dimensions.width,
+        });
+        Object.defineProperty(frame, "clientHeight", {
+          configurable: true,
+          get: () => dimensions.height,
+        });
+        const transform = screen.getByTestId("image-viewport-transform");
+        const polygon = screen
+          .getByTestId("broken-observer-overlay")
+          .querySelector("polygon");
+        const originalPoints = polygon?.getAttribute("points");
+
+        fireEvent.resize(window);
+        const expected = fitTransform({ width: 1600, height: 1200 }, dimensions);
+        expect(transform.style.transform).toContain(`scale(${expected.scale})`);
+        expect(polygon).toHaveAttribute("points", originalPoints);
+        unmount();
+        expect(disconnects).toBe(failure === "observe" ? 1 : 0);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
   it("preserves user zoom and annotated pixel positions when a desktop pane resizes", () => {
     let notifyResize: (() => void) | undefined;
     class MockResizeObserver {
