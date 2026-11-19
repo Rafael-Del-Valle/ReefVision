@@ -419,3 +419,29 @@ identity remain **unverified** in both paths; these checks do not establish
 reconstruction accuracy or biological tissue loss. CI confirmation, external
 scientific review and real Windows/GPU/representative-coral acceptance are
 still required. **RELEASE HOLD**.
+
+
+## Track C: mesh-edge route scale-interval precision (2026-11-19)
+
+Mesh-edge shortest routes remain **provisional reconstruction geometry**, not
+identified coral skeletal branches. Previously, a nonzero but sub-resolution
+relative calibration uncertainty could round both length bounds to an
+apparently exact measurement (or round a positive lower bound to zero).
+The 1.4 path engine now preserves the nominal finite route, chord, geometric
+excess, segment and cumulative distances, while setting only numerically
+unrepresentable scale-only intervals to `null`. A
+`path_scale_interval_below_numeric_resolution` QC warning requires review;
+related scalar uncertainty is withheld when its interval is unresolved.
+Genuinely zero geometric lengths, exact zero scale uncertainty and the
+mathematically zero lower limit at 100% relative uncertainty remain distinct.
+
+The saved-mesh artifact viewer also refuses misleading legacy exact-appearing
+intervals when a nonzero calibration uncertainty is recorded, while leaving
+legitimate exact and 100% uncertainty cases inspectable. Synthetic regressions
+cover source-engine, standalone project API, executable typed persisted graphs
+executed twice, scientific-artifact parity and reproducible hashes, plus
+frontend saved-artifact inspection. These checks do not verify calibration,
+coral branch anatomy, specimen identity, or physical field reconstruction.
+Final-head GitHub CI, representative datasets, independent scientific review,
+Windows installed-GUI and physical GPU acceptance remain release gates.
+**RELEASE HOLD**.
