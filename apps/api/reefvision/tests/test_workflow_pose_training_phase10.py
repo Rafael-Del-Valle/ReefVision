@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import shutil
 import stat
 import zipfile
 from datetime import timedelta
@@ -521,6 +522,49 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
             destination=mismatched_destination,
         )
     assert not (mismatched_destination / "images" / "val").exists()
+
+
+@pytest.mark.parametrize("blocked_area", ("dataset", "validation_stage"))
+def test_pose_materialization_fails_closed_when_prior_cleanup_is_blocked(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    blocked_area: str,
+) -> None:
+    # A locked prior run must not leave scientifically stale frames in a newly
+    # materialized training or independent validation dataset.
+    destination = tmp_path / "pose-dataset"
+    blocked_path = (
+        destination
+        if blocked_area == "dataset"
+        else tmp_path / ".pose-dataset-validation"
+    )
+    blocked_path.mkdir(parents=True)
+    previous = blocked_path / "prior-science.txt"
+    previous.write_bytes(b"preserve-previous-run")
+    original_rmtree = shutil.rmtree
+
+    def blocked_rmtree(path: Path, *args: Any, **kwargs: Any) -> None:
+        if Path(path) == blocked_path:
+            raise OSError("prior pose data is locked")
+        original_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(shutil, "rmtree", blocked_rmtree)
+    with pytest.raises(OSError, match="prior pose data is locked"):
+        materialize_pose_training_exports(
+            training_content=_pose_export_zip(b"new-training"),
+            validation_content=(
+                _pose_export_zip(b"new-validation")
+                if blocked_area == "validation_stage"
+                else None
+            ),
+            destination=destination,
+        )
+
+    assert previous.read_bytes() == b"preserve-previous-run"
+    if blocked_area == "dataset":
+        assert not (destination / "data.yaml").exists()
+    else:
+        assert not (destination / "images" / "val").exists()
 
 
 def test_pose_training_rechecks_frozen_holdout_bytes_before_gpu_launch(
