@@ -149,7 +149,7 @@ class ReviewQueueService:
     ) -> ReviewQueue:
         project = self.quality_control._project(project_id)
         # Before ranking a frozen study, bind each immutable per-image record
-        # to its signed manifest rather than trusting only aggregate counts.
+        # to its checksummed manifest rather than trusting only aggregate counts.
         if dataset_version is not None:
             validate_frozen_dataset_manifest(
                 dataset_version,
