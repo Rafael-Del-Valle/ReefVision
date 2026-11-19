@@ -38,3 +38,25 @@ Native Windows MSI upgrade/rollback, installed-GUI validation, representative
 biological-data acceptance and independent 1.1/1.6 Alembic revision-0038
 reconciliation remain release blockers. No pretrained weights, network service,
 automatic scientific approvals or research-data rewrites are introduced.
+
+## Frozen study group and numeric class identity gate (1.6)
+
+Dataset-version QC verifies the original producer's split contract before
+creating a standalone queue or executing a saved typed Workflow Builder graph.
+Allowed split labels are `train`, `validation`, `test`, and `unassigned`.
+A non-null biological `group_key` denotes related images (for example,
+tiles from one coral colony) that **must all belong to the same split**.
+Ungrouped images remain independent. This prevents a re-signed local frozen
+manifest from presenting study replicates across training and test sets after
+the original group-aware split assignment. The frozen class dictionary also
+requires unique, nonnegative integer indices so distinct taxa cannot silently
+share a YOLO export index. Both tests inspect stored metadata; they do not
+reauthenticate file bytes or infer a missing colony/group identity.
+
+The original 0006 and mask-aware 0007 producers, existing saved typed
+`dataset_version_source → qc_review_queue` graph, persisted artifact digests,
+researcher approval gate, and read-only failure/rollback behavior are reused.
+No migration, class renumbering, automatic model weight download, or new
+workflow node is introduced. New synthetic and disposable database tests
+cover valid ungrouped controls, recomputed-checksum group leakage and class
+index collisions, standalone QC refusal and saved graph refusal/retry.

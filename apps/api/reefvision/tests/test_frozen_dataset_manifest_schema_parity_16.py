@@ -469,3 +469,80 @@ def test_resigned_mask_taxonomy_must_match_frozen_class_dictionary(tamper: str) 
 
     with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
         validate_frozen_dataset_manifest(version, [item])
+
+@pytest.mark.parametrize("schema_version", ["0006", "0007"])
+@pytest.mark.parametrize("same_group", [True, False])
+def test_resigned_biological_group_cannot_cross_dataset_splits(
+    schema_version: str, same_group: bool
+) -> None:
+    """A parent colony cannot appear in independent training and test splits."""
+    version, first = _saved_snapshot(schema_version, with_mask=False)
+    second = deepcopy(first)
+    second.image_id = "image-2"
+    second.image_sha256 = "b" * 64
+    second.original_filename = "second-coral.png"
+    second.annotation_snapshot_json[0]["id"] = "polyp-2"
+    second.split = "test"
+    second.group_key = first.group_key if same_group else None
+    version.image_count = 2
+    version.annotation_count = 2
+
+    first_payload = _item_payload(first, schema_version=schema_version)
+    second_payload = _item_payload(second, schema_version=schema_version)
+    second.snapshot_sha256 = canonical_json_sha256(second_payload)
+    manifest = deepcopy(version.manifest_json)
+    manifest["summary"]["image_count"] = 2
+    manifest["summary"]["annotation_count"] = 2
+    manifest["items"] = [
+        {**first_payload, "snapshot_sha256": first.snapshot_sha256},
+        {**second_payload, "snapshot_sha256": second.snapshot_sha256},
+    ]
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+
+    # A missing group is deliberately an independent image; two images with
+    # the same known parent may not cross splits even with fresh checksums.
+    if same_group:
+        with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+            validate_frozen_dataset_manifest(version, [first, second])
+    else:
+        validate_frozen_dataset_manifest(version, [first, second])
+
+
+@pytest.mark.parametrize("schema_version", ["0006", "0007"])
+@pytest.mark.parametrize("invalid_split", ["testing", "", None, 3])
+def test_resigned_frozen_split_must_remain_producer_supported(
+    schema_version: str, invalid_split: object
+) -> None:
+    version, item = _saved_snapshot(schema_version, with_mask=False)
+    item.split = cast(str, invalid_split)
+    payload = _item_payload(item, schema_version=schema_version)
+    item.snapshot_sha256 = canonical_json_sha256(payload)
+    manifest = deepcopy(version.manifest_json)
+    manifest["items"] = [{**payload, "snapshot_sha256": item.snapshot_sha256}]
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+    with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+        validate_frozen_dataset_manifest(version, [item])
+
+
+@pytest.mark.parametrize("tamper", ["negative", "reused_index"])
+def test_resigned_frozen_class_indices_remain_unique_and_nonnegative(tamper: str) -> None:
+    """One numeric export class must identify only one original biological taxon."""
+    version, item = _saved_snapshot("0007", with_mask=False)
+    class_map = deepcopy(version.class_map_json)
+    if tamper == "negative":
+        class_map[0]["class_index"] = -1
+        item.annotation_snapshot_json[0]["class_index"] = -1
+    else:
+        class_map.append({"id": "thesea", "class_index": 0, "name": "Thesea"})
+    version.class_map_json = class_map
+    payload = _item_payload(item, schema_version="0007")
+    item.snapshot_sha256 = canonical_json_sha256(payload)
+    manifest = deepcopy(version.manifest_json)
+    manifest["class_map"] = class_map
+    manifest["items"] = [{**payload, "snapshot_sha256": item.snapshot_sha256}]
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+    with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+        validate_frozen_dataset_manifest(version, [item])

@@ -27,7 +27,7 @@ from reefvision.services.review_queues import ReviewQueueService
 from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project, import_one
-from reefvision.tests.test_dataset_versions import create_version
+from reefvision.tests.test_dataset_versions import create_version, save_annotations, update_image
 from reefvision.tests.test_mask_dataset_exports import _save_polygon
 from reefvision.tests.test_review_queue_annotation_evidence_16 import _queue_item
 from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
@@ -448,4 +448,138 @@ def test_resigned_mask_review_provenance_fails_standalone_and_saved_qc(
     restored_queue = client.get(queue_url)
     assert restored_queue.status_code == 200, restored_queue.text
     assert restored_queue.json() == original_queue.json()
+    assert _queue_item(client, standalone.json()["id"])["review_state"] == "pending"
+
+def test_resigned_colony_split_leakage_blocks_standalone_and_saved_qc(
+    client: TestClient,
+) -> None:
+    """Fail closed when one source colony crosses splits despite fresh digests."""
+    project = create_project(client, "Grouped coral replicas")
+    project_id = project["id"]
+    image_ids: list[str] = []
+    for index in range(2):
+        imported = import_one(
+            client,
+            project_id,
+            filename=f"colony-{index}.png",
+            relative_path=f"colony/colony-{index}.png",
+            size=(80 + index, 60),
+        )
+        image_id = imported["successful"][0]["image_id"]
+        image_ids.append(image_id)
+        save_annotations(
+            client,
+            image_id,
+            base_revision=0,
+            annotation_status="reviewed",
+            annotations=[
+                {
+                    "id": str(uuid4()),
+                    "label_class_id": project["label_classes"][0]["id"],
+                    "x_min": 5,
+                    "y_min": 5,
+                    "x_max": 25,
+                    "y_max": 25,
+                }
+            ],
+        )
+        update_image(
+            client,
+            image_id,
+            group_key="same-parent-colony",
+            annotation_status="reviewed",
+        )
+    version_id = create_version(client, project_id, name="No-leak coral dataset")["id"]
+    standalone = client.post(f"/api/v1/dataset-versions/{version_id}/review-queues", json={})
+    assert standalone.status_code == 201, standalone.text
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": _frozen_graph(version_id)},
+    )
+    assert saved.status_code == 201, saved.text
+    run_id, output = _run_frozen_graph(client, project_id, saved.json()["id"])
+    assert output["review_status"] == "requires_researcher_review"
+    assert output["priority_score_unit"] == "dimensionless"
+    queue_url = f"/api/v1/review-queues/{output['queue_id']}/items"
+    before = client.get(queue_url)
+    assert before.status_code == 200, before.text
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        version = session.get(DatasetVersion, version_id)
+        items = session.scalars(
+            select(DatasetVersionItem).where(DatasetVersionItem.dataset_version_id == version_id)
+        ).all()
+        assert version is not None and len(items) == 2
+        assert len({item.split for item in items}) == 1
+        assert {item.group_key for item in items} == {"same-parent-colony"}
+        validate_frozen_dataset_manifest(version, items)
+        # Recompute the per-item and whole-version SHA-256 after moving the
+        # second image alone into a different evaluation split.
+        items[1].split = "test" if items[0].split != "test" else "train"
+        items[1].snapshot_sha256 = canonical_json_sha256(
+            _item_payload(items[1], schema_version="0007")
+        )
+        manifest = deepcopy(version.manifest_json)
+        manifest["items"] = [
+            {
+                **_item_payload(item, schema_version="0007"),
+                "snapshot_sha256": item.snapshot_sha256,
+            }
+            for item in items
+        ]
+        version.manifest_json = manifest
+        version.manifest_sha256 = canonical_json_sha256(manifest)
+        session.flush()
+
+        with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+            validate_frozen_dataset_manifest(version, items)
+        with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+            ReviewQueueService(session, app.state.settings).create_queue_for_dataset_version(
+                version_id, ReviewQueueCreateRequest()
+            )
+        nodes = {
+            node.node_type: node
+            for node in session.scalars(
+                select(WorkflowNodeRun).where(WorkflowNodeRun.workflow_run_id == run_id)
+            )
+        }
+        project_artifact = session.scalar(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.producer_node_run_id == nodes["project_source"].id,
+                WorkflowArtifact.producer_port_id == "project",
+            )
+        )
+        dataset_artifact = session.scalar(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.producer_node_run_id == nodes["dataset_version_source"].id,
+                WorkflowArtifact.producer_port_id == "dataset",
+            )
+        )
+        assert project_artifact is not None and dataset_artifact is not None
+        qc_node = nodes["qc_review_queue"]
+        params = {
+            **dict(qc_node.parameters_json or {}),
+            "__workflow_run_id": run_id,
+            "__workflow_node_run_id": qc_node.id,
+        }
+        inputs = {"project": [project_artifact], "dataset": [dataset_artifact]}
+        # The saved artifact retains the original version digest, so the
+        # existing producer-binding gate rejects this newly re-signed version.
+        with pytest.raises(
+            ValidationError, match="QC Review Queue dataset version or manifest does not match"
+        ):
+            create_review_queue_workflow_artifact(
+                session, app.state.settings, project_id, params, inputs
+            )
+        session.rollback()
+        replay = create_review_queue_workflow_artifact(
+            session, app.state.settings, project_id, params, inputs
+        )
+        assert replay[0]["payload"] == output
+        session.rollback()
+
+    after = client.get(queue_url)
+    assert after.status_code == 200, after.text
+    assert after.json() == before.json()
     assert _queue_item(client, standalone.json()["id"])["review_state"] == "pending"

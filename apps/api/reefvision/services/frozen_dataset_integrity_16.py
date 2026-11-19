@@ -187,6 +187,7 @@ def validate_frozen_dataset_manifest(
     if not isinstance(class_map, list) or manifest.get("class_map") != class_map:
         raise ValidationError(message)
     classes: dict[str, tuple[int, str]] = {}
+    class_indices: set[int] = set()
     for entry in class_map:
         if (
             not isinstance(entry, dict)
@@ -194,11 +195,14 @@ def validate_frozen_dataset_manifest(
             or not entry["id"]
             or entry["id"] in classes
             or type(entry.get("class_index")) is not int
+            or entry["class_index"] < 0
+            or entry["class_index"] in class_indices
             or type(entry.get("name")) is not str
             or not entry["name"]
         ):
             raise ValidationError(message)
         classes[entry["id"]] = (entry["class_index"], entry["name"])
+        class_indices.add(entry["class_index"])
 
     entries: dict[str, dict[str, Any]] = {}
     for record in manifest["items"]:
@@ -229,10 +233,24 @@ def validate_frozen_dataset_manifest(
     seen: set[str] = set()
     seen_annotation_ids: set[str] = set()
     seen_mask_annotation_ids: set[str] = set()
+    group_splits: dict[str, str] = {}
     for item in items:
         if item.image_id in seen:
             raise ValidationError(message)
         seen.add(item.image_id)
+        # A re-signed manifest cannot turn related biological replicates
+        # into independent train/validation/test observations. The original
+        # dataset producer assigns each non-null group as one split unit.
+        if (
+            type(item.split) is not str
+            or item.split not in {"train", "validation", "test", "unassigned"}
+            or (item.group_key is not None and type(item.group_key) is not str)
+        ):
+            raise ValidationError(message)
+        if item.group_key is not None:
+            previous_split = group_splits.setdefault(item.group_key, item.split)
+            if previous_split != item.split:
+                raise ValidationError(message)
         if schema_version == "0006":
             # A legacy manifest cannot legitimately authorize masks omitted
             # from its historical per-image SHA-256 payload.
