@@ -403,3 +403,19 @@ and SHA-256 hashes. These are *numeric/display integrity* checks, not estimates
 of missing coral tissue, measurement confidence, or field-validated calibration.
 CI and installed Windows/GPU/representative-coral acceptance remain separate
 release gates.
+
+
+## Track C: preview omission with absent uncertainty (2026-11-19)
+
+The 513-face hidden-triangle synthetic regression now also omits the
+`relative_scale_uncertainty` field entirely, instead of supplying a
+numerical estimate or an explicit `null`. This keeps the positive but
+numerically unrepresentable display-only missing area flagged and withheld,
+while prohibiting fabricated scale-only area intervals or confidence
+intervals. The standalone project API and a separately persisted typed
+Workflow Builder graph must agree on the omitted-uncertainty payload,
+twice-replayed artifacts and deterministic hashes. Calibration and specimen
+identity remain **unverified** in both paths; these checks do not establish
+reconstruction accuracy or biological tissue loss. CI confirmation, external
+scientific review and real Windows/GPU/representative-coral acceptance are
+still required. **RELEASE HOLD**.
