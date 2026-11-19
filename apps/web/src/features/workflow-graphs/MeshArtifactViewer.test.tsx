@@ -724,6 +724,91 @@ describe("MeshArtifactViewer", () => {
     );
   });
 
+  it("does not display numerically exact intervals as verified scale precision", () => {
+    const artifact = {
+      ...validArtifact,
+      provenance: {
+        calibration_verified: false,
+        relative_scale_uncertainty: 1e-20,
+      },
+      surface_edge_paths: [
+        {
+          status: "connected",
+          path_vertex_indices: [0, 1],
+          path_vertices_in_source_frame_m: [
+            [0, 0, 0],
+            [1, 0, 0],
+          ],
+          length_m: 1,
+          length_scale_interval_m: [1, 1],
+          endpoint_chord_length_m: 1,
+          endpoint_chord_scale_interval_m: [1, 1],
+          path_edge_lengths_m: [1],
+          path_edge_length_scale_intervals_m: [[1, 1]],
+          path_cumulative_lengths_m: [0, 1],
+          path_cumulative_length_scale_intervals_m: [
+            [0, 0],
+            [1, 1],
+          ],
+          path_qc_warnings: ["path_scale_interval_below_numeric_resolution"],
+        },
+      ],
+    };
+    const unchanged = JSON.stringify(artifact);
+    expect(parseMeshRenderArtifact(artifact)?.routeInspections[0]).toMatchObject({
+      lengthM: 1,
+      lengthScaleIntervalM: null,
+      endpointChordLengthM: 1,
+      endpointChordScaleIntervalM: null,
+      edgeLengthsM: [1],
+      edgeScaleIntervalsM: null,
+      cumulativeLengthsM: [0, 1],
+      cumulativeScaleIntervalsM: null,
+      qcWarnings: ["path_scale_interval_below_numeric_resolution"],
+    });
+
+    const exactScale = {
+      ...artifact,
+      provenance: { calibration_verified: false, relative_scale_uncertainty: 0 },
+    };
+    expect(parseMeshRenderArtifact(exactScale)?.routeInspections[0]).toMatchObject({
+      lengthScaleIntervalM: [1, 1],
+      endpointChordScaleIntervalM: [1, 1],
+      edgeScaleIntervalsM: [[1, 1]],
+      cumulativeScaleIntervalsM: [
+        [0, 0],
+        [1, 1],
+      ],
+    });
+
+    const maximalUncertainty = {
+      ...artifact,
+      provenance: { calibration_verified: false, relative_scale_uncertainty: 1 },
+      surface_edge_paths: [
+        {
+          ...artifact.surface_edge_paths[0],
+          length_scale_interval_m: [0, 2],
+          endpoint_chord_scale_interval_m: [0, 2],
+          path_edge_length_scale_intervals_m: [[0, 2]],
+          path_cumulative_length_scale_intervals_m: [
+            [0, 0],
+            [0, 2],
+          ],
+        },
+      ],
+    };
+    expect(parseMeshRenderArtifact(maximalUncertainty)?.routeInspections[0]).toMatchObject({
+      lengthScaleIntervalM: [0, 2],
+      endpointChordScaleIntervalM: [0, 2],
+      edgeScaleIntervalsM: [[0, 2]],
+      cumulativeScaleIntervalsM: [
+        [0, 0],
+        [0, 2],
+      ],
+    });
+    expect(JSON.stringify(artifact)).toBe(unchanged);
+  });
+
   it("rejects misleading microscopic and zero-length uncertainty bounds", () => {
     const tiny = {
       ...validArtifact,
