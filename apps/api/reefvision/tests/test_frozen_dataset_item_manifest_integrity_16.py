@@ -279,7 +279,19 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
     assert _queue_item(client, standalone.json()["id"])["review_state"] == "pending"
 
 
-@pytest.mark.parametrize("tamper", ["draft_status", "missing_status", "unsupported_geometry"])
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        "draft_status",
+        "missing_status",
+        "unsupported_geometry",
+        "outside_polygon",
+        "wrong_polygon_bounds",
+        "wrong_polygon_area",
+        "non_numeric_polygon",
+        "degenerate_polygon",
+    ],
+)
 def test_resigned_mask_review_provenance_fails_standalone_and_saved_qc(
     client: TestClient, tamper: str
 ) -> None:
@@ -326,8 +338,18 @@ def test_resigned_mask_review_provenance_fails_standalone_and_saved_qc(
             masks[0]["status"] = "draft"
         elif tamper == "missing_status":
             masks[0].pop("status")
-        else:
+        elif tamper == "unsupported_geometry":
             masks[0]["geometry_kind"] = "unregistered_mask"
+        elif tamper == "outside_polygon":
+            masks[0]["polygon_json"][0][0] = item.width_px + 1
+        elif tamper == "wrong_polygon_bounds":
+            masks[0]["x_min"] = 0.0
+        elif tamper == "wrong_polygon_area":
+            masks[0]["area_pixels"] += 1
+        elif tamper == "non_numeric_polygon":
+            masks[0]["polygon_json"][0][0] = "invalid coordinate"
+        else:
+            masks[0]["polygon_json"] = [[8, 8], [18, 8], [28, 8]]
         item.mask_annotation_snapshot_json = masks
 
         # Both stored checksums are recomputed; the scientific review-state

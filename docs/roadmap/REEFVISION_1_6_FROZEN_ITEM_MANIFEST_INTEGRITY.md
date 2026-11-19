@@ -197,3 +197,27 @@ in the bounding-box helper before backend pytest. This iteration also applies
 that exact formatting correction; the new head still requires full CI,
 scientific review, independent Alembic-0038 resolution and genuine installed
 Windows MSI/GUI upgrade and rollback acceptance.
+
+
+## Frozen polygon source-pixel scientific consistency (2026-11-19)
+
+Audited the existing editor's polygon contract and the frozen `0007`
+producer before changing the shared QC guard. Previously, the validator
+checked verification state, geometry kind, class census and mask identity,
+but an actor capable of recomputing both unkeyed SHA-256 checksums could
+replace a polygon with coordinates outside its source image, an incorrect
+bounding box, or an inconsistent reported area. The shared read-only QC
+validator now checks finite numeric polygon points inside the original
+pixel dimensions, three distinct vertices, nonduplicated adjacent points,
+matching stored bounding extrema, and the original editor's shoelace
+area/rounded pixel-area relationship. Historical `0006` and `0007`
+raster-mask records are not reinterpreted as polygons.
+
+Five new rehashed mask regressions extend the existing real database
+standalone and saved `dataset_version_source → qc_review_queue`
+tests, including rollback, deterministic replay, provenance binding
+and pending human-review evidence. These checks are scientific
+consistency checks, not authenticated signatures or a full polygon
+topology/self-intersection proof. No live annotations or researcher
+decisions are modified. Full exact-head CI and actual Windows installer
+and installed-GUI acceptance remain release holds.

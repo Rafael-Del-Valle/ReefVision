@@ -39,6 +39,59 @@ def _valid_detection_box(snapshot: dict[str, Any], width_px: Any, height_px: Any
     return 0 <= x_min < x_max <= width and 0 <= y_min < y_max <= height
 
 
+
+def _valid_frozen_polygon(snapshot: dict[str, Any], width_px: Any, height_px: Any) -> bool:
+    """Check a frozen polygon against the source-pixel editor's saved geometry."""
+    if not _valid_detection_box(snapshot, width_px, height_px):
+        return False
+    raw_points = snapshot.get("polygon_json")
+    area_pixels = snapshot.get("area_pixels")
+    if (
+        not isinstance(raw_points, list)
+        or len(raw_points) < 3
+        or type(area_pixels) is not int
+        or area_pixels < 1
+    ):
+        return False
+
+    points: list[tuple[float, float]] = []
+    for raw_point in raw_points:
+        if (
+            not isinstance(raw_point, list)
+            or len(raw_point) != 2
+            or any(type(value) not in (int, float) for value in raw_point)
+        ):
+            return False
+        try:
+            x, y = float(raw_point[0]), float(raw_point[1])
+        except (OverflowError, ValueError):
+            return False
+        if not (isfinite(x) and isfinite(y) and 0 <= x <= width_px and 0 <= y <= height_px):
+            return False
+        points.append((x, y))
+
+    if len(set(points)) < 3 or any(
+        points[index] == points[(index + 1) % len(points)]
+        for index in range(len(points))
+    ):
+        return False
+    if (
+        min(point[0] for point in points) != snapshot["x_min"]
+        or min(point[1] for point in points) != snapshot["y_min"]
+        or max(point[0] for point in points) != snapshot["x_max"]
+        or max(point[1] for point in points) != snapshot["y_max"]
+    ):
+        return False
+    area = abs(
+        sum(
+            x * points[(index + 1) % len(points)][1]
+            - points[(index + 1) % len(points)][0] * y
+            for index, (x, y) in enumerate(points)
+        )
+    ) / 2.0
+    return isfinite(area) and area >= 1.0 and area_pixels == max(1, round(area))
+
+
 def _item_payload(item: DatasetVersionItem, *, schema_version: str) -> dict[str, Any]:
     """Reconstruct exactly the schema recorded by the version's producer."""
     payload: dict[str, Any] = {
@@ -146,6 +199,10 @@ def validate_frozen_dataset_manifest(
                     or snapshot.get("status") != "verified"
                     or type(snapshot.get("geometry_kind")) is not str
                     or snapshot["geometry_kind"] not in {"polygon", "raster_mask"}
+                    or (
+                        snapshot["geometry_kind"] == "polygon"
+                        and not _valid_frozen_polygon(snapshot, item.width_px, item.height_px)
+                    )
                     for snapshot in mask_snapshots
                 )
                 or item.per_mask_class_counts_json
