@@ -10,9 +10,7 @@ from math import atan2, degrees, dist, fsum, hypot, isfinite, pi, sqrt
 from typing import Any
 
 
-def _scale_only_length_interval(
-    length_m: float, uncertainty: float | None
-) -> list[float] | None:
+def _scale_only_length_interval(length_m: float, uncertainty: float | None) -> list[float] | None:
     """Withhold false precision in provisional mesh-edge route scale bounds.
 
     These bounds are geometric calibration ranges, never biological branch
@@ -24,8 +22,7 @@ def _scale_only_length_interval(
     lower = length_m * (1 - uncertainty)
     upper = length_m * (1 + uncertainty)
     if length_m > 0 and (
-        (uncertainty < 1 and lower == 0.0)
-        or (uncertainty > 0 and lower == upper)
+        (uncertainty < 1 and lower == 0.0) or (uncertainty > 0 and lower == upper)
     ):
         return None
     return [lower, upper]
@@ -509,8 +506,7 @@ def mesh_edge_paths(
                 "endpoint_chord_scale_interval_m": endpoint_chord_scale_interval_m,
                 "endpoint_chord_scale_uncertainty_m": (
                     chord_m * scale_uncertainty
-                    if endpoint_chord_scale_interval_m is not None
-                    and scale_uncertainty is not None
+                    if endpoint_chord_scale_interval_m is not None and scale_uncertainty is not None
                     else None
                 ),
                 "geometric_detour_ratio": detour_ratio,
