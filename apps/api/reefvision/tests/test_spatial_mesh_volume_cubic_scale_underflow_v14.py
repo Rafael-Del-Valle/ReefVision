@@ -56,10 +56,18 @@ def test_representable_tiny_volume_preserves_exact_cubic_scale_bounds() -> None:
 
 
 @pytest.mark.parametrize(
-    ("uncertainty", "bounds_available"),
-    [(None, None), (0.0, True), (0.1, True), (0.8, False), (1.0, True)],
+    ("uncertainty", "bounds_available", "omit_uncertainty"),
+    [
+        (None, None, False),
+        (None, None, True),
+        (0.0, True, False),
+        (0.1, True, False),
+        (0.8, False, False),
+        (1.0, True, False),
+    ],
     ids=[
-        "unspecified-scale-uncertainty-withholds-bounds",
+        "explicit-null-scale-uncertainty-withholds-bounds",
+        "omitted-scale-uncertainty-withholds-bounds",
         "zero-scale-uncertainty-retains-nominal-bounds",
         "ten-percent-scale-uncertainty-retains-positive-bounds",
         "positive-bound-underflow",
@@ -67,7 +75,10 @@ def test_representable_tiny_volume_preserves_exact_cubic_scale_bounds() -> None:
     ],
 )
 def test_subnormal_volume_interval_qc_replays_in_saved_typed_workflow(
-    client: TestClient, uncertainty: float | None, bounds_available: bool | None
+    client: TestClient,
+    uncertainty: float | None,
+    bounds_available: bool | None,
+    omit_uncertainty: bool,
 ) -> None:
     """A rounded zero lower limit must not masquerade as scale evidence."""
     params = {
@@ -77,7 +88,12 @@ def test_subnormal_volume_interval_qc_replays_in_saved_typed_workflow(
         "observation_id": "subnormal-volume-interval-review",
         "coordinate_frame_id": "unregistered-import-frame",
     }
-    direct = measure_mesh_preview(**{**_params(1e-115), "relative_scale_uncertainty": uncertainty})
+    direct_params = {**_params(1e-115), "relative_scale_uncertainty": uncertainty}
+    if omit_uncertainty:
+        # The API default and explicit JSON null must both mean unknown scale error.
+        params.pop("relative_scale_uncertainty")
+        direct_params.pop("relative_scale_uncertainty")
+    direct = measure_mesh_preview(**direct_params)
     project_id = str(create_project(client, "Subnormal provisional volume interval")["id"])
     base = f"/api/v1/projects/{project_id}"
     response = client.post(f"{base}/spatial/mesh-preview", json=params)
@@ -92,7 +108,11 @@ def test_subnormal_volume_interval_qc_replays_in_saved_typed_workflow(
         # Missing uncertainty is not equivalent to a verified zero-error scale.
         assert bounds_available is None
         assert standalone["enclosed_volume_scale_interval_m3"] is None
-        assert standalone["edge_connected_patch_enclosed_volume_scale_intervals_m3"] == [None]
+        assert standalone["edge_connected_patch_enclosed_volume_scale_intervals_m3"] is None
+        assert standalone["surface_area_scale_interval_m2"] is None
+        assert standalone["edge_connected_patch_area_scale_intervals_m2"] is None
+        assert standalone["axis_aligned_dimension_scale_intervals_m"] is None
+        assert standalone["provenance"]["relative_scale_uncertainty"] is None
         assert warning not in standalone["qc_warnings"]
     elif bounds_available:
         expected = [nominal * (1 - uncertainty) ** 3, nominal * (1 + uncertainty) ** 3]
