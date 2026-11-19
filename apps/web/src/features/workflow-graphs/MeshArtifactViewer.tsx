@@ -135,6 +135,16 @@ function isSavedScaleInterval(
     return false;
   }
   if (relativeScaleUncertainty === null) return true;
+  // Legacy saved results can round a positive scale interval to an
+  // apparently exact measurement, or a positive lower bound to zero.
+  // A true zero length and the 100% uncertainty lower limit are valid.
+  if (
+    nominal > 0 &&
+    ((relativeScaleUncertainty < 1 && value[0] === 0) ||
+      (relativeScaleUncertainty > 0 && value[0] === value[1]))
+  ) {
+    return false;
+  }
   // A fixed absolute tolerance can certify incorrect sub-micrometer bounds.
   // Zero-length routes must also have exactly zero scale-only bounds.
   const tolerance = nominal * 1e-8;
@@ -363,22 +373,12 @@ function parsePathInspections(
       relativeScaleUncertainty !== null &&
       Array.isArray(rawEdgeIntervals) &&
       rawEdgeIntervals.length === edgeLengthsM.length &&
-      rawEdgeIntervals.every(
-        (pair, index) =>
-          Array.isArray(pair) &&
-          pair.length === 2 &&
-          pair.every(
-            (bound) =>
-              typeof bound === "number" && Number.isFinite(bound) && bound >= 0,
-          ) &&
-          Math.abs(
-            pair[0] - edgeLengthsM[index] * (1 - relativeScaleUncertainty),
-          ) <=
-            edgeLengthsM[index] * 1e-8 &&
-          Math.abs(
-            pair[1] - edgeLengthsM[index] * (1 + relativeScaleUncertainty),
-          ) <=
-            edgeLengthsM[index] * 1e-8,
+      rawEdgeIntervals.every((pair, index) =>
+        isSavedScaleInterval(
+          pair,
+          edgeLengthsM[index],
+          relativeScaleUncertainty,
+        ),
       )
         ? (rawEdgeIntervals as [number, number][])
         : null;
