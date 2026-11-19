@@ -10,6 +10,27 @@ from math import atan2, degrees, dist, fsum, hypot, isfinite, pi, sqrt
 from typing import Any
 
 
+def _scale_only_length_interval(
+    length_m: float, uncertainty: float | None
+) -> list[float] | None:
+    """Withhold false precision in provisional mesh-edge route scale bounds.
+
+    These bounds are geometric calibration ranges, never biological branch
+    lengths or statistical confidence intervals. A genuine zero length, or
+    a zero lower bound at 100% relative uncertainty, stays valid.
+    """
+    if uncertainty is None:
+        return None
+    lower = length_m * (1 - uncertainty)
+    upper = length_m * (1 + uncertainty)
+    if length_m > 0 and (
+        (uncertainty < 1 and lower == 0.0)
+        or (uncertainty > 0 and lower == upper)
+    ):
+        return None
+    return [lower, upper]
+
+
 def _route_turn_angles(
     points: list[tuple[float, float, float]],
     route: list[int],
@@ -272,9 +293,12 @@ def mesh_edge_paths(
         path_qc_warnings: list[str] | None = None
         path_edge_lengths_m: list[float] | None = None
         path_cumulative_lengths_m: list[float] | None = None
-        path_cumulative_length_scale_intervals_m: list[list[float]] | None = None
+        path_cumulative_length_scale_intervals_m: list[list[float] | None] | None = None
         path_vertices_in_source_frame_m: list[list[float]] | None = None
-        path_edge_length_scale_intervals_m: list[list[float]] | None = None
+        path_edge_length_scale_intervals_m: list[list[float] | None] | None = None
+        length_scale_interval_m: list[float] | None = None
+        endpoint_chord_scale_interval_m: list[float] | None = None
+        geometric_excess_scale_interval_m: list[float] | None = None
         path_turn_angles_deg: list[float | None] | None = None
         maximum_turn_angle_deg: float | None = None
         total_absolute_geometric_turn_deg: float | None = None
@@ -328,15 +352,6 @@ def mesh_edge_paths(
             path_cumulative_lengths_m = [0.0, *accumulate(path_edge_lengths_m)]
             if any(not isfinite(length) for length in path_cumulative_lengths_m):
                 raise ValueError("Calibrated cumulative mesh path length overflowed")
-            if scale_uncertainty is not None:
-                path_edge_length_scale_intervals_m = [
-                    [length * (1 - scale_uncertainty), length * (1 + scale_uncertainty)]
-                    for length in path_edge_lengths_m
-                ]
-                path_cumulative_length_scale_intervals_m = [
-                    [length * (1 - scale_uncertainty), length * (1 + scale_uncertainty)]
-                    for length in path_cumulative_lengths_m
-                ]
             meters = shortest[end] * scale
             if not isfinite(meters):
                 raise ValueError("Calibrated mesh path length overflowed")
@@ -378,6 +393,43 @@ def mesh_edge_paths(
             # Route flags are topology evidence, not biological branch validation.
             route_edges = [(min(a, b), max(a, b)) for a, b in pairwise(route)]
             path_qc_warnings = []
+            if scale_uncertainty is not None:
+                path_edge_length_scale_intervals_m = [
+                    _scale_only_length_interval(length, scale_uncertainty)
+                    for length in path_edge_lengths_m
+                ]
+                path_cumulative_length_scale_intervals_m = [
+                    _scale_only_length_interval(length, scale_uncertainty)
+                    for length in path_cumulative_lengths_m
+                ]
+                length_scale_interval_m = _scale_only_length_interval(meters, scale_uncertainty)
+                endpoint_chord_scale_interval_m = _scale_only_length_interval(
+                    chord_m, scale_uncertainty
+                )
+                geometric_excess_scale_interval_m = _scale_only_length_interval(
+                    geometric_excess_m, scale_uncertainty
+                )
+                unresolved = (
+                    (meters > 0 and length_scale_interval_m is None)
+                    or (chord_m > 0 and endpoint_chord_scale_interval_m is None)
+                    or (geometric_excess_m > 0 and geometric_excess_scale_interval_m is None)
+                    or any(
+                        length > 0 and bounds is None
+                        for length, bounds in zip(
+                            path_edge_lengths_m, path_edge_length_scale_intervals_m, strict=True
+                        )
+                    )
+                    or any(
+                        length > 0 and bounds is None
+                        for length, bounds in zip(
+                            path_cumulative_lengths_m,
+                            path_cumulative_length_scale_intervals_m,
+                            strict=True,
+                        )
+                    )
+                )
+                if unresolved:
+                    path_qc_warnings.append("path_scale_interval_below_numeric_resolution")
             if shortest_route_alternatives_status == "unassessable_zero_length_edges":
                 # The selected route can avoid all zero-weight edges even when
                 # the same connected mesh component makes route uniqueness
@@ -452,35 +504,21 @@ def mesh_edge_paths(
                 "path_qc_warnings": path_qc_warnings,
                 "edge_count": len(route) - 1 if route is not None else None,
                 "length_m": meters,
-                "length_scale_interval_m": (
-                    [meters * (1 - scale_uncertainty), meters * (1 + scale_uncertainty)]
-                    if meters is not None and scale_uncertainty is not None
-                    else None
-                ),
+                "length_scale_interval_m": length_scale_interval_m,
                 "endpoint_chord_length_m": chord_m,
-                "endpoint_chord_scale_interval_m": (
-                    [chord_m * (1 - scale_uncertainty), chord_m * (1 + scale_uncertainty)]
-                    if chord_m is not None and scale_uncertainty is not None
-                    else None
-                ),
+                "endpoint_chord_scale_interval_m": endpoint_chord_scale_interval_m,
                 "endpoint_chord_scale_uncertainty_m": (
                     chord_m * scale_uncertainty
-                    if chord_m is not None and scale_uncertainty is not None
+                    if endpoint_chord_scale_interval_m is not None
+                    and scale_uncertainty is not None
                     else None
                 ),
                 "geometric_detour_ratio": detour_ratio,
                 "geometric_excess_length_m": geometric_excess_m,
-                "geometric_excess_scale_interval_m": (
-                    [
-                        geometric_excess_m * (1 - scale_uncertainty),
-                        geometric_excess_m * (1 + scale_uncertainty),
-                    ]
-                    if geometric_excess_m is not None and scale_uncertainty is not None
-                    else None
-                ),
+                "geometric_excess_scale_interval_m": geometric_excess_scale_interval_m,
                 "scale_uncertainty_m": (
                     meters * scale_uncertainty
-                    if meters is not None and scale_uncertainty is not None
+                    if length_scale_interval_m is not None and scale_uncertainty is not None
                     else None
                 ),
             }
