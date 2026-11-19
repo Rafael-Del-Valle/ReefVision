@@ -30,7 +30,7 @@ def _valid_detection_box(snapshot: dict[str, Any], width_px: Any, height_px: Any
     if any(type(value) not in (int, float) for value in coordinates):
         return False
     x_min, y_min, x_max, y_max = cast(tuple[float, float, float, float], tuple(coordinates))
-    width, height = cast(tuple[int, int], (width_px, height_px))
+    width, height = width_px, height_px
     try:
         if not all(isfinite(value) for value in (x_min, y_min, x_max, y_max)):
             return False
