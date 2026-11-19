@@ -334,12 +334,8 @@ def test_zero_area_tessellation_fractions_survive_persisted_workflow(
     assert direct["surface_area_m2"] == expected_area
     assert direct["degenerate_face_count"] == (2 if expected_area == 0 else 1)
     assert direct["edge_connected_patch_surface_area_fractions"] == expected_fractions
-    assert direct["largest_triangle_area_fraction"] == (
-        None if expected_area == 0 else 1.0
-    )
-    assert direct["area_weighted_effective_triangle_count"] == (
-        None if expected_area == 0 else 1.0
-    )
+    assert direct["largest_triangle_area_fraction"] == (None if expected_area == 0 else 1.0)
+    assert direct["area_weighted_effective_triangle_count"] == (None if expected_area == 0 else 1.0)
     assert "degenerate_triangles_present" in direct["qc_warnings"]
     assert "mesh_face_area_fraction_underflow" not in direct["qc_warnings"]
     assert "mesh_patch_area_fraction_underflow" not in direct["qc_warnings"]
@@ -382,9 +378,7 @@ def test_zero_area_tessellation_fractions_survive_persisted_workflow(
     app = cast(FastAPI, client.app)
     hashes: list[str] = []
     for _ in range(2):
-        run = client.post(
-            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-        )
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
         assert process_workflow_run_job(
             app.state.settings,
