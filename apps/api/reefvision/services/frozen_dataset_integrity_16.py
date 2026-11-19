@@ -135,11 +135,7 @@ def validate_frozen_dataset_manifest(
             # when both nested SHA-256 digests and taxonomic totals are rehashed.
             for snapshot in mask_snapshots:
                 mask_id = snapshot.get("id")
-                if (
-                    type(mask_id) is not str
-                    or not mask_id
-                    or mask_id in seen_mask_annotation_ids
-                ):
+                if type(mask_id) is not str or not mask_id or mask_id in seen_mask_annotation_ids:
                     raise ValidationError(message)
                 seen_mask_annotation_ids.add(mask_id)
 

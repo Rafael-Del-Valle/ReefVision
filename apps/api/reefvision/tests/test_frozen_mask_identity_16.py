@@ -54,9 +54,7 @@ def test_resigned_mask_ids_fail_standalone_and_saved_frozen_qc(
         base_revision=0,
     )
     version_id = create_version(client, project_id, name="Frozen mask identity")["id"]
-    standalone = client.post(
-        f"/api/v1/dataset-versions/{version_id}/review-queues", json={}
-    )
+    standalone = client.post(f"/api/v1/dataset-versions/{version_id}/review-queues", json={})
     assert standalone.status_code == 201, standalone.text
     graph = client.post(
         f"/api/v1/projects/{project_id}/workflow-graphs",
@@ -74,9 +72,7 @@ def test_resigned_mask_ids_fail_standalone_and_saved_frozen_qc(
     with app.state.session_factory() as session:
         version = session.get(DatasetVersion, version_id)
         item = session.scalar(
-            select(DatasetVersionItem).where(
-                DatasetVersionItem.dataset_version_id == version_id
-            )
+            select(DatasetVersionItem).where(DatasetVersionItem.dataset_version_id == version_id)
         )
         assert version is not None and item is not None
         assert version.schema_version == "0007"
