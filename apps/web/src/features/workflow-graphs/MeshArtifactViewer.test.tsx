@@ -818,6 +818,17 @@ describe("MeshArtifactViewer", () => {
         [0, 2],
       ],
     });
+
+    // 100% scale uncertainty is valid, but an interval wider than the
+    // supported calibration contract must not be displayed as evidence.
+    const beyondFullScale = {
+      ...maximalUncertainty,
+      provenance: {
+        calibration_verified: false,
+        relative_scale_uncertainty: 1.0000000001,
+      },
+    };
+    expect(parseMeshRenderArtifact(beyondFullScale)).toBeNull();
     expect(JSON.stringify(artifact)).toBe(unchanged);
   });
 
