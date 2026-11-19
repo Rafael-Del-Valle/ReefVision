@@ -186,3 +186,22 @@ workflow node, database migration, model download or user-asset mutation.
 Full backend/frontend/E2E CI and representative MSI installed-GUI validation
 are still required. The independent 1.1/1.6 Alembic-0038 collision remains a
 release hold.
+
+## 2026-11-19 — Stable seeded split ordering for colliding legacy keys (Track D)
+
+Follow-up to the distinct group/singleton namespace fix: the source planner
+retained a duplicate **display sort key** when a literal biological group
+was named `image:<singleton UUID>`. A stable Python sort would then depend
+on the eligible-image import order before seeded random shuffling, allowing
+the same two independent samples to exchange train/validation assignments.
+For the rare colliding keys the planner now uses the immutable per-unit image
+ID list as a tie-breaker. All unique historical sort keys, existing frozen
+studies and ordinary seeded split ordering remain unchanged.
+
+Added an in-memory permutation regression alongside the existing real-DB,
+standalone scientific QC and executable saved Workflow Builder acceptance test.
+Also applied the exact two-file Ruff-format patch from CI #44580139218,
+which failed before backend pytest. Complete exact-head CI, representative
+biology, Windows MSI/installed-GUI testing, 1.1/1.6 Alembic-0038
+reconciliation and explicit release approval remain open. No review
+automation or data migration is introduced.

@@ -318,9 +318,7 @@ class DatasetVersionService:
         for candidate in candidates:
             group_key = candidate.image.group_key
             unit_key = (
-                ("group", group_key)
-                if group_key is not None
-                else ("image", candidate.image.id)
+                ("group", group_key) if group_key is not None else ("image", candidate.image.id)
             )
             grouped_ids[unit_key].append(candidate.image.id)
 
@@ -429,7 +427,11 @@ class DatasetVersionService:
             )
             remaining_units = [unit for unit in units if unit.fixed_split is None]
             generator = random.Random(request.split_seed if request.split_seed is not None else 0)
-            remaining_units.sort(key=lambda unit: unit.key)
+            # A literal colony key may equal the generated singleton key.
+            # Break these rare ties using immutable image IDs, not candidate
+            # iteration order, so reverse import order cannot change seeded
+            # train/test assignments. Unique historical keys sort identically.
+            remaining_units.sort(key=lambda unit: (unit.key, unit.image_ids))
             generator.shuffle(remaining_units)
             for unit in remaining_units:
                 chosen_split = self._choose_split(current_counts, target_counts, unit.size)

@@ -10,6 +10,10 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from reefvision.db.models import ImageAsset
+from reefvision.schemas.dataset_versions import DatasetVersionPreviewRequest
+from reefvision.services.dataset_versions import CandidateImage, DatasetVersionService
+
 from reefvision.tests.test_annotations import create_project, import_one
 from reefvision.tests.test_dataset_versions import save_annotations, update_image
 from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
@@ -82,9 +86,7 @@ def test_literal_image_prefix_group_is_independent_in_preview_and_saved_qc(
     preview = client.post(preview_url, json=split_request)
     assert preview.status_code == 200, preview.text
     assert preview.json()["missing_group_key_count"] == 1
-    proposed = {
-        image["image_id"]: image["proposed_split"] for image in preview.json()["images"]
-    }
+    proposed = {image["image_id"]: image["proposed_split"] for image in preview.json()["images"]}
     assert proposed == {singleton_id: "train", grouped_id: "test"}
 
     created = client.post(
@@ -103,19 +105,13 @@ def test_literal_image_prefix_group_is_independent_in_preview_and_saved_qc(
     assert frozen_items.status_code == 200, frozen_items.text
     assert {item["image_id"]: item["split"] for item in frozen_items.json()} == proposed
 
-    standalone = client.post(
-        f"/api/v1/dataset-versions/{version_id}/review-queues", json={}
-    )
+    standalone = client.post(f"/api/v1/dataset-versions/{version_id}/review-queues", json={})
     assert standalone.status_code == 201, standalone.text
     graph = _frozen_graph(version_id)
-    plan = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
-    )
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
     assert plan.json()["valid"] and plan.json()["executable"]
-    saved = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph}
-    )
+    saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
 
     first_run, first_output = _run_frozen_graph(client, project_id, saved.json()["id"])
@@ -132,8 +128,32 @@ def test_literal_image_prefix_group_is_independent_in_preview_and_saved_qc(
         items = client.get(f"/api/v1/review-queues/{queue_id}/items")
         assert items.status_code == 200, items.text
         assert items.json()["total"] == 2
-        assert all(
-            item["review_state"] == "pending" for item in items.json()["items"]
-        )
+        assert all(item["review_state"] == "pending" for item in items.json()["items"])
     assert first_output["priority_score_unit"] == "dimensionless"
     assert first_output["review_status"] == "requires_researcher_review"
+
+def test_collision_safe_seeded_group_random_is_independent_of_candidate_order() -> None:
+    """An arbitrary import order must not change a seeded study split."""
+    singleton_id = "00000000-0000-0000-0000-000000000001"
+    grouped_id = "00000000-0000-0000-0000-000000000002"
+    singleton = CandidateImage(
+        image=ImageAsset(id=singleton_id, group_key=None),
+        annotations=[],
+        per_class_counts={},
+    )
+    grouped = CandidateImage(
+        image=ImageAsset(id=grouped_id, group_key=f"image:{singleton_id}"),
+        annotations=[],
+        per_class_counts={},
+    )
+    # _plan_splits is a pure in-memory operation for a request with no parent.
+    service = DatasetVersionService.__new__(DatasetVersionService)
+    request = DatasetVersionPreviewRequest(
+        split_method="group_random",
+        split_seed=7,
+    )
+    forward = service._plan_splits([singleton, grouped], request)
+    backward = service._plan_splits([grouped, singleton], request)
+    assert forward.assignments == backward.assignments
+    assert set(forward.assignments.values()) == {"train", "validation"}
+    assert forward.missing_group_key_count == backward.missing_group_key_count == 1
