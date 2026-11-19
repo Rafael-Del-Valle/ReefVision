@@ -836,7 +836,6 @@ def test_pose_materialization_rejects_special_archive_members(
     assert not (destination / "images" / "train" / "frame_00000001.png").exists()
 
 
-
 @pytest.mark.parametrize("output_name", ("pose-dataset", "ultralytics"))
 def test_pose_run_output_rejects_redirect_into_another_managed_run(
     tmp_path: Path,
@@ -872,7 +871,6 @@ def test_pose_run_output_rejects_redirect_into_another_managed_run(
     assert _resolve_unlinked_pose_run_path(settings, relative) == (
         current_run / output_name
     ).resolve()
-
 
 
 def test_pose_materialization_rejects_symlinked_export_destinations(
