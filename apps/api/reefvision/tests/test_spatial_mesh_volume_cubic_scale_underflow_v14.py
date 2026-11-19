@@ -100,7 +100,9 @@ def test_subnormal_volume_interval_qc_replays_in_saved_typed_workflow(
         assert standalone["enclosed_volume_scale_interval_m3"] is None
         assert standalone["edge_connected_patch_enclosed_volume_scale_intervals_m3"] == [None]
         assert warning in standalone["qc_warnings"]
-    assert direct["enclosed_volume_scale_interval_m3"] == standalone["enclosed_volume_scale_interval_m3"]
+    assert direct["enclosed_volume_scale_interval_m3"] == (
+        standalone["enclosed_volume_scale_interval_m3"]
+    )
     assert direct["edge_connected_patch_enclosed_volume_scale_intervals_m3"] == (
         standalone["edge_connected_patch_enclosed_volume_scale_intervals_m3"]
     )
