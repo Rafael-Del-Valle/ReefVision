@@ -142,3 +142,30 @@ QC rejection, saved typed Workflow Builder provenance refusal, rollback,
 unchanged pending review evidence, and idempotent saved-node replay. This
 does not add an overlapping node or migration, does not rewrite originals
 and does not claim hash-only authenticity. All other release holds apply.
+
+
+## Re-signed detection geometry validity (November 19, 2026)
+
+The original annotation editor validates **source-pixel** boxes against the
+image dimensions: all four coordinates must be finite numbers, nonnegative,
+inside the image bounds, and define strictly positive width and height. Frozen
+QC previously checked the boxes against the original checksummed manifest,
+but did not independently enforce those geometric constraints when a local
+writer recomputed both manifest and item digests. This could let impossible
+coral observations (negative coordinates, zero-area boxes, outside-image
+regions, infinities or nonnumeric values) enter a re-signed study.
+
+Both historical detection-only `0006` and existing mask-aware `0007`
+versions now apply the original editor's source-pixel bounds inside the
+shared **read-only** frozen-item validator. The same validator protects
+standalone QC and saved typed `dataset_version_source → qc_review_queue`
+Workflow Builder runs. It does not alter original annotations, generate new
+workflow nodes, download pretrained weights, or approve research.
+
+Synthetic schema-parity tests rehash the entire invalid box and manifest for
+each original schema. Database-backed saved-graph regressions also verify
+standalone refusal, rejection at the saved source-provenance gate, rollback,
+deterministic retry, dimensionless priority units and preserved pending human
+review. Checksums remain unauthenticated; independent dataset custody, the
+Alembic-0038 collision, real installed Windows GUI/MSI upgrade/rollback,
+and explicit researcher approval still block release.
