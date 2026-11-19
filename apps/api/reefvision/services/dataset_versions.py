@@ -303,7 +303,9 @@ class DatasetVersionService:
                     raise ValidationError("Manual split assignments conflict for the same image")
                 # Duplicate rows make an explicitly requested study split
                 # ambiguous to audit, even if the repeated value agrees.
-                raise ValidationError("Manual split assignments contain a duplicate image")
+                raise ValidationError(
+                    "Manual split assignments contain a duplicate image"
+                )
             assignments[item.image_id] = item.split
         return assignments
 
