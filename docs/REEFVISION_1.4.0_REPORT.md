@@ -467,3 +467,30 @@ the latter cause. Both formatting issues have been corrected on the isolated
 1.4 branch. A subsequent exact-head Actions run must confirm them and the
 new regression; no local full-suite, physical MSI/GUI/GPU or representative
 coral validation is claimed. **1.4 and 1.5 remain on RELEASE HOLD.**
+
+
+## Track C: calibrated surface-area bounds below numeric resolution (2026-11-19)
+
+A strictly positive relative calibration uncertainty may be smaller than the
+resolution of a nominal surface-area measurement. Previously the quadratic
+scale-only area bounds could round to the *same positive value* and imply an
+exact result despite nonzero uncertainty. The area interval helper now withholds
+such false-exact intervals while preserving nominal mesh area and the separate
+per-edge-connected-patch area. Existing
+`surface_area_scale_interval_numeric_unrepresentable` QC requires review;
+no statistical confidence interval or independently verified biology is inferred.
+
+The synthetic acceptance regression adds a positive but sub-resolution
+(`1e-17`) relative uncertainty to the subnormal-area fixture and checks direct
+measurement, standalone API, an executable typed persisted Workflow Builder
+graph executed twice, unverified provenance, equal artifacts and reproducible
+SHA-256 hashes. A separate ordinary-area control checks that positive
+sub-resolution uncertainty remains distinguishable from explicit zero,
+missing uncertainty, and the mathematically valid zero lower bound at 100%.
+The preceding head's three backend failures were Ruff formatting in the
+surface-trace regression; its formatting was separately corrected.
+
+**RELEASE HOLD:** Exact-head CI for these edits remains to be confirmed,
+and representative coral datasets, independent scientific review, migrations,
+installed Windows MSI/CAB/GUI and physical GPU acceptance remain outstanding.
+Neither synthetic fixture validates biological branch length or calibration.
