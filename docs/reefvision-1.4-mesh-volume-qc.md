@@ -107,6 +107,30 @@ typed Workflow Builder execution with provisional provenance and matching
 measurement artifact hashes. No new model checkpoints or inferred organism
 identities are involved.
 
+## Representable volume with unrepresentable uncertainty limits
+
+Even when a positive nominal provisional enclosed volume survives calibration,
+its positive lower scale-only bound can fall below binary64's smallest
+representable value. For uncertainty below 100%, reporting that rounded zero
+as a real lower bound would be misleading. In this case ReefVision retains
+the nominal provisional volume but sets its aggregate or per-patch
+`enclosed_volume_scale_interval_m3` result to `null` and reports
+`enclosed_volume_scale_interval_numeric_unrepresentable` in QC. An
+unrepresentable nonfinite endpoint is likewise withheld. These nulls
+communicate numeric precision limits, **not** uncertainty-free measurement.
+
+At exactly 100% relative scale uncertainty, a zero lower bound is
+mathematically legitimate and remains available if the upper bound is
+representable. Missing scale uncertainty still means no interval; it does
+not generate the numeric warning. This is a deterministic calibration-only
+interval and is not a statistical confidence interval.
+
+Synthetic subnormal closed tetrahedra test both cases through the direct
+measurement engine, standalone API, and two executions of a saved typed
+`mesh_surface_preview` Workflow Builder graph. Exact replay hashes and
+unverified calibration, registration, and specimen identity are asserted.
+The update does not claim validated coral tissue volume.
+
 ## Caller-supplied specimen and observation provenance
 
 The standalone mesh preview and persisted `mesh_surface_preview` Workflow
