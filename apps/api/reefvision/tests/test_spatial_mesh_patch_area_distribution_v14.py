@@ -155,10 +155,15 @@ def test_patch_area_distribution_survives_saved_typed_workflow(client: TestClien
     )
     assert artifact["measurement_status"] == "caller_supplied_unverified"
 
+
+@pytest.mark.parametrize("small_patch_first", [False, True])
 def test_positive_subnormal_area_share_is_flagged_in_saved_scientific_workflow(
-    client: TestClient,
+    client: TestClient, small_patch_first: bool,
 ) -> None:
-    """A positive reconstructed surface patch must not appear biologically absent."""
+    """A positive patch must retain its presence regardless of source-face order."""
+    source_faces = [[0, 1, 2], [3, 4, 5]]
+    if small_patch_first:
+        source_faces.reverse()
     params = {
         **GEOMETRY,
         "vertices": [
@@ -169,12 +174,15 @@ def test_positive_subnormal_area_share_is_flagged_in_saved_scientific_workflow(
             [3e-162, 0.0, 1e-160],
             [0.0, 3e-162, 1e-160],
         ],
-        "faces": [[0, 1, 2], [3, 4, 5]],
+        "faces": source_faces,
         "meters_per_unit": 1.0,
     }
     direct = measure_mesh_preview(**params)
-    assert direct["edge_connected_patch_surface_areas_m2"][1] > 0
-    assert direct["edge_connected_patch_surface_area_fractions"] == [1.0, 0.0]
+    tiny_patch_index = 0 if small_patch_first else 1
+    expected_fractions = [0.0, 1.0] if small_patch_first else [1.0, 0.0]
+    assert direct["edge_connected_patch_surface_areas_m2"][tiny_patch_index] > 0
+    assert direct["edge_connected_patch_surface_area_fractions"] == expected_fractions
+    assert direct["largest_surface_patch_index"] == (1 if small_patch_first else 0)
     assert "mesh_patch_area_fraction_underflow" in direct["qc_warnings"]
     assert "mesh_face_area_fraction_underflow" in direct["qc_warnings"]
     assert direct["measurement_status"] == "caller_supplied_unverified"
@@ -190,7 +198,7 @@ def test_positive_subnormal_area_share_is_flagged_in_saved_scientific_workflow(
     response = client.post(f"{base}/spatial/mesh-preview", json=payload)
     assert response.status_code == 200, response.text
     standalone = response.json()
-    assert standalone["edge_connected_patch_surface_areas_m2"][1] > 0
+    assert standalone["edge_connected_patch_surface_areas_m2"][tiny_patch_index] > 0
     for warning in (
         "mesh_patch_area_fraction_underflow",
         "mesh_face_area_fraction_underflow",
