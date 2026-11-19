@@ -76,6 +76,50 @@ describe("ImageViewport", () => {
     expect(transform.style.transform).not.toContain("scale(1)");
   });
 
+  it("falls back to window resizing when WebView2 exposes no usable ResizeObserver", () => {
+    // A property-existence check is insufficient: some desktop webviews
+    // expose ResizeObserver as undefined while starting the first image.
+    vi.stubGlobal("ResizeObserver", undefined);
+    try {
+      const dimensions = { width: 960, height: 640 };
+      const { unmount } = render(
+        <ImageViewport width={1600} height={1200} label="Fallback image">
+          <svg data-testid="fallback-overlay" viewBox="0 0 1600 1200">
+            <polygon points="10,20 40,20 40,60" />
+          </svg>
+        </ImageViewport>,
+      );
+      const frame = screen.getByRole("region", { name: "Fallback image" });
+      Object.defineProperty(frame, "clientWidth", {
+        configurable: true,
+        get: () => dimensions.width,
+      });
+      Object.defineProperty(frame, "clientHeight", {
+        configurable: true,
+        get: () => dimensions.height,
+      });
+      const transform = screen.getByTestId("image-viewport-transform");
+      const polygon = screen.getByTestId("fallback-overlay").querySelector("polygon");
+      const originalPoints = polygon?.getAttribute("points");
+
+      fireEvent.resize(window);
+      const expectedFit = fitTransform({ width: 1600, height: 1200 }, dimensions);
+      expect(transform.style.transform).toContain(`scale(${expectedFit.scale})`);
+
+      fireEvent.wheel(frame, { deltaY: -120, clientX: 480, clientY: 320 });
+      const manualScale = transform.style.transform.match(/scale\\(([^)]+)\\)/)?.[1];
+      expect(manualScale).toBeDefined();
+      dimensions.width = 1100;
+      dimensions.height = 720;
+      fireEvent.resize(window);
+      expect(transform.style.transform).toContain(`scale(${manualScale})`);
+      expect(polygon).toHaveAttribute("points", originalPoints);
+      unmount();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("preserves user zoom and annotated pixel positions when a desktop pane resizes", () => {
     let notifyResize: (() => void) | undefined;
     class MockResizeObserver {

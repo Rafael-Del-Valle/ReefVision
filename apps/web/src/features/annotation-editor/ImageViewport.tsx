@@ -124,7 +124,10 @@ export function ImageViewport({
       );
     };
     updateSize();
-    if ("ResizeObserver" in window) {
+    // Some embedded WebView2 shells expose the property before a usable
+    // ResizeObserver constructor exists. Fall back to window resize rather
+    // than crashing the initial image viewport during first launch.
+    if (typeof ResizeObserver === "function") {
       const observer = new ResizeObserver(updateSize);
       observer.observe(frame);
       return () => observer.disconnect();
