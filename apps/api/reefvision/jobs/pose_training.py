@@ -629,16 +629,15 @@ def process_pose_training_job(
                 "pose-workflow-training-snapshot-0002",
                 "pose-workflow-training-snapshot-0003",
                 "pose-workflow-training-snapshot-0004",
-            }:
-                if (
-                    request.get("created_by_workflow") is not True
-                    or request.get("training_run_id") != run.id
-                    or request.get("workflow_run_id") != snapshot.get("workflow_run_id")
-                    or request.get("workflow_node_run_id") != snapshot.get("workflow_node_run_id")
-                ):
-                    raise ValidationError(
-                        "Queued pose training workflow child job lineage changed"
-                    )
+            } and (
+                request.get("created_by_workflow") is not True
+                or request.get("training_run_id") != run.id
+                or request.get("workflow_run_id") != snapshot.get("workflow_run_id")
+                or request.get("workflow_node_run_id") != snapshot.get("workflow_node_run_id")
+            ):
+                raise ValidationError(
+                    "Queued pose training workflow child job lineage changed"
+                )
             sealed_digest = (
                 snapshot.get("pose_child_job_request_sha256")
                 if isinstance(snapshot, dict)
