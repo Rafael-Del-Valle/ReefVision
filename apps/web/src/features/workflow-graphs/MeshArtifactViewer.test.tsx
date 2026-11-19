@@ -755,7 +755,9 @@ describe("MeshArtifactViewer", () => {
       ],
     };
     const unchanged = JSON.stringify(artifact);
-    expect(parseMeshRenderArtifact(artifact)?.routeInspections[0]).toMatchObject({
+    expect(
+      parseMeshRenderArtifact(artifact)?.routeInspections[0],
+    ).toMatchObject({
       lengthM: 1,
       lengthScaleIntervalM: null,
       endpointChordLengthM: 1,
@@ -771,7 +773,9 @@ describe("MeshArtifactViewer", () => {
       ...artifact,
       provenance: { calibration_verified: false, relative_scale_uncertainty: 0 },
     };
-    expect(parseMeshRenderArtifact(exactScale)?.routeInspections[0]).toMatchObject({
+    expect(
+      parseMeshRenderArtifact(exactScale)?.routeInspections[0],
+    ).toMatchObject({
       lengthScaleIntervalM: [1, 1],
       endpointChordScaleIntervalM: [1, 1],
       edgeScaleIntervalsM: [[1, 1]],
@@ -797,7 +801,9 @@ describe("MeshArtifactViewer", () => {
         },
       ],
     };
-    expect(parseMeshRenderArtifact(maximalUncertainty)?.routeInspections[0]).toMatchObject({
+    expect(
+      parseMeshRenderArtifact(maximalUncertainty)?.routeInspections[0],
+    ).toMatchObject({
       lengthScaleIntervalM: [0, 2],
       endpointChordScaleIntervalM: [0, 2],
       edgeScaleIntervalsM: [[0, 2]],
