@@ -661,6 +661,43 @@ describe("ImageViewport", () => {
     expect(polygon).toHaveAttribute("points", originalPoints);
   });
 
+  it("preserves find shortcuts and editable labels without losing plain-F refit or polygon geometry", () => {
+    render(
+      <ImageViewport width={1600} height={1200} label="Editable coral image">
+        <svg data-testid="shortcut-overlay" viewBox="0 0 1600 1200">
+          <polygon points="10,10 50,10 50,50" />
+        </svg>
+        <div contentEditable suppressContentEditableWarning data-testid="annotation-label-editor">
+          Coral fragment
+        </div>
+      </ImageViewport>,
+    );
+    const frame = screen.getByRole("region", { name: "Editable coral image" });
+    const transform = screen.getByTestId("image-viewport-transform");
+    const polygon = screen.getByTestId("shortcut-overlay").querySelector("polygon");
+    const originalPoints = polygon?.getAttribute("points");
+    const fitted = transform.style.transform;
+
+    fireEvent.wheel(frame, { deltaY: -120, clientX: 300, clientY: 200 });
+    const zoomed = transform.style.transform;
+    expect(zoomed).not.toBe(fitted);
+    expect(fireEvent.keyDown(frame, { key: "f", ctrlKey: true })).toBe(true);
+    expect(fireEvent.keyDown(frame, { key: "f", metaKey: true })).toBe(true);
+    expect(fireEvent.keyDown(frame, { key: "f", altKey: true })).toBe(true);
+    expect(fireEvent.keyDown(frame, { key: "f", isComposing: true })).toBe(true);
+    expect(
+      fireEvent.keyDown(screen.getByTestId("annotation-label-editor"), {
+        key: "f",
+      }),
+    ).toBe(true);
+    expect(transform.style.transform).toBe(zoomed);
+    expect(polygon).toHaveAttribute("points", originalPoints);
+
+    expect(fireEvent.keyDown(frame, { key: "f" })).toBe(false);
+    expect(transform.style.transform).toBe(fitted);
+    expect(polygon).toHaveAttribute("points", originalPoints);
+  });
+
   it("refits when switching same-size camera images without carrying stale pan or zoom", () => {
     const renderSource = (sourceImageId: string) => (
       <ImageViewport
