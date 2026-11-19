@@ -62,6 +62,25 @@ def _cubic_volume_scale_interval_m3(
     return bounds
 
 
+def _quadratic_area_scale_interval_m2(
+    area_m2: float, uncertainty: float | None
+) -> list[float] | None:
+    """Scale-only area bounds; never misreport positive underflow as zero."""
+    if uncertainty is None:
+        return None
+    bounds = [
+        area_m2 * (1 - uncertainty) ** 2,
+        area_m2 * (1 + uncertainty) ** 2,
+    ]
+    if not all(isfinite(bound) for bound in bounds):
+        return None
+    # A zero lower limit is physically valid at 100% relative scale error
+    # or for a true zero-area surface, but not from floating-point underflow.
+    if area_m2 > 0 and uncertainty < 1 and bounds[0] == 0:
+        return None
+    return bounds
+
+
 def _sample_mesh_display_geometry(
     points: list[tuple[float, float, float]],
     faces: list[list[int]],
@@ -666,6 +685,52 @@ def measure_mesh_preview(
         else None
         for patch in ordered_patches
     ]
+    area_scale_interval_m2 = _quadratic_area_scale_interval_m2(
+        area_m2, relative_scale_uncertainty
+    )
+    patch_area_scale_intervals_m2 = (
+        [
+            _quadratic_area_scale_interval_m2(area, relative_scale_uncertainty)
+            for area in patch_areas_m2
+        ]
+        if relative_scale_uncertainty is not None
+        else None
+    )
+    partial_missing_area_scale_interval_m2 = (
+        _quadratic_area_scale_interval_m2(
+            partial_missing_area_m2, relative_scale_uncertainty
+        )
+        if partial_missing_area_representable
+        else None
+    )
+    omitted_patch_area_scale_interval_m2 = (
+        _quadratic_area_scale_interval_m2(
+            omitted_patch_area_m2, relative_scale_uncertainty
+        )
+        if omitted_patch_area_representable
+        else None
+    )
+    if relative_scale_uncertainty is not None and (
+        (area_m2 > 0 and area_scale_interval_m2 is None)
+        or (
+            patch_area_scale_intervals_m2 is not None
+            and any(
+                area > 0 and interval is None
+                for area, interval in zip(
+                    patch_areas_m2, patch_area_scale_intervals_m2, strict=True
+                )
+            )
+        )
+        or (
+            partial_missing_area_m2 > 0
+            and partial_missing_area_scale_interval_m2 is None
+        )
+        or (
+            omitted_patch_area_m2 > 0
+            and omitted_patch_area_scale_interval_m2 is None
+        )
+    ):
+        volume_qc_warnings.add("surface_area_scale_interval_numeric_unrepresentable")
     volume_scale_interval_m3 = _cubic_volume_scale_interval_m3(
         enclosed_volume_m3, relative_scale_uncertainty
     )
@@ -769,12 +834,7 @@ def measure_mesh_preview(
             partial_missing_area_m2 if partial_missing_area_representable else None
         ),
         "preview_partially_sampled_patch_missing_area_scale_interval_m2": (
-            [
-                partial_missing_area_m2 * (1 - relative_scale_uncertainty) ** 2,
-                partial_missing_area_m2 * (1 + relative_scale_uncertainty) ** 2,
-            ]
-            if relative_scale_uncertainty is not None and partial_missing_area_representable
-            else None
+            partial_missing_area_scale_interval_m2
         ),
         "preview_omitted_patch_surface_area_fraction": (
             omitted_patch_raw_area / raw_area if raw_area > 0 else None
@@ -783,12 +843,7 @@ def measure_mesh_preview(
             omitted_patch_area_m2 if omitted_patch_area_representable else None
         ),
         "preview_omitted_patch_surface_area_scale_interval_m2": (
-            [
-                omitted_patch_area_m2 * (1 - relative_scale_uncertainty) ** 2,
-                omitted_patch_area_m2 * (1 + relative_scale_uncertainty) ** 2,
-            ]
-            if (relative_scale_uncertainty is not None and omitted_patch_area_representable)
-            else None
+            omitted_patch_area_scale_interval_m2
         ),
         "vertex_count": len(points),
         "preview_referenced_bounds_in_source_frame_m": {
@@ -978,17 +1033,7 @@ def measure_mesh_preview(
             if relative_scale_uncertainty is not None
             else None
         ),
-        "edge_connected_patch_area_scale_intervals_m2": (
-            [
-                [
-                    area * (1 - relative_scale_uncertainty) ** 2,
-                    area * (1 + relative_scale_uncertainty) ** 2,
-                ]
-                for area in patch_areas_m2
-            ]
-            if relative_scale_uncertainty is not None
-            else None
-        ),
+        "edge_connected_patch_area_scale_intervals_m2": (patch_area_scale_intervals_m2),
         "inconsistent_winding_edge_count": inconsistent_winding_edge_count,
         "qc_warnings": (
             sorted(volume_qc_warnings)
@@ -1031,14 +1076,7 @@ def measure_mesh_preview(
             if relative_scale_uncertainty is not None
             else None
         ),
-        "surface_area_scale_interval_m2": (
-            [
-                area_m2 * (1 - relative_scale_uncertainty) ** 2,
-                area_m2 * (1 + relative_scale_uncertainty) ** 2,
-            ]
-            if relative_scale_uncertainty is not None
-            else None
-        ),
+        "surface_area_scale_interval_m2": (area_scale_interval_m2),
         "axis_aligned_dimension_scale_uncertainty_m": (
             [dimension * relative_scale_uncertainty for dimension in dimensions]
             if relative_scale_uncertainty is not None
