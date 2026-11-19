@@ -1101,7 +1101,6 @@ def test_pose_training_refuses_reused_gpu_output_and_preserves_checkpoints(
     assert checkpoint.read_bytes() == b"preserve-registered-user-trained-weights"
 
 
-
 def test_pose_training_refuses_unexpected_trainer_checkpoint_directory(
     tmp_path: Path,
 ) -> None:
@@ -1126,7 +1125,6 @@ def test_pose_training_refuses_unexpected_trainer_checkpoint_directory(
         return
     with pytest.raises(ValidationError, match="contains a symbolic link"):
         _verified_pose_trainer_save_dir(linked, expected)
-
 
 
 def test_pose_materialization_rejects_symlinked_export_destinations(
