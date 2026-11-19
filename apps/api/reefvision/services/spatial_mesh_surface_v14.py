@@ -198,7 +198,7 @@ def measure_mesh_preview(
     # A positive source triangle can be too small relative to another to
     # express its area share in binary64. A displayed zero is then a
     # numerical precision limit, not evidence of zero reconstructed surface.
-    face_area_fraction_underflow = any(
+    face_area_fraction_underflow = raw_area > 0 and any(
         area > 0 and share == 0 for area, share in zip(face_areas, area_shares, strict=True)
     )
     largest_triangle_area_fraction = max(area_shares) if area_shares else None
