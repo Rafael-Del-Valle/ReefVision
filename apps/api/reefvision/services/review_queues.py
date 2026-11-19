@@ -31,6 +31,7 @@ from reefvision.schemas.review_queues import (
     ReviewQueueResponse,
     ReviewScoreWeights,
 )
+from reefvision.services.frozen_dataset_integrity_16 import validate_frozen_dataset_manifest
 from reefvision.services.measurement_aware_dataset_versions import (
     MeasurementAwareDatasetVersionService,
 )
@@ -147,6 +148,13 @@ class ReviewQueueService:
         regenerated_from_queue_id: str | None = None,
     ) -> ReviewQueue:
         project = self.quality_control._project(project_id)
+        # Before ranking a frozen study, bind each immutable per-image record
+        # to its signed manifest rather than trusting only aggregate counts.
+        if dataset_version is not None:
+            validate_frozen_dataset_manifest(
+                dataset_version,
+                self.quality_control.versions.items_for_version(dataset_version.id),
+            )
         # Frozen dataset versions contain reviewed annotation snapshots but no
         # pending prediction proposals. A confidence selection would silently
         # return an empty, supposedly completed queue for every frozen image.
