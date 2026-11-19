@@ -541,9 +541,7 @@ def test_pose_training_rechecks_frozen_holdout_bytes_before_gpu_launch(
     with pytest.raises(ValidationError, match="changed before GPU training"):
         _verify_prelaunch_pose_dataset(destination, materialization)
 
-    with pytest.raises(
-        ValidationError, match="missing materialized dataset provenance"
-    ):
+    with pytest.raises(ValidationError, match="missing materialized dataset provenance"):
         _verify_prelaunch_pose_dataset(destination, None)
 
 
