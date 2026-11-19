@@ -36,6 +36,7 @@ from reefvision.jobs.pose_training import (
     _require_empty_pose_gpu_output,
     _resolve_unlinked_pose_run_path,
     _verify_prelaunch_pose_dataset,
+    _verified_pose_trainer_save_dir,
     materialize_pose_training_exports,
     process_pose_training_job,
 )
@@ -1098,6 +1099,34 @@ def test_pose_training_refuses_reused_gpu_output_and_preserves_checkpoints(
     with pytest.raises(ValidationError, match="refusing to reuse previous artifacts"):
         _require_empty_pose_gpu_output(output_root)
     assert checkpoint.read_bytes() == b"preserve-registered-user-trained-weights"
+
+
+
+def test_pose_training_refuses_unexpected_trainer_checkpoint_directory(
+    tmp_path: Path,
+) -> None:
+    # Ultralytics must not register artifacts from another run if its
+    # save_dir differs from the immutable workflow run's allocated path.
+    expected = tmp_path / "training" / "frozen-run" / "runs" / "pose"
+    unrelated = tmp_path / "training" / "other-run" / "runs" / "pose"
+    expected.mkdir(parents=True)
+    unrelated.mkdir(parents=True)
+    checkpoint = unrelated / "best.pt"
+    checkpoint.write_bytes(b"preserve-unrelated-scientific-checkpoint")
+
+    assert _verified_pose_trainer_save_dir(expected, expected) == expected
+    with pytest.raises(ValidationError, match="does not match queued training run"):
+        _verified_pose_trainer_save_dir(unrelated, expected)
+    assert checkpoint.read_bytes() == b"preserve-unrelated-scientific-checkpoint"
+
+    linked = tmp_path / "linked-run-output"
+    try:
+        linked.symlink_to(expected, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        return
+    with pytest.raises(ValidationError, match="contains a symbolic link"):
+        _verified_pose_trainer_save_dir(linked, expected)
+
 
 
 def test_pose_materialization_rejects_symlinked_export_destinations(
