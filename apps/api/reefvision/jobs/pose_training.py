@@ -364,7 +364,8 @@ def _verify_prelaunch_pose_dataset(
     # Historical Windows manifests used Path ordering, which compares names
     # case-insensitively. Accept that original digest only for pre-versioned
     # materializations, while still hashing every current file and its path.
-    if algorithm is None and len({item["path"].casefold() for item in files}) == len(files):
+    has_case_aliases = len({item["path"].casefold() for item in files}) != len(files)
+    if algorithm is None and not has_case_aliases:
         legacy_windows = sorted(files, key=lambda item: item["path"].casefold())
         if canonical_json_sha256(legacy_windows) == expected:
             return
