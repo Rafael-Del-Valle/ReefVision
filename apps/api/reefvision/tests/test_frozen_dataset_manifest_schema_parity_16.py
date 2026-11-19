@@ -132,3 +132,30 @@ def test_legacy_frozen_manifest_cannot_gain_untracked_mask_evidence() -> None:
     item.mask_annotation_snapshot_json = [{"id": "mask-1", "label_class_id": "swiftia"}]
     with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
         validate_frozen_dataset_manifest(version, [item])
+
+
+@pytest.mark.parametrize(
+    ("schema_version", "with_mask"),
+    [("0006", False), ("0007", False), ("0007", True)],
+)
+def test_fully_resigned_duplicate_observation_id_fails_all_original_schemas(
+    schema_version: str, with_mask: bool
+) -> None:
+    """A second biological detection cannot reuse the first annotation ID."""
+    version, item = _saved_snapshot(schema_version, with_mask=with_mask)
+    original = dict(item.annotation_snapshot_json[0])
+    item.annotation_snapshot_json = [original, dict(original)]
+    item.annotation_count = 2
+    item.per_class_counts_json = {"swiftia": 2}
+    version.annotation_count = 2
+    manifest = deepcopy(version.manifest_json)
+    manifest["summary"]["annotation_count"] = 2
+    payload = _item_payload(item, schema_version=schema_version)
+    item.snapshot_sha256 = canonical_json_sha256(payload)
+    manifest["items"] = [{**payload, "snapshot_sha256": item.snapshot_sha256}]
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+
+    # Every digest and aggregate count agrees; observation identity does not.
+    with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+        validate_frozen_dataset_manifest(version, [item])
