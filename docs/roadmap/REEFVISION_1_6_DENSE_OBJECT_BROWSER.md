@@ -98,3 +98,23 @@ the final page, asserts 101 mounted rows (100 page rows plus one previously
 selected pinned row), correct full-document accessible positions, invalid
 input rejection and return-to-first-page behavior. Full exact-head CI and
 installed Windows GUI usability still require independent verification.
+
+## Constant-size off-window selection pinning (Track D)
+
+Previously the display window was bounded but each invocation still copied
+*every* selected annotation and mask ID into temporary sets and filtered
+arrays before taking the latest 200. This duplicated large multi-selection
+buffers and delayed sidebar updates on dense ecological images. Pin discovery
+now traverses each selected-ID list **backwards only until 200 off-window
+entries per type are found**. It retains only IDs already mounted in the
+visible window plus those 200 candidates, without allocating a selection-sized
+temporary lookup. Repeated IDs preserve the previous last-200-entry behavior.
+
+A proxy-instrumented 50,000-object regression requires only **200 indexed
+selection reads** when the latest 200 are outside the current window; a
+separate test verifies duplicate-tail semantics. These are UI-only changes:
+full selected-ID arrays, annotation/mask data, QC decisions, class visibility,
+scientific outputs and saved executable Workflow Builder graphs remain
+unaltered. Exact-head TypeScript/Vitest/Playwright, native Windows
+installed-GUI profiling on real dense media, and researcher approval remain
+release requirements; this is not a new scientific Workflow Builder node.

@@ -262,7 +262,6 @@ def test_tampered_private_artifact_name_is_not_echoed(tmp_path: Path) -> None:
     assert (directory / private_name).read_bytes() == b"invalid payload"
 
 
-
 @pytest.mark.parametrize(
     "invalid_value",
     ["NaN", "Infinity", "-Infinity", "[NaN]", '{"nested": -Infinity}'],

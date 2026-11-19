@@ -9,6 +9,30 @@ export type DenseObjectListRow<
   | { kind: "annotation"; item: A; position: number }
   | { kind: "mask"; item: M; position: number };
 
+/** Keep pinning bounded in memory as well as in DOM nodes.
+ * Work backwards through the selection without copying a potentially huge
+ * selected-ID array into a Set or a filtered intermediate array. Counting
+ * repeated off-window entries preserves the last-200-entry behavior.
+ */
+function mostRecentOffWindowSelectionIds(
+  selectedIds: readonly string[],
+  visibleIds: ReadonlySet<string>,
+): Set<string> {
+  const pinned = new Set<string>();
+  let remaining = 200;
+  let index = selectedIds.length - 1;
+  while (index >= 0 && remaining > 0) {
+    const id = selectedIds[index];
+    index -= 1;
+    if (visibleIds.has(id)) {
+      continue;
+    }
+    pinned.add(id);
+    remaining -= 1;
+  }
+  return pinned;
+}
+
 export function boundedDenseObjectRows<
   A extends { id: string },
   M extends { id: string },
@@ -33,34 +57,31 @@ export function boundedDenseObjectRows<
   const maskStart = Math.max(0, start - annotations.length);
   const maskEnd = Math.max(0, end - annotations.length);
   const rows: DenseObjectListRow<A, M>[] = [];
-  const pendingAnnotationIds = new Set(selectedAnnotationIds);
-  const pendingMaskIds = new Set(selectedMaskIds);
+  const visibleAnnotationIds = new Set<string>();
+  const visibleMaskIds = new Set<string>();
 
   // Show only the requested source-order window. Jumping to a distant
   // biological observation must not first mount thousands of React options.
   for (let index = annotationStart; index < annotationEnd; index += 1) {
     const item = annotations[index];
     rows.push({ kind: "annotation", item, position: index });
-    pendingAnnotationIds.delete(item.id);
+    visibleAnnotationIds.add(item.id);
   }
   for (let index = maskStart; index < maskEnd; index += 1) {
     const item = masks[index];
     rows.push({ kind: "mask", item, position: annotations.length + index });
-    pendingMaskIds.delete(item.id);
+    visibleMaskIds.add(item.id);
   }
 
-  // Large selections do not override the bounded DOM. Selected records
-  // outside this window remain intact; pin at most the latest 200 per type.
-  const maxPinnedPerType = 200;
-  const pinnedAnnotations = new Set(
-    selectedAnnotationIds
-      .filter((id) => pendingAnnotationIds.has(id))
-      .slice(-maxPinnedPerType),
+  // Large selections do not override the bounded DOM or require a second
+  // full-size selection copy. Pin the latest 200 off-window entries per type.
+  const pinnedAnnotations = mostRecentOffWindowSelectionIds(
+    selectedAnnotationIds,
+    visibleAnnotationIds,
   );
-  const pinnedMasks = new Set(
-    selectedMaskIds
-      .filter((id) => pendingMaskIds.has(id))
-      .slice(-maxPinnedPerType),
+  const pinnedMasks = mostRecentOffWindowSelectionIds(
+    selectedMaskIds,
+    visibleMaskIds,
   );
 
   // Scan only regions outside the displayed window. A saved annotation

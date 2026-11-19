@@ -164,6 +164,56 @@ describe("dense object-browser window", () => {
     expect(annotations).toHaveLength(20_000);
   });
 
+  it("uses bounded selection reads and memory for huge dense-object selections", () => {
+    const annotations = Array.from({ length: 50_000 }, (_, index) => ({
+      id: `box-${index}`,
+    }));
+    const selectedIds = annotations.map((item) => item.id);
+    let selectedReads = 0;
+    const trackedSelection = new Proxy(selectedIds, {
+      get(target, property, receiver) {
+        if (typeof property === "string" && /^[0-9]+$/.test(property)) {
+          selectedReads += 1;
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    const rows = boundedDenseObjectRows(
+      annotations,
+      [],
+      200,
+      trackedSelection,
+      [],
+    );
+    expect(rows).toHaveLength(400);
+    expect(rows[0].position).toBe(0);
+    expect(rows[199].position).toBe(199);
+    expect(rows[200].position).toBe(49_800);
+    expect(rows[399].position).toBe(49_999);
+    expect(selectedReads).toBe(200);
+    expect(selectedIds).toHaveLength(50_000);
+    expect(annotations).toHaveLength(50_000);
+  });
+
+  it("preserves last-200-entry pin semantics when selected IDs repeat", () => {
+    const annotations = Array.from({ length: 300 }, (_, index) => ({
+      id: `box-${index}`,
+    }));
+    const selectedIds = ["box-250", ...Array(200).fill("box-299")];
+    const rows = boundedDenseObjectRows(
+      annotations,
+      [],
+      10,
+      selectedIds,
+      [],
+    );
+    expect(rows.map((row) => row.position)).toEqual([
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 299,
+    ]);
+    expect(selectedIds).toHaveLength(201);
+  });
+
   it("bounds both selected types independently and preserves source ordering", () => {
     const annotations = Array.from({ length: 2_000 }, (_, index) => ({
       id: `box-${index}`,
