@@ -95,12 +95,22 @@ def test_tiny_volume_standalone_and_replayed_saved_graph_preserve_provenance(
     standalone = standalone_response.json()
     expected_volume = (coordinate_extent * scale) ** 3 / 6
     assert expected_volume > 0
-    assert standalone["enclosed_volume_m3"] == pytest.approx(
-        expected_volume, rel=1e-8, abs=0
+    assert standalone["enclosed_volume_m3"] == pytest.approx(expected_volume, rel=1e-8, abs=0)
+    patch_volumes = standalone["edge_connected_patch_enclosed_volumes_m3"]
+    assert patch_volumes == pytest.approx([expected_volume], rel=1e-8, abs=0)
+    scale_bounds = [expected_volume * 0.9**3, expected_volume * 1.1**3]
+    assert standalone["enclosed_volume_scale_interval_m3"] == pytest.approx(
+        scale_bounds, rel=1e-8, abs=0
     )
-    assert (
-        "enclosed_volume_source_unit_numeric_recovery" in standalone["qc_warnings"]
-    ) is (coordinate_extent < 1)
+    patch_bounds = standalone["edge_connected_patch_enclosed_volume_scale_intervals_m3"]
+    assert patch_bounds is not None
+    assert patch_bounds[0] == pytest.approx(scale_bounds, rel=1e-8, abs=0)
+    assert standalone["surface_area_m2"] > 0
+    assert standalone["measurement_status"] == "caller_supplied_unverified"
+    assert "enclosed_volume_zero_or_underflow" not in standalone["qc_warnings"]
+    assert ("enclosed_volume_source_unit_numeric_recovery" in standalone["qc_warnings"]) is (
+        coordinate_extent < 1
+    )
     assert standalone["provenance"]["calibration_verified"] is False
     assert standalone["provenance"]["specimen_identity_verified"] is False
     assert standalone["provenance"]["coordinate_registration_verified"] is False
