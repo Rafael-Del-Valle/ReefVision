@@ -113,6 +113,7 @@ def _valid_frozen_raster_mask(snapshot: dict[str, Any], width_px: Any, height_px
         and 0 < area <= width_px * height_px
     )
 
+
 def _item_payload(item: DatasetVersionItem, *, schema_version: str) -> dict[str, Any]:
     """Reconstruct exactly the schema recorded by the version's producer."""
     payload: dict[str, Any] = {
