@@ -174,7 +174,7 @@ def create_review_queue_workflow_artifact(
         ).all()
         # A checksummed producer and matching aggregate counts cannot detect
         # changed individual coral geometry, per-class counts or split labels.
-        # Validate the original item SHA and signed manifest before replaying
+        # Validate the original item SHA and checksummed manifest before replaying
         # an existing review queue or producing a new one.
         validate_frozen_dataset_manifest(dataset_version, frozen_items)
         expected_image_ids = [item.image_id for item in frozen_items]
