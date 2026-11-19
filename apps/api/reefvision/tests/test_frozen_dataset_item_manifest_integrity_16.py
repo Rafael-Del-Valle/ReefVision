@@ -156,6 +156,9 @@ def test_frozen_item_evidence_cannot_change_under_standalone_or_saved_qc(
         "unknown_class_id",
         "source_digest_nonhex",
         "source_width_zero",
+        "ineligible_status",
+        "eligible_status_manifest_drift",
+        "unknown_eligible_status",
     ],
 )
 def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
@@ -197,6 +200,12 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             item.image_sha256 = "z" * 64
         elif tamper == "source_width_zero":
             item.width_px = 0
+        elif tamper == "ineligible_status":
+            item.image_annotation_status = "excluded"
+        elif tamper == "eligible_status_manifest_drift":
+            version.eligible_annotation_statuses_json = ["reviewed", "annotated"]
+        elif tamper == "unknown_eligible_status":
+            version.eligible_annotation_statuses_json = ["reviewed", "not_a_real_status"]
         else:
             annotations = [dict(annotation) for annotation in item.annotation_snapshot_json]
             if tamper == "reused_identity":
@@ -236,6 +245,11 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             manifest["summary"] = {
                 **version.manifest_json["summary"],
                 "annotation_count": version.annotation_count,
+            }
+        if tamper == "unknown_eligible_status":
+            manifest["split_config"] = {
+                **version.manifest_json["split_config"],
+                "eligible_annotation_statuses": list(version.eligible_annotation_statuses_json),
             }
         version.manifest_json = manifest
         version.manifest_sha256 = canonical_json_sha256(manifest)
