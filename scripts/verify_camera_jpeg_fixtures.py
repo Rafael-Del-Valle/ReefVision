@@ -94,6 +94,20 @@ def _camera_exif_offset_time_original(value: object) -> tuple[str | None, bool]:
     return normalized, False
 
 
+def _camera_exif_subsec_time_original(value: object) -> tuple[str | None, bool]:
+    """Validate camera-local fractional seconds without fabricating precision.
+
+    Preserve leading zeros; reject non-ASCII, non-digit and excessively long
+    values rather than silently treating them as valid exposure evidence.
+    """
+    if value is None:
+        return None, False
+    normalized = _normalized_exif_ascii(value)
+    if normalized is None or re.fullmatch(r"[0-9]{1,9}", normalized) is None:
+        return None, True
+    return normalized, False
+
+
 def _file_fingerprint(stat: os.stat_result) -> tuple[int, ...]:
     """Compare file identity/content metadata from path and open-handle stat."""
     stable = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
@@ -393,6 +407,13 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                                     nested_offset if nested_offset is not None else top_offset
                                 )
                             )
+                            capture_subsec, invalid_capture_subsec = (
+                                _camera_exif_subsec_time_original(
+                                    exif_ifd.get(37521)
+                                    if exif_ifd.get(37521) is not None
+                                    else exif.get(37521)
+                                )
+                            )
                             # A timezone offset without a timestamp cannot
                             # identify an exposure instant. Keep its QC finding
                             # separate from a missing (legitimate) timezone.
@@ -401,11 +422,17 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                                 and capture_offset is not None
                                 and not invalid_capture_local
                             )
+                            orphaned_exposure_subsec = (
+                                capture_local is None
+                                and capture_subsec is not None
+                                and not invalid_capture_local
+                            )
                             if exposure_ifd_conflict:
                                 # Suppress the disputed values in the scientific
                                 # manifest, while retaining an explicit QC flag.
                                 capture_local = None
                                 capture_offset = None
+                                capture_subsec = None
                             ifd0_width = exif.get(40962)
                             ifd0_height = exif.get(40963)
                             exif_pixel_width = exif_ifd.get(40962, ifd0_width)
@@ -458,6 +485,13 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                                 "jpeg_exif_camera_model_malformed": invalid_model,
                                 "jpeg_exif_datetime_original_local": capture_local,
                                 "jpeg_exif_offset_time_original": capture_offset,
+                                "jpeg_exif_subsec_time_original": capture_subsec,
+                                "jpeg_exif_subsec_time_original_malformed": (
+                                    invalid_capture_subsec
+                                ),
+                                "jpeg_exif_subsec_without_datetime_original": (
+                                    orphaned_exposure_subsec
+                                ),
                                 "jpeg_exif_datetime_original_malformed": invalid_capture_local,
                                 "jpeg_exif_offset_time_original_malformed": invalid_capture_offset,
                                 "jpeg_exif_exposure_ifd_conflict": exposure_ifd_conflict,
@@ -532,6 +566,7 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                     if (
                         decoded_metadata["jpeg_exif_datetime_original_malformed"]
                         or decoded_metadata["jpeg_exif_offset_time_original_malformed"]
+                        or decoded_metadata["jpeg_exif_subsec_time_original_malformed"]
                     ):
                         errors.append(f"invalid EXIF camera exposure time metadata: {relative}")
                     if decoded_metadata["jpeg_exif_exposure_ifd_conflict"]:
@@ -542,6 +577,13 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                     elif decoded_metadata["jpeg_exif_offset_without_datetime_original"]:
                         errors.append(
                             f"EXIF camera offset without original exposure time: {relative}"
+                        )
+                    if (
+                        decoded_metadata["jpeg_exif_subsec_without_datetime_original"]
+                        and not decoded_metadata["jpeg_exif_exposure_ifd_conflict"]
+                    ):
+                        errors.append(
+                            f"EXIF camera fractional seconds without original exposure time: {relative}"
                         )
                     if decoded_metadata["jpeg_exif_ifd0_dimension_conflict"]:
                         errors.append(
