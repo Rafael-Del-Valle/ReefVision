@@ -154,3 +154,110 @@ def test_patch_area_distribution_survives_saved_typed_workflow(client: TestClien
         == (standalone.json()["provenance"]["geometry_sha256"])
     )
     assert artifact["measurement_status"] == "caller_supplied_unverified"
+
+def test_positive_subnormal_area_share_is_flagged_in_saved_scientific_workflow(
+    client: TestClient,
+) -> None:
+    """A positive reconstructed surface patch must not appear biologically absent."""
+    params = {
+        **GEOMETRY,
+        "vertices": [
+            [0.0, 0.0, 0.0],
+            [1_000_000_000.0, 0.0, 0.0],
+            [0.0, 1_000_000_000.0, 0.0],
+            [0.0, 0.0, 1e-160],
+            [3e-162, 0.0, 1e-160],
+            [0.0, 3e-162, 1e-160],
+        ],
+        "faces": [[0, 1, 2], [3, 4, 5]],
+        "meters_per_unit": 1.0,
+    }
+    direct = measure_mesh_preview(**params)
+    assert direct["edge_connected_patch_surface_areas_m2"][1] > 0
+    assert direct["edge_connected_patch_surface_area_fractions"] == [1.0, 0.0]
+    assert "mesh_patch_area_fraction_underflow" in direct["qc_warnings"]
+    assert "mesh_face_area_fraction_underflow" in direct["qc_warnings"]
+    assert direct["measurement_status"] == "caller_supplied_unverified"
+    assert direct["provenance"]["calibration_verified"] is False
+
+    project_id = str(create_project(client, "Subnormal patch share evidence")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    payload = {
+        **params,
+        "specimen_id": "unverified-reconstruction",
+        "coordinate_frame_id": "unregistered-import-frame",
+    }
+    response = client.post(f"{base}/spatial/mesh-preview", json=payload)
+    assert response.status_code == 200, response.text
+    standalone = response.json()
+    assert standalone["edge_connected_patch_surface_areas_m2"][1] > 0
+    for warning in (
+        "mesh_patch_area_fraction_underflow",
+        "mesh_face_area_fraction_underflow",
+    ):
+        assert warning in standalone["qc_warnings"]
+    assert standalone["provenance"]["specimen_identity_verified"] is False
+    assert standalone["provenance"]["coordinate_registration_verified"] is False
+
+    graph = {
+        "graph_id": "positive-subnormal-mesh-area-share-v14",
+        "name": "Provisional area share precision diagnostics",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": payload},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "m",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifacts = [
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        ]
+        assert len(artifacts) == 1
+        assert artifacts[0]["payload_json"] == standalone
+        hashes.append(artifacts[0]["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
+
+
+def test_genuinely_degenerate_patch_does_not_raise_area_fraction_underflow_warning() -> None:
+    params = {
+        **GEOMETRY,
+        "vertices": [
+            [0, 0, 0],
+            [1, 0, 0],
+            [0, 1, 0],
+            [0, 0, 10],
+            [1, 0, 10],
+            [2, 0, 10],
+        ],
+    }
+    result = measure_mesh_preview(**params)
+    assert result["edge_connected_patch_surface_areas_m2"][1] == 0
+    assert "degenerate_triangles_present" in result["qc_warnings"]
+    assert "mesh_face_area_fraction_underflow" not in result["qc_warnings"]
+    assert "mesh_patch_area_fraction_underflow" not in result["qc_warnings"]
