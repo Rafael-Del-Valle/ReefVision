@@ -685,9 +685,7 @@ def measure_mesh_preview(
         else None
         for patch in ordered_patches
     ]
-    area_scale_interval_m2 = _quadratic_area_scale_interval_m2(
-        area_m2, relative_scale_uncertainty
-    )
+    area_scale_interval_m2 = _quadratic_area_scale_interval_m2(area_m2, relative_scale_uncertainty)
     patch_area_scale_intervals_m2 = (
         [
             _quadratic_area_scale_interval_m2(area, relative_scale_uncertainty)
@@ -697,16 +695,12 @@ def measure_mesh_preview(
         else None
     )
     partial_missing_area_scale_interval_m2 = (
-        _quadratic_area_scale_interval_m2(
-            partial_missing_area_m2, relative_scale_uncertainty
-        )
+        _quadratic_area_scale_interval_m2(partial_missing_area_m2, relative_scale_uncertainty)
         if partial_missing_area_representable
         else None
     )
     omitted_patch_area_scale_interval_m2 = (
-        _quadratic_area_scale_interval_m2(
-            omitted_patch_area_m2, relative_scale_uncertainty
-        )
+        _quadratic_area_scale_interval_m2(omitted_patch_area_m2, relative_scale_uncertainty)
         if omitted_patch_area_representable
         else None
     )
@@ -721,14 +715,9 @@ def measure_mesh_preview(
                 )
             )
         )
-        or (
-            partial_missing_area_m2 > 0
-            and partial_missing_area_scale_interval_m2 is None
-        )
-        or (
-            omitted_patch_area_m2 > 0
-            and omitted_patch_area_scale_interval_m2 is None
-        )
+        or (partial_missing_area_m2 > 0 and partial_missing_area_scale_interval_m2 is None)
+        or (preview_partially_sampled_missing_raw_area > 0 and not partial_missing_area_representable)
+        or (omitted_patch_area_m2 > 0 and omitted_patch_area_scale_interval_m2 is None)
     ):
         volume_qc_warnings.add("surface_area_scale_interval_numeric_unrepresentable")
     volume_scale_interval_m3 = _cubic_volume_scale_interval_m3(
@@ -1062,6 +1051,12 @@ def measure_mesh_preview(
             + (
                 ["preview_omits_reconstructed_mesh_surface_area"]
                 if omitted_patch_raw_area > 0 or preview_partially_sampled_missing_raw_area > 0
+                else []
+            )
+            + (
+                ["preview_partially_sampled_missing_area_numeric_unrepresentable"]
+                if preview_partially_sampled_missing_raw_area > 0
+                and not partial_missing_area_representable
                 else []
             )
             + (["preview_omits_source_axis_extrema"] if omitted_extremum_sides else [])
