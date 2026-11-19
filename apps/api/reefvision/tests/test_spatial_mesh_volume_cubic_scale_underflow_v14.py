@@ -55,6 +55,98 @@ def test_representable_tiny_volume_preserves_exact_cubic_scale_bounds() -> None:
     assert result["provenance"]["calibration_verified"] is False
 
 
+@pytest.mark.parametrize(
+    ("uncertainty", "bounds_available"),
+    [(0.8, False), (1.0, True)],
+    ids=["positive-bound-underflow", "legitimate-zero-bound-at-100-percent"],
+)
+def test_subnormal_volume_interval_qc_replays_in_saved_typed_workflow(
+    client: TestClient, uncertainty: float, bounds_available: bool
+) -> None:
+    """A rounded zero lower limit must not masquerade as scale evidence."""
+    params = {
+        **_params(1e-115),
+        "relative_scale_uncertainty": uncertainty,
+        "specimen_id": "synthetic-unverified-small-volume",
+        "observation_id": "subnormal-volume-interval-review",
+        "coordinate_frame_id": "unregistered-import-frame",
+    }
+    direct = measure_mesh_preview(**_params(1e-115), relative_scale_uncertainty=uncertainty)
+    project_id = str(create_project(client, "Subnormal provisional volume interval")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert response.status_code == 200, response.text
+    standalone = response.json()
+    nominal = standalone["enclosed_volume_m3"]
+    assert nominal is not None and 0 < nominal < 1e-320
+    assert standalone["edge_connected_patch_enclosed_volumes_m3"] == [nominal]
+    assert direct["enclosed_volume_m3"] == nominal
+    warning = "enclosed_volume_scale_interval_numeric_unrepresentable"
+    if bounds_available:
+        expected = [0.0, nominal * 8]
+        assert standalone["enclosed_volume_scale_interval_m3"] == expected
+        assert standalone["edge_connected_patch_enclosed_volume_scale_intervals_m3"] == [
+            expected
+        ]
+        assert warning not in standalone["qc_warnings"]
+    else:
+        # The true lower bound is strictly positive for uncertainty below 100%.
+        assert nominal * (1 - uncertainty) ** 3 == 0.0
+        assert standalone["enclosed_volume_scale_interval_m3"] is None
+        assert standalone["edge_connected_patch_enclosed_volume_scale_intervals_m3"] == [
+            None
+        ]
+        assert warning in standalone["qc_warnings"]
+    assert standalone["measurement_status"] == "caller_supplied_unverified"
+    assert standalone["provenance"]["calibration_verified"] is False
+    assert standalone["provenance"]["specimen_identity_verified"] is False
+    assert standalone["provenance"]["coordinate_registration_verified"] is False
+
+    graph = {
+        "graph_id": "subnormal-volume-interval-qc-v14",
+        "name": "Review provisional cubic-scale numeric bounds",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifacts = [
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        ]
+        assert len(artifacts) == 1
+        assert artifacts[0]["payload_json"] == standalone
+        hashes.append(artifacts[0]["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
+
+
 def test_genuinely_unrepresentable_cubic_volume_remains_withheld() -> None:
     # Surface area and dimensions still survive; the physical volume does not.
     result = measure_mesh_preview(**_params(1e-150))
