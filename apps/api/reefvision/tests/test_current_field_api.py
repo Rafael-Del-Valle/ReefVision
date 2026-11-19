@@ -268,4 +268,6 @@ def test_streamline_preview_rejects_dateline_grid_instead_of_false_interpolation
         },
     )
     assert response.status_code == 400, response.text
-    assert "longitude gap exceeds 180 degrees" in response.json()["detail"]
+    detail = response.json()["detail"]
+    assert "longitude extent exceeds 180 degrees" in detail
+    assert "regridding" in detail
