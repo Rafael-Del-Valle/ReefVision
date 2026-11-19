@@ -104,7 +104,6 @@ def _require_empty_pose_gpu_output(output_root: Path) -> None:
         )
 
 
-
 def _verified_pose_trainer_save_dir(actual: Path, expected: Path) -> Path:
     """Register results only from the exact run directory allocated before training.
 
