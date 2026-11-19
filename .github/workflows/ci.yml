@@ -157,3 +157,6 @@ jobs:
       - name: Verify installed start/restart process isolation
         shell: pwsh
         run: ./scripts/test-reefvision-start-process-scope.ps1
+      - name: Check start command configuration atomicity on Windows
+        shell: pwsh
+        run: ./scripts/test-reefvision-start-command-config.ps1
