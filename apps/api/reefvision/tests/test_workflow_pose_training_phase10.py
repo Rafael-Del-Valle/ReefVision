@@ -537,11 +537,13 @@ def test_pose_training_rechecks_frozen_holdout_bytes_before_gpu_launch(
     _verify_prelaunch_pose_dataset(destination, materialization)
 
     holdout_label = destination / "labels" / "val" / "frame_00000001.txt"
-    holdout_label.write_bytes(holdout_label.read_bytes() + b"# changed after freezing\\n")
+    holdout_label.write_bytes(holdout_label.read_bytes() + b"changed")
     with pytest.raises(ValidationError, match="changed before GPU training"):
         _verify_prelaunch_pose_dataset(destination, materialization)
 
-    with pytest.raises(ValidationError, match="missing materialized dataset provenance"):
+    with pytest.raises(
+        ValidationError, match="missing materialized dataset provenance"
+    ):
         _verify_prelaunch_pose_dataset(destination, None)
 
 
