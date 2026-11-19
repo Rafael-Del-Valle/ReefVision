@@ -309,15 +309,28 @@ class DatasetVersionService:
         *,
         fixed_assignments: dict[str, str],
     ) -> list[AssignmentUnit]:
-        grouped_ids: dict[str, list[str]] = defaultdict(list)
+        # A real biological group key may literally equal "image:<uuid>".
+        # Namespace singleton images separately to prevent accidental pooling
+        # or a false conflict between independent train/test assignments.
+        # Retain the legacy visible sort keys for ordinary datasets so their
+        # seeded random split order remains backwards-compatible.
+        grouped_ids: dict[tuple[str, str], list[str]] = defaultdict(list)
         for candidate in candidates:
             group_key = candidate.image.group_key
-            unit_key = group_key if group_key is not None else f"image:{candidate.image.id}"
+            unit_key = (
+                ("group", group_key)
+                if group_key is not None
+                else ("image", candidate.image.id)
+            )
             grouped_ids[unit_key].append(candidate.image.id)
 
         units: list[AssignmentUnit] = []
-        for key in sorted(grouped_ids):
-            image_ids = sorted(grouped_ids[key])
+        for namespace, source_key in sorted(
+            grouped_ids,
+            key=lambda entry: entry[1] if entry[0] == "group" else f"image:{entry[1]}",
+        ):
+            key = source_key if namespace == "group" else f"image:{source_key}"
+            image_ids = sorted(grouped_ids[(namespace, source_key)])
             fixed = {
                 fixed_assignments[image_id]
                 for image_id in image_ids

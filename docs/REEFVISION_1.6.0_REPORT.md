@@ -162,3 +162,27 @@ These checks validate frozen metadata, **not original image bytes**, and
 do not solve the independent 1.1/1.6 Alembic-0038 collision. Real Windows
 MSI/GUI installation, migration reconciliation, full scientific CI and
 explicit researcher release approval remain mandatory.
+
+
+## 2026-11-19 — Collision-safe biological group versus singleton split identities (Track D)
+
+Audited the original 0006/0007 shared dataset split producer, the 1.6
+frozen QC validator and existing executable typed saved QC Workflow Builder.
+The producer keyed a missing-group image as `image:<image_id>`, which could
+collide with an explicitly supplied biological group key of the same literal
+string. Two *independent* units could be inadvertently pooled; conflicting
+manual train/test assignments could be rejected as if they came from the same
+colony. The source planner now uses separate group/image key namespaces, while
+retaining legacy scalar ordering for non-colliding historical inputs and
+preserving seed reproducibility for ordinary datasets. No existing frozen
+dataset or immutable study evidence is rewritten.
+
+A database-backed regression covers real image imports, manual preview,
+persisted version/image split provenance, standalone QC and an executable
+saved `project_source → dataset_version_source → qc_review_queue` graph run
+twice. It requires typed dimensionless priority, unchanged manifest identity,
+two pending reviewer decisions and no automated approval. No additional
+workflow node, database migration, model download or user-asset mutation.
+Full backend/frontend/E2E CI and representative MSI installed-GUI validation
+are still required. The independent 1.1/1.6 Alembic-0038 collision remains a
+release hold.
