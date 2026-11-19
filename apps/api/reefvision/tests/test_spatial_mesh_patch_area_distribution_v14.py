@@ -158,7 +158,8 @@ def test_patch_area_distribution_survives_saved_typed_workflow(client: TestClien
 
 @pytest.mark.parametrize("small_patch_first", [False, True])
 def test_positive_subnormal_area_share_is_flagged_in_saved_scientific_workflow(
-    client: TestClient, small_patch_first: bool,
+    client: TestClient,
+    small_patch_first: bool,
 ) -> None:
     """A positive patch must retain its presence regardless of source-face order."""
     source_faces = [[0, 1, 2], [3, 4, 5]]
@@ -269,3 +270,97 @@ def test_genuinely_degenerate_patch_does_not_raise_area_fraction_underflow_warni
     assert "degenerate_triangles_present" in result["qc_warnings"]
     assert "mesh_face_area_fraction_underflow" not in result["qc_warnings"]
     assert "mesh_patch_area_fraction_underflow" not in result["qc_warnings"]
+
+
+@pytest.mark.parametrize("small_face_first", [False, True])
+def test_connected_tiny_face_warns_without_claiming_an_omitted_patch(
+    client: TestClient,
+    small_face_first: bool,
+) -> None:
+    """A representable face may have zero numeric share inside one connected patch."""
+    # Both triangles share an indexed edge. The small face is positive but
+    # its area share underflows relative to the large face; it is not a
+    # separate coral colony, disconnected patch, or missing tissue.
+    source_faces = [[0, 1, 2], [1, 0, 3]]
+    if small_face_first:
+        source_faces.reverse()
+    params = {
+        **GEOMETRY,
+        "vertices": [
+            [0.0, 0.0, 0.0],
+            [1_000_000_000.0, 0.0, 0.0],
+            [0.0, 1_000_000_000.0, 0.0],
+            [0.0, 0.0, 1e-320],
+        ],
+        "faces": source_faces,
+        "meters_per_unit": 1.0,
+        "specimen_id": "provisional-connected-surface",
+        "coordinate_frame_id": "unregistered-source-frame",
+    }
+    engine_params = {
+        key: value
+        for key, value in params.items()
+        if key not in {"specimen_id", "coordinate_frame_id"}
+    }
+    direct = measure_mesh_preview(**engine_params)
+    assert direct["edge_connected_patch_count"] == 1
+    assert direct["edge_connected_patch_surface_area_fractions"] == [1.0]
+    assert direct["surface_area_m2"] == pytest.approx(5e17)
+    assert "mesh_face_area_fraction_underflow" in direct["qc_warnings"]
+    assert "mesh_patch_area_fraction_underflow" not in direct["qc_warnings"]
+    assert "disconnected_mesh_patches" not in direct["qc_warnings"]
+    assert direct["measurement_status"] == "caller_supplied_unverified"
+
+    project_id = str(create_project(client, "Connected subnormal face QC")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert response.status_code == 200, response.text
+    standalone = response.json()
+    assert standalone["qc_warnings"] == direct["qc_warnings"]
+    assert standalone["provenance"]["calibration_verified"] is False
+    assert standalone["provenance"]["specimen_identity_verified"] is False
+    assert standalone["provenance"]["coordinate_registration_verified"] is False
+
+    graph = {
+        "graph_id": "connected-subnormal-face-qc-v14",
+        "name": "Provisional connected-face precision diagnostics",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "m",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifacts = [
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        ]
+        assert len(artifacts) == 1
+        assert artifacts[0]["payload_json"] == standalone
+        hashes.append(artifacts[0]["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
