@@ -122,3 +122,23 @@ The unresolved 1.1/1.6 Alembic-0038 collision, complete exact-head CI,
 representative scientific acceptance, physical MSI clean install and
 upgrade/rollback with installed GUI, and explicit researcher approval keep the
 release on HOLD.
+
+
+## Mask identity integrity for 0007 saved studies (November 19, 2026)
+
+The existing original 0007 producer assigns each verified polygon/raster mask
+a globally unique database `MaskAnnotation.id`, but the frozen QC validator
+previously verified mask counts and class totals without checking the mask
+identity field. A duplicated or absent ID could represent two masks as one
+biological observation even when the item and manifest SHA-256 values were
+both recomputed. The 0006 detection-only format has no mask identity field.
+
+The same read-only shared validator now requires a nonempty string ID for
+each 0007 mask and rejects reuse within or across frozen images. Detection
+and mask identifiers retain their separate database namespaces. Synthetic
+tests check fully rehashed missing, empty and duplicated IDs and cross-image
+identity reuse. A real mask-bearing coral study regression checks standalone
+QC rejection, saved typed Workflow Builder provenance refusal, rollback,
+unchanged pending review evidence, and idempotent saved-node replay. This
+does not add an overlapping node or migration, does not rewrite originals
+and does not claim hash-only authenticity. All other release holds apply.

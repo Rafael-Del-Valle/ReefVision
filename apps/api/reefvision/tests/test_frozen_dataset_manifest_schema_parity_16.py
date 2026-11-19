@@ -159,3 +159,63 @@ def test_fully_resigned_duplicate_observation_id_fails_all_original_schemas(
     # Every digest and aggregate count agrees; observation identity does not.
     with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
         validate_frozen_dataset_manifest(version, [item])
+
+
+@pytest.mark.parametrize("tamper", ["missing", "empty", "duplicate"])
+def test_fully_resigned_mask_observation_identity_is_unique(tamper: str) -> None:
+    """A checksummed polygon mask must still identify one distinct observation."""
+    version, item = _saved_snapshot("0007", with_mask=True)
+    masks = deepcopy(item.mask_annotation_snapshot_json)
+    if tamper == "missing":
+        masks[0].pop("id")
+    elif tamper == "empty":
+        masks[0]["id"] = ""
+    else:
+        masks.append(deepcopy(masks[0]))
+        item.mask_annotation_count = 2
+        item.per_mask_class_counts_json = {"swiftia": 2}
+        version.mask_annotation_count = 2
+    item.mask_annotation_snapshot_json = masks
+
+    payload = _item_payload(item, schema_version="0007")
+    item.snapshot_sha256 = canonical_json_sha256(payload)
+    manifest = deepcopy(version.manifest_json)
+    manifest["summary"]["mask_annotation_count"] = version.mask_annotation_count
+    manifest["items"] = [{**payload, "snapshot_sha256": item.snapshot_sha256}]
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+
+    with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+        validate_frozen_dataset_manifest(version, [item])
+
+
+def test_resigned_mask_identity_cannot_be_reused_across_frozen_images() -> None:
+    """Two different images cannot claim the same original mask row."""
+    version, first = _saved_snapshot("0007", with_mask=True)
+    second = deepcopy(first)
+    second.image_id = "image-2"
+    second.image_sha256 = "b" * 64
+    second.original_filename = "swiftia-second.png"
+    second.annotation_snapshot_json[0]["id"] = "polyp-2"
+    # Deliberately retain the first image's mask ID; all other data are valid.
+    first_payload = _item_payload(first, schema_version="0007")
+    second_payload = _item_payload(second, schema_version="0007")
+    second.snapshot_sha256 = canonical_json_sha256(second_payload)
+    version.image_count = 2
+    version.annotation_count = 2
+    version.mask_annotation_count = 2
+    manifest = deepcopy(version.manifest_json)
+    manifest["summary"] = {
+        "image_count": 2,
+        "annotation_count": 2,
+        "mask_annotation_count": 2,
+    }
+    manifest["items"] = [
+        {**first_payload, "snapshot_sha256": first.snapshot_sha256},
+        {**second_payload, "snapshot_sha256": second.snapshot_sha256},
+    ]
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+
+    with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+        validate_frozen_dataset_manifest(version, [first, second])

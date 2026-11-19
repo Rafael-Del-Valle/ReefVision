@@ -101,6 +101,7 @@ def validate_frozen_dataset_manifest(
 
     seen: set[str] = set()
     seen_annotation_ids: set[str] = set()
+    seen_mask_annotation_ids: set[str] = set()
     for item in items:
         if item.image_id in seen:
             raise ValidationError(message)
@@ -129,6 +130,18 @@ def validate_frozen_dataset_manifest(
                 != dict(Counter(snapshot["label_class_id"] for snapshot in mask_snapshots))
             ):
                 raise ValidationError(message)
+            # Mask annotations have their own globally unique database IDs.
+            # A duplicated/empty ID can inflate a segmentation census even
+            # when both nested SHA-256 digests and taxonomic totals are rehashed.
+            for snapshot in mask_snapshots:
+                mask_id = snapshot.get("id")
+                if (
+                    type(mask_id) is not str
+                    or not mask_id
+                    or mask_id in seen_mask_annotation_ids
+                ):
+                    raise ValidationError(message)
+                seen_mask_annotation_ids.add(mask_id)
 
         # Even a locally recomputed item and manifest digest cannot make an
         # internally inconsistent biological count valid. Verify the frozen
