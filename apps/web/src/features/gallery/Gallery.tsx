@@ -708,8 +708,11 @@ function GalleryContent({
       // polling budget. A new camera import starts a fresh batch of thumbnail
       // jobs, so reset the cached query's success count before refetching.
       await queryClient.resetQueries({ queryKey: ["images", project.id] });
-      // Cached pre-import images must not steal the new observation's focus.
-      setFocusedImageId(confirmedImportFocusId.current);
+      // Only move focus after a server-confirmed new image. A duplicate-only
+      // import must not discard the scientist's current camera observation.
+      if (confirmedImportFocusId.current !== null) {
+        setFocusedImageId(confirmedImportFocusId.current);
+      }
     },
     onError: async (_error, files) => {
       setUnconfirmedImport({
@@ -722,8 +725,11 @@ function GalleryContent({
       // while retaining the partial import report and the failure warning.
       showLatestImports();
       await queryClient.resetQueries({ queryKey: ["images", project.id] });
-      // Focus only a confirmed image, never one from the uncertain batch.
-      setFocusedImageId(confirmedImportFocusId.current);
+      // Preserve the current reviewed image if no batch confirmed a new
+      // observation. Never focus an image from an uncertain failed batch.
+      if (confirmedImportFocusId.current !== null) {
+        setFocusedImageId(confirmedImportFocusId.current);
+      }
     },
     onSettled: () => {
       importInFlight.current = false;

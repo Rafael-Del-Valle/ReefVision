@@ -761,6 +761,91 @@ describe("Gallery", () => {
     );
   });
 
+  it.each(["duplicate", "uncertain"] as const)(
+    "preserves the focused camera observation after a %s-only import",
+    async (outcome) => {
+      const camera: ProjectImage = {
+        ...image,
+        id: "camera-2",
+        original_filename: "DSC_0002.JPG",
+        managed_path: "projects/project-1/images/originals/camera-2.jpg",
+        sha256: "b".repeat(64),
+      };
+      let imageReads = 0;
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+        const url = new URL(String(input), "http://localhost");
+        if (url.pathname.endsWith(`/projects/${project.id}/imports/images`)) {
+          expect(init?.method).toBe("POST");
+          if (outcome === "uncertain") {
+            return jsonResponse({ detail: "Temporary import outage" }, 503);
+          }
+          return jsonResponse({
+            project_id: project.id,
+            successful: [],
+            duplicates: [
+              {
+                filename: camera.original_filename,
+                relative_path: camera.original_filename,
+                status: "duplicate",
+                detail: "Exact file already exists in this project",
+                image_id: null,
+                duplicate_image_id: camera.id,
+                thumbnail_job_id: null,
+              },
+            ],
+            unsupported: [],
+            failed: [],
+          });
+        }
+        if (url.pathname.endsWith(`/projects/${project.id}/images`)) {
+          imageReads += 1;
+          return jsonResponse({
+            items: [image, camera],
+            total: 2,
+            page: 1,
+            page_size: 24,
+            pages: 1,
+          });
+        }
+        throw new Error(`Unhandled request ${init?.method ?? "GET"} ${url}`);
+      });
+
+      renderGallery();
+      await screen.findByRole("article", { name: /DSC_0002\\.JPG/ });
+      await userEvent.click(
+        screen.getByRole("listitem", { name: "Focus DSC_0002.JPG" }),
+      );
+      expect(
+        screen.getByAltText("Focused project image: DSC_0002.JPG"),
+      ).toBeInTheDocument();
+
+      const fileInput = screen.getByLabelText("Import files") as HTMLInputElement;
+      await userEvent.upload(
+        fileInput,
+        new File(["camera bytes"], "DSC_0002.JPG", { type: "image/jpeg" }),
+      );
+      if (outcome === "duplicate") {
+        await screen.findByText("1 files processed");
+      } else {
+        await screen.findByText("Images could not be imported");
+      }
+      await waitFor(() => expect(imageReads).toBeGreaterThan(1));
+      await waitFor(() => expect(fileInput).not.toBeDisabled());
+
+      // Imports with no confirmed new observations must not silently
+      // switch the active scientific image or persisted review location.
+      expect(
+        screen.getByAltText("Focused project image: DSC_0002.JPG"),
+      ).toBeInTheDocument();
+      expect(
+        JSON.parse(
+          window.localStorage.getItem(`reefvision.gallery.${project.id}.v1`) ??
+            "{}",
+        ),
+      ).toMatchObject({ imageId: camera.id, page: 1 });
+    },
+  );
+
   it("serializes camera imports across file and folder pickers", async () => {
     let resolveFirstImport!: (response: Response) => void;
     const firstImport = new Promise<Response>((resolve) => {
