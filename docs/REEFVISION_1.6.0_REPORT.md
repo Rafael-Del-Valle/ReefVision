@@ -205,3 +205,11 @@ which failed before backend pytest. Complete exact-head CI, representative
 biology, Windows MSI/installed-GUI testing, 1.1/1.6 Alembic-0038
 reconciliation and explicit release approval remain open. No review
 automation or data migration is introduced.
+
+
+## 2026-11-19 — Explicit split decisions must bind to the eligible study cohort (Track D)
+
+- **Audit:** The original 1.0–1.5 dataset-version producer already accepted researcher-directed manual split choices; 1.6 adds immutable scientific QC, class management and typed executable Workflow Builder. In the existing shared split planner, manual image IDs absent from the current eligible cohort were silently ignored. A stale, excluded or cross-project image identifier could therefore leave an investigator believing a required holdout decision had been enforced.
+- **Correction:** Before either preview or creation plans a split, validate that every explicitly assigned image ID belongs to the selected project's eligible image cohort. Reject absent, excluded and foreign-project image IDs with a controlled validation error. Legitimate manual assignments and frozen versions are unchanged. No migration, new workflow node, model download, approval automation or alteration of historical research records.
+- **Regression:** Real imported-image API coverage creates a valid reviewed subset and persisted executable `project_source → dataset_version_source → qc_review_queue` graph, verifies rejection of unknown/excluded/cross-project explicit assignments in **both** preview and version creation, checks no extra immutable dataset is created, and replays the saved graph without provenance drift or lost pending human-review gates. Corrected the preceding exact-head CI Ruff import-order finding in the same test file.
+- **Release HOLD:** Full exact-head Ruff/mypy/pytest/frontend/E2E, independent Alembic-0038 1.1/1.6 reconciliation, representative biological acceptance, genuine Windows MSI/CAB installed-GUI clean install and upgrade/rollback, and researcher approval remain required.
