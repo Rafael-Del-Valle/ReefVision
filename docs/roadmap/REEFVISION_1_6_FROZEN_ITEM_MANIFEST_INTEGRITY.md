@@ -97,3 +97,28 @@ rewrites *all* logically consistent evidence: independent read-only backups
 or authenticated external provenance would be required for that threat model.
 The Windows-installed GUI, real MSI upgrade/rollback, 1.1/1.6 Alembic lineage
 reconciliation and researcher approval remain outstanding release gates.
+
+## Re-signed observation identities and saved retry ordering (November 19, 2026)
+
+The independent frozen-item QC validator now also rejects missing, empty or
+reused detection annotation IDs, including identities reused across frozen
+images. Project annotation IDs are unique record identifiers: duplicating one
+can falsely inflate a coral observation count even when the annotation census,
+class totals, item checksum and enclosing manifest checksum all agree. Existing
+`0006` and `0007` snapshot formats use this same read-only check. No new
+migration or Workflow Builder node is needed.
+
+The database-backed regression now also re-signs duplicated and empty IDs,
+checks standalone dataset QC refusal, and verifies the saved typed QC workflow
+rejects altered source data while preserving its completed human-review queue.
+For a completely re-signed version, the saved workflow first notices that its
+original dataset-source manifest digest is stale; this deliberate, earlier
+provenance failure is *not* the downstream frozen-item error. A transaction
+rollback restores the original evidence for a deterministic saved-node replay.
+The checksum still does not authenticate a wholly fabricated internally
+consistent research dataset; that requires independent evidence custody.
+
+The unresolved 1.1/1.6 Alembic-0038 collision, complete exact-head CI,
+representative scientific acceptance, physical MSI clean install and
+upgrade/rollback with installed GUI, and explicit researcher approval keep the
+release on HOLD.
