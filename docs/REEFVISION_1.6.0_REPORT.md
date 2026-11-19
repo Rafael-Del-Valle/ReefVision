@@ -110,3 +110,25 @@ workflows, approval gates and provenance are untouched. Real Windows MSI/CAB
 clean-install, upgrade/rollback, installed GUI, representative biological and
 saved-workflow tests, independent 1.1/1.6 Alembic-0038 reconciliation and
 researcher release approval remain outstanding.
+
+## 2026-11-18 — updater repository-configuration mode isolation (Track D)
+
+The managed `update-reefvision --configure-repo PATH` operation is mutually
+exclusive with setup, skip-setup, build-only, install-only, no-launch,
+clean-build, verbose and test options. Previously those combinations silently
+saved a new repository preference and returned success without running the
+requested action; `--clean-build` could even bypass its safety rejection.
+The existing `--dry-run` guard and the intentional `--configure-repo PATH
+--status` behavior are preserved. Validate incompatible arguments before
+writing `LOCALAPPDATA/ReefVision/config/commands.json`.
+
+Eight additional native-Windows child-PowerShell cases run in disposable
+`LOCALAPPDATA`, require nonzero exit and precise diagnostics, and compare the
+preexisting configuration SHA-256 after each rejection. They extend the
+already-registered MSI updater preflight rather than creating a separate
+workflow or touching real installations.
+
+This command-only safeguard does not create an executable scientific Workflow
+Builder node. Existing saved typed QC graphs, provenance, reliable retries and
+mandatory researcher review are unchanged. No migration or research-asset edit.
+Full Windows CI and genuine installed MSI/GUI acceptance remain required.

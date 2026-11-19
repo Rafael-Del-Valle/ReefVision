@@ -300,6 +300,18 @@ if ($dryRun -and $null -ne $configureRepoPath) {
     throw "--dry-run cannot be combined with --configure-repo because dry-run must not change saved configuration."
 }
 
+# Configuration is a separate operation, not an updater action. Previously
+# --configure-repo combined with --build-only, --test, or --clean-build
+# silently saved the repository path and exited successfully without doing
+# the requested work (or enforcing the cleanup prohibition). Preserve the
+# documented --configure-repo PATH --status behavior only.
+if ($null -ne $configureRepoPath -and (
+    $runSetup -or $skipSetup -or $buildOnly -or $installOnly -or
+    $noLaunch -or $cleanBuild -or $verbose -or $runTests
+)) {
+    throw "--configure-repo cannot be combined with update actions. Configure the repository separately."
+}
+
 if ($configureRepoPath) {
     $resolved = Set-ReefVisionRepoPath -RepoPath $configureRepoPath
     Write-ReefVisionCommandNote "Configured ReefVision repository: $resolved"

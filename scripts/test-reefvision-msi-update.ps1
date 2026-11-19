@@ -370,7 +370,17 @@ try {
             @{ Options = '--dry-run'; Message = '--dry-run cannot be combined with --configure-repo' },
             @{ Options = '--build-only --install-only'; Message = '--build-only and --install-only cannot be used together' },
             @{ Options = '--setup --skip-setup'; Message = '--setup and --skip-setup cannot be used together' },
-            @{ Options = '--install-only --setup'; Message = '--install-only cannot be combined with --setup' }
+            @{ Options = '--install-only --setup'; Message = '--install-only cannot be combined with --setup' },
+            # These previously exited 0 after changing saved configuration,
+            # without running the requested action or enforcing its safety gate.
+            @{ Options = '--build-only'; Message = '--configure-repo cannot be combined with update actions' },
+            @{ Options = '--install-only'; Message = '--configure-repo cannot be combined with update actions' },
+            @{ Options = '--setup'; Message = '--configure-repo cannot be combined with update actions' },
+            @{ Options = '--skip-setup'; Message = '--configure-repo cannot be combined with update actions' },
+            @{ Options = '--no-launch'; Message = '--configure-repo cannot be combined with update actions' },
+            @{ Options = '--clean-build'; Message = '--configure-repo cannot be combined with update actions' },
+            @{ Options = '--test'; Message = '--configure-repo cannot be combined with update actions' },
+            @{ Options = '--verbose'; Message = '--configure-repo cannot be combined with update actions' }
         )) {
             # Start-Process captures stderr without converting an expected
             # child PowerShell failure into a terminating parent error.
