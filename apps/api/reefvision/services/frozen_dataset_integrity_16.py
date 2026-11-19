@@ -416,4 +416,3 @@ def validate_frozen_dataset_manifest(
         )
     ):
         raise ValidationError(message)
-
