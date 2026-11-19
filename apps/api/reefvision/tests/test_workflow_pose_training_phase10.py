@@ -792,6 +792,8 @@ def test_pose_materialization_rejects_overridden_frozen_dataset_paths(
     ("tampered_field", "expected_error"),
     (
         ("job_request", "child job request checksum changed"),
+        ("unsealed_workflow_node", "workflow child job lineage changed"),
+        ("unsealed_workflow_flag", "workflow child job lineage changed"),
         ("frozen_dataset", "frozen dataset lineage changed"),
         ("run_manifest", "frozen snapshot lineage changed"),
         ("snapshot_manifest", "frozen snapshot lineage changed"),
@@ -825,6 +827,22 @@ def test_pose_worker_checks_frozen_lineage_before_export(
                 job.request_json = {
                     **request,
                     "pose_training_dataset_manifest_sha256": "0" * 64,
+                }
+            elif tampered_field in {"unsealed_workflow_node", "unsealed_workflow_flag"}:
+                # Reproduce a historical saved-workflow job queued before
+                # whole-request sealing while retaining genuine frozen truth.
+                run = session.get(TrainingRun, str(request["training_run_id"]))
+                assert run is not None
+                snapshot = dict(run.draft_snapshot_json or {})
+                assert snapshot.pop("pose_child_job_request_sha256")
+                run.draft_snapshot_json = snapshot
+                job.request_json = {
+                    **request,
+                    **(
+                        {"workflow_node_run_id": "unrelated-saved-node"}
+                        if tampered_field == "unsealed_workflow_node"
+                        else {"created_by_workflow": False}
+                    ),
                 }
             elif tampered_field == "frozen_dataset":
                 frozen = session.get(PoseTrainingDataset, str(dataset["id"]))
