@@ -114,9 +114,7 @@ def _valid_frozen_raster_mask(snapshot: dict[str, Any], width_px: Any, height_px
     )
 
 
-def _matches_frozen_class(
-    snapshot: dict[str, Any], classes: dict[str, tuple[int, str]]
-) -> bool:
+def _matches_frozen_class(snapshot: dict[str, Any], classes: dict[str, tuple[int, str]]) -> bool:
     """A saved observation must use its frozen class ID, index and name."""
     class_id = snapshot.get("label_class_id")
     if type(class_id) is not str or class_id not in classes:
