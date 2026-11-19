@@ -311,12 +311,11 @@ def _reject_overlapping_pose_validation_frames(
         raise ValidationError("Ultralytics pose validation export reuses a frozen training frame")
 
 
-def _materialized_pose_dataset_sha256(destination: Path) -> str:
-    """Fingerprint the exact local scientific files prepared for GPU training."""
+def _materialized_pose_dataset_files(destination: Path) -> list[dict[str, str]]:
+    """Hash each local pose input and record its portable relative path."""
 
     files: list[dict[str, str]] = []
     # Path ordering differs between Windows and POSIX for mixed-case names.
-    # Hash canonical relative strings so equivalent frozen inputs have one digest.
     members = sorted(
         destination.rglob("*"),
         key=lambda member: member.relative_to(destination).as_posix(),
@@ -334,7 +333,13 @@ def _materialized_pose_dataset_sha256(destination: Path) -> str:
                 "sha256": digest,
             }
         )
-    return canonical_json_sha256(files)
+    return files
+
+
+def _materialized_pose_dataset_sha256(destination: Path) -> str:
+    """Fingerprint the exact local scientific files prepared for GPU training."""
+
+    return canonical_json_sha256(_materialized_pose_dataset_files(destination))
 
 
 def _verify_prelaunch_pose_dataset(
@@ -348,8 +353,22 @@ def _verify_prelaunch_pose_dataset(
     expected = materialization.get("materialized_dataset_sha256")
     if not isinstance(expected, str) or re.fullmatch(r"[0-9a-f]{64}", expected) is None:
         raise ValidationError("Pose training run has an invalid materialized dataset fingerprint")
-    if _materialized_pose_dataset_sha256(destination) != expected:
-        raise ValidationError("Materialized pose training dataset changed before GPU training")
+    algorithm = materialization.get("materialized_dataset_fingerprint_algorithm")
+    if algorithm not in (None, "relative-posix-path-v1"):
+        raise ValidationError("Pose training run has an unsupported dataset fingerprint algorithm")
+
+    files = _materialized_pose_dataset_files(destination)
+    if canonical_json_sha256(files) == expected:
+        return
+
+    # Historical Windows manifests used Path ordering, which compares names
+    # case-insensitively. Accept that original digest only for pre-versioned
+    # materializations, while still hashing every current file and its path.
+    if algorithm is None and len({item["path"].casefold() for item in files}) == len(files):
+        legacy_windows = sorted(files, key=lambda item: item["path"].casefold())
+        if canonical_json_sha256(legacy_windows) == expected:
+            return
+    raise ValidationError("Materialized pose training dataset changed before GPU training")
 
 
 def _copy_split(
@@ -559,6 +578,7 @@ def materialize_pose_training_exports(
         "validation_mode": validation_mode,
         "data_yaml": str(yaml_path),
         "materialized_dataset_sha256": _materialized_pose_dataset_sha256(destination),
+        "materialized_dataset_fingerprint_algorithm": "relative-posix-path-v1",
         "training_image_count": len(list((destination / "images" / "train").glob("*"))),
         "validation_image_count": (
             len(list((destination / "images" / "val").glob("*")))
