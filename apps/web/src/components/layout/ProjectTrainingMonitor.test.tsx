@@ -268,6 +268,30 @@ describe("ProjectTrainingMonitor", () => {
     expect(screen.getByText("0.902")).toBeInTheDocument();
   });
 
+  it("does not report small nonzero training losses as measured zeros", async () => {
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([
+      {
+        ...activeRun,
+        metrics: {},
+        metrics_history: {
+          "train/box_loss": [0],
+          "train/cls_loss": [0.000012],
+          "train/dfl_loss": [0.00000025],
+        },
+      },
+    ]);
+
+    renderMonitor();
+    await screen.findByText("Swiftia detector");
+
+    const measuredValue = (name: string) =>
+      screen.getByText(name).closest("div")?.querySelector("dd > span");
+    expect(measuredValue("train box loss")).toHaveTextContent("0");
+    expect(measuredValue("train cls loss")).toHaveTextContent("1.2e-5");
+    expect(measuredValue("train dfl loss")).toHaveTextContent("2.5e-7");
+    expect(api.cancelTrainingRun).not.toHaveBeenCalled();
+  });
+
   it("keeps the last finite box, cls and dfl losses during partial epochs", async () => {
     vi.mocked(api.getTrainingRuns).mockResolvedValue([
       {

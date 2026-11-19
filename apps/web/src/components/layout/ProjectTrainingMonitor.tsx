@@ -85,6 +85,12 @@ function metricEntries(run: TrainingRun): Array<[string, number, string]> {
 }
 
 function metricValue(value: number): string {
+  // A real low-magnitude loss must never be rounded into an observed zero.
+  // Preserve the sign and a few significant digits in the read-only UI;
+  // persisted training metrics and their provenance remain untouched.
+  if (value !== 0 && Math.abs(value) < 0.00005) {
+    return value.toExponential(3).replace(/\.?0+e/, "e");
+  }
   if (Math.abs(value) >= 100) {
     return value.toFixed(1);
   }
