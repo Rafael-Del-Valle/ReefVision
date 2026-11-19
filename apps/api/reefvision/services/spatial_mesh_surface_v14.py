@@ -382,7 +382,11 @@ def measure_mesh_preview(
                     points, patch_faces[patch]
                 )
             )
-            calibrated_volume = raw_volume * scale**3
+            # Scaling first with scale**3 can underflow to zero even when
+            # the source volume is large enough for a representable calibrated
+            # volume. Multiply in stages to preserve provisional tiny volumes;
+            # genuinely unrepresentable results remain gated below.
+            calibrated_volume = raw_volume * scale * scale * scale
         except (ValueError, OverflowError):
             calibrated_volume = float("inf")
             raw_volume = float("inf")
