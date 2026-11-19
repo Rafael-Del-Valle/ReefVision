@@ -365,15 +365,24 @@ try {
     try {
         $env:LOCALAPPDATA = $commandLocalAppData
         $realRepoPath = Split-Path -Parent $PSScriptRoot
+        $commandScript = Join-Path $PSScriptRoot 'update-reefvision.ps1'
         foreach ($case in @(
-            @{ Args = @('--dry-run', '--configure-repo', $realRepoPath); Message = '--dry-run cannot be combined with --configure-repo' },
-            @{ Args = @('--build-only', '--install-only', '--configure-repo', $realRepoPath); Message = '--build-only and --install-only cannot be used together' },
-            @{ Args = @('--setup', '--skip-setup', '--configure-repo', $realRepoPath); Message = '--setup and --skip-setup cannot be used together' },
-            @{ Args = @('--install-only', '--setup', '--configure-repo', $realRepoPath); Message = '--install-only cannot be combined with --setup' }
+            @{ Options = '--dry-run'; Message = '--dry-run cannot be combined with --configure-repo' },
+            @{ Options = '--build-only --install-only'; Message = '--build-only and --install-only cannot be used together' },
+            @{ Options = '--setup --skip-setup'; Message = '--setup and --skip-setup cannot be used together' },
+            @{ Options = '--install-only --setup'; Message = '--install-only cannot be combined with --setup' }
         )) {
-            $commandArgs = @($case.Args)
-            $commandOutput = & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'update-reefvision.ps1') @commandArgs 2>&1 | Out-String
-            $commandExit = $LASTEXITCODE
+            # Start-Process captures stderr without converting an expected
+            # child PowerShell failure into a terminating parent error.
+            $stdoutPath = Join-Path $root ('option-stdout-' + [guid]::NewGuid().ToString('N') + '.txt')
+            $stderrPath = Join-Path $root ('option-stderr-' + [guid]::NewGuid().ToString('N') + '.txt')
+            $arguments = '-NoLogo -NoProfile -ExecutionPolicy Bypass -File "' + $commandScript + '" ' +
+                $case.Options + ' --configure-repo "' + $realRepoPath + '"'
+            $child = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -PassThru -Wait `
+                -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+            $commandExit = $child.ExitCode
+            $commandOutput = (Get-Content -LiteralPath $stdoutPath -Raw) +
+                (Get-Content -LiteralPath $stderrPath -Raw)
             if ($commandExit -eq 0 -or -not $commandOutput.Contains($case.Message)) {
                 throw "Rejected updater invocation had unexpected exit/diagnostic: $commandExit; $commandOutput"
             }
