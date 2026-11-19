@@ -367,8 +367,16 @@ def test_parent_reuse_refuses_modified_frozen_holdout_and_preserves_saved_qc(
     assert first_run != second_run
     assert first_output["dataset_version_id"] == second_output["dataset_version_id"] == parent_id
     assert first_output["dataset_manifest_sha256"] == second_output["dataset_manifest_sha256"]
-    assert first_output["priority_score_unit"] == second_output["priority_score_unit"] == "dimensionless"
-    assert first_output["review_status"] == second_output["review_status"] == "requires_researcher_review"
+    assert (
+        first_output["priority_score_unit"]
+        == second_output["priority_score_unit"]
+        == "dimensionless"
+    )
+    assert (
+        first_output["review_status"]
+        == second_output["review_status"]
+        == "requires_researcher_review"
+    )
     for queue_id in (standalone.json()["id"], first_output["queue_id"], second_output["queue_id"]):
         queued = client.get(f"/api/v1/review-queues/{queue_id}/items")
         assert queued.status_code == 200, queued.text
