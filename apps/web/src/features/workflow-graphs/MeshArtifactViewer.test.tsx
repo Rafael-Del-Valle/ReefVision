@@ -923,15 +923,50 @@ describe("MeshArtifactViewer", () => {
         [9e-17, 1.1e-16],
       ],
     });
-    expect(
-      parseMeshRenderArtifact({
-        ...tiny,
-        provenance: {
-          calibration_verified: false,
-          relative_scale_uncertainty: 1,
+    // Persisted intervals calculated for 10% uncertainty must remain unknown
+    // when the saved calibration provenance claims 100%. Keep the route
+    // inspectable rather than rejecting the otherwise valid preview geometry.
+    const mismatchedFullScale = parseMeshRenderArtifact({
+      ...tiny,
+      provenance: {
+        calibration_verified: false,
+        relative_scale_uncertainty: 1,
+      },
+    });
+    expect(mismatchedFullScale?.routeInspections[0]).toMatchObject({
+      lengthM: 1e-16,
+      lengthScaleIntervalM: null,
+      edgeScaleIntervalsM: null,
+      cumulativeScaleIntervalsM: null,
+    });
+    // At exactly 100%, a mathematical zero lower bound is valid. The viewer
+    // must not confuse it with numeric underflow or a verified calibration.
+    const validFullScale = parseMeshRenderArtifact({
+      ...tiny,
+      provenance: {
+        calibration_verified: false,
+        relative_scale_uncertainty: 1,
+      },
+      surface_edge_paths: [
+        {
+          ...tiny.surface_edge_paths[0],
+          length_scale_interval_m: [0, 2e-16],
+          path_edge_length_scale_intervals_m: [[0, 2e-16]],
+          path_cumulative_length_scale_intervals_m: [
+            [0, 0],
+            [0, 2e-16],
+          ],
         },
-      }),
-    ).toBeNull();
+      ],
+    });
+    expect(validFullScale?.routeInspections[0]).toMatchObject({
+      lengthScaleIntervalM: [0, 2e-16],
+      edgeScaleIntervalsM: [[0, 2e-16]],
+      cumulativeScaleIntervalsM: [
+        [0, 0],
+        [0, 2e-16],
+      ],
+    });
     expect(JSON.stringify(tiny)).toBe(original);
   });
 
