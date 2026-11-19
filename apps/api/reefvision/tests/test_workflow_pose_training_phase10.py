@@ -836,14 +836,11 @@ def test_pose_worker_checks_frozen_lineage_before_export(
                 snapshot = dict(run.draft_snapshot_json or {})
                 assert snapshot.pop("pose_child_job_request_sha256")
                 run.draft_snapshot_json = snapshot
-                job.request_json = {
-                    **request,
-                    **(
-                        {"workflow_node_run_id": "unrelated-saved-node"}
-                        if tampered_field == "unsealed_workflow_node"
-                        else {"created_by_workflow": False}
-                    ),
-                }
+                if tampered_field == "unsealed_workflow_node":
+                    request["workflow_node_run_id"] = "unrelated-saved-node"
+                else:
+                    request["created_by_workflow"] = False
+                job.request_json = request
             elif tampered_field == "frozen_dataset":
                 frozen = session.get(PoseTrainingDataset, str(dataset["id"]))
                 assert frozen is not None
