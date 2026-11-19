@@ -588,9 +588,8 @@ def test_pose_materialization_rejects_failed_final_holdout_cleanup(
             destination=destination,
         )
 
-    assert (staging / "images" / "train" / "frame_00000001.png").read_bytes() == (
-        b"reviewed-holdout"
-    )
+    staged_frame = staging / "images" / "train" / "frame_00000001.png"
+    assert staged_frame.read_bytes() == b"reviewed-holdout"
 
 
 def test_pose_training_rechecks_frozen_holdout_bytes_before_gpu_launch(
