@@ -501,7 +501,6 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
     assert not (mismatched_destination / "images" / "val").exists()
 
 
-
 def test_pose_materialization_rejects_identical_frames_in_independent_validation(
     tmp_path: Path,
 ) -> None:
