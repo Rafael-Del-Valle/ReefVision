@@ -595,13 +595,20 @@ def test_pose_materialization_rejects_unmapped_frozen_class_labels(
                 content = content.replace(b"0 0.5", b"1 0.5", 1)
             modified.writestr(member, content)
 
+    # Keep genuine training and validation image bytes distinct so label
+    # integrity is evaluated independently of the leakage guard.
+    training_export = reviewed
+    validation_export = independent_validation
+    if altered_split == "training":
+        training_export = altered.getvalue()
+    else:
+        validation_export = altered.getvalue()
+
     destination = tmp_path / "pose-unmapped-class"
     with pytest.raises(ValidationError, match="invalid label class index"):
         materialize_pose_training_exports(
-            training_content=altered.getvalue() if altered_split == "training" else reviewed,
-            validation_content=(
-                altered.getvalue() if altered_split == "validation" else independent_validation
-            ),
+            training_content=training_export,
+            validation_content=validation_export,
             destination=destination,
         )
     assert not (destination / "images" / "val").exists()
@@ -641,13 +648,20 @@ def test_pose_materialization_rejects_malformed_frozen_pose_rows(
                 content = (altered_label + "\n").encode("utf-8")
             modified.writestr(member, content)
 
+    # Keep genuine training and validation image bytes distinct so label
+    # integrity is evaluated independently of the leakage guard.
+    training_export = reviewed
+    validation_export = independent_validation
+    if altered_split == "training":
+        training_export = altered.getvalue()
+    else:
+        validation_export = altered.getvalue()
+
     destination = tmp_path / "pose-invalid-row"
     with pytest.raises(ValidationError, match=expected_error):
         materialize_pose_training_exports(
-            training_content=altered.getvalue() if altered_split == "training" else reviewed,
-            validation_content=(
-                altered.getvalue() if altered_split == "validation" else independent_validation
-            ),
+            training_content=training_export,
+            validation_content=validation_export,
             destination=destination,
         )
     assert not (destination / "images" / "val").exists()
