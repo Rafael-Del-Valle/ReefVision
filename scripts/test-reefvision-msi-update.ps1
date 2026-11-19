@@ -394,7 +394,7 @@ try {
             $commandOutput = (Get-Content -LiteralPath $stdoutPath -Raw) +
                 (Get-Content -LiteralPath $stderrPath -Raw)
             if ($commandExit -eq 0 -or -not $commandOutput.Contains($case.Message)) {
-                throw "Rejected updater invocation had unexpected exit/diagnostic: $commandExit; $commandOutput"
+                throw "Rejected updater invocation ($($case.Options)) had unexpected exit/diagnostic: $commandExit; $commandOutput"
             }
             if ((Get-FileHash -LiteralPath $commandConfig -Algorithm SHA256).Hash -ne $beforeCommandConfig) {
                 throw 'Rejected updater invocation modified the saved repository configuration.'

@@ -132,3 +132,9 @@ This command-only safeguard does not create an executable scientific Workflow
 Builder node. Existing saved typed QC graphs, provenance, reliable retries and
 mandatory researcher review are unchanged. No migration or research-asset edit.
 Full Windows CI and genuine installed MSI/GUI acceptance remain required.
+
+Native-Windows CI #44446182081 revealed that Windows PowerShell's common
+`-Verbose` binding can intercept `--verbose` before the remaining-arguments
+parser. The updater now also reads `$PSBoundParameters['Verbose']` so the
+configure-only exclusivity guard covers that invocation; diagnostics name
+the offending regression case. Exact-head Windows rerun is required.

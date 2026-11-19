@@ -246,7 +246,10 @@ $buildOnly = $false
 $installOnly = $false
 $noLaunch = $false
 $cleanBuild = $false
-$verbose = $false
+# Windows PowerShell can bind --verbose to the script's built-in common
+# -Verbose parameter instead of forwarding it to ValueFromRemainingArguments.
+# Honor both forms so configuration/action exclusion cannot be bypassed.
+$verbose = [bool]$PSBoundParameters['Verbose']
 $dryRun = $false
 $runTests = $false
 $configureRepoPath = $null
