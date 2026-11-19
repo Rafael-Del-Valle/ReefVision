@@ -57,3 +57,30 @@ Remaining 1.6 release gates: independent 1.1/1.6 Alembic-0038 lineage
 reconciliation, representative biological QC acceptance, crash recovery,
 Windows MSI/CAB installation and upgrade/rollback, installed GUI validation
 and explicit researcher approval. No merge, tag or release is authorized.
+
+## Frozen 0007 raster provenance follow-up (November 19, 2026)
+
+The original mask-aware producer records a managed raster `mask_path`, a
+lowercase 64-character SHA-256 `mask_content_sha256`, a source-image bounding
+box and a positive pixel area. The shared read-only frozen-item validator now
+rejects fully rehashed raster records with missing/blank paths, missing or
+malformed content digests, out-of-image boxes, zero area or an area larger than
+the source image. The existing polygon-specific shape/area validation and
+historical detection-only `0006` schema are unchanged.
+
+The original `0007` polygon parity fixture was also corrected to match the
+actual producer's `polygon_json`, bounding box and `area_pixels` contract:
+CI #44517799262 reported **one** failure in that previously unrealistic
+positive fixture (2,201 backend tests passed, 32 skipped); frontend and native
+Windows preservation passed. The repaired fixture and positive/negative raster
+parity scenarios exercise both accepted original data and recomputed-checksum
+faults. Database-backed standalone QC and twice-entered saved-graph review
+evidence now include raster provenance faults with rollback and pending human
+review preserved. Exact-head CI must confirm these tests before acceptance.
+
+The digest is **not** a cryptographic signature. Frozen QC deliberately does
+not re-open or delete a user's raster assets: it verifies recorded metadata,
+not present-day file availability or byte identity. Original producer-time
+managed-file hashing remains the source of that evidence. Taxonomic and
+biological correctness still require researcher approval; none of these
+metadata guards grants it.
