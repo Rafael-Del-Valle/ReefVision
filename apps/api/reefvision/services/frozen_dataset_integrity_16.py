@@ -129,6 +129,24 @@ def validate_frozen_dataset_manifest(
             ):
                 raise ValidationError(message)
 
+        # Even a locally recomputed item and manifest digest cannot make an
+        # internally inconsistent biological count valid. Verify the frozen
+        # annotation census independently of both stored count fields.
+        annotations = item.annotation_snapshot_json
+        if (
+            type(item.annotation_count) is not int
+            or not isinstance(annotations, list)
+            or item.annotation_count != len(annotations)
+            or any(
+                not isinstance(annotation, dict)
+                or type(annotation.get("label_class_id")) is not str
+                for annotation in annotations
+            )
+            or item.per_class_counts_json
+            != dict(Counter(annotation["label_class_id"] for annotation in annotations))
+        ):
+            raise ValidationError(message)
+
         payload = _item_payload(item, schema_version=schema_version)
         if canonical_json_sha256(payload) != item.snapshot_sha256 or entries.get(item.image_id) != {
             **payload,
