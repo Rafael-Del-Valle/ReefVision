@@ -28,6 +28,18 @@ def _scale_only_length_interval(length_m: float, uncertainty: float | None) -> l
     return [lower, upper]
 
 
+def _complete_scale_only_length_intervals(
+    values: list[float], uncertainty: float | None
+) -> list[list[float]] | None:
+    """Keep ordered trace intervals only when every waypoint bound is representable."""
+    if uncertainty is None:
+        return None
+    bounds = [_scale_only_length_interval(value, uncertainty) for value in values]
+    if any(interval is None for interval in bounds):
+        return None
+    return [interval for interval in bounds if interval is not None]
+
+
 def _route_turn_angles(
     points: list[tuple[float, float, float]],
     route: list[int],
@@ -923,8 +935,8 @@ def mesh_surface_edge_traces(
         )
         length_underflow = length_m == 0 and any(source > 0 for source in source_lengths)
         interval = (
-            [length_m * (1 - scale_uncertainty), length_m * (1 + scale_uncertainty)]
-            if scale_uncertainty is not None and not length_underflow
+            _scale_only_length_interval(length_m, scale_uncertainty)
+            if not length_underflow
             else None
         )
         if interval is not None and any(not isfinite(bound) for bound in interval):
@@ -933,19 +945,13 @@ def mesh_surface_edge_traces(
         # are marginal scale-only bounds, not independent uncertainties to
         # add in quadrature or anatomical/annotation confidence intervals.
         segment_intervals = (
-            [
-                [distance * (1 - scale_uncertainty), distance * (1 + scale_uncertainty)]
-                for distance in segment_lengths
-            ]
-            if scale_uncertainty is not None and not segment_underflow
+            _complete_scale_only_length_intervals(segment_lengths, scale_uncertainty)
+            if not segment_underflow
             else None
         )
         cumulative_intervals = (
-            [
-                [distance * (1 - scale_uncertainty), distance * (1 + scale_uncertainty)]
-                for distance in cumulative
-            ]
-            if scale_uncertainty is not None and not segment_underflow
+            _complete_scale_only_length_intervals(cumulative, scale_uncertainty)
+            if not segment_underflow
             else None
         )
         # Use the same source-frame, scale-independent geometric turning
@@ -983,11 +989,8 @@ def mesh_surface_edge_traces(
         if not isfinite(endpoint_chord_m) or not isfinite(display_chord_m):
             raise ValueError("Surface trace endpoint chord cannot be represented")
         chord_interval = (
-            [
-                endpoint_chord_m * (1 - scale_uncertainty),
-                endpoint_chord_m * (1 + scale_uncertainty),
-            ]
-            if scale_uncertainty is not None and (source_chord == 0 or endpoint_chord_m > 0)
+            _scale_only_length_interval(endpoint_chord_m, scale_uncertainty)
+            if source_chord == 0 or endpoint_chord_m > 0
             else None
         )
         if chord_interval is not None and any(not isfinite(bound) for bound in chord_interval):
@@ -1462,6 +1465,13 @@ def mesh_surface_edge_traces(
                         source_planar_isoperimetric_quotient = quotient
                 if source_planar_isoperimetric_quotient is None:
                     warnings.append("closed_surface_trace_planar_compactness_unrepresentable")
+        if scale_uncertainty is not None and (
+            (length_m > 0 and interval is None)
+            or (endpoint_chord_m > 0 and chord_interval is None)
+            or (not segment_underflow and segment_intervals is None)
+            or (not segment_underflow and cumulative_intervals is None)
+        ):
+            warnings.append("surface_trace_scale_interval_below_numeric_resolution")
         if segment_underflow:
             warnings.append("calibrated_surface_trace_segment_underflow")
         # A positive calibrated segment may disappear from cumulative distances
