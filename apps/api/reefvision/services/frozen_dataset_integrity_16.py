@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Sequence
 from math import isfinite
-from typing import Any
+from typing import Any, cast
 
 from reefvision.db.models import DatasetVersion, DatasetVersionItem
 from reefvision.domain.errors import ValidationError
@@ -29,13 +29,14 @@ def _valid_detection_box(snapshot: dict[str, Any], width_px: Any, height_px: Any
     coordinates = [snapshot.get(key) for key in ("x_min", "y_min", "x_max", "y_max")]
     if any(type(value) not in (int, float) for value in coordinates):
         return False
+    x_min, y_min, x_max, y_max = cast(tuple[float, float, float, float], tuple(coordinates))
+    width, height = cast(tuple[int, int], (width_px, height_px))
     try:
-        if not all(isfinite(value) for value in coordinates):
+        if not all(isfinite(value) for value in (x_min, y_min, x_max, y_max)):
             return False
     except OverflowError:
         return False
-    x_min, y_min, x_max, y_max = coordinates
-    return 0 <= x_min < x_max <= width_px and 0 <= y_min < y_max <= height_px
+    return 0 <= x_min < x_max <= width and 0 <= y_min < y_max <= height
 
 
 def _item_payload(item: DatasetVersionItem, *, schema_version: str) -> dict[str, Any]:
