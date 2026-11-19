@@ -100,6 +100,7 @@ def validate_frozen_dataset_manifest(
         raise ValidationError(message)
 
     seen: set[str] = set()
+    seen_annotation_ids: set[str] = set()
     for item in items:
         if item.image_id in seen:
             raise ValidationError(message)
@@ -146,6 +147,20 @@ def validate_frozen_dataset_manifest(
             != dict(Counter(annotation["label_class_id"] for annotation in annotations))
         ):
             raise ValidationError(message)
+
+        # An annotation identity must refer to one biological observation,
+        # even if a local actor recomputes all unkeyed SHA-256 checksums and
+        # makes the totals and taxonomic census internally self-consistent.
+        # Database annotation IDs are globally unique across project images.
+        for annotation in annotations:
+            annotation_id = annotation.get("id")
+            if (
+                type(annotation_id) is not str
+                or not annotation_id
+                or annotation_id in seen_annotation_ids
+            ):
+                raise ValidationError(message)
+            seen_annotation_ids.add(annotation_id)
 
         payload = _item_payload(item, schema_version=schema_version)
         if canonical_json_sha256(payload) != item.snapshot_sha256 or entries.get(item.image_id) != {
