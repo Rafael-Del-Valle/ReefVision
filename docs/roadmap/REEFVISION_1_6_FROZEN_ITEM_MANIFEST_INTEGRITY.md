@@ -221,3 +221,36 @@ consistency checks, not authenticated signatures or a full polygon
 topology/self-intersection proof. No live annotations or researcher
 decisions are modified. Full exact-head CI and actual Windows installer
 and installed-GUI acceptance remain release holds.
+
+
+## Frozen taxonomic identity binding (2026-11-19, Track D)
+
+The original 0006 and 0007 dataset producers store a project-class
+dictionary in both `DatasetVersion.class_map_json` and the checksummed
+manifest's `class_map`, and include `label_class_id`, `class_index`, and
+`class_name` in every frozen detection and verified mask observation.
+Previous read-only QC validated class counts keyed by ID but did not check
+the identity/index/name tuple against the original dictionary. A fully
+recomputed item and manifest SHA-256 could therefore call a Swiftia
+observation another taxon without changing counts or observed geometry.
+
+Standalone dataset-version QC and the existing saved executable typed
+`project_source -> dataset_version_source -> qc_review_queue` path now
+share a fail-closed guard that checks the frozen dictionary equals the
+version record, rejects duplicate or malformed class IDs, and requires
+every detection/mask class tuple to match that dictionary. Live class
+renaming is deliberately **not** consulted. Tests cover original 0006,
+mask-free 0007 and mask-bearing 0007, fully rehashed aliases and indices,
+unknown identities and conflicting class-map entries, plus database-backed
+standalone and saved-workflow rejection/replay with pending human-review
+evidence preserved. No new node, migration, model download, mutation of
+original observations, or automatic researcher approval is introduced.
+
+This is internal scientific consistency, **not** an authenticated signature:
+an actor able to rewrite the version row, dictionary, entire manifest and
+its SHA-256 together could forge a mutually consistent new identity.
+Independent dataset custody and audit attestation remain necessary. Exact-head
+CI, independent 1.1/1.6 migration-lineage reconciliation, representative
+biological research validation, Windows MSI/CAB installed-GUI clean
+installation/upgrade/rollback and explicit researcher approval still gate
+release.
