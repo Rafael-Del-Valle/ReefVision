@@ -32,6 +32,7 @@ from reefvision.db.models import (
 )
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.pose_training import (
+    _materialized_pose_dataset_sha256,
     _prepare_clean_pose_training_output,
     _require_empty_pose_gpu_output,
     _resolve_unlinked_pose_run_path,
@@ -525,6 +526,33 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
             destination=mismatched_destination,
         )
     assert not (mismatched_destination / "images" / "val").exists()
+
+
+
+
+def test_pose_materialized_fingerprint_uses_portable_path_order(tmp_path: Path) -> None:
+    # Mixed-case, independently reviewed artifacts sort differently when
+    # Path comparison follows Windows case-insensitive filename rules.
+    root = tmp_path / "frozen-pose-input"
+    reviewed_files = {
+        "Z_review/pose.png": b"reviewed-upper",
+        "a_review/pose.png": b"reviewed-lower",
+    }
+    for relative, content in reviewed_files.items():
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+
+    expected = canonical_json_sha256(
+        [
+            {
+                "path": relative,
+                "sha256": hashlib.sha256(reviewed_files[relative]).hexdigest(),
+            }
+            for relative in sorted(reviewed_files)
+        ]
+    )
+    assert _materialized_pose_dataset_sha256(root) == expected
 
 
 @pytest.mark.parametrize("blocked_area", ("dataset", "validation_stage"))
