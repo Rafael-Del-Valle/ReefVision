@@ -174,7 +174,9 @@ def test_preview_missing_face_area_underflow_is_flagged_and_replayable(
     no_uncertainty_params = {
         key: value for key, value in params.items() if key != "relative_scale_uncertainty"
     }
-    no_uncertainty_response = client.post(f"{base}/spatial/mesh-preview", json=no_uncertainty_params)
+    no_uncertainty_response = client.post(
+        f"{base}/spatial/mesh-preview", json=no_uncertainty_params
+    )
     assert no_uncertainty_response.status_code == 200, no_uncertainty_response.text
     no_uncertainty_expected = no_uncertainty_response.json()
     assert flag in no_uncertainty_expected["qc_warnings"]
