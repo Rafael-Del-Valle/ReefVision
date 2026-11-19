@@ -12,7 +12,6 @@ from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
 from reefvision.tests.test_annotations import create_project
 
-
 TINY_TRIANGLE = [
     [0.0, 0.0, 0.0],
     [1e-142, 0.0, 0.0],
@@ -133,8 +132,10 @@ def test_area_bounds_standalone_and_saved_graph_replay(
     assert hashes[0] == hashes[1]
 
 
-def test_tiny_patch_interval_withheld_without_discarding_valid_global_interval() -> None:
-    """One small disconnected source patch must not invalidate a larger patch."""
+def test_tiny_patch_interval_withheld_without_discarding_valid_global_interval(
+    client: TestClient,
+) -> None:
+    """A valid large-patch interval survives a tiny patch in saved workflow results."""
     vertices = [
         [0.0, 0.0, 0.0],
         [1.0, 0.0, 0.0],
@@ -143,13 +144,12 @@ def test_tiny_patch_interval_withheld_without_discarding_valid_global_interval()
         [2e-140 + 1e-142, 0.0, 0.0],
         [2e-140, 1e-142, 0.0],
     ]
-    result = measure_mesh_preview(
-        **{
-            **_request(0.8),
-            "vertices": vertices,
-            "faces": [[0, 1, 2], [3, 4, 5]],
-        }
-    )
+    mesh = {
+        **_request(0.8),
+        "vertices": vertices,
+        "faces": [[0, 1, 2], [3, 4, 5]],
+    }
+    result = measure_mesh_preview(**mesh)
     nominal_patch_areas = result["edge_connected_patch_surface_areas_m2"]
     assert len(nominal_patch_areas) == 2
     assert nominal_patch_areas[0] > nominal_patch_areas[1] > 0
@@ -159,6 +159,67 @@ def test_tiny_patch_interval_withheld_without_discarding_valid_global_interval()
     assert patch_bounds[0] is not None
     assert patch_bounds[1] is None
     assert "surface_area_scale_interval_numeric_unrepresentable" in result["qc_warnings"]
+
+    params = {
+        **mesh,
+        "specimen_id": "synthetic-disconnected-patches",
+        "observation_id": "unverified-two-patch-timepoint",
+        "coordinate_frame_id": "unregistered-patch-frame",
+    }
+    project_id = str(create_project(client, "Disconnected provisional coral patches")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert response.status_code == 200, response.text
+    standalone = response.json()
+    assert standalone["surface_area_scale_interval_m2"] == result["surface_area_scale_interval_m2"]
+    assert standalone["edge_connected_patch_area_scale_intervals_m2"] == patch_bounds
+    assert standalone["provenance"]["calibration_verified"] is False
+    assert standalone["provenance"]["specimen_identity_verified"] is False
+    assert standalone["provenance"]["coordinate_registration_verified"] is False
+
+    graph = {
+        "graph_id": "disconnected-area-patch-interval-v14",
+        "name": "Independent surface-area patch uncertainty review",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifacts = [
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        ]
+        assert len(artifacts) == 1
+        assert artifacts[0]["payload_json"] == standalone
+        hashes.append(artifacts[0]["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
 
 
 def test_true_zero_area_preserves_valid_zero_uncertainty_interval() -> None:
