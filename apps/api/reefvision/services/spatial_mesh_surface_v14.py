@@ -716,7 +716,10 @@ def measure_mesh_preview(
             )
         )
         or (partial_missing_area_m2 > 0 and partial_missing_area_scale_interval_m2 is None)
-        or (preview_partially_sampled_missing_raw_area > 0 and not partial_missing_area_representable)
+        or (
+            preview_partially_sampled_missing_raw_area > 0
+            and not partial_missing_area_representable
+        )
         or (omitted_patch_area_m2 > 0 and omitted_patch_area_scale_interval_m2 is None)
     ):
         volume_qc_warnings.add("surface_area_scale_interval_numeric_unrepresentable")
