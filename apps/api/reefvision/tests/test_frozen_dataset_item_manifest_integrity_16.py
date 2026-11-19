@@ -135,11 +135,13 @@ def test_frozen_item_evidence_cannot_change_under_standalone_or_saved_qc(
     assert _queue_item(client, standalone.json()["id"])["review_state"] == "pending"
 
 
-@pytest.mark.parametrize("tamper", ["annotation_total", "class_census"])
+@pytest.mark.parametrize(
+    "tamper", ["annotation_total", "class_census", "reused_identity", "empty_identity"]
+)
 def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
     client: TestClient, tamper: str
 ) -> None:
-    """Local hash recomputation cannot certify contradictory biological counts."""
+    """Rehashing cannot certify contradictory census or observation identity."""
     project_id, _, version_id, _ = _study(client)
     standalone = client.post(f"/api/v1/dataset-versions/{version_id}/review-queues", json={})
     assert standalone.status_code == 201, standalone.text
@@ -169,19 +171,29 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
         if tamper == "annotation_total":
             item.annotation_count += 1
             version.annotation_count += 1
-        else:
+        elif tamper == "class_census":
             item.per_class_counts_json = {"forged_taxon": item.annotation_count}
+        else:
+            annotations = [dict(annotation) for annotation in item.annotation_snapshot_json]
+            if tamper == "reused_identity":
+                annotations.append(dict(annotations[0]))
+                item.annotation_count += 1
+                version.annotation_count += 1
+                class_id = str(annotations[0]["label_class_id"])
+                item.per_class_counts_json = {class_id: item.annotation_count}
+            else:
+                annotations[0]["id"] = ""
+            item.annotation_snapshot_json = annotations
 
-        # Re-sign both the frozen item and its outer manifest; neither digest
-        # is an authenticated researcher signature. Internal counts still
-        # must be independently reconciled with original annotation records.
+        # Re-sign both levels so validation checks biological evidence,
+        # not merely a checksum mismatch. These are not authenticated signatures.
         payload = _item_payload(item, schema_version="0007")
         item.snapshot_sha256 = canonical_json_sha256(payload)
         manifest = {
             **version.manifest_json,
             "items": [{**payload, "snapshot_sha256": item.snapshot_sha256}],
         }
-        if tamper == "annotation_total":
+        if tamper in {"annotation_total", "reused_identity"}:
             manifest["summary"] = {
                 **version.manifest_json["summary"],
                 "annotation_count": version.annotation_count,
@@ -222,7 +234,12 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             "__workflow_node_run_id": qc_node.id,
         }
         inputs = {"project": [project_artifact], "dataset": [dataset_artifact]}
-        with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+        # The saved typed dataset source still records the *original* manifest
+        # digest. Its earlier producer-binding gate must reject re-signed data
+        # before it could reach the independent frozen-item validation.
+        with pytest.raises(
+            ValidationError, match="QC Review Queue dataset version or manifest does not match"
+        ):
             create_review_queue_workflow_artifact(
                 session, app.state.settings, project_id, params, inputs
             )
