@@ -285,7 +285,8 @@ export function ImageViewport({
     if (
       event.target instanceof HTMLElement &&
       (event.target.isContentEditable ||
-        event.target.closest("input, textarea, select, button, [contenteditable]"))
+        event.target.closest("[contenteditable]") ||
+        event.target.closest("input, textarea, select, button"))
     ) {
       return;
     }

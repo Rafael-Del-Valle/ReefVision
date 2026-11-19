@@ -667,14 +667,20 @@ describe("ImageViewport", () => {
         <svg data-testid="shortcut-overlay" viewBox="0 0 1600 1200">
           <polygon points="10,10 50,10 50,50" />
         </svg>
-        <div contentEditable suppressContentEditableWarning data-testid="annotation-label-editor">
+        <div
+          contentEditable
+          suppressContentEditableWarning
+          data-testid="annotation-label-editor"
+        >
           Coral fragment
         </div>
       </ImageViewport>,
     );
     const frame = screen.getByRole("region", { name: "Editable coral image" });
     const transform = screen.getByTestId("image-viewport-transform");
-    const polygon = screen.getByTestId("shortcut-overlay").querySelector("polygon");
+    const polygon = screen
+      .getByTestId("shortcut-overlay")
+      .querySelector("polygon");
     const originalPoints = polygon?.getAttribute("points");
     const fitted = transform.style.transform;
 
@@ -684,7 +690,9 @@ describe("ImageViewport", () => {
     expect(fireEvent.keyDown(frame, { key: "f", ctrlKey: true })).toBe(true);
     expect(fireEvent.keyDown(frame, { key: "f", metaKey: true })).toBe(true);
     expect(fireEvent.keyDown(frame, { key: "f", altKey: true })).toBe(true);
-    expect(fireEvent.keyDown(frame, { key: "f", isComposing: true })).toBe(true);
+    expect(fireEvent.keyDown(frame, { key: "f", isComposing: true })).toBe(
+      true,
+    );
     expect(
       fireEvent.keyDown(screen.getByTestId("annotation-label-editor"), {
         key: "f",
