@@ -32,6 +32,7 @@ from reefvision.db.models import (
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.pose_training import (
     _resolve_unlinked_pose_run_path,
+    _verify_prelaunch_pose_dataset,
     materialize_pose_training_exports,
     process_pose_training_job,
 )
@@ -520,6 +521,28 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
             destination=mismatched_destination,
         )
     assert not (mismatched_destination / "images" / "val").exists()
+
+
+def test_pose_training_rechecks_frozen_holdout_bytes_before_gpu_launch(
+    tmp_path: Path,
+) -> None:
+    # Reuse the frozen export fixture to simulate changes between dataset
+    # preparation and actual Ultralytics execution, without launching a GPU.
+    destination = tmp_path / "pose-dataset"
+    materialization = materialize_pose_training_exports(
+        training_content=_pose_export_zip(b"reviewed-training"),
+        validation_content=_pose_export_zip(b"reviewed-holdout"),
+        destination=destination,
+    )
+    _verify_prelaunch_pose_dataset(destination, materialization)
+
+    holdout_label = destination / "labels" / "val" / "frame_00000001.txt"
+    holdout_label.write_bytes(holdout_label.read_bytes() + b"# changed after freezing\\n")
+    with pytest.raises(ValidationError, match="changed before GPU training"):
+        _verify_prelaunch_pose_dataset(destination, materialization)
+
+    with pytest.raises(ValidationError, match="missing materialized dataset provenance"):
+        _verify_prelaunch_pose_dataset(destination, None)
 
 
 def test_pose_materialization_rejects_identical_frames_in_independent_validation(
