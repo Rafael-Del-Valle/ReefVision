@@ -1086,6 +1086,39 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                     self.assertTrue(json.loads(json.dumps(records))[0]["jpeg_decodable"])
                     self.assertEqual(photo.read_bytes(), original)
 
+    def test_boolean_exif_orientation_is_not_raster_geometry(self) -> None:
+        """True is numerically 1, but a boolean EXIF tag cannot certify orientation."""
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; boolean EXIF orientation QC unverified")
+
+        original_getexif = Image.Image.getexif
+        for orientation in (True, False):
+            with self.subTest(orientation=orientation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                photo = root / "camera.JPG"
+                Image.new("RGB", (12, 8), (20, 60, 100)).save(photo, format="JPEG")
+                original = photo.read_bytes()
+
+                def forged_exif(image):
+                    exif = original_getexif(image)
+                    exif[274] = orientation
+                    return exif
+
+                with mock.patch.object(Image.Image, "getexif", forged_exif):
+                    records, errors = MODULE.inventory(root, verify_decode=True)
+
+                self.assertEqual(
+                    errors, ["JPEG decode failed: camera.JPG: ValueError"]
+                )
+                self.assertEqual(len(records), 1)
+                self.assertTrue(records[0]["jpeg_boundary_markers"])
+                self.assertFalse(records[0]["jpeg_decodable"])
+                self.assertNotIn("jpeg_exif_orientation", records[0])
+                self.assertNotIn("jpeg_display_width", records[0])
+                self.assertEqual(photo.read_bytes(), original)
+
     def test_invalid_exif_orientation_fails_geometry_qc_read_only(self) -> None:
         """Do not invent display dimensions for malformed camera EXIF."""
         try:

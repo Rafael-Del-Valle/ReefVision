@@ -347,7 +347,10 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
                             camera_make, invalid_make = _camera_exif_label(exif.get(271))
                             camera_model, invalid_model = _camera_exif_label(exif.get(272))
                             if orientation is not None and (
-                                not isinstance(orientation, int)
+                                # bool is an int subclass (True == 1), but a
+                                # boolean EXIF orientation is not a valid
+                                # camera-defined raster transform.
+                                type(orientation) is not int
                                 or orientation not in range(1, 9)
                             ):
                                 raise ValueError("invalid EXIF orientation")
