@@ -315,7 +315,13 @@ def _materialized_pose_dataset_sha256(destination: Path) -> str:
     """Fingerprint the exact local scientific files prepared for GPU training."""
 
     files: list[dict[str, str]] = []
-    for member in sorted(destination.rglob("*")):
+    # Path ordering differs between Windows and POSIX for mixed-case names.
+    # Hash canonical relative strings so equivalent frozen inputs have one digest.
+    members = sorted(
+        destination.rglob("*"),
+        key=lambda member: member.relative_to(destination).as_posix(),
+    )
+    for member in members:
         if member.is_symlink():
             raise ValidationError("Materialized pose training dataset contains a symbolic link")
         if not member.is_file():
