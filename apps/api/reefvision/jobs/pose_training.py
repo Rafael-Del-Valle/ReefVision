@@ -76,6 +76,20 @@ def _resolve_unlinked_pose_run_path(settings: Settings, relative_path: str) -> P
     return resolve_managed_project_path(settings, relative_path)
 
 
+def _prepare_clean_pose_training_output(save_root: Path) -> None:
+    """Never start a pose retrain with stale checkpoints from an earlier attempt.
+
+    Windows can refuse to remove an in-use checkpoint or training log. If
+    cleanup fails, let the job fail rather than allowing Ultralytics to reuse
+    unverified files in the same run's output directory.
+    """
+    if save_root.is_symlink():
+        raise ValidationError("Pose training output directory is a symbolic link")
+    if save_root.exists():
+        shutil.rmtree(save_root)
+    save_root.mkdir(parents=True, exist_ok=False)
+
+
 def _safe_extract_zip(
     content: bytes,
     destination: Path,
@@ -791,15 +805,7 @@ def process_pose_training_job(
                 f"{base_relative}/ultralytics",
             )
 
-            shutil.rmtree(
-                save_root,
-                ignore_errors=True,
-            )
-
-            save_root.mkdir(
-                parents=True,
-                exist_ok=True,
-            )
+            _prepare_clean_pose_training_output(save_root)
 
             logs_path = save_root / "training.log"
 
