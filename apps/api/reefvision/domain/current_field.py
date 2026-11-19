@@ -24,8 +24,19 @@ Termination = Literal[
 Matrix = tuple[tuple[float | None, ...], ...]
 
 
-def _finite(value: float) -> bool:
-    return not isinstance(value, bool) and isfinite(value)
+def _finite(value: object) -> bool:
+    """Fail closed on malformed numeric input instead of crashing a saved run.
+
+    API and Workflow Builder inputs can include nonnumeric scalars, and even a
+    Python integer can overflow when converted to C double by math.isfinite.
+    Keep booleans invalid; never silently coerce strings into measurements.
+    """
+    if isinstance(value, bool):
+        return False
+    try:
+        return isfinite(value)
+    except (TypeError, ValueError, OverflowError):
+        return False
 
 
 def _axis(values: tuple[float, ...], bound: float) -> tuple[float, ...]:
