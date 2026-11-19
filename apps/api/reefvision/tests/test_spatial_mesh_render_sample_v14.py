@@ -151,7 +151,9 @@ def test_preview_missing_face_area_underflow_is_flagged_and_replayable(
     assert flag in direct["qc_warnings"]
     assert "surface_area_scale_interval_numeric_unrepresentable" in direct["qc_warnings"]
 
-    unspecified = measure_mesh_preview(**{**direct_params, "relative_scale_uncertainty": None})
+    unspecified = measure_mesh_preview(
+        **{**direct_params, "relative_scale_uncertainty": None}
+    )
     assert flag in unspecified["qc_warnings"]
     assert "surface_area_scale_interval_numeric_unrepresentable" not in unspecified["qc_warnings"]
     assert unspecified["surface_area_scale_interval_m2"] is None
@@ -175,13 +177,15 @@ def test_preview_missing_face_area_underflow_is_flagged_and_replayable(
             {"node_id": "project", "node_type": "project_source"},
             {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
         ],
-        "edges": [{
-            "edge_id": "project-mesh",
-            "source_node_id": "project",
-            "source_port_id": "project",
-            "target_node_id": "mesh",
-            "target_port_id": "project",
-        }],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
     }
     plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
@@ -191,7 +195,9 @@ def test_preview_missing_face_area_underflow_is_flagged_and_replayable(
     app = cast(FastAPI, client.app)
     hashes: list[str] = []
     for _ in range(2):
-        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        run = client.post(
+            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+        )
         assert run.status_code == 202, run.text
         assert process_workflow_run_job(
             app.state.settings, app.state.session_factory, str(run.json()["job_id"])
@@ -200,7 +206,8 @@ def test_preview_missing_face_area_underflow_is_flagged_and_replayable(
         assert detail.status_code == 200, detail.text
         assert detail.json()["run"]["status"] == "succeeded"
         artifacts = [
-            item for item in detail.json()["artifacts"]
+            item
+            for item in detail.json()["artifacts"]
             if item["data_type"] == "mesh_measurement_preview"
         ]
         assert len(artifacts) == 1
