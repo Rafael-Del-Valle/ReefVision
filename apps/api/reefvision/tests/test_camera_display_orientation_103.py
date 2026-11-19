@@ -13,7 +13,7 @@ from PIL import Image
 from reefvision.storage.images import create_browser_display
 
 
-@pytest.mark.parametrize("orientation", [1, 3, 6, 8])
+@pytest.mark.parametrize("orientation", [1, 2, 3, 4, 5, 6, 7, 8])
 def test_browser_display_does_not_exif_rotate_camera_pixels(tmp_path, orientation: int) -> None:
     source = tmp_path / f"camera_{orientation}.JPG"
     display = tmp_path / f"display_{orientation}.png"
@@ -46,7 +46,7 @@ def test_browser_display_does_not_exif_rotate_camera_pixels(tmp_path, orientatio
     assert hashlib.sha256(source.read_bytes()).hexdigest() == original_hash
 
 
-@pytest.mark.parametrize("orientation", [1, 3, 6, 8])
+@pytest.mark.parametrize("orientation", [1, 2, 3, 4, 5, 6, 7, 8])
 @pytest.mark.parametrize("mode", ["CMYK", "L"])
 def test_non_rgb_camera_jpeg_displays_without_reorienting_or_changing_original(
     tmp_path, mode: str, orientation: int
