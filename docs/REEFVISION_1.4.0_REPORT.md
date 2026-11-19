@@ -445,3 +445,25 @@ coral branch anatomy, specimen identity, or physical field reconstruction.
 Final-head GitHub CI, representative datasets, independent scientific review,
 Windows installed-GUI and physical GPU acceptance remain release gates.
 **RELEASE HOLD**.
+
+
+## Track C: omitted mesh-route uncertainty and formatting gates (2026-11-19)
+
+The standalone mesh-preview endpoint and a twice-executed persisted, typed
+`mesh_surface_preview` Workflow Builder graph now have a dedicated regression
+for **omitting** `relative_scale_uncertainty` entirely. The nominal provisional
+route and displayed mesh geometry remain available, but no route/chord,
+segment, cumulative or excess scale-only uncertainty intervals are invented.
+An absent uncertainty estimate also must not trigger the
+`path_scale_interval_below_numeric_resolution` warning, which is reserved for
+numerical loss of an **actually supplied** nonzero uncertainty. Direct-engine,
+API, planner, executed-artifact equality, repeatable SHA-256 hashes, and false
+calibration/specimen/registration verification flags are covered.
+
+The predecessor exact-head Actions run reported four failed workflows, caused
+by Ruff formatting in `spatial_mesh_paths_v14.py` and Prettier formatting in
+`MeshArtifactViewer.test.tsx`; the relevant workflow-graphs failure shared
+the latter cause. Both formatting issues have been corrected on the isolated
+1.4 branch. A subsequent exact-head Actions run must confirm them and the
+new regression; no local full-suite, physical MSI/GUI/GPU or representative
+coral validation is claimed. **1.4 and 1.5 remain on RELEASE HOLD.**
