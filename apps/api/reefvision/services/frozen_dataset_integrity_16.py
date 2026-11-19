@@ -24,12 +24,7 @@ SUPPORTED_SNAPSHOT_SCHEMAS = frozenset({"0006", "0007"})
 
 def _valid_detection_box(snapshot: dict[str, Any], width_px: Any, height_px: Any) -> bool:
     """Apply the original editor's source-pixel box bounds to frozen evidence."""
-    if (
-        type(width_px) is not int
-        or type(height_px) is not int
-        or width_px <= 0
-        or height_px <= 0
-    ):
+    if type(width_px) is not int or type(height_px) is not int or width_px <= 0 or height_px <= 0:
         return False
     coordinates = [snapshot.get(key) for key in ("x_min", "y_min", "x_max", "y_max")]
     if any(type(value) not in (int, float) for value in coordinates):
@@ -146,12 +141,19 @@ def validate_frozen_dataset_manifest(
                 or any(
                     not isinstance(snapshot, dict)
                     or type(snapshot.get("label_class_id")) is not str
+                    or not snapshot["label_class_id"]
+                    or snapshot.get("status") != "verified"
+                    or type(snapshot.get("geometry_kind")) is not str
+                    or snapshot["geometry_kind"] not in {"polygon", "raster_mask"}
                     for snapshot in mask_snapshots
                 )
                 or item.per_mask_class_counts_json
                 != dict(Counter(snapshot["label_class_id"] for snapshot in mask_snapshots))
             ):
                 raise ValidationError(message)
+            # Only verified original masks of supported producer geometries
+            # can contribute biological observations to a frozen study.
+            # Rehashing a draft or unsupported geometry does not authorize QC.
             # Mask annotations have their own globally unique database IDs.
             # A duplicated/empty ID can inflate a segmentation census even
             # when both nested SHA-256 digests and taxonomic totals are rehashed.

@@ -169,3 +169,31 @@ deterministic retry, dimensionless priority units and preserved pending human
 review. Checksums remain unauthenticated; independent dataset custody, the
 Alembic-0038 collision, real installed Windows GUI/MSI upgrade/rollback,
 and explicit researcher approval still block release.
+
+
+## Verified mask eligibility under re-signed snapshots (November 19, 2026)
+
+The existing 1.0–1.5 mask-aware dataset-version producer includes only
+`status == "verified"` masks and rejects unsupported geometry kinds. The 1.6
+shared frozen-item QC validator previously checked mask identities, counts and
+checksums but could admit a fully rehashed historical mask that had been
+changed to an unreviewed draft, had lost its review status or carried an unknown
+geometry kind. Such a record must not be counted as scientifically reviewed
+segmentation evidence simply because a local database writer updated the
+manifest checksum.
+
+The read-only validator now enforces the original producer's verified-mask
+status, nonempty class identity and `polygon`/`raster_mask` geometry kinds.
+Seven fully re-signed synthetic cases and three disposable, database-backed
+mask-study cases exercise corrupt evidence rejection. The database cases test
+standalone QC, saved executable typed Workflow Builder manifest-binding
+rejection, dimensionless output, deterministic rollback/replay and unchanged
+pending human-review records. No live masks, class labels, original files,
+models or database migrations are changed; no new overlapping workflow node
+or implicit researcher approval is introduced.
+
+The previous exact-head CI #44499316065 failed a Ruff-only formatting check
+in the bounding-box helper before backend pytest. This iteration also applies
+that exact formatting correction; the new head still requires full CI,
+scientific review, independent Alembic-0038 resolution and genuine installed
+Windows MSI/GUI upgrade and rollback acceptance.

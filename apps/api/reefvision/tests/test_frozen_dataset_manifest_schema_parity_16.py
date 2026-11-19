@@ -24,6 +24,7 @@ def _saved_snapshot(
         "id": "mask-1",
         "label_class_id": "swiftia",
         "geometry_kind": "polygon",
+        "status": "verified",
         "vertices": [[2, 3], [4, 3], [3, 5]],
         "measurement_json": {"length_mm": 4.5},
     }
@@ -254,6 +255,51 @@ def test_fully_resigned_invalid_detection_geometry_fails_original_schemas(
     item.annotation_snapshot_json = [snapshot]
 
     payload = _item_payload(item, schema_version=schema_version)
+    item.snapshot_sha256 = canonical_json_sha256(payload)
+    manifest = deepcopy(version.manifest_json)
+    manifest["items"] = [{**payload, "snapshot_sha256": item.snapshot_sha256}]
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+
+    with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+        validate_frozen_dataset_manifest(version, [item])
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        "draft_status",
+        "rejected_status",
+        "missing_status",
+        "empty_class",
+        "unsupported_geometry",
+        "missing_geometry",
+        "nonstr_geometry",
+    ],
+)
+def test_fully_resigned_mask_must_remain_verified_and_supported(tamper: str) -> None:
+    """A recomputed digest cannot promote draft masks into verified QC evidence."""
+    version, item = _saved_snapshot("0007", with_mask=True)
+    snapshots = deepcopy(item.mask_annotation_snapshot_json)
+    mask = snapshots[0]
+    if tamper == "draft_status":
+        mask["status"] = "draft"
+    elif tamper == "rejected_status":
+        mask["status"] = "rejected"
+    elif tamper == "missing_status":
+        mask.pop("status")
+    elif tamper == "empty_class":
+        mask["label_class_id"] = ""
+        item.per_mask_class_counts_json = {"": 1}
+    elif tamper == "unsupported_geometry":
+        mask["geometry_kind"] = "unknown"
+    elif tamper == "missing_geometry":
+        mask.pop("geometry_kind")
+    else:
+        mask["geometry_kind"] = {"invalid": True}
+    item.mask_annotation_snapshot_json = snapshots
+
+    payload = _item_payload(item, schema_version="0007")
     item.snapshot_sha256 = canonical_json_sha256(payload)
     manifest = deepcopy(version.manifest_json)
     manifest["items"] = [{**payload, "snapshot_sha256": item.snapshot_sha256}]

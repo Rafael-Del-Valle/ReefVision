@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import cast
+from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
@@ -24,6 +26,9 @@ from reefvision.services.frozen_dataset_integrity_16 import (
 from reefvision.services.review_queues import ReviewQueueService
 from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
 from reefvision.storage.datasets import canonical_json_sha256
+from reefvision.tests.test_annotations import create_project, import_one
+from reefvision.tests.test_dataset_versions import create_version
+from reefvision.tests.test_mask_dataset_exports import _save_polygon
 from reefvision.tests.test_review_queue_annotation_evidence_16 import _queue_item
 from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
     _frozen_graph,
@@ -271,4 +276,117 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
     after = client.get(queue_url)
     assert after.status_code == 200, after.text
     assert after.json() == before.json()
+    assert _queue_item(client, standalone.json()["id"])["review_state"] == "pending"
+
+
+@pytest.mark.parametrize("tamper", ["draft_status", "missing_status", "unsupported_geometry"])
+def test_resigned_mask_review_provenance_fails_standalone_and_saved_qc(
+    client: TestClient, tamper: str
+) -> None:
+    """An originally verified coral mask cannot become a draft in frozen QC."""
+    project = create_project(client, "Frozen reviewed coral masks")
+    project_id = project["id"]
+    imported = import_one(client, project_id, filename="mask-review-evidence.png")
+    image_id = imported["successful"][0]["image_id"]
+    _save_polygon(
+        client,
+        image_id=image_id,
+        class_id=project["label_classes"][0]["id"],
+        mask_id=str(uuid4()),
+        points=[(8, 8), (28, 8), (28, 28), (8, 28)],
+        base_revision=0,
+    )
+    version_id = create_version(client, project_id, name="Verified mask snapshot")["id"]
+    standalone = client.post(f"/api/v1/dataset-versions/{version_id}/review-queues", json={})
+    assert standalone.status_code == 201, standalone.text
+    saved = client.post(
+        f"/api/v1/projects/{project_id}/workflow-graphs",
+        json={"graph": _frozen_graph(version_id)},
+    )
+    assert saved.status_code == 201, saved.text
+    run_id, output = _run_frozen_graph(client, project_id, saved.json()["id"])
+    queue_url = f"/api/v1/review-queues/{output['queue_id']}/items"
+    original_queue = client.get(queue_url)
+    assert original_queue.status_code == 200, original_queue.text
+    assert output["review_status"] == "requires_researcher_review"
+    assert output["priority_score_unit"] == "dimensionless"
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        version = session.get(DatasetVersion, version_id)
+        item = session.scalar(
+            select(DatasetVersionItem).where(DatasetVersionItem.dataset_version_id == version_id)
+        )
+        assert version is not None and item is not None
+        assert item.mask_annotation_count == len(item.mask_annotation_snapshot_json) == 1
+        validate_frozen_dataset_manifest(version, [item])
+        masks = deepcopy(item.mask_annotation_snapshot_json)
+        assert masks[0]["status"] == "verified"
+        if tamper == "draft_status":
+            masks[0]["status"] = "draft"
+        elif tamper == "missing_status":
+            masks[0].pop("status")
+        else:
+            masks[0]["geometry_kind"] = "unregistered_mask"
+        item.mask_annotation_snapshot_json = masks
+
+        # Both stored checksums are recomputed; the scientific review-state
+        # constraint, not an incidental checksum mismatch, must block QC.
+        payload = _item_payload(item, schema_version="0007")
+        item.snapshot_sha256 = canonical_json_sha256(payload)
+        manifest = deepcopy(version.manifest_json)
+        manifest["items"] = [{**payload, "snapshot_sha256": item.snapshot_sha256}]
+        version.manifest_json = manifest
+        version.manifest_sha256 = canonical_json_sha256(manifest)
+        session.flush()
+
+        with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+            validate_frozen_dataset_manifest(version, [item])
+        with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+            ReviewQueueService(session, app.state.settings).create_queue_for_dataset_version(
+                version_id, ReviewQueueCreateRequest()
+            )
+        nodes = {
+            node.node_type: node
+            for node in session.scalars(
+                select(WorkflowNodeRun).where(WorkflowNodeRun.workflow_run_id == run_id)
+            )
+        }
+        project_artifact = session.scalar(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.producer_node_run_id == nodes["project_source"].id,
+                WorkflowArtifact.producer_port_id == "project",
+            )
+        )
+        dataset_artifact = session.scalar(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.producer_node_run_id == nodes["dataset_version_source"].id,
+                WorkflowArtifact.producer_port_id == "dataset",
+            )
+        )
+        assert project_artifact is not None and dataset_artifact is not None
+        qc_node = nodes["qc_review_queue"]
+        params = {
+            **dict(qc_node.parameters_json or {}),
+            "__workflow_run_id": run_id,
+            "__workflow_node_run_id": qc_node.id,
+        }
+        inputs = {"project": [project_artifact], "dataset": [dataset_artifact]}
+        with pytest.raises(
+            ValidationError, match="QC Review Queue dataset version or manifest does not match"
+        ):
+            create_review_queue_workflow_artifact(
+                session, app.state.settings, project_id, params, inputs
+            )
+        session.rollback()
+
+        replay = create_review_queue_workflow_artifact(
+            session, app.state.settings, project_id, params, inputs
+        )
+        assert replay[0]["payload"] == output
+        session.rollback()
+
+    restored_queue = client.get(queue_url)
+    assert restored_queue.status_code == 200, restored_queue.text
+    assert restored_queue.json() == original_queue.json()
     assert _queue_item(client, standalone.json()["id"])["review_state"] == "pending"
