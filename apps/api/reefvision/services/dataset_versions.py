@@ -27,7 +27,6 @@ from reefvision.db.models.project import utc_now
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.repositories.dataset_versions import DatasetVersionRepository, ExportRepository
 from reefvision.repositories.projects import ProjectRepository
-from reefvision.services.frozen_dataset_integrity_16 import validate_frozen_dataset_manifest
 from reefvision.schemas.dataset_versions import (
     DatasetExportCreateRequest,
     DatasetExportCreateResponse,
@@ -46,6 +45,7 @@ from reefvision.schemas.dataset_versions import (
     SplitRatios,
 )
 from reefvision.schemas.jobs import JobResponse
+from reefvision.services.frozen_dataset_integrity_16 import validate_frozen_dataset_manifest
 from reefvision.storage.datasets import canonical_json_sha256, dataset_export_relative_paths
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -327,6 +327,13 @@ class DatasetVersionService:
         grouped_ids: dict[tuple[str, str], list[str]] = defaultdict(list)
         for candidate in candidates:
             group_key = candidate.image.group_key
+            # Historical or directly imported records may bypass the API's
+            # blank-to-None normalization. Treating a blank value as a real
+            # colony would silently pool independent specimens into one split.
+            if group_key is not None and not group_key.strip():
+                raise ValidationError(
+                    "Empty biological group keys must be normalized before dataset splitting"
+                )
             unit_key = (
                 ("group", group_key) if group_key is not None else ("image", candidate.image.id)
             )

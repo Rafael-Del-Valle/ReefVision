@@ -213,3 +213,27 @@ automation or data migration is introduced.
 - **Correction:** Before either preview or creation plans a split, validate that every explicitly assigned image ID belongs to the selected project's eligible image cohort. Reject absent, excluded and foreign-project image IDs with a controlled validation error. Legitimate manual assignments and frozen versions are unchanged. No migration, new workflow node, model download, approval automation or alteration of historical research records.
 - **Regression:** Real imported-image API coverage creates a valid reviewed subset and persisted executable `project_source → dataset_version_source → qc_review_queue` graph, verifies rejection of unknown/excluded/cross-project explicit assignments in **both** preview and version creation, checks no extra immutable dataset is created, and replays the saved graph without provenance drift or lost pending human-review gates. Corrected the preceding exact-head CI Ruff import-order finding in the same test file.
 - **Release HOLD:** Full exact-head Ruff/mypy/pytest/frontend/E2E, independent Alembic-0038 1.1/1.6 reconciliation, representative biological acceptance, genuine Windows MSI/CAB installed-GUI clean install and upgrade/rollback, and researcher approval remain required.
+
+## 2026-11-19 — reject noncanonical legacy blank colony groups (Track D)
+
+Previously, a stored empty/whitespace-only `group_key` bypassed the image
+metadata API's normal blank-to-null rule. Dataset splitting interpreted it
+as a non-null colony key and pooled unrelated images, potentially changing
+train/validation/test assignments and misrepresenting sampling units. The
+shared split planner now refuses this malformed legacy metadata rather than
+silently assigning those samples together; previously frozen records remain
+unchanged. Normal API-created null group keys still form independent image
+units.
+
+A database-backed regression mutates a disposable image's live group key,
+requires both dataset preview and creation to reject it, and proves that
+standalone QC and twice-executed persisted typed Workflow Builder QC still
+retain frozen manifest provenance, dimensionless priority scores, and
+pending researcher approval. Recovery after restoring the source key is
+also checked. No new migration or duplicate workflow node was introduced.
+
+The immediately preceding CI failed one Ruff I001 import-order gate before
+backend pytest; that exact import ordering was corrected in the same commit.
+Full backend/frontend/E2E/native-Windows and real installed MSI/GUI acceptance
+must still be verified on the resulting head. The independent 1.1/1.6
+Alembic-0038 collision and explicit researcher release approval remain HOLD.

@@ -288,6 +288,74 @@ def test_manual_assignments_cannot_silently_ignore_ineligible_images_or_mutate_s
         assert queued.json()["items"][0]["review_state"] == "pending"
 
 
+def test_blank_legacy_biological_group_cannot_pool_samples_or_rewrite_saved_qc(
+    client: TestClient,
+) -> None:
+    """Fail closed on legacy blank colony IDs, preserving frozen reviewed evidence."""
+    project_id, image_id, version_id, _ = _study(client)
+    graph = _frozen_graph(version_id)
+    planned = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert planned.status_code == 200, planned.text
+    assert planned.json()["valid"] and planned.json()["executable"]
+    saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+
+    standalone = client.post(f"/api/v1/dataset-versions/{version_id}/review-queues", json={})
+    assert standalone.status_code == 201, standalone.text
+    first_run, first_output = _run_frozen_graph(client, project_id, saved.json()["id"])
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        image = session.get(ImageAsset, image_id)
+        assert image is not None
+        original_group_key = image.group_key
+        image.group_key = "   "
+        session.commit()
+
+    request = {
+        "eligible_annotation_statuses": ["reviewed"],
+        "split_method": "random",
+        "split_seed": 19,
+    }
+    preview_url = f"/api/v1/projects/{project_id}/dataset-version-previews"
+    versions_url = f"/api/v1/projects/{project_id}/dataset-versions"
+    for endpoint, payload in (
+        (preview_url, request),
+        (versions_url, {**request, "name": "Reject blank biological group"}),
+    ):
+        refused = client.post(endpoint, json=payload)
+        assert refused.status_code == 400, refused.text
+        assert "Empty biological group keys" in refused.json()["detail"]
+    listed = client.get(versions_url)
+    assert listed.status_code == 200, listed.text
+    assert [item["id"] for item in listed.json()] == [version_id]
+
+    # The invalid *live* metadata cannot contaminate an immutable study.
+    # Both standalone and replayed saved QC retain explicit human review.
+    next_run, next_output = _run_frozen_graph(client, project_id, saved.json()["id"])
+    assert first_run != next_run
+    assert next_output["dataset_version_id"] == first_output["dataset_version_id"] == version_id
+    assert next_output["dataset_manifest_sha256"] == first_output["dataset_manifest_sha256"]
+    for output in (first_output, next_output):
+        assert output["priority_score_unit"] == "dimensionless"
+        assert output["review_status"] == "requires_researcher_review"
+    for queue_id in (standalone.json()["id"], first_output["queue_id"], next_output["queue_id"]):
+        queued = client.get(f"/api/v1/review-queues/{queue_id}/items")
+        assert queued.status_code == 200, queued.text
+        assert queued.json()["total"] == 1
+        assert queued.json()["items"][0]["review_state"] == "pending"
+
+    # Restore the disposable direct-DB mutation; regular API writes already
+    # normalize empty and whitespace-only group keys to None.
+    with app.state.session_factory() as session:
+        image = session.get(ImageAsset, image_id)
+        assert image is not None
+        image.group_key = original_group_key
+        session.commit()
+    recovered = client.post(preview_url, json=request)
+    assert recovered.status_code == 200, recovered.text
+
+
 def test_parent_reuse_refuses_modified_frozen_holdout_and_preserves_saved_qc(
     client: TestClient,
 ) -> None:
