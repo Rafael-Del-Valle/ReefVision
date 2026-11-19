@@ -564,6 +564,7 @@ def test_pose_materialization_fails_closed_when_prior_cleanup_is_blocked(
     else:
         assert not (destination / "images" / "val").exists()
 
+
 def test_pose_materialization_rejects_failed_final_holdout_cleanup(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
