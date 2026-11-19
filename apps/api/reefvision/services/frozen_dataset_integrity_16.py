@@ -82,7 +82,6 @@ def validate_frozen_dataset_manifest(
             item.mask_annotation_count != 0
             or item.mask_annotation_snapshot_json
             or canonical_json_sha256(payload) != item.snapshot_sha256
-            or entries.get(item.image_id)
-            != {**payload, "snapshot_sha256": item.snapshot_sha256}
+            or entries.get(item.image_id) != {**payload, "snapshot_sha256": item.snapshot_sha256}
         ):
             raise ValidationError(message)
