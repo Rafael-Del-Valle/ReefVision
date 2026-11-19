@@ -92,6 +92,27 @@ def _valid_frozen_polygon(snapshot: dict[str, Any], width_px: Any, height_px: An
     return isfinite(area) and area >= 1.0 and area_pixels == max(1, round(area))
 
 
+def _valid_frozen_raster_mask(snapshot: dict[str, Any], width_px: Any, height_px: Any) -> bool:
+    """Require traceable source-pixel raster evidence without opening user assets.
+
+    A recorded SHA-256 is a provenance claim, not proof the file still exists
+    or that its bytes have not changed since snapshot creation.
+    """
+    if not _valid_detection_box(snapshot, width_px, height_px):
+        return False
+    path = snapshot.get("mask_path")
+    digest = snapshot.get("mask_content_sha256")
+    area = snapshot.get("area_pixels")
+    return (
+        type(path) is str
+        and bool(path.strip())
+        and type(digest) is str
+        and len(digest) == 64
+        and all(character in "0123456789abcdef" for character in digest)
+        and type(area) is int
+        and 0 < area <= width_px * height_px
+    )
+
 def _item_payload(item: DatasetVersionItem, *, schema_version: str) -> dict[str, Any]:
     """Reconstruct exactly the schema recorded by the version's producer."""
     payload: dict[str, Any] = {
@@ -202,6 +223,10 @@ def validate_frozen_dataset_manifest(
                     or (
                         snapshot["geometry_kind"] == "polygon"
                         and not _valid_frozen_polygon(snapshot, item.width_px, item.height_px)
+                    )
+                    or (
+                        snapshot["geometry_kind"] == "raster_mask"
+                        and not _valid_frozen_raster_mask(snapshot, item.width_px, item.height_px)
                     )
                     for snapshot in mask_snapshots
                 )
