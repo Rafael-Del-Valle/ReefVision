@@ -238,9 +238,7 @@ def test_omitted_mesh_route_uncertainty_remains_unknown_in_saved_workflow(
     assert connected["endpoint_chord_scale_uncertainty_m"] is None
     assert connected["path_edge_length_scale_intervals_m"] is None
     assert connected["path_cumulative_length_scale_intervals_m"] is None
-    assert (
-        "path_scale_interval_below_numeric_resolution" not in connected["path_qc_warnings"]
-    )
+    assert "path_scale_interval_below_numeric_resolution" not in connected["path_qc_warnings"]
     assert direct["provenance"]["calibration_verified"] is False
 
     project_id = str(create_project(client, "Mesh omitted path uncertainty")["id"])
@@ -282,9 +280,7 @@ def test_omitted_mesh_route_uncertainty_remains_unknown_in_saved_workflow(
     app = cast(FastAPI, client.app)
     hashes: list[str] = []
     for _ in range(2):
-        run = client.post(
-            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-        )
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
         assert process_workflow_run_job(
             app.state.settings, app.state.session_factory, str(run.json()["job_id"])
