@@ -1,0 +1,84 @@
+name: Windows Offline Original MSI Proof
+
+on:
+  pull_request:
+    branches: [codex/reefvision-1.6-integrated-workflows]
+    paths:
+      - '.github/workflows/windows-offline-install-proof.yml'
+      - '.github/offline-proof/**'
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Successful original Windows build workflow run ID
+        required: true
+        default: '44768324452'
+      source_sha:
+        description: Exact original build source commit
+        required: true
+        default: '83b0a98b278b98e779842538f811b2c6f5b6b4c8'
+      version:
+        description: Exact application and MSI version
+        required: true
+        default: '1.6.0'
+      schema:
+        description: Expected packaged database revision
+        required: true
+        default: 'b16_integrated_0001'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  offline-original-msi:
+    if: github.repository == 'Rafael-Del-Valle/ReefVision' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      RV_BUILD_RUN: ${{ inputs.build_run || '44768324452' }}
+      RV_SOURCE_SHA: ${{ inputs.source_sha || '83b0a98b278b98e779842538f811b2c6f5b6b4c8' }}
+      RV_VERSION: ${{ inputs.version || '1.6.0' }}
+      RV_SCHEMA: ${{ inputs.schema || 'b16_integrated_0001' }}
+      RV_PROOF_ROOT: C:/rv-offline-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: proof
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RV_SOURCE_SHA }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: source/apps/web/package-lock.json
+      - name: Stage the exact first-use driver and original installer online
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          npm --prefix source/apps/web ci --no-audit --no-fund
+          if ($LASTEXITCODE) { throw 'Could not stage the pinned browser driver.' }
+          ./proof/.github/offline-proof/stage-original.ps1 -RepositoryRoot ./source -RunId $env:RV_BUILD_RUN -SourceCommit $env:RV_SOURCE_SHA -Version $env:RV_VERSION -Root $env:RV_PROOF_ROOT
+      - name: Install, launch and reopen reviewed work with the hosted adapters disconnected
+        shell: pwsh
+        env:
+          RV_HOSTED_OFFLINE_PROOF: 'original-msi'
+        run: |
+          ./proof/.github/offline-proof/prove-offline.ps1 -RepositoryRoot ./source -SourceCommit $env:RV_SOURCE_SHA -Version $env:RV_VERSION -Schema $env:RV_SCHEMA -Root $env:RV_PROOF_ROOT
+      - name: Preserve proof and diagnostic logs after reconnect
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReefVision-Windows-Offline-MSI-Proof
+          path: |
+            ${{ env.RV_PROOF_ROOT }}/evidence/*.json
+            ${{ env.RV_PROOF_ROOT }}/evidence/*.jsonl
+            ${{ env.RV_PROOF_ROOT }}/evidence/*.log
+            ${{ env.RV_PROOF_ROOT }}/evidence/first-use-playwright/**/*-evidence.json
+            ${{ env.RV_PROOF_ROOT }}/profile/logs/backend.log
+          if-no-files-found: warn
