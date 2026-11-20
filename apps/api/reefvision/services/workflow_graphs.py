@@ -208,6 +208,7 @@ _ACTIONS: dict[str, str] = {
     "monitoring_assessment": "Assess pinned source observations and propose alerts.",
     "monitoring_project_summary": "Read a saved monitoring comparison and its attributed reviews.",
     "workflow_schedule_receipt": "Verify one completed schedule occurrence and its artifacts.",
+    "underwater_adjustment": "Verify and replay the original and output of one saved adjustment.",
     "temporal_reefpose_dataset": "Freeze or load a recording-group-split temporal pose dataset.",
     "temporal_reefpose_training": "Train or replay a native temporal pose checkpoint.",
     "temporal_reefpose_inference": "Refine video pose observations for explicit review.",
