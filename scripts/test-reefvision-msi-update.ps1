@@ -421,7 +421,8 @@ try {
             $stdoutPath = Join-Path $root ('action-stdout-' + [guid]::NewGuid().ToString('N') + '.txt')
             $stderrPath = Join-Path $root ('action-stderr-' + [guid]::NewGuid().ToString('N') + '.txt')
             $arguments = '-NoLogo -NoProfile -ExecutionPolicy Bypass -File "' + $commandScript + '" ' + $case.Options
-            $child = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -PassThru -Wait `\n                -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+            $child = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -PassThru -Wait `
+                -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
             $commandOutput = (Get-Content -LiteralPath $stdoutPath -Raw) +
                 (Get-Content -LiteralPath $stderrPath -Raw)
             if ($child.ExitCode -eq 0 -or -not $commandOutput.Contains($case.Message)) {
