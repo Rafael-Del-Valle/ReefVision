@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T07:29:00Z`
+Updated: `2026-11-20T09:37:00Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -788,6 +788,7 @@ Evidence:
 - `windows_installed`: The local MSI built from 92e355b6a restored a verified backup created by the accepted f44053a90 executable through the production Restore action. IDs, source bytes, scientific records and checkpoint survived upgrade and Project Exchange. The old executable refused the newer database unchanged and wrote successfully in the recovered 1.3 profile. The material was a generated fixture. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/92#issuecomment-7032104053` (`rv14-rich-87-restore`)
 - `windows_installed`: On a disposable profile, the official 1b0f29cff sidecar migrated the accepted 1.3 fixture, exchanged its reviewed data and model hash, and returned HTTP 200 for managed restore. The original 1.3 binary preserved the upgraded database on refusal and wrote successfully after recovery. All five authenticated backup entries were rehashed. — `docs/REEFVISION_1.4.0_REPORT.md#official-windows-build-and-recovery-at-1b0f29cff` (`rv14-official-f440-rich-restore`)
 - `windows_installed`: The official 1b0f29cff six-CAB MSI passed ten GUI journeys and all fourteen exercised install, restart, Exchange, uninstall and retention stages using its ordinary Windows profile. Byte-verified native downloads succeeded with the default inspector open. The four predecessor upgrades passed separately. Representative prior-user profiles remain open. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44693974894` (`rv14-ordinary-profile-installed-ten`)
+- `windows_installed`: Official 1.4 MSI plus six cabinets. Clean install, backup recovery and four supported upgrades passed on disposable generated profiles. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44697377337` (`rv14-lineage-upgrade-msi-fb2276c87`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -932,6 +933,7 @@ Evidence:
 - Dependencies: `rv13-study-assignments`, `rv11-repeated-measures-analysis`
 - Entry point: Research → Study design
 - Workflow Builder: `required`
+- Missing input: A prespecified representative study with independent units and calibrated repeated visits, allocation, sampling effort and independent statistical review.
 
 Acceptance checks:
 
@@ -939,8 +941,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: 15 integrated source tests covered freeze, original-growth recomputation, two successive Exchange copies, new revisions and tamper rejection. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/2e22871795784f528c9ef27511d7cd93f9d01afb` (`rv15-experimental-design-design-exchange`)
+- `browser`: Fixture roster and calibrated two-visit analysis frozen, reopened, exported and replayed twice. Receipt SHA-256 20a008c011cd3987e63588134af72e125867746f31a23a1f605e4b5a57aa0577. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/95` (`rv15-experimental-design-design-replay`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -959,8 +961,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: PNG/MP4 bytes, known and unknown clocks, reviewed conflicts, canonical media and the original report checksum survived two project copies. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/d3ef97c768e41c9c6b910da90af0fea6308cce3a` (`rv15-field-capture-field-exchange`)
+- `browser`: Project Field capture imported, reconciled and replayed a transferred batch twice. Receipt SHA-256 17280d51612a426c43902079c0e72db3637514765d87b31b05b83c8012ee341b. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/95` (`rv15-field-capture-field-replay`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -979,8 +981,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Saved selection pins bytes, class map, provider, runtime, device and effective settings. Queued jobs and graph replay reject changed weights. Two imports restored live class/model references. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/886973882c5519c0975ba4e680b4fe910450d2a6` (`rv15-model-catalog-runtime-runtime-pin`)
+- `browser`: Direct Model Hub inference and two Detection Inference graph runs matched the source-pixel boxes, labels and scores for all nine CPU and ten CUDA predictions to six decimals on independently trained fixture checkpoints. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/95` (`rv15-model-catalog-runtime-direct-graph-replay`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -992,6 +994,7 @@ Evidence:
 - Dependencies: `rv12-human-model-counts`, `rv13-heldout-agreement`, `rv15-model-catalog-runtime`
 - Entry point: Models & AI → Model comparison
 - Workflow Builder: `required`
+- Missing input: Independent reviewed stills and held-out animal recordings, compatible registered checkpoints, frozen groups and prespecified scoring thresholds.
 
 Acceptance checks:
 
@@ -999,7 +1002,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
+- `source`: Two distinct CPU-trained checkpoints scored three untouched originals in two frozen groups. Fixture SHA-256 cdae9f6bcbfe7e78f29a547cc69f9e235970206bce9bb1c574035989c493b987. Source tests also cover instance and semantic masks. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/6b762ff4ede777ef9a57ae8e630b6a9c692bfdbf` (`rv15-model-comparison-paired-stills`)
+- `source`: Pose, tracking and event comparisons preserve held-out recording groups, prove checkpoint lineage, reject changed observations and retain comparable outcomes after Exchange. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/fa3f3c4cd0ed6455eeb344a9bae8ca7c6f598bb2` (`rv15-model-comparison-paired-video`)
 - `browser`: none recorded
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
@@ -1052,6 +1056,7 @@ Evidence:
 - Dependencies: `rv13-acquisition-qc`
 - Entry point: Review → Reviewer lab
 - Workflow Builder: `required`
+- Missing input: A frozen representative sample, task rubric, independent reviewers and adjudicator, and a prespecified agreement threshold.
 
 Acceptance checks:
 
@@ -1059,8 +1064,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Separate reviewer roles submitted independent decisions, followed by attributed adjudication and an immutable agreement report. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/ac87ce0aca0766686af72be34be6c3d71ee196ef` (`rv15-reviewer-lab-blinded-ledger`)
+- `browser`: Two blinded fixture roles agreed on one of two images. Cohen's kappa was zero. Two saved replays preserved the sealed result. Receipt SHA-256 71f638f5ed0ddbf28c99b3292d55a8f8fc1b065c55b5fc6b54c4d59ce809f0ed. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/95` (`rv15-reviewer-lab-role-replay`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded

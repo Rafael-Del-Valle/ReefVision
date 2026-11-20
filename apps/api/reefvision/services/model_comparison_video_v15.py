@@ -73,13 +73,13 @@ def _index(rows: list[Row], key: str) -> dict[str, Row]:
 
 
 def _registered_model(
-    session: Session, project_id: str, model_id: str, report: Row
+    session: Session, project_id: str, model_id: str, report: Row, *, historical: bool
 ) -> ModelRegistration:
     model = source_model(session, project_id, model_id)
     models = report["models"]
     if model.task != "pose" or set(models) != {model_id}:
         raise ValidationError("The scored job must bind exactly the selected pose checkpoint")
-    if (model.metadata_json or {}).get("exchange_media_missing") is True:
+    if not historical and (model.metadata_json or {}).get("exchange_media_missing") is True:
         raise ValidationError(
             "The selected checkpoint weights were omitted from the restored project"
         )
@@ -90,7 +90,7 @@ def _registered_model(
 
 
 def _held_out_groups(
-    session: Session, project_id: str, frozen: list[Row]
+    session: Session, project_id: str, frozen: list[Row], *, historical: bool
 ) -> tuple[set[str], dict[str, VideoAsset]]:
     partitions: dict[str, str] = {}
     animals: dict[str, str] = {}
@@ -141,7 +141,7 @@ def _held_out_groups(
                 "Held-out navigation requires the original scoped video geometry and hash"
             )
         metadata = video.metadata_json or {}
-        if metadata.get("exchange_media_missing") is True:
+        if not historical and metadata.get("exchange_media_missing") is True:
             raise ValidationError(
                 "The original held-out video was omitted from the restored project"
             )
@@ -615,6 +615,8 @@ def _compare_video(
     task: VideoTask,
     source_ids: Sequence[str],
     model_ids: Sequence[str],
+    *,
+    historical: bool,
 ) -> Row:
     if (
         len(source_ids) != 2
@@ -656,9 +658,11 @@ def _compare_video(
         raise ValidationError(
             "The evaluation reference is not the complete immutable held-out cohort"
         )
-    groups, videos = _held_out_groups(session, project_id, reference.manifest["recordings"])
+    groups, videos = _held_out_groups(
+        session, project_id, reference.manifest["recordings"], historical=historical
+    )
     first_model, second_model = (
-        _registered_model(session, project_id, model_id, report)
+        _registered_model(session, project_id, model_id, report, historical=historical)
         for model_id, report in zip(model_ids, pair, strict=True)
     )
     if first_model.sha256 == second_model.sha256:
@@ -749,12 +753,16 @@ def compare_video_models(
     task: VideoTask,
     source_ids: Sequence[str],
     model_ids: Sequence[str],
+    *,
+    historical: bool = False,
 ) -> dict[str, Any]:
     """Return comparable held-out observations using original scored data and model identity."""
     if task not in ("pose", "tracking", "event"):
         raise ValidationError("Unknown held-out video comparison task")
     try:
-        return _compare_video(session, project_id, task, source_ids, model_ids)
+        return _compare_video(
+            session, project_id, task, source_ids, model_ids, historical=historical
+        )
     except (KeyError, TypeError, ValueError, IndexError, OverflowError, ZeroDivisionError) as exc:
         raise ValidationError(
             "Frozen video comparison evidence is incomplete or malformed"

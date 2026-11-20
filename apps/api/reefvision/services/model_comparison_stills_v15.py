@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
+from datetime import datetime
 from math import dist, isfinite
 from statistics import fmean
 from typing import Any, Literal
@@ -13,6 +14,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
@@ -32,6 +34,7 @@ from reefvision.domain.annotation_comparison import (
 )
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.jobs.inference import process_inference_job
+from reefvision.repositories.jobs import paired_owner_active
 from reefvision.schemas.paired_growth_contrast import Digest
 from reefvision.schemas.static_comparison import (
     ReferenceAnnotation,
@@ -82,9 +85,18 @@ class ImageTruth:
 
 @dataclass(frozen=True)
 class ModelOutputs:
+    job_id: str
     by_image: dict[str, list[PredictionProposal]]
     invalid_images: set[str]
     digest: str
+
+
+@dataclass(frozen=True)
+class RecordedImageRuns:
+    job_ids: tuple[str, str]
+    read_raster: Callable[[str], bytes]
+    original_ids: Mapping[str, str]
+    cutoff: datetime
 
 
 def _dataset_items(session: Session, version: DatasetVersion) -> list[DatasetVersionItem]:
@@ -206,7 +218,7 @@ def _semantic_indices(model: ModelRegistration, labels: list[str]) -> dict[str, 
 
 def _model(
     session: Session,
-    settings: Settings,
+    settings: Settings | None,
     project_id: str,
     task: str,
     choice: ExecutionSelection,
@@ -221,7 +233,10 @@ def _model(
         raise ValidationError("The registered model tasks do not support this comparison")
     if registration.sha256 != choice.checkpoint_sha256:
         raise ConflictError("The comparison model checkpoint changed after review")
-    verify_static_content(settings, registration.managed_path, choice.checkpoint_sha256, fresh=True)
+    if settings is not None:
+        verify_static_content(
+            settings, registration.managed_path, choice.checkpoint_sha256, fresh=True
+        )
     labels, mapping = _model_mapping(registration)
     known = {str(value) for value in mapping.values() if value is not None}
     if not known or len(known) != len(labels) or not known.issubset(dataset_classes):
@@ -245,7 +260,7 @@ def _model(
 
 
 def _verify_image(
-    session: Session, settings: Settings, project_id: str, item: DatasetVersionItem
+    session: Session, settings: Settings | None, project_id: str, item: DatasetVersionItem
 ) -> None:
     asset = session.get(ImageAsset, item.image_id)
     if asset is None or asset.project_id != project_id:
@@ -256,7 +271,8 @@ def _verify_image(
         or asset.height_px != item.height_px
     ):
         raise ValidationError("The original image differs from the frozen reference")
-    verify_static_content(settings, asset.managed_path, item.image_sha256, fresh=True)
+    if settings is not None:
+        verify_static_content(settings, asset.managed_path, item.image_sha256, fresh=True)
 
 
 def _box(
@@ -269,7 +285,7 @@ def _box(
 
 
 def _mask(
-    settings: Settings,
+    read_raster: Callable[[str], bytes],
     identifier: str,
     item: DatasetVersionItem,
     class_id: str,
@@ -279,18 +295,19 @@ def _mask(
         snapshot,
         width=item.width_px,
         height=item.height_px,
-        read_managed_raster=lambda path: read_comparison_raster(settings, path),
+        read_managed_raster=read_raster,
     )
     return MaskEvidence(identifier, item.image_id, class_id, item.width_px, item.height_px, runs)
 
 
 def _truth(
     session: Session,
-    settings: Settings,
+    settings: Settings | None,
     project_id: str,
     item: DatasetVersionItem,
     task: str,
     classes: set[str],
+    read_raster: Callable[[str], bytes],
 ) -> ImageTruth:
     if item.image_annotation_status != "reviewed":
         return ImageTruth(item, [], [], "Frozen image is excluded or was not human reviewed")
@@ -325,7 +342,9 @@ def _truth(
                 for row in snapshots
             ]
             return ImageTruth(item, boxes, [])
-        masks = [_mask(settings, row["id"], item, row["label_class_id"], row) for row in snapshots]
+        masks = [
+            _mask(read_raster, row["id"], item, row["label_class_id"], row) for row in snapshots
+        ]
         return ImageTruth(item, [], masks)
     except (ValidationError, NotFoundError) as exc:
         return ImageTruth(item, [], [], str(exc))
@@ -347,35 +366,89 @@ def _prediction_fields(row: PredictionProposal) -> dict[str, Any]:
     }
 
 
-def _run_side(
+def _require_active_owner(session: Session, project_id: str, owner_run_id: str | None) -> None:
+    if owner_run_id is not None and not paired_owner_active(session, project_id, owner_run_id):
+        raise ConflictError("The paired comparison was stopped before its inference completed")
+
+
+def _inference_child(
     session: Session,
-    settings: Settings,
     project_id: str,
-    model: ModelEvidence,
-    image_ids: list[str],
-) -> ModelOutputs:
-    choice = model.choice.model_dump(mode="json")
-    request = {key: value for key, value in choice.items() if key != "checkpoint_sha256"}
+    request: dict[str, Any],
+    owner_run_id: str | None,
+    reference_sha256: str,
+) -> Job:
+    deduplication_key = None
+    if owner_run_id is not None:
+        request["paired_owner_run_id"] = owner_run_id
+        deduplication_key = canonical_json_sha256(
+            {
+                "method": "paired-image-inference.v1",
+                "project_id": project_id,
+                "reference_sha256": reference_sha256,
+                "request": request,
+            }
+        )
+        existing = session.scalar(select(Job).where(Job.deduplication_key == deduplication_key))
+        if existing is not None:
+            return existing
     job = Job(
         project_id=project_id,
         job_type="inference",
         status="queued",
         progress_current=0,
-        progress_total=len(image_ids),
-        request_json={
-            **request,
-            "model_task": model.task,
-            "image_ids": image_ids,
-            "evaluation_only": True,
-        },
+        progress_total=len(request["image_ids"]),
+        request_json=request,
+        deduplication_key=deduplication_key,
     )
     session.add(job)
-    session.commit()
-    job_id = job.id
-    process_inference_job(
-        settings, sessionmaker(bind=session.get_bind(), expire_on_commit=False), job_id
-    )
-    session.expire_all()
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        if deduplication_key is not None:
+            existing = session.scalar(select(Job).where(Job.deduplication_key == deduplication_key))
+            if existing is not None:
+                return existing
+        raise
+    return job
+
+
+def _run_side(
+    session: Session,
+    settings: Settings | None,
+    project_id: str,
+    model: ModelEvidence,
+    image_ids: list[str],
+    *,
+    recorded_job_id: str | None = None,
+    original_ids: Mapping[str, str] | None = None,
+    owner_run_id: str | None = None,
+    reference_sha256: str,
+) -> ModelOutputs:
+    choice = model.choice.model_dump(mode="json")
+    request = {key: value for key, value in choice.items() if key != "checkpoint_sha256"}
+    expected_request = {
+        **request,
+        "model_task": model.task,
+        "image_ids": image_ids,
+        "evaluation_only": True,
+    }
+    if recorded_job_id is not None:
+        job_id = recorded_job_id
+    else:
+        assert settings is not None
+        _require_active_owner(session, project_id, owner_run_id)
+        job = _inference_child(
+            session, project_id, expected_request, owner_run_id, reference_sha256
+        )
+        job_id = job.id
+        if job.status == "queued":
+            process_inference_job(
+                settings, sessionmaker(bind=session.get_bind(), expire_on_commit=False), job_id
+            )
+            session.expire_all()
+        _require_active_owner(session, project_id, owner_run_id)
     finished = session.get(Job, job_id)
     if finished is None or finished.status != "succeeded":
         detail = finished.error_message if finished is not None else "inference receipt missing"
@@ -387,13 +460,30 @@ def _run_side(
         select(PredictionProposal).where(PredictionProposal.inference_job_id == job_id)
     ).all()
     if (
-        finished.progress_current != len(image_ids)
-        or finished.request_json.get("image_ids") != image_ids
+        finished.project_id != project_id
+        or finished.job_type != "inference"
+        or finished.progress_current != len(image_ids)
+        or finished.progress_total != len(image_ids)
+        or any(
+            finished.request_json.get(key) != value
+            for key, value in expected_request.items()
+            if key != "image_ids"
+        )
+        or sorted(finished.request_json.get("image_ids", [])) != sorted(image_ids)
         or result.get("proposal_count") != len(rows)
     ):
         raise ValidationError("Pinned inference output is incomplete")
+    archived = original_ids or {}
+
+    def digest_fields(row: PredictionProposal) -> dict[str, Any]:
+        fields = _prediction_fields(row)
+        # The reviewed model's label map independently binds the class identity.
+        fields.pop("class_id")
+        fields["image_id"] = archived.get(row.image_id, row.image_id)
+        return fields
+
     ranked = sorted(
-        ((canonical_json_sha256(_prediction_fields(row)), row) for row in rows),
+        ((canonical_json_sha256(digest_fields(row)), row) for row in rows),
         key=lambda item: item[0],
     )
     by_image: dict[str, list[PredictionProposal]] = defaultdict(list)
@@ -437,13 +527,22 @@ def _run_side(
             else allowed
         )
     return ModelOutputs(
+        job_id,
         dict(by_image),
         invalid,
         canonical_json_sha256(
             {
-                "choice": choice,
+                "choice": {
+                    **choice,
+                    **{
+                        key: archived.get(choice[key], choice[key])
+                        for key in ("model_id", "runtime_selection_id")
+                    },
+                },
                 "predictions": [digest for digest, _ in ranked],
-                "invalid_images": sorted(invalid),
+                "invalid_images": sorted(
+                    archived.get(identifier, identifier) for identifier in invalid
+                ),
             }
         ),
     )
@@ -496,7 +595,7 @@ def _box_values(
 
 
 def _mask_values(
-    settings: Settings,
+    read_raster: Callable[[str], bytes],
     image: ImageTruth,
     predictions: list[PredictionProposal],
     *,
@@ -504,7 +603,7 @@ def _mask_values(
 ) -> dict[str, tuple[str, float | None]]:
     masks = [
         _mask(
-            settings,
+            read_raster,
             f"prediction-{index}",
             image.item,
             str(row.label_class_id),
@@ -539,7 +638,7 @@ def _mask_values(
 
 def _observation(
     session: Session,
-    settings: Settings,
+    settings: Settings | None,
     project_id: str,
     task: str,
     image: ImageTruth,
@@ -547,6 +646,7 @@ def _observation(
     second: ModelOutputs,
     *,
     instances: bool,
+    read_raster: Callable[[str], bytes],
 ) -> dict[str, Any]:
     identifier = image.item.image_id
     result: dict[str, Any] = {"media_kind": "image", "media_id": identifier, "metrics": []}
@@ -563,7 +663,7 @@ def _observation(
             _box_values(image, output.by_image.get(identifier, []))
             if task == "detector"
             else _mask_values(
-                settings, image, output.by_image.get(identifier, []), instances=instances
+                read_raster, image, output.by_image.get(identifier, []), instances=instances
             )
             for output in (first, second)
         ]
@@ -578,12 +678,16 @@ def _observation(
 
 def compare_image_models(
     session: Session,
-    settings: Settings,
+    settings: Settings | None,
     project_id: str,
     task: str,
     source_ids: Mapping[str, Any],
     selections: Sequence[Mapping[str, Any]],
+    *,
+    recorded: RecordedImageRuns | None = None,
+    owner_run_id: str | None = None,
 ) -> dict[str, Any]:
+    _require_active_owner(session, project_id, owner_run_id)
     if (
         task not in {"detector", "mask"}
         or set(source_ids) != {"dataset_version_id"}
@@ -610,15 +714,23 @@ def compare_image_models(
         references = [_lineage_reference(item, task) for item in items]
     except (AttributeError, ValueError, KeyError, TypeError) as exc:
         raise ValidationError("Frozen annotation provenance is malformed") from exc
-    selection_jobs = list(
-        session.scalars(
-            select(Job).where(
-                Job.project_id == project_id,
-                Job.status == "succeeded",
-                Job.job_type.in_(("learning_evaluation", "segmentation_learning_evaluation")),
-            )
-        )
+    if recorded is None:
+        assert settings is not None
+
+        def read_live_raster(path: str) -> bytes:
+            return read_comparison_raster(settings, path)
+
+        read_raster: Callable[[str], bytes] = read_live_raster
+    else:
+        read_raster = recorded.read_raster
+    selection_query = select(Job).where(
+        Job.project_id == project_id,
+        Job.status == "succeeded",
+        Job.job_type.in_(("learning_evaluation", "segmentation_learning_evaluation")),
     )
+    if recorded is not None:
+        selection_query = selection_query.where(Job.completed_at <= recorded.cutoff)
+    selection_jobs = list(session.scalars(selection_query))
     left, right = [
         _model(session, settings, project_id, task, choice, references, selection_jobs, classes)
         for choice in choices
@@ -657,7 +769,8 @@ def compare_image_models(
                     "Recorded training or model selection has sampling group overlap"
                 )
     truth = [
-        _truth(session, settings, project_id, item, task, comparison_classes) for item in items
+        _truth(session, settings, project_id, item, task, comparison_classes, read_raster)
+        for item in items
     ]
     if not any(image.boxes or image.masks for image in truth):
         raise ValidationError(
@@ -665,7 +778,18 @@ def compare_image_models(
         )
     targets = [image.item.image_id for image in truth if image.exclusion is None]
     first, second = (
-        _run_side(session, settings, project_id, model, targets) for model in (left, right)
+        _run_side(
+            session,
+            settings,
+            project_id,
+            model,
+            targets,
+            recorded_job_id=recorded.job_ids[index] if recorded else None,
+            original_ids=recorded.original_ids if recorded else None,
+            owner_run_id=owner_run_id,
+            reference_sha256=reference_sha256,
+        )
+        for index, model in enumerate((left, right))
     )
     for model in (left, right):
         registration = session.get(ModelRegistration, str(model.choice.model_id))
@@ -684,7 +808,15 @@ def compare_image_models(
         assert image.item.group_key is not None
         groups[image.item.group_key].append(
             _observation(
-                session, settings, project_id, task, image, first, second, instances=instances
+                session,
+                settings,
+                project_id,
+                task,
+                image,
+                first,
+                second,
+                instances=instances,
+                read_raster=read_raster,
             )
         )
     held_out = left.lineage.status == right.lineage.status == "held_out"
@@ -712,6 +844,7 @@ def compare_image_models(
     return {
         "reference_id": dataset_id,
         "reference_sha256": reference_sha256,
+        "inference_job_ids": [first.job_id, second.job_id],
         "source_sha256": [
             left.choice.checkpoint_sha256,
             right.choice.checkpoint_sha256,
