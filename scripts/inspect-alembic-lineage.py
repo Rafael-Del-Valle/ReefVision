@@ -214,11 +214,14 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
     # Extra AFTER/BEFORE/INSTEAD OF triggers can change future scientific
     # records or reviewer events while every column, FK and index still
     # matches. Fail closed without reading/reporting potentially private SQL.
-    if db.execute(
-        "SELECT 1 FROM sqlite_master WHERE type = 'trigger' "
-        "AND tbl_name = ? COLLATE NOCASE LIMIT 1",
-        (table,),
-    ).fetchone() is not None:
+    if (
+        db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'trigger' "
+            "AND tbl_name = ? COLLATE NOCASE LIMIT 1",
+            (table,),
+        ).fetchone()
+        is not None
+    ):
         return False
     quoted = '"' + table.replace('"', '""') + '"'
     columns = list(db.execute(f"PRAGMA table_xinfo({quoted})"))
