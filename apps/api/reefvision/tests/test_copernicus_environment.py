@@ -225,6 +225,45 @@ def test_invalid_provider_grid_never_persists_scientific_records(
     assert client.get(f"/api/v1/projects/{project['id']}/scientific-records").json()["total"] == 0
 
 
+@pytest.mark.parametrize("omission", ["variable", "cell"])
+def test_incomplete_grid_refresh_preserves_cached_subset(
+    client, test_settings, monkeypatch, omission
+):
+    project = create_project(client)
+    raw = raw_fixture(monkeypatch)
+    raw["samples"][0]["value"] = None
+    with client.app.state.session_factory() as session:
+        initial = CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: raw
+        ).acquire(project["id"], request())
+    assert initial.skipped_missing == 1
+    assert {record.variable for record in initial.items} == {
+        "current_northward_velocity",
+        "water_potential_temperature",
+        "practical_salinity",
+    }
+
+    incomplete = deepcopy(raw)
+    missing_cell = incomplete["samples"].pop(0)
+    if omission == "cell":
+        incomplete["samples"].append({**missing_cell, "latitude": 32.6, "value": 3.0})
+    with client.app.state.session_factory() as session, pytest.raises(ValidationError):
+        CopernicusEnvironmentService(session, test_settings, fetch=lambda *_: incomplete).acquire(
+            project["id"], request(refresh=True)
+        )
+
+    offline = client.post(
+        f"/api/v1/projects/{project['id']}/environment/copernicus",
+        json=request(offline=True).model_dump(mode="json"),
+    )
+    assert offline.status_code == 200, offline.text
+    assert offline.json()["skipped_missing"] == 1
+    assert offline.json()["items"] == initial.model_dump(mode="json")["items"]
+    assert offline.json()["fetched_at"] == initial.model_dump(mode="json")["fetched_at"]
+    scientific_records = client.get(f"/api/v1/projects/{project['id']}/scientific-records")
+    assert scientific_records.json()["total"] == 3
+
+
 def test_missing_copernicus_configuration_fails_without_leaking_secrets(client):
     project = create_project(client)
     response = client.post(
