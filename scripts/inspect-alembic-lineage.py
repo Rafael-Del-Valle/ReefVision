@@ -202,6 +202,111 @@ _POST_0037_TABLE_CONTRACTS = {
 }
 
 
+
+def _sqlite_schema_tokens(ddl: str) -> tuple[str, ...] | None:
+    """Lex table DDL while preserving SQL literal values and ignoring comments.
+
+    SQLite has no CHECK-constraint PRAGMA. This deliberately conservative
+    parser is only used to reject drift, never to authorize a migration.
+    """
+    tokens: list[str] = []
+    cursor = 0
+    while cursor < len(ddl):
+        char = ddl[cursor]
+        if char.isspace():
+            cursor += 1
+            continue
+        if ddl.startswith("--", cursor):
+            end = ddl.find("\n", cursor + 2)
+            cursor = len(ddl) if end < 0 else end + 1
+            continue
+        if ddl.startswith("/*", cursor):
+            end = ddl.find("*/", cursor + 2)
+            if end < 0:
+                return None
+            cursor = end + 2
+            continue
+        if char in ("'", '"', "`", "["):
+            closer = "]" if char == "[" else char
+            cursor += 1
+            payload: list[str] = []
+            while cursor < len(ddl):
+                if ddl[cursor] == closer:
+                    if cursor + 1 < len(ddl) and ddl[cursor + 1] == closer:
+                        payload.append(closer)
+                        cursor += 2
+                        continue
+                    cursor += 1
+                    break
+                payload.append(ddl[cursor])
+                cursor += 1
+            else:
+                return None
+            value = "".join(payload)
+            tokens.append("'" + value + "'" if char == "'" else value.upper())
+            continue
+        if char.isalnum() or char in "_$":
+            end = cursor + 1
+            while end < len(ddl) and (ddl[end].isalnum() or ddl[end] in "_$"):
+                end += 1
+            tokens.append(ddl[cursor:end].upper())
+            cursor = end
+            continue
+        tokens.append(char)
+        cursor += 1
+    return tuple(tokens)
+
+
+def _original_0038_check_contract_matches(table: str, ddl: str) -> bool:
+    """Reject changed QC event vocabularies and unexpected scientific CHECKs.
+
+    The QC constraint was intentionally expanded in revisions 0039 and 0040,
+    so each exact historically declared vocabulary remains recognizable.
+    This does NOT prove the correct revision was actually applied.
+    """
+    tokens = _sqlite_schema_tokens(ddl)
+    if not tokens:
+        return False
+    # These source migrations declare no table-level collation overrides or
+    # alternate SQLite constraint conflict actions. Both could silently alter
+    # future reviewer events or biological observations.
+    if "COLLATE" in tokens or any(
+        tokens[i : i + 2] == ("ON", "CONFLICT") for i in range(len(tokens) - 1)
+    ):
+        return False
+    checks = [i for i, token in enumerate(tokens) if token == "CHECK"]
+    if table != "review_queue_item_events":
+        return not checks
+    if len(checks) != 1 or checks[0] < 2:
+        return False
+    # 0038 -> 0039 -> 0040/0041; never accept an arbitrary extra category,
+    # a missing constraint or a second constraint suppressing valid events.
+    histories = (
+        ("comment", "assign", "unassign"),
+        ("comment", "assign", "unassign", "triage_start", "triage_skip", "triage_return"),
+        (
+            "comment",
+            "assign",
+            "unassign",
+            "triage_start",
+            "triage_skip",
+            "triage_return",
+            "triage_complete",
+        ),
+    )
+    start = ("CONSTRAINT", "CK_REVIEW_QUEUE_ITEM_EVENT_TYPE", "CHECK", "(", "EVENT_TYPE", "IN", "(")
+    for history in histories:
+        values: list[str] = []
+        for event in history:
+            if values:
+                values.append(",")
+            values.append(f"'{event}'")
+        expected = start + tuple(values) + (")", ")")
+        if tokens[checks[0] - 2 : checks[0] - 2 + len(expected)] == expected:
+            return True
+    return False
+
+
 def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> bool:
     """Check fixed migration DDL without exposing SQL, identities or row data.
 
@@ -222,6 +327,16 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
         ).fetchone()
         is not None
     ):
+        return False
+    # table_xinfo, foreign_key_list and index_list cannot reveal CHECK clauses
+    # or nonindexed column collations. Compare only known source constraints.
+    ddl_row = db.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ? COLLATE NOCASE",
+        (table,),
+    ).fetchone()
+    if ddl_row is None or not isinstance(ddl_row[0], str):
+        return False
+    if not _original_0038_check_contract_matches(table, ddl_row[0]):
         return False
     quoted = '"' + table.replace('"', '""') + '"'
     columns = list(db.execute(f"PRAGMA table_xinfo({quoted})"))
