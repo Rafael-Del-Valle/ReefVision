@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T19:25:34Z`
+Updated: `2026-11-20T19:36:09Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1199,6 +1199,7 @@ Evidence:
 - `windows_installed`: The corrected original MSI passed standard-user first use, the compact keyboard handoff, offline export and reopening after restart. The published 1.0.3 and validated 1.5 upgrades passed, including the old-reader rollback. — `docs/validation/installed-workflows-a580042e8.json` (`rv16-onboarding-installer-original-a580042e8`)
 - `physical_hardware`: The native packaged first launch at 960 by 640 CSS pixels and emulated 150% scaling preserved keyboard focus and dismissal. The researcher imported image and video, edited, undid and redid, reviewed, exported YOLO and reopened. The browser attempted zero external HTTP requests. A separate eight-project 1.5 backup reopened with all 303 project files. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-onboarding-installer-physical-83b0`)
 - `physical_hardware`: The locally built Windows desktop restored both generations, preserved both historical metadata digests and reopened all seven projects in a separate launch. — `docs/validation/restored-projects-3a9ce1622.json` (`rv16-repeated-recovery-local-production-3a9`)
+- `physical_hardware`: The desktop extracted from the original GitHub MSI restored both generations from System status and reopened the existing QC project on physical Windows. — `docs/validation/restored-projects-3a9ce1622.json` (`rv16-repeated-recovery-original-windows-3a9`)
 - `representative_data`: none recorded
 
 ### rv16-qc-queues-bulk-retry: Prioritized QC queues, reviewer assignment, bulk actions, and idempotent retry

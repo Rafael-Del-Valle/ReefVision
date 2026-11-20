@@ -194,6 +194,16 @@
         "external_cabs": 5,
         "total_payload_bytes": 2978411903,
         "checksums_sha256": "70b7e6aa5ae92a7df7e79034fc2b131a9be386ca7a5a4d9a5c7be87ac5d960c1",
+        "executables": {
+          "runtime_surface": "administratively_extracted_windows_msi",
+          "version": "1.6.0",
+          "workflow_run_id": null,
+          "transport_receipt_sha256": null,
+          "extraction_receipt_sha256": "d25bbe91f7ddcefebba9a852f9c4de9ec924c7107dc029b0c99ca8e4e3f80b47",
+          "desktop_sha256": "6a1cadf2032023ba18f59f1290dd4707f917970d4f6a9426e2655725364a3bb4",
+          "sidecar_sha256": "4cdee2047daa59d6c6207369fbca401fcf8d7b4d5693b91a0cb570a95db8f18a",
+          "provenance_sha256": "bf9be1f8801bc83586542a13adaa8b6e69a9deb583f72f2edbfe44138273d8bd"
+        },
         "payload-audit": {
           "result": "pass",
           "counts": {
@@ -267,6 +277,148 @@
         "project_files_sha256": "30bc3759eefe2ad3446d42d85e0c582b06520dd7bf76fd2cf22d8b492f933be6",
         "tables_checked": 109,
         "raw_ledger_sha256": "25c44b08f40518dcd26c0a484779f48e0aad132a134e31d163875b9238aad360"
+      }
+    },
+    "original-windows": {
+      "raw_receipt_sha256": "c9fa7406f94d5afaefb6f81eec5619f6038b3bf08412ab17a6fa3dfdbd3dfb86",
+      "surface": "tauri-webview2",
+      "source_profile_unchanged_sha256": "0202b2d56533d1cb134099c3e53bd861698fbe1b67eb977b1bf3ef9153a6b763",
+      "source_and_fresh_backups": {
+        "original": {
+          "backup_id": "7438b6f8-4b5d-4463-b493-cb637f8a18c6",
+          "manifest_sha256": "e54f4229a70c75ec87eec1396c150fd82962867d7090fc92688fe5f930e342c4",
+          "archive_file_count": 38,
+          "verify_status": "valid",
+          "restore_job_id": "7087e402-d6f0-435b-8c8d-8a919a9c3824",
+          "status": "succeeded",
+          "old_metadata": {
+            "restore-receipt.json": "176a2d3440c7388df75ab5ec9b893650b4f9fe249507a11a92eb25e2a3e19299",
+            "restored-from-backup-complete.json": "b34e54c308fcc5d21336ba1cfc7599f75e8e2dfddc763b952e16219433ad0e57"
+          },
+          "receipt_path_shown_in_ui": "recoveries/retained-prior-archive/restore-receipt-2.json",
+          "new_receipt_sha256": "6bafdc897250f143c99937bb32877accb08f6150df08306963108ca06a46e896",
+          "new_marker_sha256": "07613410bfb1a7d1e52f5e437ec5e366f0c5f37fe5ef2f0024da4db31d591aaa"
+        },
+        "fresh": {
+          "backup_id": "c2e1cabc-5ff0-4972-8a21-d6163d2ab5f0",
+          "manifest_sha256": "34ee59e313c9de63f5c5d4de032c2989defe7b64185aeaed1d641c02cebba1bd",
+          "archive_file_count": 38,
+          "verify_status": "valid",
+          "restore_job_id": "cfdd3221-7d9c-42f1-826c-3e7ba36c5474",
+          "status": "succeeded",
+          "old_metadata": {
+            "restore-receipt.json": "176a2d3440c7388df75ab5ec9b893650b4f9fe249507a11a92eb25e2a3e19299",
+            "restored-from-backup-complete.json": "b34e54c308fcc5d21336ba1cfc7599f75e8e2dfddc763b952e16219433ad0e57"
+          },
+          "receipt_path_shown_in_ui": "recoveries/fresh-history-backup/restore-receipt-2.json",
+          "new_receipt_sha256": "ee1e701989ecc9ad722ada3898edc9aba972438553f0c92657e72b4e5fae264c",
+          "new_marker_sha256": "47e83bc608381259803668c12cf63d8da7d60731cfc64d46b182afa62010bc69"
+        }
+      },
+      "reopen": {
+        "projects": [
+          "22ab853e-f044-44bb-ad0c-8d6d9144f2c9",
+          "6d31c90c-0a7b-410c-b5fa-c8a6ed5fa042",
+          "89a257a8-8ff9-4534-af2d-e5eee73bf66f",
+          "8a580b82-f0b5-4ca0-8923-ef5992266a45",
+          "9937da15-a23f-41d3-adc6-4e1da24176b3",
+          "a7e63f55-7f03-4d2c-beb4-10800ad4e3a9",
+          "af85ca53-0281-449a-9cf6-756db541b756"
+        ],
+        "opened_project_id": "89a257a8-8ff9-4534-af2d-e5eee73bf66f",
+        "safe_mode": false,
+        "schema": "b16_integrated_0001"
+      },
+      "package": {
+        "source": "3a9ce1622e4f9e230e2ee14432ee7d2f32510870",
+        "version": "1.6.0",
+        "msi_sha256": "3b596ee3ba5e9188776cd3208245c277a72013877677c9a16e359ee6da04c3be",
+        "external_cabs": 5,
+        "total_payload_bytes": 2972654674,
+        "checksums_sha256": "53bf5185d40bae6d4273c4eda0442b59fdffa5488396801b42f4b93b29d37f5a",
+        "executables": {
+          "runtime_surface": "administratively_extracted_windows_msi",
+          "version": "1.6.0",
+          "workflow_run_id": 44798678615,
+          "transport_receipt_sha256": "107c7059fe602133f13e73efaf06624f82f6a125d903fafbf5dce83ae6948b42",
+          "extraction_receipt_sha256": "d11f8fdb548b6ec28c0edce087a778d302e02df3b747536d9856d0d2e64d74ff",
+          "desktop_sha256": "a99cfb431f1eb4923a64d79e423467fa9223291dc1cb628d9762d9375e4a6346",
+          "sidecar_sha256": "4f515488bc6e183bc07bb067424dacf576e0e2b615e03f0be42f460946b5dc30",
+          "provenance_sha256": "d4e53ebfebdf8201526fa7f58acd31392eceba6cdee12b5145e55313452ffb3c"
+        },
+        "payload-audit": {
+          "result": "pass",
+          "counts": {
+            "distribution_metadata": 57,
+            "entry_point_files": 14,
+            "model_manifest_assets": 0,
+            "model_manifest_provider_assets": 0,
+            "msi_cab_files": 19144,
+            "pyinstaller_outer_entries": 14,
+            "pyinstaller_pyz_archives": 1,
+            "pyinstaller_pyz_entries": 12045,
+            "zip_containers": 1,
+            "zip_members": 155
+          },
+          "provenance_sha256": "d4e53ebfebdf8201526fa7f58acd31392eceba6cdee12b5145e55313452ffb3c",
+          "findings": [],
+          "receipt_sha256": "3562fbefa4aa0c80082ec46ca4caaf49aa92fa97274d7e393eb7f3cf801b1a93"
+        },
+        "embedded-webview2": {
+          "binary": "MicrosoftEdgeWebView2RuntimeInstaller.exe",
+          "sha256": "47bc51387aff95c1275ce38cfbbb5fbab99b43b33214049877bbcdbcc7a970d5",
+          "bytes": 294099168,
+          "action": "InvokeStandalone",
+          "arguments": "/silent /install",
+          "condition": "NOT(REMOVE OR INSTALLED_WEBVIEW2_VERSION)",
+          "authenticode": {
+            "status": "Valid",
+            "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+            "thumbprint": "1C74821BF8D0EC04326C05EAED18ADB3841B44F9",
+            "version": "1.3.315.17"
+          },
+          "receipt_sha256": "3cb6438686b17ea1b4c2a926be93c804ecbe2363e7ec7f55d008dc76e28edcc0"
+        },
+        "smart-app-control": {
+          "edition": "Core",
+          "build": "26300",
+          "verified_and_reputable_policy_state": 0,
+          "signatures": [
+            {
+              "file": "ReefVision_1.6.0_x64_en-US.msi",
+              "sha256": "3b596ee3ba5e9188776cd3208245c277a72013877677c9a16e359ee6da04c3be",
+              "status": "NotSigned",
+              "signer": null
+            },
+            {
+              "file": "ReefVision.exe",
+              "sha256": "a99cfb431f1eb4923a64d79e423467fa9223291dc1cb628d9762d9375e4a6346",
+              "status": "NotSigned",
+              "signer": null
+            },
+            {
+              "file": "reefvision-api.exe",
+              "sha256": "4f515488bc6e183bc07bb067424dacf576e0e2b615e03f0be42f460946b5dc30",
+              "status": "NotSigned",
+              "signer": null
+            }
+          ],
+          "receipt_sha256": "5332f3525c4b75708111bfaf3ee1a6713a067921a043d38f1534929d361cde23"
+        }
+      },
+      "independent_fresh_copy_comparison": {
+        "backup_id": "c2e1cabc-5ff0-4972-8a21-d6163d2ab5f0",
+        "backup_manifest_sha256": "34ee59e313c9de63f5c5d4de032c2989defe7b64185aeaed1d641c02cebba1bd",
+        "archived_members": 38,
+        "archived_bytes": 4944493,
+        "database_sha256": "68328e685fa7ed4ae2aa69b52957fab6f1262543d189ad601c54e5b3b089eda9",
+        "schema": "b16_integrated_0001",
+        "sqlite_integrity_and_foreign_keys": "ok",
+        "table_inventory_sha256": "612bf8d44f35887a41b0290e86c0dc57ea3f881f356ad139a15235acac72e99e",
+        "project_files": 31,
+        "project_files_sha256": "30bc3759eefe2ad3446d42d85e0c582b06520dd7bf76fd2cf22d8b492f933be6",
+        "tables_checked": 109,
+        "raw_ledger_sha256": "b1b8106f573ebfd11324ce46b0f19441897180e45232015b8251a2337eca586e"
       }
     }
   },
