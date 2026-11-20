@@ -50,6 +50,7 @@ from reefvision.services.workflow_review import WorkflowReviewRequired
 from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
 from reefvision.services.workflow_schedule_receipt import execute_schedule_receipt
 from reefvision.services.workflow_study_design import execute_reviewed_study_design
+from reefvision.services.workflow_taxonomy import execute_detectability
 from reefvision.services.workflow_vlm import VlmClassDefinition, run_vlm_detection
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -82,6 +83,7 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "acquisition_capture_replay",
     "monitoring_assessment",
     "monitoring_project_summary",
+    "detectability_assessment",
     "workflow_schedule_receipt",
     "ecology_measurement_csv_export",
     "ecology_population_csv_export",
@@ -1176,6 +1178,7 @@ _ADAPTERS = {
     "acquisition_capture_replay": execute_acquisition_replay,
     "monitoring_assessment": execute_monitoring_assessment,
     "monitoring_project_summary": execute_monitoring_summary,
+    "detectability_assessment": execute_detectability,
     "workflow_schedule_receipt": execute_schedule_receipt,
     "ecology_event_summary": execute_event_summary,
     "research_publication_figure": execute_research_report,

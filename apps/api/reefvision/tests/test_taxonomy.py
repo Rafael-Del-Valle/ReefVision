@@ -190,3 +190,64 @@ def test_detectability_uses_repeated_known_positive_groups_and_excludes_gaps(
     assert export.status_code == 200
     assert export.json() == saved
     assert "attachment" in export.headers["Content-Disposition"]
+
+
+def test_saved_detectability_replays_same_cached_payload_twice(client: TestClient) -> None:
+    from reefvision.jobs.workflow import process_workflow_run_job
+    from reefvision.tests.test_workflow_execution_phase10 import _queue_run, _save_graph
+
+    project, _, _ = role_fixture(client)
+    root = f"/api/v1/projects/{project}"
+    result = successful(
+        client.post(
+            root + "/taxonomy/assessments",
+            json={
+                "scientific_name": "Plexaura homomalla",
+                "rank": "species",
+                "protocol": PROTOCOL,
+                "unit_type": "tank",
+                "minimum_effort_seconds": 5,
+                "window_start": START.isoformat(),
+                "window_end": (START + timedelta(hours=3)).isoformat(),
+            },
+        ),
+        201,
+    )
+    graph = {
+        "graph_id": "repeat-known-positive-assessment",
+        "name": "Repeat known-positive assessment",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "detectability",
+                "node_type": "detectability_assessment",
+                "parameters": {
+                    "assessment_id": result["id"],
+                    "assessment_sha256": result["result_sha256"],
+                },
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "project-detectability",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "detectability",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = _save_graph(client, project, graph)
+    state = client.app.state
+    evidence_hashes = set()
+    for _ in range(2):
+        queued = _queue_run(client, project, saved["id"])
+        job_id, run_id = str(queued["job_id"]), str(queued["id"])
+        assert process_workflow_run_job(state.settings, state.session_factory, job_id)
+        detail = successful(client.get("/api/v1/workflow-runs/" + run_id))
+        [artifact] = [
+            a for a in detail["artifacts"] if a["data_type"] == "detectability_assessment"
+        ]
+        assert artifact["payload_json"] == result
+        evidence_hashes.add(artifact["payload_sha256"])
+    assert evidence_hashes == {canonical_json_sha256(result)}
