@@ -71,12 +71,21 @@ def test_triangle_area_underflow_is_orientation_and_axis_invariant() -> None:
                 triangle_area(origin, first_vertex, last_vertex)
 
 
+@pytest.mark.parametrize("plane", ["xy", "yz", "zx"])
+@pytest.mark.parametrize("reverse_winding", [False, True])
 def test_underflow_fails_standalone_and_persisted_graph_without_artifact(
-    client: TestClient,
+    client: TestClient, plane: str, reverse_winding: bool
 ) -> None:
     project_id = str(create_project(client, "Triangle area underflow QC")["id"])
     base = f"/api/v1/projects/{project_id}"
     params = _parameters(1e-200)
+    params["vertices"] = {
+        "xy": [[0.0, 0.0, 0.0], [1e-200, 0.0, 0.0], [0.0, 1e-200, 0.0]],
+        "yz": [[0.0, 0.0, 0.0], [0.0, 1e-200, 0.0], [0.0, 0.0, 1e-200]],
+        "zx": [[0.0, 0.0, 0.0], [0.0, 0.0, 1e-200], [1e-200, 0.0, 0.0]],
+    }[plane]
+    if reverse_winding:
+        params["faces"] = [[0, 2, 1]]
     response = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert response.status_code == 400, response.text
     assert "area underflowed numeric precision" in response.text
