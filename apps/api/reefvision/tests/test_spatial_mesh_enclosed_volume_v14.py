@@ -284,22 +284,23 @@ def test_nonzero_volume_lost_to_float_cancellation_replays_saved_graph(
     )
     assert inward == pytest.approx(expected_volume, rel=1e-12, abs=0)
     # Exactly planar, nondegenerate coordinates must not invent an enclosed volume.
-    assert signed_enclosed_volume_mesh_units(
-        [
-            (0.0, 0.0, 0.0),
-            (1.0, 0.0, 0.0),
-            (0.0, 1.0, 0.0),
-            (1.0, 1.0, 0.0),
-        ],
-        expected_faces,
-    ) == 0.0
+    assert (
+        signed_enclosed_volume_mesh_units(
+            [
+                (0.0, 0.0, 0.0),
+                (1.0, 0.0, 0.0),
+                (0.0, 1.0, 0.0),
+                (1.0, 1.0, 0.0),
+            ],
+            expected_faces,
+        )
+        == 0.0
+    )
 
     parameters = _params(vertices=vertices)
     parameters["meters_per_unit"] = 1.0
     direct = measure_mesh_preview(**parameters)
-    assert direct["enclosed_volume_m3"] == pytest.approx(
-        expected_volume, rel=1e-12, abs=0
-    )
+    assert direct["enclosed_volume_m3"] == pytest.approx(expected_volume, rel=1e-12, abs=0)
     assert direct["edge_connected_patch_enclosed_volumes_m3"] == pytest.approx(
         [expected_volume], rel=1e-12, abs=0
     )
@@ -317,9 +318,7 @@ def test_nonzero_volume_lost_to_float_cancellation_replays_saved_graph(
     standalone = client.post(f"{base}/spatial/mesh-preview", json=request)
     assert standalone.status_code == 200, standalone.text
     payload = standalone.json()
-    assert payload["enclosed_volume_m3"] == pytest.approx(
-        expected_volume, rel=1e-12, abs=0
-    )
+    assert payload["enclosed_volume_m3"] == pytest.approx(expected_volume, rel=1e-12, abs=0)
     assert payload["provenance"]["specimen_identity_verified"] is False
 
     graph = {
@@ -348,9 +347,7 @@ def test_nonzero_volume_lost_to_float_cancellation_replays_saved_graph(
     app = cast(FastAPI, client.app)
     hashes: list[str] = []
     for _ in range(2):
-        run = client.post(
-            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-        )
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
         assert process_workflow_run_job(
             app.state.settings, app.state.session_factory, str(run.json()["job_id"])
