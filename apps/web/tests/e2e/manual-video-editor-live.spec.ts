@@ -43,9 +43,10 @@ test("edits video tracks reversibly while hidden tracks and original pixels surv
   const primary = await createClass("Fixture animal", 0);
   const background = await createClass("Fixture masked animal", 1);
 
-  await page.addInitScript(() =>
-    localStorage.setItem("reefvision.onboarding.dismissed.1.5.0", "true"),
-  );
+  const health = await get(`${api}/health`);
+  await page.addInitScript((version) => {
+    localStorage.setItem(`reefvision.onboarding.dismissed.${version}`, "true");
+  }, health.version);
   async function openWorkspace() {
     await page.goto(web);
     await page

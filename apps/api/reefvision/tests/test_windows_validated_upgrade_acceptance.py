@@ -106,3 +106,8 @@ def test_direct_validated_15_upgrade_rejects_a_different_baseline(
 def test_clean_install_requires_the_first_use_journey() -> None:
     changed = WORKFLOW.replace("-FirstUseAcceptance ", "")
     assert any("first-use" in error for error in PREFLIGHT.check_workflow(changed, VERSION))
+
+
+def test_clean_install_requires_the_workspace_journeys() -> None:
+    changed = WORKFLOW.replace("-WorkspaceWorkflowAcceptance ", "")
+    assert any("workspace" in error for error in PREFLIGHT.check_workflow(changed, VERSION))

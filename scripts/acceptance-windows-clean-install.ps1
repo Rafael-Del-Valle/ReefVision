@@ -12,6 +12,7 @@ param(
     [string]$SpatialWorkflowNodePath = '',
     [switch]$FirstUseAcceptance,
     [switch]$ResearchWorkflowAcceptance,
+    [switch]$WorkspaceWorkflowAcceptance,
     [switch]$HostedStandardUserWebView2,
     [switch]$VerifyPreviousInstallerRejectsUpgradedProfile,
     [switch]$PreviousInstallerSupportsIsolatedAcceptance,
@@ -40,6 +41,9 @@ if ($ResearchWorkflowAcceptance -and -not $SpatialWorkflowNodePath) {
 }
 if ($FirstUseAcceptance -and (-not $SpatialWorkflowNodePath -or -not $SkipUpgrade)) {
     throw 'Installed first use requires the packaged WebView2 driver and a fresh candidate install.'
+}
+if ($WorkspaceWorkflowAcceptance -and (-not $SpatialWorkflowNodePath -or -not $SkipUpgrade)) {
+    throw 'Installed workspace journeys require the packaged WebView2 driver and a fresh candidate install.'
 }
 if ($HostedStandardUserWebView2) {
     if (-not $DisposableTest -or -not $SpatialWorkflowNodePath) {
@@ -152,6 +156,7 @@ $report = [ordered]@{
     frontend_backend_connectivity = New-ReefVisionEvidenceResult
     webview2 = New-ReefVisionEvidenceResult
     first_use_workflow = if ($FirstUseAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Installed first-use acceptance not requested' }
+    workspace_workflow = if ($WorkspaceWorkflowAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Installed workspace acceptance not requested' }
     spatial_workflow = if ($SpatialWorkflowNodePath) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Packaged spatial WebView2 acceptance not requested' }
     research_workflow = if ($ResearchWorkflowAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Packaged research WebView2 acceptance not requested' }
     schema_migration = New-ReefVisionEvidenceResult
@@ -655,9 +660,21 @@ try {
                             -ExpectedBrowserSid $browserSid -BrowserArtifactsDirectory $browserArtifacts
                     }
                 }
-                Invoke-ReefVisionSpatialWebView2Acceptance -NodePath $SpatialWorkflowNodePath -RepositoryRoot $RepositoryRoot `
+                $spatialResult = Invoke-ReefVisionSpatialWebView2Acceptance -NodePath $SpatialWorkflowNodePath -RepositoryRoot $RepositoryRoot `
                     -EvidenceRoot $EvidenceRoot -Api $spatialApi -DebugPort $debugPort -DesktopProcessId $spatialDesktop.Id `
                     -ExpectedBrowserSid $browserSid -BrowserArtifactsDirectory $browserArtifacts
+                if ($WorkspaceWorkflowAcceptance) {
+                    try {
+                        $workspaces = Invoke-ReefVisionWorkspaceAcceptance -NodePath $SpatialWorkflowNodePath -RepositoryRoot $RepositoryRoot `
+                            -EvidenceRoot $EvidenceRoot -Api $spatialApi -DebugPort $debugPort -DesktopProcessId $spatialDesktop.Id `
+                            -ExpectedBrowserSid $browserSid -BrowserArtifactsDirectory $browserArtifacts
+                        $workspaces | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'workspace-evidence.json')
+                        $report.workspace_workflow = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed WebView2 passed $($workspaces.completed_journeys) class, QC, dense image and manual video journeys."
+                    } catch {
+                        $report.workspace_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $_.Exception.Message
+                    }
+                }
+                $spatialResult
             } finally {
                 try {
                     if ($ordinaryUser) {
@@ -684,6 +701,9 @@ try {
         }
         if ($FirstUseAcceptance -and $report.first_use_workflow.status -eq 'NOT RUN') {
             $report.first_use_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $report.spatial_workflow.detail
+        }
+        if ($WorkspaceWorkflowAcceptance -and $report.workspace_workflow.status -eq 'NOT RUN') {
+            $report.workspace_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $report.spatial_workflow.detail
         }
         Save-Report
     }
@@ -1128,6 +1148,9 @@ try {
     }
     if ($report.first_use_workflow.status -eq 'FAIL') {
         throw $report.first_use_workflow.detail
+    }
+    if ($report.workspace_workflow.status -eq 'FAIL') {
+        throw $report.workspace_workflow.detail
     }
     if ($report.research_workflow.status -eq 'FAIL') {
         throw $report.research_workflow.detail

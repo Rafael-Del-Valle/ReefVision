@@ -234,7 +234,8 @@ jobs:
             -InstallerPath $msi `
             -ExpectedVersion '1.6.0' -ExpectedSchemaRevision 'b16_integrated_0001' `
             -AcceptanceRoot 'C:\reefvision-1-6-0-disposable-acceptance' `
-            -SpatialWorkflowNodePath $playwrightNode -HostedStandardUserWebView2 -FirstUseAcceptance -ResearchWorkflowAcceptance -SkipUpgrade -DisposableTest -KeepArtifacts
+            -SpatialWorkflowNodePath $playwrightNode -HostedStandardUserWebView2 -FirstUseAcceptance -ResearchWorkflowAcceptance -WorkspaceWorkflowAcceptance `
+            -SkipUpgrade -DisposableTest -KeepArtifacts
 
       - name: Upload isolated Windows acceptance report and MSI logs
         if: always()
@@ -248,6 +249,8 @@ jobs:
             .artifacts/windows-clean-acceptance-*/spatial-playwright/**
             .artifacts/windows-clean-acceptance-*/first-use-playwright.json
             .artifacts/windows-clean-acceptance-*/first-use-playwright/**/*-evidence.json
+            .artifacts/windows-clean-acceptance-*/workspace-evidence.json
+            .artifacts/windows-clean-acceptance-*/workspace-playwright.json
             .artifacts/windows-clean-acceptance-*/research-evidence.json
             .artifacts/windows-clean-acceptance-*/research-playwright.json
             .artifacts/windows-clean-acceptance-*/research-playwright/**/*-evidence.json
