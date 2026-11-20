@@ -97,9 +97,7 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
         actor = "actor VARCHAR(100)"
     if variant == "unexpected_default":
         actor = "actor VARCHAR(100) NOT NULL DEFAULT 'PRIVATE_FUTURE_ACTOR'"
-    comment_column = (
-        "comment TEXT NOT NULL" if variant == "optional_notnull" else "comment TEXT"
-    )
+    comment_column = "comment TEXT NOT NULL" if variant == "optional_notnull" else "comment TEXT"
     event_type = "event_type VARCHAR(20) NOT NULL"
     if variant == "collated_event_type":
         event_type += " COLLATE NOCASE"
