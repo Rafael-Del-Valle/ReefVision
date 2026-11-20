@@ -20,8 +20,8 @@ using System;
 using System.Runtime.InteropServices;
 public static class ReefVisionOrdinaryKnownFolder {
     [DllImport("shell32")] static extern int SHGetKnownFolderPath(ref Guid id, uint flags, IntPtr token, out IntPtr path);
-    public static string Downloads() {
-        Guid id = new Guid("FDD39AD0-238F-46AF-ADB4-6C85480369C7");
+    public static string Get(string folderId) {
+        Guid id = new Guid(folderId);
         IntPtr path;
         int result = SHGetKnownFolderPath(ref id, 0x4000, IntPtr.Zero, out path);
         if (result != 0) Marshal.ThrowExceptionForHR(result);
@@ -30,9 +30,17 @@ public static class ReefVisionOrdinaryKnownFolder {
     }
 }
 '@
-$downloads = [ReefVisionOrdinaryKnownFolder]::Downloads()
+$downloadsId = '374DE290-123F-4565-9164-39C4925E467B'
+$documentsId = 'FDD39AD0-238F-46AF-ADB4-6C85480369C7'
+$inheritedProfile = $env:USERPROFILE
+$inheritedDownloads = [ReefVisionOrdinaryKnownFolder]::Get($downloadsId)
+$inheritedDocuments = [ReefVisionOrdinaryKnownFolder]::Get($documentsId)
+$ordinaryProfile = Set-ReefVisionHostedUserProfile $identity
+$downloads = [ReefVisionOrdinaryKnownFolder]::Get($downloadsId)
+$documents = [ReefVisionOrdinaryKnownFolder]::Get($documentsId)
 Set-Content -LiteralPath $stage -Value 'resolved-downloads'
-$knownFolderExists = Test-Path -LiteralPath $downloads -PathType Container
+$knownFolderInProfile = $downloads.StartsWith($ordinaryProfile + '\',[System.StringComparison]::OrdinalIgnoreCase)
+$knownFolderExists = $knownFolderInProfile -and (Test-Path -LiteralPath $downloads -PathType Container)
 $knownFolderWritable = $false
 if ($knownFolderExists) {
     $knownFolderProbe = Join-Path $downloads ('reefvision-probe-' + [guid]::NewGuid().ToString('N') + '.tmp')
@@ -55,12 +63,19 @@ try {
     driver_pid=$PID
     user_sid=$identity.User.Value
     integrity=Get-ReefVisionProcessIntegrity (Get-Process -Id $PID)
+    inherited_user_profile=$inheritedProfile
+    inherited_known_downloads=$inheritedDownloads
+    inherited_known_documents=$inheritedDocuments
+    ordinary_user_profile=$ordinaryProfile
+    known_documents=$documents
     known_downloads=$downloads
+    known_downloads_in_ordinary_profile=$knownFolderInProfile
     known_downloads_exists=$knownFolderExists
     known_downloads_writable=$knownFolderWritable
     dedicated_browser_artifacts=$context.browser_artifacts
     dedicated_browser_artifacts_writable=$artifactsWritable
 } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $context.output 'ordinary-driver-identity.json')
+if (-not $knownFolderInProfile) { throw 'Windows did not resolve Downloads in the loaded ordinary profile.' }
 Set-Content -LiteralPath $stage -Value 'starting-playwright'
 $env:REEFVISION_GUIDED_TEST_API=$context.api
 $env:REEFVISION_SPATIAL_WEBVIEW2_ENDPOINT=$context.endpoint

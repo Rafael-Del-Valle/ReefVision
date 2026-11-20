@@ -9,6 +9,33 @@ function Assert-ReefVisionHostedStandardUserMode {
     }
 }
 
+function Set-ReefVisionHostedUserProfile([System.Security.Principal.WindowsIdentity]$Identity) {
+    Assert-ReefVisionHostedStandardUserMode
+    if ($Identity.Name -notmatch '^([^\\]+)\\(rvweb-[a-f0-9]{10})$') {
+        throw 'The profile must belong to this temporary test user.'
+    }
+    $domain,$username = $Matches[1],$Matches[2]
+    $profile = [Microsoft.Win32.Registry]::GetValue(
+        "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$($Identity.User.Value)",
+        'ProfileImagePath', $null)
+    if (-not $profile -or (Split-Path -Leaf $profile) -ine $username -or
+        -not (Test-Path -LiteralPath $profile -PathType Container)) {
+        throw 'Windows did not load the profile of the temporary account.'
+    }
+    $drive = [IO.Path]::GetPathRoot($profile)
+    $env:USERPROFILE = $profile
+    $env:HOMEDRIVE = $drive.TrimEnd('\')
+    $env:HOMEPATH = $profile.Substring($env:HOMEDRIVE.Length)
+    $env:USERNAME = $username
+    $env:USERDOMAIN = $domain
+    $env:APPDATA = Join-Path $profile 'AppData/Roaming'
+    $env:LOCALAPPDATA = Join-Path $profile 'AppData/Local'
+    $env:TEMP = Join-Path $env:LOCALAPPDATA 'Temp'
+    $env:TMP = $env:TEMP
+    New-Item -ItemType Directory -Path $env:TEMP -Force | Out-Null
+    return $profile
+}
+
 function Invoke-ReefVisionCredentialDesktop([string]$ContextFile) {
     $context = Get-Content -LiteralPath $ContextFile -Raw | ConvertFrom-Json
     $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
@@ -17,6 +44,8 @@ function Invoke-ReefVisionCredentialDesktop([string]$ContextFile) {
         $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)) {
         throw 'The hosted GUI launcher did not use its designated standard Windows account.'
     }
+    $inheritedProfile = $env:USERPROFILE
+    $ordinaryProfile = Set-ReefVisionHostedUserProfile $identity
     # The credential process independently declares its PATH; it need not inherit the driver's.
     $env:PATH = @((Join-Path $env:SystemRoot 'System32'), $env:SystemRoot,
         (Join-Path $env:SystemRoot 'System32\Wbem'), (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0')) -join ';'
@@ -33,7 +62,10 @@ function Invoke-ReefVisionCredentialDesktop([string]$ContextFile) {
     } -Action {
         Start-Process -FilePath $context.executable -PassThru -WindowStyle Hidden -WorkingDirectory (Split-Path -Parent $context.executable)
     }
-    $receipt = [ordered]@{launcher_pid=$PID; desktop_pid=$desktop.Id; user_sid=$identity.User.Value}
+    $receipt = [ordered]@{
+        launcher_pid=$PID; desktop_pid=$desktop.Id; user_sid=$identity.User.Value
+        inherited_windows_profile=$inheritedProfile; ordinary_windows_profile=$ordinaryProfile
+    }
     $pending = $context.receipt + '.tmp'
     $receipt | ConvertTo-Json | Set-Content -LiteralPath $pending
     Move-Item -LiteralPath $pending -Destination $context.receipt
@@ -205,6 +237,7 @@ function Start-ReefVisionHostedGui {
         desktop_pid=$desktop.Id; launcher_pid=$Account.launcher.Id; windows_session=$child.SessionId
         desktop_owner_sid=$owner.Sid; desktop_integrity=$integrity; driver_integrity=Get-ReefVisionProcessIntegrity $hostProcess
         desktop_sha256=(Get-FileHash -LiteralPath $Executable).Hash.ToLowerInvariant()
+        inherited_windows_profile=$launch.inherited_windows_profile; ordinary_windows_profile=$launch.ordinary_windows_profile
     } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'spatial-standard-user-identity.log')
     return $desktop
 }
