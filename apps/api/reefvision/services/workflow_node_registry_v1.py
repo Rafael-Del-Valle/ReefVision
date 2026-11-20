@@ -18,6 +18,7 @@ from reefvision.services.workflow_metric_depth_3d import (
 from reefvision.services.workflow_node_registry import (
     workflow_node_registry as base_workflow_node_registry,
 )
+from reefvision.services.workflow_paired_growth_contrast import paired_growth_contrast_node
 from reefvision.services.workflow_pose import register_pose_workflow_adapters
 from reefvision.services.workflow_pose_evaluation import (
     register_pose_evaluation_workflow_adapter,
@@ -931,6 +932,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
     registry["ecology_coral_skeleton"] = coral_skeleton_node()
     registry["ecology_coral_growth"] = coral_growth_node()
     registry["ecology_verified_analysis"] = verified_ecology_analysis_node()
+    registry["paired_growth_contrast"] = paired_growth_contrast_node()
     registry["ecology_event_summary"] = event_summary_workflow_node()
     registry["research_publication_figure"] = research_report_node()
     registry["image_acquisition_quality"] = acquisition_quality_node()

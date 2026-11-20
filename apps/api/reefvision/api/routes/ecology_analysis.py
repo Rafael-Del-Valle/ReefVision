@@ -19,7 +19,12 @@ from reefvision.schemas.ecology_analysis import (
     EcologyAnalysisRead,
     EcologyAnalysisSnapshot,
 )
+from reefvision.schemas.paired_growth_contrast import (
+    PairedGrowthContrastReport,
+    PairedGrowthContrastRequest,
+)
 from reefvision.services.ecology_analysis import EcologyAnalysisService
+from reefvision.services.paired_growth_contrast import paired_growth_contrast
 
 router = APIRouter(
     prefix="/projects/{project_id}/ecology/verified-analyses",
@@ -64,6 +69,16 @@ def download_verified_ecology_analysis(
     response.headers["Content-Disposition"] = f'attachment; filename="ecology-{analysis_id}.json"'
     response.headers["X-ReefVision-Content-SHA256"] = result.content_sha256
     return result.snapshot
+
+
+@router.post("/{analysis_id}/paired-contrast", response_model=PairedGrowthContrastReport)
+def calculate_paired_growth_contrast(
+    project_id: UUID,
+    analysis_id: UUID,
+    payload: PairedGrowthContrastRequest,
+    session: DbSession,
+) -> PairedGrowthContrastReport:
+    return paired_growth_contrast(session, str(project_id), str(analysis_id), payload)
 
 
 def _spreadsheet_text(value: str | None) -> str | None:
