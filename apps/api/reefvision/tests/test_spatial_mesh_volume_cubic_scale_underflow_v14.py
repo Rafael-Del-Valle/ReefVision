@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from fractions import Fraction
 from typing import cast
 
 import pytest
@@ -33,6 +34,48 @@ def _params(scale: float) -> dict:
     }
 
 
+
+@pytest.mark.parametrize("reverse_winding", [False, True], ids=["forward", "reversed"])
+@pytest.mark.parametrize(
+    "different_apex_height", [False, True], ids=["exact-cancellation", "sub-ulp-residual"]
+)
+def test_volume_sum_across_faces_uses_exact_oracle_when_nearly_cancelling(
+    reverse_winding: bool, different_apex_height: bool
+) -> None:
+    """A plausible floating-point residual cannot replace exact signed volume."""
+    edge = 1e8
+    second_z = edge - 2e-8 if different_apex_height else edge
+    vertices = [
+        (0.0, 0.0, 0.0),
+        (edge, 0.0, 0.0),
+        (0.0, edge, 0.0),
+        (0.0, 0.0, edge),
+        (3 * edge, 0.0, 0.0),
+        (4 * edge, 0.0, 0.0),
+        (3 * edge, edge, 0.0),
+        (3 * edge, 0.0, second_z),
+    ]
+    # Two disjoint opposite-oriented closed shells deliberately stress the
+    # source-volume numerical helper, not a biologically admissible colony.
+    # The mesh measurement service has its own patch/topology QC.
+    faces = CLOSED_FACES + [
+        [a + 4, c + 4, b + 4] for a, b, c in CLOSED_FACES
+    ]
+    if reverse_winding:
+        faces = [[a, c, b] for a, b, c in faces]
+    exact_volume = (
+        Fraction(edge) * Fraction(edge) * (Fraction(edge) - Fraction(second_z)) / 6
+    )
+    recovered = signed_enclosed_volume_mesh_units(vertices, faces)
+    if different_apex_height:
+        assert exact_volume > 0
+        sign = -1 if reverse_winding else 1
+        assert recovered == pytest.approx(sign * float(exact_volume), rel=1e-15, abs=0)
+    else:
+        assert exact_volume == 0
+        assert recovered == 0.0
+
+
 def test_representable_tiny_volume_preserves_exact_cubic_scale_bounds() -> None:
     scale = 1e-110
     assert scale**3 == 0.0  # Regression: applying this intermediate drops all volume.
@@ -48,9 +91,7 @@ def test_representable_tiny_volume_preserves_exact_cubic_scale_bounds() -> None:
         [expected * 0.9**3, expected * 1.1**3], rel=1e-12, abs=0
     )
     patch_interval = result["edge_connected_patch_enclosed_volume_scale_intervals_m3"][0]
-    assert patch_interval == pytest.approx(
-        [expected * 0.9**3, expected * 1.1**3], rel=1e-12, abs=0
-    )
+    assert patch_interval == pytest.approx([expected * 0.9**3, expected * 1.1**3], rel=1e-12, abs=0)
     assert result["surface_to_enclosed_volume_ratio_per_m"] is not None
     assert "enclosed_volume_zero_or_underflow" not in result["qc_warnings"]
     assert result["measurement_status"] == "caller_supplied_unverified"
