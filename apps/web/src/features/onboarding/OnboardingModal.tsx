@@ -59,11 +59,10 @@ export function OnboardingModal({
   }, []);
 
   function navigateTo(destination: OnboardingDestination) {
-    // Both project destinations hand keyboard focus to the next workspace.
-    // Restoring the old trigger would leave focus behind the launcher.
-    if (destination === "create_project" || destination === "projects") {
-      handoffFocusRef.current = true;
-    }
+    // Every navigation is a focus handoff, not just project creation. Restoring
+    // the help launcher after unmount can steal focus from the newly opened
+    // class manager, QC review, saved workflow or System workspace.
+    handoffFocusRef.current = true;
     onNavigate(destination);
     onClose();
   }

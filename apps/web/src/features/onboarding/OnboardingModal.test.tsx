@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { OnboardingModal } from "./OnboardingModal";
+import { OnboardingModal, type OnboardingDestination } from "./OnboardingModal";
 
 function OnboardingHarness() {
   const [open, setOpen] = useState(false);
@@ -44,6 +44,30 @@ function ProjectCreationHandoffHarness() {
       {createOpen && (
         <section role="dialog" aria-label="Create project">
           <input aria-label="Project name" autoFocus />
+        </section>
+      )}
+    </>
+  );
+}
+
+function WorkspaceHandoffHarness() {
+  const [open, setOpen] = useState(true);
+  const [workspace, setWorkspace] = useState<OnboardingDestination | null>(null);
+  return (
+    <>
+      <button type="button">Open help</button>
+      {open && (
+        <OnboardingModal
+          version="1.6"
+          hasProject={true}
+          onNavigate={(destination) => setWorkspace(destination)}
+          onClose={() => setOpen(false)}
+          onDismissPermanently={() => setOpen(false)}
+        />
+      )}
+      {workspace !== null && (
+        <section aria-label="Navigated workspace">
+          <input aria-label="Workspace search" autoFocus />
         </section>
       )}
     </>
@@ -109,6 +133,26 @@ describe("onboarding local usability", () => {
     fireEvent.keyDown(last, { key: "Tab" });
     expect(document.activeElement).toBe(close);
   });
+
+  it.each([
+    "Open class manager",
+    "Open QC review",
+    "Open Workflow Builder",
+    "Open System status",
+  ] as const)(
+    "hands focus to the newly navigated workspace after %s",
+    (buttonName) => {
+      render(<WorkspaceHandoffHarness />);
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "Close" }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: buttonName }));
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(document.activeElement).toBe(
+        screen.getByRole("textbox", { name: "Workspace search" }),
+      );
+    },
+  );
 
   it("opens saved workflows without permanently dismissing onboarding", () => {
     const onNavigate = vi.fn();
