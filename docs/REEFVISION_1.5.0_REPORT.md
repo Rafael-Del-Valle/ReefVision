@@ -4,6 +4,10 @@
 
 The 1.5.0 engineering candidate builds on the validated 1.4.0 installer at `fb2276c87`. Draft #95 integrates the local provider catalog from #88 with the six project workflows below. Source and desktop results use generated research fixtures. Representative studies and release approval remain open. [Candidate and current Windows checks](https://github.com/Rafael-Del-Valle/ReefVision/pull/95)
 
+## Known geometry limitation of the #96 installer
+
+Four source points `(0,0,0)`, `(1,2,3)`, `(3,1,4)` and `(4,3,7)` all lie exactly on `z = x + y`. The #96 packaged preview and two saved runs reported `170.66666666666666 m³` at a supported scale of 999,998.1 metres per source unit. The standalone calculation also returned a nonzero volume at 1.1 metres per unit. Rounding each scaled coordinate during numerical recovery introduced the false volume. The saved artifacts both had digest `c4c7af4515773c08a00abc067dee820fe78eb53e80db7722cc719f6ff732351b`. The geometric-measurements row is open until an integrated build with the correction reproduces exact planar zero and preserves representable positive volume. [Affected binary and evidence](https://github.com/Rafael-Del-Valle/ReefVision/pull/96)
+
 ## Implemented provider foundation
 
 - Strict discovery of direct `.json` files in `<data_dir>/provider-manifests`.
