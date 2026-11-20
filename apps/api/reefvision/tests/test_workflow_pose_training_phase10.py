@@ -586,9 +586,7 @@ def test_pose_materialized_fingerprint_uses_portable_path_order(tmp_path: Path) 
         _verify_prelaunch_pose_dataset(root, {"materialized_dataset_sha256": legacy_windows})
 
 
-@pytest.mark.skipif(
-    not hasattr(os, "mkfifo"), reason="Real filesystem FIFOs require POSIX"
-)
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="Real filesystem FIFOs require POSIX")
 def test_pose_materialized_dataset_rejects_unhashed_filesystem_member(tmp_path: Path) -> None:
     # The frozen hash must not ignore a later non-file member in the training
     # tree: a real FIFO was previously silently omitted by is_file().
