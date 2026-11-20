@@ -539,3 +539,28 @@ failures, all caused by Ruff formatting in the inverse-scale precision gate
 and its new test. These formatting hunks have been corrected separately;
 this iteration's new test and exact-head Actions must still pass before
 any verification claim. **RELEASE HOLD for 1.4 and 1.5** remains mandatory.
+
+## Track C: independent provisional label QC (2026-11-19)
+
+The cubic-scale synthetic fixture now independently alters `specimen_id`,
+`observation_id`, and `coordinate_frame_id` in the standalone mesh-preview
+API. It requires all unchanged labels to remain attached, provisional
+calibration/identity/registration flags to stay false, and the geometry SHA-256,
+surface area, enclosed volume, area/volume ratio, scale-only uncertainty
+intervals, patch volume, and numeric-resolution QC to remain invariant.
+This guards against an unreviewed field label silently changing geometry
+or being promoted into a biological match or registered coordinate frame.
+
+The baseline scientific artifact is still compared against two executions
+of a persisted, executable typed Workflow Builder graph, including stable
+artifact SHA-256. Label changes to the standalone requests deliberately do
+not overwrite the saved graph's original parameters. This is synthetic
+contract testing only; it is not a real-coral field-validation result and
+cannot establish calibration accuracy, specimen identity, branch anatomy,
+or longitudinal biological change.
+
+The predecessor exact-head 1.4 run at `3f38f092` completed 20 successful
+workflows and three failed backend workflows, all at Ruff formatting.
+The two diagnosed long-line cases were corrected in this iteration.
+The updated fixture and final-head CI remain unverified until GitHub
+Actions completes. **ReefVision 1.4 and 1.5 remain on RELEASE HOLD.**
