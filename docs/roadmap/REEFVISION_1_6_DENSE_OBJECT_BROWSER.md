@@ -225,3 +225,22 @@ standalone and saved typed QC Workflow Builder operations, provenance, retries,
 review gates, and source datasets remain unchanged. Full exact-head CI and
 installed-Windows dense-image/resize usability plus MSI upgrade/rollback remain
 required independent acceptance evidence.
+
+## Isolating manual annotation gestures by initiating pointer (Track D)
+
+The full editor previously processed global pointer events without verifying the
+initiating pointer. An unrelated touch/pen contact could move or prematurely
+commit a coral box, group selection, resize or pan. Every drawing, moving,
+resizing and panning interaction now carries its originating pointer ID;
+unrelated moves/releases/cancellations cannot affect it and other pointer-down
+events cannot replace it. Window blur still cancels any gesture. Class IDs,
+original observation geometry, saved scientific records, QC review decisions,
+and executable Workflow Builder provenance remain unchanged. Two React tests
+cover mixed-pointer pan and box-creation lifecycles. This is a UI event-integrity
+fix, not a new scientific Workflow Builder node or schema migration.
+
+[Previous exact-head CI #44682654483](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44682654483)
+passed backend and Windows preservation but failed frontend Prettier before
+TypeScript/Vitest. Its exact single-file formatter diff is corrected here.
+Full new-head frontend/E2E, real installed Windows pen/touch and MSI upgrade/
+rollback, representative biology and owner approval are still required.

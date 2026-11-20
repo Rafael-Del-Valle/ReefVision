@@ -703,6 +703,53 @@ describe("AnnotationEditor", () => {
     expect(viewport.getAttribute("transform")).toBe(middlePannedTransform);
   });
 
+  it("ignores unrelated pointer movement, release, reentry and cancellation during active pan", async () => {
+    mockBasicEditorRequests();
+    renderEditor();
+    await screen.findByRole("heading", { name: session.image.original_filename });
+    stubCanvasRect();
+    const canvas = screen.getByTestId("annotation-canvas");
+    const viewport = screen.getByTestId("viewport-transform");
+    const original = viewport.getAttribute("transform");
+    fireEvent.pointerDown(canvas, { button: 0, altKey: true, pointerId: 11, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(window, { pointerId: 22, clientX: 800, clientY: 800 });
+    fireEvent.pointerUp(window, { pointerId: 22 });
+    fireEvent.pointerDown(canvas, { button: 0, altKey: true, pointerId: 22, clientX: 800, clientY: 800 });
+    expect(viewport.getAttribute("transform")).toBe(original);
+    fireEvent.pointerMove(window, { pointerId: 11, clientX: 140, clientY: 130 });
+    const firstMove = viewport.getAttribute("transform");
+    expect(firstMove).not.toBe(original);
+    fireEvent.pointerCancel(window, { pointerId: 22 });
+    fireEvent.pointerMove(window, { pointerId: 11, clientX: 180, clientY: 160 });
+    const secondMove = viewport.getAttribute("transform");
+    expect(secondMove).not.toBe(firstMove);
+    fireEvent.pointerUp(window, { pointerId: 11 });
+    fireEvent.pointerMove(window, { pointerId: 11, clientX: 200, clientY: 190 });
+    expect(viewport.getAttribute("transform")).toBe(secondMove);
+    expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
+  });
+
+  it("does not finish a coral box annotation on a secondary pointer release", async () => {
+    mockBasicEditorRequests();
+    renderEditor();
+    await screen.findByRole("heading", { name: session.image.original_filename });
+    stubCanvasRect();
+    await userEvent.click(screen.getByRole("button", { name: "Box tool" }));
+    await userEvent.click(screen.getByTestId("class-tool-1"));
+    const canvas = screen.getByTestId("annotation-canvas");
+    const objects = screen.getByRole("listbox", { name: "Objects" });
+    expect(within(objects).getAllByRole("option")).toHaveLength(1);
+    fireEvent.pointerDown(canvas, { pointerId: 31, button: 0, clientX: 150, clientY: 150 });
+    fireEvent.pointerMove(window, { pointerId: 32, clientX: 500, clientY: 500 });
+    fireEvent.pointerUp(window, { pointerId: 32 });
+    expect(within(objects).getAllByRole("option")).toHaveLength(1);
+    fireEvent.pointerMove(window, { pointerId: 31, clientX: 240, clientY: 250 });
+    fireEvent.pointerCancel(window, { pointerId: 32 });
+    fireEvent.pointerUp(window, { pointerId: 31 });
+    expect(within(objects).getAllByRole("option")).toHaveLength(2);
+    expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
+  });
+
   it("culls offscreen boxes while preserving the full object list and restores on reset", async () => {
     mockBasicEditorRequests();
     renderEditor();

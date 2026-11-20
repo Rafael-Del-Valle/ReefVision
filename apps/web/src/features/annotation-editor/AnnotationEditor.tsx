@@ -134,11 +134,13 @@ interface AnnotationEditorProps {
 type EditorInteraction =
   | {
       type: "drawing";
+      pointerId: number;
       start: Point;
       current: Point;
     }
   | {
       type: "moving";
+      pointerId: number;
       origin: Point;
       selection: string[];
       snapshot: Record<string, EditorAnnotation>;
@@ -146,6 +148,7 @@ type EditorInteraction =
     }
   | {
       type: "resizing";
+      pointerId: number;
       handle: ResizeHandle;
       annotationId: string;
       snapshot: EditorAnnotation;
@@ -153,6 +156,7 @@ type EditorInteraction =
     }
   | {
       type: "panning";
+      pointerId: number;
       origin: Point;
       initialView: ViewportTransform;
     };
@@ -2256,7 +2260,7 @@ export function AnnotationEditor({
       const currentInteraction = interactionRef.current;
       const activeView = viewRef.current;
       const svg = svgRef.current;
-      if (!currentInteraction) {
+      if (!currentInteraction || event.pointerId !== currentInteraction.pointerId) {
         return;
       }
       if (currentInteraction.type === "panning") {
@@ -2287,8 +2291,9 @@ export function AnnotationEditor({
       );
     };
 
-    const handlePointerUp = () => {
+    const handlePointerUp = (event: PointerEvent) => {
       const currentInteraction = interactionRef.current;
+      if (currentInteraction && event.pointerId !== currentInteraction.pointerId) return;
       const currentState = stateRef.current;
       if (!currentInteraction || !imageSize) {
         setInteraction(null);
@@ -2354,7 +2359,12 @@ export function AnnotationEditor({
       setInteraction(null);
     };
 
-    const handlePointerCancel = () => {
+    const handlePointerCancel = (event: PointerEvent) => {
+      if (interactionRef.current && event.pointerId !== interactionRef.current.pointerId) return;
+      interactionRef.current = null;
+      setInteraction(null);
+    };
+    const handleWindowBlur = () => {
       interactionRef.current = null;
       setInteraction(null);
     };
@@ -2362,12 +2372,12 @@ export function AnnotationEditor({
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
     window.addEventListener("pointercancel", handlePointerCancel);
-    window.addEventListener("blur", handlePointerCancel);
+    window.addEventListener("blur", handleWindowBlur);
     return () => {
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
       window.removeEventListener("pointercancel", handlePointerCancel);
-      window.removeEventListener("blur", handlePointerCancel);
+      window.removeEventListener("blur", handleWindowBlur);
     };
   }, [
     activeClassId,
@@ -2425,7 +2435,7 @@ export function AnnotationEditor({
 
   const handleCanvasPointerDown = useCallback(
     (event: ReactPointerEvent<SVGSVGElement>) => {
-      if (!currentView || !imageSize) return;
+      if (interactionRef.current || !currentView || !imageSize) return;
       if (
         event.button === 1 ||
         event.button === 2 ||
@@ -2435,6 +2445,7 @@ export function AnnotationEditor({
         event.preventDefault();
         setInteraction({
           type: "panning",
+          pointerId: event.pointerId,
           origin: { x: event.clientX, y: event.clientY },
           initialView: currentView,
         });
@@ -2456,6 +2467,7 @@ export function AnnotationEditor({
         setMaskSelection([]);
         setInteraction({
           type: "drawing",
+          pointerId: event.pointerId,
           start: point,
           current: point,
         });
@@ -2502,6 +2514,7 @@ export function AnnotationEditor({
   const handleAnnotationPointerDown = useCallback(
     (event: ReactPointerEvent<SVGRectElement>, annotationId: string) => {
       event.stopPropagation();
+      if (interactionRef.current) return;
       if (!currentView || !imageSize) {
         return;
       }
@@ -2513,6 +2526,7 @@ export function AnnotationEditor({
         event.preventDefault();
         setInteraction({
           type: "panning",
+          pointerId: event.pointerId,
           origin: { x: event.clientX, y: event.clientY },
           initialView: currentView,
         });
@@ -2522,6 +2536,7 @@ export function AnnotationEditor({
         event.preventDefault();
         setInteraction({
           type: "panning",
+          pointerId: event.pointerId,
           origin: { x: event.clientX, y: event.clientY },
           initialView: currentView,
         });
@@ -2558,6 +2573,7 @@ export function AnnotationEditor({
       );
       setInteraction({
         type: "moving",
+        pointerId: event.pointerId,
         origin: point,
         selection,
         snapshot,
@@ -2582,6 +2598,7 @@ export function AnnotationEditor({
       handle: ResizeHandle,
     ) => {
       event.stopPropagation();
+      if (interactionRef.current) return;
       if (!currentView) {
         return;
       }
@@ -2593,6 +2610,7 @@ export function AnnotationEditor({
         event.preventDefault();
         setInteraction({
           type: "panning",
+          pointerId: event.pointerId,
           origin: { x: event.clientX, y: event.clientY },
           initialView: currentView,
         });
@@ -2611,6 +2629,7 @@ export function AnnotationEditor({
       setSelection([annotation.id]);
       setInteraction({
         type: "resizing",
+        pointerId: event.pointerId,
         handle,
         annotationId: annotation.id,
         snapshot: annotation,
@@ -2623,6 +2642,7 @@ export function AnnotationEditor({
   const handleMaskPointerDown = useCallback(
     (event: ReactPointerEvent<SVGElement>, maskId: string) => {
       event.stopPropagation();
+      if (interactionRef.current) return;
       if (
         currentView &&
         (event.button === 1 ||
@@ -2633,6 +2653,7 @@ export function AnnotationEditor({
         event.preventDefault();
         setInteraction({
           type: "panning",
+          pointerId: event.pointerId,
           origin: { x: event.clientX, y: event.clientY },
           initialView: currentView,
         });

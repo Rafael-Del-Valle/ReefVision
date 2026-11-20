@@ -277,9 +277,9 @@ describe("annotation editor geometry", () => {
       { width: 100, height: Number.NaN },
       { width: 25, height: 100 },
     ]) {
-      expect(
-        resizeAnnotation(annotation, "se", { x: 50, y: 50 }, size),
-      ).toBe(annotation);
+      expect(resizeAnnotation(annotation, "se", { x: 50, y: 50 }, size)).toBe(
+        annotation,
+      );
     }
     for (const minimumSize of [0, -1, Infinity, Number.NaN, 101, 21]) {
       expect(
