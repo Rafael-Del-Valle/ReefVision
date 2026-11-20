@@ -166,6 +166,7 @@ test("collects recorded and simulated sources and replays acquisition evidence",
 
   await openProject("Acquisition sources");
   await page
+    .getByRole("region", { name: "Acquisition sources workspace", exact: true })
     .getByRole("heading", { name: "Acquisition sources", exact: true })
     .waitFor();
   await addSource("Recorded transect", "Recorded field batch");
