@@ -348,7 +348,9 @@ def test_nonzero_volume_lost_to_float_cancellation_replays_saved_graph(
     app = cast(FastAPI, client.app)
     hashes: list[str] = []
     for _ in range(2):
-        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        run = client.post(
+            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+        )
         assert run.status_code == 202, run.text
         assert process_workflow_run_job(
             app.state.settings, app.state.session_factory, str(run.json()["job_id"])
@@ -465,9 +467,9 @@ def test_representable_subnormal_volume_replays_saved_graph(
     faces = [list(reversed(face)) for face in TETRA_FACES] if reverse_winding else TETRA_FACES
     expected_volume = float(Fraction(edge) ** 3 / 6)
     assert expected_volume > 0
-    assert abs(signed_enclosed_volume_mesh_units(
-        [tuple(vertex) for vertex in vertices], faces
-    )) == pytest.approx(expected_volume, rel=1e-12, abs=0)
+    assert abs(
+        signed_enclosed_volume_mesh_units([tuple(vertex) for vertex in vertices], faces)
+    ) == pytest.approx(expected_volume, rel=1e-12, abs=0)
 
     project_id = str(create_project(client, "Representable subnormal volume QC")["id"])
     base = f"/api/v1/projects/{project_id}"
