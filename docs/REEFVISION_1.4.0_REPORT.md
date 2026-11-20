@@ -640,3 +640,29 @@ local checkpoint is modified by this HTTP boundary fix.
 These edits and final-head CI remain **unverified pending Actions**. Synthetic
 tests do not establish calibration, specimen reidentification, anatomical
 branch length, or field validation. **RELEASE HOLD: 1.4 and 1.5.**
+
+## Track C: reject nondegenerate triangles lost to numeric underflow (2026-11-20)
+
+The shared source-frame triangle-area primitive now distinguishes a truly
+collinear triangle from non-collinear geometry whose binary64 cross product
+or half-norm rounds to zero. A zero computed area triggers an exact rational
+non-collinearity check on the original finite numeric coordinates. If the
+triangle is nondegenerate, the bounded import fails with a controlled
+`3D triangle area underflowed numeric precision` error, rather than
+publishing a false zero-area surface or misclassifying it as reconstructed
+degenerate tissue. Zero-area collinear triangles remain valid geometric QC.
+
+A synthetic 1e-200-unit right triangle exercises direct primitive rejection,
+standalone project API rejection, and failure of an executable persisted typed
+Workflow Builder graph **without** a mesh-measurement artifact. A representable
+1e-100-unit reference triangle exercises the positive standalone path, two
+executions of the same saved graph, exact scientific payload equality,
+unverified calibration provenance, and reproducible SHA-256 artifact hashes.
+The exact rational predicate runs only on the zero-area branch, not every
+face of a 3D reconstruction. Existing commits and import formats are retained.
+
+These are numeric-integrity checks, **not** calibration validation, anatomical
+coral branch length, reconstruction accuracy, biological condition or specimen
+reidentification. Representative coral references, independent scientific
+review, final-head CI, installed Windows MSI/CAB/GUI and physical GPU gates
+remain outstanding. **RELEASE HOLD for both 1.4 and 1.5.**
