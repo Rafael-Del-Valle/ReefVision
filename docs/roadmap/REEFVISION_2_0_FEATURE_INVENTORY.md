@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T05:45:00Z`
+Updated: `2026-11-20T06:12:00Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -93,7 +93,7 @@ Candidate target: `2.0`
 | 2.0 | Typed, versioned Workflow Builder with guided forms and human gates | in_progress | Video & automation → Workflow Builder |
 | post-2.0 | Cloud accounts, hosted storage, and real-time collaboration | explicitly_deferred | Local cross-project summaries and offline exchange remain in scope. |
 | post-2.0 | Hyperspectral imagery | explicitly_deferred | Multispectral remains in scope. |
-| post-2.0 | Active SLEAP runtime, provider, and SLP interoperability | explicitly_deferred | BSD sleap-io may remain only for neutral NWB interchange after audit; native ReefPose is the supported pose path. Checkpoint 2194f2e96 passed a digest-bound MSI and six-CAB audit of 19,133 paths and 11,977 nested Python entries. Repeat the payload audit on the final candidate. |
+| post-2.0 | Active SLEAP runtime, provider, and SLP interoperability | explicitly_deferred | BSD sleap-io may remain only for neutral NWB interchange after audit; native ReefPose is the supported pose path. Checkpoint 2194f2e96 passed a digest-bound MSI and six-CAB audit of 19,133 paths and 11,977 nested Python entries. Local 92e355b6a built from the optional NWB development environment carried wheel metadata and two CLI declarations although the vendor module was absent. The Windows release staging regression covers this input. Repeat the payload audit on the final candidate. |
 | post-2.0 | Stereo reconstruction | explicitly_deferred | 3D import, measurement, and matching remain in scope. |
 
 ## Feature evidence
