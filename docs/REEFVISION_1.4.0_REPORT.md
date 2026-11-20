@@ -628,11 +628,14 @@ client error. This is distinct from the already-tested direct parser rejection.
 The API application now preserves FastAPI's normal 422 `detail` structure but
 renders invalid surrogate code points as printable backslash escapes within
 validation details, keeping the response UTF-8 serializable without changing
-valid Unicode text or inferring any geometry. The OBJ and PLY regressions now
-require the `string_unicode` 422 result and safe escaped input, while the
-existing valid-Unicode OBJ and persisted typed Workflow Builder parity tests
-remain intact. No imported scientific measurement or local checkpoint is
-modified by this HTTP boundary fix.
+valid Unicode text or inferring any geometry. The OBJ and PLY regressions
+permit either a parser-level 400 or a Pydantic-level 422, since framework
+versions vary; when Pydantic rejects first, they require `string_unicode`
+and safe escaped input. A focused serializer regression checks that even a
+synthetic pre-parser 422 encodes as UTF-8 while legitimate non-BMP Unicode
+remains unchanged. Existing valid-Unicode OBJ and persisted typed Workflow
+Builder parity tests remain intact. No imported scientific measurement or
+local checkpoint is modified by this HTTP boundary fix.
 
 These edits and final-head CI remain **unverified pending Actions**. Synthetic
 tests do not establish calibration, specimen reidentification, anatomical
