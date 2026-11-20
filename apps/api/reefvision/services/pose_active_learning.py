@@ -699,6 +699,11 @@ class PoseActiveLearningService:
         model_ids = self._models(project_id, request.model_ids)
 
         weights = request.weights.model_dump(mode="json")
+        grouping = (
+            {"source_grouping": request.grouping.model_dump(mode="json")}
+            if request.grouping is not None
+            else {}
+        )
         raw_candidates: list[dict[str, Any]] = []
 
         for track in tracks:
@@ -971,6 +976,14 @@ class PoseActiveLearningService:
                 "Pose Active Learning selection constraints removed every candidate"
             )
 
+        if request.grouping is not None:
+            from reefvision.services.ecology_pose_links import EcologyPoseLinkService
+
+            study = EcologyPoseLinkService(self.session).reviewed_grouping_evidence(
+                video, request.track_ids[0], {int(item["focus_frame"]) for item in selected}
+            )
+            if study:
+                grouping["source_grouping_study"] = study
         for item in selected:
             selection_metadata = {
                 "selection_mode": request.selection_mode,
@@ -986,6 +999,7 @@ class PoseActiveLearningService:
             item["selection_metadata"] = selection_metadata
             item["provenance"] = {
                 **dict(item["provenance"]),
+                **grouping,
                 "selection_metadata": selection_metadata,
             }
             item["provenance_sha256"] = canonical_json_sha256(item["provenance"])
@@ -1001,6 +1015,7 @@ class PoseActiveLearningService:
             "requested_size": request.requested_size,
             "clip_radius_frames": request.clip_radius_frames,
             "minimum_frame_spacing": request.minimum_frame_spacing,
+            **grouping,
             "selection_mode": request.selection_mode,
             "diversity_weight": (
                 float(request.diversity_weight)

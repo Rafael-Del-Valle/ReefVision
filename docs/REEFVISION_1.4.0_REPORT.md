@@ -1,6 +1,6 @@
 # ReefVision 1.4.0 acceptance report
 
-Report date: 2026-11-15
+Updated November 20, 2026.
 
 ## Release status
 
@@ -13,6 +13,24 @@ thresholds remain blocked and are listed separately below.
 
 This report does not authorize merging to `main`, tagging, or publishing. The
 published 1.0.3 release assets remain unchanged.
+
+## November 20 desktop and installer results
+
+| Workflow | Observed result | Still open |
+| --- | --- | --- |
+| Register two project meshes and replay the comparison | At `92e355b6a`, the researcher entered a 4 × 4 rigid transform and three error bounds from the selected project mesh. The standalone result and two saved executions agreed. All ten WebView2 journeys passed against the same local MSI on Windows 11. | Independent registration controls, organism identities, reviewers and thresholds. |
+| Upgrade and recover validated 1.3 | The real `f44053a90` executable created the pre-upgrade profile. The frozen `92e355b6a` sidecar preserved annotations, calibration, observations, hashes and a local checkpoint across migration and Project Exchange. Managed Restore returned HTTP 200. The old application refused the upgraded database without changing it and wrote successfully to the restored copy. | Authorized prior-user data and backups. |
+| Compare native frame and temporal ReefPose | The packaged RTX 3090 worker trained from scratch and scored all 240 labeled fixture coordinates on five held-out recording/animal groups. Mean errors were 5.575 and 4.006 px. On seven reference events the temporal model missed four and produced 18 extra. | Independent field video and labels. The identical training exposed a duplicate checkpoint registration. The corrected ordinary Temporal panel retains each run and reuses the verified registered model. |
+| Inspect the offline Windows payload | The original `92e355b6a` MSI and six external cabinets passed the integral file checks and executable self-test. Its PyInstaller bundle nevertheless included seven files of optional codec metadata declaring two CLI commands. Change `e6568c0f8` excludes those files when it stages the standard installer. | Repeat the physical archive audit on the corrected source and test on an enforcement-enabled Windows 11 device. |
+| Install, restart and uninstall | On `9764624c3` the hosted MSI installed, started its GUI and local backend, preserved the project through restart, exported Project Exchange, uninstalled and retained the data. Its elevated host failed to expose the WebView2 driver port. An ordinary user on Windows Server 2022 attached to the validated #91 MSI and exercised project creation, import and review. | The integrated harness uses a temporary ordinary account on Windows Server 2022. The Dataset versions panel now keeps Export reachable with the inspector open at 1056 and 1440 px. All ten installed journeys must pass on the integrated head. |
+
+The local `92e355b6a` MSI SHA-256 is
+`e01633131f3e83fd8687eb6341b1ffd07b6b24be30a9662d81579210d91c2820`.
+The original payload, its failed distribution audit, the GPU measurements
+and the rollback receipts are in the owner's local candidate review folder.
+[Draft #92](https://github.com/Rafael-Del-Valle/ReefVision/pull/92),
+[hosted installer and upgrades](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44680691093),
+[ordinary-user Windows comparison](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44685475470).
 
 ## Feature-by-feature result
 
@@ -614,6 +632,32 @@ reported hunks were corrected in this iteration.
 identity, calibrated organism surface area or branch length from points,
 independent coral validation, physical GPU testing, or an installed Windows
 MSI/CAB/GUI acceptance result. ReefVision 1.5 remains isolated and unchanged.
+
+## Track C: malformed JSON Unicode 422 serialization (2026-11-19)
+
+Exact-head CI for predecessor `4997d4bc` reported one failed `CI / backend`
+job (five failed cases; 5,169 passed, ten skipped). The five failures were
+three OBJ and two ASCII PLY malformed-source API tests. Pydantic rejected
+escaped unpaired UTF-16 surrogates *before* the mesh/point-cloud endpoint;
+FastAPI's default 422 response then echoed the invalid input and raised
+`UnicodeEncodeError` while encoding JSON, rather than returning a controlled
+client error. This is distinct from the already-tested direct parser rejection.
+
+The API application now preserves FastAPI's normal 422 `detail` structure but
+renders invalid surrogate code points as printable backslash escapes within
+validation details, keeping the response UTF-8 serializable without changing
+valid Unicode text or inferring any geometry. The OBJ and PLY regressions
+permit either a parser-level 400 or a Pydantic-level 422, since framework
+versions vary; when Pydantic rejects first, they require `string_unicode`
+and safe escaped input. A focused serializer regression checks that even a
+synthetic pre-parser 422 encodes as UTF-8 while legitimate non-BMP Unicode
+remains unchanged. Existing valid-Unicode OBJ and persisted typed Workflow
+Builder parity tests remain intact. No imported scientific measurement or
+local checkpoint is modified by this HTTP boundary fix.
+
+These edits and final-head CI remain **unverified pending Actions**. Synthetic
+tests do not establish calibration, specimen reidentification, anatomical
+branch length, or field validation. **RELEASE HOLD: 1.4 and 1.5.**
 
 ## Packaged ReefPose comparison on the RTX 3090
 

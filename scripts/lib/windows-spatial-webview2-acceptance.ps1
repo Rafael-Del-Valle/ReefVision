@@ -92,7 +92,9 @@ function Wait-ReefVisionWebView2DebugEndpoint {
     param(
         [Parameter(Mandatory = $true)][int]$Port,
         [Parameter(Mandatory = $true)][int]$DesktopProcessId,
-        [string]$FailureEvidencePath
+        [string]$FailureEvidencePath,
+        [string]$AttachmentEvidencePath,
+        [string]$ExpectedBrowserSid
     )
 
     $timer = [System.Diagnostics.Stopwatch]::StartNew()
@@ -120,6 +122,7 @@ function Wait-ReefVisionWebView2DebugEndpoint {
                     pid = $listener.OwningProcess
                     owner_name = $null
                     owner_parent_pid = $null
+                    owner_sid = $null
                     expected_owner = $false
                 }
                 $observedListeners += $observation
@@ -131,6 +134,11 @@ function Wait-ReefVisionWebView2DebugEndpoint {
                     $observation.owner_name = $owner.Name
                     $observation.owner_parent_pid = $owner.ParentProcessId
                     $observation.expected_owner = $owner.Name -ieq 'msedgewebview2.exe' -and $owner.ParentProcessId -eq $DesktopProcessId
+                    if ($observation.expected_owner -and $ExpectedBrowserSid) {
+                        $browserOwner = Invoke-CimMethod -InputObject $owner -MethodName GetOwnerSid
+                        $observation.owner_sid = $browserOwner.Sid
+                        $observation.expected_owner = $browserOwner.ReturnValue -eq 0 -and $browserOwner.Sid -eq $ExpectedBrowserSid
+                    }
                 }
                 if (-not $observation.expected_owner) {
                     throw "The listener on port $Port does not belong to this acceptance WebView2 process."
@@ -161,6 +169,10 @@ function Wait-ReefVisionWebView2DebugEndpoint {
                     if ($endpoint -notmatch "^ws://127[.]0[.]0[.]1:$Port/devtools/browser/[a-f0-9-]+$") {
                         $probe.result = 'unexpected_endpoint'
                         throw 'WebView2 reported an unexpected debugger endpoint.'
+                    }
+                    if ($AttachmentEvidencePath) {
+                        [ordered]@{port=$Port; desktop_pid=$DesktopProcessId; listeners=$observedListeners} |
+                            ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $AttachmentEvidencePath -Encoding utf8
                     }
                     return $endpoint
                 }
@@ -196,6 +208,16 @@ function Wait-ReefVisionWebView2DebugClosure([int]$Port) {
     throw "WebView2 debugging was still listening on port $Port after the acceptance desktop closed."
 }
 
+function Get-ReefVisionInstalledJourneyEvidence([scriptblock]$RunJourney) {
+    try {
+        $result = & $RunJourney
+        $detail = "Installed WebView2 passed $($result.completed_journeys) desktop journeys. Reviewed graph $($result.graph_record_id) ran as $($result.first_run_id) and $($result.replay_run_id) with comparison SHA-256 $($result.artifact.payload_sha256). Scratch detector $($result.ordinary_detector.model_id) produced checkpoint SHA-256 $($result.ordinary_detector.checkpoint_sha256). Managed restore job $($result.backup_restore.restore_job_id) recovered $($result.backup_restore.restored_files) verified files."
+        return New-ReefVisionEvidenceResult -Status 'PASS' -Detail $detail
+    } catch {
+        return New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $_.Exception.Message
+    }
+}
+
 function Invoke-ReefVisionSpatialWebView2Acceptance {
     param(
         [Parameter(Mandatory = $true)][string]$NodePath,
@@ -203,11 +225,13 @@ function Invoke-ReefVisionSpatialWebView2Acceptance {
         [Parameter(Mandatory = $true)][string]$EvidenceRoot,
         [Parameter(Mandatory = $true)][string]$Api,
         [Parameter(Mandatory = $true)][int]$DebugPort,
-        [Parameter(Mandatory = $true)][int]$DesktopProcessId
+        [Parameter(Mandatory = $true)][int]$DesktopProcessId,
+        [string]$ExpectedBrowserSid
     )
 
     $endpoint = Wait-ReefVisionWebView2DebugEndpoint -Port $DebugPort -DesktopProcessId $DesktopProcessId `
-        -FailureEvidencePath (Join-Path $EvidenceRoot 'spatial-webview2-startup.log')
+        -FailureEvidencePath (Join-Path $EvidenceRoot 'spatial-webview2-startup.log') `
+        -AttachmentEvidencePath (Join-Path $EvidenceRoot 'spatial-webview2-attached.log') -ExpectedBrowserSid $ExpectedBrowserSid
     $playwrightRoot = Join-Path $RepositoryRoot 'apps\web'
     $playwrightCli = Join-Path $playwrightRoot 'node_modules\@playwright\test\cli.js'
     $output = Join-Path $EvidenceRoot 'spatial-playwright'
@@ -216,6 +240,7 @@ function Invoke-ReefVisionSpatialWebView2Acceptance {
     $variables = @{
         REEFVISION_GUIDED_TEST_API = $Api
         REEFVISION_SPATIAL_WEBVIEW2_ENDPOINT = $endpoint
+        REEFVISION_ORDINARY_DETECTOR_ACCEPTANCE = '1'
         PLAYWRIGHT_JSON_OUTPUT_FILE = $report
     }
     $previous = @{}
@@ -235,7 +260,9 @@ function Invoke-ReefVisionSpatialWebView2Acceptance {
             'reviewed-coral-growth-live.spec.ts',
             'paired-growth-contrast-live.spec.ts',
             'dataset-export-layout-live.spec.ts',
-            'ordinary-project-live.spec.ts'
+            'ordinary-project-live.spec.ts',
+            'ordinary-detector-live.spec.ts',
+            'backup-restore-live.spec.ts'
         )
         & $NodePath $playwrightCli test @specs --workers=1 --retries=0 --reporter=list,json --output=$output *> $log
         if ($LASTEXITCODE -ne 0) {
@@ -257,6 +284,23 @@ function Invoke-ReefVisionSpatialWebView2Acceptance {
     if ($results.Count -ne 1) { throw 'Expected one completed two-acquisition spatial replay report.' }
     $result = Get-Content -LiteralPath $results[0].FullName -Raw | ConvertFrom-Json
     if ($result.surface -ne 'tauri-webview2') { throw 'The spatial replay did not run in ReefVision WebView2.' }
+    $detectorFiles = @(Get-ChildItem -LiteralPath $output -Recurse -File -Filter 'ordinary-detector-evidence.json')
+    if ($detectorFiles.Count -ne 1) { throw 'Expected one completed ordinary detector report.' }
+    $detector = Get-Content -LiteralPath $detectorFiles[0].FullName -Raw | ConvertFrom-Json
+    if ($detector.surface -ne 'tauri-webview2' -or $detector.device -ne 'cpu' -or $detector.initializer -ne 'scratch' -or $detector.checkpoint_sha256 -notmatch '^[a-f0-9]{64}$') {
+        throw 'The installed detector report lacks verified CPU scratch-training evidence.'
+    }
+    $backupFiles = @(Get-ChildItem -LiteralPath $output -Recurse -File -Filter 'backup-restore-evidence.json')
+    if ($backupFiles.Count -ne 1) { throw 'Expected one completed managed backup and restore report.' }
+    $backup = Get-Content -LiteralPath $backupFiles[0].FullName -Raw | ConvertFrom-Json
+    if ($backup.surface -ne 'tauri-webview2' -or $backup.restore_status -ne 'succeeded' -or
+        $backup.verified_files -lt 2 -or $backup.restored_files -ne $backup.verified_files -or
+        $backup.backup_database_sha256 -notmatch '^[a-f0-9]{64}$' -or $backup.original_sha256 -notmatch '^[a-f0-9]{64}$' -or
+        $backup.independent_recovery -ne $true -or $backup.live_original_unchanged -ne $true) {
+        throw 'The installed backup report lacks a verified independent recovery with an unchanged original.'
+    }
+    $result | Add-Member -NotePropertyName ordinary_detector -NotePropertyValue $detector
+    $result | Add-Member -NotePropertyName backup_restore -NotePropertyValue $backup
     $result | Add-Member -NotePropertyName completed_journeys -NotePropertyValue $stats.expected
     return $result
 }

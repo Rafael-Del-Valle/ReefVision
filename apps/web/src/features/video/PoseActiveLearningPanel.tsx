@@ -16,11 +16,14 @@ import {
   type PoseTrainingDataset,
   type PoseTrainingExportFormat,
 } from "./poseActiveLearningApi";
+import { ReefPoseGroupingFields } from "./ReefPoseGroupingFields";
+import type { ReefPoseSourceGrouping } from "./temporalReefPoseApi";
 
 interface PoseActiveLearningPanelProps {
   projectId: string;
   videoId: string;
   activeCandidateId?: string | null;
+  selectedTrack?: { id: string; track_number: number };
   onOpenCandidate: (candidate: PoseActiveLearningCandidate) => void;
 }
 
@@ -32,6 +35,7 @@ export function PoseActiveLearningPanel({
   projectId,
   videoId,
   activeCandidateId = null,
+  selectedTrack,
   onOpenCandidate,
 }: PoseActiveLearningPanelProps) {
   const queryClient = useQueryClient();
@@ -44,6 +48,12 @@ export function PoseActiveLearningPanel({
   const [selectionMode, setSelectionMode] =
     useState<PoseActiveLearningSelectionMode>("uncertainty");
   const [diversityWeight, setDiversityWeight] = useState(0.25);
+  const [declared, setDeclared] = useState<{
+    trackId: string;
+    grouping?: ReefPoseSourceGrouping;
+  }>();
+  const grouping =
+    declared?.trackId === selectedTrack?.id ? declared?.grouping : undefined;
   const [selectedRoundId, setSelectedRoundId] = useState("");
   const [frozenDataset, setFrozenDataset] =
     useState<PoseTrainingDataset | null>(null);
@@ -81,6 +91,9 @@ export function PoseActiveLearningPanel({
         minimum_frame_spacing: minimumFrameSpacing,
         selection_mode: selectionMode,
         diversity_weight: diversityWeight,
+        ...(grouping && selectedTrack
+          ? { track_ids: [selectedTrack.id], grouping }
+          : {}),
       }),
     onSuccess: async (round) => {
       setSelectedRoundId(round.id);
@@ -136,6 +149,19 @@ export function PoseActiveLearningPanel({
     (item) => item.id === selectedRoundId,
   );
 
+  const savedGrouping = selectedRound?.selection_manifest_json
+    .source_grouping as ReefPoseSourceGrouping | undefined;
+  const savedStudy = selectedRound?.selection_manifest_json
+    .source_grouping_study as
+    | {
+        organism_key: string;
+        link_source_sha256: string;
+        experimental_unit_id?: string;
+        study_assignment?: { sampling_unit_id?: string };
+      }
+    | undefined;
+  const isGroupingIncomplete =
+    grouping && (!grouping.recording_id.trim() || !grouping.animal_id.trim());
   const error =
     roundsQuery.error ??
     candidatesQuery.error ??
@@ -265,9 +291,22 @@ export function PoseActiveLearningPanel({
         )}
       </div>
 
+      {selectedTrack && (
+        <>
+          <p className="annotation-helper">
+            Adding IDs limits this round to track {selectedTrack.track_number}.
+          </p>
+          <ReefPoseGroupingFields
+            grouping={grouping}
+            onChange={(next) =>
+              setDeclared({ trackId: selectedTrack.id, grouping: next })
+            }
+          />
+        </>
+      )}
       <button
         type="button"
-        disabled={createMutation.isPending}
+        disabled={createMutation.isPending || isGroupingIncomplete}
         onClick={() => createMutation.mutate()}
       >
         {createMutation.isPending
@@ -303,6 +342,21 @@ export function PoseActiveLearningPanel({
               Selection manifest {selectedRound.selection_sha256.slice(0, 12)}
               ...
             </p>
+            {savedGrouping && (
+              <p className="annotation-helper">
+                Declared recording {savedGrouping.recording_id} · animal{" "}
+                {savedGrouping.animal_id}
+              </p>
+            )}
+            {savedStudy && (
+              <p className="annotation-helper">
+                Reviewed organism {savedStudy.organism_key}
+                {savedStudy.study_assignment?.sampling_unit_id &&
+                  ` · Sampling unit ${savedStudy.study_assignment.sampling_unit_id}`}
+                {" · Evidence "}
+                {savedStudy.link_source_sha256.slice(0, 12)}
+              </p>
+            )}
             <a href={poseActiveLearningRetrainingManifestUrl(selectedRound.id)}>
               Inspect retraining provenance manifest
             </a>

@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from reefvision import __version__
 from reefvision.config import Settings
 from reefvision.db.models import BackupRecord, Job
+from reefvision.desktop import resolve_alembic_paths
 from reefvision.domain.errors import ConflictError, NotFoundError
 from reefvision.repositories.backups import BackupRepository
 from reefvision.repositories.jobs import JobRepository
@@ -232,10 +233,10 @@ class BackupService:
             )
 
     def _known_schema_revisions(self) -> set[str]:
-        api_root = Path(__file__).resolve().parents[2]
-        config = Config(str(api_root / "alembic.ini"))
+        alembic_ini, migrations_dir = resolve_alembic_paths()
+        config = Config(str(alembic_ini))
         config.attributes["configure_logger"] = False
-        config.set_main_option("script_location", str(api_root / "migrations"))
+        config.set_main_option("script_location", str(migrations_dir))
         script = ScriptDirectory.from_config(config)
         head = script.get_current_head()
         if head is None:

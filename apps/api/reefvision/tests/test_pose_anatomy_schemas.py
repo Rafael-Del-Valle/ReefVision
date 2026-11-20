@@ -6,7 +6,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from reefvision.db.models import PoseLandmarkSchema, PoseLandmarkSchemaRevision
+from reefvision.db.models import PoseLandmarkSchema, PoseLandmarkSchemaRevision, VideoTrack
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_video_tracking_phase6 import _import_video
 
@@ -323,3 +323,27 @@ def test_manual_video_track_binds_exact_custom_anatomy_revision(
     )
     assert mismatch.status_code == 400
     assert "hash" in mismatch.text.lower()
+
+    association_path = f"/api/v1/video-tracks/{track['id']}/pose-temporal"
+    built = client.post(f"{association_path}-associations", json={})
+    assert built.status_code == 200, built.text
+    associations = client.get(association_path).json()
+    [observation] = associations["observations"]
+    assert observation["pose_schema_id"] == created["id"]
+    assert observation["pose_schema_revision"] == created["revision"]
+    assert observation["semantic_label"] == "Bell center"
+    assert observation["observed_x_px"] == 20
+
+    # Simulate an incompatible binding already present in a historical row.
+    with cast(FastAPI, client.app).state.session_factory() as session:
+        row = session.get(VideoTrack, track["id"])
+        assert row is not None
+        row.metadata_json = {
+            **(row.metadata_json or {}),
+            "pose_landmark_schema": {**stored, "content_hash": "f" * 64},
+        }
+        session.commit()
+    rebuild = client.post(f"{association_path}-associations", json={"replace_existing": True})
+    assert rebuild.status_code == 400, rebuild.text
+    assert "does not match a saved project revision" in rebuild.text
+    assert client.get(association_path).json() == associations

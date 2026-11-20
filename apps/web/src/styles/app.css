@@ -871,11 +871,25 @@ textarea {
   font-size: 0.78rem;
 }
 
+.versions-panel {
+  container: dataset-versions / inline-size;
+}
+
 .versions-layout {
   display: grid;
   grid-template-columns: minmax(320px, 1.05fr) minmax(300px, 0.95fr);
   gap: 1rem;
   margin-top: 1rem;
+}
+
+@container dataset-versions (max-width: 40rem) {
+  .versions-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .version-detail-card > .section-heading {
+    flex-wrap: wrap;
+  }
 }
 
 .versions-creator,
@@ -1135,7 +1149,7 @@ textarea {
   }
 
   .versions-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .dashboard-layout {

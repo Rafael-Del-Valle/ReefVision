@@ -10,6 +10,7 @@ param(
     [string]$LineageVerificationPath = '',
     [string]$ExpectedInitialSchemaRevision = '',
     [string]$SpatialWorkflowNodePath = '',
+    [switch]$HostedStandardUserWebView2,
     [switch]$VerifyPreviousInstallerRejectsUpgradedProfile,
     [switch]$PreviousInstallerSupportsIsolatedAcceptance,
     [switch]$DisposableTest,
@@ -25,11 +26,18 @@ Set-StrictMode -Version Latest
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'lib\windows-clean-acceptance.ps1')
 . (Join-Path $PSScriptRoot 'lib\windows-spatial-webview2-acceptance.ps1')
+. (Join-Path $PSScriptRoot 'lib\windows-standard-user-webview2.ps1')
 
 if (-not $DisposableTest -and -not $PlanOnly) {
     throw 'Refusing destructive MSI acceptance. Supply -DisposableTest on a disposable Windows VM/machine, or use -PlanOnly.'
 }
 if ($DisposableTest -and $PlanOnly) { throw '-DisposableTest and -PlanOnly are mutually exclusive.' }
+if ($HostedStandardUserWebView2) {
+    if (-not $DisposableTest -or -not $SpatialWorkflowNodePath) {
+        throw 'A hosted standard WebView2 user requires disposable installed spatial acceptance.'
+    }
+    Assert-ReefVisionHostedStandardUserMode
+}
 
 $InstallerPath = (Resolve-Path -LiteralPath $InstallerPath).Path
 if ([System.IO.Path]::GetExtension($InstallerPath) -ine '.msi') { throw 'InstallerPath must identify an MSI.' }
@@ -222,10 +230,12 @@ function Start-AcceptanceDesktop([string]$ProfileDataRoot = $DataRoot, [int]$Web
     $isolatedOverrides = @{
         REEFVISION_WINDOWS_ACCEPTANCE = '1'
         REEFVISION_ACCEPTANCE_DATA_DIR = $ProfileDataRoot
-        WEBVIEW2_USER_DATA_FOLDER = (Join-Path $ProfileDataRoot 'webview2')
+        # Like the installed app, keep the browser's locked cache outside managed data.
+        WEBVIEW2_USER_DATA_FOLDER = (Join-Path $RunRoot ((Split-Path -Leaf $ProfileDataRoot) + '-webview2'))
     }
     if ($WebViewDebugPort) {
         $isolatedOverrides['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = "--remote-debugging-address=127.0.0.1 --remote-debugging-port=$WebViewDebugPort"
+        $isolatedOverrides['YOLO_OFFLINE'] = 'true'
     }
     if ($LiveSam2Acceptance) {
         # The default clean-install acceptance deliberately forbids network
@@ -564,34 +574,49 @@ try {
     if (-not $shortcuts.Count) { throw 'The MSI installed no discoverable ReefVision shortcut.' }
 
     if ($SpatialWorkflowNodePath) {
-        try {
+        $report.spatial_workflow = Get-ReefVisionInstalledJourneyEvidence {
             New-Item -ItemType Directory -Path $SpatialDataRoot | Out-Null
             Set-Content -LiteralPath (Join-Path $SpatialDataRoot '.reefvision-clean-install-acceptance') -Value $Token
             $debugPort = Get-ReefVisionLoopbackDebugPort
-            $spatialDesktop = Start-AcceptanceDesktop -ProfileDataRoot $SpatialDataRoot -WebViewDebugPort $debugPort
+            $spatialDesktop = $null
+            $ordinaryUser = $null
+            $browserSid = ''
             try {
+                if ($HostedStandardUserWebView2) {
+                    $ordinaryUser = New-ReefVisionHostedGuiAccount -RunRoot $RunRoot
+                    $browserSid = $ordinaryUser.sid.Value
+                    $spatialDesktop = Start-ReefVisionHostedGui -Account $ordinaryUser -Executable (Join-Path $InstallRoot 'ReefVision.exe') `
+                        -Profile $SpatialDataRoot -DebugPort $debugPort -EvidenceRoot $EvidenceRoot
+                } else {
+                    $spatialDesktop = Start-AcceptanceDesktop -ProfileDataRoot $SpatialDataRoot -WebViewDebugPort $debugPort
+                }
                 $spatialPort = Wait-BackendPort -Path (Join-Path $SpatialDataRoot 'runtime\backend-port.txt') -DesktopProcess $spatialDesktop -BackendLogPath (Join-Path $SpatialDataRoot 'logs\backend.log')
                 $spatialApi = "http://127.0.0.1:$spatialPort/api/v1"
                 $null = Assert-AcceptancePackagedBackend -Api $spatialApi -ExpectedAppVersion $ProductVersion -ExpectedRevision $ExpectedSchemaRevision
-                $result = Invoke-ReefVisionSpatialWebView2Acceptance -NodePath $SpatialWorkflowNodePath -RepositoryRoot $RepositoryRoot -EvidenceRoot $EvidenceRoot -Api $spatialApi -DebugPort $debugPort -DesktopProcessId $spatialDesktop.Id
+                Invoke-ReefVisionSpatialWebView2Acceptance -NodePath $SpatialWorkflowNodePath -RepositoryRoot $RepositoryRoot `
+                    -EvidenceRoot $EvidenceRoot -Api $spatialApi -DebugPort $debugPort -DesktopProcessId $spatialDesktop.Id -ExpectedBrowserSid $browserSid
             } finally {
                 try {
-                    $spatialDesktop.Refresh()
-                    Stop-AcceptanceDesktop $spatialDesktop
-                } catch {
-                    if (-not $spatialDesktop.HasExited) {
-                        $spatialDesktop.Kill($true)
-                        $null = $spatialDesktop.WaitForExit(15000)
+                    if ($ordinaryUser) {
+                        Remove-ReefVisionHostedGuiAccount -Account $ordinaryUser -EvidenceRoot $EvidenceRoot
+                    } elseif ($spatialDesktop) {
+                        try {
+                            $spatialDesktop.Refresh()
+                            Stop-AcceptanceDesktop $spatialDesktop
+                        } catch {
+                            if (-not $spatialDesktop.HasExited) {
+                                $spatialDesktop.Kill($true)
+                                $null = $spatialDesktop.WaitForExit(15000)
+                            }
+                            throw
+                        }
                     }
-                    throw
+                } finally {
+                    Wait-ReefVisionWebView2DebugClosure -Port $debugPort
                 }
-                Wait-ReefVisionWebView2DebugClosure -Port $debugPort
             }
-            $report.spatial_workflow = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed WebView2 passed $($result.completed_journeys) desktop journeys. Two synthetic originals were reviewed and compared in graph $($result.graph_record_id), runs $($result.first_run_id) and $($result.replay_run_id), with downloaded comparison SHA-256 $($result.artifact.payload_sha256)."
-        } catch {
-            $report.spatial_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $_.Exception.Message
-            throw
         }
+        Save-Report
     }
 
     $desktop = Start-AcceptanceDesktop
@@ -993,6 +1018,9 @@ try {
         $report.data_retention = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Isolated project data remained after uninstall.'
     } else {
         $report.data_retention = New-ReefVisionEvidenceResult -Status 'NOT RUN' -Detail 'Uninstall was skipped.'
+    }
+    if ($report.spatial_workflow.status -eq 'FAIL') {
+        throw $report.spatial_workflow.detail
     }
 } catch {
     $report.failure_reason = $_.Exception.Message

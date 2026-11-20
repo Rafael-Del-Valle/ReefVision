@@ -594,6 +594,18 @@ disagreement QC, and standalone-versus-persisted-workflow artifact parity.
 
 ## Longitudinal registered-centroid versus landmark RMS (provisional)
 
+Open the earlier mesh in the project, choose **Compare two acquisitions**,
+select the later mesh and open **Rigid transform and error bounds**. Enter
+the 4 × 4 rigid matrix mapping earlier calibrated coordinates into the later
+frame. Translation and the three optional error bounds use meters. The
+project preview and the saved Workflow Builder form share these inputs.
+Preview rejects a distorted transform and records the review evidence with
+the result. In a fixture, a 90° rotation with translation yielded a
+surface-centroid separation of 0.266796843 m. The caller's bounds gave
+0.166796843 to 0.366796843 m. Both saved runs reproduced the standalone
+artifact. Independent registration and specimen identity remain open.
+[Desktop comparison and Exchange journey](../apps/web/tests/e2e/project-spatial-comparison-live.spec.ts).
+
 The standalone 3D longitudinal comparison and the persisted typed
 `mesh_longitudinal_comparison` Workflow Builder node now include
 `registered_centroid_separation_to_registration_rms_ratio`. This is the

@@ -4,6 +4,7 @@ Set-StrictMode -Version Latest
 $Root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'lib\windows-clean-acceptance.ps1')
 . (Join-Path $PSScriptRoot 'lib\windows-spatial-webview2-acceptance.ps1')
+. (Join-Path $PSScriptRoot 'lib\windows-standard-user-webview2.ps1')
 
 $passed = 0
 function Assert-True([bool]$Condition, [string]$Message) {
@@ -15,6 +16,36 @@ function Assert-Throws([scriptblock]$Action, [string]$Message) {
         if ($_.Exception.Message -like 'Expected failure:*') { throw }
     }
     $script:passed++
+}
+
+$journeyFailure = Get-ReefVisionInstalledJourneyEvidence { throw 'Fixture WebView2 attach timeout.' }
+Assert-True ($journeyFailure.status -eq 'FAIL') 'A failed installed journey must remain failed while the independent MSI lifecycle checks run.'
+Assert-True ($journeyFailure.detail -eq 'Fixture WebView2 attach timeout.') 'The retained journey failure must identify the original error.'
+$journeySuccess = Get-ReefVisionInstalledJourneyEvidence {
+    [pscustomobject]@{
+        completed_journeys = 10; graph_record_id = 'graph-id'; first_run_id = 'first'; replay_run_id = 'second'
+        artifact = [pscustomobject]@{ payload_sha256 = 'comparison-digest' }
+        ordinary_detector = [pscustomobject]@{ model_id = 'detector-id'; checkpoint_sha256 = 'checkpoint-digest' }
+        backup_restore = [pscustomobject]@{ restore_job_id = 'restore-id'; restored_files = 3 }
+    }
+}
+Assert-True ($journeySuccess.status -eq 'PASS' -and $journeySuccess.detail.Contains('comparison-digest') -and $journeySuccess.detail.Contains('checkpoint-digest')) 'Successful journeys must retain the spatial export and the trained detector identities.'
+Assert-True ($journeySuccess.detail.Contains('restore-id') -and $journeySuccess.detail.Contains('3 verified files')) 'Successful journeys must retain the managed restore job and recovered file count.'
+
+$oldActions = $env:GITHUB_ACTIONS
+$oldRunner = $env:RUNNER_ENVIRONMENT
+try {
+    $env:GITHUB_ACTIONS = 'true'
+    $env:RUNNER_ENVIRONMENT = 'self-hosted'
+    Assert-Throws { Assert-ReefVisionHostedStandardUserMode } 'A self-hosted or physical Windows machine must never enter temporary account provisioning.'
+    $env:RUNNER_ENVIRONMENT = 'github-hosted'
+    Assert-ReefVisionHostedStandardUserMode
+    $unmarked = Join-Path $env:TEMP ('reefvision-unmarked-' + [guid]::NewGuid().ToString('N'))
+    Assert-Throws { New-ReefVisionHostedGuiAccount -RunRoot $unmarked } 'Temporary account provisioning must require the disposable acceptance marker.'
+    Assert-True ((Get-ReefVisionProcessIntegrity (Get-Process -Id $PID)) -ge 8192) 'The Windows integrity reader did not identify the current token.'
+} finally {
+    $env:GITHUB_ACTIONS = $oldActions
+    $env:RUNNER_ENVIRONMENT = $oldRunner
 }
 
 $defaultData = Join-Path $env:APPDATA 'org.reefvision.desktop'
@@ -75,11 +106,23 @@ Assert-True (($browserArguments | ConvertTo-Json) -notmatch 'secret-value|privat
         }
     }
     function Invoke-RestMethod($Uri, [switch]$NoProxy, $TimeoutSec, $StatusCodeVariable) {
+        $script:fixtureRequests++
         Set-Variable -Name $StatusCodeVariable -Value 200 -Scope 1
         [pscustomobject]@{ webSocketDebuggerUrl = $script:debugFixtureEndpoint }
     }
+    function Invoke-CimMethod($InputObject, $MethodName) {
+        [pscustomobject]@{ Sid = 'S-1-5-21-100-200-300-1002'; ReturnValue = 0 }
+    }
     try {
         $script:debugFixtureEndpoint = 'ws://127.0.0.1:39513/devtools/browser/abcdef-1234'
+        $script:fixtureRequests = 0
+        Assert-Throws { Wait-ReefVisionWebView2DebugEndpoint -Port 39513 -DesktopProcessId $PID -ExpectedBrowserSid 'S-1-5-21-100-200-300-1001' } 'A browser launched by another Windows user was accepted.'
+        Assert-True ($script:fixtureRequests -eq 0) 'A browser with the wrong Windows account received a CDP probe.'
+        $attachment = Wait-ReefVisionWebView2DebugEndpoint -Port 39513 -DesktopProcessId $PID -ExpectedBrowserSid 'S-1-5-21-100-200-300-1002' -AttachmentEvidencePath $debugEvidence
+        Assert-True ($attachment -eq $script:debugFixtureEndpoint) 'The owned WebView2 endpoint for the ordinary account was rejected.'
+        $receipt = Get-Content -LiteralPath $debugEvidence -Raw
+        Assert-True (($receipt | ConvertFrom-Json).listeners[0].owner_sid -eq 'S-1-5-21-100-200-300-1002' -and $receipt -notmatch 'abcdef-1234') 'The attach report must record the validated Windows owner without publishing the WebSocket token.'
+        Remove-Item -LiteralPath $debugEvidence
         $attached = Wait-ReefVisionWebView2DebugEndpoint -Port 39513 -DesktopProcessId $PID -FailureEvidencePath $debugEvidence
         Assert-True ($attached -eq $script:debugFixtureEndpoint) 'Owned loopback WebView2 endpoint was not accepted.'
         Assert-True (-not (Test-Path -LiteralPath $debugEvidence)) 'A successful WebView2 attach wrote failure evidence.'
@@ -92,7 +135,7 @@ Assert-True (($browserArguments | ConvertTo-Json) -notmatch 'secret-value|privat
         Assert-True ($raw -notmatch 'private-endpoint-value') 'WebView2 diagnostics exposed an untrusted version response.'
     } finally {
         Remove-Item -LiteralPath $debugEvidence -ErrorAction SilentlyContinue
-        Remove-Variable -Name debugFixtureEndpoint -Scope Script -ErrorAction SilentlyContinue
+        Remove-Variable -Name debugFixtureEndpoint,fixtureRequests -Scope Script -ErrorAction SilentlyContinue
     }
 }
 
@@ -295,6 +338,12 @@ foreach ($lineageParameter in @(
     Assert-True ($acceptanceParameterNames -contains $lineageParameter) "Installed lineage CLI is missing -$lineageParameter."
 }
 $acceptanceScript = Get-Content -LiteralPath $acceptancePath -Raw
+$installedJourneys = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'lib\windows-spatial-webview2-acceptance.ps1') -Raw
+Assert-True ($installedJourneys.Contains("'ordinary-detector-live.spec.ts'") -and $installedJourneys.Contains("REEFVISION_ORDINARY_DETECTOR_ACCEPTANCE = '1'")) 'The installed desktop must execute the opt-in ordinary detector training, review and export journey.'
+Assert-True ($installedJourneys.Contains("'ordinary-detector-evidence.json'")) 'Installed acceptance must retain the actual software and checkpoint evidence for the detector journey.'
+$retentionCheck = $acceptanceScript.IndexOf('Isolated project data remained after uninstall.')
+$journeyFailureGate = $acceptanceScript.IndexOf('throw $report.spatial_workflow.detail')
+Assert-True ($retentionCheck -ge 0 -and $journeyFailureGate -gt $retentionCheck) 'A failed installed journey must still fail acceptance after uninstall and data retention are recorded.'
 
 # Exercise the actual rejection probe without starting or killing a desktop.
 & {

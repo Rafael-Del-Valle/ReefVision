@@ -175,7 +175,8 @@ jobs:
 
   windows-clean-install-acceptance:
     name: Fresh install, launch, persist and uninstall 1.4.0 on disposable Windows
-    runs-on: windows-latest
+    # The native CDP endpoint is verified on this hosted Windows image.
+    runs-on: windows-2022
     needs: build-windows-installer
     timeout-minutes: 75
     env:
@@ -233,7 +234,7 @@ jobs:
             -InstallerPath $msi `
             -ExpectedVersion '1.4.0' -ExpectedSchemaRevision 'b14_condition_0041' `
             -AcceptanceRoot 'C:\reefvision-1-4-0-disposable-acceptance' `
-            -SpatialWorkflowNodePath $playwrightNode -SkipUpgrade -DisposableTest -KeepArtifacts
+            -SpatialWorkflowNodePath $playwrightNode -HostedStandardUserWebView2 -SkipUpgrade -DisposableTest -KeepArtifacts
 
       - name: Upload isolated Windows acceptance report and MSI logs
         if: always()

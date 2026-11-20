@@ -2,6 +2,70 @@
 
 In **Models & AI**, open **ReefPose scientific validation** and expand **Scientific human–model comparison**. Choose a completed held-out scoring report with one registered checkpoint. An optional second report is paired on the exact same frozen reference revision, rater, configuration and upstream inference/tracker protocol. Use the same event label or anatomical measurement definition and units. Save the comparison, reopen it from the selector, and export pairs or the methods/provenance record. The saved comparison UUID configures **Publish Scientific Comparison** in Workflow Builder. This node retrieves the same report and rejects stale source evidence.
 
+## Group provenance for frame and temporal checkpoints
+
+From a project, open **Video & automation → Video & tracking**. Select the
+source track in Pose Active Learning and enter its **Recording ID** and
+**Animal ID across recordings**. Reuse the animal's identifier across other
+recordings of that animal. Review the candidate pose and choose **Freeze
+verified training dataset**. The frozen candidate records the declaration.
+When a current reviewed organism link covers the selected track and frames,
+it also records the linked revision and study assignment.
+
+In the temporal sequence dataset, select the frame-model track, human-reviewed
+supervision track and reviewed animal identity. Confirm that the tracks depict
+the same animal, enter both source identifiers, and choose a partition for
+each sequence. The comparison checks training and validation ancestry,
+including upstream frame checkpoints. Reusing a recording or an animal across
+development and test makes that source exposed. Missing declarations keep the
+result exploratory. Previously stored evaluations retain their original
+receipts. The saved training and evaluation graph uses the same frozen inputs.
+
+A scratch-trained CUDA engineering fixture used two distinct test animals
+and recordings. Both model lineages reported `held_out`. The frozen dataset
+SHA-256 was `911e58ed4fe575d910a0cbc64ebe42c2035f9d16a99e1b573125428caaeb20b9`.
+Frame and temporal estimates each scored 24 of 48 reference coordinates.
+Their respective mean errors were 57.329 and 57.100 source pixels. The pair of
+anatomical landmarks had zero frames with joint model support, so event
+accuracy and timing were unavailable. Two independent groups supplied no
+bootstrap interval. A saved graph reproduced the metrics. The fixture also
+checks reused recording and animal declarations and missing grouping.
+Representative measurements still require independent labels, compatible
+weights and prespecified criteria. [Reproducible source fixture](../scripts/verify_reefpose_temporal_lineage_live.py),
+[normal desktop grouping journey](../apps/web/tests/e2e/reefpose-lineage-grouping-live.spec.ts).
+
+## Five held-out synthetic recordings
+
+A separate RTX 3090 run on source `5578353c6` froze its design before
+training. The scratch frame model used 96 generated training frames and a
+separate 48-frame validation recording. Development used two other temporal
+training recordings and a separate temporal validation recording. Five test
+animals, each in its own 24-frame recording, were rendered after both models
+were selected and registered. One development recording needed a reviewed
+merge of fragments from the same generated individual. The scoring rule,
+split and generating seeds were preserved. The frozen test dataset digest was
+`1fa3a324dedbe9dcdd47671b967bd12f1742a3c60a154b0e7d8f80ddd02649ae`.
+
+| Measurement | Frame only | Temporal |
+| --- | ---: | ---: |
+| Landmark coordinates scored | 240 / 240 | 240 / 240 |
+| Frames with both anatomical landmarks | 120 / 120 | 120 / 120 |
+| Mean landmark error | 5.575 px | 4.006 px |
+| Matched / missed / extra events | 0 / 7 / 15 | 3 / 4 / 18 |
+| Count error across seven complete reference events | +8 | +14 |
+| Precision / recall | 0 / 0 | 0.143 / 0.429 |
+| Mean absolute onset / offset error for matched events | unavailable | 0.133 / 0.133 s |
+| Mean absolute duration / peak-time error | unavailable | 0.200 / 0.100 s |
+
+Temporal refinement reduced mean landmark error by 1.570 px. The 95% paired
+group-bootstrap interval for temporal minus frame error was −1.906 to −1.233 px.
+The temporal model also overcounted more events. The model comparison covers
+generated clips and their known coordinates. The tracked experiment repeated
+the same errors and event counts from a fresh disposable directory. Run
+`python scripts/verify_reefpose_known_answer_live.py <new-directory> --device cuda`
+from the repository's ML development environment. Field validation remains open.
+[Experiment driver](../scripts/verify_reefpose_known_answer_live.py).
+
 ## Statistical definitions
 
 - Signed difference is model estimate minus the selected frozen human reference. Mean absolute error averages the absolute values of the paired differences. Percentage errors divide by the magnitude of a nonzero reference. Zero-reference observations contribute to raw error and are counted separately.

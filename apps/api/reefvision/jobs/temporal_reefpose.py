@@ -8,7 +8,8 @@ from dataclasses import asdict
 from time import perf_counter
 from typing import Any
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select, text, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
@@ -18,6 +19,7 @@ from reefvision.db.models.temporal_reefpose import TemporalReefPoseRun
 from reefvision.domain.errors import ReefVisionError, ValidationError
 from reefvision.domain.pose_biological_events import CycleDefinition
 from reefvision.ml.reefpose.errors import ReefPoseCancelledError, ReefPoseError
+from reefvision.repositories.models import ModelRepository
 from reefvision.schemas.temporal_reefpose import (
     TEMPORAL_RUN_ADAPTER,
     TemporalEvaluationCreate,
@@ -32,7 +34,11 @@ from reefvision.services.temporal_reefpose import (
 )
 from reefvision.services.temporal_reefpose_sources import TEMPORAL_METHOD, source_model
 from reefvision.storage.datasets import canonical_json_sha256
-from reefvision.storage.temporal_reefpose import read_temporal_checkpoint, save_temporal_checkpoint
+from reefvision.storage.temporal_reefpose import (
+    discard_temporal_checkpoint,
+    read_temporal_checkpoint,
+    save_temporal_checkpoint,
+)
 
 LOGGER = logging.getLogger(__name__)
 RunProgress = Callable[[int, dict[str, Any]], None]
@@ -79,6 +85,51 @@ def _sequence(source: dict[str, Any]) -> Any:
     )
 
 
+def _register_training_checkpoint(
+    session: Session, settings: Settings, candidate: ModelRegistration
+) -> ModelRegistration:
+    models = ModelRepository(session)
+    keep_candidate = False
+    try:
+        existing = models.find_by_checksum(candidate.project_id, candidate.sha256)
+        if existing is None:
+            try:
+                with session.begin_nested():
+                    models.add(candidate)
+                    session.flush()
+            except IntegrityError:
+                # Another registration may win the project checksum during this insert.
+                existing = models.find_by_checksum(candidate.project_id, candidate.sha256)
+                if existing is None:
+                    raise
+            else:
+                keep_candidate = True
+                return candidate
+
+        keep_candidate = existing.managed_path == candidate.managed_path
+        if (
+            existing.purpose != candidate.purpose
+            or existing.framework != candidate.framework
+            or existing.task != candidate.task
+            or existing.provider_name != candidate.provider_name
+            or existing.provider_version != candidate.provider_version
+            or existing.file_size_bytes != candidate.file_size_bytes
+            or any(
+                existing.metadata_json.get(key) != value
+                for key, value in candidate.metadata_json.items()
+                if key not in {"source_temporal_run_id", "metrics_history"}
+            )
+        ):
+            raise ValidationError(
+                "The temporal checkpoint checksum belongs to an incompatible model registration"
+            )
+        read_temporal_checkpoint(settings, existing.managed_path, existing.sha256)
+        return existing
+    finally:
+        if not keep_candidate:
+            discard_temporal_checkpoint(settings, candidate.managed_path)
+
+
 def _training(
     session: Session,
     settings: Settings,
@@ -102,6 +153,7 @@ def _training(
     frame_model_sha256 = manifest["frame_model"]["checkpoint_sha256"]
     sources = manifest["sources"]
     landmark_ids = [item["id"] for item in manifest["schema"]["landmarks"]]
+    development = [source for source in sources if source["split"] != "test"]
     lineage = {
         "source_temporal_dataset_id": row.dataset_id,
         "source_temporal_dataset_sha256": source_dataset_sha256,
@@ -109,26 +161,19 @@ def _training(
         "frame_model_sha256": frame_model_sha256,
         "landmark_ids": landmark_ids,
         "training_group_keys": sorted(
-            {
-                group
-                for source in sources
-                if source["split"] in {"train", "validation"}
-                for group in source["groups"]
-            }
+            {group for source in development for group in source["groups"]}
         ),
         "training_recording_hashes": sorted(
-            {
-                source["recording"]["sha256"]
-                for source in sources
-                if source["split"] in {"train", "validation"}
-            }
+            {source["recording"]["sha256"] for source in development}
         ),
         "training_groups_complete": all(
-            any(group.startswith("group:") for group in source["groups"])
-            for source in sources
-            if source["split"] in {"train", "validation"}
+            any(group.startswith("group:") for group in source["groups"]) for source in development
         ),
     }
+    if any(source.get("source_grouping") for source in development):
+        lineage["training_declared_groups_complete"] = all(
+            source.get("source_grouping") for source in development
+        )
     recovery_path = f"{storage_root}/training/temporal/{row.id}/last.pt"
     registered_path = f"{storage_root}/models/{row.id}-temporal.pt"
     resume = read_temporal_checkpoint(settings, recovery_path)
@@ -168,7 +213,12 @@ def _training(
         on_epoch=epoch,
         cancelled=cancelled,
     )
-    if cancelled():
+    # Take the SQLite write lock only after training. It also keeps the registry
+    # savepoint inside the same transaction as the run's final status update.
+    if session.get_bind().dialect.name == "sqlite":
+        session.execute(text("BEGIN IMMEDIATE"))
+    status = session.scalar(select(Job.status).where(Job.id == row.job_id).with_for_update())
+    if status != "running":
         raise ReefPoseCancelledError("Temporal training cancelled")
     checkpoint = {
         key: value for key, value in trained.state.items() if key != "optimizer_state"
@@ -191,7 +241,7 @@ def _training(
         "training_configuration": asdict(training_config),
         "metrics_history": trained.metrics_history,
     }
-    model = ModelRegistration(
+    candidate = ModelRegistration(
         project_id=row.project_id,
         purpose="pose_temporal",
         display_name=f"{configuration.name[:174]} · {row.id[:8]}",
@@ -205,8 +255,7 @@ def _training(
         provider_version="1",
         metadata_json=metadata,
     )
-    session.add(model)
-    session.flush()
+    model = _register_training_checkpoint(session, settings, candidate)
     return {
         "model_id": model.id,
         "checkpoint_sha256": sha256,
@@ -243,6 +292,7 @@ def _loaded_model(
             "training_group_keys",
             "training_recording_hashes",
             "training_groups_complete",
+            "training_declared_groups_complete",
             "landmark_ids",
         )
     ):
@@ -382,11 +432,14 @@ def _evaluation(
         )
     state = manifest["frame_lineage"]["state"]
     grouped_test = all(any(group.startswith("group:") for group in item["groups"]) for item in test)
-    temporal_state = (
-        "held_out"
-        if grouped_test and registration.metadata_json.get("training_groups_complete")
-        else "recording_disjoint_group_unverified"
+    typed_test = [bool(item.get("source_grouping")) for item in test]
+    typed_training = registration.metadata_json.get("training_declared_groups_complete")
+    compatible_grouping = (
+        all(typed_test) and typed_training is True
+        if any(typed_test) or typed_training is not None
+        else grouped_test and registration.metadata_json.get("training_groups_complete")
     )
+    temporal_state = "held_out" if compatible_grouping else "recording_disjoint_group_unverified"
     device = next(model.parameters()).device
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)

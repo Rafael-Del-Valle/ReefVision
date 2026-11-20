@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T04:16:00Z`
+Updated: `2026-11-20T06:18:00Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -11,8 +11,8 @@ Candidate target: `2.0`
 | --- | ---: |
 | blocked | 13 |
 | explicitly_deferred | 4 |
-| in_progress | 33 |
-| verified | 27 |
+| in_progress | 32 |
+| verified | 28 |
 
 ## Features
 
@@ -40,9 +40,9 @@ Candidate target: `2.0`
 | 1.3 | Acquisition-quality review and exclusions | verified | Review → Acquisition QC |
 | 1.3 | Reviewed biological event summaries | verified | Research → Organisms & ecology → Event summaries |
 | 1.3 | 1.3 temporal/scientific exchange, upgrade, and restore | verified | Project menu → Project Exchange / Backup |
-| 1.3 | Held-out landmark, event, timing, and count agreement reports | in_progress | Models & AI → Model Hub → ReefPose scientific validation |
+| 1.3 | Held-out landmark, event, timing, and count agreement reports | verified | Models & AI → Model Hub → ReefPose scientific validation |
 | 1.3 | Publication figures, methods, and provenance records | verified | Research → Reports → Publication outputs |
-| 1.3 | Representative frame-only versus temporal ReefPose comparison | blocked | The model and data lineage required for the engineering held-out label is tracked in rv13-heldout-agreement. Representative group-aware accuracy also requires independent recordings, labels and thresholds. |
+| 1.3 | Representative frame-only versus temporal ReefPose comparison | blocked | The separate prespecified five-group source fixture measured mean landmark errors of 5.575 and 4.006 px. Frame and temporal count errors were +8 and +14. The two-group fixture with 24 of 48 coordinates and no common anatomical pair frames is retained. Field accuracy remains open. |
 | 1.3 | Reviewed study, treatment, site, tank, and sampling-unit assignments | verified | Research → Organisms & ecology → Study assignments |
 | 1.3 | Frozen temporal ReefPose datasets and checkpoint training | verified | Models & AI → Training → Temporal ReefPose |
 | 1.3 | Temporal ReefPose refinement and explicit frame review | verified | Video & automation → Video & tracking → Native temporal ReefPose |
@@ -93,7 +93,7 @@ Candidate target: `2.0`
 | 2.0 | Typed, versioned Workflow Builder with guided forms and human gates | in_progress | Video & automation → Workflow Builder |
 | post-2.0 | Cloud accounts, hosted storage, and real-time collaboration | explicitly_deferred | Local cross-project summaries and offline exchange remain in scope. |
 | post-2.0 | Hyperspectral imagery | explicitly_deferred | Multispectral remains in scope. |
-| post-2.0 | Active SLEAP runtime, provider, and SLP interoperability | explicitly_deferred | BSD sleap-io may remain only for neutral NWB interchange after audit; native ReefPose is the supported pose path. Checkpoint 2194f2e96 passed a digest-bound MSI and six-CAB audit of 19,133 paths and 11,977 nested Python entries. Repeat the payload audit on the final candidate. |
+| post-2.0 | Active SLEAP runtime, provider, and SLP interoperability | explicitly_deferred | BSD sleap-io may remain only for neutral NWB interchange after audit; native ReefPose is the supported pose path. Checkpoint 2194f2e96 passed a digest-bound MSI and six-CAB audit of 19,133 paths and 11,977 nested Python entries. Local 92e355b6a built from the optional NWB development environment carried wheel metadata and two CLI declarations although the vendor module was absent. The Windows release staging regression covers this input. Repeat the payload audit on the final candidate. |
 | post-2.0 | Stereo reconstruction | explicitly_deferred | 3D import, measurement, and matching remain in scope. |
 
 ## Feature evidence
@@ -217,7 +217,7 @@ Acceptance checks:
 Evidence:
 
 - `source`: Reviewed fixture organisms, dates and calibrations exercise per-unit differences, standard error and the t interval. Live analysis and imported receipts reject a colony and its fragments split across independent units. Two Exchange transfers retain the historical report while replays bind to the copied sources. — `apps/api/reefvision/tests/test_paired_growth_contrast.py` (`rv11-paired-reviewed-source`)
-- `browser`: Three complete synthetic tanks with unequal nested organism counts produced differences of 1, 3 and 5 mm. A fourth incomplete tank was excluded. The mean was 3 mm, standard error 1.15470054 mm and 95% interval -1.96827542 to 7.96827542 mm with 2 degrees of freedom. Three JSON downloads and 15 original file hashes matched. Calculate, Download and Save recheck the reviewed source before exposing the result or saving a graph. — `apps/web/tests/e2e/paired-growth-contrast-live.spec.ts` (`rv11-paired-desktop`)
+- `browser`: Three complete synthetic tanks with unequal nested organism counts produced differences of 1, 3 and 5 mm. A fourth incomplete tank was excluded. The mean was 3 mm, standard error 1.15470054 mm and 95% interval -1.96827542 to 7.96827542 mm with 2 degrees of freedom. Three JSON downloads and 15 original file hashes matched. Source desktop journeys also verified site, colony and recording designs with different nesting, missingness and exclusions. Four independent generated time-lapse video originals each preserved the capture-frame membership and source hash. Calculate, Download and Save recheck the reviewed source before exposing the result or saving a graph. — `apps/web/tests/e2e/paired-growth-contrast-live.spec.ts` (`rv11-paired-desktop`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -546,7 +546,7 @@ Evidence:
 ### rv13-heldout-agreement: Held-out landmark, event, timing, and count agreement reports
 
 - Target: `1.3`
-- Status: `in_progress`
+- Status: `verified`
 - Dependencies: `rv13-temporal-refinement-review`, `rv13-event-summaries`
 - Entry point: Models & AI → Model Hub → ReefPose scientific validation
 - Workflow Builder: `required`
@@ -554,12 +554,13 @@ Evidence:
 Acceptance checks:
 
 - **verified** — Publish paired landmark error, event precision/recall, timing/count error, exclusions, and checkpoint/reference provenance. (`rv13-heldout-agreement-check`)
-- **in_progress** — Carry declared independent animal and recording groups from the normal frame training workflow into an immutable checkpoint lineage. A shared group or unknown historical source must remain visible in the evaluation status. (`rv13-audited-frame-training-groups`)
+- **verified** — Carry declared independent animal and recording groups from the normal frame training workflow into an immutable checkpoint lineage. A shared group or unknown historical source must remain visible in the evaluation status. (`rv13-audited-frame-training-groups`)
 
 Evidence:
 
 - `source`: Deterministic scoring, pairing, report-hash, and stale-source tests. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/87` (`rv13-agreement-src`)
-- `browser`: none recorded
+- `source`: Scratch-train and register a native frame model through a saved graph, freeze reviewed temporal sequences and rerun the same paired metrics. Disjoint declared groups qualify as held out. Shared recordings and shared animals are exposed. Missing declarations keep the report exploratory. — `scripts/verify_reefpose_temporal_lineage_live.py` (`rv13-audited-frame-group-fixture`)
+- `browser`: Open a project and select Video & tracking, enter the recording and animal IDs on a source track, verify the pose, freeze supervised training data, then select reviewed identities and partitions for four temporal sequences. — `apps/web/tests/e2e/reefpose-lineage-grouping-live.spec.ts` (`rv13-audited-frame-group-browser`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -603,6 +604,8 @@ Evidence:
 - `browser`: none recorded
 - `windows_installed`: none recorded
 - `physical_hardware`: RTX 3090 native WebView2 fixture on packaged 78a02c20c exercised training, registration, refinement, review and comparison on 12 common frames. Frame and temporal scored 24 coordinates apiece and both missed the one complete event. The report recorded exploratory lineage. — `docs/REEFVISION_1.4.0_REPORT.md#packaged-reefpose-comparison-on-the-rtx-3090` (`rv13-packaged-exploratory-rtx`)
+- `physical_hardware`: Two source CUDA studies used frozen, disjoint animal and recording declarations. The five-group study scored all 240 coordinates, seven complete reference events and 120 common frames. The two-group study retained the unsupported anatomical frames and unavailable event timing. — `docs/REEFVISION_1_3_HELDOUT_AGREEMENT.md#five-held-out-synthetic-recordings` (`rv13-declared-disjoint-cuda`)
+- `physical_hardware`: The 92e355b6a packaged RTX 3090 worker trained from scratch and scored 240 of 240 landmark positions and 120 of 120 shared anatomical frames on five separately generated held-out recording/animal groups. Mean errors were 5.575 and 4.006 px. Of seven complete reference events, frame missed seven with 15 extra. Temporal missed four with 18 extra. Independent animal labels and field acceptance remain open. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/92#issuecomment-7032104053` (`rv13-packaged-frozen-five`)
 - `representative_data`: none recorded
 
 ### rv13-study-assignments: Reviewed study, treatment, site, tank, and sampling-unit assignments
@@ -769,13 +772,17 @@ Acceptance checks:
 - **verified** — Merge validated 1.3 without editing applied migration bodies, disambiguate both supported numeric histories from schema fingerprints, preserve rows and IDs, and reject ambiguous or unknown histories without mutation. (`rv14-lineage-source-check`)
 - **blocked** — Using an installer built from the final candidate SHA, upgrade representative 1.3 and legacy draft-1.4 profiles, exchange the integrated records, and restore a verified pre-upgrade backup. (`rv14-lineage-installed-check`)
 - **verified** — Run the exact candidate installer against deterministic 1.3, legacy 0038, and legacy 0039 fixtures, preserve the seeded evidence, round-trip Project Exchange, and restore verified backups. Confirm that the genuine historical 1.3 installer rejects the upgraded database without changing it. (`rv14-lineage-installed-synthetic-check`)
+- **verified** — Restore a verified backup created by the accepted 1.3 executable through the production frozen 1.4 sidecar. Reopen a separate copy with the old executable and reject checksum-valid backups with unknown or future schemas. (`rv14-packaged-restore-resources`)
 
 Evidence:
 
 - `source`: Real ancestry merge, unique Alembic graph, schema-fingerprinted legacy upgrades, ambiguity rejection, backup verification, and downgrade/upgrade regressions. — `docs/roadmap/REEFVISION_1_4_MIGRATION_RECONCILIATION.md` (`rv14-lineage-source`)
-- `browser`: none recorded
+- `source`: Locally built production Windows sidecar 63fd94bfc restored a checksum-authenticated f44053a90 backup. All inventory bytes matched, the exact old executable reopened the recovery and accepted a write, and two unsupported backups returned HTTP 409 before creating a destination. — `docs/roadmap/REEFVISION_1_4_MIGRATION_RECONCILIATION.md#packaged-backup-recovery-on-a-disposable-copy` (`rv14-frozen-restore-real`)
+- `browser`: From System status, create a managed backup, verify it, restore into a new folder, then read the independent SQLite copy and compare IDs, annotations, original bytes and inventory digests. The native fixture passed on the 78a02c20c shell with the production-script fixed 63fd94bfc sidecar. — `apps/web/tests/e2e/backup-restore-live.spec.ts` (`rv14-system-restore-ui`)
 - `windows_installed`: Exact-head source 36c80224a Windows acceptance passed a published 1.0.3 upgrade with schema migration, persistence, Project Exchange, uninstall, and data retention. This is partial evidence and does not substitute for representative 1.3 and legacy draft-1.4 profiles. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396` (`rv14-lineage-win-103`)
 - `windows_installed`: Exact-head source 36c80224a passed all three installed synthetic profiles. Verified 1.3 MSI upgrade, 0038 and 0039 profile migration, evidence preservation, exchange round trips, and backup restoration. The historical 1.3 build rejected the upgraded schema and the upgraded database hash remained unchanged. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396` (`rv14-lineage-win-synthetic`)
+- `windows_installed`: Installed candidate 72254d9a0 passed the published 1.0.3 upgrade, both historical numeric profile fixtures, and rollback using the genuine f44053a90 1.3 installer. The old reader preserved the upgraded database digest and reopened its separately restored pre-upgrade backup. The richer 1.3 fixture also showed that the packaged product Restore action still required the later resource-path fix. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44677664711` (`rv14-exact-87-installed`)
+- `windows_installed`: The local MSI built from 92e355b6a restored a verified backup created by the accepted f44053a90 executable through the production Restore action. IDs, source bytes, scientific records and checkpoint survived upgrade and Project Exchange. The old executable refused the newer database unchanged and wrote successfully in the recovered 1.3 profile. The material was a generated fixture. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/92#issuecomment-7032104053` (`rv14-rich-87-restore`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -823,6 +830,7 @@ Evidence:
 - `source`: Synthetic registration tests validate rigid source-to-target transforms, residual and correspondence metadata, calibration/source/geometry bindings, review independence and chronology, uncertainty bounds, and stale-evidence rejection. — `apps/api/reefvision/tests/test_spatial_mesh_registration_geometry_binding_v14.py` (`rv14-registration-binding-source`)
 - `browser`: Save both dated surveys, their source hashes, measured registration residual, correspondence count and local review in a graph and export the resulting evidence on replay. — `apps/web/tests/e2e/spatial-guided-workflow-live.spec.ts` (`rv14-registration-project-replay`)
 - `browser`: Workflow Builder exposes frames, method, residual, correspondence count, evidence note, and accepted/rejected/disputed/unresolved review states with separate operator and reviewer attribution. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-registration-guided-ui`)
+- `browser`: Enter an exact 4 × 4 source-to-target matrix and three meter error bounds from the selected project mesh. A 90-degree rotation plus translation gave provisional centroid separation 0.266796843 m with caller bounds 0.166796843–0.366796843 m. An incomplete matrix blocked preview and a nonrigid matrix returned 422. Two saved runs matched the standalone artifact and Exchange preserved the original receipt. — `apps/web/tests/e2e/project-spatial-comparison-live.spec.ts` (`rv14-registration-project-rigid`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
