@@ -22,6 +22,8 @@ def _create_scientific(db: sqlite3.Connection, variant: str) -> None:
         column = ""
     if variant == "unexpected_default":
         column = "source_kind VARCHAR(30) NOT NULL DEFAULT 'PRIVATE_FUTURE_SOURCE',"
+    if variant == "collated_source":
+        column = "source_kind VARCHAR(30) NOT NULL COLLATE NOCASE,"
     foreign_key = "REFERENCES images(id) ON DELETE RESTRICT"
     if variant == "wrong_fk":
         foreign_key = "REFERENCES images(id) ON DELETE SET NULL"
@@ -33,6 +35,10 @@ def _create_scientific(db: sqlite3.Connection, variant: str) -> None:
     extra = ", generated_tag TEXT GENERATED ALWAYS AS (id) VIRTUAL"
     if variant != "hidden_column":
         extra = ""
+    if variant == "unexpected_check":
+        extra += ", CHECK (source_kind = 'instrument')"
+    if variant == "comment_decoy":
+        extra += " /* CHECK (source_kind = 'private_future') */"
     db.execute(
         "CREATE TABLE scientific_records ("
         "id VARCHAR(36) NOT NULL PRIMARY KEY, "
@@ -94,6 +100,31 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
     comment_column = (
         "comment TEXT NOT NULL" if variant == "optional_notnull" else "comment TEXT"
     )
+    event_type = "event_type VARCHAR(20) NOT NULL"
+    if variant == "collated_event_type":
+        event_type += " COLLATE NOCASE"
+    if variant == "ignore_conflict":
+        event_type += " ON CONFLICT IGNORE"
+    values = ["comment", "assign", "unassign"]
+    if variant == "old_check_broadened":
+        values.append("approve")
+    if variant in {"triage_0039", "triage_0040"}:
+        values.extend(("triage_start", "triage_skip", "triage_return"))
+    if variant == "triage_0040":
+        values.append("triage_complete")
+    quoted_values = ", ".join(f"'{value}'" for value in values)
+    check_name = (
+        "unreviewed_event_vocab" if variant == "renamed_check" else "ck_review_queue_item_event_type"
+    )
+    check = (
+        f", CONSTRAINT {check_name} CHECK (event_type IN ({quoted_values}))"
+        if variant != "missing_check"
+        else ""
+    )
+    if variant == "extra_check":
+        check += ", CHECK (comment IS NOT NULL)"
+    if variant == "comment_decoy":
+        check += " /* CHECK (event_type IN ('approve')) */"
     unique = ", UNIQUE (review_queue_item_id, client_request_id)"
     if variant == "missing_unique":
         unique = ""
@@ -104,9 +135,9 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
         "review_queue_item_id VARCHAR(36) NOT NULL "
         "REFERENCES review_queue_items(id) ON DELETE CASCADE, "
         "project_id VARCHAR(36) NOT NULL REFERENCES projects(id) ON DELETE CASCADE, "
-        "client_request_id VARCHAR(36) NOT NULL, event_type VARCHAR(20) NOT NULL, "
+        f"client_request_id VARCHAR(36) NOT NULL, {event_type}, "
         f"{actor}, {comment_column}, assignee VARCHAR(100), "
-        f"created_at DATETIME NOT NULL{unique})"
+        f"created_at DATETIME NOT NULL{unique}{check})"
     )
     if variant != "missing_index":
         columns = {
@@ -143,6 +174,9 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
     [
         ("scientific", "valid"),
         ("scientific", "unexpected_default"),
+        ("scientific", "unexpected_check"),
+        ("scientific", "collated_source"),
+        ("scientific", "comment_decoy"),
         ("scientific", "optional_notnull"),
         ("scientific", "missing_column"),
         ("scientific", "wrong_fk"),
@@ -155,11 +189,26 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
         ("scientific", "unexpected_trigger"),
         ("qc", "valid"),
         ("qc", "unexpected_default"),
+        ("qc", "missing_check"),
+        ("qc", "old_check_broadened"),
+        ("qc", "extra_check"),
+        ("qc", "renamed_check"),
+        ("qc", "collated_event_type"),
+        ("qc", "ignore_conflict"),
+        ("qc", "comment_decoy"),
+        ("qc", "triage_0039"),
+        ("qc", "triage_0040"),
         ("qc", "optional_notnull"),
         ("qc", "wrong_fk"),
         ("qc", "wrong_onupdate_fk"),
         ("qc", "partial_lookup"),
         ("qc", "nocase_lookup"),
+        ("qc", "missing_check"),
+        ("qc", "old_check_broadened"),
+        ("qc", "extra_check"),
+        ("qc", "collated_event_type"),
+        ("qc", "ignore_conflict"),
+        ("scientific", "unexpected_check"),
         ("qc", "desc_lookup"),
         ("qc", "nullable_actor"),
         ("qc", "missing_unique"),
@@ -193,11 +242,12 @@ def test_read_only_structural_contract_catches_colliding_0038_shape(
     target = "scientific_records" if family == "scientific" else "review_queue_item_events"
     other = "review_queue_item_events" if family == "scientific" else "scientific_records"
     mismatch_warning = f"lineage_table_contract_mismatch_{target}"
+    equivalent = variant in {"valid", "comment_decoy", "triage_0039", "triage_0040"}
     assert report["structural_contracts"][target] == (
-        "matches" if variant == "valid" else "mismatch"
+        "matches" if equivalent else "mismatch"
     )
     assert report["structural_contracts"][other] == "absent"
-    assert (mismatch_warning in report["warnings"]) is (variant != "valid")
+    assert (mismatch_warning in report["warnings"]) is (not equivalent)
     assert report["upgrade_authorized"] is False
     assert "revision_0038_requires_schema_lineage_reconciliation" in report["warnings"]
     assert "PRIVATE_CORAL_NOTE" not in json.dumps(report)
