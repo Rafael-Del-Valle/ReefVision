@@ -128,6 +128,7 @@ def test_frozen_dataset_exports_exact_frames_and_loss_manifest(
         "_sleap_io",
         staticmethod(lambda: _FakeSio),
     )
+    monkeypatch.setattr("reefvision.storage.pose_nwb.write_nwb", _FakeSio.write_nwb)
 
     response = client.get(
         f"/api/v1/pose-training-datasets/{dataset['id']}/export",

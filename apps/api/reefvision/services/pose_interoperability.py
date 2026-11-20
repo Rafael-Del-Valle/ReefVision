@@ -1,8 +1,7 @@
-"""Loss-aware pose export through the optional SLEAP-IO interoperability runtime."""
+"""Loss-aware native pose text interchange and optional neutral NWB."""
 
 from __future__ import annotations
 
-import csv
 import hashlib
 import io
 import json
@@ -18,7 +17,6 @@ from uuid import uuid4
 
 import numpy as np
 from numpy.typing import NDArray
-from PIL import Image
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -39,6 +37,14 @@ from reefvision.schemas.pose_interoperability import (
 )
 from reefvision.schemas.videos import VideoPoseObservation, VideoTrackKeyframe
 from reefvision.services.pose_temporal_tracking import PoseTemporalTrackingService
+from reefvision.services.video_assets import _inspect_video
+from reefvision.storage import pose_text_records
+from reefvision.storage.pose_exchange_text import (
+    read_legacy_dlc,
+    read_legacy_yolo,
+    read_text,
+    write_text,
+)
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.storage.results_packages import sha256_file
 
@@ -112,7 +118,7 @@ class PoseInteroperabilityService:
             installed = version("sleap-io")
         except PackageNotFoundError as exc:
             raise ValidationError(
-                "Pose interoperability requires optional sleap-io "
+                "NWB pose interoperability requires optional sleap-io "
                 f"{SLEAP_IO_SUPPORTED_VERSION}. "
                 'Run python -m pip install "reefvision[interoperability]".'
             ) from exc
@@ -310,9 +316,9 @@ class PoseInteroperabilityService:
         return float("nan")
 
     def _labels(
-        self, video: VideoAsset, tracks: list[VideoTrack], schema: _PoseSchemaContext
+        self, video: VideoAsset, tracks: list[VideoTrack], schema: _PoseSchemaContext, sio: Any
     ) -> Any:
-        sio = self._sleap_io()
+        constructors = sio if sio is not None else pose_text_records
         managed_path = resolve_managed_project_path(self.settings, video.managed_path)
         if not managed_path.is_file():
             raise NotFoundError("Managed video file is missing")
@@ -320,14 +326,26 @@ class PoseInteroperabilityService:
             raise ValidationError(
                 f"Source video {video.original_filename}: checksum differs from the imported media"
             )
+        if not video.width_px or not video.height_px or video.width_px <= 0 or video.height_px <= 0:
+            raise ValidationError("Source video dimensional metadata is required for pose export")
 
-        skeleton = sio.Skeleton(
+        skeleton = constructors.Skeleton(
             nodes=list(schema.external_node_names),
             name="ReefVision canonical pose",
         )
-        sio_video = sio.Video.from_filename(str(managed_path), keep_open=False, grayscale=False)
-        if not video.width_px or not video.height_px or video.width_px <= 0 or video.height_px <= 0:
-            raise ValidationError("Source video dimensional metadata is required for pose export")
+        if sio is None:
+            decoded = _inspect_video(managed_path)
+            sio_video: Any = pose_text_records.Video(
+                filename=str(managed_path),
+                shape=(
+                    int(decoded["frame_count"]),
+                    int(decoded["height_px"]),
+                    int(decoded["width_px"]),
+                    3,
+                ),
+            )
+        else:
+            sio_video = sio.Video.from_filename(str(managed_path), keep_open=False, grayscale=False)
         if tuple(sio_video.shape[1:3]) != (video.height_px, video.width_px):
             raise ValidationError("Decoded media dimensions do not match the source video metadata")
 
@@ -338,14 +356,14 @@ class PoseInteroperabilityService:
 
         for track in tracks:
             external_name = f"reefvision-track-{track.track_number}-{track.id[:8]}"
-            external_track = sio.Track(name=external_name)
+            external_track = constructors.Track(name=external_name)
             external_tracks[track.id] = external_track
 
             label_class = self.session.get(LabelClass, track.label_class_id)
             category_name = label_class.name if label_class is not None else track.label_class_id
             category = categories.get(category_name)
             if category is None:
-                category = sio.Category(name=category_name)
+                category = constructors.Category(name=category_name)
                 categories[category_name] = category
 
             track_provenance[external_name] = {
@@ -375,19 +393,30 @@ class PoseInteroperabilityService:
                     continue
                 points, point_scores = converted
                 self._import_bbox(points[:, :2], video)
-                instance = sio.PredictedInstance.from_numpy(
-                    points[:, :2],
-                    skeleton=skeleton,
-                    point_scores=point_scores,
-                    score=self._instance_score(keyframe),
-                    track=external_track,
-                    tracking_score=None,
-                    category=category,
-                    category_score=keyframe.confidence,
-                )
-                # SLEAP-IO infers visibility from finite coordinates; column 3 is score,
-                # not visibility. Occluded coordinates remain finite scientific observations.
-                instance.points["visible"] = points[:, 2].astype(np.bool_)
+                visible = points[:, 2].astype(np.bool_)
+                if sio is None:
+                    instance = pose_text_records.Instance.from_arrays(
+                        points[:, :2],
+                        skeleton=skeleton,
+                        visible=visible,
+                        scores=point_scores,
+                        score=self._instance_score(keyframe),
+                        track=external_track,
+                        category=category,
+                    )
+                else:
+                    instance = sio.PredictedInstance.from_numpy(
+                        points[:, :2],
+                        skeleton=skeleton,
+                        point_scores=point_scores,
+                        score=self._instance_score(keyframe),
+                        track=external_track,
+                        tracking_score=None,
+                        category=category,
+                        category_score=keyframe.confidence,
+                    )
+                    # SLEAP-IO infers visibility from coordinates. Retain finite occluded points.
+                    instance.points["visible"] = visible
                 instances_by_frame[keyframe.frame].append(instance)
 
         if not instances_by_frame:
@@ -396,7 +425,7 @@ class PoseInteroperabilityService:
             )
 
         labeled_frames = [
-            sio.LabeledFrame(
+            constructors.LabeledFrame(
                 video=sio_video,
                 frame_idx=frame_index,
                 instances=instances_by_frame[frame_index],
@@ -427,6 +456,8 @@ class PoseInteroperabilityService:
                 ),
             }
         }
+        if sio is None:
+            return pose_text_records.Labels(labeled_frames, [sio_video], [skeleton], provenance)
         return sio.Labels(
             labeled_frames=labeled_frames,
             videos=[sio_video],
@@ -490,10 +521,6 @@ class PoseInteroperabilityService:
         frame_count: int,
         fps: float | None,
     ) -> None:
-        if getattr(sio, "__name__", None) != "sleap_io":
-            sio.save_nwb(labels, output, nwb_format="predictions")
-            return
-
         if frame_count <= 0:
             raise ValidationError("NWB pose export requires a positive source frame count")
         if fps is None:
@@ -502,21 +529,9 @@ class PoseInteroperabilityService:
         if not np.isfinite(sample_rate) or sample_rate <= 0:
             raise ValidationError("NWB pose export requires positive source video FPS metadata")
 
-        timestamps = np.arange(frame_count, dtype=np.float64) / sample_rate
-        try:
-            nwb_predictions = import_module("sleap_io.io.nwb_predictions")
-            write_nwb = nwb_predictions.write_nwb
-            write_nwb(
-                labels,
-                str(output),
-                pose_estimation_metadata={"video_timestamps": timestamps},
-            )
-        except ValidationError:
-            raise
-        except Exception as exc:
-            raise ValidationError(
-                f"Could not write NWB pose predictions with source-frame timestamps: {exc}"
-            ) from exc
+        from reefvision.storage.pose_nwb import write_nwb
+
+        write_nwb(sio, labels, output)
 
     @staticmethod
     def _write_bundle_manifest(
@@ -766,55 +781,6 @@ class PoseInteroperabilityService:
             cls._validate_archive_member(filename)
 
     @staticmethod
-    def _placeholder_image(path: Path) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if path.exists():
-            return
-        Image.new("RGB", (1, 1), (0, 0, 0)).save(path)
-
-    @classmethod
-    def _prepare_coco_placeholders(cls, source: Path) -> None:
-        try:
-            document = json.loads(source.read_text(encoding="utf-8-sig"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise ValidationError("COCO pose import requires valid UTF-8 JSON") from exc
-        if not isinstance(document, dict):
-            raise ValidationError("COCO pose import requires a JSON object")
-        images = document.get("images")
-        if not isinstance(images, list):
-            raise ValidationError("COCO pose import is missing its images array")
-        for image in images:
-            if not isinstance(image, dict):
-                raise ValidationError("COCO pose import contains a malformed image record")
-            filename = image.get("file_name")
-            if not isinstance(filename, str) or not filename.strip():
-                raise ValidationError("COCO pose image records require file_name")
-            relative = cls._validate_archive_member(filename)
-            cls._placeholder_image(source.parent / relative)
-
-    @classmethod
-    def _prepare_dlc_placeholders(cls, source: Path) -> None:
-        try:
-            rows = list(csv.reader(source.read_text(encoding="utf-8-sig").splitlines()))
-        except (OSError, UnicodeDecodeError, csv.Error) as exc:
-            raise ValidationError("DeepLabCut pose import requires valid CSV") from exc
-        image_rows = 0
-        for row in rows:
-            if not row:
-                continue
-            candidate = row[0].strip()
-            lowered = candidate.casefold()
-            if not candidate or not lowered.endswith(
-                (".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff")
-            ):
-                continue
-            relative = cls._validate_archive_member(candidate)
-            cls._placeholder_image(source.parent / relative)
-            image_rows += 1
-        if image_rows == 0:
-            raise ValidationError("DeepLabCut pose CSV does not contain any image-index rows")
-
-    @staticmethod
     def _native_bundle_file(
         directory: Path,
         exchange_format: PoseInteroperabilityFormat,
@@ -845,6 +811,7 @@ class PoseInteroperabilityService:
         exchange_format: PoseInteroperabilityFormat,
         content: bytes,
         source_filename: str | None,
+        video_dimensions: tuple[int, int] | None = None,
     ) -> Any:
         extensions: dict[str, tuple[str, ...]] = {
             "nwb": (".nwb", ".zip"),
@@ -861,76 +828,51 @@ class PoseInteroperabilityService:
             ):
                 raise ValidationError(f"Invalid extension for {exchange_format}: {source_filename}")
 
-        sio = self._sleap_io()
+        suffix = {"nwb": ".nwb", "coco": ".json", "dlc_csv": ".csv"}.get(exchange_format)
         try:
             with TemporaryDirectory(prefix="reefvision-pose-import-") as temp:
                 root = Path(temp)
-
-                if exchange_format == "ultralytics_pose":
-                    dataset_root = root / "dataset"
-                    dataset_root.mkdir(parents=True, exist_ok=True)
-                    actual_dataset_root = self._extract_ultralytics_zip(
-                        content,
-                        dataset_root,
-                    )
-                    ultralytics_manifest = self._read_bundle_manifest(
-                        dataset_root,
-                        exchange_format,
-                    )
-                    labels = sio.load_ultralytics(
-                        str(actual_dataset_root),
-                        split="train",
-                    )
-                    return self._inject_bundle_manifest(labels, ultralytics_manifest)
-
-                suffixes: dict[PoseInteroperabilityFormat, str] = {
-                    "nwb": ".nwb",
-                    "coco": ".json",
-                    "dlc_csv": ".csv",
-                    "ultralytics_pose": ".zip",
-                }
-                manifest: dict[str, object] | None = None
-
-                if zipfile.is_zipfile(io.BytesIO(content)):
-                    bundle_root = root / "bundle"
-                    bundle_root.mkdir(parents=True, exist_ok=True)
-                    self._extract_safe_zip(
-                        content,
-                        bundle_root,
-                        label="Pose interoperability import",
-                    )
-                    manifest = self._read_bundle_manifest(
-                        bundle_root,
-                        exchange_format,
-                    )
-                    source = self._native_bundle_file(
-                        bundle_root,
-                        exchange_format,
-                    )
+                archive = zipfile.is_zipfile(io.BytesIO(content))
+                manifest = None
+                if exchange_format == "ultralytics_pose" and not archive:
+                    raise ValidationError("Ultralytics pose import requires a valid ZIP archive")
+                if archive:
+                    self._extract_safe_zip(content, root, label="Pose interoperability import")
+                    manifest = self._read_bundle_manifest(root, exchange_format)
+                    if (
+                        exchange_format in {"dlc_csv", "ultralytics_pose"}
+                        and (root / "reefvision.json").is_file()
+                    ):
+                        source = root / "native-pose.zip"
+                        source.write_bytes(content)
+                        return read_text(source, exchange_format)
+                    source = self._native_bundle_file(root, exchange_format)
                 else:
-                    filename = Path(source_filename or f"pose{suffixes[exchange_format]}").name
-                    if not filename.casefold().endswith(suffixes[exchange_format]):
-                        filename = f"pose{suffixes[exchange_format]}"
-                    source = root / filename
+                    source = root / f"pose{suffix}"
                     source.write_bytes(content)
 
                 if exchange_format == "nwb":
-                    labels = sio.load_nwb(str(source))
-                elif exchange_format == "coco":
-                    self._validate_coco_paths(source.read_bytes())
-                    self._prepare_coco_placeholders(source)
-                    labels = sio.load_coco(
-                        str(source),
-                        dataset_root=str(source.parent),
-                    )
+                    from reefvision.storage.pose_nwb import read_nwb
+
+                    return read_nwb(self._sleap_io(), source)
+                if exchange_format == "coco":
+                    decoded = read_text(source, exchange_format)
                 elif exchange_format == "dlc_csv":
-                    self._prepare_dlc_placeholders(source)
-                    labels = sio.load_dlc(str(source), config=False)
-                else:
-                    raise ValidationError(
-                        f"Unsupported pose interoperability format: {exchange_format}"
+                    provenance = (
+                        manifest.get("reefvision_pose_interoperability") if manifest else None
                     )
-                return self._inject_bundle_manifest(labels, manifest)
+                    if video_dimensions is None and isinstance(provenance, dict):
+                        width, height = provenance.get("width_px"), provenance.get("height_px")
+                        if isinstance(width, int) and isinstance(height, int):
+                            video_dimensions = (width, height)
+                    if video_dimensions is None:
+                        raise ValidationError("Historical DLC CSV requires target video dimensions")
+                    decoded = read_legacy_dlc(source, *video_dimensions)
+                else:
+                    decoded = read_legacy_yolo(source.parent)
+                if self._reefvision_provenance(decoded) is not None:
+                    return decoded
+                return self._inject_bundle_manifest(decoded, manifest)
         except ValidationError:
             raise
         except Exception as exc:
@@ -1539,7 +1481,12 @@ class PoseInteroperabilityService:
                 "from the target video's project"
             )
 
-        labels = self._load_labels(exchange_format, content, source_filename)
+        if exchange_format == "dlc_csv":
+            labels = self._load_labels(
+                exchange_format, content, source_filename, (video.width_px, video.height_px)
+            )
+        else:
+            labels = self._load_labels(exchange_format, content, source_filename)
         imported_schema = self._imported_schema(labels)
         warnings = self._verify_import_video_mapping(
             video=video,
@@ -1660,7 +1607,7 @@ class PoseInteroperabilityService:
                 f"Import failed for {Path(source_filename or 'pose').name} "
                 f"({exchange_format}): {exc}. "
                 "Nothing was imported; the operation was atomic. "
-                "Correct the file, source mapping, or optional runtime and retry."
+                "Check the file and source mapping before retrying."
             ) from exc
 
     def export(
@@ -1682,8 +1629,8 @@ class PoseInteroperabilityService:
             video = self._video(video_id)
             tracks = self._pose_tracks(video_id)
             schema = self._schema_context(tracks)
-            labels = self._labels(video, tracks, schema)
-            sio = self._sleap_io()
+            sio = self._sleap_io() if exchange_format == "nwb" else None
+            labels = self._labels(video, tracks, schema, sio)
             stem = Path(video.original_filename).stem or "video"
 
             manifest = self._bundle_manifest(labels, exchange_format)
@@ -1709,61 +1656,30 @@ class PoseInteroperabilityService:
                         exchange_format=exchange_format,
                     )
 
+                format_suffix = {
+                    "coco": "coco",
+                    "dlc_csv": "dlc",
+                    "ultralytics_pose": "ultralytics",
+                }[exchange_format]
+                output, _ = write_text(
+                    labels, root, exchange_format, dlc_filename=f"{stem}.pose.dlc.csv"
+                )
                 if exchange_format == "coco":
-                    output = bundle_dir / f"{stem}.pose.coco.json"
-                    sio.save_coco(
-                        labels,
-                        str(output),
-                        visibility_encoding="ternary",
+                    output.replace(bundle_dir / f"{stem}.pose.coco.json")
+                else:
+                    self._extract_safe_zip(
+                        output.read_bytes(), bundle_dir, label="Native pose interchange"
                     )
-                    self._write_bundle_manifest(bundle_dir, manifest)
-                    return PoseInteroperabilityArtifact(
-                        filename=f"{stem}.pose.coco.zip",
-                        media_type="application/zip",
-                        content=self._zip_directory(bundle_dir),
-                        exchange_format=exchange_format,
-                    )
-
-                if exchange_format == "dlc_csv":
-                    output = bundle_dir / f"{stem}.pose.dlc.csv"
-                    sio.save_csv(
-                        labels,
-                        str(output),
-                        format="dlc",
-                        include_score=True,
-                        scorer="ReefVision",
-                        save_metadata=False,
-                    )
-                    self._write_bundle_manifest(bundle_dir, manifest)
-                    return PoseInteroperabilityArtifact(
-                        filename=f"{stem}.pose.dlc.zip",
-                        media_type="application/zip",
-                        content=self._zip_directory(bundle_dir),
-                        exchange_format=exchange_format,
-                    )
-
-                if exchange_format == "ultralytics_pose":
-                    output_dir = bundle_dir / "dataset"
-                    sio.save_ultralytics(
-                        labels,
-                        str(output_dir),
-                        split_ratios={"train": 1.0},
-                        class_id=0,
-                        verbose=False,
-                        use_multiprocessing=False,
-                    )
-                    self._write_bundle_manifest(output_dir, manifest)
-                    return PoseInteroperabilityArtifact(
-                        filename=f"{stem}.pose.ultralytics.zip",
-                        media_type="application/zip",
-                        content=self._zip_directory(output_dir),
-                        exchange_format=exchange_format,
-                    )
-
-            raise ValidationError(f"Unsupported pose interoperability format: {exchange_format}")
+                self._write_bundle_manifest(bundle_dir, manifest)
+                return PoseInteroperabilityArtifact(
+                    filename=f"{stem}.pose.{format_suffix}.zip",
+                    media_type="application/zip",
+                    content=self._zip_directory(bundle_dir),
+                    exchange_format=exchange_format,
+                )
         except Exception as exc:
             raise ValidationError(
                 f"Export failed for video {video_id} ({exchange_format}): {exc}. "
-                "Source observations were not changed. Check source media, pose schema, "
-                "and optional runtime before retrying."
+                "Source observations were not changed. Check the source media and pose schema "
+                "before retrying."
             ) from exc

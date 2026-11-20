@@ -1,4 +1,4 @@
-"""Temporary artifact lifecycle for optional pose interoperability."""
+"""Temporary artifact lifecycle for pose interoperability."""
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -19,7 +19,7 @@ def load_exchange(sio: Any, content: bytes, filename: str, fmt: str) -> Any:
             return read_nwb(sio, source)
         from reefvision.storage.pose_exchange_text import read_text
 
-        return read_text(sio, source, fmt)
+        return read_text(source, fmt)
 
 
 def save_exchange(sio: Any, labels: Any, stem: str, fmt: str) -> tuple[str, str, bytes]:
@@ -36,7 +36,7 @@ def save_exchange(sio: Any, labels: Any, stem: str, fmt: str) -> tuple[str, str,
         elif fmt in {"coco", "dlc_csv", "ultralytics_pose"}:
             from reefvision.storage.pose_exchange_text import write_text
 
-            path, media_type = write_text(sio, labels, root, fmt)
+            path, media_type = write_text(labels, root, fmt)
         else:
             raise ValidationError(f"Unsupported pose interoperability format: {fmt}")
         return path.name, media_type, path.read_bytes()
