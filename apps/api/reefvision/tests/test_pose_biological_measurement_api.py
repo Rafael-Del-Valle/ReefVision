@@ -517,57 +517,6 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
         == 422
     )
 
-    monitoring_url = f"/api/v1/projects/{project['id']}/monitoring"
-    original_selection = event_report["snapshot"]["selection"]
-    dated_selection = {
-        **original_selection,
-        "sessions": [{**original_selection["sessions"][0], "observed_at": "2026-01-01T10:00:00Z"}],
-    }
-    dated = client.post(summary_url, json=dated_selection)
-    assert dated.status_code == 201, dated.text
-    dated_report = dated.json()
-    rule_response = client.post(
-        monitoring_url + "/rules",
-        json={
-            "label": "Reviewed gape monitoring",
-            "kind": "biological",
-            "protocol": event_report["snapshot"]["protocol_sha256"],
-            "metric": "confirmed_events_per_minute",
-            "unit": "events/min",
-            "parameters": {
-                "summary_ids": [dated_report["id"], event_report["id"]],
-                "minimum_effort_seconds": 0.25,
-                "upper_limit": 100,
-            },
-        },
-    )
-    assert rule_response.status_code == 201, rule_response.text
-    rule = rule_response.json()
-    monitor_response = client.post(
-        monitoring_url + "/assessments",
-        json={
-            "rule_id": rule["id"],
-            "rule_sha256": rule["rule_sha256"],
-            "window_start": "2026-01-01T09:00:00Z",
-            "window_end": "2026-01-01T11:00:00Z",
-        },
-    )
-    assert monitor_response.status_code == 201, monitor_response.text
-    monitor = monitor_response.json()
-    monitor_result = monitor["result"]
-    assert monitor_result["estimate"] == pytest.approx(120)
-    assert monitor_result["effort"]["valid_duration_s"] == pytest.approx(0.5)
-    assert monitor_result["effort"]["confirmed_event_count"] == 1
-    assert monitor_result["exclusions"][0]["reason"] == "unknown_session_time"
-    (biological,) = monitor_result["biological_sessions"]
-    assert biological["event_ids"] == [confirmed_event["id"]]
-    assert biological["video_sha256"] == evidence["source"]["video_sha256"]
-    (proposed,) = client.get(
-        monitoring_url + "/alerts", params={"assessment_id": monitor["id"]}
-    ).json()["items"]
-    assert proposed["kind"] == "upper_limit"
-    assert proposed["status"] == "proposed"
-
     graph = {
         "graph_id": "event-summary-replay",
         "name": "Replay reviewed event summary",
@@ -626,7 +575,59 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
     ).json()
     assert not rejected["compatible"], rejected
     assert any("reviewed measurement effort" in error for error in rejected["errors"]), rejected
-    imported = import_archive(client, original)
+    monitoring_url = f"/api/v1/projects/{project['id']}/monitoring"
+    original_selection = event_report["snapshot"]["selection"]
+    dated_selection = {
+        **original_selection,
+        "sessions": [{**original_selection["sessions"][0], "observed_at": "2026-01-01T10:00:00Z"}],
+    }
+    dated = client.post(summary_url, json=dated_selection)
+    assert dated.status_code == 201, dated.text
+    dated_report = dated.json()
+    rule_response = client.post(
+        monitoring_url + "/rules",
+        json={
+            "label": "Reviewed gape monitoring",
+            "kind": "biological",
+            "protocol": event_report["snapshot"]["protocol_sha256"],
+            "metric": "confirmed_events_per_minute",
+            "unit": "events/min",
+            "parameters": {
+                "summary_ids": [dated_report["id"], event_report["id"]],
+                "minimum_effort_seconds": 0.25,
+                "upper_limit": 100,
+            },
+        },
+    )
+    assert rule_response.status_code == 201, rule_response.text
+    rule = rule_response.json()
+    monitor_response = client.post(
+        monitoring_url + "/assessments",
+        json={
+            "rule_id": rule["id"],
+            "rule_sha256": rule["rule_sha256"],
+            "window_start": "2026-01-01T09:00:00Z",
+            "window_end": "2026-01-01T11:00:00Z",
+        },
+    )
+    assert monitor_response.status_code == 201, monitor_response.text
+    monitor = monitor_response.json()
+    monitor_result = monitor["result"]
+    assert monitor_result["estimate"] == pytest.approx(120)
+    assert monitor_result["effort"]["valid_duration_s"] == pytest.approx(0.5)
+    assert monitor_result["effort"]["confirmed_event_count"] == 1
+    assert monitor_result["exclusions"][0]["reason"] == "unknown_session_time"
+    (biological,) = monitor_result["biological_sessions"]
+    assert biological["event_ids"] == [confirmed_event["id"]]
+    assert biological["video_sha256"] == evidence["source"]["video_sha256"]
+    (proposed,) = client.get(
+        monitoring_url + "/alerts", params={"assessment_id": monitor["id"]}
+    ).json()["items"]
+    assert proposed["kind"] == "upper_limit"
+    assert proposed["status"] == "proposed"
+
+    with_monitoring = export_archive(client, test_settings, project["id"])
+    imported = import_archive(client, with_monitoring)
     assert imported.status_code == 201, imported.text
     destination = imported.json()["project_id"]
     mapping = imported.json()["package"]["options_json"]["id_map"]
