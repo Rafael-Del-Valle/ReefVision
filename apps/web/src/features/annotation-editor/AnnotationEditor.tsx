@@ -376,6 +376,7 @@ export function AnnotationEditor({
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef(state);
   const interactionRef = useRef<EditorInteraction | null>(interaction);
+  const panPreviousPointRef = useRef<Point | null>(null);
   const viewRef = useRef<ViewportTransform | null>(view);
   const currentImageIdRef = useRef(currentImageId);
   const loadedImageIdRef = useRef<string | null>(null);
@@ -2264,14 +2265,19 @@ export function AnnotationEditor({
         return;
       }
       if (currentInteraction.type === "panning") {
-        setView({
-          ...currentInteraction.initialView,
-          offsetX:
-            currentInteraction.initialView.offsetX +
-            (event.clientX - currentInteraction.origin.x),
-          offsetY:
-            currentInteraction.initialView.offsetY +
-            (event.clientY - currentInteraction.origin.y),
+        const previousPoint =
+          panPreviousPointRef.current ?? currentInteraction.origin;
+        panPreviousPointRef.current = {
+          x: event.clientX,
+          y: event.clientY,
+        };
+        setView((latestView) => {
+          const base = latestView ?? currentInteraction.initialView;
+          return {
+            ...base,
+            offsetX: base.offsetX + event.clientX - previousPoint.x,
+            offsetY: base.offsetY + event.clientY - previousPoint.y,
+          };
         });
         return;
       }
@@ -2356,16 +2362,19 @@ export function AnnotationEditor({
         ]);
       }
 
+      panPreviousPointRef.current = null;
       setInteraction(null);
     };
 
     const handlePointerCancel = (event: PointerEvent) => {
       if (interactionRef.current && event.pointerId !== interactionRef.current.pointerId) return;
       interactionRef.current = null;
+      panPreviousPointRef.current = null;
       setInteraction(null);
     };
     const handleWindowBlur = () => {
       interactionRef.current = null;
+      panPreviousPointRef.current = null;
       setInteraction(null);
     };
 
@@ -2443,6 +2452,10 @@ export function AnnotationEditor({
         (state.tool === "pan" && !samPromptArmed)
       ) {
         event.preventDefault();
+        panPreviousPointRef.current = {
+          x: event.clientX,
+          y: event.clientY,
+        };
         setInteraction({
           type: "panning",
           pointerId: event.pointerId,
@@ -2524,6 +2537,10 @@ export function AnnotationEditor({
         (event.button === 0 && event.altKey)
       ) {
         event.preventDefault();
+        panPreviousPointRef.current = {
+          x: event.clientX,
+          y: event.clientY,
+        };
         setInteraction({
           type: "panning",
           pointerId: event.pointerId,
@@ -2534,6 +2551,10 @@ export function AnnotationEditor({
       }
       if (state.tool === "pan") {
         event.preventDefault();
+        panPreviousPointRef.current = {
+          x: event.clientX,
+          y: event.clientY,
+        };
         setInteraction({
           type: "panning",
           pointerId: event.pointerId,
@@ -2608,6 +2629,10 @@ export function AnnotationEditor({
         (event.button === 0 && event.altKey)
       ) {
         event.preventDefault();
+        panPreviousPointRef.current = {
+          x: event.clientX,
+          y: event.clientY,
+        };
         setInteraction({
           type: "panning",
           pointerId: event.pointerId,
@@ -2651,6 +2676,10 @@ export function AnnotationEditor({
           state.tool === "pan")
       ) {
         event.preventDefault();
+        panPreviousPointRef.current = {
+          x: event.clientX,
+          y: event.clientY,
+        };
         setInteraction({
           type: "panning",
           pointerId: event.pointerId,
