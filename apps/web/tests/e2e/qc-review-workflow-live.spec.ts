@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 
 import { expect, type APIResponse, type Response } from "@playwright/test";
 
@@ -125,13 +125,13 @@ test("coordinates frozen QC review and reopens two saved workflow runs", async (
       (response) =>
         response.url() === url && response.request().method() === "POST",
     );
-  async function openProject() {
+  async function openProject(projectName = name) {
     await page.goto(web);
     await page
-      .getByRole("button", { name: `Open ${name}`, exact: true })
+      .getByRole("button", { name: `Open ${projectName}`, exact: true })
       .click();
   }
-  async function openReview() {
+  async function openReview(datasetVersionId = version.id) {
     await page.getByRole("tab", { name: "Review", exact: true }).click();
     await page.getByRole("tab", { name: "Review queue", exact: true }).click();
     await page
@@ -139,7 +139,7 @@ test("coordinates frozen QC review and reopens two saved workflow runs", async (
       .selectOption("dataset_version");
     await page
       .getByRole("combobox", { name: /^Dataset version/ })
-      .selectOption(version.id);
+      .selectOption(datasetVersionId);
   }
   async function openWorkflows() {
     await page
@@ -202,19 +202,20 @@ test("coordinates frozen QC review and reopens two saved workflow runs", async (
   await coordination.getByLabel("Review comment").fill(note);
   await coordination.getByRole("button", { name: "Add comment" }).click();
   await expect(recordedNote).toBeVisible();
-  const blocked = page.waitForEvent("dialog").then(async (dialog) => {
-    expect(dialog.message()).toContain("close reviewer coordination");
-    await dialog.accept();
+  const blocked = page.getByRole("alert").filter({
+    hasText:
+      "Resolve any uncertain audit request and close reviewer coordination",
   });
   await page
     .getByRole("tab", { name: "Video & automation", exact: true })
     .click();
-  await blocked;
+  await expect(blocked).toBeVisible();
   await expect(recordedNote).toBeVisible();
   await coordination
     .getByRole("button", { name: "Close coordination" })
     .click();
   await expect(coordination).toBeHidden();
+  await expect(blocked).toBeHidden();
 
   const bulk = page.getByRole("region", { name: "Bulk QC triage" });
   const bulkRoute = `${api}/review-queues/${standalone.id}/items/bulk`;
@@ -299,13 +300,10 @@ test("coordinates frozen QC review and reopens two saved workflow runs", async (
       }))
       .sort((left, right) => left.image.localeCompare(right.image));
   const expectedRanking = comparable(standaloneItems);
-  const runReceipts = [];
-  for (const attempt of [1, 2]) {
-    await openProject();
-    await openWorkflows();
+  async function executeSavedWorkflow(projectId: string) {
     const revision = page.getByRole("listitem").filter({ hasText: graphName });
     await revision.getByRole("button", { name: "Load", exact: true }).click();
-    const queued = waitForPost(`${root}/workflow-runs`);
+    const queued = waitForPost(`${api}/projects/${projectId}/workflow-runs`);
     await revision
       .getByRole("button", { name: "Run saved revision", exact: true })
       .click();
@@ -330,6 +328,14 @@ test("coordinates frozen QC review and reopens two saved workflow runs", async (
       (row) => row.data_type === "review_queue_reference",
     )!;
     expect(artifact.producer_port_id).toBe("queue");
+    return { runId, artifact };
+  }
+
+  const runReceipts = [];
+  for (const attempt of [1, 2]) {
+    await openProject();
+    await openWorkflows();
+    const { runId, artifact } = await executeSavedWorkflow(project.id);
     expect(artifact.payload_json).toEqual(
       expect.objectContaining({
         project_id: project.id,
@@ -381,6 +387,124 @@ test("coordinates frozen QC review and reopens two saved workflow runs", async (
     expect(original.ok()).toBe(true);
     expect(sha256(await original.body())).toBe(image.original_sha256);
   }
+  await page
+    .getByRole("tab", { name: "Data & annotation", exact: true })
+    .click();
+  await page
+    .getByRole("tab", { name: "Interoperability", exact: true })
+    .click();
+  await page
+    .getByLabel("Include original images and videos", { exact: true })
+    .check();
+  await expect(
+    page.getByLabel("Include registered model weights", { exact: true }),
+  ).not.toBeChecked();
+  await page
+    .getByRole("button", { name: "Create exchange ZIP", exact: true })
+    .click();
+  const zip = page.getByRole("link", { name: "Download ZIP", exact: true });
+  await expect(zip).toBeVisible({ timeout: 20_000 });
+  const transfer = page.waitForEvent("download");
+  await zip.click();
+  const archivePath = info.outputPath("synthetic-qc.reefvision.zip");
+  await (await transfer).saveAs(archivePath);
+  const archiveSha256 = sha256(await readFile(archivePath));
+  await page
+    .getByLabel("Project exchange ZIP", { exact: true })
+    .setInputFiles(archivePath);
+  const inspecting = waitForPost(`${api}/exchange-packages/inspect`);
+  await page
+    .getByRole("button", { name: "Inspect safely", exact: true })
+    .click();
+  const inspection = await checked<{
+    compatible: boolean;
+    format_version: string;
+    manifest_sha256: string;
+    section_counts: Record<string, number>;
+    included_media_count: number;
+  }>(await inspecting, 200);
+  expect(inspection.compatible).toBe(true);
+  expect(inspection.format_version).toBe("1.6");
+  expect(inspection.section_counts.review_queue_item_events).toBe(4);
+  expect(inspection.section_counts.review_queue_bulk_requests).toBe(1);
+  expect(inspection.included_media_count).toBe(2);
+  await expect(page.getByText("Format: 1.6", { exact: true })).toBeVisible();
+
+  const copyName = `${name} restored`;
+  await page.getByLabel("Imported project name (optional)").fill(copyName);
+  const restoring = waitForPost(`${api}/exchange-packages/import`);
+  await page
+    .getByRole("button", { name: "Import as new project", exact: true })
+    .click();
+  const copy = await checked<{
+    project_id: string;
+    source_manifest_sha256: string;
+    package: { options_json: { origin_id_map: Record<string, string> } };
+  }>(await restoring, 201);
+  expect(copy.project_id).not.toBe(project.id);
+  expect(copy.source_manifest_sha256).toBe(inspection.manifest_sha256);
+  const mapping = copy.package.options_json.origin_id_map;
+  expect(mapping[project.id]).toBe(copy.project_id);
+  await openProject(copyName);
+  await openReview(mapping[version.id]);
+  await expect(
+    page.getByText("3 historical queues", { exact: true }),
+  ).toBeVisible();
+  const importedQueueId = mapping[standalone.id];
+  const importedRanked = await queueItems(importedQueueId);
+  expect(importedRanked.map((item) => item.id).sort()).toEqual(
+    standaloneItems.map((item) => mapping[item.id]).sort(),
+  );
+  const rankOneId =
+    mapping[standaloneItems.find((item) => item.rank_position === 1)!.id];
+  const history = await checked<{
+    current_assignee: string;
+    items: { event_type: string; actor: string; comment: string | null }[];
+  }>(
+    await page.request.get(
+      `${api}/review-queues/${importedQueueId}/items/${rankOneId}/events`,
+    ),
+    200,
+  );
+  expect(history.current_assignee).toBe(assignee);
+  expect(history.items.map((item) => [item.event_type, item.actor])).toEqual([
+    ["assign", reviewer],
+    ["comment", reviewer],
+    ["triage_start", reviewer],
+  ]);
+  expect(history.items[1].comment).toBe(note);
+  for (const image of images) {
+    const restoredImageId = mapping[image.id];
+    expect(restoredImageId).not.toBe(image.id);
+    const copied = await page.request.get(
+      `${api}/images/${restoredImageId}/content`,
+    );
+    expect(copied.ok()).toBe(true);
+    expect(sha256(await copied.body())).toBe(image.original_sha256);
+  }
+  await openWorkflows();
+  const restoredVersion = await checked<DatasetVersionRecord>(
+    await page.request.get(`${api}/dataset-versions/${mapping[version.id]}`),
+    200,
+  );
+  const restoredRun = await executeSavedWorkflow(copy.project_id);
+  expect(restoredRun.artifact.payload_json).toEqual(
+    expect.objectContaining({
+      project_id: copy.project_id,
+      dataset_version_id: restoredVersion.id,
+      dataset_manifest_sha256: restoredVersion.manifest_sha256,
+      item_count: 2,
+      review_status: "requires_researcher_review",
+    }),
+  );
+  const restoredRunItems = await queueItems(
+    String(restoredRun.artifact.payload_json.queue_id),
+  );
+  expect(
+    restoredRunItems.map((item) => [item.image_id, item.score]).sort(),
+  ).toEqual(
+    expectedRanking.map((item) => [mapping[item.image], item.score]).sort(),
+  );
   await writeFile(
     info.outputPath("qc-review-workflow.json"),
     JSON.stringify(
@@ -396,6 +520,16 @@ test("coordinates frozen QC review and reopens two saved workflow runs", async (
         images,
         ranking: expectedRanking,
         runs: runReceipts,
+        archive: {
+          sha256: archiveSha256,
+          manifest_sha256: inspection.manifest_sha256,
+          imported_project_id: copy.project_id,
+          imported_queue_id: importedQueueId,
+          imported_workflow_run_id: restoredRun.runId,
+          imported_workflow_payload_sha256: restoredRun.artifact.payload_sha256,
+          item_events: inspection.section_counts.review_queue_item_events,
+          bulk_requests: inspection.section_counts.review_queue_bulk_requests,
+        },
       },
       null,
       2,
