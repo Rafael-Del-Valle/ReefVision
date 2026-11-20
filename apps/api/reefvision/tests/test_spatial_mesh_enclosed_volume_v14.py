@@ -289,8 +289,7 @@ def test_nonzero_volume_lost_to_float_cancellation_replays_saved_graph(
     for source_origin in range(len(vertices)):
         for reversed_winding in (False, True):
             ordered_faces = [
-                list(reversed(face)) if reversed_winding else list(face)
-                for face in expected_faces
+                list(reversed(face)) if reversed_winding else list(face) for face in expected_faces
             ]
             root_face_index = next(
                 index for index, face in enumerate(ordered_faces) if source_origin in face
@@ -319,9 +318,7 @@ def test_nonzero_volume_lost_to_float_cancellation_replays_saved_graph(
 
     # This winding previously produced a nonzero but incorrect floating
     # residual; persist and replay it through the actual API/workflow paths.
-    parameters = _params(
-        vertices=vertices, faces=[list(reversed(face)) for face in expected_faces]
-    )
+    parameters = _params(vertices=vertices, faces=[list(reversed(face)) for face in expected_faces])
     parameters["meters_per_unit"] = 1.0
     direct = measure_mesh_preview(**parameters)
     assert direct["enclosed_volume_m3"] == pytest.approx(expected_volume, rel=1e-12, abs=0)
@@ -735,3 +732,131 @@ def test_large_source_translation_preserves_volume_and_saved_workflow(
         hashes.append(artifacts[0]["payload_sha256"])
     assert len(hashes[0]) == 64
     assert hashes[0] == hashes[1]
+
+
+@pytest.mark.parametrize("reverse_winding", [False, True])
+def test_concave_prism_volume_surface_and_saved_workflow(
+    client: TestClient, reverse_winding: bool
+) -> None:
+    """A deeply concave closed surface must preserve exact analytic volume."""
+    # This extreme U-shaped synthetic prism is a numerical cancellation
+    # fixture, NOT a real coral, validated reconstruction or field scale.
+    length = 100_000_000.0
+    thickness = 1.0
+    height = 1_000.0
+    outline = [
+        (0.0, 0.0),
+        (length, 0.0),
+        (length, length),
+        (length - thickness, length),
+        (length - thickness, thickness),
+        (thickness, thickness),
+        (thickness, length),
+        (0.0, length),
+    ]
+    vertices = [[x, y, z] for z in (0.0, height) for x, y in outline]
+    # Six top triangles tessellate only the U, not its empty central notch.
+    top_triangles = [
+        (7, 0, 5),
+        (7, 5, 6),
+        (3, 4, 2),
+        (2, 4, 1),
+        (1, 4, 0),
+        (0, 4, 5),
+    ]
+    faces = [[a, c, b] for a, b, c in top_triangles]
+    faces.extend([[a + 8, b + 8, c + 8] for a, b, c in top_triangles])
+    for index in range(len(outline)):
+        next_index = (index + 1) % len(outline)
+        faces.extend(
+            [
+                [index, next_index, next_index + 8],
+                [index, next_index + 8, index + 8],
+            ]
+        )
+    # Select a face on the outside of the notch as the first-face origin.
+    # Reordering source triangles must not change the enclosed volume.
+    root_index = next(index for index, face in enumerate(faces) if set(face) == {2, 3, 4})
+    root_face = faces.pop(root_index)
+    start = root_face.index(2)
+    faces.insert(0, root_face[start:] + root_face[:start])
+    if reverse_winding:
+        faces = [list(reversed(face)) for face in faces]
+
+    analytic_section_area = (3 * length - 2 * thickness) * thickness
+    analytic_perimeter = 6 * length - 2 * thickness
+    expected_source_volume = analytic_section_area * height
+    expected_source_area = 2 * analytic_section_area + analytic_perimeter * height
+    signed = signed_enclosed_volume_mesh_units([tuple(point) for point in vertices], faces)
+    assert signed == pytest.approx(
+        -expected_source_volume if reverse_winding else expected_source_volume,
+        rel=1e-12,
+        abs=0,
+    )
+    parameters = _params(vertices=vertices, faces=faces)
+    direct = measure_mesh_preview(**parameters)
+    expected_volume_m3 = expected_source_volume * 0.01**3
+    expected_area_m2 = expected_source_area * 0.01**2
+    assert direct["enclosed_volume_m3"] == pytest.approx(
+        expected_volume_m3, rel=1e-12, abs=0
+    )
+    assert direct["surface_area_m2"] == pytest.approx(expected_area_m2, rel=1e-12)
+    assert direct["edge_connected_patch_count"] == 1
+    assert direct["enclosed_volume_scale_interval_m3"] == pytest.approx(
+        [expected_volume_m3 * 0.9**3, expected_volume_m3 * 1.1**3]
+    )
+    assert direct["provenance"]["calibration_verified"] is False
+
+    project_id = str(create_project(client, "Concave analytic volume QC")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    request = {**parameters, "specimen_id": "synthetic-concave-not-a-coral"}
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=request)
+    assert standalone.status_code == 200, standalone.text
+    payload = standalone.json()
+    assert payload["enclosed_volume_m3"] == pytest.approx(
+        expected_volume_m3, rel=1e-12, abs=0
+    )
+    assert payload["surface_area_m2"] == pytest.approx(expected_area_m2, rel=1e-12)
+    assert payload["provenance"]["calibration_verified"] is False
+    assert payload["provenance"]["specimen_identity_verified"] is False
+
+    graph = {
+        "graph_id": "mesh-concave-analytic-volume-v14",
+        "name": "Provisional concave mesh analytic reference",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": request},
+        ],
+        "edges": [
+            {
+                "edge_id": "source-to-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    artifact_hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifacts = [
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        ]
+        assert len(artifacts) == 1
+        assert artifacts[0]["payload_json"] == payload
+        artifact_hashes.append(artifacts[0]["payload_sha256"])
+    assert len(artifact_hashes[0]) == 64
+    assert artifact_hashes[0] == artifact_hashes[1]
