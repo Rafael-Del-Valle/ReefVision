@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_validator
 
 from reefvision.schemas.model_runtime import Digest
+from reefvision.schemas.reviewer_lab_v15 import UtcDatetime
 
 ComparisonTask = Literal["detector", "mask", "pose", "tracking", "event"]
 
@@ -75,3 +76,28 @@ class ComparisonSource(ComparisonChoice):
     model_ids: list[UUID] = Field(default_factory=list)
     reference_id: UUID
     reference_sha256: Digest
+
+
+class ComparisonSummary(BaseModel):
+    id: UUID
+    task: ComparisonTask
+    status: str
+    created_at: UtcDatetime
+    error_message: str | None
+    content_sha256: Digest | None
+
+
+class ComparisonJobResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    project_id: UUID
+    job_type: Literal["paired_model_comparison"]
+    status: str
+    progress_current: int
+    progress_total: int
+    request_json: ComparisonRequest
+    result_json: dict[str, Any] | None
+    error_message: str | None
+    created_at: UtcDatetime
+    started_at: UtcDatetime | None
+    completed_at: UtcDatetime | None

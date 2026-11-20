@@ -2,7 +2,7 @@
 
 import csv
 from io import StringIO
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response
@@ -13,8 +13,13 @@ from sqlalchemy.orm import Session
 from reefvision.api.dependencies import get_db_session
 from reefvision.db.models import Job, Project
 from reefvision.domain.errors import NotFoundError
-from reefvision.schemas.jobs import JobResponse
-from reefvision.schemas.paired_models_v15 import ComparisonRequest, ComparisonSource, ComparisonTask
+from reefvision.schemas.paired_models_v15 import (
+    ComparisonJobResponse,
+    ComparisonRequest,
+    ComparisonSource,
+    ComparisonSummary,
+    ComparisonTask,
+)
 from reefvision.services import paired_models_v15 as comparison
 
 router = APIRouter(
@@ -28,7 +33,7 @@ def sources(project_id: UUID, task: ComparisonTask, session: Db) -> list[Compari
     return comparison.list_sources(session, str(project_id), task)
 
 
-@router.post("", response_model=JobResponse, status_code=202)
+@router.post("", response_model=ComparisonJobResponse, status_code=202)
 def submit(project_id: UUID, payload: ComparisonRequest, req: Request, session: Db) -> Job:
     return comparison.submit(session, req.app.state.settings, str(project_id), payload)
 
@@ -40,31 +45,26 @@ def history(
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 25,
     completed_only: bool = False,
-) -> list[dict[str, Any]]:
+) -> list[ComparisonSummary]:
     if session.get(Project, str(project_id)) is None:
         raise NotFoundError("Project not found")
-    query = select(Job).where(
-        Job.project_id == str(project_id), Job.job_type == comparison.JOB_TYPE
-    )
+    query = select(
+        Job.id,
+        Job.status,
+        Job.created_at,
+        Job.error_message,
+        Job.request_json["task"].as_string().label("task"),
+        Job.result_json["content_sha256"].as_string().label("content_sha256"),
+    ).where(Job.project_id == str(project_id), Job.job_type == comparison.JOB_TYPE)
     if completed_only:
         query = query.where(Job.status == "succeeded")
-    rows = session.scalars(
+    rows = session.execute(
         query.order_by(Job.created_at.desc(), Job.id).offset(offset).limit(limit)
-    )
-    return [
-        {
-            "id": row.id,
-            "task": row.request_json.get("task"),
-            "status": row.status,
-            "created_at": row.created_at,
-            "error_message": row.error_message,
-            "content_sha256": (row.result_json or {}).get("content_sha256"),
-        }
-        for row in rows
-    ]
+    ).mappings()
+    return [ComparisonSummary.model_validate(row) for row in rows]
 
 
-@router.get("/{comparison_id}", response_model=JobResponse)
+@router.get("/{comparison_id}", response_model=ComparisonJobResponse)
 def current(project_id: UUID, comparison_id: UUID, session: Db) -> Job:
     return comparison.get_job(session, str(project_id), str(comparison_id))
 

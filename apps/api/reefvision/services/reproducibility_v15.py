@@ -25,11 +25,12 @@ from reefvision.services.reproducibility_lineage_v15 import PACKAGE_OPTION
 from reefvision.services.reviewer_lab_v15 import ReviewerLabService
 from reefvision.services.study_design import StudyDesignService
 from reefvision.storage.datasets import canonical_json_sha256
-from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.storage.reproducibility_v15 import (
+    archive_location,
+    build_bundle,
     copy_uploaded_bundle,
+    existing_bundle,
     open_verified_bundle,
-    write_bundle,
 )
 
 
@@ -62,12 +63,6 @@ def _response(row: ProjectExchangePackage) -> ReproducibilityPackage:
             "proof_sha256": manifest.proof.proof_sha256 if manifest else None,
             "error_message": row.error_message,
         }
-    )
-
-
-def _destination(settings: Settings, row: ProjectExchangePackage) -> Path:
-    return resolve_managed_project_path(settings, row.archive_path).with_name(
-        f"{row.id}.reproducibility.zip",
     )
 
 
@@ -137,10 +132,7 @@ class ReproducibilityService:
         row = self._package(package_id)
         if _response(row).status != "complete":
             raise ConflictError("Wait for the reproducibility package to finish")
-        path = _destination(self.settings, row)
-        if not path.is_file():
-            raise NotFoundError("Reproducibility archive is unavailable")
-        return path
+        return existing_bundle(self.settings, row.archive_path, row.id)
 
     def restore(self, source: BinaryIO, project_name: str | None) -> ReproducibilityImport:
         from reefvision.services.project_exchange_import_v1 import import_project_exchange_v1
@@ -150,7 +142,9 @@ class ReproducibilityService:
             def attach(project: Project, package: ProjectExchangePackage) -> None:
                 if project.id != package.project_id:
                     raise ValidationError("Research package destination project does not match")
-                copy_uploaded_bundle(source, _destination(self.settings, package))
+                copy_uploaded_bundle(
+                    source, archive_location(self.settings, package.archive_path, package.id)
+                )
                 _attach_manifest(package, verified.manifest)
 
             restored = import_project_exchange_v1(
@@ -191,9 +185,7 @@ def complete_research_export(
     if row is None or not (scope := _options(row)):
         return
     selection = ReproducibilitySelection.model_validate(scope["selection"])
-    native = resolve_managed_project_path(settings, row.archive_path)
-    with native.open("rb") as stream:
-        manifest = write_bundle(stream, _destination(settings, row), selection)
+    manifest = build_bundle(settings, row.archive_path, row.id, selection)
     _attach_manifest(row, manifest)
     job.result_json = {
         **(job.result_json or {}),

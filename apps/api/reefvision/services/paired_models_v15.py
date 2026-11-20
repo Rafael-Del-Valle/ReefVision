@@ -202,6 +202,10 @@ def _inputs(
         )
         if row is None or row.project_id != project_id:
             raise NotFoundError("Comparison evidence not found in this project")
+        if isinstance(row, Job):
+            from reefvision.jobs.reefpose_validation import completed_report
+
+            completed_report(session, project_id, row.id)
         current = _source(row)
         if current.sha256 != source.sha256:
             raise ConflictError("The comparison source changed after selection")
@@ -237,7 +241,12 @@ def get_job(session: Session, project_id: str, job_id: str) -> Job:
 
 
 def evaluate(
-    session: Session, settings: Settings, project_id: str, request: ComparisonRequest
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    request: ComparisonRequest,
+    *,
+    owner_run_id: str | None = None,
 ) -> tuple[list[RuntimeSelectionResponse], dict[str, Any], dict[str, Any]]:
     from reefvision.services.model_comparison_stills_v15 import compare_image_models
     from reefvision.services.model_comparison_video_v15 import compare_video_models
@@ -259,6 +268,7 @@ def evaluate(
                 }
                 for model in models
             ],
+            owner_run_id=owner_run_id,
         )
     else:
         raw = compare_video_models(
@@ -291,7 +301,9 @@ def process_comparison(settings: Settings, factory: sessionmaker[Session], job_i
         project_id = job.project_id
         try:
             request = ComparisonRequest.model_validate(job.request_json)
-            models, evidence, summary = evaluate(session, settings, project_id, request)
+            models, evidence, summary = evaluate(
+                session, settings, project_id, request, owner_run_id=job_id
+            )
             snapshot = {
                 "schema_version": "paired-model-comparison-1.5",
                 "project_id": project_id,
@@ -348,13 +360,21 @@ def read_report(session: Session, project_id: str, job_id: str) -> dict[str, Any
 
 
 def replay(
-    session: Session, settings: Settings, project_id: str, job_id: str, digest: str
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    job_id: str,
+    digest: str,
+    *,
+    owner_run_id: str | None = None,
 ) -> dict[str, Any]:
     result = read_report(session, project_id, job_id)
     if result["content_sha256"] != digest:
         raise ConflictError("The selected comparison digest changed")
     request = ComparisonRequest.model_validate(get_job(session, project_id, job_id).request_json)
-    _, replayed, summary = evaluate(session, settings, project_id, request)
+    _, replayed, summary = evaluate(
+        session, settings, project_id, request, owner_run_id=owner_run_id
+    )
     original = result["snapshot"]["evidence"]
     mapping = result["source_id_map"]
 

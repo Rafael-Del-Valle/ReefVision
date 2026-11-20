@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
-from reefvision.db.models import WorkflowArtifact
+from reefvision.db.models import WorkflowArtifact, WorkflowRun
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.workflow_graphs import (
     WorkflowNodeDefinitionResponse,
@@ -50,11 +50,15 @@ def execute_paired_models(
     projects = inputs.get("project", [])
     if len(projects) != 1 or projects[0].payload_json.get("project_id") != project_id:
         raise ValidationError("Paired comparison requires its owning project")
+    owner = session.get(WorkflowRun, str(parameters.get("__workflow_run_id", "")))
+    if owner is None or owner.project_id != project_id or not owner.job_id:
+        raise ValidationError("Paired comparison requires an active project workflow run")
     report = replay(
         session,
         settings,
         project_id,
         str(parameters.get("comparison_id", "")),
         str(parameters.get("comparison_sha256", "")),
+        owner_run_id=owner.job_id,
     )
     return [{"port_id": "report", "data_type": "paired_model_report", "payload": report}]

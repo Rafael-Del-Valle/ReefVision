@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T09:37:00Z`
+Updated: `2026-11-20T10:08:50Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -982,6 +982,7 @@ Acceptance checks:
 Evidence:
 
 - `source`: Saved selection pins bytes, class map, provider, runtime, device and effective settings. Queued jobs and graph replay reject changed weights. Two imports restored live class/model references. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/886973882c5519c0975ba4e680b4fe910450d2a6` (`rv15-model-catalog-runtime-runtime-pin`)
+- `source`: A marked early 1.5 model-review profile upgraded through the desktop migrator twice. Its record UUIDs, UTC timestamp, original signed snapshot and checkpoint SHA-256 survived. Database foreign-key checks found zero violations. A copy with unprovable source identity rolled back without changes. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/ebce490b1e153fcdaf84c0b4c7c13721b12b7b6f` (`rv15-model-catalog-runtime-early-schema-recovery`)
 - `browser`: Direct Model Hub inference and two Detection Inference graph runs matched the source-pixel boxes, labels and scores for all nine CPU and ten CUDA predictions to six decimals on independently trained fixture checkpoints. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/95` (`rv15-model-catalog-runtime-direct-graph-replay`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
@@ -1004,7 +1005,8 @@ Evidence:
 
 - `source`: Two distinct CPU-trained checkpoints scored three untouched originals in two frozen groups. Fixture SHA-256 cdae9f6bcbfe7e78f29a547cc69f9e235970206bce9bb1c574035989c493b987. Source tests also cover instance and semantic masks. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/6b762ff4ede777ef9a57ae8e630b6a9c692bfdbf` (`rv15-model-comparison-paired-stills`)
 - `source`: Pose, tracking and event comparisons preserve held-out recording groups, prove checkpoint lineage, reject changed observations and retain comparable outcomes after Exchange. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/fa3f3c4cd0ed6455eeb344a9bae8ca7c6f598bb2` (`rv15-model-comparison-paired-video`)
-- `browser`: none recorded
+- `source`: Two successive native project imports preserved the scored comparisons and original source references across detector, mask, pose, tracking and event tasks. Modified source and mask content were rejected before importing. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/deaf079f12d392f63ed70108c38e35fec6d23247` (`rv15-model-comparison-comparison-project-exchange`)
+- `browser`: Models & AI compared two locally trained detectors on three originals in two frozen groups, exported both formats, reopened the differing original by hash and ran the saved comparison twice. The restored native evidence also covers recorded pose, tracking and event comparisons. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/8155cc78a07081cdecc5bfd780aa713c8615b0d6` (`rv15-model-comparison-paired-disagreement-editor`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1043,8 +1045,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Research export combines the frozen design, sealed independent review, paired model comparison, model hashes, methods, environment and exclusions with a native project archive. Tests cover repeated restore, weights and media omissions, aliased field originals, and rejection of inconsistent reports before import. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/d126bff406518811490c4abdb177aa73d45c2c15` (`rv15-reproducibility-package-offline-research-archive`)
+- `browser`: Six ordinary project journeys completed. The 64,711-byte Research ZIP contained none of the omitted checkpoint bytes in any of its 112 native archive members. Two original saved graph runs and a third after import returned the same payload SHA-256 fdfcb169edd1a8e6c67aaddcbb979e01470286afd53a07e2b8901bca62e9d84a. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/74645f2dff3e369f9d05152e0b7841e0afc65f8d` (`rv15-reproducibility-package-download-inspect-reopen`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1672,6 +1674,7 @@ Evidence:
 - `source`: Retired models are unavailable to new evaluation, image, video and saved pose workflow jobs while their histories remain readable. Native COCO, DeepLabCut CSV and Ultralytics exchange passed without the optional codec. The pinned optional NWB round trip and historical-file checks ran in the 41-test integration suite. — `docs/THIRD_PARTY_SLEAP_AUDIT.md` (`scope-sleap-source-retirement`)
 - `browser`: none recorded
 - `windows_installed`: The official six-CAB 1b0f29cff build had zero retired-runtime findings across 19,133 payload files and 11,984 frozen Python modules. A separate five-CAB build from the optional development environment passed across 19,186 files and 12,296 modules. The final 2.0 payload audit remains open. — `docs/REEFVISION_1.4.0_REPORT.md#official-windows-build-and-recovery-at-1b0f29cff` (`scope-sleap-1b0-package-audit`)
+- `windows_installed`: The official 1.4.0 MSI and six cabinets at fb2276c87 contained 19,133 inspected paths and 11,984 nested Python entries. The payload audit found zero retired runtime components and no bundled model assets. The 2.0 payload requires its own audit. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44697377337` (`scope-sleap-active-support-official-fb2276c87`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
