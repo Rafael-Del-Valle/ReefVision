@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -14,7 +15,11 @@ from reefvision.db.models.project import Project, utc_now
 from reefvision.db.models.study_design import StudyDesignRevision
 from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_level
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
-from reefvision.schemas.ecology_analysis import GrowthResult, GrowthSelection
+from reefvision.schemas.ecology_analysis import (
+    EcologyAnalysisSnapshot,
+    GrowthResult,
+    GrowthSelection,
+)
 from reefvision.schemas.ecology_study_assignment import (
     EcologyStudyAssignmentRead,
     validate_study_assignments,
@@ -40,6 +45,105 @@ from reefvision.services.ecology_analysis import EcologyAnalysisService
 from reefvision.services.ecology_identity import EcologyIdentityService
 from reefvision.services.paired_growth_contrast import build_paired_growth_report
 from reefvision.storage.datasets import canonical_json_sha256
+
+
+def validate_study_roster(
+    declaration: StudyDesignDeclaration, roster: Sequence[StudyDesignRosterMember]
+) -> None:
+    if [member.organism_key for member in roster] != sorted(declaration.organism_keys):
+        raise ValidationError("The roster must include exactly the declared organisms")
+    lineages: dict[str, str] = {}
+    for member in roster:
+        if (
+            member.experimental_unit_type.casefold()
+            != declaration.contrast.experimental_unit_type.casefold()
+        ):
+            raise ValidationError(
+                "The enrolled organisms must use the declared independent unit type"
+            )
+        lineage = member.parent_colony_key or member.organism_key
+        if lineages.setdefault(lineage, member.experimental_unit_id) != member.experimental_unit_id:
+            raise ValidationError("A colony lineage spans multiple declared independent units")
+    if classify_ecological_unit_level(declaration.contrast.experimental_unit_type) == "organism":
+        counts = Counter(member.experimental_unit_id for member in roster)
+        if any(count > 1 for count in counts.values()):
+            raise ValidationError("An organism-level unit cannot contain multiple organisms")
+    treatments = {row.assignment.treatment_code for row in roster}
+    if treatments - {None} != {item.code for item in declaration.treatments} or (
+        None in treatments and len(treatments) > 1
+    ):
+        raise ValidationError("Declared treatments must match each enrolled reviewed assignment")
+    try:
+        validate_study_assignments((row, row.assignment) for row in roster)
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
+
+
+def rebuild_study_binding(
+    *,
+    project_id: UUID,
+    analysis_id: UUID,
+    source_sha256: str,
+    analysis_snapshot: EcologyAnalysisSnapshot,
+    analysis_created_at: datetime,
+    declaration: StudyDesignDeclaration,
+    roster: Sequence[StudyDesignRosterMember],
+    declared_at: datetime,
+    calculate_t_interval: bool = True,
+) -> StudyDesignBinding:
+    """Recompute the same scientific binding from current or archived frozen evidence."""
+    selection, result = analysis_snapshot.selection, analysis_snapshot.result
+    if (
+        not isinstance(selection, GrowthSelection)
+        or not selection.sampling_plan
+        or not isinstance(result, GrowthResult)
+    ):
+        raise ValidationError("Select reviewed calibrated growth evidence with a sampling plan")
+    if selection.metric != declaration.metric:
+        raise ValidationError("The measurement metric must match the reviewed growth analysis")
+    enrolled = {(member.experimental_unit_id, member.organism_key) for member in roster}
+    sampled = {
+        (unit.experimental_unit_id, organism)
+        for unit in selection.sampling_plan
+        for organism in unit.organism_keys
+    }
+    if sampled != enrolled:
+        raise ValidationError(
+            "The growth plan must contain the same enrolled organisms and independent units"
+        )
+    if declaration.exclusion_policy == "no_source_exclusions" and any(
+        exclusion.source_kind == "calibration" for exclusion in result.exclusions
+    ):
+        raise ValidationError("The reviewed growth analysis contains excluded sources")
+    if declaration.timing == "prospective" and (
+        analysis_created_at < declared_at
+        or any(item.observed_at < declared_at for item in result.observations)
+    ):
+        raise ValidationError("Prospective evidence must follow the original plan freeze")
+    request = PairedGrowthContrastRequest.model_validate(
+        {**declaration.contrast.model_dump(mode="json"), "source_sha256": source_sha256}
+    )
+    identities = {
+        item.organism_key: PairedGrowthRosterIdentity(
+            organism_key=item.organism_key,
+            revision=item.identity_revision,
+            parent_colony_key=item.parent_colony_key,
+            experimental_unit_type=item.experimental_unit_type,
+            experimental_unit_id=item.experimental_unit_id,
+        )
+        for item in roster
+    }
+    report = build_paired_growth_report(
+        project_id,
+        analysis_id,
+        analysis_snapshot,
+        request,
+        identities,
+        calculate_t_interval=calculate_t_interval,
+    )
+    return StudyDesignBinding(
+        analysis_id=report.analysis_id, source_sha256=report.source_sha256, paired_report=report
+    )
 
 
 class StudyDesignService:
@@ -107,24 +211,16 @@ class StudyDesignService:
     ) -> list[StudyDesignRosterMember]:
         current = EcologyIdentityService(self.session)._latest(project_id)
         roster = []
-        lineages: dict[str, str] = {}
         for key in sorted(declaration.organism_keys):
             identity = current.get(key)
             if identity is None or identity.study_assignment is None:
                 raise ValidationError(f"{key} requires a reviewed study assignment in this project")
             unit_id = identity.experimental_unit_id
             unit_type = identity.experimental_unit_type
-            if (
-                not unit_id
-                or not unit_type
-                or unit_type.casefold() != declaration.contrast.experimental_unit_type.casefold()
-            ):
+            if not unit_id or not unit_type:
                 raise ValidationError(
                     "The enrolled organisms must use the declared independent unit type"
                 )
-            lineage = identity.parent_colony_key or key
-            if lineages.setdefault(lineage, unit_id) != unit_id:
-                raise ValidationError("A colony lineage spans multiple declared independent units")
             roster.append(
                 StudyDesignRosterMember(
                     identity_id=UUID(identity.id),
@@ -137,24 +233,7 @@ class StudyDesignService:
                     assignment=EcologyStudyAssignmentRead.model_validate(identity.study_assignment),
                 )
             )
-        if (
-            classify_ecological_unit_level(declaration.contrast.experimental_unit_type)
-            == "organism"
-        ):
-            counts = Counter(member.experimental_unit_id for member in roster)
-            if any(count > 1 for count in counts.values()):
-                raise ValidationError("An organism-level unit cannot contain multiple organisms")
-        treatments = {row.assignment.treatment_code for row in roster}
-        if treatments - {None} != {item.code for item in declaration.treatments} or (
-            None in treatments and len(treatments) > 1
-        ):
-            raise ValidationError(
-                "Declared treatments must match each enrolled reviewed assignment"
-            )
-        try:
-            validate_study_assignments((row, row.assignment) for row in roster)
-        except ValueError as exc:
-            raise ValidationError(str(exc)) from exc
+        validate_study_roster(declaration, roster)
         return roster
 
     def _require_current_roster(self, saved: StudyDesignRead) -> list[StudyDesignRosterMember]:
@@ -195,63 +274,18 @@ class StudyDesignService:
             raise ConflictError(
                 "Selected growth evidence has changed; save a freshly reviewed analysis"
             )
-        selection, result = analysis.snapshot.selection, analysis.snapshot.result
-        if (
-            not isinstance(selection, GrowthSelection)
-            or not selection.sampling_plan
-            or not isinstance(result, GrowthResult)
-        ):
-            raise ValidationError("Select reviewed calibrated growth evidence with a sampling plan")
-        if selection.metric != declaration.metric:
-            raise ValidationError("The measurement metric must match the reviewed growth analysis")
-        enrolled = {(member.experimental_unit_id, member.organism_key) for member in roster}
-        sampled = {
-            (unit.experimental_unit_id, organism)
-            for unit in selection.sampling_plan
-            for organism in unit.organism_keys
-        }
-        if sampled != enrolled:
-            raise ValidationError(
-                "The growth plan must contain the same enrolled organisms and independent units"
-            )
-        if declaration.exclusion_policy == "no_source_exclusions" and any(
-            exclusion.source_kind == "calibration" for exclusion in result.exclusions
-        ):
-            raise ValidationError("The reviewed growth analysis contains excluded sources")
-        if declaration.timing == "prospective" and (
-            analysis.created_at < declared_at
-            or any(item.observed_at < declared_at for item in result.observations)
-        ):
-            raise ValidationError("Prospective evidence must follow the original plan freeze")
-
-        request = PairedGrowthContrastRequest.model_validate(
-            {
-                **declaration.contrast.model_dump(mode="json"),
-                "source_sha256": source.growth_source_sha256,
-            }
-        )
-        identities = {
-            item.organism_key: PairedGrowthRosterIdentity(
-                organism_key=item.organism_key,
-                revision=item.identity_revision,
-                parent_colony_key=item.parent_colony_key,
-                experimental_unit_type=item.experimental_unit_type,
-                experimental_unit_id=item.experimental_unit_id,
-            )
-            for item in roster
-        }
         prior = original.binding if original else None
-        report = build_paired_growth_report(
-            original.project_id if original else analysis.project_id,
-            prior.analysis_id if prior else analysis.id,
-            analysis.snapshot,
-            request,
-            identities,
+        return rebuild_study_binding(
+            project_id=original.project_id if original else analysis.project_id,
+            analysis_id=prior.analysis_id if prior else analysis.id,
+            source_sha256=source.growth_source_sha256,
+            analysis_snapshot=analysis.snapshot,
+            analysis_created_at=analysis.created_at,
+            declaration=declaration,
+            roster=roster,
+            declared_at=declared_at,
             calculate_t_interval=prior is None
             or prior.paired_report.interval_status != "statistics_runtime_unavailable",
-        )
-        return StudyDesignBinding(
-            analysis_id=report.analysis_id, source_sha256=report.source_sha256, paired_report=report
         )
 
     def _append(
