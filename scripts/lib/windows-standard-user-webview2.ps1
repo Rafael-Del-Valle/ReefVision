@@ -33,7 +33,10 @@ function Invoke-ReefVisionCredentialDesktop([string]$ContextFile) {
     } -Action {
         Start-Process -FilePath $context.executable -PassThru -WindowStyle Hidden -WorkingDirectory (Split-Path -Parent $context.executable)
     }
-    $receipt = [ordered]@{launcher_pid=$PID; desktop_pid=$desktop.Id; user_sid=$identity.User.Value}
+    $receipt = [ordered]@{
+        launcher_pid=$PID; desktop_pid=$desktop.Id; user_sid=$identity.User.Value
+        windows_user_profile=$env:USERPROFILE
+    }
     $pending = $context.receipt + '.tmp'
     $receipt | ConvertTo-Json | Set-Content -LiteralPath $pending
     Move-Item -LiteralPath $pending -Destination $context.receipt
@@ -173,8 +176,10 @@ function Start-ReefVisionHostedGui {
     $hostProcess = Get-Process -Id $PID
     $launchArgs = '-NoProfile -NonInteractive -File "{0}" -LaunchContext "{1}"' -f $launcherSource,$context
     $Account.launcher_errors = Join-Path $handshake 'launcher.stderr'
+    # Let Windows populate the temporary account environment so its shell
+    # folders and browser downloads resolve under the actual ordinary profile.
     $Account.launcher = Start-Process -FilePath $hostProcess.Path -ArgumentList $launchArgs -Credential $Account.credential `
-        -LoadUserProfile -PassThru -WindowStyle Hidden -WorkingDirectory $bootstrap `
+        -LoadUserProfile -UseNewEnvironment -PassThru -WindowStyle Hidden -WorkingDirectory $bootstrap `
         -RedirectStandardOutput (Join-Path $handshake 'launcher.stdout') -RedirectStandardError $Account.launcher_errors
     $deadline = [DateTime]::UtcNow.AddSeconds(35)
     do {
@@ -196,6 +201,10 @@ function Start-ReefVisionHostedGui {
     if ($owner.ReturnValue -ne 0 -or $owner.Sid -ne $Account.sid.Value) {
         throw 'The exact installed desktop did not run as the designated Windows standard user.'
     }
+    $windowsProfile = Get-CimInstance Win32_UserProfile -Filter "SID = '$($Account.sid.Value)'"
+    if (-not $windowsProfile -or -not $windowsProfile.Loaded -or $launch.windows_user_profile -ine $windowsProfile.LocalPath) {
+        throw 'The desktop launcher did not use the loaded Windows profile for the designated standard user.'
+    }
     $desktop = Get-Process -Id $child.ProcessId -ErrorAction Stop
     $Account.desktop = $desktop
     $integrity = Get-ReefVisionProcessIntegrity $desktop
@@ -205,6 +214,7 @@ function Start-ReefVisionHostedGui {
         desktop_pid=$desktop.Id; launcher_pid=$Account.launcher.Id; windows_session=$child.SessionId
         desktop_owner_sid=$owner.Sid; desktop_integrity=$integrity; driver_integrity=Get-ReefVisionProcessIntegrity $hostProcess
         desktop_sha256=(Get-FileHash -LiteralPath $Executable).Hash.ToLowerInvariant()
+        desktop_windows_user_profile=$launch.windows_user_profile
     } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'spatial-standard-user-identity.log')
     return $desktop
 }
