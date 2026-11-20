@@ -191,7 +191,11 @@ describe("ImageViewport", () => {
 
   it("keeps wheel zoom while dragging and pans from the latest pointer position", () => {
     render(
-      <ImageViewport width={1600} height={1200} label="Zoom during pan viewport">
+      <ImageViewport
+        width={1600}
+        height={1200}
+        label="Zoom during pan viewport"
+      >
         <svg aria-label="Preserved image annotations">
           <rect x="10" y="20" width="30" height="40" />
         </svg>
@@ -203,7 +207,7 @@ describe("ImageViewport", () => {
     const transform = screen.getByTestId("image-viewport-transform");
     const readTransform = () => {
       const match = transform.style.transform.match(
-        /^translate\\(([-+\\d.e]+)px, ([-+\\d.e]+)px\\) scale\\(([-+\\d.e]+)\\)$/,
+        /^translate\(([-+\d.e]+)px, ([-+\d.e]+)px\) scale\(([-+\d.e]+)\)$/,
       );
       if (!match) throw new Error("Invalid viewport transform");
       return match.slice(1).map(Number);
@@ -248,7 +252,9 @@ describe("ImageViewport", () => {
     });
     expect(transform.style.transform).toBe(fitted);
     expect(
-      screen.getByLabelText("Preserved image annotations").querySelector("rect"),
+      screen
+        .getByLabelText("Preserved image annotations")
+        .querySelector("rect"),
     ).toHaveAttribute("x", "10");
   });
 
