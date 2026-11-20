@@ -22,12 +22,14 @@ Assert-True ($journeyFailure.status -eq 'FAIL') 'A failed installed journey must
 Assert-True ($journeyFailure.detail -eq 'Fixture WebView2 attach timeout.') 'The retained journey failure must identify the original error.'
 $journeySuccess = Get-ReefVisionInstalledJourneyEvidence {
     [pscustomobject]@{
-        completed_journeys = 9; graph_record_id = 'graph-id'; first_run_id = 'first'; replay_run_id = 'second'
+        completed_journeys = 10; graph_record_id = 'graph-id'; first_run_id = 'first'; replay_run_id = 'second'
         artifact = [pscustomobject]@{ payload_sha256 = 'comparison-digest' }
         ordinary_detector = [pscustomobject]@{ model_id = 'detector-id'; checkpoint_sha256 = 'checkpoint-digest' }
+        backup_restore = [pscustomobject]@{ restore_job_id = 'restore-id'; restored_files = 3 }
     }
 }
 Assert-True ($journeySuccess.status -eq 'PASS' -and $journeySuccess.detail.Contains('comparison-digest') -and $journeySuccess.detail.Contains('checkpoint-digest')) 'Successful journeys must retain the spatial export and the trained detector identities.'
+Assert-True ($journeySuccess.detail.Contains('restore-id') -and $journeySuccess.detail.Contains('3 verified files')) 'Successful journeys must retain the managed restore job and recovered file count.'
 
 $defaultData = Join-Path $env:APPDATA 'org.reefvision.desktop'
 $OldConfig = $env:REEFVISION_CONFIG_DIR

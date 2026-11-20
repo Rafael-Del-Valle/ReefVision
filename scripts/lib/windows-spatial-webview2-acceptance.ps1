@@ -199,7 +199,7 @@ function Wait-ReefVisionWebView2DebugClosure([int]$Port) {
 function Get-ReefVisionInstalledJourneyEvidence([scriptblock]$RunJourney) {
     try {
         $result = & $RunJourney
-        $detail = "Installed WebView2 passed $($result.completed_journeys) desktop journeys. Reviewed graph $($result.graph_record_id) ran as $($result.first_run_id) and $($result.replay_run_id) with comparison SHA-256 $($result.artifact.payload_sha256). Scratch detector $($result.ordinary_detector.model_id) produced checkpoint SHA-256 $($result.ordinary_detector.checkpoint_sha256)."
+        $detail = "Installed WebView2 passed $($result.completed_journeys) desktop journeys. Reviewed graph $($result.graph_record_id) ran as $($result.first_run_id) and $($result.replay_run_id) with comparison SHA-256 $($result.artifact.payload_sha256). Scratch detector $($result.ordinary_detector.model_id) produced checkpoint SHA-256 $($result.ordinary_detector.checkpoint_sha256). Managed restore job $($result.backup_restore.restore_job_id) recovered $($result.backup_restore.restored_files) verified files."
         return New-ReefVisionEvidenceResult -Status 'PASS' -Detail $detail
     } catch {
         return New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $_.Exception.Message
@@ -247,7 +247,8 @@ function Invoke-ReefVisionSpatialWebView2Acceptance {
             'paired-growth-contrast-live.spec.ts',
             'dataset-export-layout-live.spec.ts',
             'ordinary-project-live.spec.ts',
-            'ordinary-detector-live.spec.ts'
+            'ordinary-detector-live.spec.ts',
+            'backup-restore-live.spec.ts'
         )
         & $NodePath $playwrightCli test @specs --workers=1 --retries=0 --reporter=list,json --output=$output *> $log
         if ($LASTEXITCODE -ne 0) {
@@ -275,7 +276,17 @@ function Invoke-ReefVisionSpatialWebView2Acceptance {
     if ($detector.surface -ne 'tauri-webview2' -or $detector.device -ne 'cpu' -or $detector.initializer -ne 'scratch' -or $detector.checkpoint_sha256 -notmatch '^[a-f0-9]{64}$') {
         throw 'The installed detector report lacks verified CPU scratch-training evidence.'
     }
+    $backupFiles = @(Get-ChildItem -LiteralPath $output -Recurse -File -Filter 'backup-restore-evidence.json')
+    if ($backupFiles.Count -ne 1) { throw 'Expected one completed managed backup and restore report.' }
+    $backup = Get-Content -LiteralPath $backupFiles[0].FullName -Raw | ConvertFrom-Json
+    if ($backup.surface -ne 'tauri-webview2' -or $backup.restore_status -ne 'succeeded' -or
+        $backup.verified_files -lt 2 -or $backup.restored_files -ne $backup.verified_files -or
+        $backup.backup_database_sha256 -notmatch '^[a-f0-9]{64}$' -or $backup.original_sha256 -notmatch '^[a-f0-9]{64}$' -or
+        $backup.independent_recovery -ne $true -or $backup.live_original_unchanged -ne $true) {
+        throw 'The installed backup report lacks a verified independent recovery with an unchanged original.'
+    }
     $result | Add-Member -NotePropertyName ordinary_detector -NotePropertyValue $detector
+    $result | Add-Member -NotePropertyName backup_restore -NotePropertyValue $backup
     $result | Add-Member -NotePropertyName completed_journeys -NotePropertyValue $stats.expected
     return $result
 }

@@ -222,7 +222,8 @@ function Start-AcceptanceDesktop([string]$ProfileDataRoot = $DataRoot, [int]$Web
     $isolatedOverrides = @{
         REEFVISION_WINDOWS_ACCEPTANCE = '1'
         REEFVISION_ACCEPTANCE_DATA_DIR = $ProfileDataRoot
-        WEBVIEW2_USER_DATA_FOLDER = (Join-Path $ProfileDataRoot 'webview2')
+        # Like the installed app, keep the browser's locked cache outside managed data.
+        WEBVIEW2_USER_DATA_FOLDER = (Join-Path $RunRoot ((Split-Path -Leaf $ProfileDataRoot) + '-webview2'))
     }
     if ($WebViewDebugPort) {
         $isolatedOverrides['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = "--remote-debugging-address=127.0.0.1 --remote-debugging-port=$WebViewDebugPort"
