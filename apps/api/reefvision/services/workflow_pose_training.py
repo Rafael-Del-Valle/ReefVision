@@ -939,9 +939,17 @@ def _reused_pose_training_result(
         # An empty alternate checkpoint must never be replayed as usable science.
         if advertised_checkpoint.stat().st_size == 0:
             raise ValidationError("Recovered pose-training checkpoint artifact is empty")
+        # A matching digest cannot establish independent checkpoint lineage
+        # when another registered model shares this file's inode.
+        if advertised_checkpoint.stat().st_nlink > 1:
+            raise ValidationError("Recovered pose-training checkpoint artifact is hard-linked")
 
     if not checkpoint.is_file():
         raise ValidationError("Recovered pose training checkpoint is missing")
+    # Historical manifests may not advertise best/last separately. Apply
+    # the same first-completion hard-link invariant to their selected model.
+    if checkpoint.stat().st_nlink > 1:
+        raise ValidationError("Recovered pose training checkpoint is hard-linked")
 
     # First completion has already hashed these bytes while persisting the
     # checkpoint digest. Reuse that result rather than hashing large weights
