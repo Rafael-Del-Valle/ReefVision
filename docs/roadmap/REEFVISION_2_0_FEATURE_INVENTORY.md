@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T18:06:47Z`
+Updated: `2026-11-20T19:06:10Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1167,6 +1167,7 @@ Evidence:
 - `browser`: none recorded
 - `windows_installed`: Original 1.6 and 1.5 MSI payloads preserved both historical 0038 schemas and QC 0039 through 0041, with separate old-reader restore and an unchanged mixed-history refusal. — `docs/validation/compact-windows-review-a580042e8.json` (`rv16-lineage-reconciliation-historical-original-83b0a98b2`)
 - `windows_installed`: The unchanged original Windows verifier migrated each historical 0038 family and QC 0039–0041. Five separate restores reopened in the matching original reader, preserving the prior rows and files. The ambiguous profile was refused with unchanged bytes. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44768324452/job/136432743297` (`rv16-lineage-reconciliation-original-five-schema-recovery`)
+- `windows_installed`: On this original MSI the five historical scientific and QC schemas upgraded and restored, the ambiguous profile stayed unchanged, and the validated 1.5 upgrade reopened a separate backup in the previous reader. — `docs/validation/installed-workflows-a580042e8.json` (`rv16-lineage-reconciliation-original-a580042e8`)
 - `physical_hardware`: Both 0038 database histories and QC revisions 0039 through 0041 retained all prior table fingerprints, ID bindings and managed files. Five verified backup restorations rehashed 42 files. The older native readers reopened the backups. A mixed profile refused startup byte-identically. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-lineage-reconciliation-physical-83b0`)
 - `representative_data`: none recorded
 
@@ -1189,6 +1190,7 @@ Evidence:
 - `browser`: The corrected source-built WebView2 opened the first project, imported the original, reviewed the annotation, downloaded YOLO data and reopened the saved result. — `docs/validation/compact-windows-review-a580042e8.json` (`rv16-onboarding-installer-native-first-use-a580042e8`)
 - `windows_installed`: The original 1.6 MSI installed, launched, exported a reviewed annotation, reopened it after restart and uninstalled under outbound deny. Both ordinary and SYSTEM controls recorded 149 denied observations over 147 seconds. — `docs/validation/compact-windows-review-a580042e8.json` (`rv16-onboarding-installer-offline-83b0a98b2`)
 - `windows_installed`: The same original MSI passed compact keyboard and DPI first use under an ordinary account, offline import, annotation, export and reopen, clean removal with retention, and a separate 1.5 upgrade and verified prior-reader rollback. — `docs/validation/compact-windows-review-a580042e8.json` (`rv16-onboarding-original-offline-upgrade-83b0a98b2`)
+- `windows_installed`: The corrected original MSI passed standard-user first use, the compact keyboard handoff, offline export and reopening after restart. The published 1.0.3 and validated 1.5 upgrades passed, including the old-reader rollback. — `docs/validation/installed-workflows-a580042e8.json` (`rv16-onboarding-installer-original-a580042e8`)
 - `physical_hardware`: The native packaged first launch at 960 by 640 CSS pixels and emulated 150% scaling preserved keyboard focus and dismissal. The researcher imported image and video, edited, undid and redid, reviewed, exported YOLO and reopened. The browser attempted zero external HTTP requests. A separate eight-project 1.5 backup reopened with all 303 project files. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-onboarding-installer-physical-83b0`)
 - `representative_data`: none recorded
 
