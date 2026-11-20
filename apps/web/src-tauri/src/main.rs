@@ -246,6 +246,15 @@ function Format-SafeText {
   # Bound untrusted camera/study names and worker logs before regex parsing.
   # Never truncate the persisted scientific record; this limits display only.
   if ($text.Length -gt 4096) { $text = $text.Substring(0, 4096) }
+  # Erasing a terminal edit *inside* an ASCII metric token can manufacture a
+  # different loss (0.2 + OSC/CSI/bidi/backspace + 5 -> 0.25). Refuse the
+  # rendered field instead of inventing numeric evidence; the persisted job
+  # history and raw training log remain unchanged.
+  $token = '[A-Za-z0-9._/+%=-]'
+  $terminalEdit = '(?:\x1b[\]PX^_][\s\S]*?(?:\x07|\x9c|\x1b\\|$)|[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)|(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]|\p{Cf}|\x08)'
+  if ([regex]::IsMatch($text, "(?<=$token)$terminalEdit(?=$token)")) {
+    return '[terminal-edited field omitted]'
+  }
   $text = [regex]::Replace($text, '\x1b[\]PX^_][\s\S]*?(?:\x07|\x9c|\x1b\\|$)', '')
   $text = [regex]::Replace($text, '[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)', '')
   $text = [regex]::Replace($text, '(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]', '')
