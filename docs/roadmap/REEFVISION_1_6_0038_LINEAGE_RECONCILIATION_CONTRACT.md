@@ -150,3 +150,31 @@ or proof of 1.1/1.6 Alembic-0038 reconciliation. Original databases and saved
 typed Workflow Builder QC graphs, provenance, retries and human-review gates
 remain untouched. CI, representative saved-workflow execution and genuine
 Windows MSI/installed-GUI acceptance are still required for release.
+
+## Declared FK update action and lookup-index fidelity (2026-11-20, Track D)
+
+The original independent 1.1 and 1.6 revision-0038 migrations use default
+SQLite `ON UPDATE NO ACTION` foreign keys and full, ascending, BINARY-collated
+indexes for scientific observation chronology and QC event chronology.
+Previously the optional preflight matched foreign-key *delete* actions and
+index names' column/UNIQUE signatures, but not foreign-key update policies
+or the partial/collation/sort semantics of non-UNIQUE lookup indexes.
+
+The read-only opt-in structural inspector now rejects `ON UPDATE CASCADE` or
+other non-source update rules on protected table FKs; it also requires an
+unfiltered, ascending BINARY lookup for each source-declared index. A partial
+observation index, an alternate collation, or reversed event-time index can
+have identical columns but different scientific retrieval and performance
+semantics. Additional unrelated non-unique indexes remain permitted, while
+unexpected UNIQUE constraints retain their existing fail-closed treatment.
+
+Expanded disposable populated-DB regressions cover both scientific and QC
+lineages, altered update actions, partial lookup indexes, NOCASE keys,
+descending time keys, strict JSON-only CLI diagnostics, research-note
+redaction and byte-identical originals after each read-only audit. These
+regressions are **not** migration acceptance: the cross-branch 0038 collision
+remains unresolved, `upgrade_authorized` stays false, no existing database
+is altered, and representative biological saved-workflow, Windows MSI/CAB,
+installed GUI and researcher approval remain release prerequisites. This
+preflight is outside executable scientific Workflow Builder because it
+inspects migration provenance without processing scientific observations.
