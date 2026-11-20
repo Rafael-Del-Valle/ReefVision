@@ -27,7 +27,15 @@ def _parse_obj_float(token: str) -> float:
 
 
 def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
-    if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_OBJ_BYTES:
+    if not isinstance(text, str):
+        raise ValueError("OBJ preview exceeds the 256000-byte limit")
+    try:
+        byte_length = len(text.encode("utf-8"))
+    except UnicodeEncodeError as exc:
+        # JSON permits escaped, unpaired UTF-16 surrogates even though they
+        # cannot form UTF-8 source bytes for an immutable mesh import.
+        raise ValueError("OBJ preview contains an unpaired Unicode surrogate") from exc
+    if byte_length > MAX_OBJ_BYTES:
         raise ValueError("OBJ preview exceeds the 256000-byte limit")
     # splitlines() and split() accept Unicode line/space separators that are
     # not part of the supported ASCII OBJ syntax. Such separators can silently
