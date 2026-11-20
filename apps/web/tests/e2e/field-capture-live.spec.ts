@@ -19,9 +19,12 @@ test("captures local field originals and replays a transferred batch", async ({
   if (desktop.surface === "source-browser") {
     await page.setViewportSize({ width: 1350, height: 900 });
   }
-  await page.addInitScript(() =>
-    localStorage.setItem("reefvision.onboarding.dismissed.1.5.0", "true"),
-  );
+  const { version } = JSON.parse(await readFile("package.json", "utf8")) as {
+    version: string;
+  };
+  await page.addInitScript((value) => {
+    localStorage.setItem(`reefvision.onboarding.dismissed.${value}`, "true");
+  }, version);
   const marker = randomUUID().slice(0, 8);
   async function project(name: string) {
     const response = await page.request.post(`${api}/projects`, {
