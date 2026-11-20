@@ -1456,6 +1456,21 @@ export function AnnotationEditor({
     },
   });
 
+  // Acceptance writes a new server revision. Keep local edits paused until the
+  // existing clean-document hydrator has adopted that revision.
+  const annotationRevisionUpdating =
+    acceptPredictionMutation.isPending ||
+    acceptAssistMutation.isPending ||
+    (bulkReviewMutation.isPending &&
+      bulkReviewMutation.variables.action === "accept") ||
+    ((acceptPredictionMutation.isSuccess ||
+      acceptAssistMutation.isSuccess ||
+      (bulkReviewMutation.isSuccess &&
+        bulkReviewMutation.variables.action === "accept")) &&
+      !dirty &&
+      sessionQuery.data?.image.id === currentImageId &&
+      sessionQuery.data.image.annotation_revision > state.baseRevision);
+
   const setSelection = useCallback((selection: string[]) => {
     dispatch({ type: "setSelection", selection });
   }, []);
@@ -1470,6 +1485,7 @@ export function AnnotationEditor({
       selection?: string[],
       maskSelection?: string[],
     ) => {
+      if (annotationRevisionUpdating) return;
       dispatch({
         type: "commitDocument",
         document,
@@ -1477,7 +1493,7 @@ export function AnnotationEditor({
         maskSelection,
       });
     },
-    [],
+    [annotationRevisionUpdating],
   );
 
   const applyClassToSelection = useCallback(
@@ -1723,6 +1739,7 @@ export function AnnotationEditor({
   }, [copySelection, pasteClipboard]);
 
   const saveNow = useCallback((): Promise<boolean> => {
+    if (annotationRevisionUpdating) return Promise.resolve(false);
     if (thumbnailOnlyPreview) {
       setShortcutMessage(
         "Load the full-resolution image before saving annotation changes.",
@@ -1776,7 +1793,12 @@ export function AnnotationEditor({
       });
     savePromiseRef.current = promise;
     return promise;
-  }, [project.id, queryClient, thumbnailOnlyPreview]);
+  }, [
+    annotationRevisionUpdating,
+    project.id,
+    queryClient,
+    thumbnailOnlyPreview,
+  ]);
 
   const flushPendingSave = useCallback(async (): Promise<boolean> => {
     if (savePromiseRef.current) {
@@ -1902,6 +1924,8 @@ export function AnnotationEditor({
         }
         return;
       }
+
+      if (annotationRevisionUpdating) return;
 
       // Shift+Digit1/2 are editor actions, while plain 1–9 still choose classes.
       if (
@@ -2039,6 +2063,7 @@ export function AnnotationEditor({
     applyClassToSelection,
     currentImageId,
     activeDetectorModelId,
+    annotationRevisionUpdating,
     deployModelMutation,
     predictImage,
     refinement,
@@ -2649,7 +2674,7 @@ export function AnnotationEditor({
           <button
             type="button"
             className="secondary"
-            disabled={thumbnailOnlyPreview}
+            disabled={thumbnailOnlyPreview || annotationRevisionUpdating}
             onClick={() => void saveNow()}
           >
             Save now
@@ -2725,7 +2750,7 @@ export function AnnotationEditor({
             <label>
               Annotation status
               <select
-                disabled={thumbnailOnlyPreview}
+                disabled={thumbnailOnlyPreview || annotationRevisionUpdating}
                 value={state.document.annotation_status}
                 onChange={(event) =>
                   commitDocument({
@@ -3509,7 +3534,7 @@ export function AnnotationEditor({
                   className="secondary"
                   title="Undo (Ctrl/Cmd+Z)"
                   aria-keyshortcuts="Control+Z Meta+Z"
-                  disabled={!canUndo}
+                  disabled={!canUndo || annotationRevisionUpdating}
                   onClick={() => dispatch({ type: "undo" })}
                 >
                   Undo
@@ -3519,7 +3544,7 @@ export function AnnotationEditor({
                   className="secondary"
                   title="Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y)"
                   aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y Meta+Y"
-                  disabled={!canRedo}
+                  disabled={!canRedo || annotationRevisionUpdating}
                   onClick={() => dispatch({ type: "redo" })}
                 >
                   Redo
