@@ -91,11 +91,74 @@ test("compares two project originals, reviews identity, reopens and exports the 
     await group.getByLabel("Relative scale uncertainty").fill("0.1");
     await group.getByLabel("Provisional specimen ID").fill("synthetic-colony");
     await group.getByLabel("Observation ID", { exact: true }).fill(observation);
-    await group.getByLabel("Coordinate frame ID").fill("synthetic-frame");
+    await group.getByLabel("Coordinate frame ID").fill(`${observation}-frame`);
     await group.getByLabel("Acquisition timestamp", { exact: true }).fill(day);
   }
   await configure(earlier, "survey-1", "2026-10-01T12:00:00Z");
   await configure(later, "survey-2", "2026-10-02T12:00:00Z");
+  const registration = task.getByRole("group", {
+    name: "Registration review",
+    exact: true,
+  });
+  await registration
+    .getByText("Rigid transform and error bounds", { exact: true })
+    .click({ timeout: 5000 });
+  const matrix = registration.getByLabel(
+    "Earlier-to-later rigid transform (4 × 4)",
+  );
+  const transform = [
+    [0, -1, 0, 0.5],
+    [1, 0, 0, 0.125],
+    [0, 0, 1, 0],
+    [0, 0, 0, 1],
+  ];
+  const separation = Math.sqrt(41) / 24;
+  const interval = [separation - 0.1, separation + 0.1];
+
+  const registrationFields = {
+    "RMS residual (meters)": "0.025",
+    "Correspondence count": "4",
+    "Registration evidence note":
+      "Synthetic control coordinates in the two source frames.",
+    "Registration operator": "fixture-registration-operator",
+    "Independent registration reviewer": "fixture-registration-reviewer",
+    "Independent registration review note":
+      "Synthetic control transform and declared error bounds.",
+    "Registration review timestamp": "2026-10-03T12:00:00Z",
+    "Earlier centroid error bound (meters)": "0.02",
+    "Later centroid error bound (meters)": "0.03",
+    "Alignment error bound (meters)": "0.05",
+  };
+  for (const [label, value] of Object.entries(registrationFields)) {
+    await registration.getByLabel(label, { exact: true }).fill(value);
+  }
+  await registration
+    .getByLabel("Independent registration decision")
+    .selectOption("supports_alignment");
+  const preview = task.getByRole("button", {
+    name: "Preview comparison",
+    exact: true,
+  });
+  await matrix.fill("[[0");
+  await expect(preview).toBeDisabled();
+  await expect(
+    task.getByText("Enter a 4 × 4 registration matrix with finite numbers."),
+  ).toBeVisible();
+  await matrix.fill(JSON.stringify([[2, -1, 0, 0.5], ...transform.slice(1)]));
+  const checkedInvalid = page.waitForResponse((r) =>
+    r.url().endsWith("/spatial/mesh-longitudinal-comparison"),
+  );
+  await preview.click();
+  const invalid = await checkedInvalid;
+  expect(invalid.status(), await invalid.text()).toBe(422);
+  expect(await invalid.text()).toContain(
+    "Registration transform must have unit rotation axes",
+  );
+  await expect(
+    task.getByRole("button", { name: "Save comparison workflow" }),
+  ).toBeDisabled();
+  await matrix.fill(JSON.stringify(transform));
+
   const review = task.getByRole("group", {
     name: "Organism correspondence",
     exact: true,
@@ -158,12 +221,42 @@ test("compares two project originals, reviews identity, reopens and exports the 
     after_source_payload_sha256: after.sha256,
   });
   expect(standalone.provenance.specimen_identity_verified).toBe(false);
+  expect(standalone.provenance.coordinate_registration_verified).toBe(false);
+  expect(standalone.registered_surface_centroid_separation_m).toBeCloseTo(
+    separation,
+    12,
+  );
+  expect(
+    standalone.registered_surface_centroid_separation_caller_bound_interval_m,
+  ).toEqual(interval.map((value) => expect.closeTo(value, 12)));
+  await expect(
+    task.getByText("Registered surface centroid separation", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    task.getByText("Caller-declared separation bounds", { exact: true }),
+  ).toBeVisible();
   const saving = page.waitForResponse(
     (r) =>
       r.url().endsWith("/workflow-graphs") && r.request().method() === "POST",
   );
   await task.getByRole("button", { name: "Save comparison workflow" }).click();
   const saved = await (await saving).json();
+  const savedComparison = saved.graph_json.nodes.find(
+    (node: { node_id: string }) => node.node_id === "compare",
+  );
+  expect(savedComparison.parameters.registration_evidence).toMatchObject({
+    source_frame_id: "survey-1-frame",
+    target_frame_id: "survey-2-frame",
+    source_to_target_transform_m: transform,
+    source_payload_sha256: before.sha256,
+    target_payload_sha256: after.sha256,
+    source_centroid_position_error_bound_m: 0.02,
+    target_centroid_position_error_bound_m: 0.03,
+    registration_alignment_error_bound_m: 0.05,
+  });
+  await task.screenshot({
+    path: info.outputPath("registered-centroid-comparison.png"),
+  });
   async function downloadComparison(filename: string) {
     const download = page.waitForEvent("download");
     await page
@@ -181,6 +274,23 @@ test("compares two project originals, reviews identity, reopens and exports the 
     await openWorkflow(projectName);
     const row = page.getByRole("listitem").filter({ hasText: saved.name });
     await row.getByRole("button", { name: "Load", exact: true }).click();
+    await page
+      .locator("[data-node-id='compare']")
+      .getByRole("button", { name: "Configure", exact: true })
+      .click();
+    const reopened = page.getByRole("group", {
+      name: "Registration review",
+      exact: true,
+    });
+    await reopened
+      .getByText("Rigid transform and error bounds", { exact: true })
+      .click();
+    await expect(
+      reopened.getByLabel("Earlier-to-later rigid transform (4 × 4)"),
+    ).toHaveValue(JSON.stringify(transform));
+    await expect(
+      reopened.getByLabel("Alignment error bound (meters)"),
+    ).toHaveValue("0.05");
     const queued = page.waitForResponse(
       (r) =>
         r.url().endsWith("/workflow-runs") && r.request().method() === "POST",

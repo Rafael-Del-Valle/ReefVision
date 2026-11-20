@@ -24,6 +24,9 @@ interface ComparisonResult {
   after_surface_area_m2: number;
   delta_surface_area_m2: number | null;
   delta_surface_area_scale_interval_m2: [number, number] | null;
+  registered_surface_centroid_separation_m: number | null;
+  registered_surface_centroid_separation_caller_bound_interval_m:
+    [number, number] | null;
   qc_warnings: string[];
 }
 
@@ -322,7 +325,24 @@ function ComparisonForm({
                 ? `${result.delta_surface_area_scale_interval_m2.join(" to ")} m²`
                 : "Unavailable"}
             </dd>
+            {result.registered_surface_centroid_separation_m != null && (
+              <>
+                <dt>Registered surface centroid separation</dt>
+                <dd>{result.registered_surface_centroid_separation_m} m</dd>
+                <dt>Caller-declared separation bounds</dt>
+                <dd>
+                  {result.registered_surface_centroid_separation_caller_bound_interval_m
+                    ? `${result.registered_surface_centroid_separation_caller_bound_interval_m.join(" to ")} m`
+                    : "Unavailable"}
+                </dd>
+              </>
+            )}
           </dl>
+          {result.registered_surface_centroid_separation_m != null && (
+            <p>
+              Surface centroid separation is a provisional alignment diagnostic.
+            </p>
+          )}
           <details>
             <summary>Measurement qualifications</summary>
             <ul>
