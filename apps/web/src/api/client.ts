@@ -1,4 +1,5 @@
 import { getApiBaseUrl, getRuntimeContext } from "../runtime";
+import type { ImageAdjustmentPin } from "../features/annotation-editor/imageAdjustmentApi";
 
 export interface HealthResponse {
   status: string;
@@ -2777,6 +2778,7 @@ export async function createInferenceJob(
   payload: {
     model_id: string;
     image_ids: string[];
+    image_adjustment?: ImageAdjustmentPin;
     confidence_threshold?: number;
     iou_threshold?: number;
     device: string;
