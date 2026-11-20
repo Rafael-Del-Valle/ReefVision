@@ -688,6 +688,112 @@
       }
     ]
   },
+  "secondary_windows_build": {
+    "scope": "Independent second build identity and SHA-256 comparison; the package was not installed or used for workflow tests.",
+    "workflow_head_commit": "3a9ce1622e4f9e230e2ee14432ee7d2f32510870",
+    "build_provenance_commit": "35a23ad3f43d2a82158eb47ea8135ae615245554",
+    "build_commit_parents": [
+      "9ee37d56872298383a89d3c0bdc59f6b9b7b5e95",
+      "3a9ce1622e4f9e230e2ee14432ee7d2f32510870"
+    ],
+    "identical_source_tree": "33a32f8c3887aacf6134369c729b173779131fc5",
+    "workflow_run_id": 44798678342,
+    "workflow_name": "ReefVision 1.0 Acceptance",
+    "workflow_run_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678342",
+    "job_id": 136540600556,
+    "job_conclusion": "success",
+    "artifact_id": 14668521905,
+    "artifact_name": "reefvision-1.0-windows-msi",
+    "artifact_size_bytes": 2966946989,
+    "artifact_sha256": "8f2550b7e090afb96d746179a0708e882892dac3537db350b3096bba1bfad755",
+    "artifact_expires_at": "2027-02-18T19:04:15Z",
+    "provenance_sha256": "4e8bfcd371c64b5dca81c413d46d9bd9d68f4edc3ca8fb07842a91689a610ed7",
+    "official_comparison_workflow_run_id": 44798678615,
+    "official_provenance_sha256": "d4e53ebfebdf8201526fa7f58acd31392eceba6cdee12b5145e55313452ffb3c",
+    "identity": {
+      "ProductVersion": "1.6.0",
+      "ProductCode": "{67EE662E-3D4E-4E61-BEC0-D532BB1BC7BE}",
+      "UpgradeCode": "{5EDA8EE0-2A5D-5B08-A8DF-9BECFC3A4351}"
+    },
+    "media": [
+      {
+        "disk_id": 1,
+        "cabinet": "rv1.cab",
+        "embedded": false
+      },
+      {
+        "disk_id": 2,
+        "cabinet": "rv2.cab",
+        "embedded": false
+      },
+      {
+        "disk_id": 3,
+        "cabinet": "rv3.cab",
+        "embedded": false
+      },
+      {
+        "disk_id": 4,
+        "cabinet": "rv4.cab",
+        "embedded": false
+      },
+      {
+        "disk_id": 5,
+        "cabinet": "rv5.cab",
+        "embedded": false
+      }
+    ],
+    "files": [
+      {
+        "name": "ReefVision_1.6.0_x64_en-US.msi",
+        "size_bytes": 299216144,
+        "sha256": "1caf3694be8b0cc17f89fed3100175ba66918cd45a5b530195f24f0a52811b48",
+        "official_size_bytes": 299216144,
+        "official_sha256": "3b596ee3ba5e9188776cd3208245c277a72013877677c9a16e359ee6da04c3be",
+        "identical_to_official": false
+      },
+      {
+        "name": "rv1.cab",
+        "size_bytes": 454061494,
+        "sha256": "cf20185ce489e3964e98e4f280be7ea2154621b89020678c3049cf0e612ce869",
+        "official_size_bytes": 619612757,
+        "official_sha256": "b2e97f82ad5b106d4a2291588ac647bf6ec252b55ef64e0da3abaa8457471f08",
+        "identical_to_official": false
+      },
+      {
+        "name": "rv2.cab",
+        "size_bytes": 658551693,
+        "sha256": "035f78086208faa8d8554e35ac9a4579cf1aa046865d31805f51d6529a7e36c8",
+        "official_size_bytes": 667548415,
+        "official_sha256": "0ed7788c79336d665c70e3bca0d6fb6651e03ca0c20d2acf77ede9e9cce46b10",
+        "identical_to_official": false
+      },
+      {
+        "name": "rv3.cab",
+        "size_bytes": 647332123,
+        "sha256": "64411bc5122701871ecf1ac3ef1204df5bdd32d40b3b52ed22be2e1d197387d6",
+        "official_size_bytes": 705555478,
+        "official_sha256": "9c299dcb6f34d3c46a313e232b90341fc23ae7f19048d7c44ce027e182fe2bc4",
+        "identical_to_official": false
+      },
+      {
+        "name": "rv4.cab",
+        "size_bytes": 522726126,
+        "sha256": "a7bd5d9edea25748d67c669b0b738ce8ce1ed1a2eaa1b59dfbe663f4f3207623",
+        "official_size_bytes": 512335749,
+        "official_sha256": "dc151b9c2cbb5916254b2aa292a1ea473dfeca86a61d0acebf8cff416872684b",
+        "identical_to_official": false
+      },
+      {
+        "name": "rv5.cab",
+        "size_bytes": 390141062,
+        "sha256": "37b596ddf9f45259f33fc38c6c73dfed6c3da9650d230106a7a0df0ab843fef6",
+        "official_size_bytes": 168386131,
+        "official_sha256": "faf000f1e1aa7fd05bb4eed1ab61b646e44357151e6c709f5f380e088bf0f273",
+        "identical_to_official": false
+      }
+    ],
+    "comparison_receipt_sha256": "150c9771d617605d655843b3b3e8d3818feb83ab1c47fc7c884f948d436a65f3"
+  },
   "original_installer_offline": {
     "source_commit": "3a9ce1622e4f9e230e2ee14432ee7d2f32510870",
     "harness_commit": "0690ab42efd3c38a1022c3135965c46b24d86a96",
@@ -1031,6 +1137,262 @@
         "flaky": 0
       }
     }
+  },
+  "hosted_suites": {
+    "receipt_sha256": "500d455db4d36c06b29438699cf0e9e39e7e20ae038efc290372ba610c87c7f9",
+    "workflow_count": 15,
+    "workflows": [
+      {
+        "id": 44798678390,
+        "name": "Milestone 6 Video Activity",
+        "conclusion": "success",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678390",
+        "run_attempt": 1,
+        "jobs": []
+      },
+      {
+        "id": 44798678344,
+        "name": "Milestone 7 Acceptance",
+        "conclusion": "success",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678344",
+        "run_attempt": 1,
+        "jobs": []
+      },
+      {
+        "id": 44798678400,
+        "name": "Milestone 10 Acceptance",
+        "conclusion": "success",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678400",
+        "run_attempt": 1,
+        "jobs": []
+      },
+      {
+        "id": 44798678280,
+        "name": "Pose Workflow Validation",
+        "conclusion": "success",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678280",
+        "run_attempt": 1,
+        "jobs": []
+      },
+      {
+        "id": 44798678143,
+        "name": "Milestone 6 Video Reports",
+        "conclusion": "success",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678143",
+        "run_attempt": 1,
+        "jobs": []
+      },
+      {
+        "id": 44798678448,
+        "name": "Milestone 6 Hardening",
+        "conclusion": "success",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678448",
+        "run_attempt": 1,
+        "jobs": []
+      },
+      {
+        "id": 44798678355,
+        "name": "Milestone 6 Video Occupancy",
+        "conclusion": "success",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678355",
+        "run_attempt": 1,
+        "jobs": []
+      },
+      {
+        "id": 44798678393,
+        "name": "Milestone 6 Acceptance",
+        "conclusion": "success",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678393",
+        "run_attempt": 1,
+        "jobs": []
+      },
+      {
+        "id": 44798678607,
+        "name": "Milestone 8 Acceptance",
+        "conclusion": "success",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678607",
+        "run_attempt": 1,
+        "jobs": []
+      },
+      {
+        "id": 44798678402,
+        "name": "Milestone 6 Video Science",
+        "conclusion": "success",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678402",
+        "run_attempt": 1,
+        "jobs": []
+      },
+      {
+        "id": 44798678282,
+        "name": "Development Prettier Diagnostics",
+        "conclusion": "success",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678282",
+        "run_attempt": 1,
+        "jobs": []
+      },
+      {
+        "id": 44798678269,
+        "name": "Milestone 9 Acceptance",
+        "conclusion": "success",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678269",
+        "run_attempt": 1,
+        "jobs": []
+      },
+      {
+        "id": 44798678615,
+        "name": "Build Windows Desktop Release Candidate",
+        "conclusion": "success",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678615",
+        "run_attempt": 1,
+        "jobs": []
+      },
+      {
+        "id": 44798678167,
+        "name": "CI",
+        "conclusion": "success",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678167",
+        "run_attempt": 1,
+        "jobs": [
+          {
+            "id": 136504812082,
+            "name": "frontend",
+            "conclusion": "success",
+            "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678167/job/136504812082",
+            "test_and_tool_summaries": [
+              "Test Files  136 passed (136)",
+              "Tests  906 passed (906)",
+              "15 passed (22.2s)"
+            ],
+            "pytest_skip_failure_and_rerun_details": []
+          },
+          {
+            "id": 136504812435,
+            "name": "backend",
+            "conclusion": "success",
+            "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678167/job/136504812435",
+            "test_and_tool_summaries": [
+              "1324 files already formatted",
+              "Success: no issues found in 711 source files",
+              "5920 passed, 11 skipped, 2 warnings in 3312.63s"
+            ],
+            "pytest_skip_failure_and_rerun_details": [
+              "SKIPPED [1] apps/api/reefvision/tests/reefpose/test_benchmark.py:43: CUDA is not available",
+              "SKIPPED [1] apps/api/reefvision/tests/reefpose/test_evaluation_service.py:565: Set REEFPOSE_RUN_GPU_TESTS=1 for explicit RTX evaluation validation",
+              "SKIPPED [1] apps/api/reefvision/tests/reefpose/test_evaluation_service.py:655: Set REEFPOSE_RUN_GPU_TESTS=1 for explicit RTX comparison validation",
+              "SKIPPED [1] apps/api/reefvision/tests/test_patch_101_live_sam2_acceptance.py:48: Real SAM checkpoint downloads require the dedicated live acceptance job",
+              "SKIPPED [1] apps/api/reefvision/tests/test_reefpose_temporal.py:146: CUDA unavailable",
+              "SKIPPED [1] apps/api/reefvision/tests/test_reefpose_temporal.py:171: CUDA unavailable",
+              "SKIPPED [1] apps/api/reefvision/tests/test_restore_and_diagnostics.py:174: Windows path syntax",
+              "SKIPPED [1] apps/api/reefvision/tests/test_whaledrone_airdata_e2e.py:326: Explicit --whaledrone-integration opt-in required",
+              "SKIPPED [1] apps/api/reefvision/tests/test_whaledrone_georeferencing_integration.py:30: Explicit --whaledrone-integration opt-in required",
+              "SKIPPED [1] apps/api/reefvision/tests/test_whaledrone_telemetry_integration.py:13: Explicit --whaledrone-integration opt-in required",
+              "SKIPPED [1] apps/api/reefvision/tests/test_workflow_pose_training_phase10.py:1287: Set REEFPOSE_RUN_GPU_TESTS=1 for the explicit RTX validation run"
+            ]
+          }
+        ]
+      },
+      {
+        "id": 44798678342,
+        "name": "ReefVision 1.0 Acceptance",
+        "conclusion": "success",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678342",
+        "run_attempt": 1,
+        "jobs": [
+          {
+            "id": 136504808459,
+            "name": "Desktop frontend and E2E",
+            "conclusion": "success",
+            "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678342/job/136504808459",
+            "test_and_tool_summaries": [
+              "Test Files  136 passed (136)",
+              "Tests  906 passed (906)",
+              "Test Files  1 passed (1)",
+              "Tests  1 passed (1)",
+              "15 passed (27.0s)"
+            ],
+            "pytest_skip_failure_and_rerun_details": []
+          },
+          {
+            "id": 136504808840,
+            "name": "Backend, migrations, and scientific workflows",
+            "conclusion": "success",
+            "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678342/job/136504808840",
+            "test_and_tool_summaries": [
+              "1324 files already formatted",
+              "Success: no issues found in 707 source files",
+              "5913 passed, 18 skipped, 2 warnings in 3648.46s",
+              "126 passed, 1 warning in 101.83s"
+            ],
+            "pytest_skip_failure_and_rerun_details": [
+              "SKIPPED [1] apps/api/reefvision/tests/reefpose/test_benchmark.py:43: CUDA is not available",
+              "SKIPPED [1] apps/api/reefvision/tests/reefpose/test_evaluation_service.py:565: Set REEFPOSE_RUN_GPU_TESTS=1 for explicit RTX evaluation validation",
+              "SKIPPED [1] apps/api/reefvision/tests/reefpose/test_evaluation_service.py:655: Set REEFPOSE_RUN_GPU_TESTS=1 for explicit RTX comparison validation",
+              "SKIPPED [1] apps/api/reefvision/tests/test_patch_101_live_sam2_acceptance.py:48: Real SAM checkpoint downloads require the dedicated live acceptance job",
+              "SKIPPED [1] apps/api/reefvision/tests/test_pose_exchange_text.py:144: opt in with --pose-interop-integration",
+              "SKIPPED [1] apps/api/reefvision/tests/test_pose_exchange_text.py:163: opt in with --pose-interop-integration",
+              "SKIPPED [1] apps/api/reefvision/tests/test_pose_nwb_runtime.py:55: opt in with --pose-interop-integration",
+              "SKIPPED [1] apps/api/reefvision/tests/test_pose_nwb_runtime.py:99: opt in with --pose-interop-integration",
+              "SKIPPED [1] apps/api/reefvision/tests/test_pose_nwb_runtime.py:117: opt in with --pose-interop-integration",
+              "SKIPPED [1] apps/api/reefvision/tests/test_pose_nwb_runtime.py:152: opt in with --pose-interop-integration",
+              "SKIPPED [1] apps/api/reefvision/tests/test_pose_nwb_runtime.py:167: opt in with --pose-interop-integration",
+              "SKIPPED [1] apps/api/reefvision/tests/test_reefpose_temporal.py:146: CUDA unavailable",
+              "SKIPPED [1] apps/api/reefvision/tests/test_reefpose_temporal.py:171: CUDA unavailable",
+              "SKIPPED [1] apps/api/reefvision/tests/test_restore_and_diagnostics.py:174: Windows path syntax",
+              "SKIPPED [1] apps/api/reefvision/tests/test_whaledrone_airdata_e2e.py:326: Explicit --whaledrone-integration opt-in required",
+              "SKIPPED [1] apps/api/reefvision/tests/test_whaledrone_georeferencing_integration.py:30: Explicit --whaledrone-integration opt-in required",
+              "SKIPPED [1] apps/api/reefvision/tests/test_whaledrone_telemetry_integration.py:13: Explicit --whaledrone-integration opt-in required",
+              "SKIPPED [1] apps/api/reefvision/tests/test_workflow_pose_training_phase10.py:1287: Set REEFPOSE_RUN_GPU_TESTS=1 for the explicit RTX validation run"
+            ]
+          },
+          {
+            "id": 136504808862,
+            "name": "SAM 2.1 Windows-pinned provider versions on CPU",
+            "conclusion": "success",
+            "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678342/job/136504808862",
+            "test_and_tool_summaries": [
+              "1 passed, 1 warning in 17.19s"
+            ],
+            "pytest_skip_failure_and_rerun_details": []
+          },
+          {
+            "id": 136504808908,
+            "name": "SAM 2.1 real online checkpoint and prompted inference",
+            "conclusion": "success",
+            "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678342/job/136504808908",
+            "test_and_tool_summaries": [
+              "1 passed in 15.04s"
+            ],
+            "pytest_skip_failure_and_rerun_details": []
+          },
+          {
+            "id": 136504808962,
+            "name": "SAM 2.1 real inference on native Windows Python 3.12",
+            "conclusion": "success",
+            "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678342/job/136504808962",
+            "test_and_tool_summaries": [
+              "1 passed, 1 warning in 32.99s"
+            ],
+            "pytest_skip_failure_and_rerun_details": []
+          },
+          {
+            "id": 136540600556,
+            "name": "Windows MSI release build",
+            "conclusion": "success",
+            "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678342/job/136540600556",
+            "test_and_tool_summaries": [],
+            "pytest_skip_failure_and_rerun_details": []
+          },
+          {
+            "id": 136554828386,
+            "name": "ReefVision 1.0 software gate",
+            "conclusion": "success",
+            "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678342/job/136554828386",
+            "test_and_tool_summaries": [],
+            "pytest_skip_failure_and_rerun_details": []
+          }
+        ]
+      }
+    ]
   },
   "windows_backend": {
     "collected_pytest_nodes": 5931,
