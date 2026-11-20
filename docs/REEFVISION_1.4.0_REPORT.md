@@ -564,3 +564,25 @@ workflows and three failed backend workflows, all at Ruff formatting.
 The two diagnosed long-line cases were corrected in this iteration.
 The updated fixture and final-head CI remain unverified until GitHub
 Actions completes. **ReefVision 1.4 and 1.5 remain on RELEASE HOLD.**
+
+## Track C: OBJ Unicode source-scalar integrity (2026-11-19)
+
+A bounded OBJ import can contain otherwise inert object labels or comments with
+escaped, *unpaired UTF-16 surrogates*. Python JSON decoding can represent these
+as strings, but they cannot be encoded as immutable UTF-8 source bytes. The OBJ
+parser now explicitly rejects the malformed scalar with a scientific-input
+ValueError instead of allowing an uncaught UnicodeEncodeError to interrupt
+the preview or job worker. It still accepts legitimate Unicode scalar text
+(including non-BMP coral-label characters) in inert metadata without changing
+surface geometry. This does not trust or interpret source labels as biological
+identity.
+
+The new regression covers direct parser rejection in both labels and comments,
+escaped-input standalone API failure, and positive non-BMP Unicode source
+parity between standalone preview and an executable, persisted typed Workflow
+Builder graph. Supplied calibration and specimen identity remain unverified.
+Before this change, the preceding 1.4 HEAD had 22 successful Actions checks
+and one still running; final-head tests must be checked independently.
+Representative coral validation, independent scientific review, migrations,
+Windows installed GUI/MSI/CAB and physical GPU gates remain release blockers.
+**RELEASE HOLD for 1.4 and 1.5.**
