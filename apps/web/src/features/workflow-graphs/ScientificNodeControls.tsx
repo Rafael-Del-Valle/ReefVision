@@ -14,6 +14,7 @@ import {
 import type { EventSummary } from "../ecology/EventSummaryPanel";
 import type { PoseLink } from "../ecology/poseOrganismLinksApi";
 import { ModelSelectionField } from "../models/ReviewedModelRuntime";
+import { listStudyDesigns } from "../ecology/studyDesignApi";
 import {
   AcquisitionQualityControls,
   defaultAcquisitionThresholds,
@@ -37,6 +38,7 @@ const scientificNodes = new Set([
   "image_acquisition_quality",
   "ecology_verified_analysis",
   "paired_growth_contrast",
+  "reviewed_study_design",
   "mesh_surface_preview",
   "point_cloud_preview",
   "mesh_longitudinal_comparison",
@@ -137,6 +139,13 @@ export function scientificConfigurationIssue(
       !/^[0-9a-f]{64}$/.test(string(parameters.selection_sha256)))
   )
     return "Choose a reviewed project model configuration.";
+  if (
+    nodeType === "reviewed_study_design" &&
+    (!string(parameters.design_revision_id) ||
+      !/^[0-9a-f]{64}$/.test(string(parameters.design_sha256)))
+  ) {
+    return "Choose a frozen study design revision.";
+  }
   if (
     nodeType === "paired_growth_contrast" &&
     (!string(parameters.analysis_id) ||
@@ -1875,6 +1884,39 @@ export function ScientificNodeControls({
       <ProviderManifestSnapshotFields
         parameters={parameters}
         onChange={onChange}
+      />
+    );
+  if (nodeType === "reviewed_study_design")
+    return (
+      <Records
+        queryKey={[base, "saved", "study-design"]}
+        load={async (offset, signal) => {
+          const page = await listStudyDesigns(
+            projectId,
+            offset / PAGE + 1,
+            signal,
+          );
+          return page.items.map((record) => ({
+            id: record.id,
+            label: `${record.snapshot.declaration.title} · r${record.revision} · ${record.id.slice(0, 8)}`,
+            digest: record.content_sha256,
+          }));
+        }}
+        render={(options) => (
+          <SourceSelect
+            label="Study design revision"
+            value={string(parameters.design_revision_id)}
+            options={options}
+            onChange={(id) =>
+              onChange({
+                ...parameters,
+                design_revision_id: id,
+                design_sha256:
+                  options.find((item) => item.id === id)?.digest ?? "",
+              })
+            }
+          />
+        )}
       />
     );
   if (nodeType === "mesh_surface_preview" || nodeType === "point_cloud_preview")

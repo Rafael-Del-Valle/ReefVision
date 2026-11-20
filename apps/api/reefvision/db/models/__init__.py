@@ -113,6 +113,7 @@ from reefvision.db.models.spatial_condition_v14 import (
     SpatialConditionRubric,
 )
 from reefvision.db.models.spatial_source_asset_v14 import SpatialSourceAsset
+from reefvision.db.models.study_design import StudyDesignRevision
 from reefvision.db.models.temporal_reefpose import (
     TemporalReefPoseDataset,
     TemporalReefPoseFrame,
@@ -214,6 +215,7 @@ __all__ = [
     "SpatialConditionRevision",
     "SpatialConditionRubric",
     "SpatialSourceAsset",
+    "StudyDesignRevision",
     "TemporalReefPoseDataset",
     "TemporalReefPoseFrame",
     "TemporalReefPoseRun",

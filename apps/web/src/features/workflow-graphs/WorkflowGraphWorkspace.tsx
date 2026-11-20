@@ -50,6 +50,17 @@ function ScienceArtifact({
   const data = artifact.payload_json;
   const api = `${getApiBaseUrl()}/projects/${projectId}`;
   if (
+    artifact.data_type === "study_design_report" &&
+    typeof data.content_sha256 === "string"
+  ) {
+    return (
+      <p>
+        Replayed frozen study design · SHA-256{" "}
+        <code>{data.content_sha256}</code>
+      </p>
+    );
+  }
+  if (
     artifact.data_type === "paired_growth_contrast" &&
     typeof data.report_sha256 === "string"
   ) {
