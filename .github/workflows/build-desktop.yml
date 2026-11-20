@@ -234,7 +234,7 @@ jobs:
             -InstallerPath $msi `
             -ExpectedVersion '1.5.0' -ExpectedSchemaRevision 'b15_integrated_0001' `
             -AcceptanceRoot 'C:\reefvision-1-5-0-disposable-acceptance' `
-            -SpatialWorkflowNodePath $playwrightNode -HostedStandardUserWebView2 -SkipUpgrade -DisposableTest -KeepArtifacts
+            -SpatialWorkflowNodePath $playwrightNode -HostedStandardUserWebView2 -ResearchWorkflowAcceptance -SkipUpgrade -DisposableTest -KeepArtifacts
 
       - name: Upload isolated Windows acceptance report and MSI logs
         if: always()
@@ -246,6 +246,9 @@ jobs:
             .artifacts/windows-clean-acceptance-*/*.log
             .artifacts/windows-clean-acceptance-*/spatial-playwright.json
             .artifacts/windows-clean-acceptance-*/spatial-playwright/**
+            .artifacts/windows-clean-acceptance-*/research-evidence.json
+            .artifacts/windows-clean-acceptance-*/research-playwright.json
+            .artifacts/windows-clean-acceptance-*/research-playwright/**/*-evidence.json
           if-no-files-found: warn
           include-hidden-files: true
           retention-days: 14
