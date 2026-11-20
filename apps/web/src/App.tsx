@@ -1228,6 +1228,12 @@ function ReefVisionMainApp() {
             {activeView === "workflow_schedules" && (
               <WorkflowSchedulesWorkspace
                 projectId={selectedProject.id}
+                onOpenWorkflowGraph={(graph) => {
+                  if (graph.project_id !== selectedProject.id) return;
+                  setResearchGraph(graph);
+                  setScheduledRunId(null);
+                  setActiveView("workflows");
+                }}
                 onOpenWorkflowRun={(runId, graph) => {
                   setResearchGraph(
                     graph?.project_id === selectedProject.id ? graph : null,
