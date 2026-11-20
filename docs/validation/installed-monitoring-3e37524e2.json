@@ -1,0 +1,206 @@
+{
+  "source": "3e37524e28c4b7dde8ffbe203120d3b8e7fe2ee9",
+  "version": "1.7.0",
+  "schema": "b17_monitor_0003",
+  "manufacturing": {
+    "run": 44827326113,
+    "job": 136603186182,
+    "msi_sha256": "90faf157f5dc8489d64f31f92c9b105471e24621bc732d96b91132763ef290cc",
+    "cabinet_count": 6,
+    "original_transport": [
+      {
+        "id": 14675634039,
+        "name": "ReefVision-1.7.0-RC-Installer-Part-1",
+        "size_bytes": 1658082969,
+        "sha256": "9ac7894015ad582c1ee176f5c9625029e09a95f1f9571326a48744dd076167e8"
+      },
+      {
+        "id": 14673874733,
+        "name": "ReefVision-1.7.0-RC-Installer-Part-2",
+        "size_bytes": 1313677121,
+        "sha256": "2c068357f342a612cc6f7ae0cc14048a8200096d24225f3d8cc09a09fadbb904"
+      }
+    ],
+    "files": [
+      {
+        "name": "ReefVision_1.7.0_x64_en-US.msi",
+        "size_bytes": 299216643,
+        "sha256": "90faf157f5dc8489d64f31f92c9b105471e24621bc732d96b91132763ef290cc"
+      },
+      {
+        "name": "rv1.cab",
+        "size_bytes": 489668463,
+        "sha256": "6f8e80e8adec37fd626dfeff3cd0930c19ea46618d7a004712823a8ba90a1681"
+      },
+      {
+        "name": "rv2.cab",
+        "size_bytes": 567465683,
+        "sha256": "ed43b9570aba8459a8d8df0449362a74f4118e1739d732b2b9f20b1ca82044d9"
+      },
+      {
+        "name": "rv3.cab",
+        "size_bytes": 301726873,
+        "sha256": "97d5abab733306ec632811df64cd89b9730669460ebda104ba0c123f12fa666f"
+      },
+      {
+        "name": "rv4.cab",
+        "size_bytes": 607783924,
+        "sha256": "b35c8f33bf68ebefe00b0b336618442a2cb0111dedf1ac0bf432e8c382127a55"
+      },
+      {
+        "name": "rv5.cab",
+        "size_bytes": 704919115,
+        "sha256": "a56f6d2a373017c417f596013fd93ae356d3719bbb0d417a74b64379dd86040c"
+      },
+      {
+        "name": "rv6.cab",
+        "size_bytes": 973742,
+        "sha256": "461951ca097fc0c13ffba49e7cf406dc89be7be1c45cfef0c766497967f953db"
+      }
+    ],
+    "provenance_sha256": "f751aa96ebdece355f7b25cdfaf6c0e8641c354c481efec434bb1b8235533bf3",
+    "verified_installer_folder": "candidate-review/1.7/checkpoints/3e37524e2/official/installer"
+  },
+  "native_desktop": {
+    "surface": "administrative-original-msi",
+    "runtime": "tauri-webview2",
+    "schema": "b17_monitor_0003",
+    "driver": "8b98324a5f97dd183c9ce11f55921578100252ea",
+    "tracked_driver_correction": "172b156bc961da1aca8c1aee86b9b8428c97fb7e",
+    "first_driver": {
+      "passed": 1,
+      "failed": 1,
+      "reason": "The monitoring reopen selector matched both its enclosing section and the saved-assessment combobox."
+    },
+    "corrected_driver": {
+      "passed": 2,
+      "failed": 0,
+      "duration_ms": 38052.751
+    },
+    "actual_camera_opened": false,
+    "simulated_capture_occurrence": "bb11fa71-e549-47d3-bf3a-bb5cc9ccd8a0",
+    "replay_sha256": [
+      "cc9804149706a16420629796d1101dd3832cf32a3337b4ae74a521a4e89258f8",
+      "cc9804149706a16420629796d1101dd3832cf32a3337b4ae74a521a4e89258f8"
+    ],
+    "biological_fixture": {
+      "project_id": "01abdfab-3bb7-4338-8729-096f0397308b",
+      "summary_id": "3ddb752d-04ca-4a7e-b0bd-14868908d0de",
+      "assessment_id": "892c3356-d395-4f73-9226-958ae104da27",
+      "result_sha256": "e77f81bbafb414c6a83b705e4740b570e5c89b644a02c1c710fc1c1b9dc6bb85",
+      "evidence_sha256": "c6eb79d9f5124e7742f3e0fcf7fba3fd4002e7d5c2dda81ce16b06d24eb3c262",
+      "method": "confirmed_events_per_valid_minute_by_dated_reviewed_session_v1",
+      "protocol_sha256": "10e28b858b7814021fb45e863251803726c58527d4474aec812c4dc0acf6e355",
+      "estimate": 12.76595744680851,
+      "unit": "events/min",
+      "effort": {
+        "expected_slots": null,
+        "observed_slots": null,
+        "accepted_observations": null,
+        "coverage_fraction": null,
+        "accepted_fraction": null,
+        "valid_duration_s": 4.7,
+        "confirmed_event_count": 1,
+        "accepted_sessions": 1
+      },
+      "video_sha256": "d6e4d6c7103ef3838d7c13531498d853d0ace6d2d8868812f1ad16c50614e482"
+    },
+    "evidence_digests": {
+      "acquisition-source-evidence.json": "907f8f79c08b3e80276f7719314250bd2553de785d36d4ca06e37aae5c1d3206",
+      "monitoring-proof.json": "8aee47b9d68bc04cc2df217b87c3e5b7bd5541d8917a866d1c1eb3525a35c94f",
+      "monitoring-playwright.json": "80e0584a3ab0b0bbae215626b0373eaec68249c3c3c0d77d2d6f0c51e57b2fb3"
+    }
+  },
+  "seven_project_upgrade_and_rollback": {
+    "old_package": "3a9ce1622e4f9e230e2ee14432ee7d2f32510870",
+    "old_msi_sha256": "3b596ee3ba5e9188776cd3208245c277a72013877677c9a16e359ee6da04c3be",
+    "current_msi_sha256": "90faf157f5dc8489d64f31f92c9b105471e24621bc732d96b91132763ef290cc",
+    "backup_sha256": "34ee59e313c9de63f5c5d4de032c2989defe7b64185aeaed1d641c02cebba1bd",
+    "backup_members": 38,
+    "project_count": 7,
+    "prior_tables": 109,
+    "prior_rows": 3214,
+    "original_managed_files": 31,
+    "added_tables": [
+      "acquisition_captures",
+      "acquisition_sources",
+      "monitoring_alert_reviews",
+      "monitoring_alerts",
+      "monitoring_assessments",
+      "monitoring_project_summaries",
+      "monitoring_rules",
+      "workflow_schedule_occurrences",
+      "workflow_schedules"
+    ],
+    "old_reader_refused": "ede768e67ea0850ae88ce54cf4ebaa6b499b3c768f0e458d7f8a81dd90853772",
+    "database_checksum_before_and_after_refusal": "197844c04ff562fb07e9006404f19f8d053268b1de8dc0e0c8b6b42ed4c2b8b8",
+    "old_schema_reopened": "b16_integrated_0001",
+    "writable_rollback_reopened": true
+  },
+  "retired_provider_audit": {
+    "counts": {
+      "distribution_metadata": 57,
+      "entry_point_files": 14,
+      "model_manifest_assets": 0,
+      "model_manifest_provider_assets": 0,
+      "msi_cab_files": 19147,
+      "pyinstaller_outer_entries": 14,
+      "pyinstaller_pyz_archives": 1,
+      "pyinstaller_pyz_entries": 12075,
+      "zip_containers": 1,
+      "zip_members": 155
+    },
+    "retired_vendor_findings": [],
+    "application_owned_historical_descriptor": [
+      "backend/reefvision-api/reefvision-api.exe :: PYZ.pyz :: reefvision.ml.sleap_nn_provider"
+    ]
+  },
+  "publisher_and_policy": {
+    "source": "3e37524e28c4b7dde8ffbe203120d3b8e7fe2ee9",
+    "workflow_run_id": 44827326113,
+    "observed_utc": "2026-11-20T22:43:23.3107781Z",
+    "edition": "Core",
+    "build": "26300",
+    "verified_and_reputable_policy_state": 0,
+    "signatures": [
+      {
+        "file": "ReefVision.exe",
+        "sha256": "ff006cd2594983f8839211fecd28b1008647bde5117da70835d4ec812111cbf2",
+        "status": "NotSigned",
+        "signer": null
+      },
+      {
+        "file": "reefvision-api.exe",
+        "sha256": "82961858248b453b15b1903a6cb112b04b2e28dc330f7de2ee1e7ca658b68461",
+        "status": "NotSigned",
+        "signer": null
+      },
+      {
+        "file": "ReefVision_1.7.0_x64_en-US.msi",
+        "sha256": "90faf157f5dc8489d64f31f92c9b105471e24621bc732d96b91132763ef290cc",
+        "status": "NotSigned",
+        "signer": null
+      }
+    ],
+    "enforcing_device_acceptance": "open"
+  },
+  "external_field_inputs": [
+    "Identified approved camera or sensor and supported protocol, a prepared recording scene, witness and independent clock for loss/reconnect.",
+    "Representative logger or dated biological observations, declared survey effort, independent ground truth and prespecified anomaly-review thresholds."
+  ],
+  "evidence_folder": "candidate-review/1.7/checkpoints/3e37524e2/official",
+  "evidence_files_sha256": {
+    "independent-package-validation.json": "18192b3140a9acb953cdb0d85e8452fd95176ff580901e625a664825151a9106",
+    "installer/SHA256SUMS.txt": "356d39d24b8d322f7e864d422a7de0b2e36cbb68e782775621d8f4d302ee3763",
+    "evidence/rich-direct-rollback/proof.json": "a80f478ce78dd6d8cfa7a2a127faa2805c05c05654197e496d9c07c0f2b06b66",
+    "evidence/retired-provider-audit/receipt.json": "dbe0d0c67a2b3b5321e4d451820c9988187793a6b76ac3c3f05d423533587741",
+    "evidence/smart-app-control.json": "39004a8c514871ec14cd064bb072372d593881d9fb6df422ad6354549d7d498d",
+    "evidence/native-combined/native-index.json": "006ae5b3792642d3548f9b83af2526403a76066481e9aa5885205b4c5b9e2b3d",
+    "evidence/native-combined/native-combined-evidence.json": "d3dfe82f8eb77830fe070ba9d1fcccb6f9ad0c4ba4567e3415ef9fedc9b62125",
+    "evidence/native-combined/monitoring-playwright.json": "80e0584a3ab0b0bbae215626b0373eaec68249c3c3c0d77d2d6f0c51e57b2fb3",
+    "evidence/native-combined/monitoring-proof.json": "8aee47b9d68bc04cc2df217b87c3e5b7bd5541d8917a866d1c1eb3525a35c94f",
+    "evidence/native-combined/acquisition-source-evidence.json": "907f8f79c08b3e80276f7719314250bd2553de785d36d4ca06e37aae5c1d3206",
+    "evidence/native-combined/native-closure.json": "cfb0eef09b791fd754b928ec01586f974512ecbc5777364b10399e692936d7e2",
+    "evidence/native-original-comparison/summary.json": "770359254ec1238c952350ece39de52970b0a75100cd7cc71a6e7a58e5969d0a"
+  }
+}

@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T22:28:57Z`
+Updated: `2026-11-20T22:54:08Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1264,6 +1264,7 @@ Evidence:
 - `source`: The source worker recovered keyed captures after interruption. Two Project Exchange generations preserved recording clocks and original bytes, rebound saved acquisition pins and removed physical consent on the new installations. — `docs/validation/monitoring-76731aa95.json` (`rv17-device-sources-exchange-76731aa95`)
 - `browser`: Project → Video & automation → Acquisition sources captured two sealed observations around a real read failure and explicit reconnect. A simulated scheduled capture and two saved receipt runs preserved its digest. The ordinary UI required consent before physical access. — `docs/validation/monitoring-76731aa95.json` (`rv17-device-sources-capture-76731aa95`)
 - `browser`: System status restored all nine files in the device fixture. A restarted recovery reopened three recorded and simulated capture receipts with their original hashes. Project Exchange into a fresh profile paused the separately carried camera and required new approval before any capture. — `docs/validation/combined-monitoring-3e37524e2.json` (`rv17-device-sources-backup-transfer-3e37524e2`)
+- `browser`: The original MSI binaries ran under ordinary Windows WebView2. The researcher opened a sealed recording, recovered after disconnect, ran a scheduled simulator and replayed its receipt twice with the same digest. The camera approval dialog was cancelled before capture. — `docs/validation/installed-monitoring-3e37524e2.json` (`rv17-device-sources-native-recording-3e37524e2`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1310,6 +1311,7 @@ Evidence:
 - `source`: The services assessed declared UTC windows and persisted attributed reviews. A missing biological date or unassessed sensor reading withheld its estimate. Two archive generations retained immutable decisions and rebound reviewed biological source records. — `docs/validation/monitoring-76731aa95.json` (`rv17-monitoring-alerts-reviews-76731aa95`)
 - `browser`: The researcher reviewed four proposed environmental findings and exported a dated biological assessment with one confirmed event across 4.7 seconds. Two saved replays matched. All inputs are documented fixtures. — `docs/validation/monitoring-76731aa95.json` (`rv17-monitoring-alerts-proposals-76731aa95`)
 - `browser`: In the restored project the researcher reopened one confirmed and three dismissed alerts tied to their original proposals. A complete six-file profile backup separately recovered the review rows unchanged. Dated biological observations and controlled environmental inputs remain fixtures. — `docs/validation/combined-monitoring-3e37524e2.json` (`rv17-monitoring-alerts-restored-review-3e37524e2`)
+- `browser`: In the original MSI desktop, the researcher reopened the saved monitoring result and reviewed a generated recording with one confirmed event over 4.7 seconds. The corrected browser selector passed both native journeys on the original package. — `docs/validation/installed-monitoring-3e37524e2.json` (`rv17-monitoring-alerts-native-review-3e37524e2`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
