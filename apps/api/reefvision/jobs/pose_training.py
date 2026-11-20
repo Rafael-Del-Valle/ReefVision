@@ -133,6 +133,10 @@ def _require_trusted_pose_checkpoints(save_dir: Path) -> None:
             or getattr(metadata, "st_file_attributes", 0) & 0x400
         ):
             raise ValidationError("Pose training checkpoint is empty or redirected")
+        # A hard link can alias an earlier registered model without being a
+        # symlink or reparse point; it is not a unique product of this run.
+        if metadata.st_nlink > 1:
+            raise ValidationError("Pose training checkpoint is hard-linked to another file")
         found = True
     if not found:
         raise ValidationError("Pose training produced no usable checkpoints")
