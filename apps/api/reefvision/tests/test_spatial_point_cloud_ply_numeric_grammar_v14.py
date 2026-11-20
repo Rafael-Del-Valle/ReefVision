@@ -90,7 +90,16 @@ def test_non_ascii_point_cloud_ply_fails_cleanly_at_parser_and_api(
         headers={"content-type": "application/json"},
     )
     assert response.status_code in (400, 422), response.text
-    if response.status_code == 400:
+    if any(0xD800 <= ord(char) <= 0xDFFF for char in invalid):
+        # Bad escaped UTF-16 is rejected by request validation before PLY
+        # parsing. The 422 error must not crash during UTF-8 serialization.
+        assert response.status_code == 422, response.text
+        detail = response.json()["detail"]
+        assert detail[0]["type"] == "string_unicode"
+        assert detail[0]["input"].isascii()
+        assert "\\ud" in detail[0]["input"]
+    else:
+        assert response.status_code == 400, response.text
         assert response.json()["detail"] == "Point-cloud PLY must contain ASCII text only"
 
 
