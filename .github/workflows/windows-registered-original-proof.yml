@@ -1,0 +1,107 @@
+name: Windows Registered Original MSI Proof
+
+on:
+  pull_request:
+    branches: [codex/reefvision-1.7-reviewed-foundations]
+    paths:
+      - '.github/workflows/windows-registered-original-proof.yml'
+      - '.github/windows-installed-proof/**'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  registered-original-clean-install:
+    if: github.repository == 'Rafael-Del-Valle/ReefVision' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: windows-2022
+    timeout-minutes: 80
+    env:
+      PROOF_ROOT: C:/rv-registered-${{ github.run_id }}-${{ github.run_attempt }}
+      SOURCE_COMMIT: 3e37524e28c4b7dde8ffbe203120d3b8e7fe2ee9
+      ORIGINAL_BUILD_RUN: '44827326113'
+      ORIGINAL_MSI_SHA256: 90faf157f5dc8489d64f31f92c9b105471e24621bc732d96b91132763ef290cc
+      DRIVER_BLOB: ad600365190cfcdf400d5f99de39917d1b1b8bbd
+      DRIVER_COMMIT: 8b98324a5f97dd183c9ce11f55921578100252ea
+      DRIVER_PATH: apps/web/tests/e2e/monitoring-live.spec.ts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: proof
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_COMMIT }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: source/apps/web/package-lock.json
+      - name: Stage verified original MSI and pinned driver
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ./proof/.github/windows-installed-proof/stage-original.ps1 -RepositoryRoot ./source -RunId $env:ORIGINAL_BUILD_RUN `
+            -SourceCommit $env:SOURCE_COMMIT -Version 1.7.0 -Root $env:PROOF_ROOT
+          $receipt = Get-Content -LiteralPath "$env:PROOF_ROOT/evidence/verified-transport.json" -Raw | ConvertFrom-Json
+          if ($receipt.original_msi_sha256 -cne $env:ORIGINAL_MSI_SHA256) { throw 'Original installer SHA differs.' }
+          $patch = (Resolve-Path -LiteralPath './proof/.github/windows-installed-proof/selector.patch').Path
+          git -C source apply --unidiff-zero --check $patch
+          if ($LASTEXITCODE) { throw 'Monitoring locator witness does not apply to the exact source.' }
+          git -C source apply --unidiff-zero $patch
+          if ($LASTEXITCODE) { throw 'Monitoring locator witness did not apply.' }
+          $files = @(git -C source diff --name-only)
+          if ($files.Count -ne 1 -or $files[0] -cne $env:DRIVER_PATH -or
+              (git -C source hash-object $env:DRIVER_PATH).Trim() -cne $env:DRIVER_BLOB) {
+            throw 'The retest driver must match the exact isolated locator-only correction.'
+          }
+          [ordered]@{
+            source_commit=$env:SOURCE_COMMIT; workflow_run_id=[long]$env:ORIGINAL_BUILD_RUN
+            original_msi_sha256=$receipt.original_msi_sha256; driver_commit=$env:DRIVER_COMMIT
+            driver_git_blob=$env:DRIVER_BLOB; changed_paths=$files
+            driver_sha256=(Get-FileHash -LiteralPath (Join-Path ./source $env:DRIVER_PATH)).Hash.ToLowerInvariant()
+          } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath "$env:PROOF_ROOT/evidence/registered-retest-provenance.json"
+          npm --prefix source/apps/web ci --no-audit --no-fund
+          if ($LASTEXITCODE) { throw 'Could not stage pinned installed acceptance drivers.' }
+      - name: Complete the original registered clean role with the corrected locator
+        shell: pwsh
+        working-directory: source
+        run: |
+          . ./scripts/lib/node-tools.ps1
+          $playwrightNode = Find-ReefVisionExecutable -Names 'node.exe'
+          $env:PATH = @((Join-Path $env:SystemRoot 'System32'), $env:SystemRoot,
+            (Join-Path $env:SystemRoot 'System32/Wbem'), (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0'),
+            (Split-Path -Parent (Get-Command pwsh.exe).Source)) -join ';'
+          & ./scripts/acceptance-windows-clean-install.ps1 `
+            -InstallerPath "$env:PROOF_ROOT/payload/ReefVision_1.7.0_x64_en-US.msi" `
+            -ExpectedVersion '1.7.0' -ExpectedSchemaRevision 'b17_monitor_0003' `
+            -AcceptanceRoot "$env:PROOF_ROOT/acceptance" `
+            -SpatialWorkflowNodePath $playwrightNode -HostedStandardUserWebView2 -FirstUseAcceptance -ResearchWorkflowAcceptance -WorkspaceWorkflowAcceptance `
+            -ScheduleWorkflowAcceptance -MonitoringWorkflowAcceptance `
+            -SkipUpgrade -DisposableTest -KeepArtifacts
+      - name: Stage all retained provenance on the checkout drive
+        if: always()
+        shell: pwsh
+        run: |
+          ./proof/.github/windows-installed-proof/collect-original-provenance.ps1 -RepositoryRoot ./source -ProofRoot $env:PROOF_ROOT
+      - name: Retain independent test and original payload provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReefVision-1.7-Original-Registered-Clean-Retest
+          path: |
+            source/.artifacts/registered-retest-transport/*.json
+            source/.artifacts/windows-clean-acceptance-*/report.json
+            source/.artifacts/windows-clean-acceptance-*/*.log
+            source/.artifacts/windows-clean-acceptance-*/*-playwright.json
+            source/.artifacts/windows-clean-acceptance-*/*-evidence.json
+            source/.artifacts/windows-clean-acceptance-*/*-playwright/**/*-evidence.json
+            source/.artifacts/windows-clean-acceptance-*/spatial-playwright/**/spatial-workflow.json
+            source/.artifacts/windows-clean-acceptance-*/schedule-*-playwright/**/schedule-proof.json
+            source/.artifacts/windows-clean-acceptance-*/monitoring-playwright/**/monitoring-proof.json
+          include-hidden-files: true
+          if-no-files-found: warn
