@@ -19,6 +19,7 @@ param(
     [switch]$KeepArtifacts,
     [switch]$SkipUpgrade,
     [switch]$SkipUninstall,
+    [switch]$VerifyReinstallAfterUninstall,
     [switch]$LiveSam2Acceptance
 )
 
@@ -56,6 +57,9 @@ if ($lineageArguments.Count -notin @(0, 3)) {
 }
 if ($VerifyPreviousInstallerRejectsUpgradedProfile -and (-not $PreviousInstallerPath -or $SkipUpgrade -or $SkipUninstall)) {
     throw '-VerifyPreviousInstallerRejectsUpgradedProfile requires an earlier MSI plus enabled upgrade and uninstall steps.'
+}
+if ($VerifyReinstallAfterUninstall -and ($PreviousInstallerPath -or $SkipUninstall)) {
+    throw '-VerifyReinstallAfterUninstall requires clean candidate installation and enabled uninstall.'
 }
 $LineageFixture = $null
 if ($lineageArguments.Count -eq 3) {
@@ -168,6 +172,7 @@ $report = [ordered]@{
     upgrade = if ($SkipUpgrade) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'SkipUpgrade requested' } elseif (-not $PreviousInstallerPath) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'previous installer not supplied' } else { New-ReefVisionEvidenceResult }
     uninstall = if ($SkipUninstall) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'SkipUninstall requested' } else { New-ReefVisionEvidenceResult }
     data_retention = New-ReefVisionEvidenceResult
+    reinstall = if ($VerifyReinstallAfterUninstall) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Reinstall not requested' }
     failure_reason = $null
 }
 
@@ -204,6 +209,12 @@ function Run-Msi([string]$Action, [string]$PackageOrProduct, [string]$LogName, [
     $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
     if ($process.ExitCode -notin @(0, 3010)) { throw "msiexec $Action failed with exit code $($process.ExitCode). See $log" }
     return $process.ExitCode
+}
+function Assert-AcceptanceUninstalled {
+    if (Test-Path (Join-Path $InstallRoot 'ReefVision.exe')) { throw 'ReefVision.exe remains after uninstall.' }
+    if (@($shortcutCandidates | Where-Object { Test-Path -LiteralPath $_ }).Count -gt 0) { throw 'A ReefVision shortcut remains after uninstall.' }
+    if (@(Get-ReefVisionInstalledRegistrations).Count -gt 0) { throw 'ReefVision uninstall registration remains after uninstall.' }
+    if (-not (Test-Path -LiteralPath $DataRoot -PathType Container)) { throw 'Isolated user data was removed by uninstall.' }
 }
 function Wait-BackendPort(
     [string]$Path,
@@ -989,6 +1000,9 @@ try {
     if ($persisted.id -ne $projectId) { throw 'Project ID changed across restart.' }
     $persistedAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"
     if (-not ($persistedAnnotations.annotations | Where-Object id -eq $annotationId)) { throw 'Acceptance annotation did not persist across restart.' }
+    if ($VerifyReinstallAfterUninstall) {
+        $preReinstallImageSha256 = Get-AcceptanceContentSha256 "$api/images/$imageId/content"
+    }
     if ($CameraFixturePath) {
         # Validate media persistence independently of the in-memory import response.
         # This also covers an MSI upgrade when a previous installer was supplied.
@@ -1095,12 +1109,35 @@ try {
             $productCode = Get-AcceptanceMsiProperty -Path $InstallerPath -Name 'ProductCode'
             Run-Msi -Action Uninstall -PackageOrProduct $productCode -LogName 'uninstall.log' | Out-Null
         }
-        if (Test-Path (Join-Path $InstallRoot 'ReefVision.exe')) { throw 'ReefVision.exe remains after uninstall.' }
-        if (@($shortcutCandidates | Where-Object { Test-Path -LiteralPath $_ }).Count -gt 0) { throw 'A ReefVision shortcut remains after uninstall.' }
-        if (@(Get-ReefVisionInstalledRegistrations).Count -gt 0) { throw 'ReefVision uninstall registration remains after uninstall.' }
+        Assert-AcceptanceUninstalled
         $report.uninstall = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Program binaries removed.'
-        if (-not (Test-Path $DataRoot)) { throw 'Isolated user data was removed by uninstall.' }
         $report.data_retention = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Isolated project data remained after uninstall.'
+        if ($VerifyReinstallAfterUninstall) {
+            Run-Msi -Action Install -PackageOrProduct $InstallerPath -LogName 'reinstall.log' -TargetRoot $InstallRoot | Out-Null
+            try {
+                $reinstalledDesktop = Start-AcceptanceDesktop
+                try {
+                    $reinstalledPort = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $reinstalledDesktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
+                    $reinstalledApi = "http://127.0.0.1:$reinstalledPort/api/v1"
+                    $null = Assert-AcceptancePackagedBackend -Api $reinstalledApi -ExpectedAppVersion $ProductVersion -ExpectedRevision $ExpectedSchemaRevision
+                    $null = Wait-AcceptanceWebView2 -DesktopProcessId $reinstalledDesktop.Id
+                    $reopenedProject = Invoke-RestMethod "$reinstalledApi/projects/$projectId"
+                    $reopenedAnnotations = Invoke-RestMethod "$reinstalledApi/images/$imageId/annotations"
+                    $originalAnnotation = $persistedAnnotations.annotations | Where-Object id -eq $annotationId | ConvertTo-Json -Depth 8 -Compress
+                    $reopenedAnnotation = $reopenedAnnotations.annotations | Where-Object id -eq $annotationId | ConvertTo-Json -Depth 8 -Compress
+                    if ($reopenedProject.id -cne $projectId -or $reopenedAnnotation -cne $originalAnnotation -or
+                        (Get-AcceptanceContentSha256 "$reinstalledApi/images/$imageId/content") -cne $preReinstallImageSha256) {
+                        throw 'Reinstall changed the retained project, image, or annotation.'
+                    }
+                } finally {
+                    Stop-AcceptanceDesktop $reinstalledDesktop
+                }
+            } finally {
+                Run-Msi -Action Uninstall -PackageOrProduct $productCode -LogName 'uninstall-after-reinstall.log' | Out-Null
+                Assert-AcceptanceUninstalled
+            }
+            $report.reinstall = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Same MSI reinstalled and started WebView2: project $projectId, image $imageId at SHA-256 $preReinstallImageSha256, and annotation $annotationId reopened from the retained isolated profile. Final uninstall preserved data and removed registration, binaries and shortcuts."
+        }
     } else {
         $report.data_retention = New-ReefVisionEvidenceResult -Status 'NOT RUN' -Detail 'Uninstall was skipped.'
     }

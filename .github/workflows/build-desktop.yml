@@ -27,6 +27,7 @@ concurrency:
 
 jobs:
   build-windows-installer:
+    if: github.ref_name != 'codex/reefvision-1.5-qa-original-installer'
     runs-on: windows-latest
     timeout-minutes: 120
     steps:
@@ -178,18 +179,33 @@ jobs:
     # The native CDP endpoint is verified on this hosted Windows image.
     runs-on: windows-2022
     needs: build-windows-installer
+    if: >-
+      ${{ !cancelled() && (needs.build-windows-installer.result == 'success' ||
+      (github.event_name == 'workflow_dispatch' && github.ref_name == 'codex/reefvision-1.5-qa-original-installer')) }}
     timeout-minutes: 75
     env:
-      SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      REUSE_ORIGINAL_INSTALLER: ${{ github.ref_name == 'codex/reefvision-1.5-qa-original-installer' }}
+      SOURCE_COMMIT: ${{ (github.ref_name == 'codex/reefvision-1.5-qa-original-installer' && '1d3942662ba2c4a75c30c59acf37851be51ce3e1') || github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Retrieve exact MSI and every external CAB
+        if: env.REUSE_ORIGINAL_INSTALLER != 'true'
         uses: actions/download-artifact@v4
         with:
           pattern: ReefVision-1.5.0-RC-Installer-Part-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/reefvision-1-5-0-installer
+
+      - name: Retrieve original 1d3942662 MSI and five CABs from run 44734856995
+        if: env.REUSE_ORIGINAL_INSTALLER == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 44734856995
+          artifact-ids: 14630620179,14629883100
           merge-multiple: true
           path: ${{ runner.temp }}/reefvision-1-5-0-installer
 
@@ -197,7 +213,25 @@ jobs:
         shell: pwsh
         run: |
           $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-5-0-installer'
+          if ($env:REUSE_ORIGINAL_INSTALLER -eq 'true') {
+            $provenance = (Get-FileHash -LiteralPath (Join-Path $folder 'build-provenance.json')).Hash
+            if ($provenance -ine '294fd1fcfb0d8621a78ae92fe30a388c8be061b390426ce76716e7891e9769ab') {
+              throw 'Build provenance differs from the retained original 1d3942662 transport.'
+            }
+          }
           $payload = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $folder -Version '1.5.0' -ExpectedFilename 'ReefVision_1.5.0_x64_en-US.msi' -SourceCommit $env:SOURCE_COMMIT -RequireProvenance
+          if ($env:REUSE_ORIGINAL_INSTALLER -eq 'true') {
+            $receipt = [ordered]@{
+              installer_source_commit = $env:SOURCE_COMMIT
+              qa_source_commit = $env:GITHUB_SHA
+              original_run_id = 44734856995
+              original_artifact_ids = @(14630620179, 14629883100)
+              build_provenance_sha256 = $provenance.ToLowerInvariant()
+              payload = $payload
+            }
+            New-Item -ItemType Directory -Path '.artifacts' -Force | Out-Null
+            $receipt | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath '.artifacts/clean-original-payload.json'
+          }
           $payload | ConvertTo-Json -Depth 8
 
       - uses: actions/setup-node@v4
@@ -234,7 +268,8 @@ jobs:
             -InstallerPath $msi `
             -ExpectedVersion '1.5.0' -ExpectedSchemaRevision 'b15_integrated_0002' `
             -AcceptanceRoot 'C:\reefvision-1-5-0-disposable-acceptance' `
-            -SpatialWorkflowNodePath $playwrightNode -HostedStandardUserWebView2 -ResearchWorkflowAcceptance -SkipUpgrade -DisposableTest -KeepArtifacts
+            -SpatialWorkflowNodePath $playwrightNode -HostedStandardUserWebView2 -ResearchWorkflowAcceptance -SkipUpgrade -DisposableTest -KeepArtifacts `
+            -VerifyReinstallAfterUninstall:($env:REUSE_ORIGINAL_INSTALLER -eq 'true')
 
       - name: Upload isolated Windows acceptance report and MSI logs
         if: always()
@@ -242,6 +277,7 @@ jobs:
         with:
           name: ReefVision-1.5.0-RC-Windows-Clean-Install-Evidence
           path: |
+            .artifacts/clean-original-payload.json
             .artifacts/windows-clean-acceptance-*/report.json
             .artifacts/windows-clean-acceptance-*/*.log
             .artifacts/windows-clean-acceptance-*/spatial-playwright.json
