@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import contextlib
 import errno
 import hashlib
+import logging
 import os
 import shutil
 import struct
@@ -20,6 +20,8 @@ from PIL import ExifTags, Image, UnidentifiedImageError
 from reefvision.config import Settings
 from reefvision.domain.errors import ValidationError
 from reefvision.storage.projects import resolve_managed_project_path
+
+LOGGER = logging.getLogger(__name__)
 
 # File extensions are only a preflight filter; Pillow verifies the actual decoded format.
 SUPPORTED_EXTENSIONS = {
@@ -90,6 +92,23 @@ def ensure_supported_extension(filename: str) -> None:
         raise UnsupportedImageError("Supported image types are JPEG, PNG, TIFF, WebP, BMP, and GIF")
 
 
+def cleanup_owned_import_path(path: Path) -> None:
+    """Remove an artifact created by this import without hiding its outcome."""
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        # A scanner or disconnected volume can hold an unreferenced copy.
+        LOGGER.warning("Could not clean up import artifact %s", path, exc_info=True)
+
+
+def original_bytes_match(path: Path, file_size_bytes: int, digest: str) -> bool:
+    """Verify the actual managed original without changing it."""
+    with path.open("rb") as stored:
+        if os.fstat(stored.fileno()).st_size != file_size_bytes:
+            return False
+        return hashlib.file_digest(stored, "sha256").hexdigest() == digest
+
+
 def stream_to_staging(
     source: IO[bytes], destination: Path, *, max_bytes: int | None = None
 ) -> tuple[str, int]:
@@ -114,7 +133,7 @@ def stream_to_staging(
         # Exclusive creation may fail because another upload already owns
         # this UUID path. Never delete a file that this call did not create.
         if created:
-            destination.unlink(missing_ok=True)
+            cleanup_owned_import_path(destination)
         raise
     return digest.hexdigest(), total
 
@@ -337,13 +356,12 @@ def commit_staged_image(staged_path: Path, destination: Path) -> None:
             raise ValidationError("Managed image destination already exists") from collision
         except Exception:
             if created:
-                destination.unlink(missing_ok=True)
+                cleanup_owned_import_path(destination)
             raise
     # The original has already been published. A transient failure to remove
     # its staging link must not turn a valid import into an orphaned original
     # with no database record. Retain the staging copy for later cleanup.
-    with contextlib.suppress(OSError):
-        staged_path.unlink()
+    cleanup_owned_import_path(staged_path)
 
 
 def _unique_rendition_temporary(destination: Path) -> Path:
