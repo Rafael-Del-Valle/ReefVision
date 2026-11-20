@@ -401,6 +401,37 @@ try {
             }
             $passed++
         }
+
+        # No --configure-repo override: these were accepted and returned
+        # status or a dry-run instead of executing or refusing the action.
+        # Rejections happen before reading repository metadata, taking an
+        # update lock, installing software or mutating saved user settings.
+        foreach ($case in @(
+            @{ Options = '--status --setup'; Message = '--status is read-only' },
+            @{ Options = '--status --skip-setup'; Message = '--status is read-only' },
+            @{ Options = '--status --build-only'; Message = '--status is read-only' },
+            @{ Options = '--status --install-only'; Message = '--status is read-only' },
+            @{ Options = '--status --no-launch'; Message = '--status is read-only' },
+            @{ Options = '--status --test'; Message = '--status is read-only' },
+            @{ Options = '--status --dry-run'; Message = '--status is read-only' },
+            @{ Options = '--status --clean-build'; Message = '--status is read-only' },
+            @{ Options = '--clean-build --dry-run'; Message = '--clean-build is disabled' },
+            @{ Options = '--clean-build'; Message = '--clean-build is disabled' }
+        )) {
+            $stdoutPath = Join-Path $root ('action-stdout-' + [guid]::NewGuid().ToString('N') + '.txt')
+            $stderrPath = Join-Path $root ('action-stderr-' + [guid]::NewGuid().ToString('N') + '.txt')
+            $arguments = '-NoLogo -NoProfile -ExecutionPolicy Bypass -File "' + $commandScript + '" ' + $case.Options
+            $child = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -PassThru -Wait `\n                -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+            $commandOutput = (Get-Content -LiteralPath $stdoutPath -Raw) +
+                (Get-Content -LiteralPath $stderrPath -Raw)
+            if ($child.ExitCode -eq 0 -or -not $commandOutput.Contains($case.Message)) {
+                throw "Ambiguous updater action ($($case.Options)) had unexpected result: $($child.ExitCode); $commandOutput"
+            }
+            if ((Get-FileHash -LiteralPath $commandConfig -Algorithm SHA256).Hash -ne $beforeCommandConfig) {
+                throw "Rejected updater action modified persistent configuration: $($case.Options)"
+            }
+            $passed++
+        }
     }
     finally {
         $env:LOCALAPPDATA = $previousLocalAppData

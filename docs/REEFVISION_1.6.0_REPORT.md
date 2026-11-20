@@ -263,3 +263,28 @@ scientific Workflow Builder operation: existing typed executable QC, persisted
 runs, provenance, retries and researcher approval remain unchanged. CI on
 this exact head, genuine installed MSI/GUI testing, 1.1/1.6 Alembic-0038
 reconciliation and release approval remain required.
+
+## 2026-11-20 — Updater read-only status / disabled cleanup action preflight (Track D)
+
+The 1.6 MSI updater already had safe source/installer identity checks and
+configuration isolation, but `--status --build-only`, `--status --test`,
+`--status --install-only`, and similar mixtures returned success after showing
+status without carrying out the requested action. Likewise `--dry-run
+--clean-build` reported a successful plan despite the cleanup operation being
+explicitly disabled for user-asset safety. The parser now rejects mixed
+status/update actions and refuses disabled cleanup **before** repository
+resolution, any persistent setting, update lock, setup, API, or MSI operation.
+Intentional standalone `--status`, `--dry-run`, `--configure-repo PATH
+--status`, and `--help` remain supported; no installer, user assets, models,
+scientific records, or migrations are changed.
+
+Ten native-Windows child-PowerShell regressions are added to the existing
+registered MSI updater preflight, using disposable `LOCALAPPDATA`, nonzero
+exit/diagnostic checks, and SHA-256 verification that rejected invocations
+leave the original command configuration unchanged. This is an out-of-band
+CLI safety contract, not a new biological analysis: the already implemented
+typed executable/saved QC Workflow Builder, provenance, retry semantics and
+researcher-approval gates are unaffected. Exact-head CI, Windows MSI/CAB
+clean installation/upgrade/rollback, installed-GUI acceptance, representative
+biological saved-workflow validation, independent 1.1/1.6 Alembic-0038
+reconciliation and explicit owner approval remain release holds.

@@ -315,6 +315,22 @@ if ($null -ne $configureRepoPath -and (
     throw "--configure-repo cannot be combined with update actions. Configure the repository separately."
 }
 
+# --status is a read-only query, not a request to build, install or test.
+# Previously mixed invocations returned success after showing status only,
+# silently skipping even the explicitly prohibited --clean-build action.
+if ($showStatus -and (
+    $runSetup -or $skipSetup -or $buildOnly -or $installOnly -or
+    $noLaunch -or $cleanBuild -or $dryRun -or $runTests
+)) {
+    throw "--status is read-only and cannot be combined with update actions."
+}
+
+# Disabled destructive cleanup must fail before reading mutable repo state or
+# reporting a misleading successful dry-run, and before any setup or MSI lock.
+if ($cleanBuild) {
+    throw "--clean-build is disabled for MSI updates until artifact-only, ownership-verified cleanup is validated. No files were deleted."
+}
+
 if ($configureRepoPath) {
     $resolved = Set-ReefVisionRepoPath -RepoPath $configureRepoPath
     Write-ReefVisionCommandNote "Configured ReefVision repository: $resolved"
@@ -416,10 +432,6 @@ try {
             latest_installer = if ($latestInstaller) { $latestInstaller.FullName } else { $null }
         } | ConvertTo-Json -Depth 4
         exit 0
-    }
-
-    if ($cleanBuild) {
-        throw "--clean-build is disabled for MSI updates until artifact-only, ownership-verified cleanup is validated. No files were deleted."
     }
 
     if ($runTests) {
