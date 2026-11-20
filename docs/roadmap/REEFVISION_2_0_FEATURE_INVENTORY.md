@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-16T20:34:31Z`
+Updated: `2026-11-20T02:45:28Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -11,8 +11,8 @@ Candidate target: `2.0`
 | --- | ---: |
 | blocked | 13 |
 | explicitly_deferred | 4 |
-| in_progress | 33 |
-| verified | 27 |
+| in_progress | 32 |
+| verified | 28 |
 
 ## Features
 
@@ -61,7 +61,7 @@ Candidate target: `2.0`
 | 1.5 | Offline field capture and later project reconciliation | in_progress | Project → Field capture |
 | 1.5 | Local model catalog, runtime selection, and prompt-assisted configuration | in_progress | Models & AI → Model Hub |
 | 1.5 | Unified detector, mask, pose, tracking, and event comparison | in_progress | Models & AI → Model comparison |
-| 1.5 | Early local provider and plugin foundations | in_progress | Models & AI → Providers |
+| 1.5 | Early local provider and plugin foundations | verified | Models & AI → Providers |
 | 1.5 | Complete research reproducibility package | in_progress | Research → Export reproducibility package |
 | 1.5 | Reviewer roles, independent queues, adjudication, and agreement | in_progress | Review → Reviewer lab |
 | 1.6 | Safe class management after use | in_progress | Annotate → Classes |
@@ -765,8 +765,8 @@ Evidence:
 
 - `source`: Real ancestry merge, unique Alembic graph, schema-fingerprinted legacy upgrades, ambiguity rejection, backup verification, and downgrade/upgrade regressions. — `docs/roadmap/REEFVISION_1_4_MIGRATION_RECONCILIATION.md` (`rv14-lineage-source`)
 - `browser`: none recorded
-- `windows_installed`: Exact-head source 37dad5c0 Windows acceptance passed a published 1.0.3 upgrade with schema migration, persistence, Project Exchange, uninstall, and data retention. This is partial evidence and does not substitute for representative 1.3 and legacy draft-1.4 profiles. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/43911232634` (`rv14-lineage-win-103`)
-- `windows_installed`: Exact-head source 37dad5c0 passed all three installed synthetic profiles. Verified 1.3 MSI upgrade, 0038 and 0039 profile migration, evidence preservation, exchange round trips, and backup restoration. The historical 1.3 build rejected the upgraded schema and the upgraded database hash remained unchanged. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/43911232634` (`rv14-lineage-win-synthetic`)
+- `windows_installed`: Exact-head source 36c80224a Windows acceptance passed a published 1.0.3 upgrade with schema migration, persistence, Project Exchange, uninstall, and data retention. This is partial evidence and does not substitute for representative 1.3 and legacy draft-1.4 profiles. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396` (`rv14-lineage-win-103`)
+- `windows_installed`: Exact-head source 36c80224a passed all three installed synthetic profiles. Verified 1.3 MSI upgrade, 0038 and 0039 profile migration, evidence preservation, exchange round trips, and backup restoration. The historical 1.3 build rejected the upgraded schema and the upgraded database hash remained unchanged. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396` (`rv14-lineage-win-synthetic`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -980,20 +980,20 @@ Evidence:
 ### rv15-provider-foundations: Early local provider and plugin foundations
 
 - Target: `1.5`
-- Status: `in_progress`
+- Status: `verified`
 - Dependencies: `rv13-temporal-dataset-training`
 - Entry point: Models & AI → Providers
 - Workflow Builder: `required`
 
 Acceptance checks:
 
-- **in_progress** — Discover local provider manifests, expose capabilities/availability, isolate failures, and preserve unavailable provider records without executing unknown code. (`rv15-provider-foundations-check`)
+- **verified** — Discover local provider manifests, expose capabilities/availability, isolate failures, and preserve unavailable provider records without executing unknown code. (`rv15-provider-foundations-check`)
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
-- `windows_installed`: none recorded
+- `source`: Strict inspect-only manifest discovery, API exposure, failure isolation, and metadata-only Workflow Builder snapshots passed the exact-head source gates. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/88` (`rv15-provider-foundations-src`)
+- `browser`: Home → open project → Models & AI → Providers passed component and Playwright acceptance; local manifests remain non-executable and unavailable records remain visible. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/88` (`rv15-provider-foundations-ui`)
+- `windows_installed`: Exact-head clean-install and published-1.0.3 upgrade runs discovered the seeded manifest with its source digest and returned blocked inspect-only preflight from the packaged API. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/43843151701` (`rv15-provider-foundations-win`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 

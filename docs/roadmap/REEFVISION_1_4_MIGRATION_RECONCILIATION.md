@@ -91,6 +91,9 @@ and check the migration status, the seeded project and records, and the Project
 Exchange export. Shut down the application before restoring the database backup
 and the original project files into a separate disposable data directory.
 Check the restored schema revision and project evidence. Source-level upgrade
-tests cover the generated profiles. Installed launch, exchange, and rollback
-still require execution on Windows. These synthetic profiles cover historical
-schemas and do not stand in for an acceptance run on representative projects.
+tests cover the generated profiles. The Windows run for lineage commit
+`36c80224a` passed the three generated profiles and the published 1.0.3 upgrade.
+The 1.3 installer rejected the upgraded schema and preserved the database
+digest. Repeat the matrix on the integrated candidate. Real prior-user profiles
+with verified backups still require owner-authorized copies.
+[Windows lineage acceptance](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396)
