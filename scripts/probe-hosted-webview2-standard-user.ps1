@@ -260,7 +260,7 @@ try {
             Where-Object { $_.IdentityReference.Value -eq $sid } | ForEach-Object { $_.FileSystemRights.ToString() })
         ordinary_account_can_read_sentinel=(Test-Path -LiteralPath (Join-Path $account.browser_artifacts 'standard-account-write-test.txt'))
     }
-    foreach ($name in 'ordinary-project-playwright.json','ordinary-driver-identity.json','ordinary-2d-webview2.json','probe-native-viewport.json','probe-download-network.json') {
+    foreach ($name in 'ordinary-project-playwright.json','ordinary-driver-identity.json','ordinary-driver-environment.json','ordinary-2d-webview2.json','probe-native-viewport.json','probe-download-network.json') {
         Get-ChildItem -LiteralPath $driverOutput -File -Recurse -Filter $name | Copy-Item -Destination $EvidenceRoot
     }
     $identityPath=Join-Path $EvidenceRoot 'ordinary-driver-identity.json'

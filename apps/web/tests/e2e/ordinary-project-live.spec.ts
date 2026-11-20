@@ -1,6 +1,7 @@
 import { expect } from "@playwright/test";
 import { createHash, randomUUID } from "node:crypto";
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { copyFile, readFile, readdir, writeFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { test } from "./spatialDesktop";
 
 test("imports an image and video, persists a reviewed edit, and exports YOLO", async ({
@@ -167,6 +168,10 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
   );
   expect(archive.ok()).toBeTruthy();
   const exportedZip = info.outputPath("ordinary-2d-export.zip");
+  const ordinaryDownloads = process.env.REEFVISION_PROBE_ORDINARY_DOWNLOADS;
+  const existingOrdinaryFiles = ordinaryDownloads
+    ? await readdir(ordinaryDownloads).catch(() => [])
+    : [];
   const events: object[] = [];
   const requests = new Set<string>();
   const native = await page.context().newCDPSession(page);
@@ -200,16 +205,42 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
     }
   });
   await native.send("Network.enable");
-  let browserDownload: { filename: string; status?: string | null } | null =
-    null;
+  let browserDownload: {
+    filename: string;
+    status?: string | null;
+    native_saved_file?: { path: string; sha256: string };
+  } | null = null;
   try {
     const downloadEvent = page.waitForEvent("download");
     await page.getByRole("link", { name: "Download zip", exact: true }).click();
     const download = await downloadEvent;
-    browserDownload = { filename: download.suggestedFilename() };
-    expect(download.suggestedFilename()).toMatch(/\.zip$/i);
+    const filename = download.suggestedFilename();
+    browserDownload = { filename };
+    expect(filename).toMatch(/\.zip$/i);
+    expect(basename(filename)).toBe(filename);
     try {
       await download.saveAs(exportedZip);
+    } catch (error) {
+      if (!ordinaryDownloads || existingOrdinaryFiles.includes(filename))
+        throw error;
+      const savedPath = join(ordinaryDownloads, filename);
+      const expectedHash = hash(await archive.body());
+      try {
+        await expect
+          .poll(
+            async () =>
+              hash(await readFile(savedPath).catch(() => Buffer.alloc(0))),
+            { timeout: 8_000 },
+          )
+          .toBe(expectedHash);
+      } catch {
+        throw error;
+      }
+      await copyFile(savedPath, exportedZip);
+      browserDownload.native_saved_file = {
+        path: savedPath,
+        sha256: expectedHash,
+      };
     } finally {
       browserDownload.status = await download.failure();
     }
@@ -229,6 +260,7 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
           },
           events,
           browser_download: browserDownload,
+          ordinary_downloads: ordinaryDownloads,
           artifact_path: artifactPath,
           artifact_files: await readdir(artifactPath).catch(() => []),
         },
