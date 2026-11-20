@@ -83,13 +83,18 @@ jobs:
             -SpatialWorkflowNodePath $playwrightNode -HostedStandardUserWebView2 -FirstUseAcceptance -ResearchWorkflowAcceptance -WorkspaceWorkflowAcceptance `
             -ScheduleWorkflowAcceptance -MonitoringWorkflowAcceptance `
             -SkipUpgrade -DisposableTest -KeepArtifacts
+      - name: Stage all retained provenance on the checkout drive
+        if: always()
+        shell: pwsh
+        run: |
+          ./proof/.github/windows-installed-proof/collect-original-provenance.ps1 -RepositoryRoot ./source -ProofRoot $env:PROOF_ROOT
       - name: Retain independent test and original payload provenance
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ReefVision-1.7-Original-Registered-Clean-Retest
           path: |
-            ${{ env.PROOF_ROOT }}/evidence/*.json
+            source/.artifacts/registered-retest-transport/*.json
             source/.artifacts/windows-clean-acceptance-*/report.json
             source/.artifacts/windows-clean-acceptance-*/*.log
             source/.artifacts/windows-clean-acceptance-*/*-playwright.json
