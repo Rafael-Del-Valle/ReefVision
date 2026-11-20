@@ -587,7 +587,7 @@ try {
                 }
                 Wait-ReefVisionWebView2DebugClosure -Port $debugPort
             }
-            $report.spatial_workflow = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed WebView2 imported two synthetic originals, recorded provisional review, replayed graph $($result.graph_record_id) as $($result.first_run_id) and $($result.replay_run_id), and downloaded comparison SHA-256 $($result.artifact.payload_sha256)."
+            $report.spatial_workflow = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed WebView2 passed $($result.completed_journeys) desktop journeys. Two synthetic originals were reviewed and compared in graph $($result.graph_record_id), runs $($result.first_run_id) and $($result.replay_run_id), with downloaded comparison SHA-256 $($result.artifact.payload_sha256)."
         } catch {
             $report.spatial_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $_.Exception.Message
             throw

@@ -96,7 +96,10 @@ function Invoke-ReefVisionSpatialWebView2Acceptance {
             'spatial-guided-workflow-live.spec.ts',
             'project-spatial-comparison-live.spec.ts',
             'anatomical-branch-live.spec.ts',
-            'spatial-condition-live.spec.ts'
+            'spatial-condition-live.spec.ts',
+            'reviewed-coral-growth-live.spec.ts',
+            'dataset-export-layout-live.spec.ts',
+            'ordinary-project-live.spec.ts'
         )
         & $NodePath $playwrightCli test @specs --workers=1 --retries=0 --reporter=list,json --output=$output *> $log
         if ($LASTEXITCODE -ne 0) {
@@ -112,11 +115,12 @@ function Invoke-ReefVisionSpatialWebView2Acceptance {
 
     $stats = (Get-Content -LiteralPath $report -Raw | ConvertFrom-Json).stats
     if ($stats.expected -ne $specs.Count -or $stats.skipped -ne 0 -or $stats.unexpected -ne 0) {
-        throw 'Every packaged spatial journey must execute successfully.'
+        throw 'Every requested packaged desktop journey must execute successfully.'
     }
     $results = @(Get-ChildItem -LiteralPath $output -Recurse -File -Filter 'spatial-workflow.json')
     if ($results.Count -ne 1) { throw 'Expected one completed two-acquisition spatial replay report.' }
     $result = Get-Content -LiteralPath $results[0].FullName -Raw | ConvertFrom-Json
     if ($result.surface -ne 'tauri-webview2') { throw 'The spatial replay did not run in ReefVision WebView2.' }
+    $result | Add-Member -NotePropertyName completed_journeys -NotePropertyValue $stats.expected
     return $result
 }
