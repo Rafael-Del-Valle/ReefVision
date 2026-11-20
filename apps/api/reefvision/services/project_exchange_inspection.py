@@ -16,7 +16,7 @@ from reefvision.schemas.project_exchange import (
     ProjectExchangeUnavailableAsset,
 )
 from reefvision.services.project_exchange_field_v15 import (
-    FIELD_EXCHANGE_FORMAT,
+    FIELD_EXCHANGE_FORMATS,
     FIELD_MEDIA_KIND,
     FIELD_ORIGIN,
     FIELD_SECTION_MODELS,
@@ -25,6 +25,8 @@ from reefvision.services.project_exchange_field_v15 import (
     validate_field_exchange,
     validate_field_origin,
 )
+from reefvision.services.project_exchange_qc_v16 import FORMAT as QC_FORMAT
+from reefvision.services.project_exchange_qc_v16 import validate_qc_exchange
 from reefvision.services.project_exchange_v15 import INTEGRATED_FORMATS, validate_v15_exchange
 from reefvision.services.static_comparison import STATIC_COMPARISON_JOB
 from reefvision.storage.datasets import canonical_json_sha256
@@ -254,6 +256,7 @@ def inspect_project_exchange(
                         validate_v15_exchange(
                             version, project_id, section_rows, manifest.get("origin")
                         )
+                        validate_qc_exchange(version, project_id, section_rows)
                         validate_spatial_exchange_records(project_id, section_rows)
                         validate_paired_growth_exchange(
                             project_id, section_rows, manifest.get("origin")
@@ -272,7 +275,7 @@ def inspect_project_exchange(
                         errors.append(str(exc))
             is_integrated = version in INTEGRATED_FORMATS
             source_project_rows = section_rows.get("project", [])
-            if version != FIELD_EXCHANGE_FORMAT and (
+            if version not in FIELD_EXCHANGE_FORMATS and (
                 set(section_rows).intersection(FIELD_SECTION_MODELS)
                 or contains_field_exchange_records(section_rows)
                 or FIELD_ORIGIN in manifest
@@ -303,11 +306,15 @@ def inspect_project_exchange(
                     or project_rows[0].get("id") != project["id"]
                 ):
                     raise ValidationError("Exchange archive must identify one source project")
-                if not any(
-                    section_rows.get(name) for name in (*integration, *FIELD_SECTION_MODELS)
-                ) and not any(
-                    row.get("job_type") == STATIC_COMPARISON_JOB
-                    for row in section_rows.get("jobs", [])
+                if (
+                    version != QC_FORMAT
+                    and not any(
+                        section_rows.get(name) for name in (*integration, *FIELD_SECTION_MODELS)
+                    )
+                    and not any(
+                        row.get("job_type") == STATIC_COMPARISON_JOB
+                        for row in section_rows.get("jobs", [])
+                    )
                 ):
                     raise ValidationError(
                         "Exchange 1.2 archive has no integrated scientific records"
@@ -333,10 +340,10 @@ def inspect_project_exchange(
                     ordinary_media = [
                         item for item in media if item.get("kind") != FIELD_MEDIA_KIND
                     ]
-                    if version != FIELD_EXCHANGE_FORMAT and len(ordinary_media) != len(media):
+                    if version not in FIELD_EXCHANGE_FORMATS and len(ordinary_media) != len(media):
                         raise ValidationError("Field originals require the 1.5 exchange format")
                     media_gaps = _integrated_media_gaps(section_rows, ordinary_media)
-                    if version == FIELD_EXCHANGE_FORMAT:
+                    if version in FIELD_EXCHANGE_FORMATS:
                         project_id = str(manifest["project"]["id"])
                         validate_field_exchange(
                             project_id,
@@ -407,7 +414,7 @@ def inspect_project_exchange(
                 errors=errors,
             )
             included_generated_artifact_count = len(generated)
-            if version == FIELD_EXCHANGE_FORMAT and any(
+            if version in FIELD_EXCHANGE_FORMATS and any(
                 field_owned_project_path(str(item.get("source_relative_path", "")))
                 for item in generated
             ):

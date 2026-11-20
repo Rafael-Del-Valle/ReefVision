@@ -550,3 +550,31 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
         or item_evidence_digest != queue_item_evidence_sha256(items)
     ):
         raise invalid
+
+
+def queue_reference_payload(
+    queue: Any, run_id: str, node_id: str, dataset_manifest_sha256: str | None
+) -> dict[str, Any]:
+    """Bind the saved artifact to its producing run and exact ranked snapshot."""
+    payload: dict[str, Any] = {
+        "schema_version": "workflow-qc-review-queue-0001",
+        "project_id": queue.project_id,
+        "queue_id": queue.id,
+        "item_count": queue.item_count,
+        "source_quality_control_run_id": queue.source_quality_control_run_id,
+        "formula_id": queue.formula_id,
+        "formula_version": queue.formula_version,
+        "input_checksums": queue.input_checksums_json,
+        "review_status": "requires_researcher_review",
+        "priority_score_unit": "dimensionless",
+        "workflow_run_id": run_id,
+        "workflow_node_run_id": node_id,
+    }
+    if queue.dataset_version_id is not None:
+        if not dataset_manifest_sha256:
+            raise ValidationError("QC queue is missing its frozen dataset manifest")
+        payload.update(
+            dataset_version_id=queue.dataset_version_id,
+            dataset_manifest_sha256=dataset_manifest_sha256,
+        )
+    return payload

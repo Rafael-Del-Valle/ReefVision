@@ -30,6 +30,7 @@ from reefvision.schemas.review_queues import (
 from reefvision.services.frozen_dataset_integrity_16 import validate_frozen_dataset_manifest
 from reefvision.services.review_queues import ReviewQueueService
 from reefvision.services.workflow_review_queue_integrity import (
+    queue_reference_payload,
     validate_saved_queue_snapshot,
 )
 from reefvision.storage.datasets import canonical_json_sha256
@@ -390,23 +391,9 @@ def create_review_queue_workflow_artifact(
                 "SQLite QC review-queue writer contention; retry the saved workflow node"
             ) from exc
 
-    payload = {
-        "schema_version": "workflow-qc-review-queue-0001",
-        "project_id": project_id,
-        "queue_id": queue.id,
-        "item_count": queue.item_count,
-        "source_quality_control_run_id": queue.source_quality_control_run_id,
-        "formula_id": queue.formula_id,
-        "formula_version": queue.formula_version,
-        "input_checksums": queue.input_checksums_json,
-        "review_status": "requires_researcher_review",
-        "priority_score_unit": "dimensionless",
-        "workflow_run_id": run_id,
-        "workflow_node_run_id": node_run_id,
-    }
-    if dataset_version is not None:
-        payload["dataset_version_id"] = dataset_version.id
-        payload["dataset_manifest_sha256"] = dataset_version.manifest_sha256
+    payload = queue_reference_payload(
+        queue, run_id, node_run_id, dataset_version.manifest_sha256 if dataset_version else None
+    )
     if saved_outputs:
         saved_output = session.get(WorkflowArtifact, saved_outputs[0])
         if (

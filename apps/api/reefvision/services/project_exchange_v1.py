@@ -77,7 +77,7 @@ from reefvision.domain.reproducibility_v15 import HISTORICAL_PROOFS
 from reefvision.schemas.project_exchange import ProjectExchangePackageResponse
 from reefvision.services.project_exchange import MANIFEST_NAME, ProjectExchangeService, _row
 from reefvision.services.project_exchange_field_v15 import (
-    FIELD_EXCHANGE_FORMAT,
+    FIELD_EXCHANGE_FORMATS,
     FIELD_ORIGIN,
     field_exchange_records,
     field_owned_project_path,
@@ -92,6 +92,9 @@ from reefvision.services.project_exchange_integrated import (
     integrated_records,
 )
 from reefvision.services.project_exchange_paired_models_v15 import paired_comparison_raster_paths
+from reefvision.services.project_exchange_qc_v16 import FORMAT as QC_FORMAT
+from reefvision.services.project_exchange_qc_v16 import SECTIONS as QC_SECTIONS
+from reefvision.services.project_exchange_qc_v16 import has_qc_history, is_qc_graph
 from reefvision.services.project_exchange_v15 import FORMAT_VERSION as RESEARCH_FORMAT_VERSION
 from reefvision.services.project_exchange_v15 import INTEGRATED_FORMATS, has_v15_records
 from reefvision.services.project_exchange_workflows import is_spatial_workflow_graph
@@ -163,6 +166,8 @@ class ProjectExchangeV1Service(ProjectExchangeService):
     """Project exchange service with executable-workflow provenance included."""
 
     def _format_version(self, project_id: str) -> str:
+        if has_qc_history(self.session, project_id):
+            return QC_FORMAT
         if has_v15_records(self.session, project_id) or has_field_capture_batches(
             self.session, project_id
         ):
@@ -577,7 +582,14 @@ class ProjectExchangeV1Service(ProjectExchangeService):
         )
 
         integrated = integrated_records(self.session, project.id)
-        if any(integrated.values()):
+        with_qc = any(integrated.get(name) for name in QC_SECTIONS) or any(
+            is_qc_graph(graph.graph_json)
+            for graph in cast(Sequence[WorkflowGraphRecord], sections.get("workflow_graphs", []))
+        )
+        if not with_qc:
+            for name in QC_SECTIONS:
+                integrated.pop(name, None)
+        if with_qc or any(integrated.values()):
             sections.update(integrated)
         sections.update(field_exchange_records(self.session, project.id))
         return sections
@@ -899,7 +911,7 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                     "manifest_sha256": parent.manifest_sha256,
                     "id_map": source.get("origin_id_map") or source.get("id_map", {}),
                 }
-                if package.format_version == FIELD_EXCHANGE_FORMAT and source.get(FIELD_ORIGIN):
+                if package.format_version in FIELD_EXCHANGE_FORMATS and source.get(FIELD_ORIGIN):
                     manifest[FIELD_ORIGIN] = source[FIELD_ORIGIN]
 
         proofs = project_proofs(self.session, project.id)
