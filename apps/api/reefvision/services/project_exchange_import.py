@@ -65,6 +65,7 @@ from reefvision.schemas.spatial_asset_metadata_revision_v14 import (
 from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvidence
 from reefvision.schemas.spatial_source_asset_v14 import SpatialSourceParseResult
 from reefvision.services.project_exchange_acquisition import validate_acquisition_exchange
+from reefvision.services.project_exchange_alerts_v17 import restore_alert_row
 from reefvision.services.project_exchange_comparison import restore_comparison_jobs
 from reefvision.services.project_exchange_computed import (
     COMPUTED_SECTIONS,
@@ -75,6 +76,7 @@ from reefvision.services.project_exchange_condition_v14 import (
     remap_condition_observation,
     remap_condition_report,
 )
+from reefvision.services.project_exchange_device_v17 import restore_device_row
 from reefvision.services.project_exchange_environmental_analysis import (
     ANALYSIS_SECTIONS,
     remap_environmental_analysis_sections,
@@ -103,6 +105,10 @@ from reefvision.services.project_exchange_integrated import (
     parent_first,
     remap_ecology_evidence,
     remap_reviewed_snapshot,
+)
+from reefvision.services.project_exchange_monitoring_v17 import (
+    preserve_comparison_snapshot,
+    validate_monitoring_exchange,
 )
 from reefvision.services.project_exchange_pose import (
     remap_measurement_digests,
@@ -481,6 +487,9 @@ def import_project_exchange(
         )
         validate_qc_exchange(inspection.format_version or "", old_project_id, section_rows)
         validate_schedule_exchange(inspection.format_version or "", old_project_id, section_rows)
+        validate_monitoring_exchange(
+            inspection.format_version or "", old_project_id, section_rows, manifest.get("origin")
+        )
         validate_frozen_pose_frames(section_rows)
         validate_acquisition_exchange(section_rows)
         validate_computed_exchange_records(old_project_id, section_rows)
@@ -611,6 +620,12 @@ def import_project_exchange(
             }
             mapped_ecology: dict[str, list[dict[str, Any]]] = {}
             digests = remap_measurement_digests(section_rows, id_map) if integrated else {}
+            for original, mapped in zip(
+                section_rows.get("scientific_records", []),
+                scientific_rows.get("scientific_records", []),
+                strict=True,
+            ):
+                digests[original["content_sha256"]] = mapped["content_sha256"]
             source_jobs = {row["id"]: row for row in section_rows.get("jobs", [])}
             track_digests: dict[str, tuple[str, str]] = {}
             for section_name in order:
@@ -697,6 +712,9 @@ def import_project_exchange(
                             section_name, row, values, id_map, digests, track_digests
                         )
                     restore_schedule_row(section_name, row, values)
+                    restore_alert_row(section_name, row, values, id_map, digests)
+                    restore_device_row(section_name, row, values, id_map, digests)
+                    preserve_comparison_snapshot(section_name, row, values)
                     if inspection.format_version in QC_FORMATS:
                         restore_qc_row(section_name, row, values, id_map, qc_requests)
                     if integrated and section_name == "video_tracks":

@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from reefvision.api.routes.acquisition_sources import router as acquisition_sources_router
 from reefvision.api.routes.active_learning import router as active_learning_router
 from reefvision.api.routes.advanced_provider_execution import (
     router as advanced_provider_execution_router,
@@ -53,6 +54,8 @@ from reefvision.api.routes.model_agreement import router as model_agreement_rout
 from reefvision.api.routes.model_catalog import router as model_catalog_router
 from reefvision.api.routes.model_runtime import router as model_runtime_router
 from reefvision.api.routes.models import router as models_router
+from reefvision.api.routes.monitoring import router as monitoring_router
+from reefvision.api.routes.monitoring_summaries import router as monitoring_summaries_router
 from reefvision.api.routes.paired_models_v15 import router as paired_models_router
 from reefvision.api.routes.pose_active_learning import router as pose_active_learning_router
 from reefvision.api.routes.pose_biological_measurement import (
@@ -111,6 +114,9 @@ from reefvision.services.workflow_v1_install import install_workflow_v1_extensio
 install_workflow_v1_extensions()
 
 api_router = APIRouter(prefix="/api/v1")
+api_router.include_router(acquisition_sources_router)
+api_router.include_router(monitoring_router)
+api_router.include_router(monitoring_summaries_router)
 api_router.include_router(environmental_analysis_router)
 api_router.include_router(environmental_context_router)
 api_router.include_router(field_capture_router)

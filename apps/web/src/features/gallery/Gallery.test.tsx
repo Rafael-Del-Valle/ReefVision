@@ -79,11 +79,124 @@ function renderGallery(
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   window.localStorage.clear();
 });
 
 describe("Gallery pending thumbnail refresh", () => {
+  it("stops background reads after a connection error and resumes after explicit refresh", async () => {
+    vi.useFakeTimers();
+    let offline = false;
+    let thumbnail: string | null = null;
+    const reads = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      offline
+        ? jsonResponse({ detail: "Local image service unavailable" }, 503)
+        : jsonResponse({
+            items: [{ ...image, thumbnail_path: thumbnail }],
+            total: 1,
+            page: 1,
+            page_size: 24,
+            pages: 1,
+          }),
+    );
+    const tick = (ms: number) =>
+      act(async () => vi.advanceTimersByTimeAsync(ms));
+    renderGallery();
+    await tick(1);
+    expect(
+      screen.getByRole("article", { name: /swiftia-01\.png/ }),
+    ).toBeVisible();
+    offline = true;
+    await tick(5_001);
+    expect(screen.getByText("Images could not be loaded")).toBeVisible();
+    expect(reads).toHaveBeenCalledTimes(2);
+    await tick(20_000);
+    expect(reads).toHaveBeenCalledTimes(2);
+
+    offline = false;
+    fireEvent.click(
+      screen.getByRole("button", { name: "Refresh pending thumbnails" }),
+    );
+    await tick(1);
+    expect(screen.queryByText("Images could not be loaded")).toBeNull();
+    thumbnail = "thumbnails/completed.jpg";
+    await tick(5_001);
+    expect(screen.getByAltText("Thumbnail of swiftia-01.png")).toBeVisible();
+    expect(reads).toHaveBeenCalledTimes(4);
+  });
+
+  it("rearms exhausted polling after a later import on the same image page", async () => {
+    vi.useFakeTimers();
+    let imported = false;
+    let thumbnail: string | null = null;
+    let reads = 0;
+    const next = {
+      ...image,
+      id: "image-later",
+      original_filename: "later-camera.jpg",
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input).includes("/imports/images")) {
+        imported = true;
+        return jsonResponse({
+          project_id: project.id,
+          successful: [
+            {
+              filename: next.original_filename,
+              image_id: next.id,
+              status: "successful",
+            },
+          ],
+          duplicates: [],
+          unsupported: [],
+          failed: [],
+        });
+      }
+      reads += 1;
+      const items = imported
+        ? [{ ...next, thumbnail_path: thumbnail }, image]
+        : [image];
+      return jsonResponse({
+        items,
+        total: items.length,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      });
+    });
+    const tick = (ms: number) =>
+      act(async () => vi.advanceTimersByTimeAsync(ms));
+    const { container } = renderGallery();
+    await tick(1);
+    for (let index = 0; index < 12; index += 1) await tick(5_001);
+    expect(reads).toBe(13);
+    await tick(5_001);
+    expect(reads).toBe(13);
+
+    const picker = container.querySelector<HTMLInputElement>(
+      'input[type="file"]:not([webkitdirectory])',
+    )!;
+    fireEvent.change(picker, {
+      target: {
+        files: [
+          new File(["generated JPEG fixture"], next.original_filename, {
+            type: "image/jpeg",
+          }),
+        ],
+      },
+    });
+    await tick(3);
+    expect(
+      screen.getByRole("article", { name: /later-camera\.jpg/ }),
+    ).toBeVisible();
+    expect(reads).toBe(14);
+    thumbnail = "thumbnails/later-camera.jpg";
+    await tick(5_001);
+    expect(screen.getByAltText("Thumbnail of later-camera.jpg")).toBeVisible();
+    expect(reads).toBe(15);
+  });
+
   it("limits background metadata checks to the currently pending thumbnails", () => {
     const pending = { items: [{ thumbnail_path: null }] };
     const complete = { items: [{ thumbnail_path: "thumbnails/ready.jpg" }] };

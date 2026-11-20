@@ -234,10 +234,13 @@ def process_workflow_run_job(
             run.completed_at = job.completed_at
             session.commit()
             return False
-        plan = WorkflowGraphService(session).plan(run.project_id, graph)
+        graphs = WorkflowGraphService(session)
+        plan = graphs.plan(run.project_id, graph)
         if not plan.valid:
             job.status = "failed"
-            job.error_message = "Workflow graph no longer validates"
+            job.error_message = graphs.execution_validation_message(
+                graph, plan, prefix="Workflow graph no longer validates"
+            )
             job.completed_at = _now()
             run.status = "failed"
             run.error_message = job.error_message

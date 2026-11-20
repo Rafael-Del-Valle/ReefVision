@@ -203,6 +203,10 @@ _ACTIONS: dict[str, str] = {
     "research_publication_figure": "Create or reopen a figure and table with its source.",
     "image_acquisition_quality": "Measure acquisition quality and retain reviewable image flags.",
     "field_capture_reconcile": "Reconcile the sealed field batch and retain its review receipt.",
+    "acquisition_source_capture": "Capture one observation from a pinned acquisition source.",
+    "acquisition_capture_replay": "Read one preserved observation from its acquisition receipt.",
+    "monitoring_assessment": "Assess pinned source observations and propose alerts.",
+    "monitoring_project_summary": "Read a saved monitoring comparison and its attributed reviews.",
     "workflow_schedule_receipt": "Verify one completed schedule occurrence and its artifacts.",
     "temporal_reefpose_dataset": "Freeze or load a recording-group-split temporal pose dataset.",
     "temporal_reefpose_training": "Train or replay a native temporal pose checkpoint.",
@@ -324,7 +328,7 @@ class WorkflowGraphService:
                 self._issue(
                     "error",
                     "model_scope_mismatch",
-                    "Registered model does not belong to this project",
+                    "The selected model is unavailable in this project",
                     node_id=node_id,
                 )
             )
@@ -755,6 +759,32 @@ class WorkflowGraphService:
             referenced_dataset_version_ids=sorted(referenced_dataset_ids),
             referenced_video_ids=sorted(referenced_video_ids),
         )
+
+    def execution_validation_message(
+        self,
+        graph: WorkflowGraphRequest,
+        plan: WorkflowGraphPlanResponse,
+        *,
+        prefix: str,
+    ) -> str:
+        """Summarize the first planner error using only graph-local context."""
+        issue = next((issue for issue in plan.issues if issue.severity == "error"), None)
+        if issue is None:
+            return prefix
+
+        location = ""
+        if issue.node_id is not None:
+            node = next((node for node in graph.nodes if node.node_id == issue.node_id), None)
+            definition = self.registry.get(node.node_type) if node else None
+            location = (
+                f"{definition.display_name} ({issue.node_id})"
+                if definition
+                else f"Node {issue.node_id}"
+            )
+        elif issue.edge_id is not None:
+            location = f"Edge {issue.edge_id}"
+        detail = f"{location} — {issue.message}" if location else issue.message
+        return f"{prefix}. {detail}"
 
     def plan(
         self,

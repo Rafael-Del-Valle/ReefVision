@@ -29,12 +29,18 @@ from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.services.mask_measurements import MaskMeasurementService
 from reefvision.services.model_runtime import workflow_runtime_settings
 from reefvision.services.workflow_acquisition_quality import execute_acquisition_quality
+from reefvision.services.workflow_acquisition_source import (
+    execute_acquisition_replay,
+    execute_acquisition_source,
+)
 from reefvision.services.workflow_coral_growth import execute_coral_growth
 from reefvision.services.workflow_coral_skeleton import execute_coral_skeleton
 from reefvision.services.workflow_depth import create_depth_map_artifacts
 from reefvision.services.workflow_ecology_analysis import execute_verified_ecology_analysis
 from reefvision.services.workflow_ecology_event_summary import execute_event_summary
 from reefvision.services.workflow_field_capture import execute_field_capture_reconcile
+from reefvision.services.workflow_monitoring import execute_monitoring_assessment
+from reefvision.services.workflow_monitoring_summary import execute_monitoring_summary
 from reefvision.services.workflow_paired_growth_contrast import execute_paired_growth_contrast
 from reefvision.services.workflow_paired_models_v15 import execute_paired_models
 from reefvision.services.workflow_prompt_assist import create_prompt_assist_mask_proposals
@@ -72,6 +78,10 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "research_publication_figure",
     "image_acquisition_quality",
     "field_capture_reconcile",
+    "acquisition_source_capture",
+    "acquisition_capture_replay",
+    "monitoring_assessment",
+    "monitoring_project_summary",
     "workflow_schedule_receipt",
     "ecology_measurement_csv_export",
     "ecology_population_csv_export",
@@ -1162,6 +1172,10 @@ _ADAPTERS = {
     "paired_model_comparison": execute_paired_models,
     "research_reproducibility_package": execute_reproducibility,
     "field_capture_reconcile": execute_field_capture_reconcile,
+    "acquisition_source_capture": execute_acquisition_source,
+    "acquisition_capture_replay": execute_acquisition_replay,
+    "monitoring_assessment": execute_monitoring_assessment,
+    "monitoring_project_summary": execute_monitoring_summary,
     "workflow_schedule_receipt": execute_schedule_receipt,
     "ecology_event_summary": execute_event_summary,
     "research_publication_figure": execute_research_report,

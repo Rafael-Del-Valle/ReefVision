@@ -91,6 +91,9 @@ from reefvision.services.project_exchange_integrated import (
     has_integrated_records,
     integrated_records,
 )
+from reefvision.services.project_exchange_monitoring_v17 import FORMAT as MONITORING_FORMAT
+from reefvision.services.project_exchange_monitoring_v17 import SECTIONS as MONITORING_SECTIONS
+from reefvision.services.project_exchange_monitoring_v17 import has_monitoring_records
 from reefvision.services.project_exchange_paired_models_v15 import paired_comparison_raster_paths
 from reefvision.services.project_exchange_qc_v16 import FORMAT as QC_FORMAT
 from reefvision.services.project_exchange_qc_v16 import SECTIONS as QC_SECTIONS
@@ -169,6 +172,8 @@ class ProjectExchangeV1Service(ProjectExchangeService):
     """Project exchange service with executable-workflow provenance included."""
 
     def _format_version(self, project_id: str) -> str:
+        if has_monitoring_records(self.session, project_id):
+            return MONITORING_FORMAT
         if has_schedules(self.session, project_id):
             return SCHEDULE_FORMAT
         if has_qc_history(self.session, project_id):
@@ -587,7 +592,11 @@ class ProjectExchangeV1Service(ProjectExchangeService):
         )
 
         integrated = integrated_records(self.session, project.id)
-        if not any(integrated.get(name) for name in SCHEDULE_SECTIONS):
+        with_monitoring = any(integrated.get(name) for name in MONITORING_SECTIONS)
+        if not with_monitoring:
+            for name in MONITORING_SECTIONS:
+                integrated.pop(name, None)
+        if not with_monitoring and not any(integrated.get(name) for name in SCHEDULE_SECTIONS):
             for name in SCHEDULE_SECTIONS:
                 integrated.pop(name, None)
         with_qc = any(integrated.get(name) for name in QC_SECTIONS) or any(

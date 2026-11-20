@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from math import ceil
 from pathlib import Path
 from typing import BinaryIO
@@ -28,30 +27,18 @@ from reefvision.schemas.images import (
 from reefvision.storage.images import (
     InvalidImageError,
     UnsupportedImageError,
+    cleanup_owned_import_path,
     commit_staged_image,
     create_browser_display,
     create_thumbnail,
     ensure_supported_extension,
     inspect_staged_image,
+    original_bytes_match,
     project_image_directories,
     safe_original_name,
     stream_to_staging,
 )
 from reefvision.storage.projects import resolve_managed_project_path
-
-LOGGER = logging.getLogger(__name__)
-
-
-def _cleanup_import_path(path: Path) -> None:
-    """Remove an uncommitted import artifact without aborting the batch."""
-    try:
-        path.unlink(missing_ok=True)
-    except OSError:
-        # Windows scanners, WebView2, and removable media can temporarily
-        # retain a handle. The artifact is unreferenced and can be cleaned up
-        # later; preserving the per-file report is more important than
-        # replacing the original import outcome with a request-level error.
-        LOGGER.warning("Could not clean up import artifact %s", path, exc_info=True)
 
 
 class ImageService:
@@ -98,7 +85,20 @@ class ImageService:
                 inspected = inspect_staged_image(staging, sha256, size)
                 duplicate = self.images.find_duplicate(project_id, sha256)
                 if duplicate is not None:
-                    _cleanup_import_path(staging)
+                    try:
+                        intact = original_bytes_match(
+                            resolve_managed_project_path(self.settings, duplicate.managed_path),
+                            duplicate.file_size_bytes,
+                            duplicate.sha256,
+                        )
+                    except (OSError, ValidationError):
+                        intact = False
+                    if not intact:
+                        raise InvalidImageError(
+                            "Matching image has a missing, unreadable, or changed managed "
+                            "original. Restore or repair it before retrying."
+                        )
+                    cleanup_owned_import_path(staging)
                     report["duplicates"].append(
                         ImportItemResponse(
                             filename=filename,
@@ -119,6 +119,12 @@ class ImageService:
                 commit_staged_image(staging, managed_destination)
                 staging_owned = False
                 uncommitted_original = True
+                if not original_bytes_match(
+                    managed_destination, inspected.file_size_bytes, inspected.sha256
+                ):
+                    raise InvalidImageError(
+                        "Managed image checksum or size changed during publication"
+                    )
                 image = ImageAsset(
                     id=image_id,
                     project_id=project_id,
@@ -146,25 +152,23 @@ class ImageService:
                 )
                 self.images.add(image)
                 self.jobs.add(job)
+                self.session.flush()
+                thumbnail_job_id = job.id
                 self.session.commit()
-                # A successful database commit makes the managed original
-                # durable, even if a subsequent response refresh fails.
                 uncommitted_original = False
-                self.session.refresh(image)
-                self.session.refresh(job)
                 report["successful"].append(
                     ImportItemResponse(
                         filename=filename,
                         relative_path=relative_path,
                         status="successful",
-                        image_id=image.id,
-                        thumbnail_job_id=job.id,
+                        image_id=image_id,
+                        thumbnail_job_id=thumbnail_job_id,
                     )
                 )
             except UnsupportedImageError as exc:
                 self.session.rollback()
                 if staging_owned:
-                    _cleanup_import_path(staging)
+                    cleanup_owned_import_path(staging)
                 report["unsupported"].append(
                     ImportItemResponse(
                         filename=filename,
@@ -176,11 +180,11 @@ class ImageService:
             except (InvalidImageError, OSError, IntegrityError, ValidationError) as exc:
                 self.session.rollback()
                 if staging_owned:
-                    _cleanup_import_path(staging)
+                    cleanup_owned_import_path(staging)
                 # Do not delete an existing original when exclusive placement
                 # failed, or a committed original after a response error.
                 if uncommitted_original and managed_destination is not None:
-                    _cleanup_import_path(managed_destination)
+                    cleanup_owned_import_path(managed_destination)
                 report["failed"].append(
                     ImportItemResponse(
                         filename=filename,
@@ -192,11 +196,11 @@ class ImageService:
             except Exception as exc:
                 self.session.rollback()
                 if staging_owned:
-                    _cleanup_import_path(staging)
+                    cleanup_owned_import_path(staging)
                 # Do not delete an existing original when exclusive placement
                 # failed, or a committed original after a response error.
                 if uncommitted_original and managed_destination is not None:
-                    _cleanup_import_path(managed_destination)
+                    cleanup_owned_import_path(managed_destination)
                 report["failed"].append(
                     ImportItemResponse(
                         filename=filename,

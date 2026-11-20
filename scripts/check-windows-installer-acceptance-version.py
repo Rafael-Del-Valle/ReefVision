@@ -74,7 +74,7 @@ _VALIDATED_UPGRADE_JOBS = {
 _CANDIDATE_REVISION = {
     "1.5.0": "b15_integrated_0002",
     "1.6.0": "b16_integrated_0001",
-    "1.7.0": "b17_workflows_0001",
+    "1.7.0": "b17_monitor_0003",
 }
 
 

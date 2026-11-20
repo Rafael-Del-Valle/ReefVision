@@ -7,6 +7,10 @@ from reefvision.schemas.workflow_graphs import (
     WorkflowPortDefinition,
 )
 from reefvision.services.workflow_acquisition_quality import acquisition_quality_node
+from reefvision.services.workflow_acquisition_source import (
+    acquisition_replay_node,
+    acquisition_source_node,
+)
 from reefvision.services.workflow_coral_growth import coral_growth_node
 from reefvision.services.workflow_coral_skeleton import coral_skeleton_node
 from reefvision.services.workflow_depth_3d import register_video_depth_3d_adapter
@@ -16,6 +20,8 @@ from reefvision.services.workflow_field_capture import field_capture_reconcile_n
 from reefvision.services.workflow_metric_depth_3d import (
     register_video_metric_depth_3d_adapter,
 )
+from reefvision.services.workflow_monitoring import monitoring_assessment_node
+from reefvision.services.workflow_monitoring_summary import monitoring_summary_node
 from reefvision.services.workflow_node_registry import (
     workflow_node_registry as base_workflow_node_registry,
 )
@@ -942,6 +948,10 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
     registry["paired_model_comparison"] = paired_models_node()
     registry["research_reproducibility_package"] = reproducibility_node()
     registry["field_capture_reconcile"] = field_capture_reconcile_node()
+    registry["acquisition_source_capture"] = acquisition_source_node()
+    registry["acquisition_capture_replay"] = acquisition_replay_node()
+    registry["monitoring_assessment"] = monitoring_assessment_node()
+    registry["monitoring_project_summary"] = monitoring_summary_node()
     registry["workflow_schedule_receipt"] = schedule_receipt_node()
     registry["ecology_event_summary"] = event_summary_workflow_node()
     registry["research_publication_figure"] = research_report_node()

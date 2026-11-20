@@ -22,7 +22,7 @@ from reefvision.storage.datasets import canonical_json_sha256
 
 _API_ROOT = Path(__file__).resolve().parents[2]
 _VERSIONS = _API_ROOT / "migrations" / "versions"
-_INTEGRATED_HEAD = "b17_workflows_0001"
+_INTEGRATED_HEAD = "b17_monitor_0003"
 _POSE_MIGRATIONS = (
     "0038_pose_anatomy_definitions.py",
     "0039_pose_evaluation_runs.py",
@@ -53,6 +53,45 @@ def migration_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Mi
         yield settings, config, engine
     finally:
         engine.dispose()
+
+
+def test_monitoring_migrations_add_to_a_persisted_scheduler_profile(
+    migration_db: MigrationDatabase,
+) -> None:
+    _, config, engine = migration_db
+    command.upgrade(config, "b17_workflows_0001")
+    _create_project(engine)
+    previous = set(inspect(engine).get_table_names())
+    with engine.connect() as connection:
+        project = connection.exec_driver_sql("SELECT * FROM projects").one()
+    command.upgrade(config, "b17_acquire_0002")
+    capture_tables = {"acquisition_sources", "acquisition_captures"}
+    assert set(inspect(engine).get_table_names()) == previous | capture_tables
+    command.upgrade(config, "b17_monitor_0003")
+    monitoring_tables = {
+        "monitoring_rules",
+        "monitoring_assessments",
+        "monitoring_alerts",
+        "monitoring_alert_reviews",
+        "monitoring_project_summaries",
+    }
+    schema = inspect(engine)
+    assert set(schema.get_table_names()) == previous | capture_tables | monitoring_tables
+    for table, uniqueness in {
+        "acquisition_captures": {("source_id", "capture_key"), ("source_id", "ordinal")},
+        "monitoring_assessments": {("rule_id", "window_start", "window_end", "evidence_sha256")},
+        "monitoring_alerts": {("assessment_id", "finding_key")},
+        "monitoring_alert_reviews": {("alert_id", "revision")},
+        "monitoring_project_summaries": {("project_id", "content_sha256")},
+    }.items():
+        assert {
+            tuple(c["column_names"]) for c in schema.get_unique_constraints(table)
+        } >= uniqueness
+    command.downgrade(config, "b17_workflows_0001")
+    assert set(inspect(engine).get_table_names()) == previous
+    with engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT * FROM projects").one() == project
+        assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
 
 
 def _create_project(engine: Engine) -> None:

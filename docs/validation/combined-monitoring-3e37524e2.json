@@ -1,0 +1,307 @@
+{
+  "source": "3e37524e28c4b7dde8ffbe203120d3b8e7fe2ee9",
+  "tree": "d1b2bb12844d5f7ab7f0c72d3c58f5cd5de07ede",
+  "version": "1.7.0",
+  "schema": "b17_monitor_0003",
+  "surface": "Source browser and real loopback desktop worker on Windows",
+  "schedule_purposes": [
+    {
+      "purpose": "acquisition",
+      "project_id": "87b4b09b-bf8e-4081-a75c-9dbeb830b0af",
+      "graph_sha256": "dff954d573ceb76dae83341c172b9abee9e8c50272be8958b25700f0c2a1d67d",
+      "inputs_sha256": "02b1c5f4cfa69a0132ba2173991ac57663056a0dc629c4441487a5b4de75def9",
+      "schedule_id": "79ff561e-4343-4abc-a2ce-886f6581d6e1",
+      "occurrence_id": "616dbb51-4714-4bae-9af7-eda390d6908c",
+      "job_id": "ac3a4336-e08a-4903-a62d-969decf736f9",
+      "workflow_run_id": "3819ede6-f424-4949-8149-a2c22e7e3f95",
+      "output_type": "field_capture_reconciliation",
+      "output_sha256": "1369097ecd21cd672cf66b5dc8a947efa6ff7ea5c7bfc0d8a0e343216531c125"
+    },
+    {
+      "purpose": "inference",
+      "project_id": "01f78c86-5b4b-4416-9ff5-a6fa99bd9412",
+      "graph_sha256": "948a8e192919102a4168a3eb1a5f0b4bc525fb68a23ab7a1479bb62ea43af987",
+      "inputs_sha256": "81746ec9abdbbf9cd096cdd90a693028535c923a248d6ea7227fc850528a2001",
+      "schedule_id": "de705810-c2ee-4f97-96ac-d7ad3eebec8f",
+      "occurrence_id": "48e01771-3a6a-4c19-96ca-88397576c79b",
+      "job_id": "23115072-0c59-4d62-8bed-57ecfcda5d40",
+      "workflow_run_id": "8c1af58e-981a-4973-ab8d-13472124285b",
+      "output_type": "detection_proposals",
+      "output_sha256": "dda3e26424d94c82d1dc04e8737b98c60410d93464d97890c45eb3747bc0bcf2"
+    },
+    {
+      "purpose": "qc",
+      "project_id": "89a257a8-8ff9-4534-af2d-e5eee73bf66f",
+      "graph_sha256": "2b256b0b340dd34c711c740fbf1510fc9d060bb023f252035ce35e9567ff67b3",
+      "inputs_sha256": "b21dee6f4a8b6b9000d68a43d5557b625df30cbf26750cffe5d6f81207fa7994",
+      "schedule_id": "78feb98a-9abd-4c5c-95a9-e58fd8209038",
+      "occurrence_id": "6dea5a83-925d-4cc3-86cb-c4f8eea4f7c9",
+      "job_id": "6d862c2b-edda-4a6e-8b0b-2a515b9305c2",
+      "workflow_run_id": "eaddabda-b01f-42c3-93af-75aee127cefe",
+      "output_type": "review_queue_reference",
+      "output_sha256": "e4fa14eaf9398be58346a983d9641a4738cf1798a0a23ef94c5cc2f2804a9b2d"
+    },
+    {
+      "purpose": "report",
+      "project_id": "01abdfab-3bb7-4338-8729-096f0397308b",
+      "graph_sha256": "9675c56e94123d634039942a5f8da44a52eee3dcd8a6efa4d783c78c600310e7",
+      "inputs_sha256": "0ac7a46333d2a9f045d86f38585166b41072ffc8b5f8f8784bf0a76f68742d33",
+      "schedule_id": "a578e831-fe8f-4886-bf3c-6713dcf86ff8",
+      "occurrence_id": "c1d81dec-0d58-48e8-9020-27729e99e203",
+      "job_id": "131d895a-8805-4f15-ba52-214da8723706",
+      "workflow_run_id": "bc0d7d2b-09e5-4168-8fd2-9223d43a0d7b",
+      "output_type": "reviewed_ecology_event_summary",
+      "output_sha256": "cecf535332a6bbdc733ed14979346dbbe51a72594d0dd3343aec53a136a62155"
+    }
+  ],
+  "system_status_recovery": [
+    {
+      "source": "dev",
+      "backup_id": "b09880e9-8016-4082-86c8-db6d622c82fb",
+      "restore_job_id": "f29fa5eb-9cd0-44b9-aba3-dbe2d9949953",
+      "verified_files": 9,
+      "database_sha256_before_reopen": "15f1677ad2708499be9da5277b82880baeb15db3fc3d1ec4283b09497043ce19",
+      "reopened_project_count": 2,
+      "reopened_records": [
+        [
+          "2a300619-d6ce-4cc5-bed8-a0564d6b1308",
+          "05b1b3e3-2ec8-4c0d-9510-66d38f2ae091",
+          "a3f1a93c-3699-4082-9b0d-539c0037bf72",
+          "848a358f609d4cacc0e5f940c98e23830625298da9c580cbfc94827b64575fab"
+        ],
+        [
+          "2a300619-d6ce-4cc5-bed8-a0564d6b1308",
+          "05b1b3e3-2ec8-4c0d-9510-66d38f2ae091",
+          "89fc418c-d171-43d3-aad1-914d9394c496",
+          "765cec957a248556a71bf5f0561784c793adeda489b0c3caaa1967631bde971c"
+        ],
+        [
+          "2a300619-d6ce-4cc5-bed8-a0564d6b1308",
+          "f6b338af-d634-4acf-a81c-02e8824513dd",
+          "8a57963b-aa5e-4fb4-94ce-970feb7e2099",
+          "d6fb9bc5be0f8a6751a0b2d6161fa616b598cfa7e236fd879ffa70319451d696"
+        ]
+      ],
+      "table_counts": {
+        "acquisition_sources": 3,
+        "acquisition_captures": 3,
+        "workflow_schedules": 1,
+        "workflow_schedule_occurrences": 1
+      }
+    },
+    {
+      "source": "mon",
+      "backup_id": "14d33561-c350-4441-870a-d24572cb60f0",
+      "restore_job_id": "a0fe4021-18b0-4ce1-b6f8-9d5262817e00",
+      "verified_files": 6,
+      "database_sha256_before_reopen": "069daddfd82adf687de198f1d57181fa9411578c5f2ac271c99d0dec37ceb46f",
+      "reopened_project_count": 4,
+      "reopened_records": [
+        [
+          "02f8c0e6-12f0-4255-a5ec-c3696689a146",
+          "4c5e67ea-f121-46b6-8bb6-41cade4a102e",
+          "91384f957293b388a9e71ed3fb6a7ac5ce758efa337348c95fe8df61e06a674e"
+        ]
+      ],
+      "table_counts": {
+        "monitoring_rules": 3,
+        "monitoring_assessments": 3,
+        "monitoring_alerts": 4,
+        "monitoring_alert_reviews": 4,
+        "monitoring_project_summaries": 1
+      }
+    }
+  ],
+  "test_groups": {
+    "combined-archive-d": {
+      "passed": 179,
+      "skipped": 2
+    },
+    "pose-exchange-optin": {
+      "passed": 26
+    },
+    "installed-ready-tests": {
+      "passed": 27
+    }
+  },
+  "portable_browser_cases": {
+    "scheduled_jobs": 4,
+    "system_status_backup_and_restore": 2
+  },
+  "frontend": {
+    "files": 140,
+    "passed": 920,
+    "node": "v22.23.5",
+    "commands": {
+      "dependencies": {
+        "exit_code": 0,
+        "seconds": 4.191
+      },
+      "prettier": {
+        "exit_code": 0,
+        "seconds": 9.111
+      },
+      "typecheck": {
+        "exit_code": 0,
+        "seconds": 10.693
+      },
+      "vitest": {
+        "exit_code": 0,
+        "seconds": 40.699
+      },
+      "production-build": {
+        "exit_code": 0,
+        "seconds": 14.431
+      }
+    }
+  },
+  "scope_notes": [
+    "The focused transfer group ran on the integrated working source during assembly. Its two opt-in cases passed when enabled explicitly on the combined source.",
+    "Fixture-based full-profile restore preserved the existing local IDs and scientific history. Project Exchange is a separate transfer operation with new local project and row identities.",
+    "The registered installer and original cabinets have their own source-bound qualification."
+  ],
+  "registered_installer_workflow": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44827326113",
+  "general_ci": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44827326046",
+  "scientific_ci": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44827326030",
+  "owner_directory": "candidate-review/1.7/checkpoints/3e37524e2/source/product-journeys",
+  "files_sha256": {
+    "acquisition-result.json": "84807014d7bf9cf71b1dbc0a8a7259b18a734e6a15e0eec5dac372ef11b9bd5c",
+    "acquisition-navigation.json": "68a0c776db23e9235bf5f408ba4f085fdb532d0d568436ab61b2fe960f87ae54",
+    "inference-result.json": "0323d463766feb773e5ee43be634652d5a85b1eac4499246f5c47d09aab45003",
+    "inference-navigation.json": "b00c52752072bac1608c965d755466d00c259dd840cf721b4326068c6030c972",
+    "qc-result.json": "fd2b9508f2c1e6c805872ff574326aadb849a19a6fa52aacbf9d40ed2acd1a3f",
+    "qc-navigation.json": "27696c361840d611fd3b20ec1c02d9b52e9828cc1195f9535f686abdbdcd0e21",
+    "report-result.json": "08986bd0cc218296a52c0fb6eeff34489d360abda37283849c5025b54a748ce7",
+    "report-navigation.json": "6ac528dd330057242d57562679c56d4c65b884fc0f1f70a17a172de0a48d1ec5",
+    "dev-backup-ui.json": "d4c3373fe0ed2f5157e3da32aee40cf9074a99f04e549f232851ee3456cbca34",
+    "dev-backup-reopen.json": "a46bc6c74f312300bcb1681fd02fe2806663a14bb6455dd439f38c1348e8bb99",
+    "mon-backup-ui.json": "0284005499c0f6dfe25d61fb66311a50a15d202ff6a3c3c294e0f3ed355af59a",
+    "mon-backup-reopen.json": "0788859e0c5dca7ac16cc437119a881532453f2f080508d7ec45212150953587",
+    "combined-archive-d.xml": "fe3eb89809c1cbf848b7c4b3d3c57a6270fcce91de1c3db0975d366c0b2d530f",
+    "pose-exchange-optin.xml": "67b02b0986f6ecf58b765c6723cec66ceeba452ddac1344947c369b17152e55f",
+    "installed-ready-tests.xml": "394dcf8f45b87249187516225b376a8025e15b9d28628d026fd2d43e31a1e69e",
+    "frontend-commands.json": "4a7d3f3fb81670d1d3058ac5bb19c51197dae46eb6186b47c7291898e72ee36e",
+    "frontend-vitest.json": "9813e2ed51b80ebba9ee0e3e780e8da6d83b9aa2a02450b8f8d977aff1ef96ae",
+    "combined-hosted-harness.log": "7221daf4105d113d28370dd585750f83a2fad76e9205586250904465dbf03653",
+    "combined-bridge-types.log": "6501b43c7207c83d9f86a56eb1ca66ebf6e50ff1ce14b7a0640f1b79638f3ce6",
+    "restored-monitoring-desktop.json": "8ce37aff067ecd13f360f1a4db6bdb6ad3eaf1e70c21362b1b947b493485dae4",
+    "original_export.json": "de33bc5402e4953c2c44434d3a18ad5a4f9a2fa8be08e8ec6da17ee364b09faf",
+    "restored_export.json": "3dfb56bdc6cd06e94e21af1333e30e69beb23d6b5680da729dce26a94e5c38bf",
+    "screenshot.png": "0890e966aa47e48cef7a299f30926fbce5dd1f98a81834ea198f4e9ce0a8f30a",
+    "full-migration.json": "c08c72f1a4c38ece74d713e127169de3769f3bda959635bb2aef923d6c82fd76",
+    "earlier-package-readers.json": "a9d4151a8c55689542aaf69fa78dfbfc66ab52a416a9aafd28b57bf6ca1f6023"
+  },
+  "normal_desktop_exchange": {
+    "archive": {
+      "path": "attempt-2/monitoring-exchange.reefvision.zip",
+      "sha256": "12884851a5512f5f10b855b28b2f891adbf6e89c084072bff4b0ef05cf9c94df"
+    },
+    "original_export": {
+      "path": "attempt-2/original-summary.json",
+      "sha256": "de33bc5402e4953c2c44434d3a18ad5a4f9a2fa8be08e8ec6da17ee364b09faf"
+    },
+    "restored_export": {
+      "path": "attempt-2/restored-summary.json",
+      "sha256": "3dfb56bdc6cd06e94e21af1333e30e69beb23d6b5680da729dce26a94e5c38bf"
+    },
+    "frozen_comparison_sha256": "91384f957293b388a9e71ed3fb6a7ac5ce758efa337348c95fe8df61e06a674e",
+    "historical_project_ids": [
+      "02f8c0e6-12f0-4255-a5ec-c3696689a146",
+      "b3f376df-16c1-4105-9682-3add1abd9914",
+      "f65cbb59-9814-4ea4-b971-16023ebeb081"
+    ],
+    "export_difference": "Only owning project ID and summary row ID were changed.",
+    "both_exports_repeat_byte_identical": true,
+    "frozen_snapshot_byte_identical_between_projects": true,
+    "receipt": "restored-monitoring-desktop.json"
+  },
+  "alembic": {
+    "sequence": [
+      "upgrade head",
+      "downgrade base",
+      "upgrade head"
+    ],
+    "states": [
+      {
+        "schema": "b17_monitor_0003",
+        "table_count": 119,
+        "tables_sha256": "426a228b9b7f3fd023ba9a4366cf94687b052099fab6f001409215aae95cd89b"
+      },
+      {
+        "schema": null,
+        "table_count": 1,
+        "tables_sha256": "684682839594810fcd1931c9efbdae5bce9afec15d39753a0b3354afe94a5ce5"
+      },
+      {
+        "schema": "b17_monitor_0003",
+        "table_count": 119,
+        "tables_sha256": "426a228b9b7f3fd023ba9a4366cf94687b052099fab6f001409215aae95cd89b"
+      }
+    ]
+  },
+  "predecessor_confirmation": {
+    "registered_scheduler_source": "e60ed5503451991316b831aab7a3841afa8705f7",
+    "ci_backend": {
+      "job": 136560227890,
+      "passed": 5946,
+      "skipped": 11
+    },
+    "scientific_backend": {
+      "job": 136560228057,
+      "passed": 5939,
+      "skipped": 18,
+      "additional_focused_cases": 126
+    },
+    "original_frontend": {
+      "ordinary_job": 136560227843,
+      "outcome": "Two expectations failed on the original source."
+    },
+    "reconciled_ci": {
+      "run": 44819064329,
+      "head": "12e323d80c7c5f98d009734bb794ba6a96c76f6c",
+      "backend_job": 136574907852,
+      "passed": 5964,
+      "skipped": 11,
+      "frontend_job": 136574907908,
+      "frontend": "success"
+    }
+  },
+  "older_installers_reading_combined_exchange": [
+    {
+      "source": "3a9ce1622e4f9e230e2ee14432ee7d2f32510870",
+      "package_msi_sha256": "3b596ee3ba5e9188776cd3208245c277a72013877677c9a16e359ee6da04c3be",
+      "version": "1.6.0",
+      "schema": "b16_integrated_0001",
+      "ordinary_project_id": "acdcb856-a965-437b-89ae-8f3aeb225d44",
+      "archive_format": "1.7.1",
+      "archive_sha256": "12884851a5512f5f10b855b28b2f891adbf6e89c084072bff4b0ef05cf9c94df",
+      "inspection_errors": [
+        "Unsupported exchange format version"
+      ],
+      "import_status": 400,
+      "import_error": {
+        "detail": "Exchange package failed inspection: Unsupported exchange format version"
+      },
+      "preserved_tables": 109,
+      "managed_files_unchanged": true
+    },
+    {
+      "source": "e60ed5503451991316b831aab7a3841afa8705f7",
+      "package_msi_sha256": "60d3824e8fda5ddefba339603e73f191b8769efccfd6ab2b882196b35f8b4034",
+      "version": "1.7.0",
+      "schema": "b17_workflows_0001",
+      "ordinary_project_id": "e87dc9e9-958c-464b-a10c-cbb6caf2a84d",
+      "archive_format": "1.7.1",
+      "archive_sha256": "12884851a5512f5f10b855b28b2f891adbf6e89c084072bff4b0ef05cf9c94df",
+      "inspection_errors": [
+        "Unsupported exchange format version"
+      ],
+      "import_status": 400,
+      "import_error": {
+        "detail": "Exchange package failed inspection: Unsupported exchange format version"
+      },
+      "preserved_tables": 111,
+      "managed_files_unchanged": true
+    }
+  ]
+}

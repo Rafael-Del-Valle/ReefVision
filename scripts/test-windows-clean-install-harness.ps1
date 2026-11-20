@@ -6,6 +6,7 @@ $Root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'lib\windows-spatial-webview2-acceptance.ps1')
 . (Join-Path $PSScriptRoot 'lib\windows-standard-user-webview2.ps1')
 . (Join-Path $PSScriptRoot 'lib\windows-scheduler-webview2-acceptance.ps1')
+. (Join-Path $PSScriptRoot 'lib\windows-monitoring-webview2-acceptance.ps1')
 
 $passed = 0
 function Assert-True([bool]$Condition, [string]$Message) {
@@ -17,6 +18,72 @@ function Assert-Throws([scriptblock]$Action, [string]$Message) {
         if ($_.Exception.Message -like 'Expected failure:*') { throw }
     }
     $script:passed++
+}
+
+& {
+    $sha = 'a' * 64
+    $capture = @{
+        surface='tauri-webview2'; version='1.7.0'; schema='b17_monitor_0003'; project_id='fixture-a'
+        disconnected_cursor=1; simulated_source_id='sim-fixture'; occurrence_id='slot-fixture'
+        camera_consent_cancelled_without_capture=$true; replay_digests=@($sha,$sha)
+        recorded=@(
+            @{content_sha256=$sha;receipt=@{project_id='fixture-a';source_kind='recorded';source_id='recorded';ordinal=0
+                media=@{sha256=$sha;field_batch_id='batch';field_batch_sha256=$sha}
+                time=@{captured_at_utc='2025-08-02T22:05:06Z';uncertainty_seconds=$null}}}
+            @{content_sha256=('b' * 64);receipt=@{project_id='fixture-a';source_kind='recorded';source_id='recorded';ordinal=1
+                media=@{sha256=('d' * 64);field_batch_id='batch';field_batch_sha256=$sha}
+                time=@{captured_at_utc=$null;uncertainty_seconds=$null;clock=@{state='unknown'}}}}
+        )
+        capture_artifact=@{data_type='acquisition_capture_receipt';payload_sha256=$sha;workflow_run_id='worker-run';payload_json=@{receipt=@{
+            project_id='fixture-a';source_id='sim-fixture';source_kind='simulated'
+            dispatch=@{kind='schedule';occurrence_id='slot-fixture';workflow_run_id='worker-run'}
+            synthetic_reading=@{unit='synthetic arbitrary units'}
+        }}}
+    }
+    $monitoring = @{
+        surface='tauri-webview2';version='1.7.0';schema='b17_monitor_0003';generated_fixture=$true
+        export_sha256=$sha
+        assessments=@(
+            @{project_id='study-a';id='assessment-a';evidence_sha256=$sha;result_sha256=$sha
+              effort=@{accepted_observations=4;observed_slots=4;expected_slots=5}}
+            @{project_id='study-b';id='assessment-b';evidence_sha256=$sha;result_sha256=$sha
+              effort=@{accepted_observations=5;observed_slots=5;expected_slots=5}}
+            @{project_id='study-c';id='assessment-c';evidence_sha256=$sha;result_sha256=$sha
+              effort=@{accepted_observations=4;observed_slots=4;expected_slots=4}}
+        )
+        findings=@(
+            @{id='drop';kind='drop';proposal_sha256=$sha}
+            @{id='delay';kind='delay';proposal_sha256=$sha}
+            @{id='drift';kind='drift';proposal_sha256=$sha}
+            @{id='upper';kind='upper_limit';proposal_sha256=$sha}
+        )
+        reviews=@(
+            @{alert_id='drop';project_id='study-a';decision='confirmed';reviewer='fixture';reason='Fixture reviewed';revision=1}
+            @{alert_id='delay';project_id='study-a';decision='dismissed';reviewer='fixture';reason='Fixture reviewed';revision=1}
+            @{alert_id='drift';project_id='study-a';decision='dismissed';reviewer='fixture';reason='Fixture reviewed';revision=1}
+            @{alert_id='upper';project_id='study-a';decision='dismissed';reviewer='fixture';reason='Fixture reviewed';revision=1}
+        )
+        summary=@{id='summary';content_sha256=$sha;project_rows=@(
+            @{project_id='study-a';status='included';reasons=@()}
+            @{project_id='study-b';status='included';reasons=@()}
+            @{project_id='study-c';status='excluded';reasons=@('The UTC observation windows differ.')}
+        )}
+        assessment_replays=@(@{id='run-1';payloadSha256=$sha},@{id='run-2';payloadSha256=$sha})
+        summary_replays=@(@{id='run-3';payloadSha256=$sha},@{id='run-4';payloadSha256=$sha})
+    }
+    Assert-ReefVisionInstalledMonitoringResults -Acquisition $capture -Monitoring $monitoring -Version '1.7.0' -Revision 'b17_monitor_0003'
+    Assert-True $true 'Generated recorded, simulated and monitoring receipts should validate together.'
+    $capture.recorded[1].receipt.time.captured_at_utc = '2025-08-02T22:05:07Z'
+    Assert-Throws { Assert-ReefVisionInstalledMonitoringResults $capture $monitoring '1.7.0' 'b17_monitor_0003' } 'An invented reconnect clock must not qualify.'
+    $capture.recorded[1].receipt.time.captured_at_utc = $null
+    $capture.capture_artifact.payload_json.receipt.dispatch.workflow_run_id = 'unrelated-run'
+    Assert-Throws { Assert-ReefVisionInstalledMonitoringResults $capture $monitoring '1.7.0' 'b17_monitor_0003' } 'The scheduled simulator must name the artifact parent run.'
+    $capture.capture_artifact.payload_json.receipt.dispatch.workflow_run_id = 'worker-run'
+    $monitoring.summary.project_rows[2].status = 'included'
+    Assert-Throws { Assert-ReefVisionInstalledMonitoringResults $capture $monitoring '1.7.0' 'b17_monitor_0003' } 'An incompatible project must stay excluded.'
+    $monitoring.summary.project_rows[2].status = 'excluded'
+    $monitoring.summary_replays[1].payloadSha256 = 'c' * 64
+    Assert-Throws { Assert-ReefVisionInstalledMonitoringResults $capture $monitoring '1.7.0' 'b17_monitor_0003' } 'A differing replay must not qualify.'
 }
 
 $slot = [datetimeoffset]'2026-11-20T15:00:10Z'
@@ -41,7 +108,7 @@ Assert-Throws { Get-ReefVisionScheduleRestartTime $clockWitness $slot.AddSeconds
     Assert-Throws {
         Get-ReefVisionInstalledScheduleBackend -Port 9876 -DesktopProcessId 1200 `
             -BrowserSid 'fixture-sid' -BackendExecutable 'C:\installed\reefvision-api.exe' `
-            -Profile 'C:\isolated\scheduled' -Version '1.7.0' -Revision 'b17_workflows_0001'
+            -Profile 'C:\isolated\scheduled' -Version '1.7.0' -Revision 'b17_monitor_0003'
     } 'An unrelated loopback listener cannot enter the scheduler fixture.'
     Assert-True (-not $script:unexpectedScheduleApiCall) 'The unrelated scheduler listener received a probe before being bound to the MSI.'
 }
@@ -67,18 +134,18 @@ Assert-Throws { Get-ReefVisionScheduleRestartTime $clockWitness $slot.AddSeconds
     function Invoke-RestMethod($Uri, [switch]$NoProxy, $TimeoutSec) {
         if ($Uri -like '*/system/version') {
             return [pscustomobject]@{
-                application_version=$expectedVersion; current_schema_revision='b17_workflows_0001'
+                application_version=$expectedVersion; current_schema_revision='b17_monitor_0003'
                 data_dir=$observedProfile; database_path=(Join-Path $observedProfile 'reefvision.db')
             }
         }
         if ($Uri -like '*/system/migrations/status') {
-            return [pscustomobject]@{ schema_status='up_to_date';current_schema_revision='b17_workflows_0001' }
+            return [pscustomobject]@{ schema_status='up_to_date';current_schema_revision='b17_monitor_0003' }
         }
         throw 'Unexpected schedule identity probe.'
     }
     $pins = @{
         Port=9876; DesktopProcessId=1200; BrowserSid='fixture-sid'; BackendExecutable=$expectedExe
-        Profile=$expectedProfile; Version='1.7.0'; Revision='b17_workflows_0001'
+        Profile=$expectedProfile; Version='1.7.0'; Revision='b17_monitor_0003'
     }
     $observed = Get-ReefVisionInstalledScheduleBackend @pins
     Assert-True ($observed.exact_profile_verified -and $observed.pid -eq 4321) 'Schedule backend must verify both process and marked profile before use.'
@@ -571,6 +638,11 @@ $nodeDiscoveryIndex = $desktopWorkflow.IndexOf($nodeDiscovery)
 Assert-True ($nodeDiscoveryIndex -ge 0) 'Packaged Playwright must discover a single executable through the Windows Node helper.'
 $cleanInstallStep = $desktopWorkflow.Substring($nodeDiscoveryIndex)
 Assert-True ($cleanInstallStep.IndexOf('$env:PATH = @(') -gt 0) 'Playwright must capture the absolute Node path before the application PATH is restricted.'
+Assert-True ($cleanInstallStep.Contains('-ScheduleWorkflowAcceptance -MonitoringWorkflowAcceptance')) 'The clean role must run monitoring as well as the existing scheduler restart phases.'
+foreach ($monitoringArtifact in @('monitoring-workflow-evidence.json','monitoring-playwright.json',
+    'monitoring-playwright/**/acquisition-source-evidence.json','monitoring-playwright/**/monitoring-proof.json')) {
+    Assert-True ($cleanInstallStep.Contains(".artifacts/windows-clean-acceptance-*/$monitoringArtifact")) "Missing installed evidence retention for $monitoringArtifact."
+}
 
 $nodeFixtureRoot = Join-Path $env:TEMP ('reefvision-node-selection-' + [guid]::NewGuid().ToString('N'))
 $firstNodeFolder = Join-Path $nodeFixtureRoot 'first'

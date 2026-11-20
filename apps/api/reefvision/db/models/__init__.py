@@ -1,5 +1,6 @@
 """Database model exports."""
 
+from reefvision.db.models.acquisition_source import AcquisitionCapture, AcquisitionSource
 from reefvision.db.models.active_learning_round import ActiveLearningRound
 from reefvision.db.models.annotation import Annotation
 from reefvision.db.models.annotation_event import AnnotationEvent
@@ -56,6 +57,13 @@ from reefvision.db.models.mask_annotation import MaskAnnotation
 from reefvision.db.models.mask_annotation_event import MaskAnnotationEvent
 from reefvision.db.models.model_registration import ModelRegistration
 from reefvision.db.models.model_runtime_selection import ModelRuntimeSelection
+from reefvision.db.models.monitoring import (
+    MonitoringAlert,
+    MonitoringAlertReview,
+    MonitoringAssessment,
+    MonitoringProjectSummary,
+    MonitoringRule,
+)
 from reefvision.db.models.pose_active_learning import (
     PoseActiveLearningCandidate,
     PoseActiveLearningRound,
@@ -148,6 +156,8 @@ from reefvision.db.models.workflow_execution import (
 from reefvision.db.models.workflow_schedule import WorkflowSchedule, WorkflowScheduleOccurrence
 
 __all__ = [
+    "AcquisitionCapture",
+    "AcquisitionSource",
     "ActiveLearningRound",
     "Annotation",
     "AnnotationEvent",
@@ -193,6 +203,11 @@ __all__ = [
     "MaskAnnotationEvent",
     "ModelRegistration",
     "ModelRuntimeSelection",
+    "MonitoringAlert",
+    "MonitoringAlertReview",
+    "MonitoringAssessment",
+    "MonitoringProjectSummary",
+    "MonitoringRule",
     "PoseActiveLearningCandidate",
     "PoseActiveLearningRound",
     "PoseAnimalIdentity",

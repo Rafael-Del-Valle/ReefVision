@@ -484,6 +484,10 @@ function GalleryContent({
   );
   const activeThumbnail = useRef<HTMLButtonElement | null>(null);
   const filmstripRef = useRef<HTMLDivElement | null>(null);
+  const thumbnailPoll = useRef<{
+    pendingKey: string;
+    firstLoad: number;
+  } | null>(null);
   const [page, setPage] = useState(initialPreference.current.page);
   const [pageDraft, setPageDraft] = useState(
     String(initialPreference.current.page),
@@ -525,11 +529,31 @@ function GalleryContent({
 
   const images = useQuery<ImagePage>({
     queryKey: ["images", project.id, page, filters, sortBy],
-    refetchInterval: (query) =>
-      galleryPendingThumbnailRefetchMs(
-        query.state.data,
-        query.state.dataUpdateCount,
-      ),
+    refetchInterval: (query) => {
+      const { data, dataUpdateCount, error } = query.state;
+      if (error !== null) return false;
+      const pending = data?.items
+        .filter((item) => !item.thumbnail_path)
+        .map((item) => item.id)
+        .sort();
+      if (!pending?.length) {
+        thumbnailPoll.current = null;
+        return false;
+      }
+      // A different set of pending assets gets its own bounded refresh window.
+      const pendingKey = JSON.stringify([query.queryHash, pending]);
+      const previous = thumbnailPoll.current;
+      const firstLoad =
+        previous?.pendingKey === pendingKey &&
+        dataUpdateCount >= previous.firstLoad
+          ? previous.firstLoad
+          : dataUpdateCount;
+      thumbnailPoll.current = { pendingKey, firstLoad };
+      return galleryPendingThumbnailRefetchMs(
+        data,
+        dataUpdateCount - firstLoad + 1,
+      );
+    },
     queryFn: ({ signal }) =>
       getImages(
         project.id,

@@ -53,6 +53,8 @@ import type {
 } from "./features/video/videoWorkspaceBridge";
 import { WorkflowGraphWorkspace } from "./features/workflow-graphs/WorkflowGraphWorkspace";
 import { WorkflowSchedulesWorkspace } from "./features/workflow-schedules/WorkflowSchedulesWorkspace";
+import { AcquisitionSourcesWorkspace } from "./features/acquisition-sources/AcquisitionSourcesWorkspace";
+import { MonitoringWorkspace } from "./features/monitoring/MonitoringWorkspace";
 import {
   EmptyState,
   ErrorState,
@@ -98,6 +100,7 @@ interface AnnotationLaunchState {
 type ProjectView =
   | "gallery"
   | "field_capture"
+  | "acquisition_sources"
   | "versions"
   | "interoperability"
   | "environmental_context"
@@ -105,6 +108,7 @@ type ProjectView =
   | "scientific_heatmaps"
   | "ecology"
   | "study_design"
+  | "monitoring"
   | "reproducibility"
   | "models"
   | "model_comparison"
@@ -238,6 +242,12 @@ const PROJECT_NAV_GROUPS: Array<{
     description: "Freeze the study design and review its evidence.",
     items: [
       {
+        id: "monitoring",
+        label: "Monitoring",
+        description:
+          "Assess observation windows, review alerts, and compare local projects.",
+      },
+      {
         id: "study_design",
         label: "Study design",
         description:
@@ -293,6 +303,12 @@ const PROJECT_NAV_GROUPS: Array<{
         label: "Workflow builder",
         description:
           "Visually connect typed analysis nodes, validate, save, and run.",
+      },
+      {
+        id: "acquisition_sources",
+        label: "Acquisition sources",
+        description:
+          "Capture observations from recordings, simulations, and approved local cameras.",
       },
       {
         id: "workflow_schedules",
@@ -1132,6 +1148,12 @@ function ReefVisionMainApp() {
             {activeView === "versions" && (
               <DatasetVersionsPanel project={selectedProject} />
             )}
+            {activeView === "acquisition_sources" && (
+              <AcquisitionSourcesWorkspace
+                key={selectedProject.id}
+                projectId={selectedProject.id}
+              />
+            )}
             {activeView === "field_capture" && (
               <FieldCaptureWorkspace
                 key={selectedProject.id}
@@ -1202,6 +1224,13 @@ function ReefVisionMainApp() {
                   setResearchGraph(graph);
                   setActiveView("workflows");
                 }}
+              />
+            )}
+            {activeView === "monitoring" && (
+              <MonitoringWorkspace
+                key={selectedProject.id}
+                projectId={selectedProject.id}
+                onOpenWorkflow={() => setActiveView("workflows")}
               />
             )}
             {activeView === "study_design" && (

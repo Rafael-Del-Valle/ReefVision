@@ -1,0 +1,781 @@
+{
+  "source": "3e37524e28c4b7dde8ffbe203120d3b8e7fe2ee9",
+  "version": "1.7.0",
+  "schema": "b17_monitor_0003",
+  "manufacturing": {
+    "run": 44827326113,
+    "job": 136603186182,
+    "msi_sha256": "90faf157f5dc8489d64f31f92c9b105471e24621bc732d96b91132763ef290cc",
+    "cabinet_count": 6,
+    "original_transport": [
+      {
+        "id": 14675634039,
+        "name": "ReefVision-1.7.0-RC-Installer-Part-1",
+        "size_bytes": 1658082969,
+        "sha256": "9ac7894015ad582c1ee176f5c9625029e09a95f1f9571326a48744dd076167e8"
+      },
+      {
+        "id": 14673874733,
+        "name": "ReefVision-1.7.0-RC-Installer-Part-2",
+        "size_bytes": 1313677121,
+        "sha256": "2c068357f342a612cc6f7ae0cc14048a8200096d24225f3d8cc09a09fadbb904"
+      }
+    ],
+    "files": [
+      {
+        "name": "ReefVision_1.7.0_x64_en-US.msi",
+        "size_bytes": 299216643,
+        "sha256": "90faf157f5dc8489d64f31f92c9b105471e24621bc732d96b91132763ef290cc"
+      },
+      {
+        "name": "rv1.cab",
+        "size_bytes": 489668463,
+        "sha256": "6f8e80e8adec37fd626dfeff3cd0930c19ea46618d7a004712823a8ba90a1681"
+      },
+      {
+        "name": "rv2.cab",
+        "size_bytes": 567465683,
+        "sha256": "ed43b9570aba8459a8d8df0449362a74f4118e1739d732b2b9f20b1ca82044d9"
+      },
+      {
+        "name": "rv3.cab",
+        "size_bytes": 301726873,
+        "sha256": "97d5abab733306ec632811df64cd89b9730669460ebda104ba0c123f12fa666f"
+      },
+      {
+        "name": "rv4.cab",
+        "size_bytes": 607783924,
+        "sha256": "b35c8f33bf68ebefe00b0b336618442a2cb0111dedf1ac0bf432e8c382127a55"
+      },
+      {
+        "name": "rv5.cab",
+        "size_bytes": 704919115,
+        "sha256": "a56f6d2a373017c417f596013fd93ae356d3719bbb0d417a74b64379dd86040c"
+      },
+      {
+        "name": "rv6.cab",
+        "size_bytes": 973742,
+        "sha256": "461951ca097fc0c13ffba49e7cf406dc89be7be1c45cfef0c766497967f953db"
+      }
+    ],
+    "provenance_sha256": "f751aa96ebdece355f7b25cdfaf6c0e8641c354c481efec434bb1b8235533bf3",
+    "verified_installer_folder": "candidate-review/1.7/checkpoints/3e37524e2/official/installer",
+    "windows_packaging_tests": {
+      "job": 136603186182,
+      "focused_backend_passed": 23,
+      "rust_passed": 8,
+      "rust_failed": 0
+    }
+  },
+  "native_desktop": {
+    "surface": "administrative-original-msi",
+    "runtime": "tauri-webview2",
+    "schema": "b17_monitor_0003",
+    "driver": "8b98324a5f97dd183c9ce11f55921578100252ea",
+    "tracked_driver_correction": "172b156bc961da1aca8c1aee86b9b8428c97fb7e",
+    "first_driver": {
+      "passed": 1,
+      "failed": 1,
+      "reason": "The monitoring reopen selector matched both its enclosing section and the saved-assessment combobox."
+    },
+    "corrected_driver": {
+      "passed": 2,
+      "failed": 0,
+      "duration_ms": 38052.751
+    },
+    "actual_camera_opened": false,
+    "simulated_capture_occurrence": "bb11fa71-e549-47d3-bf3a-bb5cc9ccd8a0",
+    "replay_sha256": [
+      "cc9804149706a16420629796d1101dd3832cf32a3337b4ae74a521a4e89258f8",
+      "cc9804149706a16420629796d1101dd3832cf32a3337b4ae74a521a4e89258f8"
+    ],
+    "biological_fixture": {
+      "project_id": "01abdfab-3bb7-4338-8729-096f0397308b",
+      "summary_id": "3ddb752d-04ca-4a7e-b0bd-14868908d0de",
+      "assessment_id": "892c3356-d395-4f73-9226-958ae104da27",
+      "result_sha256": "e77f81bbafb414c6a83b705e4740b570e5c89b644a02c1c710fc1c1b9dc6bb85",
+      "evidence_sha256": "c6eb79d9f5124e7742f3e0fcf7fba3fd4002e7d5c2dda81ce16b06d24eb3c262",
+      "method": "confirmed_events_per_valid_minute_by_dated_reviewed_session_v1",
+      "protocol_sha256": "10e28b858b7814021fb45e863251803726c58527d4474aec812c4dc0acf6e355",
+      "estimate": 12.76595744680851,
+      "unit": "events/min",
+      "effort": {
+        "expected_slots": null,
+        "observed_slots": null,
+        "accepted_observations": null,
+        "coverage_fraction": null,
+        "accepted_fraction": null,
+        "valid_duration_s": 4.7,
+        "confirmed_event_count": 1,
+        "accepted_sessions": 1
+      },
+      "video_sha256": "d6e4d6c7103ef3838d7c13531498d853d0ace6d2d8868812f1ad16c50614e482"
+    },
+    "evidence_digests": {
+      "acquisition-source-evidence.json": "907f8f79c08b3e80276f7719314250bd2553de785d36d4ca06e37aae5c1d3206",
+      "monitoring-proof.json": "8aee47b9d68bc04cc2df217b87c3e5b7bd5541d8917a866d1c1eb3525a35c94f",
+      "monitoring-playwright.json": "80e0584a3ab0b0bbae215626b0373eaec68249c3c3c0d77d2d6f0c51e57b2fb3"
+    }
+  },
+  "seven_project_upgrade_and_rollback": {
+    "old_package": "3a9ce1622e4f9e230e2ee14432ee7d2f32510870",
+    "old_msi_sha256": "3b596ee3ba5e9188776cd3208245c277a72013877677c9a16e359ee6da04c3be",
+    "current_msi_sha256": "90faf157f5dc8489d64f31f92c9b105471e24621bc732d96b91132763ef290cc",
+    "backup_sha256": "34ee59e313c9de63f5c5d4de032c2989defe7b64185aeaed1d641c02cebba1bd",
+    "backup_members": 38,
+    "project_count": 7,
+    "prior_tables": 109,
+    "prior_rows": 3214,
+    "original_managed_files": 31,
+    "added_tables": [
+      "acquisition_captures",
+      "acquisition_sources",
+      "monitoring_alert_reviews",
+      "monitoring_alerts",
+      "monitoring_assessments",
+      "monitoring_project_summaries",
+      "monitoring_rules",
+      "workflow_schedule_occurrences",
+      "workflow_schedules"
+    ],
+    "old_reader_refused": "ede768e67ea0850ae88ce54cf4ebaa6b499b3c768f0e458d7f8a81dd90853772",
+    "database_checksum_before_and_after_refusal": "197844c04ff562fb07e9006404f19f8d053268b1de8dc0e0c8b6b42ed4c2b8b8",
+    "old_schema_reopened": "b16_integrated_0001",
+    "writable_rollback_reopened": true
+  },
+  "retired_provider_audit": {
+    "counts": {
+      "distribution_metadata": 57,
+      "entry_point_files": 14,
+      "model_manifest_assets": 0,
+      "model_manifest_provider_assets": 0,
+      "msi_cab_files": 19147,
+      "pyinstaller_outer_entries": 14,
+      "pyinstaller_pyz_archives": 1,
+      "pyinstaller_pyz_entries": 12075,
+      "zip_containers": 1,
+      "zip_members": 155
+    },
+    "retired_vendor_findings": [],
+    "application_owned_historical_descriptor": [
+      "backend/reefvision-api/reefvision-api.exe :: PYZ.pyz :: reefvision.ml.sleap_nn_provider"
+    ]
+  },
+  "publisher_and_policy": {
+    "source": "3e37524e28c4b7dde8ffbe203120d3b8e7fe2ee9",
+    "workflow_run_id": 44827326113,
+    "observed_utc": "2026-11-20T22:43:23.3107781Z",
+    "edition": "Core",
+    "build": "26300",
+    "verified_and_reputable_policy_state": 0,
+    "signatures": [
+      {
+        "file": "ReefVision.exe",
+        "sha256": "ff006cd2594983f8839211fecd28b1008647bde5117da70835d4ec812111cbf2",
+        "status": "NotSigned",
+        "signer": null
+      },
+      {
+        "file": "reefvision-api.exe",
+        "sha256": "82961858248b453b15b1903a6cb112b04b2e28dc330f7de2ee1e7ca658b68461",
+        "status": "NotSigned",
+        "signer": null
+      },
+      {
+        "file": "ReefVision_1.7.0_x64_en-US.msi",
+        "sha256": "90faf157f5dc8489d64f31f92c9b105471e24621bc732d96b91132763ef290cc",
+        "status": "NotSigned",
+        "signer": null
+      }
+    ],
+    "enforcing_device_acceptance": "open"
+  },
+  "external_field_inputs": [
+    "Identified approved camera or sensor and supported protocol, a prepared recording scene, witness and independent clock for loss/reconnect.",
+    "Representative logger or dated biological observations, declared survey effort, independent ground truth and prespecified anomaly-review thresholds."
+  ],
+  "evidence_folder": "candidate-review/1.7/checkpoints/3e37524e2/official",
+  "evidence_files_sha256": {
+    "independent-package-validation.json": "18192b3140a9acb953cdb0d85e8452fd95176ff580901e625a664825151a9106",
+    "installer/SHA256SUMS.txt": "356d39d24b8d322f7e864d422a7de0b2e36cbb68e782775621d8f4d302ee3763",
+    "evidence/rich-direct-rollback/proof.json": "a80f478ce78dd6d8cfa7a2a127faa2805c05c05654197e496d9c07c0f2b06b66",
+    "evidence/retired-provider-audit/receipt.json": "dbe0d0c67a2b3b5321e4d451820c9988187793a6b76ac3c3f05d423533587741",
+    "evidence/smart-app-control.json": "39004a8c514871ec14cd064bb072372d593881d9fb6df422ad6354549d7d498d",
+    "evidence/native-combined/native-index.json": "006ae5b3792642d3548f9b83af2526403a76066481e9aa5885205b4c5b9e2b3d",
+    "evidence/native-combined/native-combined-evidence.json": "d3dfe82f8eb77830fe070ba9d1fcccb6f9ad0c4ba4567e3415ef9fedc9b62125",
+    "evidence/native-combined/monitoring-playwright.json": "80e0584a3ab0b0bbae215626b0373eaec68249c3c3c0d77d2d6f0c51e57b2fb3",
+    "evidence/native-combined/monitoring-proof.json": "8aee47b9d68bc04cc2df217b87c3e5b7bd5541d8917a866d1c1eb3525a35c94f",
+    "evidence/native-combined/acquisition-source-evidence.json": "907f8f79c08b3e80276f7719314250bd2553de785d36d4ca06e37aae5c1d3206",
+    "evidence/native-combined/native-closure.json": "cfb0eef09b791fd754b928ec01586f974512ecbc5777364b10399e692936d7e2",
+    "evidence/native-original-comparison/summary.json": "770359254ec1238c952350ece39de52970b0a75100cd7cc71a6e7a58e5969d0a"
+  },
+  "registered_offline_install_and_recovery": {
+    "first_attempt": {
+      "run": 44827891656,
+      "job": 136605044108,
+      "result": "FAIL",
+      "duration_seconds": 202.3819409,
+      "control_counts": {
+        "ordinary": 510,
+        "system": 509
+      },
+      "maximum_control_gap_seconds": {
+        "ordinary": 7.9572375,
+        "system": 8.3009876
+      },
+      "artifact": {
+        "id": 14675977583,
+        "sha256": "903c9998876c0b33ccc4a274dbd9b603539020d5bae259bfdd11091a7f033466",
+        "retained_members": 14
+      },
+      "error": "The real ordinary-account and SYSTEM TCP control did not establish expected online=True.",
+      "raw_report_sha256": "caa2269bdfe97091901bf67f514a9213f77dcd763f9a00adae79dd5552b0c578",
+      "index_sha256": "b2edae9661e523774204abe710961d24a03b579cd2fcbcfc0c47c842fb2c8cce"
+    },
+    "corrected_reconnect_controls": {
+      "run": 44832181000,
+      "job": 136619580978,
+      "result": "PASS",
+      "duration_seconds": 138.2404184,
+      "control_counts": {
+        "ordinary": 346,
+        "system": 343
+      },
+      "maximum_control_gap_seconds": {
+        "ordinary": 6.3110362,
+        "system": 6.3110362
+      },
+      "artifact": {
+        "id": 14677162845,
+        "sha256": "5f027b1c61a921af43921c38587cb80fb521b0641ec5fc783fcd3fec95159e38",
+        "retained_members": 18
+      },
+      "error": null,
+      "raw_report_sha256": "e5419fb4df67be4c78d206b58ff98690be978ca744df651ce1e6b8227d75f6d4",
+      "index_sha256": "1ea62499b499455b4c4da02def7a56625198c57b5f84106483107838e80d681c",
+      "independent_reconnect_principals": [
+        "ordinary",
+        "SYSTEM"
+      ],
+      "retained_review_source_sha256": "11da437ad33072b11627e77994f869a1f92c4c0b94e0b64f920567853ff0674b",
+      "uninstall_exit_code": 0
+    }
+  },
+  "native_scheduled_inference": {
+    "cuda": {
+      "source_sha256": "364e80c96eb96eaed8592124a45079a0c91a3ea7fbf3ab7a55e4734767953313",
+      "surface": "GitHub Actions original MSI administrative image, physical Windows Tauri WebView2 and frozen PyInstaller sidecar",
+      "device": {
+        "gpu_name": "NVIDIA GeForce RTX 3090",
+        "index": 0,
+        "driver_version": "617.42",
+        "before_memory_mib_used": 1102,
+        "before_memory_mib_free": 23221,
+        "before_utilization_percent": 15,
+        "before_visible_compute_pids": 18,
+        "exact_backend_cuda_pid_sampled": true
+      },
+      "frozen_manifest": {
+        "id": "829643c6-acaa-46df-8f09-6ce01e4c590c",
+        "project_id": "01f78c86-5b4b-4416-9ff5-a6fa99bd9412",
+        "status": "complete",
+        "manifest_sha256": "5aa2015f6cc3b7aebdbd61d25ebbe8c76ad5f02b4372183a4c941fcda947d510"
+      },
+      "images_by_split": {
+        "train": 4,
+        "validation": 2
+      },
+      "model": {
+        "id": "225fc21f-252e-471c-b937-76531e5bd510",
+        "sha256": "ce1350906e6b5be22887aef99f748f4bb1442db17309e063572d3f5cd92c2782",
+        "source_training_run_id": "04864a1b-66af-4713-a80d-f167ab492eee"
+      },
+      "graph_sha256": "8e522b6eae6e2d328e8e400e8849bf3209e6c5ee8cf3e27c62db2f9ab09a47d6",
+      "occurrence_id": "b885a51d-e12f-44d9-add0-4f8a4e4c5ca6",
+      "workflow_run_id": "1d0fced3-0c74-41cf-9ba2-a413b3e8286a",
+      "inference_job": "685f44e8-cec7-4459-b4ca-93f873b8070e",
+      "pending_proposals": 19,
+      "verified_annotation_count": 7,
+      "typed_artifact_hashes": [
+        {
+          "id": "0a4a4d20-bdbe-4239-be5f-0203782ad18d",
+          "data_type": "dataset_version",
+          "sha256": "d6e02be6e4b24287f3e2f41b402d8597623e3f348b47c83cd39f1683347faa94"
+        },
+        {
+          "id": "7d5f76a6-31a4-412f-bcdc-f3f5552cd2f2",
+          "data_type": "image_collection",
+          "sha256": "fc9155968bf1c2507b007153f500133a3c6bb677215562d80dd85893a26c8adb"
+        },
+        {
+          "id": "3e6f54e9-c094-4b76-8a66-c2644d05fedf",
+          "data_type": "reviewed_model_reference",
+          "sha256": "07a0762eff8fd598193e36bde4e48e2d087142fc9588c3131c4a0962b2d9a584"
+        },
+        {
+          "id": "6708d531-0ed6-45cf-8cda-5441e25a085d",
+          "data_type": "detection_proposals",
+          "sha256": "85aa1193418cc95065b2f056991d7705bf88df24abc6a5cd1ece8a01bc01362e"
+        }
+      ]
+    },
+    "unavailable_checkpoint": {
+      "source_sha256": "4a8fda1d6807773e03141f6a065219f98a12a1204793768d2468181db12b8383",
+      "occurrence_id": "06ab6c64-8042-4a5e-99fe-1d1233f7f0d7",
+      "workflow_run_id": "066be9c4-6014-4677-b13f-1e179e35a3b3",
+      "workflow_job_id": "cc42731f-0e29-4fde-91f2-5e52dcf75577",
+      "visible_message": "runtime · reviewed_model_runtime · failed — The reviewed local checkpoint is missing or unreadable",
+      "inference_jobs": 0,
+      "new_proposals": 0,
+      "same_download_after_restart": "65cd61c5443103aeb710d99260423dc10000ab6878274b46d17213c31a416380",
+      "initial_driver_diagnostic": "Both the node card and node list row exposed the same diagnostic. The completed run and downloaded receipt were retained. A second native process reopened that exact profile with a scoped list locator and issued no additional workflow occurrence.",
+      "initial_driver": {
+        "startTime": "2026-11-20T22:59:37.068Z",
+        "duration": 29094.214,
+        "expected": 0,
+        "skipped": 0,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "reopen_driver": {
+        "startTime": "2026-11-20T23:01:32.182Z",
+        "duration": 2501.008,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      }
+    }
+  },
+  "original_registered_matrix": {
+    "run": 44827326113,
+    "sha256": "74a072d0a58338fde6fc8ffafb931a0fe80e200e0cdf125a81b5e18859a0dbad",
+    "roles": {
+      "clean": {
+        "job": 136614617006,
+        "conclusion": "failure"
+      },
+      "published-1.0.3": {
+        "job": 136614616746,
+        "conclusion": "success"
+      },
+      "validated-1.3": {
+        "job": 136614616849,
+        "conclusion": "success"
+      },
+      "validated-1.4": {
+        "job": 136614616861,
+        "conclusion": "success"
+      },
+      "validated-1.5": {
+        "job": 136614616860,
+        "conclusion": "success"
+      },
+      "validated-1.6": {
+        "job": 136614616852,
+        "conclusion": "success"
+      },
+      "draft-1.4-0038": {
+        "job": 136614616826,
+        "conclusion": "success"
+      },
+      "draft-1.4-0039": {
+        "job": 136614616729,
+        "conclusion": "success"
+      },
+      "historical-qc": {
+        "job": 136614616657,
+        "conclusion": "success"
+      }
+    },
+    "original_clean_stage_counts": {
+      "PASS": 19,
+      "FAIL": 1,
+      "SKIPPED": 11
+    },
+    "original_clean_failure": "The monitoring reopen test matched two accessible elements. Acquisition and the remaining lifecycle stages passed."
+  },
+  "windows_source_suite": {
+    "workers": 10,
+    "collected": 5992,
+    "passed": 5980,
+    "skipped": 12,
+    "failed": 0,
+    "errors": 0,
+    "wall_seconds": 2714.969,
+    "ordered_nodeids_sha256": "bb0ffab8b55a8ffe07c3322760800822754becd977c2ebcf547432f1825ed6bb",
+    "collection_allocations_and_junit_match": true,
+    "receipt_sha256": "b5c2bdf8e0ab4a586d293514c6388e4b3140fc75f1e6a272116c0a643b6a7745",
+    "raw_checksums_sha256": "3a672cbb82676afa6a4f9ee5dca899674ab0e82dff57f602affd4cf4b9c4eb21",
+    "skipped_groups": {
+      "Windows symbolic-link capability": 5,
+      "external WhaleDrone opt-in": 3,
+      "native ReefPose CUDA opt-in": 3,
+      "dedicated live SAM checkpoint": 1
+    },
+    "frontend_tests": 920,
+    "frontend_files": 140,
+    "additional_native_reefpose_gpu_run": {
+      "tests": [
+        "test_async_two_model_reefpose_cuda_comparison",
+        "test_native_reefpose_cuda_scientific_evaluation",
+        "test_native_reefpose_cuda_workflow_registration_and_inference"
+      ],
+      "events": [
+        {
+          "comparison_job_id": "8037a8d9-5023-4900-ad23-71e448dd1d6c",
+          "cuda_version": "12.1",
+          "device": "NVIDIA GeForce RTX 3090",
+          "evaluation_run_ids": [
+            "79fab242-ab8d-4328-8f9a-ee1347d79395",
+            "cee9a49f-a5df-4d21-8ddc-274074c515df"
+          ],
+          "fixture": "synthetic-engineering-only",
+          "peak_gpu_memory_bytes": 9822208,
+          "progress_current": 2,
+          "progress_total": 2,
+          "report_sha256": "d8835da163eb1aff6bc7b9e13786b947701d409da771b1f93106f9c6ac46097d",
+          "schema_version": "reefpose-phase3b-async-gpu-0001",
+          "scientific_accuracy_validated": false,
+          "torch_version": "2.5.1+cu121"
+        },
+        {
+          "cuda_version": "12.1",
+          "device": "NVIDIA GeForce RTX 3090",
+          "evaluation_run_id": "50054e21-3bfb-4747-849a-9eb48bcfa512",
+          "fixture": "synthetic-engineering-only",
+          "images_per_second": 82.79173736024872,
+          "inference_latency_ms": 12.078500003553927,
+          "matched_visible_count": 2,
+          "peak_gpu_memory_bytes": 18341888,
+          "result_sha256": "7a0e075c50608a85d068921416e5cff4257318ec66a66780a9209d9a7a78e18a",
+          "schema_version": "reefpose-phase3-evaluation-gpu-0001",
+          "scientific_accuracy_validated": false,
+          "torch_version": "2.5.1+cu121",
+          "visible_reference_count": 2
+        },
+        {
+          "checkpoint_sha256": "4ee7cfc121118a9d30f99146a37e404f5652e6da591e791febdc4483811947e5",
+          "cuda_version": "12.1",
+          "device": "NVIDIA GeForce RTX 3090",
+          "inference_detection_count": 1,
+          "inference_keypoint_count": 2,
+          "model_id": "95887c13-39b6-458b-b3d4-492f89ef1262",
+          "peak_gpu_memory_bytes": 18550272,
+          "schema_version": "reefpose-phase2a-gpu-validation-0001",
+          "scientific_accuracy_validated": false,
+          "source_image_size": [
+            96,
+            64
+          ],
+          "torch_version": "2.5.1+cu121",
+          "training_job_id": "60450761-f3c8-4914-ac26-2316a06264f7",
+          "training_metrics": {
+            "best_selection_loss": 0.17095494270324707,
+            "selection_loss": 0.17095494270324707,
+            "train_heatmap_loss": 0.10054591298103333,
+            "train_loss": 0.17095494270324707,
+            "train_visibility_loss": 0.7040901780128479
+          },
+          "training_run_id": "97a53cf0-62bb-472e-b6ff-98dd8c0fcaac",
+          "workflow_seconds": 1.6578126999957021
+        }
+      ],
+      "junit": {
+        "path": "source/native-reefpose-gpu/junit.xml",
+        "sha256": "8261fab4ea43af07356f404f1b7e62f5908a72274e800799ad135929af35b18c"
+      },
+      "log": {
+        "path": "source/native-reefpose-gpu/pytest.log",
+        "sha256": "9b8f10b5c64d8078b49544068e559aa5c4b92ea8678d5e1f55f33733231a1fa4"
+      }
+    }
+  },
+  "concurrent_1_4_volume_regression": {
+    "source": "e3c7f46662739f9e432c4a2b154425d33173c2dc",
+    "test_blob": "a11627ab459fde492f2f273b63d6b8c0b631a782",
+    "passed": 21,
+    "latest_ci": [
+      {
+        "run": 44829260292,
+        "job": 136609736194
+      },
+      {
+        "run": 44829260305,
+        "job": 136609737853
+      },
+      {
+        "run": 44829260481,
+        "job": 136609740353
+      }
+    ],
+    "donor_scope": "All three donor jobs stopped at Ruff formatting in spatial_mesh_volume_v14.py line 61. The candidate's numerical implementation uses exact integer accumulation on the binary coordinate grid.",
+    "records": [
+      {
+        "path": "source/current-donor-79/result.json",
+        "sha256": "1dffee9af0603793154f3494544b0b7064ca0859913d0d0b0606cd119836061e"
+      },
+      {
+        "path": "source/current-donor-79/donor79-execution.xml",
+        "sha256": "b187c5bbc5dbcce18a76fc48671a9f5d0e9447dc18580fdca0db14a5b1f8418d"
+      },
+      {
+        "path": "source/current-donor-79/donor79-execution.log",
+        "sha256": "9c02324bb1c56117cb6ced31f299b3eb582b708ca0867ff48a7a365a6d5d7ecc"
+      }
+    ]
+  },
+  "registered_clean_first_correction": {
+    "run": 44831963508,
+    "job": 136618848147,
+    "source": "3e37524e28c4b7dde8ffbe203120d3b8e7fe2ee9",
+    "driver": "8b98324a5f97dd183c9ce11f55921578100252ea",
+    "registered_clean_command": "success",
+    "artifact_upload": "failed across two drive roots",
+    "workflow_conclusion": "failure",
+    "stdout_sha256": "45a62c09f4597737e3aba171dcad4c1fc142ff1dc60802e6351e53e640324ada",
+    "retained": "registered-retest/attempt-44831963508/original-index.json"
+  },
+  "registered_installer_results": {
+    "source_commit": "3e37524e28c4b7dde8ffbe203120d3b8e7fe2ee9",
+    "original_build_run_id": 44827326113,
+    "original_msi_sha256": "90faf157f5dc8489d64f31f92c9b105471e24621bc732d96b91132763ef290cc",
+    "media_cabinets": 6,
+    "validated_registered_roles": 9,
+    "same_original_msi": true,
+    "original_clean": {
+      "job_id": 136614617006,
+      "conclusion": "failure",
+      "artifact": {
+        "id": 14676249149,
+        "sha256": "ba99aaa4b8afbefb5828a6a4df2981e7afadca3c3d2df69aa507e2df63c433ec",
+        "files_rehashed": 52
+      }
+    },
+    "corrected_clean": {
+      "job_id": 136629658079,
+      "proof_run": 44835185157,
+      "driver_commit": "8b98324a5f97dd183c9ce11f55921578100252ea",
+      "artifact": {
+        "id": 14678243938,
+        "sha256": "c99851bcfcf218a33b670d802815a23bab2c43373de20c1f4eaa944cf75993de",
+        "retained_files": 61
+      },
+      "registered_lifecycle_passes": 20,
+      "native_journeys": {
+        "first-use": 1,
+        "workspace": 5,
+        "research": 6,
+        "spatial": 10,
+        "monitoring": 2
+      },
+      "scheduler_phases": 2
+    },
+    "original_lineage_jobs": {
+      "published-1.0.3": 136614616746,
+      "validated-1.3": 136614616849,
+      "validated-1.4": 136614616861,
+      "validated-1.5": 136614616860,
+      "validated-1.6": 136614616852,
+      "draft-1.4-0038": 136614616826,
+      "draft-1.4-0039": 136614616729,
+      "historical-qc": 136614616657
+    },
+    "retained_role_members": 193,
+    "offline": {
+      "run_id": 44832181000,
+      "seconds": 138.2404184,
+      "control_counts": {
+        "ordinary": 346,
+        "system": 343
+      },
+      "restored_and_uninstalled": true
+    },
+    "scope": "Original registered Windows roles and exact-runtime retests on disposable generated profiles. No physical capture or external scientific outcome.",
+    "evidence": {
+      "package": {
+        "path": "independent-package-validation.json",
+        "sha256": "18192b3140a9acb953cdb0d85e8452fd95176ff580901e625a664825151a9106"
+      },
+      "original_matrix": {
+        "path": "hosted/original-matrix-validation.json",
+        "sha256": "74a072d0a58338fde6fc8ffafb931a0fe80e200e0cdf125a81b5e18859a0dbad"
+      },
+      "registered_clean_retest": {
+        "path": "registered-retest/attempt-44835185157/registered-retest-index.json",
+        "sha256": "94ff0c4bf362ab4a0af3be103020a261671eba4e25cf99c5c38921fdfece82b6"
+      },
+      "registered_clean_first_corrected_run": {
+        "path": "registered-retest/attempt-44831963508/job.json",
+        "sha256": "935b2cd094e72e51438835b78e24a1924391ac486e4f561f4b6fff2aac73bc95"
+      },
+      "registered_clean_first_corrected_run_log": {
+        "path": "registered-retest/attempt-44831963508/job.log",
+        "sha256": "45a62c09f4597737e3aba171dcad4c1fc142ff1dc60802e6351e53e640324ada"
+      },
+      "offline": {
+        "path": "offline/attempt-44832181000/offline-index.json",
+        "sha256": "1ea62499b499455b4c4da02def7a56625198c57b5f84106483107838e80d681c"
+      },
+      "offline_first_attempt": {
+        "path": "offline/offline-index.json",
+        "sha256": "b2edae9661e523774204abe710961d24a03b579cd2fcbcfc0c47c842fb2c8cce"
+      },
+      "physical_native": {
+        "path": "evidence/native-combined/native-index.json",
+        "sha256": "006ae5b3792642d3548f9b83af2526403a76066481e9aa5885205b4c5b9e2b3d"
+      },
+      "physical_first_attempt": {
+        "path": "evidence/native-combined/attempt-1/attempt-1.json",
+        "sha256": "e992e6a2cf43279d18a43570d63438b96e02e0d629f1de52fed167dfb6d0936f"
+      }
+    },
+    "qualification_sha256": "b8e121b8496d4f8c7ab8295de19d0186b70e1a00275dba2c95986489f74a4691",
+    "registered_clean_stage_counts": {
+      "PASS": 20,
+      "SKIPPED": 11
+    },
+    "clean_phases": {
+      "install": "PASS",
+      "shortcuts": "PASS",
+      "first_launch": "PASS",
+      "frontend_backend_connectivity": "PASS",
+      "webview2": "PASS",
+      "first_use_workflow": "PASS",
+      "workspace_workflow": "PASS",
+      "schedule_workflow": "PASS",
+      "monitoring_workflow": "PASS",
+      "spatial_workflow": "PASS",
+      "research_workflow": "PASS",
+      "schema_migration": "PASS",
+      "model_policy": "PASS",
+      "provider_manifests": "PASS",
+      "sam2_live": "SKIPPED",
+      "external_annotation_imports": "PASS",
+      "camera_jpeg": "SKIPPED",
+      "confidence_review": "SKIPPED",
+      "project_persistence": "PASS",
+      "restart": "PASS",
+      "project_exchange": "PASS",
+      "lineage_preflight": "SKIPPED",
+      "lineage_initial_evidence": "SKIPPED",
+      "lineage_final_evidence": "SKIPPED",
+      "lineage_exchange_roundtrip": "SKIPPED",
+      "lineage_restore": "SKIPPED",
+      "historical_schema_rejection": "SKIPPED",
+      "historical_backup_reopen": "SKIPPED",
+      "upgrade": "SKIPPED",
+      "uninstall": "PASS",
+      "data_retention": "PASS"
+    }
+  },
+  "hosted_source_suites": {
+    "file": "source/hosted-source-suites.json",
+    "sha256": "5e29662cf4fb791116ef9373393a33461c003836753abad5d9e5eeb00407ee08",
+    "jobs": [
+      {
+        "id": 136603256330,
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44827326046/job/136603256330",
+        "summaries": [
+          "1366 files already formatted",
+          "Success: no issues found in 741 source files",
+          "5981 passed, 11 skipped, 2 warnings in 3011.60s"
+        ]
+      },
+      {
+        "id": 136603256630,
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44827326046/job/136603256630",
+        "summaries": [
+          "Test Files  140 passed (140)",
+          "Tests  920 passed (920)",
+          "15 passed (21.2s)"
+        ]
+      },
+      {
+        "id": 136603240824,
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44827326030/job/136603240824",
+        "summaries": [
+          "1366 files already formatted",
+          "Success: no issues found in 737 source files",
+          "5974 passed, 18 skipped, 2 warnings in 3120.94s",
+          "126 passed, 1 warning in 84.84s"
+        ]
+      },
+      {
+        "id": 136603241114,
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44827326030/job/136603241114",
+        "summaries": [
+          "1 passed, 1 warning in 36.44s"
+        ]
+      },
+      {
+        "id": 136603241180,
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44827326030/job/136603241180",
+        "summaries": [
+          "1 passed, 1 warning in 15.12s"
+        ]
+      },
+      {
+        "id": 136603241241,
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44827326030/job/136603241241",
+        "summaries": [
+          "Test Files  140 passed (140)",
+          "Tests  920 passed (920)",
+          "Test Files  1 passed (1)",
+          "Tests  1 passed (1)",
+          "15 passed (21.0s)"
+        ]
+      },
+      {
+        "id": 136603241459,
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44827326030/job/136603241459",
+        "summaries": [
+          "1 passed in 10.50s"
+        ]
+      }
+    ],
+    "all_terminal_workflows": {
+      "count": 20,
+      "outcomes": {
+        "44827325887": "success",
+        "44827326041": "success",
+        "44827326105": "success",
+        "44827325961": "success",
+        "44827325867": "success",
+        "44827325962": "success",
+        "44827326200": "success",
+        "44827326056": "success",
+        "44827326312": "success",
+        "44827326092": "success",
+        "44827326149": "success",
+        "44827326065": "success",
+        "44827326015": "success",
+        "44827326194": "success",
+        "44827326251": "success",
+        "44827326389": "success",
+        "44827326075": "success",
+        "44827326113": "failure",
+        "44827326046": "success",
+        "44827326030": "success"
+      },
+      "sha256": "d514d32b633eefe84646b89616c8b8db80776e6cbe65794cc56fc04fd179ca51",
+      "path": "source/hosted-terminal-workflows.json"
+    }
+  },
+  "second_build": {
+    "workflow_head_commit": "3e37524e28c4b7dde8ffbe203120d3b8e7fe2ee9",
+    "build_provenance_commit": "17523693fa0f879fd7d45bae54f51b1df1330071",
+    "identical_source_tree": "d1b2bb12844d5f7ab7f0c72d3c58f5cd5de07ede",
+    "workflow_run_id": 44827326030,
+    "workflow_run_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44827326030",
+    "job_id": 136629819549,
+    "artifact_id": 14678299585,
+    "artifact_sha256": "9443d8ed270e8a4d27c2a36eb05e9db2197f0168dad1cb0a6e5807ef0f744723",
+    "build_provenance_sha256": "ccab3342ca32322e6834a9ef7100a649cb79f6654eeb529b920450b6a704c890",
+    "msi_sha256": "9fa2ef44a1c7629afc28b7f27bd04e4695684edf9d78a04489687584f474a06f",
+    "cabinets": 5,
+    "independently_installed": false,
+    "comparison_sha256": "a3937e1b6f4770c49d2601da9e2f3e8d80b6b6fbada0bd81ca8803091f15a0a0",
+    "comparison_path": "second-build/verified-artifact-comparison.json"
+  }
+}

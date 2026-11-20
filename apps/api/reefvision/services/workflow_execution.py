@@ -268,7 +268,11 @@ class WorkflowExecutionService:
         graph = WorkflowGraphRequest.model_validate(record.graph_json)
         plan = self.graphs.plan(project_id, graph)
         if not plan.valid:
-            raise ValidationError("Workflow graph is no longer valid")
+            raise ValidationError(
+                self.graphs.execution_validation_message(
+                    graph, plan, prefix="Workflow graph is no longer valid"
+                )
+            )
         unsupported = [
             step.node_type
             for step in plan.steps

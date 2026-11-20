@@ -3,6 +3,7 @@ import type { WorkspacePresetId } from "./workspacePresets";
 export type WorkspaceInspectorView =
   | "gallery"
   | "field_capture"
+  | "acquisition_sources"
   | "versions"
   | "interoperability"
   | "environmental_context"
@@ -10,6 +11,7 @@ export type WorkspaceInspectorView =
   | "scientific_heatmaps"
   | "ecology"
   | "study_design"
+  | "monitoring"
   | "reproducibility"
   | "models"
   | "model_comparison"
@@ -50,6 +52,7 @@ export interface WorkspacePresetInspectorGuidance {
 export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "gallery",
   "field_capture",
+  "acquisition_sources",
   "versions",
   "interoperability",
   "environmental_context",
@@ -57,6 +60,7 @@ export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "scientific_heatmaps",
   "ecology",
   "study_design",
+  "monitoring",
   "reproducibility",
   "models",
   "model_comparison",
@@ -77,6 +81,35 @@ const WORKSPACE_INSPECTORS: Record<
   WorkspaceInspectorView,
   WorkspaceInspectorDefinition
 > = {
+  acquisition_sources: {
+    title: "Acquisition sources",
+    summary: "Inspect the source, recording clock and capture history.",
+    boundary: "record",
+    recordPolicy:
+      "Captures preserve the source media and clock declaration. A local camera needs explicit approval.",
+    actions: [
+      {
+        label: "Schedules",
+        target: "workflow_schedules",
+        description: "Set a cadence for a saved acquisition workflow.",
+      },
+    ],
+  },
+  monitoring: {
+    title: "Monitoring",
+    summary: "Assess observation windows and review proposed alerts.",
+    boundary: "review",
+    recordPolicy:
+      "Assessments retain their sources, effort and units. Each alert decision records its reviewer.",
+    actions: [
+      {
+        label: "Environmental context",
+        target: "environmental_context",
+        description:
+          "Inspect the observations behind environmental monitoring.",
+      },
+    ],
+  },
   model_comparison: {
     title: "Model comparison",
     summary:

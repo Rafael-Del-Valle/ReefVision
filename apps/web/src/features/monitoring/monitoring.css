@@ -1,0 +1,31 @@
+.monitoring-workspace .panel + .panel,
+.monitoring-workspace form + section {
+  margin-block-start: 1rem;
+}
+
+.monitoring-workspace .monitoring-peer {
+  margin-block: 1rem;
+  align-items: start;
+}
+
+.monitoring-fields {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.monitoring-fields > div {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) minmax(0, 2fr);
+  gap: 0.5rem;
+}
+
+.monitoring-fields dd {
+  margin: 0;
+}
+
+.monitoring-fields dd,
+.monitoring-fields pre,
+.monitoring-workspace code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
