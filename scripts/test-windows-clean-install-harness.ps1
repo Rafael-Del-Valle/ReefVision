@@ -41,7 +41,7 @@ Assert-Throws { Get-ReefVisionScheduleRestartTime $clockWitness $slot.AddSeconds
     Assert-Throws {
         Get-ReefVisionInstalledScheduleBackend -Port 9876 -DesktopProcessId 1200 `
             -BrowserSid 'fixture-sid' -BackendExecutable 'C:\installed\reefvision-api.exe' `
-            -Profile 'C:\isolated\scheduled' -Version '1.7.0' -Revision 'b17_workflows_0001'
+            -Profile 'C:\isolated\scheduled' -Version '1.7.0' -Revision 'b17_monitor_0003'
     } 'An unrelated loopback listener cannot enter the scheduler fixture.'
     Assert-True (-not $script:unexpectedScheduleApiCall) 'The unrelated scheduler listener received a probe before being bound to the MSI.'
 }
@@ -67,18 +67,18 @@ Assert-Throws { Get-ReefVisionScheduleRestartTime $clockWitness $slot.AddSeconds
     function Invoke-RestMethod($Uri, [switch]$NoProxy, $TimeoutSec) {
         if ($Uri -like '*/system/version') {
             return [pscustomobject]@{
-                application_version=$expectedVersion; current_schema_revision='b17_workflows_0001'
+                application_version=$expectedVersion; current_schema_revision='b17_monitor_0003'
                 data_dir=$observedProfile; database_path=(Join-Path $observedProfile 'reefvision.db')
             }
         }
         if ($Uri -like '*/system/migrations/status') {
-            return [pscustomobject]@{ schema_status='up_to_date';current_schema_revision='b17_workflows_0001' }
+            return [pscustomobject]@{ schema_status='up_to_date';current_schema_revision='b17_monitor_0003' }
         }
         throw 'Unexpected schedule identity probe.'
     }
     $pins = @{
         Port=9876; DesktopProcessId=1200; BrowserSid='fixture-sid'; BackendExecutable=$expectedExe
-        Profile=$expectedProfile; Version='1.7.0'; Revision='b17_workflows_0001'
+        Profile=$expectedProfile; Version='1.7.0'; Revision='b17_monitor_0003'
     }
     $observed = Get-ReefVisionInstalledScheduleBackend @pins
     Assert-True ($observed.exact_profile_verified -and $observed.pid -eq 4321) 'Schedule backend must verify both process and marked profile before use.'

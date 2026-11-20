@@ -29,7 +29,7 @@ from create_windows_qc_history_controls import (
 )
 
 CURRENT_VERSION = "1.7.0"
-CURRENT = "b17_workflows_0001"
+CURRENT = "b17_monitor_0003"
 PREVIOUS = "b15_integrated_0002"
 
 

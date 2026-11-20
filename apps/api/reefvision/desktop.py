@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import json
 import logging
+import multiprocessing
 import os
 import subprocess
 import sys
@@ -583,4 +584,5 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     raise SystemExit(main())
