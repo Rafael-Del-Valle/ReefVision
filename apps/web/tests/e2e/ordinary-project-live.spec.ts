@@ -115,8 +115,51 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
   expect(frozen.ok(), await frozen.text()).toBeTruthy();
   const snapshot = await frozen.json();
   expect(snapshot.manifest_sha256).toMatch(/^[a-f0-9]{64}$/);
+  const exportButton = page.getByRole("button", {
+    name: "Export YOLO dataset",
+  });
+  const inspector = page.getByRole("complementary", {
+    name: "Workspace inspector",
+  });
+  await expect(inspector).toBeVisible();
+  if (desktop.surface === "source-browser") {
+    for (const width of [1440, 1056]) {
+      await page.setViewportSize({ width, height: 760 });
+      await expect(inspector).toBeVisible();
+      await exportButton.scrollIntoViewIfNeeded();
+      const layout = await exportButton.evaluate((button) => {
+        const stage = button.closest(".rv-workbench-stage")!;
+        const versions = button.closest(".versions-layout")!;
+        const inspector = document.getElementById(
+          "reefvision-workspace-inspector",
+        )!;
+        const buttonBounds = button.getBoundingClientRect();
+        const hitTarget = document.elementFromPoint(
+          buttonBounds.x + buttonBounds.width / 2,
+          buttonBounds.y + buttonBounds.height / 2,
+        );
+        return {
+          viewport: { width: window.innerWidth, height: window.innerHeight },
+          columnWidths: getComputedStyle(versions).gridTemplateColumns,
+          stageRight: stage.getBoundingClientRect().right,
+          inspectorLeft: inspector.getBoundingClientRect().left,
+          buttonLeft: buttonBounds.left,
+          buttonRight: buttonBounds.right,
+          pointerReachesExport: button.contains(hitTarget),
+          pointerRecipient:
+            hitTarget?.closest("aside")?.className ?? hitTarget?.tagName,
+        };
+      });
+      await writeFile(
+        info.outputPath(`dataset-layout-${width}.json`),
+        JSON.stringify(layout, null, 2),
+      );
+      expect(layout.buttonRight).toBeLessThanOrEqual(layout.stageRight);
+      expect(layout.pointerReachesExport, JSON.stringify(layout)).toBe(true);
+    }
+  }
   const exporting = post(`${api}/dataset-versions/${snapshot.id}/exports`);
-  await page.getByRole("button", { name: "Export YOLO dataset" }).click();
+  await exportButton.click();
   const exported = await exporting;
   expect(exported.ok(), await exported.text()).toBeTruthy();
   const { export: record, job } = await exported.json();
