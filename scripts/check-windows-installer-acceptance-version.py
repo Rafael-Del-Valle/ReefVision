@@ -206,6 +206,17 @@ def _check_split_workflow(workflow: str, version: str) -> list[str]:
                 "Clean-install job is missing installed first-use acceptance",
             )
         )
+        errors.extend(
+            _missing(
+                clean,
+                (
+                    "-WorkspaceWorkflowAcceptance",
+                    ".artifacts/windows-clean-acceptance-*/workspace-evidence.json",
+                    ".artifacts/windows-clean-acceptance-*/workspace-playwright.json",
+                ),
+                "Clean-install job is missing installed workspace acceptance",
+            )
+        )
     for name, job in ((_BUILD_JOB, build), (_CLEAN_JOB, clean), (_UPGRADE_JOB, upgrade)):
         errors.extend(
             _missing(

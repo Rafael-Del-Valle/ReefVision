@@ -97,9 +97,10 @@ test("reviews class edits and preserves frozen exports after reopening", async (
   );
   const empty = await addClass("Unused example", 3);
 
-  await page.addInitScript(() =>
-    localStorage.setItem("reefvision.onboarding.dismissed.1.5.0", "true"),
-  );
+  const health = await get(`${api}/health`);
+  await page.addInitScript((version) => {
+    localStorage.setItem(`reefvision.onboarding.dismissed.${version}`, "true");
+  }, health.version);
   const open = async () => {
     await page.goto(web);
     await page

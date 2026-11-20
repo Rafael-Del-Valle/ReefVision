@@ -30,7 +30,11 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
   const device = firstUse ? await page.context().newCDPSession(page) : null;
   const scale = 1.5;
   if (device) {
-    const localOrigins = new Set([new URL(api).origin, new URL(web).origin]);
+    const appUrl = new URL(web);
+    const localOrigins = new Set([new URL(api).origin, appUrl.origin]);
+    if (desktop.surface === "tauri-webview2") {
+      localOrigins.add(`${appUrl.protocol}//ipc.localhost`);
+    }
     await page.route(/^https?:\/\//, (route) => {
       const origin = new URL(route.request().url()).origin;
       if (localOrigins.has(origin)) return route.continue();
