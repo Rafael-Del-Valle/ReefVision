@@ -118,7 +118,10 @@ from reefvision.services.project_exchange_temporal_reefpose import (
     remap_temporal_exchange_row,
     restore_temporal_links,
 )
-from reefvision.services.project_exchange_workflows import restore_workflow_provenance
+from reefvision.services.project_exchange_workflows import (
+    has_spatial_workflow_history,
+    restore_workflow_provenance,
+)
 from reefvision.services.projects import ProjectService
 from reefvision.services.scientific_data import content_hash
 from reefvision.services.scientific_heatmaps import scientific_heatmap_content_hash
@@ -452,6 +455,9 @@ def import_project_exchange(
         validate_environmental_analysis_exchange(old_project_id, section_rows)
         validate_spatial_exchange_records(old_project_id, section_rows)
         _validate_heatmap_artifacts(old_project_id, section_rows)
+        restores_workflow_provenance = bool(integrated) or has_spatial_workflow_history(
+            section_rows
+        )
 
         project: Project | None = None
         try:
@@ -848,7 +854,7 @@ def import_project_exchange(
                 shutil.copyfileobj(source, target)
 
             manifest_sha256 = canonical_json_sha256(manifest)
-            origin = (manifest.get("origin") or {}) if integrated else {}
+            origin = (manifest.get("origin") or {}) if restores_workflow_provenance else {}
             origin_ids = map_origin_ids(origin, id_map)
             package = ProjectExchangePackage(
                 id=package_id,
@@ -864,7 +870,11 @@ def import_project_exchange(
                     "source_project_name": source_project.get("name"),
                     "id_remapped": True,
                     "id_map": id_map,
-                    **({"digest_map": digests, "origin_id_map": origin_ids} if integrated else {}),
+                    **(
+                        {"digest_map": digests, "origin_id_map": origin_ids}
+                        if restores_workflow_provenance
+                        else {}
+                    ),
                     "copied_media_count": copied_media_count,
                 },
                 completed_at=datetime.now(UTC),
@@ -887,6 +897,7 @@ def import_project_exchange(
                         lock.protocol_sha256 = protocol
                 restore_pose_comparisons(session, project.id, digests)
                 restore_comparison_jobs(session, project.id, section_rows, id_map, digests)
+            if restores_workflow_provenance:
                 restore_workflow_provenance(
                     session, project.id, section_rows, id_map, digests, _remap_json
                 )
