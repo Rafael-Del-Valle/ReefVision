@@ -12,6 +12,8 @@ from PIL import Image
 from sqlalchemy import select
 
 from reefvision.db.models.field_capture import FieldCaptureObservation
+from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.jobs.workflow_schedules import dispatch_due_schedules
 from reefvision.ml.acquisition_camera import CameraUnavailable, LocalCameraFrame
 from reefvision.services import acquisition_sources
 from reefvision.storage.projects import resolve_managed_project_path
@@ -214,3 +216,127 @@ def test_local_camera_remains_unopened_without_consent_and_does_not_recapture_on
     assert (
         approved["source_sha256"] == resumed["source_sha256"] == saved["receipt"]["source_sha256"]
     )
+
+
+def _acquisition_graph(client, pid, node_type, pins):
+    return check(
+        client.post(
+            f"/api/v1/projects/{pid}/workflow-graphs",
+            json={
+                "graph": {
+                    "graph_id": node_type,
+                    "name": "Acquisition fixture",
+                    "nodes": [
+                        {"node_id": "project", "node_type": "project_source"},
+                        {"node_id": "capture", "node_type": node_type, "parameters": pins},
+                    ],
+                    "edges": [
+                        {
+                            "edge_id": "project-capture",
+                            "source_node_id": "project",
+                            "source_port_id": "project",
+                            "target_node_id": "capture",
+                            "target_port_id": "project",
+                        }
+                    ],
+                },
+            },
+        ),
+        201,
+    )
+
+
+def test_scheduled_source_and_two_historical_replays_use_only_its_pinned_receipt(client):
+    pid = project(client)
+    route, source = source_create(
+        client,
+        pid,
+        {
+            "kind": "simulated",
+            "seed": 17,
+            "start_at_utc": "2026-01-01T00:00:00Z",
+            "period_seconds": 300,
+        },
+    )
+    saved = _acquisition_graph(
+        client,
+        pid,
+        "acquisition_source_capture",
+        {
+            "source_id": source["id"],
+            "source_sha256": source["source_sha256"],
+        },
+    )
+    project_runs = f"/api/v1/projects/{pid}/workflow-runs"
+    settings, factory = client.app.state.settings, client.app.state.session_factory
+
+    def queued(graph):
+        return check(client.post(project_runs, json={"graph_record_id": graph["id"]}), 202)
+
+    def detail(run_id):
+        return check(client.get(f"/api/v1/workflow-runs/{run_id}"), 200)
+
+    manual = queued(saved)
+    assert not process_workflow_run_job(settings, factory, manual["job_id"])
+    failed = detail(manual["id"])["run"]
+    assert (
+        failed["status"] == "failed" and "matching scheduled occurrence" in failed["error_message"]
+    )
+    assert check(client.get(route), 200)["cursor"] == 0
+    due = datetime(2026, 1, 1, 4, tzinfo=UTC)
+    schedule_route = f"/api/v1/projects/{pid}/workflow-schedules"
+    schedule = check(
+        client.post(
+            schedule_route,
+            json={
+                "name": "Generated local acquisition",
+                "purpose": "acquisition",
+                "workflow_graph_record_id": saved["id"],
+                "interval_seconds": 300,
+                "next_due_at": due.isoformat(),
+            },
+        ),
+        201,
+    )
+    assert dispatch_due_schedules(settings, factory, now=due) == 1
+    assert dispatch_due_schedules(settings, factory, now=due) == 0
+    [occurrence] = check(client.get(f"{schedule_route}/{schedule['id']}/occurrences"), 200)["items"]
+    assert process_workflow_run_job(settings, factory, occurrence["job_id"])
+    assert not process_workflow_run_job(settings, factory, occurrence["job_id"])
+    report = next(
+        row
+        for row in detail(occurrence["workflow_run_id"])["artifacts"]
+        if row["data_type"] == "acquisition_capture_receipt"
+    )
+    body = report["payload_json"]
+    assert body["receipt"]["dispatch"] == {
+        "kind": "schedule",
+        "occurrence_id": occurrence["id"],
+        "workflow_run_id": occurrence["workflow_run_id"],
+        "node_id": "capture",
+    }
+    assert check(client.get(f"{route}/captures/{body['receipt']['id']}"), 200) == body
+    replay = _acquisition_graph(
+        client,
+        pid,
+        "acquisition_capture_replay",
+        {
+            "capture_id": body["receipt"]["id"],
+            "content_sha256": body["content_sha256"],
+        },
+    )
+    runs = []
+    for _ in range(2):
+        run = queued(replay)
+        assert process_workflow_run_job(settings, factory, run["job_id"])
+        replayed = next(
+            row
+            for row in detail(run["id"])["artifacts"]
+            if row["data_type"] == "acquisition_capture_receipt"
+        )
+        assert replayed["payload_json"] == body
+        assert replayed["payload_sha256"] == report["payload_sha256"]
+        runs.append(run["id"])
+    assert len(set(runs)) == 2
+    assert check(client.get(route), 200)["cursor"] == 1
+    assert check(client.get(f"{route}/captures"), 200)["total"] == 1
