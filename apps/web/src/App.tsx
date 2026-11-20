@@ -349,11 +349,14 @@ function ReefVisionMainApp() {
     datasetVersionId?: string;
   } | null>(null);
   const [qcCoordinationOpen, setQcCoordinationOpen] = useState(false);
+  const [qcNavigationBlocked, setQcNavigationBlocked] = useState(false);
+  const handleQcCoordinationChange = useCallback((open: boolean) => {
+    setQcCoordinationOpen(open);
+    if (!open) setQcNavigationBlocked(false);
+  }, []);
   const preventQcNavigation = useCallback(() => {
     if (activeView !== "review_queue" || !qcCoordinationOpen) return false;
-    window.alert(
-      "Resolve any uncertain audit request and close reviewer coordination before leaving the review queue.",
-    );
+    setQcNavigationBlocked(true);
     return true;
   }, [activeView, qcCoordinationOpen]);
   const navigateToView = useCallback(
@@ -1299,17 +1302,25 @@ function ReefVisionMainApp() {
               />
             )}
             {activeView === "review_queue" && (
-              <ReviewQueueDashboard
-                project={selectedProject}
-                initialQueue={
-                  workflowQueue?.projectId === selectedProject.id
-                    ? workflowQueue
-                    : undefined
-                }
-                onOpenImage={handleOpenReviewItem}
-                onSelectedQueueChange={handleSelectedReviewQueueChange}
-                onCoordinationOpenChange={setQcCoordinationOpen}
-              />
+              <>
+                {qcNavigationBlocked && (
+                  <p role="alert" className="form-error">
+                    Resolve any uncertain audit request and close reviewer
+                    coordination before leaving the review queue.
+                  </p>
+                )}
+                <ReviewQueueDashboard
+                  project={selectedProject}
+                  initialQueue={
+                    workflowQueue?.projectId === selectedProject.id
+                      ? workflowQueue
+                      : undefined
+                  }
+                  onOpenImage={handleOpenReviewItem}
+                  onSelectedQueueChange={handleSelectedReviewQueueChange}
+                  onCoordinationOpenChange={handleQcCoordinationChange}
+                />
+              </>
             )}
             {activeView === "classes" && (
               <ClassManagerPanel project={selectedProject} />
