@@ -477,6 +477,7 @@ def test_camera_duplicate_of_verified_original_remains_a_duplicate(
     assert reupload["successful"] == [], reupload
     assert reupload["duplicates"][0]["duplicate_image_id"] == (first["successful"][0]["image_id"])
 
+
 @pytest.mark.parametrize("damage", ["shorter", "larger"])
 def test_camera_duplicate_skips_reading_invalid_size_original(
     client: TestClient,
@@ -508,3 +509,44 @@ def test_camera_duplicate_skips_reading_invalid_size_original(
     assert len(reupload["failed"]) == 1, reupload
     assert "missing or damaged managed original" in reupload["failed"][0]["detail"]
     assert client.get(f"/api/v1/projects/{project['id']}/images").json()["total"] == 1
+
+
+def test_transient_camera_original_read_denial_preserves_recoverable_duplicate(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A Windows read denial must not discard a good resend or alter the original."""
+    project = create_project(client, "Transient managed camera read denial")
+    source = image_bytes("JPEG", size=(57, 43))
+    first = import_one(client, project["id"], filename="SONY_ORIGINAL.JPG", content=source)
+    image_id = first["successful"][0]["image_id"]
+    record = client.get(f"/api/v1/images/{image_id}").json()
+    managed = Path(test_settings.resolved_data_dir) / record["managed_path"]
+    original_open = Path.open
+
+    def reject_camera_read(path: Path, mode: str = "r") -> BinaryIO:
+        if path == managed and mode == "rb":
+            raise PermissionError("Simulated temporary Windows camera original read denial")
+        return original_open(path, mode)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "open", reject_camera_read)
+        denied = import_one(
+            client, project["id"], filename="CANON_RESEND.JPEG", content=source
+        )
+
+    assert denied["successful"] == [], denied
+    assert denied["duplicates"] == [], denied
+    assert len(denied["failed"]) == 1, denied
+    assert "missing or damaged managed original" in denied["failed"][0]["detail"]
+    assert managed.read_bytes() == source
+    assert client.get(f"/api/v1/projects/{project['id']}/images").json()["total"] == 1
+
+    # A transient read failure must be recoverable without re-importing or
+    # replacing a valid immutable scientific camera original.
+    retried = import_one(client, project["id"], filename="CANON_RESEND.JPEG", content=source)
+    assert retried["failed"] == [], retried
+    assert retried["successful"] == [], retried
+    assert retried["duplicates"][0]["duplicate_image_id"] == image_id
+    assert managed.read_bytes() == source
