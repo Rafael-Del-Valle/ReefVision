@@ -1,20 +1,26 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import zipfile
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision import __version__
 from reefvision.config import Settings
+from reefvision.jobs import restores
+from reefvision.jobs.backups import process_backup_job
 from reefvision.jobs.diagnostics import process_diagnostics_job
 from reefvision.jobs.restores import process_restore_job
-from reefvision.storage.backups import BACKUP_FORMAT_VERSION
+from reefvision.storage.backups import BACKUP_FORMAT_VERSION, backup_io_path
 
 from .test_backups import create_completed_backup
+from .test_images import create_project
 
 
 def test_restore_job_restores_backup_into_new_recovery_location(
@@ -62,6 +68,136 @@ def test_restore_rejects_existing_destination(
 
     assert restore_response.status_code == 409
     assert "already exists" in restore_response.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    ("destination_name", "published_length"),
+    [("archive1", 256), ("backup-copy-17545a73-20b", 256), ("backup-copy-17545a73-20b", 261)],
+)
+def test_restore_reads_published_members_near_windows_path_limit(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    destination_name: str,
+    published_length: int,
+) -> None:
+    project = create_project(client, "Recovery path-length fixture")
+    captured_root = test_settings.resolved_data_dir
+    root = captured_root.with_name(captured_root.name + "-restore-target")
+    project_path = Path(str(project["storage_root"]))
+    target = root / "recoveries" / destination_name
+    member = project_path / "training" / "dataset" / "generated-managed-original-file.bin"
+    padding = published_length - len(str(target / member)) - 1
+    assert 0 < padding < 255
+    member = member.parent / ("x" * padding) / member.name
+    source = captured_root / member
+    source.parent.mkdir(parents=True)
+    content = b"generated original managed asset"
+    source.write_bytes(content)
+    old_staging_member = root / "recoveries" / ".t" / destination_name / member
+    assert len(str(target / member)) == published_length
+    assert len(str(old_staging_member)) == published_length + 3
+    assert len(str(old_staging_member) + ".part") == published_length + 8
+
+    created = client.post("/api/v1/backups", json={}).raise_for_status().json()
+    factory = cast(FastAPI, client.app).state.session_factory
+    assert process_backup_job(test_settings, factory, created["job"]["id"])
+    backup = created["backup"]
+    shutil.copytree(captured_root, root)
+    monkeypatch.setattr(test_settings, "data_dir", root)
+    backup_member = root / backup["destination_path"] / "data" / member
+    assert len(str(backup_member)) < 260 and backup_member.read_bytes() == content
+    endpoint = f"/api/v1/backups/{backup['id']}"
+    assert client.post(endpoint + "/verify").raise_for_status().json()["status"] == "valid"
+
+    open_file = Path.open
+
+    def windows_open(path: Path, *args: Any, **kwargs: Any) -> Any:
+        if os.name == "nt" and len(str(path)) >= 260 and not str(path).startswith("\\\\?\\"):
+            raise FileNotFoundError(2, "File path exceeds the classic Windows limit", str(path))
+        return open_file(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", windows_open)
+    request = (
+        client.post(endpoint + "/restore", json={"destination_name": destination_name})
+        .raise_for_status()
+        .json()
+    )
+    assert process_restore_job(test_settings, factory, request["job"]["id"])
+    published = target / member
+    readable = published if published_length < 260 else backup_io_path(published)
+    assert readable.read_bytes() == backup_member.read_bytes() == source.read_bytes()
+    assert (target / backup["database_filename"]).is_file()
+    duplicate = client.post(endpoint + "/restore", json={"destination_name": destination_name})
+    assert duplicate.status_code == 409 and "already exists" in duplicate.json()["detail"]
+    assert readable.read_bytes() == content
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows path syntax")
+def test_backup_filesystem_path_qualifies_drive_and_unc_roots() -> None:
+    assert str(backup_io_path(Path("C:/data"))) == r"\\?\C:\data"
+    assert str(backup_io_path(Path("//server/share/data"))) == r"\\?\UNC\server\share\data"
+    assert backup_io_path(backup_io_path(Path("C:/data"))) == backup_io_path(Path("C:/data"))
+    assert backup_io_path(Path("projects/member")) == Path("projects/member")
+
+
+@pytest.mark.parametrize("after_publication", [False, True])
+def test_interrupted_restore_keeps_other_staging_and_allows_safe_retry(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    after_publication: bool,
+) -> None:
+    _, backup = create_completed_backup(client, test_settings)
+    factory = cast(FastAPI, client.app).state.session_factory
+    root = test_settings.resolved_data_dir
+    endpoint = f"/api/v1/backups/{backup['id']}"
+    target = root / "recoveries" / "retry"
+    other_stage = root / "recoveries" / ".t" / "retry"
+    other_stage.mkdir(parents=True)
+    sentinel = other_stage / "other-writer.txt"
+    sentinel.write_bytes(b"independent stage owner")
+    request = (
+        client.post(endpoint + "/restore", json={"destination_name": "retry"})
+        .raise_for_status()
+        .json()
+    )
+    job_id = request["job"]["id"]
+    assert client.post(endpoint + "/restore", json={"destination_name": "retry"}).status_code == 409
+
+    def interrupt_after_copy(*_args: Any, **_kwargs: Any) -> None:
+        raise OSError("Synthetic interruption after staging the restored files")
+
+    open_file = Path.open
+
+    def inaccessible_published_file(path: Path, *args: Any, **kwargs: Any) -> Any:
+        if path.is_relative_to(backup_io_path(target)):
+            raise PermissionError("Synthetic interruption while reopening the recovery")
+        return open_file(path, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        if after_publication:
+            patch.setattr(Path, "open", inaccessible_published_file)
+        else:
+            patch.setattr(restores, "_verify_restored_copy", interrupt_after_copy)
+        assert not process_restore_job(test_settings, factory, job_id)
+    failed = client.get(f"/api/v1/jobs/{job_id}").raise_for_status().json()
+    assert failed["status"] == "failed"
+    expected = "could not be opened" if after_publication else "Synthetic interruption"
+    assert expected in failed["error_message"]
+    assert not target.exists()
+    assert not any((root / ".t").iterdir())
+    assert sentinel.read_bytes() == b"independent stage owner"
+    assert client.post(endpoint + "/verify").raise_for_status().json()["status"] == "valid"
+
+    retry = (
+        client.post(endpoint + "/restore", json={"destination_name": "retry"})
+        .raise_for_status()
+        .json()
+    )
+    assert process_restore_job(test_settings, factory, retry["job"]["id"])
+    assert (target / "restore-receipt.json").is_file()
+    assert sentinel.read_bytes() == b"independent stage owner"
 
 
 def test_diagnostics_job_creates_redacted_bundle(

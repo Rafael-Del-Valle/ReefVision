@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, cast
 
@@ -70,6 +72,38 @@ def test_backup_job_creates_verified_managed_backup(
     assert verification["completion_marker_present"] is True
     assert not verification["errors"]
     assert not verification["checksum_failures"]
+
+
+def test_backup_preserves_deep_live_training_asset_in_portable_inventory(
+    client: TestClient, test_settings: Settings
+) -> None:
+    project = create_project(client, "Deep training archive")
+    root = test_settings.resolved_data_dir
+    relative = Path("projects") / project["id"] / "training" / project["id"] / "dataset"
+    while len(str(root / relative / "images" / "train" / "frame.png")) <= 265:
+        relative /= "frozen-recording-2026"
+    relative = relative / "images" / "train" / "frame.png"
+    fixture_root = root
+    if os.name == "nt":
+        # Seed the full NTFS name independently of the application's storage code.
+        name = root.as_posix()
+        fixture_root = Path("//?/UNC/" + name[2:] if name.startswith("//") else "//?/" + name)
+    member = fixture_root / relative
+    member.parent.mkdir(parents=True)
+    content = b"original offline training member"
+    member.write_bytes(content)
+    _, backup = create_completed_backup(client, test_settings)
+    manifest = json.loads((root / backup["manifest_path"]).read_bytes())
+    asset_name = "data/" + relative.as_posix()
+    rows = [entry for entry in manifest["file_inventory"] if entry["path"] == asset_name]
+    assert len(rows) == 1
+    assert rows[0]["sha256"] == sha256(content).hexdigest()
+    assert rows[0]["size_bytes"] == len(content)
+    assert "data/test.db" not in {entry["path"] for entry in manifest["file_inventory"]}
+    verification = client.post(f"/api/v1/backups/{backup['id']}/verify")
+    assert verification.status_code == 200
+    assert verification.json()["status"] == "valid"
+    assert member.read_bytes() == content
 
 
 def test_backup_after_restore_keeps_live_assets_without_recapturing_recoveries(
