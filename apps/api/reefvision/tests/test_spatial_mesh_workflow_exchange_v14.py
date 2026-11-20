@@ -6,11 +6,15 @@ from hashlib import sha256
 from json import dumps
 from typing import Any, cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from reefvision.domain.errors import ValidationError
 from reefvision.jobs.project_exchange import process_project_exchange_export_job
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.services.project_exchange_mesh_v14 import validate_mesh_workflow_receipts
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project
 
 
@@ -18,6 +22,24 @@ def _digest(bundle: dict[str, Any]) -> str:
     return sha256(
         dumps(bundle, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
     ).hexdigest()
+
+
+def test_comparison_with_stale_measurement_digest_is_rejected() -> None:
+    # Older comparisons without a separate review bundle still have a payload digest.
+    payload = {"provenance": {}, "delta_surface_area_m2": 0.5}
+    archive = {
+        "workflow_artifacts": [
+            {
+                "data_type": "mesh_longitudinal_comparison",
+                "payload_sha256": canonical_json_sha256(payload),
+                "payload_json": payload,
+            }
+        ]
+    }
+    validate_mesh_workflow_receipts(archive)
+    payload["delta_surface_area_m2"] = 0.25
+    with pytest.raises(ValidationError, match="payload checksum"):
+        validate_mesh_workflow_receipts(archive)
 
 
 def _run(client: TestClient, base: str, graph_record_id: str) -> dict[str, Any]:
@@ -34,6 +56,7 @@ def _detail(client: TestClient, run_id: str) -> dict[str, Any]:
     response = client.get(f"/api/v1/workflow-runs/{run_id}")
     assert response.status_code == 200, response.text
     detail = response.json()
+    assert isinstance(detail, dict)
     assert detail["run"]["status"] == "succeeded", detail
     return detail
 
@@ -61,6 +84,7 @@ def _exchange(client: TestClient, base: str) -> dict[str, Any]:
     )
     assert imported.status_code == 201, imported.text
     result = imported.json()
+    assert isinstance(result, dict)
     assert result["package"]["format_version"] == "1.0"
     return result
 

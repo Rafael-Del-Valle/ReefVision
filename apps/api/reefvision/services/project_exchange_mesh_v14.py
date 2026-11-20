@@ -11,6 +11,7 @@ from reefvision.services.spatial_calibration_review_v14 import (
     canonical_spatial_calibration_review_evidence,
 )
 from reefvision.services.spatial_mesh_longitudinal_v14 import mesh_review_bundle_sha256
+from reefvision.storage.datasets import canonical_json_sha256
 
 MESH_NODE_TYPES = frozenset({"mesh_surface_preview", "mesh_longitudinal_comparison"})
 _REVIEW_LINKS = {
@@ -75,12 +76,14 @@ def restore_mesh_measurement(payload: dict[str, Any], id_map: dict[str, str]) ->
 
 
 def validate_mesh_workflow_receipts(sections: dict[str, list[dict[str, Any]]]) -> None:
-    """Reject review hashes that no longer describe the archived bundle."""
+    """Verify the original measurement and any attached review bundle."""
     for row in sections.get("workflow_artifacts", []):
         if row.get("data_type") != "mesh_longitudinal_comparison":
             continue
         try:
             payload = row["payload_json"]
+            if canonical_json_sha256(payload) != row.get("payload_sha256"):
+                raise ValidationError("Mesh comparison payload checksum mismatch")
             provenance = payload["provenance"]
             bundle = provenance.get("review_evidence_bundle")
             digest = provenance.get("review_evidence_bundle_sha256")
