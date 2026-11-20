@@ -121,6 +121,16 @@ def _verified_pose_trainer_save_dir(actual: Path, expected: Path) -> Path:
     """
     if actual.is_symlink() or any(parent.is_symlink() for parent in actual.parents):
         raise ValidationError("Pose trainer output path contains a symbolic link")
+    if sys.platform == "win32":
+        # A trainer can report a junction alias into the expected directory.
+        # Resolve() would erase that redirection before provenance comparison.
+        for component in (actual, *actual.parents):
+            try:
+                attributes = getattr(component.lstat(), "st_file_attributes", 0)
+            except (FileNotFoundError, NotADirectoryError):
+                continue
+            if attributes & 0x400:
+                raise ValidationError("Pose trainer output path contains a Windows junction")
     save_dir = actual.resolve()
     if save_dir != expected:
         raise ValidationError("Pose trainer output does not match queued training run")
