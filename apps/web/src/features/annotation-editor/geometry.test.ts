@@ -71,7 +71,7 @@ describe("annotation editor geometry", () => {
     ]);
   });
 
-  it("translates 200,000 biological boxes without a JavaScript argument-stack overflow", () => {
+  it("moves 200,000 coral boxes without an argument spread", () => {
     const originals = Array.from({ length: 200_000 }, (_, index) => {
       const x_min = 10 + (index % 1000);
       const y_min = 10 + Math.floor(index / 1000);
