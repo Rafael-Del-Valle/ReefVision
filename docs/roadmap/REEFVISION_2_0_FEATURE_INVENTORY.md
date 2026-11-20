@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T16:25:25Z`
+Updated: `2026-11-20T17:13:52Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1163,7 +1163,7 @@ Evidence:
 
 - `source`: Six populated profiles from original scientific, QC and 1.5 software retained all original columns, rows, file hashes and foreign keys across migration and two opens. Seventy migration, backup and compatibility tests passed. — `docs/validation/research-workflows-1-6.json` (`rv16-independent-0038-families`)
 - `browser`: none recorded
-- `windows_installed`: none recorded
+- `windows_installed`: Original 1.6 and 1.5 MSI payloads preserved both historical 0038 schemas and QC 0039 through 0041, with separate old-reader restore and an unchanged mixed-history refusal. — `docs/validation/compact-windows-review-a580042e8.json` (`rv16-lineage-reconciliation-historical-original-83b0a98b2`)
 - `physical_hardware`: Both 0038 database histories and QC revisions 0039 through 0041 retained all prior table fingerprints, ID bindings and managed files. Five verified backup restorations rehashed 42 files. The older native readers reopened the backups. A mixed profile refused startup byte-identically. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-lineage-reconciliation-physical-83b0`)
 - `representative_data`: none recorded
 
@@ -1183,7 +1183,8 @@ Evidence:
 
 - `source`: none recorded
 - `browser`: At 960 by 640 CSS pixels and 150% scale, a new researcher used the keyboard to create a project, imported an original, annotated, undid and redid, reviewed, reopened and downloaded YOLO. No external HTTP attempts were recorded. — `docs/validation/research-workflows-1-6.json` (`rv16-first-use-compact`)
-- `windows_installed`: none recorded
+- `browser`: The corrected source-built WebView2 opened the first project, imported the original, reviewed the annotation, downloaded YOLO data and reopened the saved result. — `docs/validation/compact-windows-review-a580042e8.json` (`rv16-onboarding-installer-native-first-use-a580042e8`)
+- `windows_installed`: The original 1.6 MSI installed, launched, exported a reviewed annotation, reopened it after restart and uninstalled under outbound deny. Both ordinary and SYSTEM controls recorded 149 denied observations over 147 seconds. — `docs/validation/compact-windows-review-a580042e8.json` (`rv16-onboarding-installer-offline-83b0a98b2`)
 - `physical_hardware`: The native packaged first launch at 960 by 640 CSS pixels and emulated 150% scaling preserved keyboard focus and dismissal. The researcher imported image and video, edited, undid and redid, reviewed, exported YOLO and reopened. The browser attempted zero external HTTP requests. A separate eight-project 1.5 backup reopened with all 303 project files. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-onboarding-installer-physical-83b0`)
 - `representative_data`: none recorded
 
@@ -1203,6 +1204,7 @@ Evidence:
 
 - `source`: Seven Project Exchange tests verified stable retry identity, source ownership, damaged data refusal, and two saved frozen QC runs in each of two generations of imported projects. — `docs/validation/research-workflows-1-6.json` (`rv16-frozen-qc-exchange`)
 - `browser`: The ordinary Review workspace froze evidence, assigned and annotated items, bulk-started reviews and replayed the guided graph twice. A retry in a new backend process changed zero records. — `docs/validation/research-workflows-1-6.json` (`rv16-frozen-qc-review`)
+- `browser`: With the inspector open, the source-built Windows desktop reached the ranked assignment at 1056 and 1440 CSS pixels. The ordinary review, frozen replays and project recovery completed. — `docs/validation/compact-windows-review-a580042e8.json` (`rv16-qc-queues-bulk-retry-compact-review-a580042e8`)
 - `windows_installed`: none recorded
 - `physical_hardware`: The packaged native Review workspace froze a ranked queue, assigned items and confirmed completion. Two saved runs executed. ZIP exchange preserved five ledger events, a keyed bulk request and two original images; a reopened graph completed in the restored project. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-qc-queues-bulk-retry-physical-83b0`)
 - `representative_data`: none recorded

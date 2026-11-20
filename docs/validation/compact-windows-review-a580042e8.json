@@ -1,0 +1,227 @@
+{
+  "manufacturing_source": "a580042e84c4d2fa0a646fbf8ec5a3dc90657fa8",
+  "material": "Generated desktop fixtures and original MSI packages.",
+  "normal_navigation": "Project → Review → Review queue → ranked item → Comments & assignments",
+  "surface": "Native Windows Tauri/WebView2 built from the exact source.",
+  "windows_desktop_sha256": "d5d81a53bd59f2f509d7643fb80b7a344b38eb0a3a3aca15f13525f0edbdc93d",
+  "original_package_pointer_results": [
+    {
+      "css_width": 960,
+      "css_height": 640,
+      "dpr": 1.5,
+      "pointer_reaches_action": true,
+      "observed_element": {
+        "tag": "BUTTON",
+        "text": "Comments & assignments"
+      }
+    },
+    {
+      "css_width": 980,
+      "css_height": 760,
+      "dpr": 1,
+      "pointer_reaches_action": true,
+      "observed_element": {
+        "tag": "BUTTON",
+        "text": "Comments & assignments"
+      }
+    },
+    {
+      "css_width": 981,
+      "css_height": 760,
+      "dpr": 1,
+      "pointer_reaches_action": true,
+      "observed_element": {
+        "tag": "BUTTON",
+        "text": "Comments & assignments"
+      }
+    },
+    {
+      "css_width": 1024,
+      "css_height": 760,
+      "dpr": 1,
+      "pointer_reaches_action": true,
+      "observed_element": {
+        "tag": "BUTTON",
+        "text": "Comments & assignments"
+      }
+    },
+    {
+      "css_width": 1025,
+      "css_height": 760,
+      "dpr": 1,
+      "pointer_reaches_action": false,
+      "observed_element": {
+        "tag": "SUMMARY",
+        "text": "Evidence and review policy",
+        "landmark": "Workspace inspector",
+        "class": "rv-workbench-inspector"
+      }
+    },
+    {
+      "css_width": 1056,
+      "css_height": 760,
+      "dpr": 1,
+      "pointer_reaches_action": false,
+      "observed_element": {
+        "tag": "SECTION",
+        "text": "Scientist decision requiredScientist review queu",
+        "landmark": "Workspace inspector",
+        "class": "rv-workbench-inspector"
+      }
+    },
+    {
+      "css_width": 1100,
+      "css_height": 760,
+      "dpr": 1,
+      "pointer_reaches_action": true,
+      "observed_element": {
+        "tag": "BUTTON",
+        "text": "Comments & assignments"
+      }
+    },
+    {
+      "css_width": 1152,
+      "css_height": 760,
+      "dpr": 1,
+      "pointer_reaches_action": true,
+      "observed_element": {
+        "tag": "BUTTON",
+        "text": "Comments & assignments"
+      }
+    },
+    {
+      "css_width": 1280,
+      "css_height": 760,
+      "dpr": 1,
+      "pointer_reaches_action": true,
+      "observed_element": {
+        "tag": "BUTTON",
+        "text": "Comments & assignments"
+      }
+    },
+    {
+      "css_width": 1440,
+      "css_height": 960,
+      "dpr": 1,
+      "pointer_reaches_action": true,
+      "observed_element": {
+        "tag": "BUTTON",
+        "text": "Comments & assignments"
+      }
+    }
+  ],
+  "corrected_viewports": [
+    {
+      "width": 1440,
+      "columns": 2
+    },
+    {
+      "width": 1056,
+      "columns": 1
+    }
+  ],
+  "normal_result": {
+    "source_desktop_cases": 6,
+    "skips": 0,
+    "retries": 0,
+    "first_use": {
+      "image_sha256": "11da437ad33072b11627e77994f869a1f92c4c0b94e0b64f920567853ff0674b",
+      "annotation_status": "reviewed",
+      "export_sha256": "ce10bda717dea5ea68b6e6e8d13c826fc8ef31e6fc7b58015ce417eee1db4c17"
+    },
+    "frozen_qc": {
+      "project_id": "22566790-941c-4b0b-864d-23da72372432",
+      "dataset_version_id": "b50063b8-e177-4136-b338-b91cc423c353",
+      "dataset_manifest_sha256": "db4070ca019ec51782329b370f123c1565317e95920a0a1d01ce458a198e8ce1",
+      "standalone_queue_id": "d0c3a476-b975-4b82-a4c1-27a1436da9c0",
+      "explicit_completion_confirmed": true,
+      "bulk_request": {
+        "item_ids": [
+          "40e7f270-eb0a-4c1c-b7df-407ec5658aa0",
+          "23a0c225-d8aa-4050-b2dd-047dd90ee2dc"
+        ],
+        "action": "start",
+        "actor": "Fixture QC researcher",
+        "client_request_id": "acfa565b-ab94-4cce-8ef4-74b6b8c5d451"
+      },
+      "graph_id": "31981f34-c46d-4385-9150-4aa769673ce3",
+      "graph_sha256": "4f3aedc7a27f736e9e777bcd7aa6531d0c216dd8f83f78db0fc0296f5f0b7e09",
+      "archive": {
+        "sha256": "e5b0bbac3f3d2df3d7e8e765a245786e4dbd46479c8112c98bf6bf7ab3326a97",
+        "manifest_sha256": "75a568f0f86b9884edb19a322c0227c51e57f37034544e3e205db907e573d4ab",
+        "imported_project_id": "0628ff16-fd94-4549-9033-a4c3003880e2",
+        "imported_queue_id": "0b0fcbff-3e76-4a7c-a76a-a70a7b397e56",
+        "audited_event_count": 5,
+        "reopened_rank_one_review_state": "completed",
+        "imported_workflow_run_id": "80092cf3-86a9-42fc-a484-68b6fd077bd8",
+        "imported_workflow_payload_sha256": "1eae0a2b954ae8352f574d6d16d6c47d157dfcc37a8ed9c0528240695e017dab",
+        "item_events": 5,
+        "bulk_requests": 1
+      }
+    },
+    "first_use_receipt_sha256": "08ac8fbf63ce7f475b86a6edc6665ee17edef418cf13633999a427838ea37f70",
+    "workspace_receipt_sha256": "7232df1f22e0aa0085966467ccbb31398b0a47e3b28178546fb627ac0214e032"
+  },
+  "affected_source_checks": {
+    "vitest": 906,
+    "frontend_files": 136,
+    "rust": {
+      "tests": 8,
+      "failures": 0,
+      "ignored": 0
+    },
+    "migrations": "fresh upgrade to b16_integrated_0001, downgrade to base",
+    "default_chromium": {
+      "expected": 15,
+      "skipped": 40,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "cuda_source": {
+      "device": "NVIDIA GeForce RTX 3090",
+      "cases": 3,
+      "skips": 0
+    }
+  },
+  "original_package": {
+    "source": "83b0a98b278b98e779842538f811b2c6f5b6b4c8",
+    "msi_sha256": "595323074d044a8a2c7b62cc2760aa46ad796f205b5d3b4c7b2062cf960c530e",
+    "hosted_clean": {
+      "workflow_run": 44768324452,
+      "job": 136420579045,
+      "passed_native": 21,
+      "failed_native": 1,
+      "passed_required_other_stages": 17,
+      "failure": "Workspace inspector intercepted the first ranked assignment action."
+    },
+    "historical": {
+      "run": 44777499227,
+      "job": 136431101805,
+      "receipt_sha256": "18967496eb886567c01ab03348695b9afde3c1382587ea4ef5f856b8bb93f625",
+      "profiles": [
+        "science0038",
+        "qc0038",
+        "qc0039",
+        "qc0040",
+        "qc0041"
+      ],
+      "mixed_history": "Refused before modification."
+    },
+    "offline": {
+      "run": 44778755971,
+      "artifact": 14650414590,
+      "artifact_sha256": "7b504bb259b65277e44eb399dce8621b03d3fab0f24fa428b52ee9cc1dcffd3b",
+      "duration_seconds": 147.193373,
+      "medium_integrity_rid": 8192,
+      "ordinary_denied_observations": 149,
+      "system_denied_observations": 149,
+      "firewall_policy_changes": 0,
+      "verified_receipt_sha256": "7d75a8e2e4a38a1b660f05e851c335851f70175d94e56e5f6f13b49d101025d0"
+    }
+  },
+  "reproduce": {
+    "qc": "apps/web/tests/e2e/qc-review-workflow-live.spec.ts",
+    "first_use": "apps/web/tests/e2e/ordinary-project-live.spec.ts",
+    "installed_driver": "scripts/acceptance-windows-clean-install.ps1"
+  }
+}
