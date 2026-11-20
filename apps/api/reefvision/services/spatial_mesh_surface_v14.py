@@ -20,6 +20,7 @@ from reefvision.services import (
     spatial_mesh_ply_v14,
     spatial_mesh_volume_v14,
 )
+from reefvision.services.spatial_anatomical_branch_v14 import measure_declared_centerline
 
 MAX_PREVIEW_TRIANGLES = 512
 
@@ -1190,6 +1191,10 @@ def preview_from_request(payload: Any) -> dict[str, Any]:
         specimen_identity_verified=False,
         observation_metadata_verified=False,
     )
+    if payload.anatomical_branch is not None:
+        result["declared_branch_centerline"] = measure_declared_centerline(
+            payload.anatomical_branch, result
+        )
     review = payload.calibration_review
     if review is not None:
         # Pydantic does not revalidate already-created mutable model instances.
