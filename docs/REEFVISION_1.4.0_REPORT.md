@@ -586,3 +586,71 @@ and one still running; final-head tests must be checked independently.
 Representative coral validation, independent scientific review, migrations,
 Windows installed GUI/MSI/CAB and physical GPU gates remain release blockers.
 **RELEASE HOLD for 1.4 and 1.5.**
+
+
+## Track C: ASCII PLY point-cloud Unicode safety and persisted QC (2026-11-19)
+
+A malformed, JSON-escaped unpaired Unicode surrogate in a point-cloud PLY
+comment or coordinate record previously reached `text.encode("utf-8")`
+before the ASCII-source check. This could leak `UnicodeEncodeError` rather
+than return a controlled scientific-input rejection. The bounded PLY reader now
+checks its character-count limit followed by `isascii()`, which is a
+byte-equivalent size check for the only accepted source alphabet. Well-formed
+but non-ASCII labels are also rejected (unlike OBJ, ASCII PLY remains
+ASCII-only), and permitted ASCII coordinates, comments, and source checksums
+retain their existing interpretation.
+
+Regression coverage includes direct parser checks, JSON-escaped standalone
+API input with malformed surrogate values, and a typed executable persisted
+Workflow Builder graph with a well-formed but non-ASCII PLY comment. The graph
+must fail without emitting a point-cloud measurement artifact. Existing
+positive standalone/twice-replayed saved-workflow tests continue to guard
+provisional calibration, source provenance, and deterministic SHA-256
+artifacts. The predecessor exact-head Actions completed 20 successful checks
+and three backend Ruff-format failures in the OBJ Unicode regression; those
+reported hunks were corrected in this iteration.
+
+**RELEASE HOLD:** Final-head CI is pending; none of this establishes biological
+identity, calibrated organism surface area or branch length from points,
+independent coral validation, physical GPU testing, or an installed Windows
+MSI/CAB/GUI acceptance result. ReefVision 1.5 remains isolated and unchanged.
+
+## Packaged ReefPose comparison on the RTX 3090
+
+The Windows package from source `78a02c20c8eb06e160e0d7b7c32e87ffd4414120`
+ran a synthetic temporal study in native WebView2 on Windows 11 build 26300
+with a physical RTX 3090 and PyTorch 2.5.1+cu121. Its MSI SHA-256 was
+`307fc18f53c7df940c55975b91d31e8df1dc27fa8dacdcd196ec024dda94c0fb`.
+The MSI and five cabinets were administratively extracted to a disposable
+directory. The Windows Installer registry contained the same products before
+and after extraction.
+[Windows build](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44671351401).
+
+The operator froze the fixture sequences, trained and registered a scratch
+temporal checkpoint, refined 12 frames, recorded review and ran a paired
+scientific evaluation on the GPU. The database receipt agreed with the
+WebView2 test record on project, evaluation, job, frozen dataset, model SHA-256
+and execution settings. Its status was `exploratory`. The frame model's
+training group provenance was `unverified`, and the temporal model's was
+`recording_disjoint_group_unverified`.
+
+| Recorded quantity | Frame only | Temporal |
+| --- | ---: | ---: |
+| Synthetic landmark coordinates scored | 24 / 24 | 24 / 24 |
+| Mean localization error | 46.2430 px | 45.8611 px |
+| Complete reference events | 1 | 1 |
+| Matched / missed / extra events | 0 / 1 / 0 | 0 / 1 / 0 |
+| Predicted count minus reference count | −1 | −1 |
+
+No matched event supplied a timing error. The 12 common frames covered 1.1 s
+in one recording and one group. The group bootstrap requires five groups for
+an interval. Evaluation reported `cuda:0` and 49,664 peak allocated CUDA
+bytes. Independent reference material and prespecified field thresholds
+remain open.
+
+| Identity | Recorded value |
+| --- | --- |
+| Evaluation | `fd268d86-d5fc-4202-ac73-43960245ae92` |
+| Dataset manifest SHA-256 | `506860a70afd82efa7610dd6d33c77cf9b34997464b8aadb2ed86600dc476447` |
+| Frame checkpoint SHA-256 | `62afaf1bcc5f189bec166795b50d13969f866d2522548e36d13b7ab96d04ca6b` |
+| Temporal checkpoint SHA-256 | `ddf2ad44bcdb4512571d1ceaa0ca7f3d9fcd87a3da26e1e0902a55f59deba105` |

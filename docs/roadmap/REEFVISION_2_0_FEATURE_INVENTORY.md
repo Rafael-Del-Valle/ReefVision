@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T03:57:55Z`
+Updated: `2026-11-20T04:16:00Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -11,8 +11,8 @@ Candidate target: `2.0`
 | --- | ---: |
 | blocked | 13 |
 | explicitly_deferred | 4 |
-| in_progress | 32 |
-| verified | 28 |
+| in_progress | 33 |
+| verified | 27 |
 
 ## Features
 
@@ -23,7 +23,7 @@ Candidate target: `2.0`
 | 1.1 | Offline-pinned NOAA/Copernicus and tidal/lunar context | verified | Project → Data & annotation → Environmental Context |
 | 1.1 | Project Exchange, backup, upgrade, and rollback integrity | verified | Project menu → Project Exchange / Backup |
 | 1.1 | Projective density on a declared surveyed reference plane | blocked | Project → Data & annotation → Computed Metrics → Open verified mask coverage |
-| 1.1 | Repeated-measures scientific analysis | blocked | Research → Analyses → Repeated measures |
+| 1.1 | Repeated-measures scientific analysis | blocked | Organisms & ecology → Reviewed analyses → saved growth analysis → Repeated measures |
 | 1.1 | Versioned scientific records, provenance, and computed metrics | verified | Open project → Research → Scientific records |
 | 1.1 | Telemetry and geographic measurements with uncertainty | verified | Research → Scientific records → Geographic measurements |
 | 1.1 | Standalone and saved Workflow Builder parity for 1.1 science | verified | Video & automation → Workflow Builder |
@@ -40,9 +40,9 @@ Candidate target: `2.0`
 | 1.3 | Acquisition-quality review and exclusions | verified | Review → Acquisition QC |
 | 1.3 | Reviewed biological event summaries | verified | Research → Organisms & ecology → Event summaries |
 | 1.3 | 1.3 temporal/scientific exchange, upgrade, and restore | verified | Project menu → Project Exchange / Backup |
-| 1.3 | Held-out landmark, event, timing, and count agreement reports | verified | Models & AI → Model Hub → ReefPose scientific validation |
+| 1.3 | Held-out landmark, event, timing, and count agreement reports | in_progress | Models & AI → Model Hub → ReefPose scientific validation |
 | 1.3 | Publication figures, methods, and provenance records | verified | Research → Reports → Publication outputs |
-| 1.3 | Representative frame-only versus temporal ReefPose comparison | blocked | On Windows the administratively extracted 2194f2e96 package trained and registered a scratch temporal checkpoint, refined 12 held-out fixture frames and evaluated on a physical RTX 3090. Representative group-aware accuracy still requires independent recordings, labels and thresholds. |
+| 1.3 | Representative frame-only versus temporal ReefPose comparison | blocked | The model and data lineage required for the engineering held-out label is tracked in rv13-heldout-agreement. Representative group-aware accuracy also requires independent recordings, labels and thresholds. |
 | 1.3 | Reviewed study, treatment, site, tank, and sampling-unit assignments | verified | Research → Organisms & ecology → Study assignments |
 | 1.3 | Frozen temporal ReefPose datasets and checkpoint training | verified | Models & AI → Training → Temporal ReefPose |
 | 1.3 | Temporal ReefPose refinement and explicit frame review | verified | Video & automation → Video & tracking → Native temporal ReefPose |
@@ -205,18 +205,19 @@ Evidence:
 - Target: `1.1`
 - Status: `blocked`
 - Dependencies: `rv11-scientific-record-foundation`
-- Entry point: Research → Analyses → Repeated measures
+- Entry point: Organisms & ecology → Reviewed analyses → saved growth analysis → Repeated measures
 - Workflow Builder: `required`
 - Missing input: An approved repeated-measures study design, unit/nesting and missingness rules, representative repeated observations, preregistered estimand, and independent statistical review thresholds.
 
 Acceptance checks:
 
 - **blocked** — Analyze declared independent units and repeated observations without treating images or organisms as independent replicates. (`rv11-repeated-measures-analysis-check`)
+- **verified** — Compute a declared two-visit comparison for complete independent units on frozen calibrated observations. Preserve missingness, nesting, design and source hashes in the same desktop and saved-workflow result. (`rv11-paired-two-visit-engineering`)
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Reviewed fixture organisms, dates and calibrations exercise per-unit differences, standard error and the t interval. Live analysis and imported receipts reject a colony and its fragments split across independent units. Two Exchange transfers retain the historical report while replays bind to the copied sources. — `apps/api/reefvision/tests/test_paired_growth_contrast.py` (`rv11-paired-reviewed-source`)
+- `browser`: Three complete synthetic tanks with unequal nested organism counts produced differences of 1, 3 and 5 mm. A fourth incomplete tank was excluded. The mean was 3 mm, standard error 1.15470054 mm and 95% interval -1.96827542 to 7.96827542 mm with 2 degrees of freedom. Three JSON downloads and 15 original file hashes matched. Calculate, Download and Save recheck the reviewed source before exposing the result or saving a graph. — `apps/web/tests/e2e/paired-growth-contrast-live.spec.ts` (`rv11-paired-desktop`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -545,7 +546,7 @@ Evidence:
 ### rv13-heldout-agreement: Held-out landmark, event, timing, and count agreement reports
 
 - Target: `1.3`
-- Status: `verified`
+- Status: `in_progress`
 - Dependencies: `rv13-temporal-refinement-review`, `rv13-event-summaries`
 - Entry point: Models & AI → Model Hub → ReefPose scientific validation
 - Workflow Builder: `required`
@@ -553,6 +554,7 @@ Evidence:
 Acceptance checks:
 
 - **verified** — Publish paired landmark error, event precision/recall, timing/count error, exclusions, and checkpoint/reference provenance. (`rv13-heldout-agreement-check`)
+- **in_progress** — Carry declared independent animal and recording groups from the normal frame training workflow into an immutable checkpoint lineage. A shared group or unknown historical source must remain visible in the evaluation status. (`rv13-audited-frame-training-groups`)
 
 Evidence:
 
@@ -600,7 +602,7 @@ Evidence:
 - `source`: none recorded
 - `browser`: none recorded
 - `windows_installed`: none recorded
-- `physical_hardware`: none recorded
+- `physical_hardware`: RTX 3090 native WebView2 fixture on packaged 78a02c20c exercised training, registration, refinement, review and comparison on 12 common frames. Frame and temporal scored 24 coordinates apiece and both missed the one complete event. The report recorded exploratory lineage. — `docs/REEFVISION_1.4.0_REPORT.md#packaged-reefpose-comparison-on-the-rtx-3090` (`rv13-packaged-exploratory-rtx`)
 - `representative_data`: none recorded
 
 ### rv13-study-assignments: Reviewed study, treatment, site, tank, and sampling-unit assignments
@@ -853,7 +855,7 @@ Evidence:
 - Dependencies: None
 - Entry point: Not user-facing
 - Workflow Builder: `not_applicable`
-- Missing input: A suitable disposable Windows 11 device with Smart App Control enforcement enabled and the exact final-candidate installer. This host runs Windows 11 build 26300 with VerifiedAndReputablePolicyState=0 (off), and the only local 1.4 MSI is from an older candidate, so hosted or local standard acceptance cannot exercise enforcement or produce a relevant Code Integrity 3077 event.
+- Missing input: A suitable disposable Windows 11 device with Smart App Control enforcement enabled and the exact final-candidate installer. The available physical host runs Windows 11 build 26300 with VerifiedAndReputablePolicyState=0 (off). Enforcement evidence requires launching the verified MSI and app on an enforcing device and recording the signature and Code Integrity event if blocked.
 
 Acceptance checks:
 

@@ -349,8 +349,8 @@ jobs:
     env:
       SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
       GH_TOKEN: ${{ github.token }}
-      REEFVISION_1_3_RUN: "43648296842"
-      REEFVISION_1_3_SOURCE: f56b577323c31f60b69251e1bb29e91b384d0d04
+      REEFVISION_1_3_RUN: "43767076956"
+      REEFVISION_1_3_SOURCE: f44053a90286ce57cc6f7356be922bcf8ba41e22
     steps:
       - uses: actions/checkout@v4
         with:
@@ -397,9 +397,9 @@ jobs:
           }
           $previous = Join-Path $env:RUNNER_TEMP 'reefvision-1-3-0-installer'
           New-Item -ItemType Directory -Path $previous | Out-Null
-          gh run download 43648296842 --repo Rafael-Del-Valle/ReefVision --name ReefVision-1.3.0-RC-Installer-Part-1 --dir $previous
+          gh run download $env:REEFVISION_1_3_RUN --repo Rafael-Del-Valle/ReefVision --name ReefVision-1.3.0-RC-Installer-Part-1 --dir $previous
           if ($LASTEXITCODE -ne 0) { throw 'Could not download retained 1.3 installer part 1.' }
-          gh run download 43648296842 --repo Rafael-Del-Valle/ReefVision --name ReefVision-1.3.0-RC-Installer-Part-2 --dir $previous
+          gh run download $env:REEFVISION_1_3_RUN --repo Rafael-Del-Valle/ReefVision --name ReefVision-1.3.0-RC-Installer-Part-2 --dir $previous
           if ($LASTEXITCODE -ne 0) { throw 'Could not download retained 1.3 installer part 2.' }
           $payload = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $previous -Version '1.3.0' -ExpectedFilename 'ReefVision_1.3.0_x64_en-US.msi' -SourceCommit $env:REEFVISION_1_3_SOURCE -RequireProvenance
           $payload | ConvertTo-Json -Depth 8

@@ -1,7 +1,16 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { getDatasetVersions, request, type JobRecord } from "../../api/client";
-import { listEcologyAnalyses } from "../ecology/ecologyAnalysisApi";
+import {
+  listEcologyAnalyses,
+  type EcologyAnalysis,
+} from "../ecology/ecologyAnalysisApi";
+import {
+  pairedDesignReady,
+  pairedVisitDates,
+  PairedGrowthFields,
+  type PairedGrowthDraft,
+} from "../ecology/PairedGrowthFields";
 import type { EventSummary } from "../ecology/EventSummaryPanel";
 import type { PoseLink } from "../ecology/poseOrganismLinksApi";
 import {
@@ -26,6 +35,7 @@ const scientificNodes = new Set([
   "research_publication_figure",
   "image_acquisition_quality",
   "ecology_verified_analysis",
+  "paired_growth_contrast",
   "mesh_surface_preview",
   "point_cloud_preview",
   "mesh_longitudinal_comparison",
@@ -35,7 +45,12 @@ export const hasScientificNodeControls = (nodeType: string) =>
   scientificNodes.has(nodeType);
 
 type Parameters = Record<string, unknown>;
-type Option = { id: string; label: string; unavailable?: boolean };
+type Option = {
+  id: string;
+  label: string;
+  unavailable?: boolean;
+  digest?: string;
+};
 const object = (value: unknown): Parameters =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as Parameters)
@@ -53,6 +68,14 @@ export function scientificConfigurationIssue(
   parameters: Parameters,
 ): string | undefined {
   const config = object(parameters.configuration);
+  if (
+    nodeType === "paired_growth_contrast" &&
+    (!string(parameters.analysis_id) ||
+      !/^[0-9a-f]{64}$/.test(string(parameters.source_sha256)) ||
+      !pairedDesignReady(pairedDraft(parameters)))
+  ) {
+    return "Choose a frozen growth analysis and declare its paired visits, independent unit, estimand and missingness policy.";
+  }
   if (nodeType === "scientific_comparison") {
     if (
       string(parameters.comparison_id) ||
@@ -281,6 +304,90 @@ async function savedOptions(
   );
   return data.map((row) =>
     resultLabel(row, reports ? "configuration" : "options"),
+  );
+}
+
+function pairedDraft(parameters: Parameters): PairedGrowthDraft {
+  return {
+    baseline_date: string(parameters.baseline_date),
+    followup_date: string(parameters.followup_date),
+    experimental_unit_type: string(parameters.experimental_unit_type),
+    estimand: string(parameters.estimand),
+    missingness_policy:
+      parameters.missingness_policy === "complete_unit" ? "complete_unit" : "",
+  };
+}
+
+function PairedGrowthNodeFields({
+  projectId,
+  parameters,
+  onChange,
+}: {
+  projectId: string;
+  parameters: Parameters;
+  onChange: (value: Parameters) => void;
+}) {
+  const selectedId = string(parameters.analysis_id);
+  const source = useQuery({
+    queryKey: ["paired-growth-source", projectId, selectedId],
+    queryFn: ({ signal }) =>
+      request<EcologyAnalysis>(
+        `/projects/${encodeURIComponent(projectId)}/ecology/verified-analyses/${encodeURIComponent(selectedId)}`,
+        { signal },
+      ),
+    enabled: !!selectedId,
+  });
+  const row = source.data;
+  const matches =
+    row && !row.stale && row.content_sha256 === parameters.source_sha256;
+  return (
+    <>
+      <Records
+        queryKey={[projectId, "paired-growth-sources"]}
+        load={async (offset, signal) => {
+          const data = await listEcologyAnalyses(
+            projectId,
+            offset / PAGE + 1,
+            signal,
+          );
+          return data.items.map((item) => ({
+            id: item.id,
+            label: `Reviewed ${item.snapshot.result.kind} · ${item.snapshot.reviewed_by} · ${item.id.slice(0, 8)}`,
+            unavailable: item.stale || pairedVisitDates(item).length < 2,
+            digest: item.content_sha256,
+          }));
+        }}
+        render={(options) => (
+          <SourceSelect
+            label="Frozen growth analysis"
+            value={selectedId}
+            options={options}
+            onChange={(id) => {
+              const chosen = options.find((option) => option.id === id);
+              onChange(
+                chosen
+                  ? { analysis_id: chosen.id, source_sha256: chosen.digest }
+                  : {},
+              );
+            }}
+          />
+        )}
+      />
+      {selectedId && source.error && <p role="alert">{source.error.message}</p>}
+      {selectedId && row && !matches && (
+        <p role="alert">
+          The selected source is stale or its digest has changed. Select a
+          current reviewed growth analysis.
+        </p>
+      )}
+      {matches && (
+        <PairedGrowthFields
+          dates={pairedVisitDates(row)}
+          value={pairedDraft(parameters)}
+          onChange={(draft) => onChange({ ...parameters, ...draft })}
+        />
+      )}
+    </>
   );
 }
 
@@ -1557,6 +1664,14 @@ export function ScientificNodeControls({
   if (nodeType === "image_acquisition_quality")
     return (
       <AcquisitionFields
+        projectId={projectId}
+        parameters={parameters}
+        onChange={onChange}
+      />
+    );
+  if (nodeType === "paired_growth_contrast")
+    return (
+      <PairedGrowthNodeFields
         projectId={projectId}
         parameters={parameters}
         onChange={onChange}

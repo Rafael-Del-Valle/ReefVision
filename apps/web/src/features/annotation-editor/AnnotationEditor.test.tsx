@@ -1494,6 +1494,131 @@ describe("AnnotationEditor", () => {
     );
   });
 
+  it.each([false, true])(
+    "waits for the accepted annotation revision before saving (independent edit: %s)",
+    async (independentEdit) => {
+      const revision = session.image.annotation_revision + 1;
+      const correction = {
+        ...session.annotations[0],
+        id: "corrected-annotation",
+        source_prediction_id: pendingProposal.id,
+        x_min: pendingProposal.x_min + 5,
+      };
+      const acceptedSession = {
+        ...session,
+        image: { ...session.image, annotation_revision: revision },
+        annotations: [...session.annotations, correction],
+      };
+      let releaseRefresh: (response: Response) => void = () => {};
+      const refresh = new Promise<Response>((resolve) => {
+        releaseRefresh = resolve;
+      });
+      let accepted = false;
+      let refreshing = false;
+      const savePayloads: Array<{
+        base_revision: number;
+        annotation_status: string;
+        annotations: Array<{ id: string }>;
+      }> = [];
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async (input, init) => {
+          const url = String(input);
+          if (url.endsWith(`/images/${session.image.id}/annotations`)) {
+            if (init?.method === "PUT") {
+              const payload = JSON.parse(String(init.body));
+              savePayloads.push(payload);
+              if (payload.base_revision !== revision || independentEdit) {
+                return jsonResponse(
+                  { detail: "Annotation revision conflict" },
+                  409,
+                );
+              }
+              return jsonResponse({
+                ...acceptedSession,
+                image: {
+                  ...acceptedSession.image,
+                  annotation_revision: revision + 1,
+                  annotation_status: "reviewed",
+                },
+              });
+            }
+            if (accepted) {
+              refreshing = true;
+              return refresh.then((response) => response.clone());
+            }
+            return jsonResponse(session);
+          }
+          if (
+            url.endsWith(`/prediction-proposals/${pendingProposal.id}/accept`)
+          ) {
+            accepted = true;
+            return jsonResponse({
+              proposal: { ...pendingProposal, review_status: "accepted" },
+              annotation: correction,
+            });
+          }
+          if (
+            url.includes(`/images/${session.image.id}/prediction-proposals`)
+          ) {
+            return jsonResponse({
+              items: accepted ? [] : [pendingProposal],
+              counts: { pending: accepted ? 0 : 1 },
+            });
+          }
+          if (url.endsWith("/class-visibility"))
+            return jsonResponse(buildVisibilityBundle());
+          return jsonResponse([]);
+        });
+
+      renderEditor();
+      const status = await screen.findByLabelText("Annotation status");
+      await userEvent.click(
+        await screen.findByTestId("prediction-row-proposal-1"),
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: "Edit geometry" }),
+      );
+      fireEvent.change(screen.getByLabelText("X Min"), {
+        target: { value: correction.x_min },
+      });
+      await userEvent.click(
+        screen.getByRole("button", { name: "Accept reviewed result" }),
+      );
+      await waitFor(() => expect(refreshing).toBe(true));
+      expect(status).toBeDisabled();
+      expect(savePayloads).toEqual([]);
+
+      await act(async () => releaseRefresh(jsonResponse(acceptedSession)));
+      await waitFor(() => expect(status).toBeEnabled());
+      await userEvent.selectOptions(status, "reviewed");
+      await userEvent.click(screen.getByRole("button", { name: "Save now" }));
+
+      await waitFor(() => expect(savePayloads).toHaveLength(1));
+      expect(savePayloads[0]).toMatchObject({
+        base_revision: revision,
+        annotation_status: "reviewed",
+      });
+      expect(savePayloads[0]?.annotations.map(({ id }) => id)).toContain(
+        correction.id,
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId("annotation-save-state")).toHaveTextContent(
+          independentEdit ? "Annotation revision conflict" : "Saved",
+        ),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `/prediction-proposals/${pendingProposal.id}/accept`,
+        ),
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining(`"x_min":${correction.x_min}`),
+        }),
+      );
+    },
+  );
+
   it("sends a selected prediction proposal through Prompt Assist and accepts the mask", async () => {
     let proposalAccepted = false;
     const fetchMock = vi

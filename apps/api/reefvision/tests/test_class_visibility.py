@@ -1,11 +1,16 @@
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event
 from typing import Any, cast
+from uuid import UUID, uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from reefvision.config import Settings
 from reefvision.db.base import Base
 from reefvision.main import create_app
+from reefvision.storage import identity
 
 
 def create_project(client: TestClient, **overrides: object) -> dict[str, Any]:
@@ -34,6 +39,40 @@ def create_label_class(
     )
     assert response.status_code == 201, response.text
     return cast(dict[str, Any], response.json())
+
+
+def test_first_concurrent_visibility_reads_share_the_published_identity(
+    client: TestClient, test_settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = create_project(client)
+    endpoint = f"/api/v1/projects/{project['id']}/class-visibility"
+    identity_file = test_settings.resolved_data_dir / identity.LOCAL_USER_IDENTITY_FILENAME
+    assert not identity_file.exists()
+
+    first_initialization = Event()
+    competing_initialization = Event()
+
+    def generate_identity() -> UUID:
+        if first_initialization.is_set():
+            competing_initialization.set()
+        else:
+            first_initialization.set()
+            # Keep the first publication pending while a second request opens the profile.
+            competing_initialization.wait(timeout=1)
+        return uuid4()
+
+    monkeypatch.setattr(identity, "uuid4", generate_identity)
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        first = workers.submit(client.get, endpoint)
+        assert first_initialization.wait(timeout=5)
+        second = workers.submit(client.get, endpoint)
+        responses = [first.result(timeout=5), second.result(timeout=5)]
+
+    for response in responses:
+        assert response.status_code == 200, response.text
+    observed = {response.json()["user_identity"] for response in responses}
+    assert observed == {identity_file.read_text(encoding="utf-8").strip()}
+    assert not competing_initialization.is_set()
 
 
 def test_class_visibility_preferences_persist_across_restart(tmp_path: Path) -> None:

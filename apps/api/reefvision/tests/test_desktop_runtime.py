@@ -1,14 +1,18 @@
-"""Tests for the packaged Windows desktop event-loop configuration."""
+"""Tests for Windows desktop startup and event-loop configuration."""
 
 import asyncio
+import builtins
 import sys
+import threading
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
 
 from reefvision import desktop
-from reefvision.config import clear_settings_cache
+from reefvision.config import Settings, clear_settings_cache
 
 
 def test_frozen_windows_sidecar_uses_selector_policy(
@@ -60,6 +64,56 @@ def test_non_windows_process_keeps_default_event_loop_policy(
     desktop.configure_windows_event_loop_policy()
 
     set_policy.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("platform", "frozen", "stats_available", "expected_imports"),
+    [
+        ("win32", False, True, ["scipy.stats"]),
+        ("win32", False, False, ["scipy.stats"]),
+        ("win32", True, True, ["scipy.linalg", "scipy.sparse.linalg", "scipy.stats"]),
+        ("win32", True, False, ["scipy.linalg", "scipy.sparse.linalg", "scipy.stats"]),
+        ("linux", True, True, []),
+    ],
+)
+def test_desktop_preloads_scipy_on_main_thread_before_serving(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    platform: str,
+    frozen: bool,
+    stats_available: bool,
+    expected_imports: list[str],
+) -> None:
+    events: list[str] = []
+    imports = {
+        "scipy.linalg": SimpleNamespace(blas=SimpleNamespace(__name__="blas")),
+        "scipy.sparse.linalg": SimpleNamespace(eigsh=SimpleNamespace(__name__="eigsh")),
+        "scipy.stats": SimpleNamespace(t=SimpleNamespace(name="t")),
+    }
+
+    def import_scipy(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name not in imports:
+            return original_import(name, *args, **kwargs)
+        assert threading.current_thread() is threading.main_thread()
+        events.append(name)
+        if name == "scipy.stats" and not stats_available:
+            raise ModuleNotFoundError("SciPy statistics are unavailable", name=name)
+        return imports[name]
+
+    async def run_api_server(_: Settings, _options: desktop.DesktopLaunchOptions) -> int:
+        events.append("serve")
+        return 0
+
+    original_import = builtins.__import__
+    monkeypatch.setattr(sys, "platform", platform)
+    monkeypatch.setattr(desktop, "is_frozen_bundle", lambda: frozen)
+    monkeypatch.setattr(desktop, "configure_windows_event_loop_policy", lambda: None)
+    monkeypatch.setattr(desktop, "run_api_server", run_api_server)
+    monkeypatch.setattr(desktop, "build_settings", lambda _: Settings(data_dir=tmp_path))
+    monkeypatch.setattr(builtins, "__import__", import_scipy)
+
+    assert desktop.main(["--data-dir", str(tmp_path), "--skip-migrations"]) == 0
+    assert events == [*expected_imports, "serve"]
 
 
 def test_normal_desktop_launch_overrides_inherited_safe_mode(

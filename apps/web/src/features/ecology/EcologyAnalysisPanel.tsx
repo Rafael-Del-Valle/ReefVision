@@ -13,6 +13,7 @@ import {
   type SurveySource,
 } from "./ecologyAnalysisApi";
 import { GrowthSamplingPlan } from "./GrowthSamplingPlan";
+import { PairedGrowthContrast } from "./PairedGrowthContrast";
 
 interface ImageOption {
   id: string;
@@ -784,6 +785,13 @@ export function EcologyAnalysisPanel({
       {active && (
         <div aria-label="Saved ecological result">
           <AnalysisResults analysis={active} projectId={projectId} />
+          {active.snapshot.selection.kind === "growth" && (
+            <PairedGrowthContrast
+              key={`${active.id}:${active.content_sha256}`}
+              projectId={projectId}
+              analysis={active}
+            />
+          )}
           <button type="button" onClick={() => recalculate(active)}>
             Prepare recalculation
           </button>

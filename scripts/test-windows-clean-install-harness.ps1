@@ -44,11 +44,56 @@ try {
 }
 
 $foreignListener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+$debugEvidence = Join-Path $env:TEMP ('reefvision-webview2-' + [guid]::NewGuid().ToString('N') + '.log')
 try {
     $foreignListener.Start()
-    Assert-Throws { Wait-ReefVisionWebView2DebugEndpoint -Port $foreignListener.LocalEndpoint.Port -DesktopProcessId $PID } 'An unrelated loopback listener was accepted as WebView2.'
+    Assert-Throws { Wait-ReefVisionWebView2DebugEndpoint -Port $foreignListener.LocalEndpoint.Port -DesktopProcessId $PID -FailureEvidencePath $debugEvidence } 'An unrelated loopback listener was accepted as WebView2.'
+    Assert-True (Test-Path -LiteralPath $debugEvidence) 'A failed WebView2 attach did not record diagnostics.'
+    $diagnostic = Get-Content -LiteralPath $debugEvidence -Raw | ConvertFrom-Json
+    Assert-True ($diagnostic.expected_port -eq $foreignListener.LocalEndpoint.Port) 'WebView2 diagnostics lost the requested port.'
+    Assert-True ($diagnostic.listeners[0].pid -eq $PID -and $diagnostic.listeners[0].expected_owner -eq $false) 'WebView2 diagnostics lost unexpected listener ownership.'
+    Assert-True ($diagnostic.version_probe.attempt_count -eq 0) 'An unrelated listener received an unsafe CDP probe.'
 } finally {
     $foreignListener.Stop()
+    Remove-Item -LiteralPath $debugEvidence -ErrorAction SilentlyContinue
+}
+$browserArguments = Get-ReefVisionWebView2DiagnosticArguments '"C:\Edge\msedgewebview2.exe" --remote-debugging-address=127.0.0.1 --remote-debugging-port=39513 "--user-data-dir=C:\private-profile" --unrelated=secret-value'
+Assert-True ($browserArguments.remote_debugging_port -eq 39513 -and $browserArguments.remote_debugging_address -eq '127.0.0.1' -and $browserArguments.user_data_dir_arg_present) 'WebView2 diagnostics lost accepted browser launch flags.'
+Assert-True (($browserArguments | ConvertTo-Json) -notmatch 'secret-value|private-profile') 'WebView2 diagnostics exposed a raw command line argument.'
+
+& {
+    function Get-NetTCPConnection {
+        [CmdletBinding()]
+        param($LocalPort, $State)
+        [pscustomobject]@{ LocalAddress = '127.0.0.1'; OwningProcess = 4321 }
+    }
+    function Get-CimInstance {
+        [CmdletBinding()]
+        param($ClassName, $Filter)
+        if ($Filter -eq 'ProcessId = 4321') {
+            [pscustomobject]@{ Name = 'msedgewebview2.exe'; ParentProcessId = $PID }
+        }
+    }
+    function Invoke-RestMethod($Uri, [switch]$NoProxy, $TimeoutSec, $StatusCodeVariable) {
+        Set-Variable -Name $StatusCodeVariable -Value 200 -Scope 1
+        [pscustomobject]@{ webSocketDebuggerUrl = $script:debugFixtureEndpoint }
+    }
+    try {
+        $script:debugFixtureEndpoint = 'ws://127.0.0.1:39513/devtools/browser/abcdef-1234'
+        $attached = Wait-ReefVisionWebView2DebugEndpoint -Port 39513 -DesktopProcessId $PID -FailureEvidencePath $debugEvidence
+        Assert-True ($attached -eq $script:debugFixtureEndpoint) 'Owned loopback WebView2 endpoint was not accepted.'
+        Assert-True (-not (Test-Path -LiteralPath $debugEvidence)) 'A successful WebView2 attach wrote failure evidence.'
+
+        $script:debugFixtureEndpoint = 'ws://127.0.0.1:39513/unexpected/private-endpoint-value'
+        Assert-Throws { Wait-ReefVisionWebView2DebugEndpoint -Port 39513 -DesktopProcessId $PID -FailureEvidencePath $debugEvidence } 'An unexpected CDP route was accepted.'
+        $raw = Get-Content -LiteralPath $debugEvidence -Raw
+        $diagnostic = $raw | ConvertFrom-Json
+        Assert-True ($diagnostic.version_probe.result -eq 'unexpected_endpoint' -and $diagnostic.version_probe.status -eq 200) 'WebView2 diagnostics lost the version probe outcome.'
+        Assert-True ($raw -notmatch 'private-endpoint-value') 'WebView2 diagnostics exposed an untrusted version response.'
+    } finally {
+        Remove-Item -LiteralPath $debugEvidence -ErrorAction SilentlyContinue
+        Remove-Variable -Name debugFixtureEndpoint -Scope Script -ErrorAction SilentlyContinue
+    }
 }
 
 $safeRoot = Join-Path $env:SystemDrive 'reefvision-clean-acceptance-tests'
@@ -406,8 +451,10 @@ foreach ($workflowContract in @(
     'python scripts/create_windows_lineage_fixtures.py',
     'python scripts/verify_windows_lineage_fixture.py',
     "-SourceCommit `$env:SOURCE_COMMIT -RequireProvenance",
-    'gh run download 43648296842',
-    'f56b577323c31f60b69251e1bb29e91b384d0d04',
+    'REEFVISION_1_3_RUN: "43767076956"',
+    'f44053a90286ce57cc6f7356be922bcf8ba41e22',
+    'gh run download $env:REEFVISION_1_3_RUN --repo Rafael-Del-Valle/ReefVision --name ReefVision-1.3.0-RC-Installer-Part-1',
+    'gh run download $env:REEFVISION_1_3_RUN --repo Rafael-Del-Valle/ReefVision --name ReefVision-1.3.0-RC-Installer-Part-2',
     "-Version '1.3.0' -ExpectedFilename 'ReefVision_1.3.0_x64_en-US.msi'",
     'VerifyPreviousInstallerRejectsUpgradedProfile = $true'
 )) {
