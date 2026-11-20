@@ -7,11 +7,12 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from reefvision.db.models import Job
+from reefvision.db.models import Job, ModelRuntimeSelection
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.project_exchange import process_project_exchange_export_job
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.models import ModelService
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project, import_one
 from reefvision.tests.test_model_inference import (
@@ -255,4 +256,141 @@ def test_exchange_restores_runtime_receipt_model_and_mapped_classes_across_two_c
         assert process_inference_job(
             app.state.settings, app.state.session_factory, job.json()["id"]
         )
+        # The row's aliases must match the independently retained import map.
+        # A self-consistent but forged mapping cannot authorize a live execution.
+        with app.state.session_factory() as session:
+            selected = session.get(ModelRuntimeSelection, copied["id"])
+            assert selected is not None
+            aliases = dict(selected.source_id_map_json)
+            for field in ("source_project_id", "source_model_id"):
+                source_id = copied["snapshot"][field]
+                selected.source_id_map_json = {
+                    **aliases,
+                    source_id: image,
+                }
+                session.commit()
+                rejected = client.post(
+                    base + "/inference-jobs",
+                    json={
+                        "model_id": copied["model_id"],
+                        "runtime_selection_id": copied["id"],
+                        "image_ids": [image],
+                    },
+                )
+                assert rejected.status_code == 409, rejected.text
+                assert "source project or model linkage" in rejected.json()["detail"]
+            selected.source_id_map_json = aliases
+            session.commit()
         saved = copied
+
+
+def test_historical_receipt_keeps_original_digest_and_requires_a_new_execution_review(
+    client: TestClient,
+    local_detector: None,
+) -> None:
+    app = cast(FastAPI, client.app)
+    project = create_project(client)["id"]
+    model = register_model(
+        client,
+        project,
+        purpose="detector",
+        filename="historic.pt",
+        display_name="Historic fixture",
+    )
+    image = import_one(client, project)["successful"][0]["image_id"]
+    base = f"/api/v1/projects/{project}"
+    address = f"{base}/model-runtime-selections"
+    draft = {"model_id": model["id"], "runtime_id": "pytorch", "device": "cpu"}
+    current = client.post(f"{address}/preview", json=draft).json()
+    snapshot = {
+        key: value
+        for key, value in current["snapshot"].items()
+        if key not in {"class_mapping", "applied_image_settings"}
+    }
+    digest = canonical_json_sha256(snapshot)
+    with app.state.session_factory() as session:
+        selection = ModelRuntimeSelection(
+            project_id=project,
+            model_id=model["id"],
+            snapshot_json=snapshot,
+            content_sha256=digest,
+        )
+        session.add(selection)
+        session.commit()
+        selection_id = selection.id
+    local_model = model["id"]
+    for copy in range(3):
+        reopened = client.get(f"{address}/{selection_id}")
+        assert reopened.status_code == 200, reopened.text
+        receipt = reopened.json()
+        assert receipt["snapshot"] == snapshot and receipt["content_sha256"] == digest
+        assert receipt["requires_re_review"] is True
+        assert client.get(address).json() == [receipt]
+        assert canonical_json_sha256(receipt["snapshot"]) == digest
+        failed = client.post(
+            f"{base}/inference-jobs",
+            json={
+                "model_id": local_model,
+                "image_ids": [image],
+                "runtime_selection_id": selection_id,
+            },
+        )
+        assert failed.status_code == 409 and "review" in failed.json()["detail"].lower()
+        if copy == 2:
+            break
+        queued = client.post(
+            f"{base}/exchange-packages", json={"include_media": True, "include_model_weights": True}
+        ).json()
+        assert process_project_exchange_export_job(
+            app.state.settings,
+            app.state.session_factory,
+            queued["job_id"],
+        )
+        files = client.get(f"/api/v1/exchange-packages/{queued['package']['id']}/download").content
+        inspected = client.post(
+            "/api/v1/exchange-packages/inspect",
+            files={"file": ("historical.zip", files)},
+        )
+        assert inspected.status_code == 200 and inspected.json()["compatible"], inspected.text
+        if copy == 0:
+
+            def alter_original_id(
+                _: dict[str, Any],
+                rows: dict[str, list[dict[str, Any]]],
+            ) -> None:
+                (archived,) = rows["model_runtime_selections"]
+                archived["snapshot_json"]["source_project_id"] = model["id"]
+                archived["content_sha256"] = canonical_json_sha256(archived["snapshot_json"])
+
+            tampered = import_archive(client, rewrite(files, alter_original_id))
+            assert tampered.status_code == 400 and "receipt" in tampered.text.lower()
+        restored = import_archive(client, files)
+        assert restored.status_code == 201, restored.text
+        row = restored.json()
+        alias = row["package"]["options_json"]["id_map"]
+        selection_id, local_model, image = (
+            alias[key] for key in (selection_id, local_model, image)
+        )
+        base = f"/api/v1/projects/{row['project_id']}"
+        address = f"{base}/model-runtime-selections"
+
+    draft["model_id"] = local_model
+    preview = client.post(f"{address}/preview", json=draft)
+    assert preview.status_code == 200, preview.text
+    fresh_preview = preview.json()
+    assert fresh_preview["content_sha256"] != digest
+    fresh = client.post(
+        address, json={"draft": draft, "reviewed_sha256": fresh_preview["content_sha256"]}
+    )
+    assert fresh.status_code == 201 and fresh.json()["requires_re_review"] is False, fresh.text
+    assert client.get(f"{address}/{selection_id}").json()["snapshot"] == snapshot
+    ready = client.post(
+        f"{base}/inference-jobs",
+        json={
+            "model_id": local_model,
+            "image_ids": [image],
+            "runtime_selection_id": fresh.json()["id"],
+        },
+    )
+    assert ready.status_code == 200, ready.text
+    assert process_inference_job(app.state.settings, app.state.session_factory, ready.json()["id"])

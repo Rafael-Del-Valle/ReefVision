@@ -2,14 +2,13 @@
 
 from typing import Any
 
-from pydantic import ValidationError as SchemaError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import ModelRuntimeSelection, StudyDesignRevision
 from reefvision.db.models.reviewer_lab_v15 import ReviewerLabMember
 from reefvision.domain.errors import ValidationError
-from reefvision.schemas.model_runtime import RuntimeReceipt
+from reefvision.schemas.model_runtime import read_runtime_receipt, runtime_source_links_match
 from reefvision.services.project_exchange_reviewer_lab_v15 import (
     REVIEWER_LAB_SECTIONS,
     restore_reviewer_lab_row,
@@ -19,7 +18,6 @@ from reefvision.services.project_exchange_study_v15 import (
     restore_study_row,
     validate_study_exchange,
 )
-from reefvision.storage.datasets import canonical_json_sha256
 
 FORMAT_VERSION = "1.5"
 INTEGRATED_FORMATS = {"1.2", FORMAT_VERSION}
@@ -31,14 +29,6 @@ def has_v15_records(session: Session, project_id: str) -> bool:
         session.scalar(select(model.id).where(model.project_id == project_id).limit(1)) is not None
         for model in (ModelRuntimeSelection, StudyDesignRevision, ReviewerLabMember)
     )
-
-
-def model_source_ids(receipt: RuntimeReceipt) -> set[str]:
-    return {
-        str(receipt.source_project_id),
-        str(receipt.source_model_id),
-        *(str(identifier) for identifier in receipt.class_mapping.values() if identifier),
-    }
 
 
 def validate_v15_exchange(
@@ -58,21 +48,17 @@ def validate_v15_exchange(
     classes = {row["id"] for row in sections.get("label_classes", [])}
     for row in sections.get("model_runtime_selections", []):
         try:
-            receipt = RuntimeReceipt.model_validate(row["snapshot_json"])
+            receipt = read_runtime_receipt(row["snapshot_json"], row["content_sha256"])
             local = row["source_id_map_json"]
-            identifiers = model_source_ids(receipt)
             registration = registrations[row["model_id"]]
             if (
-                canonical_json_sha256(row["snapshot_json"]) != row["content_sha256"]
-                or receipt.catalog_id != f"registered-model/{receipt.source_model_id}"
-                or local.keys() - identifiers
-                or any(
-                    local.get(key, key) != original_to_local.get(key, key) for key in identifiers
+                not runtime_source_links_match(
+                    receipt,
+                    local,
+                    original_to_local,
+                    project_id=project_id,
+                    model_id=registration["id"],
                 )
-                or local.get(str(receipt.source_project_id), str(receipt.source_project_id))
-                != project_id
-                or local.get(str(receipt.source_model_id), str(receipt.source_model_id))
-                != registration["id"]
                 or registration["sha256"] != receipt.checkpoint_sha256
                 or registration["file_size_bytes"] != receipt.file_size_bytes
                 or any(
@@ -82,7 +68,7 @@ def validate_v15_exchange(
                 )
             ):
                 raise ValueError("Invalid source linkage or digest")
-        except (SchemaError, ValueError, TypeError, KeyError, AttributeError) as exc:
+        except (ValueError, TypeError, KeyError, AttributeError) as exc:
             raise ValidationError(
                 "Reviewed model selection has an invalid receipt or source reference"
             ) from exc
@@ -94,9 +80,9 @@ def restore_v15_row(
     restore_study_row(name, row, values, mapping)
     restore_reviewer_lab_row(name, row, values, mapping)
     if name == "model_runtime_selections":
-        receipt = RuntimeReceipt.model_validate(row["snapshot_json"])
+        receipt = read_runtime_receipt(row["snapshot_json"], row["content_sha256"])
         previous = row["source_id_map_json"]
         values["source_id_map_json"] = {
-            key: mapping[previous.get(key, key)] for key in model_source_ids(receipt)
+            key: mapping[previous.get(key, key)] for key in receipt.source_ids()
         }
         values["snapshot_json"] = row["snapshot_json"]
