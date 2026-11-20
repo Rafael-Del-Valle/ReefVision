@@ -199,9 +199,18 @@ foreach ($key in @('train/box_loss', 'train/cls_loss', 'train/dfl_loss',
     throw ('Canonical YOLO loss validity was corrupted: {0}' -f $key)
   }
 }
-if (-not (Test-ValidScientificMetricValue -Name 'scientific/correlation' -Value -0.25) -or
-    (Test-ValidScientificMetricValue -Name 'train/box_loss' -Value '-0.25')) {
-  throw 'Scientific loss QC must preserve signed non-loss metrics and reject string losses.'
+# Pass explicitly typed numbers, as supplied by the JSON deserializer, so
+# PowerShell's command argument mode cannot change the test subject's type.
+# Check each independent contract separately to identify a real regression.
+foreach ($signed in @([double](-0.25), [decimal](-0.125), [int](-1))) {
+  if (-not (Test-ValidScientificMetricValue -Name 'scientific/correlation' -Value $signed)) {
+    throw ('Signed non-loss metric was rejected: type={0}, value={1}' -f $signed.GetType().FullName, $signed)
+  }
+}
+foreach ($stringLoss in @('-0.25', '0', 'NaN')) {
+  if (Test-ValidScientificMetricValue -Name 'train/box_loss' -Value $stringLoss) {
+    throw ('String masquerading as YOLO loss was accepted: {0}' -f $stringLoss)
+  }
 }
 
 # PowerShell single-quoted regex strings use one backslash for regex escapes.
