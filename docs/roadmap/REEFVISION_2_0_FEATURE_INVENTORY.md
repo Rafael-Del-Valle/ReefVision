@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T18:30:31Z`
+Updated: `2026-11-20T18:42:06Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -771,6 +771,7 @@ Evidence:
 - `windows_installed`: The original b846f57e9 sidecar passed eight standalone enclosure cases and sixteen saved runs. Both polygon windings recovered 1.6666666667e-313 cubic metres after calibration with identical export hashes. Positive source volumes still below representability returned a controlled failure and exact planar controls remained zero. Both new donor regressions passed on the integrated source. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/97` (`rv14-positive-volume-recovery-1787cd57c-on-b846f57e9`)
 - `physical_hardware`: In the packaged 1.5 WebView2, both OBJ windings and a double-precision PLY yielded 3.7007434154171883e-9 cubic metres at fixture scale. The planar control withheld the value. An actual reopen reproduced all four artifact checksums. Physical receipt SHA-256 91cc3210fe28a508a20cea48fb60ffdb988648389071357938184997870c54b7. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv14-physical-volume-3c8e2d070`)
 - `physical_hardware`: The corrected local MSI's native Windows desktop reproduced the calibrated mesh result through both saved runs and retained the original files in Project Exchange. — `docs/validation/mesh-volume-8821ed9a1.json` (`rv14-volume-winding-local-msi-8821`)
+- `physical_hardware`: The original GitHub MSI reproduced the corrected finite volume, scale bounds, planar control and saved replay on physical Windows. Its matching cabinet and executable identities were verified before opening the project. — `docs/validation/mesh-volume-8821ed9a1.json` (`rv14-volume-winding-original-msi-8821`)
 - `representative_data`: none recorded
 
 ### rv14-lineage-upgrade: Validated 1.3 to 1.4 ancestry, migration, exchange, and rollback

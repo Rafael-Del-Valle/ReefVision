@@ -258,6 +258,91 @@
         "checksums_sha256": "39ce1dfb68f44dbb9003a6286c7235fefce0f897e244473bd9ad35ff6f6ab3a5"
       },
       "process_and_listeners_closed": true
+    },
+    "original-windows": {
+      "surface": "Tauri WebView2 from the hash-bound administrative MSI extraction on physical Windows",
+      "receipt_sha256": "698c04d5a2e6a5ba32e27c458ace9c35f996d88534a09e416d6d0b709b3bd9db",
+      "project_id": "6c1efb22-0608-4680-b798-ce0742b0769b",
+      "inputs": [
+        {
+          "filename": "near-forward.obj",
+          "original_sha256": "8894c3787a455879679dc767d547763e54ae67a8941074aba0446273fb225a28",
+          "geometry_sha256": "9ee21530a0d8adcdc11bfb868cb035b9112321398781ba4b036ab2ba4a20cf1a",
+          "volume_m3": 3.7007434154171883e-09,
+          "scale_interval_m3": [
+            3.483110096643334e-09,
+            3.927258518388044e-09
+          ],
+          "calibration_verified": false,
+          "measurement_status": "caller_supplied_unverified"
+        },
+        {
+          "filename": "near-offending-inward.obj",
+          "original_sha256": "cb82b2ae03b7d1e680ee39f6918e5c010d2d273a79e012943820559a0cf58f6b",
+          "geometry_sha256": "22d19d00686798a102155132defd31b79ca1287703670eccec6b2ac4902dc0a6",
+          "volume_m3": 3.7007434154171883e-09,
+          "scale_interval_m3": [
+            3.483110096643334e-09,
+            3.927258518388044e-09
+          ],
+          "calibration_verified": false,
+          "measurement_status": "caller_supplied_unverified"
+        },
+        {
+          "filename": "flat-control.obj",
+          "original_sha256": "00b4b598bb9c21452d4521ec2b969c96fe912afb811d14267e27ece789d024e9",
+          "geometry_sha256": "5b4d889d2f3cccf0302d1a291fcdf865e9875e1e406eed4ced30e28874d4f93b",
+          "volume_m3": null,
+          "scale_interval_m3": null,
+          "calibration_verified": false,
+          "measurement_status": "caller_supplied_unverified"
+        }
+      ],
+      "reopened_graph_runs": [
+        {
+          "run": "dabb6ee9-686f-4707-bb16-b8d9c47f756a",
+          "workflow_graph_id": "62edabbc-5f14-4664-be9e-661c5413cfa1",
+          "graph_sha256": "a52bcc254ee27344b2416d03d30fb81dfa8e5c598211e1f48f288f2be46d3569",
+          "artifacts": [
+            "224d97e03457778ccdda71132be6d872e73016e3d0225875186f201ead34888f",
+            "953b37b543655367195bc8887328223bf680912a38739745d8ee0576bcbfbd44",
+            "a0052dfe213302ce6a6539b3c52eda8a7901677fc031b1e39fbf0ba727e79b52"
+          ]
+        },
+        {
+          "run": "2d9d5dc6-605b-46df-aae5-e696cc26e626",
+          "workflow_graph_id": "62edabbc-5f14-4664-be9e-661c5413cfa1",
+          "graph_sha256": "a52bcc254ee27344b2416d03d30fb81dfa8e5c598211e1f48f288f2be46d3569",
+          "artifacts": [
+            "224d97e03457778ccdda71132be6d872e73016e3d0225875186f201ead34888f",
+            "953b37b543655367195bc8887328223bf680912a38739745d8ee0576bcbfbd44",
+            "a0052dfe213302ce6a6539b3c52eda8a7901677fc031b1e39fbf0ba727e79b52"
+          ]
+        }
+      ],
+      "export": {
+        "package_id": "4accc9a9-e7ec-4a8d-a478-3f2ee9aa8301",
+        "sha256": "ac3707828ebe86758a361b698bb9cab2beeb1d4f11408a4ef26456c8092627d7",
+        "verified_sections": 63,
+        "identical_originals": 3,
+        "verified_replay_artifacts": 6
+      },
+      "test": {
+        "startTime": "2026-11-20T18:41:09.484Z",
+        "duration": 13223.572999999999,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "build": {
+        "version": "1.6.0",
+        "msi_sha256": "e16beecec17ac17cb19d4c7916147ac3f72c97c2dbb9336ef360abe92ef4fc9f",
+        "external_cabs": 5,
+        "total_payload_bytes": 2971712383,
+        "checksums_sha256": "ba13682f3834ec7242104be7088191b237f76b100fc5919f9fd5ce4c38d4c61b"
+      },
+      "process_and_listeners_closed": true
     }
   },
   "spatial_tests": {
