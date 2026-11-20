@@ -1415,6 +1415,62 @@ describe("Gallery", () => {
     );
   });
 
+  it("preserves modified WebView2 shortcuts and IME composition without changing the focused image", async () => {
+    const secondImage: ProjectImage = {
+      ...image,
+      id: "image-2",
+      original_filename: "swiftia-02.png",
+    };
+    const onFocusedImageChange = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        items: [image, secondImage],
+        total: 2,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+
+    renderGallery(undefined, undefined, onFocusedImageChange);
+    const viewer = await screen.findByRole("region", {
+      name: "Image workbench",
+    });
+    await waitFor(() =>
+      expect(onFocusedImageChange).toHaveBeenLastCalledWith("image-1"),
+    );
+    viewer.focus();
+
+    for (const input of [
+      { key: "ArrowRight", ctrlKey: true },
+      { key: "ArrowRight", metaKey: true },
+      { key: "ArrowRight", altKey: true },
+      { key: "ArrowRight", shiftKey: true },
+      { key: "Home", ctrlKey: true },
+      { key: "End", metaKey: true },
+      { key: "ArrowRight", isComposing: true },
+      { key: "Process" },
+    ]) {
+      const event = new KeyboardEvent("keydown", {
+        ...input,
+        bubbles: true,
+        cancelable: true,
+      });
+      fireEvent(viewer, event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(
+        screen.getByAltText("Focused project image: swiftia-01.png"),
+      ).toBeInTheDocument();
+    }
+    expect(onFocusedImageChange).not.toHaveBeenCalledWith("image-2");
+
+    // Ordinary, unmodified gallery navigation is still available.
+    await userEvent.keyboard("{ArrowRight}");
+    expect(
+      await screen.findByAltText("Focused project image: swiftia-02.png"),
+    ).toBeInTheDocument();
+  });
+
   it("loads only the adjacent page when keyboard navigation crosses a boundary", async () => {
     const requestedPages: number[] = [];
     const secondPageImage: ProjectImage = {

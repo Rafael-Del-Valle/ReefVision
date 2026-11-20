@@ -1042,7 +1042,19 @@ function GalleryContent({
   }
 
   function handleViewerKeyDown(event: KeyboardEvent<HTMLElement>) {
-    if (shouldIgnoreGalleryShortcut(event.target)) return;
+    // Preserve native WebView2/OS modified navigation keys and IME text input.
+    // Only plain gallery shortcuts are allowed to change scientific image focus.
+    if (
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      event.nativeEvent.isComposing ||
+      event.key === "Process" ||
+      shouldIgnoreGalleryShortcut(event.target)
+    ) {
+      return;
+    }
     const action: GalleryNavigationAction | null =
       event.key === "ArrowLeft"
         ? "previous"
