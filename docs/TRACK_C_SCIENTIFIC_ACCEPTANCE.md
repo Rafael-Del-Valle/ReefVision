@@ -4,6 +4,23 @@ This is a **test plan**, not evidence that ReefVision 1.4 or 1.5 is validated or
 
 ## 1.4: 3D geometry and longitudinal studies
 
+**Signed-volume magnitude overflow guard (synthetic source-kernel check; CI pending):**
+A collection of repeated, oppositely oriented tetrahedron faces can have individually
+finite signed face terms but a sum of their absolute magnitudes larger than the
+largest representable binary64 value. Calling `math.fsum` directly on those
+magnitudes raises `OverflowError` even when the signed total is zero or a
+representable nonzero residual. The source kernel now normalizes by its largest
+finite contribution before summation and uses a dimensionless cancellation
+condition to trigger exact rational recovery. The regression uses 12
+oppositely oriented synthetic tetrahedral shell copies at an edge of 5e102
+source units, exact-zero and one-ULP apex-perturbed cases, and both face
+windings. Verify the signed result against an independent `Fraction` oracle.
+**These duplicated faces are intentionally not a valid imported coral mesh:**
+do not submit them as an accepted standalone or saved Workflow Builder measurement.
+Existing topologically valid standalone and twice-replayed persisted graph
+regressions must remain green. This is numeric fail-closed protection, not a
+calibrated biological-volume or independent human-verification claim.
+
 **Cross-face signed-volume cancellation integrity (synthetic helper gate; CI pending):**
 Even when no individual face determinant is near roundoff, an oriented sum
 across faces may nearly cancel and return a plausible but inaccurate nonzero
