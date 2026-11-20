@@ -1,19 +1,47 @@
+from hashlib import sha256
+from pathlib import Path
 from typing import Any, cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.config import Settings
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.ml.providers import DetectionPrediction, DetectionSettings
+from reefvision.services.models import ModelService
 from reefvision.tests.test_image_adjustments_v18 import make_source, save_recipe
+from reefvision.tests.test_model_inference import FakeDetectorRegistrationProvider, register_model
 
 
 def test_saved_adjustment_replays_two_identical_typed_artifacts_and_rejects_wrong_pin(
-    client: TestClient, test_settings: Settings
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project, image_id, original = make_source(client)
     saved = save_recipe(client, image_id, original)
     receipt = saved["receipt"]
+    worker_inputs: list[str] = []
+
+    class InspectingDetector(FakeDetectorRegistrationProvider):
+        def predict(
+            self, image_path: Path, settings: DetectionSettings
+        ) -> list[DetectionPrediction]:
+            worker_inputs.append(sha256(image_path.read_bytes()).hexdigest())
+            return []
+
+    monkeypatch.setattr(ModelService, "_provider_for_purpose", lambda *_: InspectingDetector())
+    monkeypatch.setattr(
+        "reefvision.jobs.inference.detection_provider_for_name", lambda _: InspectingDetector()
+    )
+    model = register_model(
+        client,
+        project["id"],
+        purpose="detector",
+        filename="graph.pt",
+        display_name="Graph detector",
+    )
     pin = {
         "image_id": image_id,
         "recipe_id": saved["id"],
@@ -27,6 +55,12 @@ def test_saved_adjustment_replays_two_identical_typed_artifacts_and_rejects_wron
         "nodes": [
             {"node_id": "source", "node_type": "project_source"},
             {"node_id": "correction", "node_type": "underwater_adjustment", "parameters": pin},
+            {
+                "node_id": "model",
+                "node_type": "registered_model_source",
+                "parameters": {"model_id": model["id"]},
+            },
+            {"node_id": "infer", "node_type": "detection_inference"},
         ],
         "edges": [
             {
@@ -35,6 +69,27 @@ def test_saved_adjustment_replays_two_identical_typed_artifacts_and_rejects_wron
                 "source_port_id": "project",
                 "target_node_id": "correction",
                 "target_port_id": "project",
+            },
+            {
+                "edge_id": "catalog",
+                "source_node_id": "source",
+                "source_port_id": "project",
+                "target_node_id": "model",
+                "target_port_id": "project",
+            },
+            {
+                "edge_id": "input",
+                "source_node_id": "correction",
+                "source_port_id": "images",
+                "target_node_id": "infer",
+                "target_port_id": "images",
+            },
+            {
+                "edge_id": "checkpoint",
+                "source_node_id": "model",
+                "source_port_id": "model",
+                "target_node_id": "infer",
+                "target_port_id": "model",
             },
         ],
     }
@@ -65,7 +120,9 @@ def test_saved_adjustment_replays_two_identical_typed_artifacts_and_rejects_wron
     assert first_output["payload_sha256"] == second_output["payload_sha256"]
     assert first_output["payload_json"]["receipt"] == receipt
     assert first_output["payload_json"]["image_ids"] == [image_id]
+    assert worker_inputs == [receipt["rendition_sha256"]] * 2
     pin["content_sha256"] = "0" * 64
     failed = replay(save_graph())
     assert failed["run"]["status"] == "failed"
     assert not any(row["data_type"] == "adjusted_image_reference" for row in failed["artifacts"])
+    assert len(worker_inputs) == 2

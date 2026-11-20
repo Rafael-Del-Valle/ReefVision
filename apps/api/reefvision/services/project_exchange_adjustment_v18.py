@@ -139,18 +139,18 @@ def validate_adjustment_exchange(
                 check_model_input(model_input, record)
         for row in rows.get("prediction_proposals", []):
             provenance = row.get("provenance_json") or {}
-            record = job_recipes.get(row.get("inference_job_id", ""))
-            if record is None:
+            proposal_record = job_recipes.get(row.get("inference_job_id", ""))
+            if proposal_record is None:
                 if "model_input" in provenance:
                     raise ValidationError(
                         "Adjusted prediction is missing its original inference job"
                     )
                 continue
-            if row["project_id"] != project_id or row["image_id"] != str(record.image_id):
+            if row["project_id"] != project_id or row["image_id"] != str(proposal_record.image_id):
                 raise ValidationError(
                     "Adjusted prediction is bound to a different source pixel grid"
                 )
-            check_model_input(provenance.get("model_input"), record)
+            check_model_input(provenance.get("model_input"), proposal_record)
         for row in rows.get("workflow_artifacts", []):
             data_type = row.get("data_type")
             payload = row["payload_json"]
@@ -158,11 +158,11 @@ def validate_adjustment_exchange(
                 observations = payload.get(
                     "detections" if data_type == "detection_proposals" else "masks", []
                 )
-                record = job_recipes.get(payload.get("inference_job_id", ""))
+                workflow_record = job_recipes.get(payload.get("inference_job_id", ""))
                 for observation in observations:
                     model_input = (observation.get("provenance") or {}).get("model_input")
-                    if record is not None:
-                        check_model_input(model_input, record)
+                    if workflow_record is not None:
+                        check_model_input(model_input, workflow_record)
                     elif model_input is not None:
                         raise ValidationError(
                             "Adjusted workflow proposals are missing their inference job"

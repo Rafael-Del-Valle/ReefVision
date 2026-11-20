@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   startTransition,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
   type WheelEvent as ReactWheelEvent,
   useCallback,
   useEffect,
@@ -118,6 +119,7 @@ import {
 import { useMaskRefinement } from "./useMaskRefinement";
 import { PendingMaskEditor } from "./PendingMaskEditor";
 import { ImprovePredictionsPanel } from "./ImprovePredictionsPanel";
+import type { ImageAdjustmentPin } from "./imageAdjustmentApi";
 
 interface AnnotationEditorProps {
   project: Project;
@@ -131,6 +133,10 @@ interface AnnotationEditorProps {
   };
   onClose: () => void;
   onActiveImageChange?: (imageId: string) => void;
+  adjustmentImageId?: string;
+  adjustmentControls?: ReactNode;
+  renditionUrl?: string;
+  modelAdjustment?: ImageAdjustmentPin;
 }
 
 type EditorInteraction =
@@ -289,6 +295,10 @@ export function AnnotationEditor({
   launchContext,
   onClose,
   onActiveImageChange,
+  adjustmentImageId,
+  adjustmentControls,
+  renditionUrl,
+  modelAdjustment,
 }: AnnotationEditorProps) {
   const queryClient = useQueryClient();
   const { confirm, confirmationDialog } = useActionConfirmation();
@@ -326,6 +336,19 @@ export function AnnotationEditor({
     null,
   );
   const [deployModelId, setDeployModelId] = useState("");
+  const [chosenModelRecipe, setChosenModelRecipe] = useState<string | null>(
+    null,
+  );
+  const offeredModelAdjustment =
+    adjustmentImageId === currentImageId ? modelAdjustment : undefined;
+  const selectedModelAdjustment =
+    offeredModelAdjustment?.recipe_id === chosenModelRecipe
+      ? offeredModelAdjustment
+      : undefined;
+  useEffect(
+    () => setChosenModelRecipe(null),
+    [offeredModelAdjustment?.recipe_id],
+  );
   const [deployConfidence, setDeployConfidence] = useState("0.25");
   const [quickReviewConfidence, setQuickReviewConfidence] = useState("50");
   const [quickReviewOpen, setQuickReviewOpen] = useState(false);
@@ -1332,18 +1355,26 @@ export function AnnotationEditor({
   }, [samInstallJobQuery.data]);
 
   const deployModelMutation = useMutation({
-    mutationFn: (modelId: string) => {
+    mutationFn: ({
+      modelId,
+      input,
+    }: {
+      modelId: string;
+      input?: ImageAdjustmentPin;
+    }) => {
       if (!modelId) {
         throw new Error("Choose a trained or imported project model first");
       }
       return createInferenceJob(project.id, {
         model_id: modelId,
         image_ids: [currentImageId],
+        ...(input ? { image_adjustment: input } : {}),
         confidence_threshold: Number(deployConfidence),
         device: deployDevice,
       });
     },
-    onSuccess: (job) => {
+    onSuccess: (job, { input }) => {
+      if (input) setChosenModelRecipe(null);
       completedDeployJobRef.current = null;
       setDeployJobId(job.id);
       localStorage.setItem(
@@ -2040,7 +2071,7 @@ export function AnnotationEditor({
     }
     setShowPredictions(true);
     if (activeDetectorModelId)
-      deployModelMutation.mutate(activeDetectorModelId);
+      deployModelMutation.mutate({ modelId: activeDetectorModelId });
     else fullImageMutation.mutate();
   };
 
@@ -2737,12 +2768,14 @@ export function AnnotationEditor({
   const currentLabelClasses = labelClasses;
   const strokeScale = 1 / resolvedView.scale;
   const handleRadius = Math.max(4 * strokeScale, 2);
-  const imageHref = annotationImageSource(
+  const originalHref = annotationImageSource(
     image.id,
     image.thumbnail_path,
     fullImageLoaded,
     fullImageRetry,
   );
+  const imageHref =
+    (adjustmentImageId === image.id ? renditionUrl : undefined) ?? originalHref;
   const imageRenderKey = `${image.id}:${fullImageRetry}:${fullImageLoaded}`;
   const assistAcceptLabelClassId =
     (assistSourcePrediction
@@ -2921,6 +2954,7 @@ export function AnnotationEditor({
           </button>
         </aside>
         <aside className="annotation-editor-sidebar">
+          {adjustmentImageId === image.id && adjustmentControls}
           <EnvironmentalSubjectInspector
             projectId={project.id}
             subject={{ image_id: image.id }}
@@ -3041,6 +3075,22 @@ export function AnnotationEditor({
               on this image. Grounding DINO and other prompted, open-vocabulary
               tools remain separate assist workflows.
             </p>
+            {offeredModelAdjustment && (
+              <label className="image-adjustment-opt-in">
+                <input
+                  type="checkbox"
+                  checked={Boolean(selectedModelAdjustment)}
+                  onChange={(event) =>
+                    setChosenModelRecipe(
+                      event.target.checked
+                        ? offeredModelAdjustment.recipe_id
+                        : null,
+                    )
+                  }
+                />
+                Use saved adjustment for the next model run
+              </label>
+            )}
             {!detectorModels.isPending &&
               !detectorModels.isError &&
               deployableModels.length === 0 && (
@@ -3066,7 +3116,12 @@ export function AnnotationEditor({
                 deployJobQuery.data?.status === "queued" ||
                 deployJobQuery.data?.status === "running"
               }
-              onClick={() => deployModelMutation.mutate(deployModelId)}
+              onClick={() =>
+                deployModelMutation.mutate({
+                  modelId: deployModelId,
+                  input: selectedModelAdjustment,
+                })
+              }
             >
               {deployModelMutation.isPending
                 ? "Queueing model..."

@@ -13,8 +13,13 @@ from PIL import Image
 from reefvision.config import Settings
 from reefvision.jobs.inference import process_inference_job
 from reefvision.ml.providers import DetectionPrediction, PixelBox
+from reefvision.schemas.image_adjustments_v18 import PhotometricParameters
 from reefvision.services.models import ModelService
-from reefvision.storage.image_adjustments_v18 import AdjustmentRendition, publish_adjusted_rendition
+from reefvision.storage.image_adjustments_v18 import (
+    AdjustmentRendition,
+    publish_adjusted_rendition,
+    render_adjustment,
+)
 from reefvision.tests.test_images import create_project, import_one
 from reefvision.tests.test_model_inference import FakeDetectorRegistrationProvider, register_model
 
@@ -58,6 +63,23 @@ def test_atomic_adjustment_publication_with_standard_long_windows_path(tmp_path:
     publish_adjusted_rendition(path, AdjustmentRendition(png, digest, ""))
     assert path.read_bytes() == png
     assert list(parent.iterdir()) == [path]
+
+
+def test_canonical_png_decodes_across_stored_deflate_boundaries() -> None:
+    width, height = 280, 120
+    source = Image.new("RGB", (width, height), (10, 50, 180))
+    source.putpixel((width - 1, height - 1), (164, 32, 28))
+    stream = BytesIO()
+    source.save(stream, format="PNG")
+    original = stream.getvalue()
+    original_sha = sha256(original).hexdigest()
+    params = PhotometricParameters(brightness_offset=2)
+    rendition = render_adjustment(original, original_sha, width, height, params)
+    assert rendition == render_adjustment(original, original_sha, width, height, params)
+    with Image.open(BytesIO(rendition.png)) as decoded:
+        assert decoded.getpixel((0, 0)) == (12, 52, 182)
+        assert decoded.getpixel((width - 1, height - 1)) == (166, 34, 30)
+        assert sha256(decoded.tobytes()).hexdigest() == rendition.rgb_sha256
 
 
 def make_source(client: TestClient, mode: str = "RGB") -> tuple[dict[str, Any], str, bytes]:
