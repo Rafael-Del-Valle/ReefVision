@@ -13,6 +13,7 @@ from typing import Any, cast
 from uuid import uuid4
 
 from PIL import Image, UnidentifiedImageError
+from pydantic import ValidationError as SchemaValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -39,8 +40,13 @@ from reefvision.ml.sleap_nn_provider import SLEAP_NN_ACTIONABLE_RETIREMENT, SLEA
 from reefvision.repositories.images import ImageRepository
 from reefvision.repositories.jobs import paired_owner_active
 from reefvision.repositories.models import ModelRepository
+from reefvision.schemas.image_adjustments_v18 import ImageAdjustmentPin
 from reefvision.services.annotations import _polygon_area, _polygon_self_intersects
-from reefvision.services.model_runtime import verify_queued_selection
+from reefvision.services.image_adjustments_v18 import (
+    ImageAdjustmentService,
+    adjusted_input_provenance,
+)
+from reefvision.services.model_runtime import verify_checkpoint, verify_queued_selection
 from reefvision.storage.projects import resolve_managed_project_path
 
 
@@ -340,6 +346,8 @@ def process_inference_job(
     factory: sessionmaker[Session],
     job_id: str,
 ) -> bool:
+    adjustment_path: Path | None = None
+    adjustment_provenance: dict[str, Any] | None = None
     with factory() as session:
         job = session.get(Job, job_id)
         if job is None or job.job_type != "inference" or job.status != "queued":
@@ -356,9 +364,30 @@ def process_inference_job(
         session.commit()
         request = dict(job.request_json)
         model = _model(session, str(request["model_id"]))
+        image_ids = [str(image_id) for image_id in request["image_ids"]]
         try:
             verify_queued_selection(session, settings, model.project_id, request)
-        except ReefVisionError as exc:
+            if "image_adjustment" in request:
+                if len(image_ids) != 1 or model.project_id != job.project_id:
+                    raise ValidationError(
+                        "Adjusted inference requires one original from the model's project"
+                    )
+                pin = ImageAdjustmentPin.model_validate(request["image_adjustment"])
+                verify_checkpoint(
+                    settings,
+                    model,
+                    str(request.get("checkpoint_sha256", "")),
+                    model.file_size_bytes,
+                )
+                adjustment_path, adjustment = ImageAdjustmentService(
+                    session, settings
+                ).verified_input(
+                    model.project_id,
+                    image_ids[0],
+                    pin,
+                )
+                adjustment_provenance = adjusted_input_provenance(adjustment)
+        except (ReefVisionError, SchemaValidationError) as exc:
             job.status = "failed"
             job.error_message = str(exc)
             job.completed_at = _utc_now()
@@ -371,7 +400,6 @@ def process_inference_job(
             session.commit()
             return False
         model_path = resolve_managed_project_path(settings, model.managed_path)
-        image_ids = [str(image_id) for image_id in request["image_ids"]]
         inference_settings = DetectionSettings(
             confidence_threshold=float(request["confidence_threshold"]),
             iou_threshold=float(request["iou_threshold"]),
@@ -444,7 +472,9 @@ def process_inference_job(
                 project = session.get(Project, project_id)
                 if image is None or project is None:
                     raise ValidationError("The inference job references a missing image or project")
-                image_path = resolve_managed_project_path(settings, image.managed_path)
+                image_path = adjustment_path or resolve_managed_project_path(
+                    settings, image.managed_path
+                )
                 invalid_prediction_errors: list[str] = []
 
                 if semantic_provider is not None:
@@ -559,6 +589,12 @@ def process_inference_job(
                             "runtime_selection_id": request["runtime_selection_id"],
                             "runtime_selection_sha256": request["runtime_selection_sha256"],
                         }
+                if adjustment_provenance is not None:
+                    for proposal in proposals:
+                        proposal.provenance_json = {
+                            **(proposal.provenance_json or {}),
+                            "model_input": adjustment_provenance,
+                        }
                 session.add_all(proposals)
                 job.progress_current = index
                 previous = dict(job.result_json or {})
@@ -581,6 +617,8 @@ def process_inference_job(
                         if item.geometry_kind in {"polygon_mask", "raster_mask"}
                     ),
                 }
+                if adjustment_provenance is not None:
+                    job.result_json["model_input"] = adjustment_provenance
                 if invalid_prediction_count:
                     job.result_json["invalid_prediction_count"] = invalid_prediction_count
                     job.result_json["invalid_prediction_errors"] = recorded_errors

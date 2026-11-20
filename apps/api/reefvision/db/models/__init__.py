@@ -50,6 +50,7 @@ from reefvision.db.models.field_capture import (
 )
 from reefvision.db.models.geo_referenced_observation import GeoReferencedObservation
 from reefvision.db.models.image import ImageAsset
+from reefvision.db.models.image_adjustment import ImageAdjustmentRecipe
 from reefvision.db.models.image_label import ImageLabel
 from reefvision.db.models.job import Job
 from reefvision.db.models.label_class import LabelClass
@@ -205,6 +206,7 @@ __all__ = [
     "FieldCaptureReconciliationRecord",
     "FieldCaptureReview",
     "GeoReferencedObservation",
+    "ImageAdjustmentRecipe",
     "ImageAsset",
     "ImageLabel",
     "Job",
