@@ -2040,4 +2040,3 @@ def test_database_copy_rejects_direct_symlink_and_noncanonical_path(tmp_path: Pa
     assert evidence["status"] == "HOLD"
     assert evidence["problems"] == ["database_copy_noncanonical_path"]
     assert evidence["upgrade_authorized"] is False
-
