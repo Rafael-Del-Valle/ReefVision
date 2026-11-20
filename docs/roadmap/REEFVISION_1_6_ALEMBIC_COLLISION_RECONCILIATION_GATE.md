@@ -70,3 +70,9 @@ evidence only**: it does not reconcile the independently colliding 1.1/1.6
 Alembic-0038 histories, mutate a database, or bypass saved Workflow Builder
 human review. Full exact-head CI and native Windows installed/upgrade/rollback
 validation remain required before release.
+
+## Original 0038 column-nullability and default contract (2026-11-20)
+
+The optional `--verify-structural-contracts` read-only inspector now verifies **both** sides of each original column nullability contract, not only originally required columns. An unexpected `NOT NULL` on an originally optional image/video link or reviewer comment can suppress valid future observations even with unchanged historical rows. A new SQLite column `DEFAULT` can fabricate future scientific source values or reviewer attribution despite identical existing row contents. Neither independently authored 0038 source table declares a column default, so the inspector rejects all unexpected defaults. These deviations report the existing redacted `lineage_table_contract_mismatch_*` warning and retain `upgrade_authorized=false`; no data or schema is altered.
+
+Four synthetic populated-table regressions cover optional `NOT NULL` and injected defaults in both scientific and QC families; two strict CLI cases verify nonzero exits, redaction and byte preservation. Existing valid-contract controls stay green. This check does **not** validate cross-branch migration ancestry, automatically approve a database, or replace representative biological, saved-workflow, and genuine installed-Windows MSI/GUI acceptance. Revision-0038 reconciliation and explicit researcher approval remain required before release.
