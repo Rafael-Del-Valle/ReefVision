@@ -554,11 +554,13 @@ def materialize_pose_training_exports(
     # left a partial export. The same run ID may still own reviewed inputs.
     if destination.exists():
         raise ValidationError(
-            "Pose training export destination already exists; refusing to overwrite prior scientific data"
+            "Pose training export destination already exists; "
+            "refusing to overwrite prior scientific data"
         )
     if validation_content is not None and validation_stage.exists():
         raise ValidationError(
-            "Pose training validation stage already exists; refusing to overwrite prior scientific data"
+            "Pose training validation stage already exists; "
+            "refusing to overwrite prior scientific data"
         )
 
     _safe_extract_zip(
