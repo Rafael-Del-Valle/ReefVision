@@ -72,7 +72,8 @@ def _duplicate_original_verified(settings: Settings, image: ImageAsset) -> bool:
                 size += len(block)
     except (OSError, ValidationError):
         LOGGER.warning(
-            "Cannot verify previously imported camera original %s", image.id,
+            "Cannot verify previously imported camera original %s",
+            image.id,
             exc_info=True,
         )
         return False
