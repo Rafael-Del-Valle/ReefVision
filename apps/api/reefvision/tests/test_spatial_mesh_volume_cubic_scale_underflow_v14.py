@@ -348,39 +348,59 @@ def test_cubic_volume_subresolution_scale_qc_standalone_and_saved_graph(
     client: TestClient,
 ) -> None:
     """Positive volume with rounded-equal bounds must not appear exact."""
+    mesh_params = {**_params(1e-8), "relative_scale_uncertainty": 1e-17}
     params = {
-        **_params(1e-8),
-        "relative_scale_uncertainty": 1e-17,
+        **mesh_params,
         "specimen_id": "synthetic-unverified-cubic-precision",
         "observation_id": "tiny-relative-uncertainty",
         "coordinate_frame_id": "source-frame-not-registered",
     }
-    direct = measure_mesh_preview(**params)
+    direct = measure_mesh_preview(**mesh_params)
     nominal = direct["enclosed_volume_m3"]
     assert nominal == pytest.approx(1 / 6)
     assert nominal > 0
     assert (1 - 1e-17) ** 3 == (1 + 1e-17) ** 3
     assert direct["enclosed_volume_scale_interval_m3"] is None
     assert direct["edge_connected_patch_enclosed_volume_scale_intervals_m3"] == [None]
+    ratio = direct["surface_to_enclosed_volume_ratio_per_m"]
+    assert ratio is not None and ratio > 0
+    assert direct["surface_to_enclosed_volume_ratio_scale_interval_per_m"] is None
+    assert direct["edge_connected_patch_surface_to_enclosed_volume_ratio_scale_intervals_per_m"] == [
+        None
+    ]
+    ratio_warning = "surface_volume_ratio_scale_interval_numeric_unrepresentable"
+    assert ratio_warning in direct["qc_warnings"]
     warning = "enclosed_volume_scale_interval_numeric_unrepresentable"
     assert warning in direct["qc_warnings"]
     assert direct["measurement_status"] == "caller_supplied_unverified"
     assert direct["provenance"]["calibration_verified"] is False
-    assert direct["provenance"]["specimen_identity_verified"] is False
-    assert direct["provenance"]["coordinate_registration_verified"] is False
 
+    # Direct engine provenance lacks request-level specimen/coordinate fields;
+    # those are added by preview_from_request in API and saved workflows.
     # An explicit zero error, an unknown error, and a physically valid 100%
     # lower bound must remain distinct from rounded-away positive error.
-    exact = measure_mesh_preview(**{**params, "relative_scale_uncertainty": 0.0})
+    exact = measure_mesh_preview(**{**mesh_params, "relative_scale_uncertainty": 0.0})
     assert exact["enclosed_volume_scale_interval_m3"] == [nominal, nominal]
+    assert exact["surface_to_enclosed_volume_ratio_scale_interval_per_m"] == [ratio, ratio]
     assert warning not in exact["qc_warnings"]
-    unknown = measure_mesh_preview(**{**params, "relative_scale_uncertainty": None})
+    assert ratio_warning not in exact["qc_warnings"]
+    ordinary = measure_mesh_preview(**{**mesh_params, "relative_scale_uncertainty": 0.1})
+    assert ordinary["surface_to_enclosed_volume_ratio_scale_interval_per_m"] == pytest.approx(
+        [ratio / 1.1, ratio / 0.9]
+    )
+    assert ratio_warning not in ordinary["qc_warnings"]
+    unknown = measure_mesh_preview(**{**mesh_params, "relative_scale_uncertainty": None})
     assert unknown["enclosed_volume_scale_interval_m3"] is None
     assert unknown["edge_connected_patch_enclosed_volume_scale_intervals_m3"] is None
+    assert unknown["surface_to_enclosed_volume_ratio_scale_interval_per_m"] is None
+    assert unknown["edge_connected_patch_surface_to_enclosed_volume_ratio_scale_intervals_per_m"] is None
     assert warning not in unknown["qc_warnings"]
-    full = measure_mesh_preview(**{**params, "relative_scale_uncertainty": 1.0})
+    assert ratio_warning not in unknown["qc_warnings"]
+    full = measure_mesh_preview(**{**mesh_params, "relative_scale_uncertainty": 1.0})
     assert full["enclosed_volume_scale_interval_m3"] == [0.0, nominal * 8]
+    assert full["surface_to_enclosed_volume_ratio_scale_interval_per_m"] is None
     assert warning not in full["qc_warnings"]
+    assert ratio_warning not in full["qc_warnings"]
 
     project_id = str(create_project(client, "Provisional cubic precision review")["id"])
     base = f"/api/v1/projects/{project_id}"
@@ -390,6 +410,11 @@ def test_cubic_volume_subresolution_scale_qc_standalone_and_saved_graph(
     assert standalone["enclosed_volume_m3"] == nominal
     assert standalone["enclosed_volume_scale_interval_m3"] is None
     assert standalone["edge_connected_patch_enclosed_volume_scale_intervals_m3"] == [None]
+    assert standalone["surface_to_enclosed_volume_ratio_per_m"] == ratio
+    assert standalone["surface_to_enclosed_volume_ratio_scale_interval_per_m"] is None
+    assert standalone["edge_connected_patch_surface_to_enclosed_volume_ratio_scale_intervals_per_m"] == [
+        None
+    ]
     assert standalone["qc_warnings"] == direct["qc_warnings"]
     assert standalone["provenance"]["calibration_verified"] is False
     assert standalone["provenance"]["specimen_identity_verified"] is False
