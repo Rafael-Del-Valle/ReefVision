@@ -669,7 +669,10 @@ fn main() {
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![desktop_context, open_training_console])
+        .invoke_handler(tauri::generate_handler![
+            desktop_context,
+            open_training_console
+        ])
         .setup(|app| {
             let data_dir = resolve_desktop_data_dir(app.handle())?;
             let handle = app.handle().clone();
@@ -727,7 +730,9 @@ mod tests {
 
     #[test]
     fn training_console_accepts_only_opaque_run_ids() {
-        assert!(valid_training_run_id("b530769c-2a79-4d44-a36e-61d988d5fa78"));
+        assert!(valid_training_run_id(
+            "b530769c-2a79-4d44-a36e-61d988d5fa78"
+        ));
         assert!(valid_training_run_id("run-1"));
         assert!(!valid_training_run_id(""));
         assert!(!valid_training_run_id("not a run"));
