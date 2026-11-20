@@ -6,11 +6,13 @@ import hashlib
 import json
 import os
 import platform
+import shutil
 import sqlite3
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy.engine import make_url
 
@@ -118,6 +120,35 @@ def backup_member_path(root: Path, member: str) -> Path:
     if not backup_io_path(candidate).resolve().is_relative_to(filesystem_root):
         raise ValidationError("Backup inventory path escapes its managed directory")
     return candidate
+
+
+def restore_staging_path(settings: Settings, job_id: str) -> Path:
+    """Address a single restore job's private directory across process restarts."""
+    root = backup_io_path(settings.resolved_data_dir).resolve()
+    workspace = root / ".t" / UUID(job_id).hex
+    if workspace.resolve() != workspace:
+        raise ValidationError("Restore staging must be a directory inside the managed profile")
+    return workspace
+
+
+def discard_restore_staging(settings: Settings, job_id: str) -> None:
+    workspace = restore_staging_path(settings, job_id)
+    if workspace.exists():
+        shutil.rmtree(workspace)
+
+
+def has_restore_job_receipt(destination: Path, job_id: str, request: dict[str, Any]) -> bool:
+    try:
+        path = backup_member_path(destination, "restore-receipt.json")
+        receipt = json.loads(backup_io_path(path).read_text(encoding="utf-8"))
+    except (FileNotFoundError, NotADirectoryError, UnicodeError, json.JSONDecodeError):
+        return False
+    return isinstance(receipt, dict) and (
+        receipt.get("restore_job_id") == job_id
+        and receipt.get("backup_id") == request["backup_id"]
+        and receipt.get("source_backup_path") == request["backup_path"]
+        and receipt.get("restored_destination") == request["destination_path"]
+    )
 
 
 def build_backup_plan(

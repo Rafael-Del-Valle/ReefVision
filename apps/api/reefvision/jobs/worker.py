@@ -38,7 +38,7 @@ from reefvision.jobs.pose_identity_tracking import process_pose_identity_trackin
 from reefvision.jobs.project_exchange import process_project_exchange_export_job
 from reefvision.jobs.quality_control import process_quality_control_job
 from reefvision.jobs.reefpose_validation import process_reefpose_validation_job
-from reefvision.jobs.restores import process_restore_job
+from reefvision.jobs.restores import process_restore_job, recover_cancel_requested_restore
 from reefvision.jobs.sam_image_proposals import process_sam_image_proposals_job
 from reefvision.jobs.spatial_source_parse_v14 import process_spatial_source_parse_job
 from reefvision.jobs.static_comparison import process_static_comparison_job
@@ -341,6 +341,13 @@ def recover_interrupted_jobs(
         for job in interrupted_training_jobs:
             recover_training_run(session, settings, job)
         count += recover_interrupted_video_tracking_jobs(session)
+        if settings is not None:
+            cancelled_restores = session.scalars(
+                select(Job).where(Job.job_type == "restore", Job.status == "cancel_requested")
+            )
+            for restore in cancelled_restores:
+                recover_cancel_requested_restore(settings, restore)
+            session.flush()
         count += JobRepository(session).recover_interrupted_jobs()
 
         recovered_at = datetime.now(UTC)

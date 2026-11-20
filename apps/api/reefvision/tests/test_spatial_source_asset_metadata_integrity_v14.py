@@ -146,3 +146,27 @@ def test_corrupt_imported_source_metadata_fails_standalone_and_saved_workflow(
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "failed"
     assert not any(item["data_type"] == artifact_type for item in detail.json()["artifacts"])
+
+
+def test_surrogate_filename_fails_before_original_bytes_are_persisted(
+    client: TestClient,
+) -> None:
+    """SQLite cannot store lone surrogates; validate before any storage attempt."""
+    from io import BytesIO
+
+    from reefvision.domain.errors import ValidationError as DomainValidationError
+    from reefvision.services.spatial_source_assets_v14 import (
+        SpatialSourceAssetService,
+        _safe_original_filename,
+    )
+
+    project_id = str(create_project(client, "Reject non-scalar filenames")["id"])
+    app = cast(FastAPI, client.app)
+    for filename in ("coral\ud800.obj", "coral\udfff.ply"):
+        assert not _safe_original_filename(filename)
+        with app.state.session_factory() as session:
+            service = SpatialSourceAssetService(session, app.state.settings)
+            with pytest.raises(DomainValidationError, match="safe original"):
+                service.import_source(project_id, filename, BytesIO(OBJ))
+    assert _safe_original_filename("coral_🐠.obj")
+    assert client.get(f"/api/v1/projects/{project_id}/spatial/assets").json() == []
