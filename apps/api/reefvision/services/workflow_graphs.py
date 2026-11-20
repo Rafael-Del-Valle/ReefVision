@@ -16,6 +16,7 @@ from reefvision.db.models import (
     Project,
     VideoAsset,
 )
+from reefvision.schemas.review_queues import parse_workflow_review_weights
 from reefvision.schemas.workflow_graphs import (
     WorkflowEdge,
     WorkflowGraphIssue,
@@ -228,6 +229,7 @@ _ACTIONS: dict[str, str] = {
     "ecology_paired_count_csv_export": (
         "Export source-linked human-model CSV with unverified evidence and review restrictions."
     ),
+    "qc_review_queue": "Create a persistent, auditable queue requiring human review.",
 }
 
 
@@ -416,6 +418,25 @@ class WorkflowGraphService:
                 )
             )
 
+    def _validate_qc_review_queue_node(
+        self,
+        node_id: str,
+        parameters: dict[str, Any],
+        issues: list[WorkflowGraphIssue],
+    ) -> None:
+        try:
+            parse_workflow_review_weights(parameters.get("signal_weights"))
+        except ValueError:
+            issues.append(
+                self._issue(
+                    "error",
+                    "invalid_qc_signal_weights",
+                    "QC Review Queue weights must use recognized nonnegative finite "
+                    "signals with a finite positive total",
+                    node_id=node_id,
+                )
+            )
+
     def validate(
         self,
         project_id: str,
@@ -526,6 +547,8 @@ class WorkflowGraphService:
                 self._validate_vlm_node(project_id, node.node_id, node.parameters, issues)
             elif node.node_type == "model_training":
                 self._validate_training_node(node.node_id, node.parameters, issues)
+            elif node.node_type == "qc_review_queue":
+                self._validate_qc_review_queue_node(node.node_id, node.parameters, issues)
 
         edge_counts = Counter(edge.edge_id for edge in graph.edges)
         for edge_id, count in edge_counts.items():
@@ -636,6 +659,26 @@ class WorkflowGraphService:
                             node_id=node_id,
                         )
                     )
+
+        # Prediction proposals are deliberately excluded from immutable
+        # dataset-version QC context. Flag confidence-gated version queues at
+        # planning time instead of letting a saved graph yield a false empty
+        # completed review queue. Live project-only filtering remains valid.
+        for node in graph.nodes:
+            if (
+                node.node_type == "qc_review_queue"
+                and node.parameters.get("review_below_confidence") is not None
+                and incoming.get((node.node_id, "dataset"))
+            ):
+                issues.append(
+                    self._issue(
+                        "error",
+                        "unsupported_frozen_qc_confidence_filter",
+                        "Frozen dataset versions do not snapshot pending predictions; "
+                        "remove the confidence filter or disconnect the dataset input",
+                        node_id=node.node_id,
+                    )
+                )
 
         for node in graph.nodes:
             accepted_purposes = _MODEL_PURPOSES_BY_NODE.get(node.node_type)
