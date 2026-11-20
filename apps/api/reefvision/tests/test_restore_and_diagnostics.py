@@ -70,6 +70,43 @@ def test_restore_rejects_existing_destination(
     assert "already exists" in restore_response.json()["detail"]
 
 
+def test_restore_keeps_preexisting_marker_and_receipt_named_directory(
+    client: TestClient, test_settings: Settings
+) -> None:
+    root = test_settings.resolved_data_dir
+    root.mkdir(parents=True, exist_ok=True)
+    marker = root / "restored-from-backup-complete.json"
+    marker.write_bytes(b"original field recovery log")
+    directory = root / "Restore-Receipt-2.json"
+    directory.mkdir()
+    (directory / "notes").write_bytes(b"retained field notes")
+    _, backup = create_completed_backup(client, test_settings)
+    response = (
+        client.post(
+            f"/api/v1/backups/{backup['id']}/restore", json={"destination_name": "retained-history"}
+        )
+        .raise_for_status()
+        .json()
+    )
+    job_id = response["job"]["id"]
+    assert process_restore_job(
+        test_settings, cast(FastAPI, client.app).state.session_factory, job_id
+    )
+    target = root / response["destination_path"]
+    result = client.get(f"/api/v1/jobs/{job_id}").raise_for_status().json()["result_json"]
+    assert (target / marker.name).read_bytes() == marker.read_bytes()
+    assert (target / directory.name / "notes").read_bytes() == b"retained field notes"
+    assert result["restore_receipt_filename"] == "restore-receipt-3.json"
+    assert result["completion_marker_filename"] == "restored-from-backup-complete-3.json"
+    assert (
+        json.loads((target / result["restore_receipt_filename"]).read_bytes())["restore_job_id"]
+        == job_id
+    )
+    assert (target / result["completion_marker_filename"]).read_bytes() == (
+        root / backup["completion_marker_path"]
+    ).read_bytes()
+
+
 @pytest.mark.parametrize(
     ("destination_name", "published_length"),
     [("archive1", 256), ("backup-copy-17545a73-20b", 256), ("backup-copy-17545a73-20b", 261)],
@@ -86,7 +123,8 @@ def test_restore_reads_published_members_near_windows_path_limit(
     root = captured_root.with_name(captured_root.name + "-restore-target")
     project_path = Path(str(project["storage_root"]))
     target = root / "recoveries" / destination_name
-    member = project_path / "training" / "dataset" / "generated-managed-original-file.bin"
+    # Keep room for the deliberate padding under the default Windows pytest directory.
+    member = project_path / "training" / "dataset" / "weights.bin"
     padding = published_length - len(str(target / member)) - 1
     assert 0 < padding < 255
     member = member.parent / ("x" * padding) / member.name

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import shutil
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -25,8 +24,10 @@ from reefvision.storage.backups import (
     discard_restore_staging,
     has_restore_job_receipt,
     hash_file,
+    restore_metadata_filenames,
     restore_staging_path,
     verify_backup_directory,
+    write_restore_metadata,
 )
 
 LOGGER = logging.getLogger("reefvision.restores")
@@ -81,6 +82,8 @@ def process_restore_job(settings: Settings, factory: sessionmaker[Session], job_
         database_filename = manifest.get("database_filename")
         if not isinstance(database_filename, str) or not database_filename:
             raise RuntimeError("Backup manifest database filename is missing")
+        receipt_filename, marker_filename = restore_metadata_filenames(inventory, database_filename)
+        request = {**request, "restore_receipt_filename": receipt_filename}
 
         if backup_io_path(destination_root).exists():
             if not has_restore_job_receipt(destination_root, job_id, request):
@@ -89,7 +92,7 @@ def process_restore_job(settings: Settings, factory: sessionmaker[Session], job_
             _verify_restored_copy(
                 destination_root, inventory=inventory, database_filename=database_filename
             )
-            if hash_file(destination_root / "restored-from-backup-complete.json") != hash_file(
+            if hash_file(destination_root / marker_filename) != hash_file(
                 backup_root / BACKUP_COMPLETION_MARKER_FILENAME
             ):
                 raise RuntimeError(
@@ -102,6 +105,8 @@ def process_restore_job(settings: Settings, factory: sessionmaker[Session], job_
                 restored_count=len(inventory),
                 restored_bytes=int(verification["total_size_bytes"]),
                 verification_status=verification["status"],
+                receipt_filename=receipt_filename,
+                marker_filename=marker_filename,
             )
             return True
 
@@ -113,6 +118,7 @@ def process_restore_job(settings: Settings, factory: sessionmaker[Session], job_
             stage="restoring_files",
             progress_current=0,
             progress_total=max(len(inventory), 1),
+            receipt_filename=receipt_filename,
         )
 
         restored_count = 0
@@ -145,22 +151,18 @@ def process_restore_job(settings: Settings, factory: sessionmaker[Session], job_
             )
 
         ensure_job_not_cancelled(factory, job_id)
-        _write_restore_receipt(
+        write_restore_metadata(
             staging_root,
+            receipt_filename,
+            marker_filename,
             job_id=job_id,
-            backup_id=backup_id,
-            backup_relative=backup_relative,
-            destination_relative=destination_relative,
+            request=request,
+            completion_source=backup_root / BACKUP_COMPLETION_MARKER_FILENAME,
         )
         _verify_restored_copy(
             staging_root,
             inventory=inventory,
             database_filename=database_filename,
-        )
-        completion_source = backup_root / BACKUP_COMPLETION_MARKER_FILENAME
-        shutil.copy2(
-            backup_io_path(completion_source),
-            backup_io_path(staging_root / "restored-from-backup-complete.json"),
         )
         _publish_restore(staging_root, destination_root, restored_paths)
         _finalize_success(
@@ -170,6 +172,8 @@ def process_restore_job(settings: Settings, factory: sessionmaker[Session], job_
             restored_count=restored_count,
             restored_bytes=restored_bytes,
             verification_status=verification["status"],
+            receipt_filename=receipt_filename,
+            marker_filename=marker_filename,
         )
         LOGGER.info(
             "ReefVision restore completed",
@@ -278,29 +282,6 @@ def _verify_restored_copy(
             raise RuntimeError(f"Restored file failed verification: {relative_path}")
 
 
-def _write_restore_receipt(
-    restore_root: Path,
-    *,
-    job_id: str,
-    backup_id: str,
-    backup_relative: str,
-    destination_relative: str,
-) -> None:
-    restore_root = backup_io_path(restore_root)
-    restore_root.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "restore_job_id": job_id,
-        "backup_id": backup_id,
-        "source_backup_path": backup_relative,
-        "restored_destination": destination_relative,
-        "restored_at": datetime.now(UTC).isoformat(),
-    }
-    (restore_root / "restore-receipt.json").write_text(
-        json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")),
-        encoding="utf-8",
-    )
-
-
 def _update_job_state(
     factory: sessionmaker[Session],
     *,
@@ -309,6 +290,7 @@ def _update_job_state(
     progress_current: int,
     progress_total: int,
     bytes_processed: int | None = None,
+    receipt_filename: str | None = None,
 ) -> None:
     with factory() as session:
         job = session.get(Job, job_id)
@@ -321,6 +303,9 @@ def _update_job_state(
         }
         if bytes_processed is not None:
             result_json["bytes_processed"] = bytes_processed
+        if receipt_filename is not None:
+            # Startup cancellation recovery must find the job's own published receipt.
+            job.request_json = {**job.request_json, "restore_receipt_filename": receipt_filename}
         job.result_json = result_json
         session.commit()
 
@@ -333,6 +318,8 @@ def _finalize_success(
     restored_count: int,
     restored_bytes: int,
     verification_status: str,
+    receipt_filename: str,
+    marker_filename: str,
 ) -> None:
     with factory() as session:
         job = session.get(Job, job_id)
@@ -348,6 +335,8 @@ def _finalize_success(
             "restored_file_count": restored_count,
             "restored_total_size_bytes": restored_bytes,
             "verification_status": verification_status,
+            "restore_receipt_filename": receipt_filename,
+            "completion_marker_filename": marker_filename,
         }
         session.commit()
 

@@ -281,7 +281,19 @@ test("creates, verifies, and restores a backup from System status", async ({
 
   const loaded = async <T>(path: string) =>
     JSON.parse(await readFile(path, "utf8")) as T;
-  const receipt = await loaded(join(target, "restore-receipt.json"));
+  const reportedReceipt = restoreJob.result_json?.restore_receipt_filename;
+  const receiptFilename =
+    typeof reportedReceipt === "string"
+      ? reportedReceipt
+      : "restore-receipt.json";
+  if (typeof reportedReceipt === "string") {
+    await expect(
+      jobCard.getByText(restored.destination_path + "/" + receiptFilename, {
+        exact: true,
+      }),
+    ).toBeVisible();
+  }
+  const receipt = await loaded(managedPath(target, receiptFilename));
   expect(receipt).toMatchObject({
     backup_id: created.backup.id,
     source_backup_path: created.backup.destination_path,
@@ -376,6 +388,7 @@ test("creates, verifies, and restores a backup from System status", async ({
         restore_job_id: restoreJob.id,
         restore_status: restoreJob.status,
         restore_destination: restored.destination_path,
+        restore_receipt_filename: receiptFilename,
         verified_files: verified.file_count,
         restored_files: restoreJob.result_json?.restored_file_count,
         database_schema_revision: version.current_schema_revision,
