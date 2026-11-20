@@ -233,3 +233,35 @@ The inspector remains diagnostic only: passing it never authorizes migration.
 The independent 1.1/1.6 0038 collision, genuine Windows installed-GUI/MSI
 upgrade/rollback, representative saved biological Workflow Builder acceptance
 and explicit researcher release approval remain unresolved.
+
+## 2026-11-20 — Preserve source migration index names and constraint origins
+
+The read-only 0038 structural preflight previously matched SQLite indexes by
+ordered columns and uniqueness only. A renamed look-up index would therefore
+pass even though the original 1.1/1.6 Alembic downgrade explicitly drops the
+*named* index. Similarly, a manual `CREATE UNIQUE INDEX` could replace the
+original QC `UNIQUE` table constraint, producing the same observed columns but
+different batch-table-recreation semantics.
+
+The optional inspector now retains the three historical named non-unique
+lookup indexes from the two actual revision-0038 source migrations, and requires
+the expected names, full ascending BINARY key shape and CREATE INDEX origin.
+The QC request-identity uniqueness must come from the original table constraint
+(origin `u`, not `c`); internal SQLite autoindex names are deliberately **not**
+pinned because they are generated and can change during legitimate table
+recreation. As before, separately added nonunique indexes are allowed.
+
+Seven regression cases (four direct structural checks and four strict
+subprocess cases, with one shared fixture) distinguish a renamed scientific
+index, both renamed QC chronology indexes and manual UNIQUE replacement. Each
+constructs populated offline SQLite research/review evidence, requires
+mismatch/refusal, preserves the original file bytes and redacts the private
+observation/comment. Canonical 0038 and historical 0039/0040 QC controls remain
+in the same parameterized suite. An independent SQLite index-origin probe
+confirmed `u` for table UNIQUE and `c` for explicit CREATE UNIQUE INDEX.
+
+This is a diagnostic preflight **only**. It neither renumbers/migrates the
+competing 0038 lineages nor authorizes an upgrade. Complete exact-head backend,
+frontend/E2E, native-Windows preservation, representative biological and saved
+typed Workflow Builder QC validation, installed MSI/CAB clean-install and
+upgrade/rollback, installed GUI and explicit researcher approval remain required.
