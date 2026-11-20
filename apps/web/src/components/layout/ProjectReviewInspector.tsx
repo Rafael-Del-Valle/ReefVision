@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import {
+  getReviewQueue,
   getReviewQueueItems,
   getReviewQueues,
   type ReviewQueueItem,
@@ -35,12 +36,21 @@ export function ProjectReviewInspector({
   const queues = useQuery({
     queryKey: reviewQueuesQueryKey(projectId, "project", ""),
     queryFn: ({ signal }) => getReviewQueues(projectId, signal),
+    enabled: selectedQueueId === null,
   });
-
+  const queueDetail = useQuery({
+    queryKey: ["review_queue", projectId, selectedQueueId],
+    queryFn: ({ signal }) => getReviewQueue(selectedQueueId!, signal),
+    enabled: selectedQueueId !== null,
+  });
+  const queueQuery = selectedQueueId === null ? queues : queueDetail;
+  const candidate =
+    selectedQueueId === null ? queues.data?.[0] : queueDetail.data;
   const selectedQueue =
-    queues.data?.find((queue) => queue.id === selectedQueueId) ??
-    queues.data?.[0] ??
-    null;
+    candidate?.project_id === projectId &&
+    (selectedQueueId === null || candidate.id === selectedQueueId)
+      ? candidate
+      : null;
 
   const queueId = selectedQueue?.id ?? "";
 
@@ -84,17 +94,24 @@ export function ProjectReviewInspector({
         accept, reject, or alter scientific annotations itself.
       </p>
 
-      {queues.isPending && (
+      {queueQuery.isPending && (
         <p className="annotation-helper">Loading review queues…</p>
       )}
 
-      {queues.error && (
+      {queueQuery.error && (
         <p className="form-error" role="alert">
-          Review queues could not be loaded: {queues.error.message}
+          Review queues could not be loaded: {queueQuery.error.message}
         </p>
       )}
 
-      {!queues.isPending &&
+      {selectedQueueId !== null && queueQuery.isSuccess && !selectedQueue && (
+        <p className="form-error" role="alert">
+          The selected review queue is unavailable for this project.
+        </p>
+      )}
+
+      {selectedQueueId === null &&
+        !queues.isPending &&
         !queues.error &&
         (queues.data?.length ?? 0) === 0 && (
           <div className="rv-inspector-empty-control">

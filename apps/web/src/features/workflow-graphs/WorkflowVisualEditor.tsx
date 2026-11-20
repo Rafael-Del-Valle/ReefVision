@@ -123,6 +123,7 @@ function portCompatible(sourceTypes: string[], targetTypes: string[]): boolean {
 
 function nodeKind(definition: WorkflowNodeDefinition | undefined): string {
   if (!definition) return "Automated";
+  if (definition.node_type === "qc_review_queue") return "Human triage";
   if (definition.category === "Human review") return "Scientist review";
   if (definition.category === "Scientific analysis")
     return "Scientific analysis";
@@ -701,7 +702,9 @@ export function WorkflowVisualEditor({
             const planStep = planSteps.get(node.node_id);
             const status = statusLabel(runNode?.status);
             const kind = nodeKind(definition);
-            const reviewNode = definition?.category === "Human review";
+            const reviewNode =
+              definition?.category === "Human review" &&
+              node.node_type !== "qc_review_queue";
 
             return (
               <div
