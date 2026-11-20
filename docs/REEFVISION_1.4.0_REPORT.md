@@ -698,3 +698,29 @@ remain open.
 | Dataset manifest SHA-256 | `506860a70afd82efa7610dd6d33c77cf9b34997464b8aadb2ed86600dc476447` |
 | Frame checkpoint SHA-256 | `62afaf1bcc5f189bec166795b50d13969f866d2522548e36d13b7ab96d04ca6b` |
 | Temporal checkpoint SHA-256 | `ddf2ad44bcdb4512571d1ceaa0ca7f3d9fcd87a3da26e1e0902a55f59deba105` |
+
+## Track C: reject nondegenerate triangles lost to numeric underflow (2026-11-20)
+
+The shared source-frame triangle-area primitive now distinguishes a truly
+collinear triangle from non-collinear geometry whose binary64 cross product
+or half-norm rounds to zero. A zero computed area triggers an exact rational
+non-collinearity check on the original finite numeric coordinates. If the
+triangle is nondegenerate, the bounded import fails with a controlled
+`3D triangle area underflowed numeric precision` error, rather than
+publishing a false zero-area surface or misclassifying it as reconstructed
+degenerate tissue. Zero-area collinear triangles remain valid geometric QC.
+
+A synthetic 1e-200-unit right triangle exercises direct primitive rejection,
+standalone project API rejection, and failure of an executable persisted typed
+Workflow Builder graph **without** a mesh-measurement artifact. A representable
+1e-100-unit reference triangle exercises the positive standalone path, two
+executions of the same saved graph, exact scientific payload equality,
+unverified calibration provenance, and reproducible SHA-256 artifact hashes.
+The exact rational predicate runs only on the zero-area branch, not every
+face of a 3D reconstruction. Existing commits and import formats are retained.
+
+These are numeric-integrity checks, **not** calibration validation, anatomical
+coral branch length, reconstruction accuracy, biological condition or specimen
+reidentification. Representative coral references, independent scientific
+review, final-head CI, installed Windows MSI/CAB/GUI and physical GPU gates
+remain outstanding. **RELEASE HOLD for both 1.4 and 1.5.**
