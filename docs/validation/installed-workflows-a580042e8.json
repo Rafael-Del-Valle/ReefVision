@@ -1,0 +1,314 @@
+{
+  "source": "a580042e84c4d2fa0a646fbf8ec5a3dc90657fa8",
+  "version": "1.6.0",
+  "fixtures": "Generated, isolated projects.",
+  "windows_build": {
+    "run": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44779080692",
+    "job": 136436638993,
+    "parts": [
+      {
+        "id": 14654077368,
+        "name": "ReefVision-1.6.0-RC-Installer-Part-1",
+        "size_bytes": 1953706481,
+        "sha256": "8facea92ec04010f0da9c81a454749c53e02afd3e13a750b5ac6b684f2dd618d"
+      },
+      {
+        "id": 14654107360,
+        "name": "ReefVision-1.6.0-RC-Installer-Part-2",
+        "size_bytes": 1018956303,
+        "sha256": "d57cb5951c737810e84af356235b45a5e9073eca5cd2da786a0536b22eaedeb7"
+      }
+    ],
+    "msi_media": [
+      {
+        "disk_id": 1,
+        "cabinet": "rv1.cab",
+        "embedded": false
+      },
+      {
+        "disk_id": 2,
+        "cabinet": "rv2.cab",
+        "embedded": false
+      },
+      {
+        "disk_id": 3,
+        "cabinet": "rv3.cab",
+        "embedded": false
+      },
+      {
+        "disk_id": 4,
+        "cabinet": "rv4.cab",
+        "embedded": false
+      },
+      {
+        "disk_id": 5,
+        "cabinet": "rv5.cab",
+        "embedded": false
+      }
+    ],
+    "files": [
+      {
+        "name": "ReefVision_1.6.0_x64_en-US.msi",
+        "size_bytes": 299216144,
+        "sha256": "f31c18ce403802f6d31be1531ef5c66133b9e5150a777abc21736bb88987073c"
+      },
+      {
+        "name": "rv1.cab",
+        "size_bytes": 625834182,
+        "sha256": "53f8aed5969e15e32205db81f982f8793a3c5c88c4840adeb247dc4bf57ff4f7"
+      },
+      {
+        "name": "rv2.cab",
+        "size_bytes": 433682315,
+        "sha256": "478efd24cc6cfb8c05c98023102cd2455d0dac28ec366309dd3f4e5040f8d9ea"
+      },
+      {
+        "name": "rv3.cab",
+        "size_bytes": 594968995,
+        "sha256": "74609ce9e570e8db51269a4d4d792a96a93e2adc8c7e03c7462c72b0a65b2e3f"
+      },
+      {
+        "name": "rv4.cab",
+        "size_bytes": 642726166,
+        "sha256": "39a967693d218cfe86ce7af70c28f50ecbcbfcd3fce76e03765781b014aba084"
+      },
+      {
+        "name": "rv5.cab",
+        "size_bytes": 376229903,
+        "sha256": "bb5f573b76b471419bf0661684cffe32b3e7c37d69ea6e73abc0e2c5446fdf94"
+      }
+    ],
+    "provenance_sha256": "7a4a410260a20459e473270546e38392561c4f45dcf82fcbd87504efcce1888f",
+    "portable_checksums_sha256": "1b2885613c0779a92c507ef85b61b8d56c7ecd91ff2358e38b6067bbf847b7a4",
+    "total_payload_bytes": 2972657705,
+    "msi_identity": {
+      "ProductVersion": "1.6.0",
+      "ProductCode": "{C4CE2B00-AD44-44AB-9B39-CCC8E4197EE7}",
+      "UpgradeCode": "{5EDA8EE0-2A5D-5B08-A8DF-9BECFC3A4351}"
+    },
+    "desktop_sha256": "41bdf17415591f81a00d2a7e56e173d55cb07c3e7d10caa000fd233fdfac3c1a",
+    "backend_sha256": "4e2f0d9f36f9e8b0a99fb2e3dc509ad43c09d5491b8ceaf099ad81f3596b4923"
+  },
+  "distribution": {
+    "audit_sha256": "2559f9c6801f5779204926d3a8a23803721999805d83e5cb1ce3053771a39b94",
+    "findings": [],
+    "counts": {
+      "distribution_metadata": 57,
+      "entry_point_files": 14,
+      "model_manifest_assets": 0,
+      "model_manifest_provider_assets": 0,
+      "msi_cab_files": 19144,
+      "pyinstaller_outer_entries": 14,
+      "pyinstaller_pyz_archives": 1,
+      "pyinstaller_pyz_entries": 12045,
+      "zip_containers": 1,
+      "zip_members": 155
+    },
+    "signature_status": {
+      "ReefVision_1.6.0_x64_en-US.msi": "NotSigned",
+      "ReefVision.exe": "NotSigned",
+      "reefvision-api.exe": "NotSigned"
+    },
+    "system": {
+      "edition": "Core",
+      "build": "26300",
+      "verified_and_reputable_policy_state": 0,
+      "enforcing_device_acceptance": "open"
+    }
+  },
+  "offline_install": {
+    "proof_run_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44779273302",
+    "proof_job_id": 136437296408,
+    "proof_artifact_id": 14653838860,
+    "proof_artifact_sha256": "f2ec7db6eeeb2006a716fa767a916762e9739ce4de648a01d8466d49fd455797",
+    "topology": "deny outbound for all programs except authenticated Actions executables TCP 443",
+    "deny_duration_seconds": 221.135197,
+    "controls": {
+      "ordinary": {
+        "observations": 232,
+        "reachable": 0,
+        "maximum_gap_seconds": 4.2913881
+      },
+      "system": {
+        "observations": 232,
+        "reachable": 0,
+        "maximum_gap_seconds": 4.2913881
+      }
+    },
+    "msi_install_exit_code": 0,
+    "desktop_integrity_rid": 8192,
+    "restored_network": true,
+    "uninstall_exit_code": 0,
+    "project_image_after_restart": {
+      "image_id": "a76d652b-a87c-452d-8bec-edeba653fe5e",
+      "sha256": "11da437ad33072b11627e77994f869a1f92c4c0b94e0b64f920567853ff0674b",
+      "status": "reviewed"
+    },
+    "prerequisites": "The hosted runner had Windows and WebView2 prerequisites available."
+  },
+  "physical_native": {
+    "surface": "Physical Windows, original GitHub MSI administrative image",
+    "suite_passes": {
+      "cuda": 1,
+      "research": 6,
+      "first-use": 1,
+      "workspace": 5
+    },
+    "summary_sha256": "3bb595a76c394204e08a923bbb5246a8a9ba3415f922608bc9651ee9b99fef46",
+    "detector": {
+      "inference_device": "NVIDIA GeForce RTX 3090",
+      "saved_run_ids": [
+        "0a310645-fb09-4080-9919-b284b5191d5c",
+        "f997f787-bf2d-4177-bd92-476dc44be1ed"
+      ],
+      "matched_proposals": 9,
+      "proposal_digest": "faeda37065ed8bd7f7e57c77cf74ae8151ac8ce7f97834e8a8bf48d3c6470da2"
+    },
+    "ranked_qc": {
+      "graph_id": "e6c9ad86-346e-4671-a082-aaf6776bb039",
+      "graph_sha256": "2b256b0b340dd34c711c740fbf1510fc9d060bb023f252035ce35e9567ff67b3",
+      "dataset_manifest_sha256": "c8cc656f1a2c05128b5e5d890041219c6132606496f4c1ef96e721fb7b597f2c",
+      "ranking": [
+        {
+          "image": "574bb6d0-47fe-485b-af69-383004690ab2",
+          "score": 12.5,
+          "input_sha256": "c2e1c0ef967df11e9f0d83dfb857dccb15b7726135df44c79206e7137a1ab31e"
+        },
+        {
+          "image": "a88d6beb-c278-4f7f-b6b0-43b7a02747e9",
+          "score": 12.5,
+          "input_sha256": "a3a485964079fd7da5fc13ea665cae0cc3a56a3f21a3ad4b68b1d61a9442c41e"
+        }
+      ],
+      "runs": [
+        {
+          "id": "40e0bb4d-e636-4088-960c-ce8a4e60e647",
+          "queue_id": "7e3db570-34be-57b5-a847-81e7c907d85d",
+          "payload_sha256": "ef5a02c7fd1d92849a14f4c4fbc84d7c82e9a690315a9b0491f8de088be8a018"
+        },
+        {
+          "id": "b19fe9bd-de40-4327-9157-4428dd3eaaeb",
+          "queue_id": "67e53b63-ff35-5d96-bc06-041dd17f2685",
+          "payload_sha256": "c774b52dae6aff3e9007781bd0e474ffb388e44022e6b1e28448b828d52f0b98"
+        }
+      ],
+      "review_after_exchange": {
+        "sha256": "2512bd4742db387612e333579a9eb6e994580b34cbab6ec3e8e62148ae2151eb",
+        "manifest_sha256": "d5414b41abf5e018f7872333c5e87cd8b6c8a9e6bfcaf484bbe038cbfbf7f695",
+        "audited_event_count": 5,
+        "reopened_rank_one_review_state": "completed",
+        "bulk_requests": 1,
+        "imported_workflow_run_id": "f67a9588-1c67-4775-9a51-8bf3e3b695c7"
+      }
+    },
+    "gallery": {
+      "original_images": 5000,
+      "existing_boxes": 1500,
+      "cards_ms": 70.89999999850988,
+      "focused_thumbnail_ms": 206,
+      "original_content_unchanged": true,
+      "unchanged_existing_geometry": 1500,
+      "unchanged_hidden_geometry": 750
+    }
+  },
+  "recovery": {
+    "old_reader_revision": "b15_integrated_0002",
+    "current_revision": "b16_integrated_0001",
+    "projects": 8,
+    "compared_scientific_tables": 39,
+    "backup_manifest_sha256": "4cc9a5311deff3f36ec7b319f0bd9b972c1d8d2674cc4db2f05ee2ec18c4fd6e",
+    "upgraded_db_sha256": "5b0b265c0bc4c29531c56a8e00498a0f3f040573ffb82fe3ff222650caa621c3",
+    "project_file_hashes_preserved": 303,
+    "old_package_rejected_newer_without_loopback_or_database_mutation": true,
+    "independent_old_copy_reopened_with_identical_db": true,
+    "current_workspace_backup": {
+      "source_commit": "a580042e84c4d2fa0a646fbf8ec5a3dc90657fa8",
+      "backup_id": "dad26692-1751-4c3f-881b-7d141ddf0754",
+      "manifest_sha256": "0ce5f6e969ed70854a5fcbe5af581e7f74b440a9bce28203ba65fe12d9c3dfc7",
+      "project_file_count": 33,
+      "prior_table_count": 109,
+      "manifest_file_count": 40,
+      "original_donor_unchanged": true
+    }
+  },
+  "windows_source_suite": {
+    "selection": [
+      "apps/api/reefvision/tests",
+      "--pose-interop-integration"
+    ],
+    "collected_pytest_nodes": 5929,
+    "ordered_nodeids_sha256": "a5de103414691aa2cf5f8916ea1899eddae02fdeaf23a88d51a1e30d62c6f7ba",
+    "verified_shards": 12,
+    "passed": 5917,
+    "skipped": 12,
+    "failed": 0,
+    "errors": 0,
+    "skip_reasons": [
+      {
+        "nodeid": "apps/api/reefvision/tests/reefpose/test_evaluation_service.py::test_async_two_model_reefpose_cuda_comparison",
+        "reason": "Set REEFPOSE_RUN_GPU_TESTS=1 for explicit RTX comparison validation"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/reefpose/test_evaluation_service.py::test_native_reefpose_cuda_scientific_evaluation",
+        "reason": "Set REEFPOSE_RUN_GPU_TESTS=1 for explicit RTX evaluation validation"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/test_local_provider_manifests_v15.py::test_symlink_is_rejected_without_following_target",
+        "reason": "Symlink creation is unavailable: [WinError 1314] A required privilege is not held by the client: 'C:\\\\rvb16-a580\\\\w00\\\\pytest-tmp\\\\test_symlink_is_rejected_witho0\\\\outside.json' -> 'C:\\\\rvb16-a580\\\\w00\\\\pytest-tmp\\\\test_symlink_is_rejected_witho0\\\\data\\\\provider-manifests\\\\linked.json'"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/test_patch_101_live_sam2_acceptance.py::test_real_sam2_tiny_download_inference_and_review_provenance",
+        "reason": "Real SAM checkpoint downloads require the dedicated live acceptance job"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/test_spatial_source_assets_v14.py::test_symlinked_original_with_matching_bytes_fails_standalone_and_saved_workflow[glb-mesh]",
+        "reason": "Filesystem does not permit symlink creation"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/test_spatial_source_assets_v14.py::test_symlinked_original_with_matching_bytes_fails_standalone_and_saved_workflow[obj-mesh]",
+        "reason": "Filesystem does not permit symlink creation"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/test_spatial_source_assets_v14.py::test_symlinked_original_with_matching_bytes_fails_standalone_and_saved_workflow[ply-point-cloud]",
+        "reason": "Filesystem does not permit symlink creation"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/test_spatial_source_assets_v14.py::test_symlinked_originals_directory_cannot_replay_saved_mesh",
+        "reason": "Filesystem does not permit directory symlinks"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/test_whaledrone_airdata_e2e.py::test_whaledrone_airdata_end_to_end",
+        "reason": "Explicit --whaledrone-integration opt-in required"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/test_whaledrone_georeferencing_integration.py::test_external_whaledrone_georeferencing",
+        "reason": "Explicit --whaledrone-integration opt-in required"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/test_whaledrone_telemetry_integration.py::test_external_whaledrone_pair",
+        "reason": "Explicit --whaledrone-integration opt-in required"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/test_workflow_pose_training_phase10.py::test_native_reefpose_cuda_workflow_registration_and_inference",
+        "reason": "Set REEFPOSE_RUN_GPU_TESTS=1 for the explicit RTX validation run"
+      }
+    ],
+    "receipt_sha256": "2694f26a7e8ef1f075779d1bbb10714070f3fe76ab124a310e981db730a39119"
+  },
+  "hosted_lifecycle": {
+    "workflow": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44779080692",
+    "status": "queued",
+    "conclusion": null,
+    "verified_roles": {
+      "draft-1.4-0039": {
+        "job_id": 136461222594,
+        "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44779080692/job/136461222594",
+        "artifact": {
+          "id": 14655306796,
+          "sha256": "7682ed8e7a674d22e03e4ed8cf058e4e4faf10b144830557f72abe89690cf47a",
+          "files_rehashed": 9
+        }
+      }
+    }
+  }
+}
