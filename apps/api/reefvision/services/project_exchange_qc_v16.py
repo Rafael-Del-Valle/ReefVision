@@ -12,6 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import (
+    DatasetVersion,
+    DatasetVersionItem,
     ReviewQueue,
     ReviewQueueBulkRequestRecord,
     ReviewQueueItemEvent,
@@ -20,6 +22,7 @@ from reefvision.db.models import (
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.review_queue_events import ReviewQueueEventCreate
 from reefvision.schemas.review_queues import ReviewQueueBulkRequest
+from reefvision.services.frozen_dataset_integrity_16 import validate_frozen_dataset_manifest
 from reefvision.services.workflow_review_queue_integrity import (
     queue_item_evidence_sha256,
     queue_reference_payload,
@@ -97,21 +100,50 @@ def _workflow_owners(rows: Rows) -> dict[str, dict[str, Any]]:
 
 
 def validate_qc_exchange(version: str, project: str, rows: Rows) -> None:
-    present = any(rows.get(s) for s in SECTIONS) or any(
-        is_qc_graph(row["graph_json"]) for row in rows.get("workflow_graphs", ())
-    )
-    if version != FORMAT:
-        if present:
-            raise ValidationError("QC audit records require Project Exchange 1.6")
-        return
-    if not present or not all(s in rows for s in SECTIONS):
-        raise ValidationError("Project Exchange 1.6 is missing the QC history inventory")
     try:
+        present = any(rows.get(s) for s in SECTIONS) or any(
+            is_qc_graph(row["graph_json"]) for row in rows.get("workflow_graphs", ())
+        )
+        if version != FORMAT:
+            if present:
+                raise ValidationError("QC audit records require Project Exchange 1.6")
+            return
+        if not present or not all(s in rows for s in SECTIONS):
+            raise ValidationError("Project Exchange 1.6 is missing the QC history inventory")
         _validate_history(project, rows)
+        versions = {v["id"]: v for v in rows.get("dataset_versions", [])}
+        required = frozen_qc_dataset_ids(rows)
+        items: dict[str, list[DatasetVersionItem]] = defaultdict(list)
+        for item in rows.get("dataset_version_items", []):
+            if item["dataset_version_id"] in required:
+                items[item["dataset_version_id"]].append(DatasetVersionItem(**item))
+        for identifier in required:
+            version_row = versions[identifier]
+            if version_row["project_id"] != project:
+                raise ValidationError("Frozen QC dataset belongs to another project")
+            validate_frozen_dataset_manifest(DatasetVersion(**version_row), items[identifier])
     except (ValueError, KeyError, TypeError, AttributeError) as exc:
         raise ValidationError(
             "QC history contains an invalid request, event or workflow reference"
         ) from exc
+
+
+def frozen_qc_dataset_ids(rows: Rows) -> set[str]:
+    ids = {
+        q["dataset_version_id"]
+        for q in rows.get("review_queues", ())
+        if q.get("dataset_version_id")
+    }
+    for row in rows.get("workflow_graphs", ()):
+        graph = row["graph_json"]
+        if is_qc_graph(graph):
+            ids.update(
+                node["parameters"]["dataset_version_id"]
+                for node in graph["nodes"]
+                if node.get("node_type") == "dataset_version_source"
+                and (node.get("parameters") or {}).get("dataset_version_id")
+            )
+    return ids
 
 
 def _validate_history(project: str, rows: Rows) -> None:

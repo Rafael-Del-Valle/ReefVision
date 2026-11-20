@@ -157,3 +157,75 @@ def test_saved_qc_owns_same_imported_queue_and_reruns_twice(
             [live] = [a for a in replay["artifacts"] if a["data_type"] == "review_queue_reference"]
             assert live["payload_json"]["item_count"] == source["item_count"]
         raw = export_archive(client, test_settings, mapping[project])
+
+
+def test_frozen_qc_dataset_replays_after_two_generations_of_exchange(
+    client: TestClient, test_settings: Settings
+) -> None:
+    from reefvision.tests.test_dataset_versions import create_version
+    from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
+        _frozen_graph,
+        _run_frozen_graph,
+        _study,
+    )
+
+    project, image, _, box = _study(client)
+    mask = {
+        "id": str(uuid4()),
+        "label_class_id": box["label_class_id"],
+        "geometry_kind": "polygon",
+        "points": [{"x": 8, "y": 8}, {"x": 30, "y": 8}, {"x": 12, "y": 26}],
+    }
+    update = client.put(
+        f"/api/v1/images/{image}/annotations",
+        json={
+            "base_revision": 1,
+            "annotation_status": "reviewed",
+            "annotations": [box],
+            "mask_annotations": [mask],
+        },
+    )
+    assert update.is_success, update.text
+    version = create_version(client, project, name="Box and polygon at freeze")["id"]
+    saved = client.post(
+        f"/api/v1/projects/{project}/workflow-graphs", json={"graph": _frozen_graph(version)}
+    )
+    assert saved.is_success, saved.text
+    graph = saved.json()["id"]
+    _, source = _run_frozen_graph(client, project, graph)
+    source_manifest = client.get(f"/api/v1/dataset-versions/{version}/manifest").json()
+    raw = export_archive(client, test_settings, project)
+
+    def damage(_, sections):
+        item = next(
+            i for i in sections["dataset_version_items"] if i["dataset_version_id"] == version
+        )
+        item["per_mask_class_counts_json"] = {str(uuid4()): 1}
+
+    before = database_counts(client)
+    rejected = import_archive(client, rewrite(raw, damage))
+    assert rejected.status_code == 400, rejected.text
+    assert database_counts(client) == before
+    for _ in range(2):
+        copied = import_archive(client, raw)
+        assert copied.is_success, copied.text
+        package = copied.json()["package"]["options_json"]
+        mapping = package["origin_id_map"]
+        copied_version = mapping[version]
+        (item,) = client.get(f"/api/v1/dataset-versions/{copied_version}/items").json()
+        counts = {mapping[box["label_class_id"]]: 1}
+        assert item["per_class_counts_json"] == item["per_mask_class_counts_json"] == counts
+        assert item["mask_annotation_snapshot_json"][0]["polygon_json"] == [
+            [8, 8],
+            [30, 8],
+            [12, 26],
+        ]
+        first_run, first = _run_frozen_graph(client, mapping[project], mapping[graph])
+        second_run, second = _run_frozen_graph(client, mapping[project], mapping[graph])
+        assert first_run != second_run and first["queue_id"] != second["queue_id"]
+        assert first["dataset_version_id"] == second["dataset_version_id"] == copied_version
+        digest = first["dataset_manifest_sha256"]
+        assert second["dataset_manifest_sha256"] == digest != source["dataset_manifest_sha256"]
+        assert first["item_count"] == second["item_count"] == source["item_count"]
+        raw = export_archive(client, test_settings, mapping[project])
+    assert client.get(f"/api/v1/dataset-versions/{version}/manifest").json() == source_manifest

@@ -116,6 +116,7 @@ from reefvision.services.project_exchange_pose import (
 )
 from reefvision.services.project_exchange_qc_v16 import FORMAT as QC_FORMAT
 from reefvision.services.project_exchange_qc_v16 import (
+    frozen_qc_dataset_ids,
     remap_event_requests,
     restore_qc_row,
     validate_qc_exchange,
@@ -964,16 +965,21 @@ def import_project_exchange(
                         lock.protocol_sha256 = protocol
                 restore_pose_comparisons(session, project.id, digests)
                 from reefvision.services.project_exchange_paired_models_v15 import (
-                    restore_paired_model_comparisons,
+                    restore_frozen_dataset_and_model_lineage,
                 )
 
-                restore_paired_model_comparisons(
+                restore_frozen_dataset_and_model_lineage(
                     session,
                     project.id,
                     section_rows,
                     id_map,
                     digests,
                     source_storage_root=source_storage_root,
+                    linked_dataset_ids=(
+                        frozenset(frozen_qc_dataset_ids(section_rows))
+                        if inspection.format_version == QC_FORMAT
+                        else frozenset()
+                    ),
                 )
                 restore_comparison_jobs(session, project.id, section_rows, id_map, digests)
             if restores_workflow_provenance:
