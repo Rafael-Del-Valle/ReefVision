@@ -148,6 +148,47 @@ def test_submit_comparison_is_async_durable_and_order_independently_deduplicated
         assert jobs[0].deduplication_key == job["request_json"]["request_sha256"]
 
 
+def test_retired_pose_comparison_is_rejected_without_queuing_new_work(client: TestClient) -> None:
+    _seed(client)
+    historic_id = MODEL_IDS[0]
+    with client.app.state.session_factory() as session:
+        retired = session.get(ModelRegistration, historic_id)
+        assert retired is not None
+        retired.provider_name = "sleap_nn"
+        retired.provider_version = "0.3.3"
+        retired.framework = "sleap_nn"
+        retired.metadata_json = {
+            **retired.metadata_json,
+            "historical_provider_receipt": "keep the original scientific record",
+        }
+        session.commit()
+
+    historical_record = client.get(f"/api/v1/models/{historic_id}")
+    assert historical_record.status_code == 200
+    assert historical_record.json()["provider_name"] == "sleap_nn"
+    assert historical_record.json()["metadata_json"]["historical_provider_receipt"] == (
+        "keep the original scientific record"
+    )
+    queued = client.post(
+        f"/api/v1/projects/{PROJECT_ID}/pose-evaluation-comparisons",
+        json=_payload([historic_id]),
+    )
+    assert queued.status_code == 400, (queued.status_code, queued.json().get("status"))
+    assert "retired" in queued.json()["detail"]
+    assert "ReefPose" in queued.json()["detail"]
+    individual_payload = _payload([historic_id])
+    individual_payload.pop("model_ids")
+    single = client.post(
+        f"/api/v1/projects/{PROJECT_ID}/pose-evaluations",
+        json={**individual_payload, "model_id": historic_id},
+    )
+    assert single.status_code == 400, single.text
+    assert single.json()["detail"] == queued.json()["detail"]
+    listed = client.get(f"/api/v1/projects/{PROJECT_ID}/pose-evaluation-comparisons")
+    assert listed.json()["total"] == 0
+    assert client.get(f"/api/v1/models/{historic_id}").json() == historical_record.json()
+
+
 def test_ultralytics_model_uses_authoritative_schema_binding(client: TestClient) -> None:
     _seed(client)
     with client.app.state.session_factory() as session:

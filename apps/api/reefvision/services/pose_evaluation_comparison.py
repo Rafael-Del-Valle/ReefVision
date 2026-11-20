@@ -21,6 +21,7 @@ from reefvision.db.models import (
     Project,
 )
 from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.ml.pose_evaluation import reject_retired_pose_evaluation_provider
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.pose_evaluation import (
     PoseEvaluationComparisonCreateRequest,
@@ -31,7 +32,7 @@ from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
 
 ACTIVE_STATUSES = ("queued", "running", "cancel_requested")
-SUPPORTED_PROVIDERS = frozenset({"reefpose", "ultralytics", "sleap_nn"})
+SUPPORTED_PROVIDERS = frozenset({"reefpose", "ultralytics"})
 
 
 class PoseEvaluationComparisonService:
@@ -136,6 +137,7 @@ class PoseEvaluationComparisonService:
                 raise ValidationError("Pose comparison model belongs to another project")
             if model.purpose != "detector" or model.task != "pose":
                 raise ValidationError("Pose comparison accepts only registered pose models")
+            reject_retired_pose_evaluation_provider(model.provider_name)
             if model.provider_name not in SUPPORTED_PROVIDERS:
                 raise ValidationError(
                     f"Pose comparison provider is unsupported: {model.provider_name}"

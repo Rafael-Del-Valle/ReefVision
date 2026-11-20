@@ -192,8 +192,11 @@ export function PoseEvaluationComparisonPanel({
       <fieldset className="annotation-selection-list">
         <legend>Compatible registered pose models</legend>
         {poseModels.map((model) => {
+          const retired = model.provider_name === "sleap_nn";
           const compatible = Boolean(
-            selectedDataset && modelMatchesDataset(model, selectedDataset),
+            !retired &&
+            selectedDataset &&
+            modelMatchesDataset(model, selectedDataset),
           );
           return (
             <label key={model.id}>
@@ -204,9 +207,11 @@ export function PoseEvaluationComparisonPanel({
                 onChange={() => toggleModel(model.id)}
               />
               {model.display_name} · {model.provider_name}
-              {!compatible && selectedDataset
-                ? " · incompatible schema or leakage"
-                : ""}
+              {retired
+                ? " · retired for new evaluations. Choose a native ReefPose model."
+                : !compatible && selectedDataset
+                  ? " · incompatible schema or leakage"
+                  : ""}
             </label>
           );
         })}
