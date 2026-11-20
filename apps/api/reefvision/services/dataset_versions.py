@@ -291,9 +291,7 @@ class DatasetVersionService:
                 raise ValidationError("Parent dataset version must belong to the same project")
             if ancestor.status != "complete":
                 raise ValidationError("Only complete dataset versions may be used as parents")
-            validate_frozen_dataset_manifest(
-                ancestor, self.versions.items_for_version(ancestor.id)
-            )
+            validate_frozen_dataset_manifest(ancestor, self.versions.items_for_version(ancestor.id))
             if ancestor.parent_version_id is None:
                 break
             ancestor = self._version(ancestor.parent_version_id)
