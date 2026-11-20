@@ -419,6 +419,17 @@ def _verify_prelaunch_pose_dataset(
     raise ValidationError("Materialized pose training dataset changed before GPU training")
 
 
+def _verify_postlaunch_pose_dataset(destination: Path, materialization: object) -> None:
+    """Fail a completed run if its reviewed frames or labels changed during training."""
+
+    try:
+        _verify_prelaunch_pose_dataset(destination, materialization)
+    except ValidationError as exc:
+        raise ValidationError(
+            "Materialized pose training dataset changed during GPU training"
+        ) from exc
+
+
 def _copy_split(
     source_root: Path,
     destination_root: Path,
@@ -1090,10 +1101,12 @@ def process_pose_training_job(
                 settings,
                 f"{base_relative}/pose-dataset",
             )
-            _verify_prelaunch_pose_dataset(
-                dataset_root,
-                dict(run.artifact_manifest_json or {}).get("materialization"),
+            # Capture the original persisted provenance before invoking the
+            # trainer; a later manifest rewrite cannot authorize altered inputs.
+            frozen_materialization = dict(run.artifact_manifest_json or {}).get(
+                "materialization"
             )
+            _verify_prelaunch_pose_dataset(dataset_root, frozen_materialization)
 
             train_args = dict(run.training_config_json or {})
 
@@ -1230,6 +1243,10 @@ def process_pose_training_job(
                     (f"[{datetime.now(UTC).isoformat()}] pose training cancelled"),
                 )
             else:
+                # A training process (or another local process) can alter
+                # frozen inputs after preflight. Never register a successful
+                # experiment against bytes that were not the reviewed input.
+                _verify_postlaunch_pose_dataset(dataset_root, frozen_materialization)
                 _complete_training_run(
                     session,
                     run,

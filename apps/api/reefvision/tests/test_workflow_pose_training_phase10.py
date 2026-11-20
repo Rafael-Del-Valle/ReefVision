@@ -40,6 +40,7 @@ from reefvision.jobs.pose_training import (
     _require_empty_pose_gpu_output,
     _resolve_unlinked_pose_run_path,
     _verified_pose_trainer_save_dir,
+    _verify_postlaunch_pose_dataset,
     _verify_prelaunch_pose_dataset,
     materialize_pose_training_exports,
     process_pose_training_job,
@@ -688,11 +689,16 @@ def test_pose_training_rechecks_frozen_holdout_bytes_before_gpu_launch(
         destination=destination,
     )
     _verify_prelaunch_pose_dataset(destination, materialization)
+    _verify_postlaunch_pose_dataset(destination, materialization)
 
     holdout_label = destination / "labels" / "val" / "frame_00000001.txt"
     holdout_label.write_bytes(holdout_label.read_bytes() + b"changed")
     with pytest.raises(ValidationError, match="changed before GPU training"):
         _verify_prelaunch_pose_dataset(destination, materialization)
+    # A modified validation label must also invalidate the completed GPU job,
+    # even if it passed the earlier preflight verification.
+    with pytest.raises(ValidationError, match="changed during GPU training"):
+        _verify_postlaunch_pose_dataset(destination, materialization)
 
     with pytest.raises(ValidationError, match="missing materialized dataset provenance"):
         _verify_prelaunch_pose_dataset(destination, None)
