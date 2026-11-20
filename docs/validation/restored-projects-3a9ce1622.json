@@ -688,6 +688,60 @@
       }
     ]
   },
+  "original_installer_offline": {
+    "source_commit": "3a9ce1622e4f9e230e2ee14432ee7d2f32510870",
+    "harness_commit": "0690ab42efd3c38a1022c3135965c46b24d86a96",
+    "build_run_id": 44798678615,
+    "proof_run_id": 44806092015,
+    "proof_job_id": 136530371656,
+    "proof_run_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44806092015",
+    "proof_artifact_id": 14662813572,
+    "proof_artifact_sha256": "7d2bd362315404a32f5dca3e4c7c56e75a8de7b55bc68b73ab82e2ca5b5966a7",
+    "hosted_report_sha256": "cb9920dba8d0dc44b4047424598fb627a82af3afefe7068171e8abe4610a71ec",
+    "deny_duration_seconds": 181.7295567,
+    "controls": {
+      "ordinary": {
+        "observations": 476,
+        "reachable": 0,
+        "maximum_gap_seconds": 4.7093193
+      },
+      "system": {
+        "observations": 475,
+        "reachable": 0,
+        "maximum_gap_seconds": 4.7718197
+      }
+    },
+    "desktop_integrity_rid": 8192,
+    "msi_install_exit_code": 0,
+    "native_cleanup": {
+      "desktop_closed": true,
+      "launch_process_closed": true,
+      "profile_removed": true,
+      "account_removed": true
+    },
+    "msi_sha256": "3b596ee3ba5e9188776cd3208245c277a72013877677c9a16e359ee6da04c3be",
+    "verified_receipt_sha256": "49af9c1594f58b7d55c16a39a965cc3d44f8f5e8d51496164b0c9d3040cd5712",
+    "first_launch": {
+      "backend_pid": 7372,
+      "desktop_pid": 1216,
+      "schema": "b16_integrated_0001",
+      "version": "1.6.0"
+    },
+    "second_launch": {
+      "backend_pid": 732,
+      "desktop_pid": 1476,
+      "schema": "b16_integrated_0001",
+      "version": "1.6.0"
+    },
+    "reopened_review": {
+      "project_id": "cab2f497-f7b1-4c68-bbf1-78a7129db14d",
+      "image_sha256": "11da437ad33072b11627e77994f869a1f92c4c0b94e0b64f920567853ff0674b",
+      "annotation_status": "reviewed",
+      "export_sha256": "4a1ca0b7aea815da46f21953cccbaa22690083acff724f77f1f9fb5a932099ff"
+    },
+    "observed_policy_changes": 0,
+    "uninstall_exit_code": 0
+  },
   "earlier_offline_observations": [
     {
       "status": "NATIVE_PRODUCT_OPERATIONS_PASSED_EXACT_HARNESS_SAMPLING_GATE_FAILED",
@@ -975,6 +1029,134 @@
         "skipped": 0,
         "unexpected": 0,
         "flaky": 0
+      }
+    }
+  },
+  "windows_backend": {
+    "collected_pytest_nodes": 5931,
+    "verified_shards": 12,
+    "passed": 5919,
+    "skipped": 12,
+    "failed": 0,
+    "errors": 0,
+    "skip_reasons": [
+      {
+        "nodeid": "apps/api/reefvision/tests/reefpose/test_evaluation_service.py::test_async_two_model_reefpose_cuda_comparison",
+        "reason": "Set REEFPOSE_RUN_GPU_TESTS=1 for explicit RTX comparison validation"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/reefpose/test_evaluation_service.py::test_native_reefpose_cuda_scientific_evaluation",
+        "reason": "Set REEFPOSE_RUN_GPU_TESTS=1 for explicit RTX evaluation validation"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/test_local_provider_manifests_v15.py::test_symlink_is_rejected_without_following_target",
+        "reason": "Symlink creation is unavailable: [WinError 1314] A required privilege is not held by the client: 'C:\\\\rvb16-3a9c\\\\w02\\\\pytest-tmp\\\\test_symlink_is_rejected_witho0\\\\outside.json' -> 'C:\\\\rvb16-3a9c\\\\w02\\\\pytest-tmp\\\\test_symlink_is_rejected_witho0\\\\data\\\\provider-manifests\\\\linked.json'"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/test_patch_101_live_sam2_acceptance.py::test_real_sam2_tiny_download_inference_and_review_provenance",
+        "reason": "Real SAM checkpoint downloads require the dedicated live acceptance job"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/test_spatial_source_assets_v14.py::test_symlinked_original_with_matching_bytes_fails_standalone_and_saved_workflow[glb-mesh]",
+        "reason": "Filesystem does not permit symlink creation"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/test_spatial_source_assets_v14.py::test_symlinked_original_with_matching_bytes_fails_standalone_and_saved_workflow[obj-mesh]",
+        "reason": "Filesystem does not permit symlink creation"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/test_spatial_source_assets_v14.py::test_symlinked_original_with_matching_bytes_fails_standalone_and_saved_workflow[ply-point-cloud]",
+        "reason": "Filesystem does not permit symlink creation"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/test_spatial_source_assets_v14.py::test_symlinked_originals_directory_cannot_replay_saved_mesh",
+        "reason": "Filesystem does not permit directory symlinks"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/test_whaledrone_airdata_e2e.py::test_whaledrone_airdata_end_to_end",
+        "reason": "Explicit --whaledrone-integration opt-in required"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/test_whaledrone_georeferencing_integration.py::test_external_whaledrone_georeferencing",
+        "reason": "Explicit --whaledrone-integration opt-in required"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/test_whaledrone_telemetry_integration.py::test_external_whaledrone_pair",
+        "reason": "Explicit --whaledrone-integration opt-in required"
+      },
+      {
+        "nodeid": "apps/api/reefvision/tests/test_workflow_pose_training_phase10.py::test_native_reefpose_cuda_workflow_registration_and_inference",
+        "reason": "Set REEFPOSE_RUN_GPU_TESTS=1 for the explicit RTX validation run"
+      }
+    ],
+    "ordered_nodeids_sha256": "7568ac3ecca743c6f542f03cfea0637ce80991f9b900fe6c12568835655cff10",
+    "receipt_sha256": "38a5c353a575fc578a91e1f7f07d6a71a7ca7bad00cdf7b2c21d1964062e7194"
+  },
+  "concurrent_review": {
+    "validated_1_3": "f44053a90286ce57cc6f7356be922bcf8ba41e22",
+    "approved_windows_lineage": "36c80224a627e8fe1c1d8ffb5a704ffa9f90c701",
+    "lineage_in_integrated_source": true,
+    "validated_1_3_in_pr79_and_pr89": true,
+    "files": {
+      "spatial-review.md": "e434079f21ad75ed68a177c7b14ae7c0340a5779e9d7b5c1000bd85c071da574",
+      "spatial-selected.xml": "779b5bdeea0f1d15b1ca191121f7e97fa33075acdd94b6dd4bcf1131bdfbc0a1",
+      "qc-review.json": "8530c0a13b899807dbc4516a380419a159423bb201b1fa93e9cc365f371fc80a",
+      "pose-review.json": "0d3f2f9a32dca93aa68748567fcaf4753e7fbcc6c2b63a8265630e24bff29053",
+      "pose-donor-selected.xml": "67951948e2a67e1efffbf0f82a3587e77d9209745894b721a23cfc82ee82a04b"
+    },
+    "pr79": {
+      "head": "ab1aa24ef4f43a86deef7b8eff91a291c884e34a",
+      "previous": "d0b52d6de463dc3917a7da995ae5580820cd9cce",
+      "source_change": "Test and documentation only; both windings and both coordinate frames of a concave prism.",
+      "researcher_surface": "Mesh preview endpoint and two saved graph replays per case",
+      "integrated_cases_passed": 11,
+      "donor_ruff": "Test formatting",
+      "research_evidence": "generated geometry"
+    },
+    "pr77": {
+      "head": "78b05808c8b28fccb47b2db14919b960828115cd",
+      "previous": "721bdfb42582ed2caac6b0f4b66553cb6760f13c",
+      "source_change": "Optional offline SQLite trigger diagnostic and tests.",
+      "donor_windows": {
+        "passed": 160,
+        "skipped": 33,
+        "failed": 0
+      },
+      "new_module": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0,
+        "log_sha256": "30996442c11d889951b998127ffd576f1cc8a9daff07b704e71d6aa7563028a4"
+      },
+      "ci": {
+        "id": 44804262363,
+        "event": "push",
+        "conclusion": "success",
+        "new_test_file_explicitly_selected": false
+      },
+      "integrated_result": "No SQLite triggers in the authentic seven-project backup, its restored copy, or the five populated historical upgrade controls."
+    },
+    "receipt_sha256": "458689708b53dd261da6e3764249d95698f58db4e8e19814263a48581d2072cd",
+    "pr78": {
+      "head": "d0207de1e1d31a86ec07ea162aa373f6c8c7a8eb",
+      "previous": "504ce43686942973307757e9f17a9f9581fb57ef",
+      "technical_scope": "The direct comparison re-executed an Ultralytics pose worker helper in the same generated training or validation staging directory. The pinned source archives kept their original hashes on both branches.",
+      "current_entry": "Workflow Builder creates a fresh TrainingRun UUID per unfinished execution and reuses verified completed output. Startup finalizes interrupted training; Jobs retry of a training job requires native ReefPose and a resume checkpoint. Native ReefPose dispatches to a separate processor. The comparison did not reproduce an ordinary 1.6 user's loss of original images or weights.",
+      "future_milestone_action": "For rv19-end-to-end-workflows and rv19-performance-resilience, port the confirmed preservation behavior when implementing or exercising same-run materialization/restart. Verify through the real offline training workflow, preserve existing files and original checkpoints, document any refusal, and exercise a usable retry or a new run. Keep the native ReefPose path and historical migrations.",
+      "ci_ruff": {
+        "job": 136528781084,
+        "pose_run": 44805637639,
+        "rule": "E501",
+        "line_lengths": [
+          106,
+          104
+        ],
+        "limit": 100
+      },
+      "donor_focused_junit": {
+        "passes": 3,
+        "sha256": "67951948e2a67e1efffbf0f82a3587e77d9209745894b721a23cfc82ee82a04b",
+        "selector": "preserves_prior_scientific_data or never_silently_reuses_training_for_validation"
       }
     }
   }

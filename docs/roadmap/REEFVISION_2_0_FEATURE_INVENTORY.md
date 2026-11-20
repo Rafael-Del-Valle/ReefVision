@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T19:53:03Z`
+Updated: `2026-11-20T20:01:08Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1199,6 +1199,7 @@ Evidence:
 - `windows_installed`: The same original MSI passed compact keyboard and DPI first use under an ordinary account, offline import, annotation, export and reopen, clean removal with retention, and a separate 1.5 upgrade and verified prior-reader rollback. — `docs/validation/compact-windows-review-a580042e8.json` (`rv16-onboarding-original-offline-upgrade-83b0a98b2`)
 - `windows_installed`: The corrected original MSI passed standard-user first use, the compact keyboard handoff, offline export and reopening after restart. The published 1.0.3 and validated 1.5 upgrades passed, including the old-reader rollback. — `docs/validation/installed-workflows-a580042e8.json` (`rv16-onboarding-installer-original-a580042e8`)
 - `windows_installed`: The original installer completed clean ordinary-user annotation, review, export and recovery, with separate upgrade and rollback checks across the supported historical profiles. — `docs/validation/restored-projects-3a9ce1622.json` (`rv16-original-installed-3a9`)
+- `windows_installed`: An ordinary user installed the original MSI under measured outbound denial, reviewed a box, exported it, reopened it in a fresh desktop process and uninstalled successfully. — `docs/validation/restored-projects-3a9ce1622.json` (`rv16-offline-original-3a9`)
 - `physical_hardware`: The native packaged first launch at 960 by 640 CSS pixels and emulated 150% scaling preserved keyboard focus and dismissal. The researcher imported image and video, edited, undid and redid, reviewed, exported YOLO and reopened. The browser attempted zero external HTTP requests. A separate eight-project 1.5 backup reopened with all 303 project files. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-onboarding-installer-physical-83b0`)
 - `physical_hardware`: The locally built Windows desktop restored both generations, preserved both historical metadata digests and reopened all seven projects in a separate launch. — `docs/validation/restored-projects-3a9ce1622.json` (`rv16-repeated-recovery-local-production-3a9`)
 - `physical_hardware`: The desktop extracted from the original GitHub MSI restored both generations from System status and reopened the existing QC project on physical Windows. — `docs/validation/restored-projects-3a9ce1622.json` (`rv16-repeated-recovery-original-windows-3a9`)
