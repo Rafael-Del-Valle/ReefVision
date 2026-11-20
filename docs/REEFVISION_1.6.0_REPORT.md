@@ -288,3 +288,26 @@ researcher-approval gates are unaffected. Exact-head CI, Windows MSI/CAB
 clean installation/upgrade/rollback, installed-GUI acceptance, representative
 biological saved-workflow validation, independent 1.1/1.6 Alembic-0038
 reconciliation and explicit owner approval remain release holds.
+
+## 2026-11-20 — Reject aliased research-media ancestors during offline upgrade preflight (Track D)
+
+The migration-copy media integrity check already rejected symlinks/junctions
+at the scoped asset root and inside it, but a real directory nested beneath a
+**symlinked parent** could pass root-only inspection. The preservation verifier
+now checks the complete lexical ancestry of each baseline and candidate asset
+root, including Windows junction/reparse points, before comparison, during both
+inventories, and during the final tree recheck. Any alias refuses preservation
+with `asset_symlink_not_allowed`; neither the media path nor private filenames
+appear in the diagnostic evidence. Existing ordinary independent offline media
+folders and additive assets retain the original behavior.
+
+Four parameterized subprocess regressions cover baseline/candidate aliases
+one or more levels above otherwise ordinary research-media roots, assert
+nonzero HOLD, no disclosed filenames, and unchanged SQLite/media bytes.
+An independent Python filesystem probe confirmed the original root-only check
+cannot detect an ancestor symlink. These are **not** a substitute for exact-head
+repository pytest/Windows CI, real MSI/CAB upgrade and installed-GUI testing.
+This optional offline migration preflight is not a scientific analysis node;
+existing saved executable typed Workflow Builder QC, units, retries,
+provenance and mandatory researcher review are unchanged. The independent
+1.1/1.6 Alembic-0038 conflict and explicit release approval remain HOLD.

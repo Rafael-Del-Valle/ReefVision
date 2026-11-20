@@ -479,6 +479,46 @@ def test_upgrade_asset_inventory_fails_closed_without_changing_evidence(
     assert (before_assets / "original.mp4").read_bytes() == original_asset_bytes
 
 
+@pytest.mark.parametrize("aliased_scope", ["baseline", "candidate"])
+@pytest.mark.parametrize("nested", [False, True])
+def test_asset_preservation_rejects_symlinked_ancestor_outside_scoped_root(
+    tmp_path: Path, aliased_scope: str, nested: bool
+) -> None:
+    """A non-link media root must not hide a symlink in its parent path."""
+    before = tmp_path / "before.sqlite"
+    after = tmp_path / "after.sqlite"
+    _seed(before)
+    shutil.copyfile(before, after)
+    real_parent = tmp_path / "real-research-parent"
+    real_root = real_parent / ("nested" if nested else "study") / "media"
+    real_root.mkdir(parents=True)
+    alias = tmp_path / "alias-to-parent"
+    try:
+        alias.symlink_to(real_parent, target_is_directory=True)
+    except (NotImplementedError, OSError):
+        pytest.skip("filesystem does not permit directory symlinks")
+    aliased_root = alias / ("nested" if nested else "study") / "media"
+    assert not aliased_root.is_symlink()
+    other_root = tmp_path / "independent-media"
+    other_root.mkdir()
+    for root in (real_root, other_root):
+        (root / "private-coral-image.raw").write_bytes(b"preserved coral observation")
+    baseline = aliased_root if aliased_scope == "baseline" else other_root
+    candidate = aliased_root if aliased_scope == "candidate" else other_root
+    before_bytes, after_bytes = before.read_bytes(), after.read_bytes()
+    code, evidence = _run(before, after, baseline, candidate)
+    assert code == 2
+    assert evidence["status"] == "HOLD"
+    assert evidence["upgrade_authorized"] is False
+    assert evidence["requires_researcher_approval"] is True
+    assert "asset_symlink_not_allowed" in evidence["problems"]
+    assert "private-coral-image.raw" not in json.dumps(evidence)
+    assert "real-research-parent" not in json.dumps(evidence)
+    assert before.read_bytes() == before_bytes
+    assert after.read_bytes() == after_bytes
+    assert (real_root / "private-coral-image.raw").read_bytes() == b"preserved coral observation"
+
+
 def test_asset_copies_must_not_share_hardlinked_original_storage(tmp_path: Path) -> None:
     before = tmp_path / "before.sqlite"
     after = tmp_path / "after.sqlite"

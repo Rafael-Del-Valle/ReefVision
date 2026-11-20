@@ -753,6 +753,19 @@ def _is_unsafe_asset_link(path: Path, info: os.stat_result | None = None) -> boo
     )
 
 
+def _assert_asset_root_ancestry(root: Path) -> None:
+    """Reject a link or junction in any ancestor of a scoped media directory.
+
+    Checking only the final media directory misses an alias to a researcher
+    collection through a symlinked parent. Keep the original lexical path:
+    resolve() would erase the unsafe component before we can inspect it.
+    """
+    absolute = root.absolute()
+    for component in (absolute, *absolute.parents):
+        if _is_unsafe_asset_link(component):
+            raise ValueError("asset_symlink_not_allowed")
+
+
 def _asset_state(info: os.stat_result) -> tuple[int, int, int, int, int, int, int]:
     """Identity and mutation-sensitive metadata for an offline regular file."""
     return (
@@ -802,6 +815,7 @@ def _asset_inventory(
     File names are used only for an in-process relative-path comparison and
     are never included in the public diagnostic report.
     """
+    _assert_asset_root_ancestry(root)
     if _is_unsafe_asset_link(root) or not root.is_dir():
         raise ValueError("invalid_asset_root")
 
@@ -910,6 +924,7 @@ def _assert_asset_tree_unchanged(
     initial_directories: dict[str, tuple[int, ...]],
 ) -> None:
     """Reject a source or candidate tree changed after its hashing pass."""
+    _assert_asset_root_ancestry(root)
     if _is_unsafe_asset_link(root) or not root.is_dir():
         raise ValueError("asset_changed_after_inventory")
 
@@ -951,6 +966,8 @@ def _assert_asset_tree_unchanged(
 
 def _compare_assets(before_root: Path, after_root: Path) -> dict:
     """Require each original asset at the same relative path with equal bytes."""
+    _assert_asset_root_ancestry(before_root)
+    _assert_asset_root_ancestry(after_root)
     if _is_unsafe_asset_link(before_root) or _is_unsafe_asset_link(after_root):
         raise ValueError("asset_symlink_not_allowed")
     if not before_root.is_dir() or not after_root.is_dir():
