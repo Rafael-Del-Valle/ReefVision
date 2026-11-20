@@ -23,6 +23,8 @@ def _create_scientific(db: sqlite3.Connection, variant: str) -> None:
     foreign_key = "REFERENCES images(id) ON DELETE RESTRICT"
     if variant == "wrong_fk":
         foreign_key = "REFERENCES images(id) ON DELETE SET NULL"
+    if variant == "wrong_onupdate_fk":
+        foreign_key = "REFERENCES images(id) ON UPDATE CASCADE ON DELETE RESTRICT"
     extra = ", generated_tag TEXT GENERATED ALWAYS AS (id) VIRTUAL"
     if variant != "hidden_column":
         extra = ""
@@ -41,9 +43,13 @@ def _create_scientific(db: sqlite3.Connection, variant: str) -> None:
         f"created_at DATETIME NOT NULL{extra})"
     )
     if variant != "missing_index":
+        columns = {
+            "partial_lookup": "(project_id, variable, observed_at) WHERE observed_at IS NOT NULL",
+            "nocase_lookup": "(project_id COLLATE NOCASE, variable, observed_at)",
+            "desc_lookup": "(project_id, variable, observed_at DESC)",
+        }.get(variant, "(project_id, variable, observed_at)")
         db.execute(
-            "CREATE INDEX ix_scientific_project_variable_time "
-            "ON scientific_records (project_id, variable, observed_at)"
+            "CREATE INDEX ix_scientific_project_variable_time ON scientific_records " + columns
         )
     columns = (
         "id, project_id, variable, source_kind, observed_at, payload_json, "
@@ -73,6 +79,8 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
     fk = "REFERENCES review_queues(id) ON DELETE CASCADE"
     if variant == "wrong_fk":
         fk = "REFERENCES review_queues(id) ON DELETE RESTRICT"
+    if variant == "wrong_onupdate_fk":
+        fk = "REFERENCES review_queues(id) ON UPDATE CASCADE ON DELETE CASCADE"
     actor = "actor VARCHAR(100) NOT NULL"
     if variant == "nullable_actor":
         actor = "actor VARCHAR(100)"
@@ -91,9 +99,14 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
         f"created_at DATETIME NOT NULL{unique})"
     )
     if variant != "missing_index":
+        columns = {
+            "partial_lookup": "(review_queue_item_id, created_at) WHERE created_at IS NOT NULL",
+            "nocase_lookup": "(review_queue_item_id COLLATE NOCASE, created_at)",
+            "desc_lookup": "(review_queue_item_id, created_at DESC)",
+        }.get(variant, "(review_queue_item_id, created_at)")
         db.execute(
             "CREATE INDEX ix_review_queue_item_events_item_created "
-            "ON review_queue_item_events (review_queue_item_id, created_at)"
+            "ON review_queue_item_events " + columns
         )
     db.execute(
         "CREATE INDEX ix_review_queue_item_events_queue_created "
@@ -121,11 +134,19 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
         ("scientific", "valid"),
         ("scientific", "missing_column"),
         ("scientific", "wrong_fk"),
+        ("scientific", "wrong_onupdate_fk"),
+        ("scientific", "partial_lookup"),
+        ("scientific", "nocase_lookup"),
+        ("scientific", "desc_lookup"),
         ("scientific", "missing_index"),
         ("scientific", "hidden_column"),
         ("scientific", "unexpected_trigger"),
         ("qc", "valid"),
         ("qc", "wrong_fk"),
+        ("qc", "wrong_onupdate_fk"),
+        ("qc", "partial_lookup"),
+        ("qc", "nocase_lookup"),
+        ("qc", "desc_lookup"),
         ("qc", "nullable_actor"),
         ("qc", "missing_unique"),
         ("qc", "missing_index"),
@@ -202,9 +223,18 @@ def test_strict_structural_audit_rejects_forged_scientific_0038(
     assert path.read_bytes() == before
 
 
-@pytest.mark.parametrize("family", ["scientific", "qc"])
-def test_strict_0038_trigger_drift_is_redacted_and_read_only(
-    tmp_path: Path, family: str
+@pytest.mark.parametrize(
+    ("family", "variant"),
+    [
+        ("scientific", "unexpected_trigger"),
+        ("qc", "unexpected_trigger"),
+        ("scientific", "wrong_onupdate_fk"),
+        ("scientific", "partial_lookup"),
+        ("qc", "nocase_lookup"),
+    ],
+)
+def test_strict_0038_semantic_drift_is_redacted_and_read_only(
+    tmp_path: Path, family: str, variant: str
 ) -> None:
     path = tmp_path / "triggered-lineage-copy.sqlite"
     with sqlite3.connect(path) as db:
@@ -219,9 +249,9 @@ def test_strict_0038_trigger_drift_is_redacted_and_read_only(
             "INSERT INTO review_queue_items VALUES ('item1');"
         )
         if family == "scientific":
-            _create_scientific(db, "unexpected_trigger")
+            _create_scientific(db, variant)
         else:
-            _create_qc(db, "unexpected_trigger")
+            _create_qc(db, variant)
         db.commit()
 
     before = path.read_bytes()
