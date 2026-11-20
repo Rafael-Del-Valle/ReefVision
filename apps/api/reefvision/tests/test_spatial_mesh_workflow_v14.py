@@ -81,35 +81,42 @@ def test_mesh_shape_ratio_withholds_zero_diagonal(client: TestClient) -> None:
 
 
 @pytest.mark.parametrize(
-    ("obj_text", "warning"),
+    ("obj_text", "diagnostic", "rejects_unrepresentable_area"),
     [
         pytest.param(
             "v 0 0 0\nv 1e-200 0 0\nv 0 1e-200 0\nf 1 2 3\n",
-            "mesh_shape_ratio_unavailable_numeric_underflow",
+            "3D triangle area underflowed numeric precision",
+            True,
             id="underflow",
         ),
         pytest.param(
             "v 0 0 0\nv 0 0 0\nv 0 0 0\nf 1 2 3\n",
             "mesh_shape_ratio_unavailable_zero_extent",
+            False,
             id="zero-extent",
         ),
     ],
 )
 def test_mesh_shape_ratio_unavailable_in_saved_workflow(
-    client: TestClient, obj_text: str, warning: str
+    client: TestClient,
+    obj_text: str,
+    diagnostic: str,
+    rejects_unrepresentable_area: bool,
 ) -> None:
+    """Unrepresentable positive surfaces fail, but truly zero surfaces remain measurable."""
     project_id = str(create_project(client, "Tiny mesh shape ratio")["id"])
     base = f"/api/v1/projects/{project_id}"
-    params = {
-        **MESH,
-        "obj_text": obj_text,
-    }
+    params = {**MESH, "obj_text": obj_text}
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
-    assert standalone.status_code == 200, standalone.text
-    measurement = standalone.json()
-    assert measurement["surface_area_to_bounding_diagonal_squared_ratio"] is None
-    assert warning in measurement["qc_warnings"]
-    assert measurement["provenance"]["calibration_verified"] is False
+    if rejects_unrepresentable_area:
+        assert standalone.status_code == 400, standalone.text
+        assert diagnostic in standalone.text
+    else:
+        assert standalone.status_code == 200, standalone.text
+        measurement = standalone.json()
+        assert measurement["surface_area_to_bounding_diagonal_squared_ratio"] is None
+        assert diagnostic in measurement["qc_warnings"]
+        assert measurement["provenance"]["calibration_verified"] is False
 
     graph = {
         "graph_id": "tiny-mesh-shape-ratio-v14",
@@ -134,25 +141,43 @@ def test_mesh_shape_ratio_unavailable_in_saved_workflow(
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
-    assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
-    )
-    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
-    assert detail.status_code == 200, detail.text
-    assert detail.json()["run"]["status"] == "succeeded"
-    artifact = next(
-        item["payload_json"]
-        for item in detail.json()["artifacts"]
-        if item["data_type"] == "mesh_measurement_preview"
-    )
-    assert artifact["surface_area_to_bounding_diagonal_squared_ratio"] is None
-    assert warning in artifact["qc_warnings"]
-    expected_sha = measurement["provenance"]["geometry_sha256"]
-    assert artifact["provenance"]["geometry_sha256"] == expected_sha
+    artifact_hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        completed = process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        mesh_artifacts = [
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        ]
+        if rejects_unrepresentable_area:
+            assert completed is False
+            assert detail.json()["run"]["status"] == "failed"
+            assert not mesh_artifacts
+            continue
 
+        assert completed is True
+        assert detail.json()["run"]["status"] == "succeeded"
+        assert len(mesh_artifacts) == 1
+        artifact = mesh_artifacts[0]["payload_json"]
+        assert artifact["surface_area_to_bounding_diagonal_squared_ratio"] is None
+        assert diagnostic in artifact["qc_warnings"]
+        assert artifact["provenance"]["calibration_verified"] is False
+        assert artifact["provenance"]["geometry_sha256"] == (
+            measurement["provenance"]["geometry_sha256"]
+        )
+        assert artifact["surface_area_m2"] == measurement["surface_area_m2"]
+        artifact_hashes.append(mesh_artifacts[0]["payload_sha256"])
+    if not rejects_unrepresentable_area:
+        assert len(artifact_hashes) == 2
+        assert len(artifact_hashes[0]) == 64
+        assert artifact_hashes[0] == artifact_hashes[1]
 
 @pytest.mark.parametrize(
     "obj_text",
