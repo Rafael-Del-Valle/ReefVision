@@ -4,6 +4,24 @@ This is a **test plan**, not evidence that ReefVision 1.4 or 1.5 is validated or
 
 ## 1.4: 3D geometry and longitudinal studies
 
+**Cross-face signed-volume cancellation integrity (synthetic helper gate; CI pending):**
+Even when no individual face determinant is near roundoff, an oriented sum
+across faces may nearly cancel and return a plausible but inaccurate nonzero
+volume. The provisional source-coordinate volume helper now detects aggregate
+near-cancellation and recomputes from exact rational representations of the
+imported binary64 coordinates. The regression uses two disjoint,
+opposite-oriented synthetic tetrahedral shells (an arithmetic stress case,
+**not** a biologically admissible coral volume). With one apex differing by
+one representable binary64 step near 1e8, the prior floating-point sum yielded
+67,108,864 source units³; the independent rational result is approximately
+24,835,268.65641276 source units³. Both winding directions and the exact-zero
+case must agree with the independent rational oracle.
+`test_spatial_mesh_volume_cubic_scale_underflow_v14.py` covers this helper
+gate; separate direct-service, standalone API and twice-replayed persisted typed
+Workflow Builder tests cover the normal scientific measurement path. Neither
+test category validates mesh topology, an organism's enclosed biological
+volume, calibration or reviewer-confirmed identity.
+
 **Calibrated-volume underflow contract reconciliation (synthetic; exact-head CI pending):**
 A source-coordinate tetrahedron with orthogonal 1e-110-unit edges has a
 strictly positive but binary64-unrepresentable source volume. The direct signed
