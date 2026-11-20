@@ -372,5 +372,133 @@
         "xml_sha256": "8c1edff7e9667ab374610679dbc3fd6ad06e628023472f314ecdd78f23fffcb0"
       }
     }
+  },
+  "windows_installer": {
+    "original_run": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315334",
+    "verification_sha256": "40665d02c2e09ceb46216028342ba2df125fb9b898f3a5ef50900fe66d50963f",
+    "roles": {
+      "clean": {
+        "job_id": 136490506896,
+        "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315334/job/136490506896",
+        "artifact": {
+          "id": 14657654419,
+          "sha256": "5397d1517b7dea16fe206a5c71d6258beb40cbd497094dd91c4b7eef31da4148",
+          "files_rehashed": 34
+        }
+      },
+      "published-1.0.3": {
+        "job_id": 136490506674,
+        "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315334/job/136490506674",
+        "artifact": {
+          "id": 14658553235,
+          "sha256": "1ccc9eb42087b734ee337be438dc3651f7d2f4ab67b64b7b3985651ac727b91a",
+          "files_rehashed": 6
+        }
+      },
+      "validated-1.3": {
+        "job_id": 136490506935,
+        "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315334/job/136490506935",
+        "artifact": {
+          "id": 14659052477,
+          "sha256": "64b290f13e1b0c79c72a86e237a5a1de6b51a9cc0661496f77823520d3ddcb8e",
+          "files_rehashed": 12
+        }
+      },
+      "validated-1.4": {
+        "job_id": 136490506829,
+        "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315334/job/136490506829",
+        "artifact": {
+          "id": 14657398940,
+          "sha256": "e41604fd294ff68bf29406e872c885cc5bf9079bd95bed28ccee6e9e9fe41812",
+          "files_rehashed": 7
+        }
+      },
+      "validated-1.5": {
+        "job_id": 136490506887,
+        "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315334/job/136490506887",
+        "artifact": {
+          "id": 14660145094,
+          "sha256": "b15cffd9f4e625b1b59ec0f6a71c70735c5584c8e844336034701ac2102f53ab",
+          "files_rehashed": 11
+        }
+      },
+      "draft-1.4-0038": {
+        "job_id": 136490506927,
+        "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315334/job/136490506927",
+        "artifact": {
+          "id": 14659580236,
+          "sha256": "f1f16a0b8e758a1c7839421822b4e48832b15a4e590d2417eb3123b353a9d5fc",
+          "files_rehashed": 9
+        }
+      },
+      "draft-1.4-0039": {
+        "job_id": 136490506776,
+        "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315334/job/136490506776",
+        "artifact": {
+          "id": 14658687080,
+          "sha256": "96c70ac2597f39de9221a2c47e6598ad53a88d95faa69c2be38863c9898e3be0",
+          "files_rehashed": 9
+        }
+      },
+      "historical-qc": {
+        "job_id": 136490506706,
+        "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315334/job/136490506706",
+        "artifact": {
+          "id": 14658712515,
+          "sha256": "a6a450ff878867d8da0e3b1b3ea50d7df502b8373ceca193e167a67482f1e67d",
+          "files_rehashed": 67
+        }
+      }
+    },
+    "clean_stages": {
+      "PASS": 18,
+      "SKIPPED": 11
+    },
+    "clean_suites": {
+      "first-use": {
+        "startTime": "2026-11-20T18:46:40.111Z",
+        "duration": 11671.882000000001,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "workspace": {
+        "startTime": "2026-11-20T18:52:18.628Z",
+        "duration": 62061.019,
+        "expected": 5,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "research": {
+        "startTime": "2026-11-20T18:46:52.973Z",
+        "duration": 150465.426,
+        "expected": 6,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "spatial": {
+        "startTime": "2026-11-20T18:49:24.376Z",
+        "duration": 173285.736,
+        "expected": 10,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      }
+    }
+  },
+  "subsequent_recovery_finding": {
+    "backup_id": "7438b6f8-4b5d-4463-b493-cb637f8a18c6",
+    "backup_manifest_sha256": "e54f4229a70c75ec87eec1396c150fd82962867d7090fc92688fe5f930e342c4",
+    "members_rehashed": 38,
+    "bytes": 4940397,
+    "failed_restore_job": "5d1e03c1-c885-4fc6-9e5d-45fb98a4a72e",
+    "observed_error": "Restored file failed verification: data/restore-receipt.json",
+    "failed_destination_published": false,
+    "archive_preserved": true,
+    "receipt_sha256": "4a4ab732af448ea075758e830b6ab82b23eafb1fdd8cb6662cdbfc5cf853fcc6",
+    "correction": "https://github.com/Rafael-Del-Valle/ReefVision/pull/105"
   }
 }
