@@ -32,6 +32,8 @@ export function ProjectInferenceInspector({
   const detectorModels = useQuery({
     queryKey: ["models", projectId, "detector"],
     queryFn: ({ signal }) => getModels(projectId, "detector", signal),
+    select: (models) =>
+      models.filter((model) => model.provider_name !== "sleap_nn"),
   });
 
   const activeJob = useQuery({
@@ -128,7 +130,7 @@ export function ProjectInferenceInspector({
         !detectorModels.error &&
         (detectorModels.data?.length ?? 0) === 0 && (
           <div className="rv-inspector-empty-control">
-            <strong>No detector models registered</strong>
+            <strong>No compatible detector models available</strong>
             <p>
               Register or train a compatible detector in Model Hub before
               running batch inference.

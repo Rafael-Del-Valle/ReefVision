@@ -2109,6 +2109,13 @@ describe("AnnotationEditor", () => {
       if (url.includes(`/projects/${project.id}/models?purpose=detector`)) {
         return jsonResponse([
           {
+            id: "historic-pose",
+            display_name: "Historical pose",
+            provider_name: "sleap_nn",
+            task: "pose",
+            metadata_json: { active_for_predictions: true },
+          },
+          {
             id: "detector-best",
             project_id: project.id,
             purpose: "detector",

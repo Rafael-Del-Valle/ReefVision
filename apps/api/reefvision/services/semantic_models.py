@@ -26,6 +26,7 @@ from reefvision.ml.semantic_segmentation import (
     NNUNET_PROVIDER_ID,
     SEMANTIC_SEGMENTATION_TASK,
 )
+from reefvision.ml.sleap_nn_provider import SLEAP_NN_ACTIONABLE_RETIREMENT, SLEAP_NN_PROVIDER_ID
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.models import (
     InferenceJobCreateRequest,
@@ -676,6 +677,8 @@ class SemanticModelService(SegmentationModelService):
                 "Inference jobs require a compatible detector, pose model, instance segmenter, "
                 "or semantic segmenter from the same project"
             )
+        if model.provider_name.strip().casefold() == SLEAP_NN_PROVIDER_ID:
+            raise ValidationError(SLEAP_NN_ACTIONABLE_RETIREMENT)
         images = self.images.list_by_ids(payload.image_ids)
         if len(images) != len(payload.image_ids):
             raise ValidationError("One or more requested images do not exist")

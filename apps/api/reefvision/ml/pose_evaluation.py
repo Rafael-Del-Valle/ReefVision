@@ -13,7 +13,7 @@ from PIL import Image
 from reefvision.db.models import ModelRegistration
 from reefvision.domain.errors import ValidationError
 from reefvision.ml.providers import resolve_torch_device
-from reefvision.ml.sleap_nn_provider import SLEAP_NN_PROVIDER_ID, SLEAP_NN_RETIREMENT_REASON
+from reefvision.ml.sleap_nn_provider import SLEAP_NN_ACTIONABLE_RETIREMENT, SLEAP_NN_PROVIDER_ID
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,8 +63,7 @@ def reject_retired_pose_evaluation_provider(provider_name: str) -> None:
     if provider_name.strip().casefold() == SLEAP_NN_PROVIDER_ID:
         raise PoseEvaluationProviderExclusion(
             "provider_runtime_unavailable",
-            f"SLEAP-NN is {SLEAP_NN_RETIREMENT_REASON}. "
-            "Choose a registered native ReefPose model for evaluation.",
+            SLEAP_NN_ACTIONABLE_RETIREMENT,
         )
 
 
