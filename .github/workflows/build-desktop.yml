@@ -214,7 +214,9 @@ jobs:
         run: |
           $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-4-0-installer'
           $msi = Join-Path $folder 'ReefVision_1.4.0_x64_en-US.msi'
-          $playwrightNode = (Get-Command node -CommandType Application).Source
+          . ./scripts/lib/node-tools.ps1
+          $playwrightNode = Find-ReefVisionExecutable -Names 'node.exe'
+          if (-not $playwrightNode) { throw 'Packaged WebView2 acceptance requires Node from setup-node.' }
           $env:PATH = @(
             (Join-Path $env:SystemRoot 'System32'),
             $env:SystemRoot,

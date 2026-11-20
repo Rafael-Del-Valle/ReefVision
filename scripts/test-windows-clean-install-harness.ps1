@@ -365,6 +365,39 @@ Assert-True ($acceptanceScript -notmatch 'Where-Object\s+FullName\s+-eq\s+''mani
 
 $desktopWorkflowPath = Join-Path $Root '.github\workflows\build-desktop.yml'
 $desktopWorkflow = Get-Content -LiteralPath $desktopWorkflowPath -Raw
+. (Join-Path $PSScriptRoot 'lib\node-tools.ps1')
+$nodeDiscovery = '$playwrightNode = Find-ReefVisionExecutable -Names ''node.exe'''
+$nodeDiscoveryIndex = $desktopWorkflow.IndexOf($nodeDiscovery)
+Assert-True ($nodeDiscoveryIndex -ge 0) 'Packaged Playwright must discover a single executable through the Windows Node helper.'
+$cleanInstallStep = $desktopWorkflow.Substring($nodeDiscoveryIndex)
+Assert-True ($cleanInstallStep.IndexOf('$env:PATH = @(') -gt 0) 'Playwright must capture the absolute Node path before the application PATH is restricted.'
+
+$nodeFixtureRoot = Join-Path $env:TEMP ('reefvision-node-selection-' + [guid]::NewGuid().ToString('N'))
+$firstNodeFolder = Join-Path $nodeFixtureRoot 'first'
+$secondNodeFolder = Join-Path $nodeFixtureRoot 'second'
+$firstNodePath = Join-Path $firstNodeFolder 'node.exe'
+$secondNodePath = Join-Path $secondNodeFolder 'node.exe'
+$originalPath = $env:PATH
+try {
+    New-Item -ItemType Directory -Path $firstNodeFolder,$secondNodeFolder -Force | Out-Null
+    # The fixture exercises executable discovery only, without launching these files.
+    $stub = Join-Path $env:SystemRoot 'System32\cmd.exe'
+    Copy-Item -LiteralPath $stub -Destination $firstNodePath
+    Copy-Item -LiteralPath $stub -Destination $secondNodePath
+    $env:PATH = "$firstNodeFolder;$secondNodeFolder"
+    Assert-True (@(Get-Command node -CommandType Application).Count -eq 2) 'The fixture must expose both executable choices.'
+    $selectedDriver = Find-ReefVisionExecutable -Names 'node.exe'
+    $env:PATH = Join-Path $env:SystemRoot 'System32'
+    Assert-True ($selectedDriver -is [string] -and $selectedDriver -ieq $firstNodePath) 'The first Node executable must remain one absolute path after restricting PATH.'
+    Assert-True (-not (Get-Command node.exe -CommandType Application -ErrorAction SilentlyContinue)) 'The selected driver must stay off the application PATH.'
+} finally {
+    $env:PATH = $originalPath
+    [IO.File]::Delete($firstNodePath)
+    [IO.File]::Delete($secondNodePath)
+    foreach ($folder in $firstNodeFolder,$secondNodeFolder,$nodeFixtureRoot) {
+        if ([IO.Directory]::Exists($folder)) { [IO.Directory]::Delete($folder) }
+    }
+}
 foreach ($profileName in @('validated-1.3', 'draft-1.4-0038', 'draft-1.4-0039')) {
     Assert-True ($desktopWorkflow.Contains("profile: $profileName")) "Windows lineage matrix is missing $profileName."
 }
