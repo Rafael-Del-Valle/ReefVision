@@ -182,19 +182,14 @@ def test_removable_camera_import_rejects_silent_copy_corruption(
     monkeypatch.setattr(image_storage.os, "link", unsupported_hardlink)
     monkeypatch.setattr(image_storage.shutil, "copyfileobj", corrupted_copy)
 
-    report = import_one(
-        client, project["id"], filename="SONY_REMOVABLE_0103.JPEG", content=source
-    )
+    report = import_one(client, project["id"], filename="SONY_REMOVABLE_0103.JPEG", content=source)
 
     assert report["successful"] == []
     assert len(report["failed"]) == 1, report
     assert "checksum or size changed" in report["failed"][0]["detail"]
     assert client.get(f"/api/v1/projects/{project['id']}/images").json()["total"] == 0
     original_directory = (
-        Path(test_settings.resolved_data_dir)
-        / project["storage_root"]
-        / "images"
-        / "originals"
+        Path(test_settings.resolved_data_dir) / project["storage_root"] / "images" / "originals"
     )
     assert list(original_directory.iterdir()) == []
 
