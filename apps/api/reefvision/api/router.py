@@ -100,6 +100,7 @@ from reefvision.api.routes.spatial_source_assets_v14 import (
 from reefvision.api.routes.static_comparison import router as static_comparison_router
 from reefvision.api.routes.study_design import router as study_design_router
 from reefvision.api.routes.system import router as system_router
+from reefvision.api.routes.taxonomy import router as taxonomy_router
 from reefvision.api.routes.temporal_reefpose import router as temporal_reefpose_router
 from reefvision.api.routes.training import router as training_router
 from reefvision.api.routes.video_science import router as video_science_router
@@ -115,6 +116,7 @@ install_workflow_v1_extensions()
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(acquisition_sources_router)
+api_router.include_router(taxonomy_router)
 api_router.include_router(monitoring_router)
 api_router.include_router(monitoring_summaries_router)
 api_router.include_router(environmental_analysis_router)
