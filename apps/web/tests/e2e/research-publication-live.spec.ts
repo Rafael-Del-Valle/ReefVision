@@ -22,7 +22,7 @@ test("publishes and reopens a held-out agreement figure", async ({ page }) => {
   const title = `Synthetic held-out agreement ${randomUUID().slice(0, 8)}`;
 
   await page.addInitScript(() => {
-    localStorage.setItem("reefvision.onboarding.dismissed.1.5.0", "true");
+    localStorage.setItem("reefvision.onboarding.dismissed.1.6.0", "true");
   });
   const openProject = async () => {
     await page.goto(web!);
