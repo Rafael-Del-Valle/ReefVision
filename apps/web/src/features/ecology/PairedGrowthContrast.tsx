@@ -1,9 +1,4 @@
-import {
-  skipToken,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 
 import { saveWorkflowGraph } from "../workflow-graphs/workflowGraphApi";
@@ -27,7 +22,15 @@ function formatMeasurement(value: number | null, unit: string | null) {
     : `${Number(value.toPrecision(6))}${unit ? " " + unit : ""}`;
 }
 
-function PairedResults({ report }: { report: PairedGrowthReport }) {
+function PairedResults({
+  report,
+  onDownload,
+  checking,
+}: {
+  report: PairedGrowthReport;
+  onDownload: () => void;
+  checking: boolean;
+}) {
   const interval = report.confidence_interval_95;
   const intervalNotes = {
     available: "Unavailable",
@@ -116,10 +119,7 @@ function PairedResults({ report }: { report: PairedGrowthReport }) {
           </p>
         ))}
       </details>
-      <button
-        type="button"
-        onClick={() => downloadPairedReport(report, report.report_sha256)}
-      >
+      <button type="button" disabled={checking} onClick={onDownload}>
         Download paired result JSON
       </button>
     </section>
@@ -135,25 +135,35 @@ export function PairedGrowthContrast({
 }) {
   const client = useQueryClient();
   const [draft, setDraft] = useState(emptyPairedGrowthDraft);
-  const [declaration, setDeclaration] = useState<PairedGrowthRequest | null>(
-    null,
-  );
   const { selection } = analysis.snapshot;
   const dates = pairedVisitDates(analysis);
   const ready = !analysis.stale && pairedDesignReady(draft);
 
-  const result = useQuery({
-    queryKey: ["paired-growth-contrast", projectId, analysis.id, declaration],
-    queryFn:
-      declaration && !analysis.stale
-        ? ({ signal }) =>
-            calculatePairedContrast(projectId, analysis.id, declaration, signal)
-        : skipToken,
-    retry: false,
+  const result = useMutation({
+    mutationFn: (declaration: PairedGrowthRequest) =>
+      calculatePairedContrast(projectId, analysis.id, declaration),
   });
-  const save = useMutation({
-    mutationFn: (report: PairedGrowthReport) =>
-      saveWorkflowGraph(projectId, {
+  const action = useMutation({
+    mutationFn: async ({
+      report,
+      intent,
+    }: {
+      report: PairedGrowthReport;
+      intent: "save" | "download";
+    }) => {
+      const fresh = await calculatePairedContrast(projectId, analysis.id, {
+        source_sha256: report.source_sha256,
+        ...report.design,
+      });
+      if (fresh.report_sha256 !== report.report_sha256)
+        throw new Error(
+          "This result has changed. Calculate the paired contrast again.",
+        );
+      if (intent === "download") {
+        downloadPairedReport(fresh, fresh.report_sha256);
+        return null;
+      }
+      return saveWorkflowGraph(projectId, {
         graph_id: `paired-growth-${report.report_sha256}`,
         name: `Paired growth · ${report.design.baseline_date} to ${report.design.followup_date} · ${report.design.experimental_unit_type}`.slice(
           0,
@@ -180,29 +190,34 @@ export function PairedGrowthContrast({
             target_port_id: "project",
           },
         ],
-      }),
-    onSuccess: () =>
-      client.invalidateQueries({ queryKey: ["workflow-graphs", projectId] }),
+      });
+    },
+    onSuccess: (graph) =>
+      graph
+        ? client.invalidateQueries({ queryKey: ["workflow-graphs", projectId] })
+        : undefined,
   });
 
   function calculate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (ready)
-      setDeclaration({
-        source_sha256: analysis.content_sha256,
-        ...draft,
-        experimental_unit_type: draft.experimental_unit_type.trim(),
-        estimand: draft.estimand.trim(),
-        missingness_policy: "complete_unit",
-      });
+    if (!ready) return;
+    action.reset();
+    result.mutate({
+      source_sha256: analysis.content_sha256,
+      ...draft,
+      experimental_unit_type: draft.experimental_unit_type.trim(),
+      estimand: draft.estimand.trim(),
+      missingness_policy: "complete_unit",
+    });
   }
 
   if (selection.kind !== "growth") return null;
-  const report = declaration && !analysis.stale ? result.data : undefined;
+  const report =
+    result.isSuccess && !action.isError && !analysis.stale
+      ? result.data
+      : undefined;
   const saved =
-    save.variables &&
-    save.variables.report_sha256 === report?.report_sha256 &&
-    save.isSuccess;
+    action.isSuccess && action.variables.intent === "save" ? action.data : null;
   return (
     <details>
       <summary>Repeated measures</summary>
@@ -217,40 +232,44 @@ export function PairedGrowthContrast({
           UTC visit dates for every independent unit.
         </p>
       ) : (
-        <form
-          aria-label="Declare paired growth contrast"
-          onSubmit={calculate}
-          onChange={() => setDeclaration(null)}
-        >
-          <PairedGrowthFields dates={dates} value={draft} onChange={setDraft} />
-          <button disabled={!ready || result.isFetching}>
+        <form aria-label="Declare paired growth contrast" onSubmit={calculate}>
+          <PairedGrowthFields
+            dates={dates}
+            value={draft}
+            onChange={(next) => {
+              result.reset();
+              action.reset();
+              setDraft(next);
+            }}
+          />
+          <button disabled={!ready || result.isPending}>
             Calculate paired contrast
           </button>
         </form>
       )}
-      {declaration && result.isFetching && (
-        <p role="status">Calculating paired contrast…</p>
-      )}
-      {declaration && result.error && (
-        <p role="alert">{result.error.message}</p>
-      )}
+      {result.isPending && <p role="status">Calculating paired contrast…</p>}
+      {result.error && <p role="alert">{result.error.message}</p>}
+      {action.error && <p role="alert">{action.error.message}</p>}
       {report && (
         <>
-          <PairedResults report={report} />
+          <PairedResults
+            report={report}
+            checking={action.isPending}
+            onDownload={() => action.mutate({ report, intent: "download" })}
+          />
           <button
             type="button"
-            onClick={() => save.mutate(report)}
-            disabled={save.isPending || Boolean(saved)}
+            disabled={action.isPending || Boolean(saved)}
+            onClick={() => action.mutate({ report, intent: "save" })}
           >
             Save paired workflow
           </button>
-          {saved && (
-            <p role="status">Saved in Workflow builder as {save.data.name}.</p>
+          {action.isPending && (
+            <p role="status">Checking the reviewed source…</p>
           )}
-          {save.isError &&
-            save.variables?.report_sha256 === report.report_sha256 && (
-              <p role="alert">{save.error.message}</p>
-            )}
+          {saved && (
+            <p role="status">Saved in Workflow builder as {saved.name}.</p>
+          )}
         </>
       )}
     </details>

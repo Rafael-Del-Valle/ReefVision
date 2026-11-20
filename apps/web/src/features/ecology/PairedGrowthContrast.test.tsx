@@ -3,13 +3,17 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 
 import { PairedGrowthContrast } from "./PairedGrowthContrast";
-import { calculatePairedContrast } from "./pairedGrowthContrastApi";
+import {
+  calculatePairedContrast,
+  downloadPairedReport,
+} from "./pairedGrowthContrastApi";
 import type { EcologyAnalysis } from "./ecologyAnalysisApi";
 import { saveWorkflowGraph } from "../workflow-graphs/workflowGraphApi";
 
 vi.mock("./pairedGrowthContrastApi", async (original) => ({
   ...(await original<typeof import("./pairedGrowthContrastApi")>()),
   calculatePairedContrast: vi.fn(),
+  downloadPairedReport: vi.fn(),
 }));
 vi.mock("../workflow-graphs/workflowGraphApi", () => ({
   saveWorkflowGraph: vi.fn(),
@@ -57,7 +61,7 @@ const source: EcologyAnalysis = {
 
 function renderContrast(analysis = source) {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
   });
   return render(
     <QueryClientProvider client={client}>
@@ -125,7 +129,6 @@ it("binds a declared two-visit analysis to its frozen source and saves the same 
     "project-1",
     "growth-1",
     { ...design, source_sha256: source.content_sha256 },
-    expect.any(AbortSignal),
   );
   vi.mocked(saveWorkflowGraph).mockResolvedValue({
     id: "graph-1",
@@ -157,6 +160,40 @@ it("binds a declared two-visit analysis to its frozen source and saves the same 
       }),
     ),
   );
+  const changed = new Error("The reviewed roster has changed.");
+  vi.mocked(calculatePairedContrast).mockRejectedValueOnce(changed);
+  fireEvent.change(screen.getByLabelText("Declared estimand"), {
+    target: { value: "Another design" },
+  });
+  fireEvent.change(screen.getByLabelText("Declared estimand"), {
+    target: { value: design.estimand },
+  });
+  fireEvent.click(calculate);
+  expect(await screen.findByRole("alert")).toHaveTextContent(changed.message);
+  expect(
+    screen.queryByRole("button", { name: "Download paired result JSON" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Save paired workflow" }),
+  ).not.toBeInTheDocument();
+
+  fireEvent.click(calculate);
+  const download = await screen.findByRole("button", {
+    name: "Download paired result JSON",
+  });
+  vi.mocked(calculatePairedContrast).mockRejectedValueOnce(changed);
+  fireEvent.click(download);
+  expect(await screen.findByRole("alert")).toHaveTextContent(changed.message);
+  expect(downloadPairedReport).not.toHaveBeenCalled();
+
+  fireEvent.click(calculate);
+  const saveAgain = await screen.findByRole("button", {
+    name: "Save paired workflow",
+  });
+  vi.mocked(calculatePairedContrast).mockRejectedValueOnce(changed);
+  fireEvent.click(saveAgain);
+  expect(await screen.findByRole("alert")).toHaveTextContent(changed.message);
+  expect(saveWorkflowGraph).toHaveBeenCalledTimes(1);
   fireEvent.change(screen.getByLabelText("Baseline UTC date"), {
     target: { value: "2026-09-15" },
   });
