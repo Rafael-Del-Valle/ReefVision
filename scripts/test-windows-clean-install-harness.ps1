@@ -451,8 +451,10 @@ foreach ($workflowContract in @(
     'python scripts/create_windows_lineage_fixtures.py',
     'python scripts/verify_windows_lineage_fixture.py',
     "-SourceCommit `$env:SOURCE_COMMIT -RequireProvenance",
-    'gh run download 43648296842',
-    'f56b577323c31f60b69251e1bb29e91b384d0d04',
+    'REEFVISION_1_3_RUN: "43767076956"',
+    'f44053a90286ce57cc6f7356be922bcf8ba41e22',
+    'gh run download $env:REEFVISION_1_3_RUN --repo Rafael-Del-Valle/ReefVision --name ReefVision-1.3.0-RC-Installer-Part-1',
+    'gh run download $env:REEFVISION_1_3_RUN --repo Rafael-Del-Valle/ReefVision --name ReefVision-1.3.0-RC-Installer-Part-2',
     "-Version '1.3.0' -ExpectedFilename 'ReefVision_1.3.0_x64_en-US.msi'",
     'VerifyPreviousInstallerRejectsUpgradedProfile = $true'
 )) {
