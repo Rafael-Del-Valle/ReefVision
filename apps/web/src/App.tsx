@@ -38,6 +38,7 @@ import { InteroperabilityWorkspace } from "./features/interoperability/Interoper
 import { ModelManager } from "./features/models/ModelManager";
 import { OnboardingModal } from "./features/onboarding/OnboardingModal";
 import { QualityControlDashboard } from "./features/quality-control/QualityControlDashboard";
+import { ReviewerLab } from "./features/reviewer-lab/ReviewerLab";
 import { ReviewQueueDashboard } from "./features/review-queues/ReviewQueueDashboard";
 import { SystemPanel } from "./features/system/SystemPanel";
 import { TrainingWorkspace } from "./features/training/TrainingWorkspace";
@@ -103,6 +104,7 @@ type ProjectView =
   | "classes"
   | "quality_control"
   | "review_queue"
+  | "reviewer_lab"
   | "advanced_providers"
   | "workflows"
   | "system";
@@ -217,6 +219,12 @@ const PROJECT_NAV_GROUPS: Array<{
         id: "quality_control",
         label: "Quality control",
         description: "Run explainable project or dataset-version QC checks.",
+      },
+      {
+        id: "reviewer_lab",
+        label: "Reviewer lab",
+        description:
+          "Assign blinded project reviews and adjudicate disagreement.",
       },
       {
         id: "review_queue",
@@ -1134,6 +1142,13 @@ function ReefVisionMainApp() {
                     highlightPredictionIds: issue.prediction_ids_json,
                   })
                 }
+              />
+            )}
+            {activeView === "reviewer_lab" && (
+              <ReviewerLab
+                key={selectedProject.id}
+                projectId={selectedProject.id}
+                onOpenWorkflow={() => setActiveView("workflows")}
               />
             )}
             {activeView === "review_queue" && (

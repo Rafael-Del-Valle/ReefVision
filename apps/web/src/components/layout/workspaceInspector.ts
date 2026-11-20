@@ -16,6 +16,7 @@ export type WorkspaceInspectorView =
   | "classes"
   | "quality_control"
   | "review_queue"
+  | "reviewer_lab"
   | "advanced_providers"
   | "workflows";
 
@@ -57,6 +58,7 @@ export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "classes",
   "quality_control",
   "review_queue",
+  "reviewer_lab",
   "advanced_providers",
   "workflows",
 ];
@@ -351,6 +353,26 @@ const WORKSPACE_INSPECTORS: Record<
         label: "Images & annotation",
         target: "gallery",
         description: "Inspect and correct the underlying image evidence.",
+      },
+    ],
+  },
+  reviewer_lab: {
+    title: "Independent reviewer agreement",
+    summary:
+      "Assign two blinded decisions on pinned project originals and send disagreements to a distinct adjudicator.",
+    boundary: "review",
+    recordPolicy:
+      "Sealed reports preserve local role revisions and independent decisions.",
+    actions: [
+      {
+        label: "Review queue",
+        target: "review_queue",
+        description: "Review the project queue that supplies candidates.",
+      },
+      {
+        label: "Workflow Builder",
+        target: "workflows",
+        description: "Replay a sealed agreement report.",
       },
     ],
   },

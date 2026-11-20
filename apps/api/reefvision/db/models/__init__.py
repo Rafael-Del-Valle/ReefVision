@@ -100,6 +100,14 @@ from reefvision.db.models.quality_control_run import QualityControlRun
 from reefvision.db.models.reefpose_validation import ReefPoseReference
 from reefvision.db.models.review_queue import ReviewQueue
 from reefvision.db.models.review_queue_item import ReviewQueueItem
+from reefvision.db.models.reviewer_lab_v15 import (
+    ReviewerLabCredential,
+    ReviewerLabDecisionRecord,
+    ReviewerLabMember,
+    ReviewerLabReportRecord,
+    ReviewerLabRoleRevision,
+    ReviewerLabRoundRecord,
+)
 from reefvision.db.models.scientific_record import (
     EnvironmentalCacheEntry,
     EnvironmentalEventDefinition,
@@ -208,6 +216,12 @@ __all__ = [
     "ReefPoseReference",
     "ReviewQueue",
     "ReviewQueueItem",
+    "ReviewerLabCredential",
+    "ReviewerLabDecisionRecord",
+    "ReviewerLabMember",
+    "ReviewerLabReportRecord",
+    "ReviewerLabRoleRevision",
+    "ReviewerLabRoundRecord",
     "ScientificRecord",
     "SkeletonAnalysisRevision",
     "SpatialAssetMetadataRevision",

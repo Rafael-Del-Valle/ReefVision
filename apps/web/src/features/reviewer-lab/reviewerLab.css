@@ -1,0 +1,20 @@
+.reviewer-lab {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+}
+
+.reviewer-lab-image {
+  display: block;
+  max-width: 100%;
+  max-height: 28rem;
+  object-fit: contain;
+}
+
+.reviewer-lab-digest {
+  overflow-wrap: anywhere;
+}
+
+.reviewer-lab details {
+  overflow: auto;
+}

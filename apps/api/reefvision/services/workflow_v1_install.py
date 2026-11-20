@@ -18,6 +18,13 @@ from reefvision.services.workflow_provider_manifests_v15 import (
     extend_provider_manifest_registry,
     register_provider_manifest_adapter,
 )
+from reefvision.services.workflow_reviewer_lab_v15 import (
+    NODE_TYPE as REVIEWER_LAB_NODE_TYPE,
+)
+from reefvision.services.workflow_reviewer_lab_v15 import (
+    extend_reviewer_lab_registry,
+    register_reviewer_lab_adapter,
+)
 
 
 def install_workflow_v1_extensions() -> None:
@@ -27,15 +34,15 @@ def install_workflow_v1_extensions() -> None:
     register_condition_adapter()
     register_provider_manifest_adapter()
     register_model_runtime_adapter()
-    install_workflow_node_registry(
-        extend_model_runtime_registry(
-            extend_provider_manifest_registry(
-                extend_condition_registry(extend_mesh_registry(workflow_node_registry))
-            )
-        )
-    )
+    register_reviewer_lab_adapter()
+    registry = extend_condition_registry(extend_mesh_registry(workflow_node_registry))
+    registry = extend_model_runtime_registry(extend_provider_manifest_registry(registry))
+    install_workflow_node_registry(extend_reviewer_lab_registry(registry))
     workflow_graphs._ACTIONS["reviewed_model_runtime"] = (
         "Verify and use a reviewed local model configuration."
+    )
+    workflow_graphs._ACTIONS[REVIEWER_LAB_NODE_TYPE] = (
+        "Replay an immutable local reviewer agreement report."
     )
     workflow_graphs._ACTIONS["spatial_condition_report"] = (
         "Replay a pinned biological condition review report."
