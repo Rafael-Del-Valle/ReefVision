@@ -356,7 +356,120 @@ def read_report(session: Session, project_id: str, job_id: str) -> dict[str, Any
         raise ConflictError("The comparison has no completed report")
     if canonical_json_sha256(result["snapshot"]) != result.get("content_sha256"):
         raise ConflictError("Stored comparison report checksum mismatch")
+    snapshot = result["snapshot"]
+    if snapshot["selection"]["task"] in IMAGE_TASKS and not snapshot["evidence"].get(
+        "inference_job_ids"
+    ):
+        return {
+            **result,
+            "verification_status": "unverified_legacy",
+            "verification_message": (
+                "This archived report predates pinned inference jobs. Replay to verify it from "
+                "the original evaluation jobs and media, or create a new comparison."
+            ),
+        }
     return result
+
+
+def _normalized_groups(groups: list[dict[str, Any]], ids: dict[str, str]) -> dict[str, list[str]]:
+    return {
+        group["group_id"]: sorted(
+            canonical_json_sha256({**obs, "media_id": ids.get(obs["media_id"], obs["media_id"])})
+            for obs in group["observations"]
+        )
+        for group in groups
+    }
+
+
+def _verify_legacy_history(
+    session: Session, settings: Settings, project_id: str, job: Job, result: dict[str, Any]
+) -> None:
+    from reefvision.services.model_comparison_stills_v15 import (
+        RecordedImageRuns,
+        UnverifiedLegacyInference,
+        compare_image_models,
+    )
+    from reefvision.storage.model_comparison_stills_v15 import read_comparison_raster
+
+    request = ComparisonRequest.model_validate(job.request_json)
+    original = result["snapshot"]["evidence"]
+    mapping = result["source_id_map"]
+    selected = ComparisonRequest.model_validate(result["snapshot"]["selection"])
+    service = ModelRuntimeService(session, settings)
+    models = [service.get(project_id, str(pin.id)) for pin in (request.left, request.right)]
+    if request.task != selected.task or any(
+        model.content_sha256 != pin.sha256
+        or pin.sha256 != frozen_pin.sha256
+        or str(pin.id) != mapping.get(str(frozen_pin.id), str(frozen_pin.id))
+        or str(model.model_id) != mapping.get(frozen["model_id"], frozen["model_id"])
+        or model.snapshot.model_dump(mode="json") != frozen["receipt"]
+        for model, pin, frozen_pin, frozen in zip(
+            models,
+            (request.left, request.right),
+            (selected.left, selected.right),
+            result["snapshot"]["models"],
+            strict=True,
+        )
+    ):
+        raise ConflictError("Reviewed model selections changed. Create a new comparison.")
+    hashes = original["source_sha256"]
+    if len(hashes) != 6 or job.completed_at is None:
+        raise ConflictError(result["verification_message"])
+    try:
+        verified_legacy = compare_image_models(
+            session,
+            None,
+            project_id,
+            request.task,
+            {"dataset_version_id": str(request.sources[0].id)},
+            [
+                {
+                    "model_id": str(model.model_id),
+                    "checkpoint_sha256": model.snapshot.checkpoint_sha256,
+                    **pinned_job_settings(model),
+                }
+                for model in models
+            ],
+            recorded=RecordedImageRuns(
+                None,
+                lambda path: read_comparison_raster(settings, path),
+                {value: key for key, value in mapping.items()},
+                job.completed_at,
+                legacy_digests=(hashes[4], hashes[5]),
+                started_at=job.started_at,
+            ),
+        )
+    except UnverifiedLegacyInference as exc:
+        raise ConflictError(str(exc)) from exc
+    verified = ComparisonEvidence.model_validate(verified_legacy).model_dump(mode="json")
+    if (
+        verified["source_sha256"] != hashes
+        or verified["reference_id"]
+        != mapping.get(original["reference_id"], original["reference_id"])
+        or verified["reference_sha256"] != request.sources[0].sha256
+        or original["reference_sha256"] != result["snapshot"]["selection"]["sources"][0]["sha256"]
+        or _normalized_groups(verified["groups"], {})
+        != _normalized_groups(original["groups"], mapping)
+        or summarize_groups(verified["groups"]) != result["snapshot"]["summary"]
+        or any(
+            verified[key] != original[key] for key in ("evaluation_status", "method", "limitations")
+        )
+    ):
+        raise ConflictError(
+            "The archived legacy comparison differs from its original worker outputs. "
+            "Restore the original evaluation jobs and media, or create a new comparison."
+        )
+
+
+def require_verified_report(
+    session: Session, settings: Settings, project_id: str, job_id: str
+) -> None:
+    """Gate verified packages on persisted comparison evidence without running a model."""
+    result = read_report(session, project_id, job_id)
+    if result.get("verification_status") == "unverified_legacy":
+        _verify_legacy_history(
+            session, settings, project_id, get_job(session, project_id, job_id), result
+        )
 
 
 def replay(
@@ -371,29 +484,25 @@ def replay(
     result = read_report(session, project_id, job_id)
     if result["content_sha256"] != digest:
         raise ConflictError("The selected comparison digest changed")
-    request = ComparisonRequest.model_validate(get_job(session, project_id, job_id).request_json)
-    _, replayed, summary = evaluate(
-        session, settings, project_id, request, owner_run_id=owner_run_id
-    )
+    job = get_job(session, project_id, job_id)
+    request = ComparisonRequest.model_validate(job.request_json)
     original = result["snapshot"]["evidence"]
     mapping = result["source_id_map"]
 
-    def normalized(groups: list[dict[str, Any]], ids: dict[str, str]) -> dict[str, list[str]]:
-        return {
-            group["group_id"]: sorted(
-                canonical_json_sha256(
-                    {**obs, "media_id": ids.get(obs["media_id"], obs["media_id"])}
-                )
-                for obs in group["observations"]
-            )
-            for group in groups
-        }
-
+    is_legacy = result.get("verification_status") == "unverified_legacy"
+    if is_legacy:
+        _verify_legacy_history(session, settings, project_id, job, result)
+    _, replayed, summary = evaluate(
+        session, settings, project_id, request, owner_run_id=owner_run_id
+    )
     if (
-        normalized(original["groups"], mapping) != normalized(replayed["groups"], {})
+        _normalized_groups(original["groups"], mapping)
+        != _normalized_groups(replayed["groups"], {})
         or original["evaluation_status"] != replayed["evaluation_status"]
         or summary != result["snapshot"]["summary"]
-        or (not mapping and original["source_sha256"] != replayed["source_sha256"])
+        or (
+            not mapping and not is_legacy and original["source_sha256"] != replayed["source_sha256"]
+        )
     ):
         raise ConflictError("Recomputed observations differ from the frozen model comparison")
     return {"snapshot": result["snapshot"], "content_sha256": digest}

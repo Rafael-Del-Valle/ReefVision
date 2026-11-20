@@ -782,12 +782,12 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             if bool(package.options_json.get("include_generated_artifacts", False))
             else []
         )
-        raster_paths = paired_comparison_raster_paths(
-            {
-                name: [_row(row) for row in records.get(name, [])]
-                for name in ("jobs", "dataset_version_items", "prediction_proposals")
-            }
-        )
+        raster_sections = {
+            name: [_row(row) for row in records.get(name, [])]
+            for name in ("jobs", "dataset_version_items", "prediction_proposals")
+        }
+        mandatory_rasters = paired_comparison_raster_paths(raster_sections, include_legacy=False)
+        raster_paths = paired_comparison_raster_paths(raster_sections)
         seen_generated = {descriptor["source_relative_path"] for descriptor, _ in generated}
         prefix = project.storage_root.rstrip("/") + "/"
         for managed, digest in sorted(raster_paths.items()):
@@ -797,6 +797,8 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             if relative in seen_generated:
                 continue
             path = resolve_managed_project_path(self.settings, managed)
+            if managed not in mandatory_rasters and not path.is_file():
+                continue
             if _file_sha256(path) != digest:
                 raise ValidationError("Paired raster changed before export")
             generated.append(

@@ -93,10 +93,16 @@ class ModelOutputs:
 
 @dataclass(frozen=True)
 class RecordedImageRuns:
-    job_ids: tuple[str, str]
+    job_ids: tuple[str, str] | None
     read_raster: Callable[[str], bytes]
     original_ids: Mapping[str, str]
     cutoff: datetime
+    legacy_digests: tuple[str, str] | None = None
+    started_at: datetime | None = None
+
+
+class UnverifiedLegacyInference(ValidationError):
+    """An older receipt cannot be linked to a unique pair of frozen worker outputs."""
 
 
 def _dataset_items(session: Session, version: DatasetVersion) -> list[DatasetVersionItem]:
@@ -425,6 +431,7 @@ def _run_side(
     original_ids: Mapping[str, str] | None = None,
     owner_run_id: str | None = None,
     reference_sha256: str,
+    legacy_digest: bool = False,
 ) -> ModelOutputs:
     choice = model.choice.model_dump(mode="json")
     request = {key: value for key, value in choice.items() if key != "checkpoint_sha256"}
@@ -478,7 +485,11 @@ def _run_side(
     def digest_fields(row: PredictionProposal) -> dict[str, Any]:
         fields = _prediction_fields(row)
         # The reviewed model's label map independently binds the class identity.
-        fields.pop("class_id")
+        if legacy_digest:
+            if row.label_class_id is not None:
+                fields["class_id"] = archived.get(row.label_class_id, row.label_class_id)
+        else:
+            fields.pop("class_id")
         fields["image_id"] = archived.get(row.image_id, row.image_id)
         return fields
 
@@ -546,6 +557,53 @@ def _run_side(
             }
         ),
     )
+
+
+def _resolve_legacy_side(
+    session: Session,
+    project_id: str,
+    model: ModelEvidence,
+    targets: list[str],
+    reference_sha256: str,
+    recorded: RecordedImageRuns,
+    digest: str,
+) -> ModelOutputs:
+    query = select(Job).where(
+        Job.project_id == project_id,
+        Job.job_type == "inference",
+        Job.status == "succeeded",
+        Job.completed_at <= recorded.cutoff,
+        Job.request_json["runtime_selection_id"].as_string()
+        == str(model.choice.runtime_selection_id),
+    )
+    if recorded.started_at is not None:
+        query = query.where(Job.created_at >= recorded.started_at)
+    matches: list[ModelOutputs] = []
+    for job in session.scalars(query):
+        try:
+            result = _run_side(
+                session,
+                None,
+                project_id,
+                model,
+                targets,
+                recorded_job_id=job.id,
+                original_ids=recorded.original_ids,
+                legacy_digest=True,
+                reference_sha256=reference_sha256,
+            )
+        except ValidationError:
+            continue
+        if result.digest == digest:
+            matches.append(result)
+            if len(matches) > 1:
+                break
+    if len(matches) != 1:
+        raise UnverifiedLegacyInference(
+            "Older comparison cannot be verified uniquely. Use the original project "
+            "with both evaluation jobs and original media, or create a new comparison."
+        )
+    return matches[0]
 
 
 def _center(box: BoxEvidence) -> tuple[float, float]:
@@ -773,24 +831,42 @@ def compare_image_models(
         for item in items
     ]
     if not any(image.boxes or image.masks for image in truth):
+        if recorded is not None and recorded.legacy_digests is not None:
+            raise UnverifiedLegacyInference(
+                "The legacy comparison's reference originals are unavailable"
+            )
         raise ValidationError(
             "The reviewed test split has no usable positive reference for this task"
         )
     targets = [image.item.image_id for image in truth if image.exclusion is None]
-    first, second = (
-        _run_side(
-            session,
-            settings,
-            project_id,
-            model,
-            targets,
-            recorded_job_id=recorded.job_ids[index] if recorded else None,
-            original_ids=recorded.original_ids if recorded else None,
-            owner_run_id=owner_run_id,
-            reference_sha256=reference_sha256,
-        )
-        for index, model in enumerate((left, right))
-    )
+    outputs = []
+    for index, model in enumerate((left, right)):
+        if recorded is not None and recorded.job_ids is None:
+            if recorded.legacy_digests is None:
+                raise UnverifiedLegacyInference("Both archived inference jobs are required")
+            outcome = _resolve_legacy_side(
+                session,
+                project_id,
+                model,
+                targets,
+                reference_sha256,
+                recorded,
+                recorded.legacy_digests[index],
+            )
+        else:
+            outcome = _run_side(
+                session,
+                settings,
+                project_id,
+                model,
+                targets,
+                recorded_job_id=recorded.job_ids[index] if recorded and recorded.job_ids else None,
+                original_ids=recorded.original_ids if recorded else None,
+                owner_run_id=owner_run_id,
+                reference_sha256=reference_sha256,
+            )
+        outputs.append(outcome)
+    first, second = outputs
     for model in (left, right):
         registration = session.get(ModelRegistration, str(model.choice.model_id))
         if (

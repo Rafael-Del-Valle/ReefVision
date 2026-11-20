@@ -1,17 +1,23 @@
 """Project Exchange must preserve paired comparison receipts and prove their evidence."""
 
+import json
 from copy import deepcopy
+from io import BytesIO
 from typing import Any, cast
 from uuid import uuid4
+from zipfile import ZipFile
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
-from reefvision.db.models import ModelRegistration, Project
+from reefvision.db.models import Job, ModelRegistration, PredictionProposal, Project
 from reefvision.domain.errors import ConflictError
 from reefvision.jobs.project_exchange import process_project_exchange_export_job
+from reefvision.services.model_comparison_stills_v15 import _prediction_fields
 from reefvision.services.paired_models_v15 import process_comparison, replay, summarize_groups
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_model_comparison_stills_v15 import (
@@ -25,6 +31,14 @@ from reefvision.tests.test_model_comparison_stills_v15 import (
 from reefvision.tests.test_model_comparison_video_v15 import VideoFixture
 from reefvision.tests.test_model_comparison_video_v15 import video_comparison as video_fixture
 from reefvision.tests.test_paired_growth_contrast import _run_graph
+from reefvision.tests.test_reproducibility_v15 import (
+    REPRO,
+    _archive_with_replacement,
+    _export,
+    _upload,
+    _zip_body,
+)
+from reefvision.tests.test_reproducibility_v15 import _fixture as _reproducibility_fixture
 from reefvision.tests.test_scientific_project_exchange import import_archive, rewrite
 
 reviewed_runtime = reviewed_runtime_fixture
@@ -275,3 +289,212 @@ def test_paired_video_comparison_scores_restore_and_replay_twice(
                     "content_sha256": original["content_sha256"],
                 }
         raw = _archive(client, target)
+
+
+def _record_pre_id_comparison(
+    session: Session, job_id: str, test_settings: Settings, missing: str | None = None
+) -> tuple[dict[str, Any], str]:
+    job = session.get(Job, job_id)
+    assert job is not None and job.result_json is not None
+    snapshot = deepcopy(job.result_json["snapshot"])
+    evidence = snapshot["evidence"]
+    children = evidence.pop("inference_job_ids")
+    for index, child_id in enumerate(children):
+        child = session.get(Job, child_id)
+        model = session.get(ModelRegistration, child.request_json["model_id"])
+        proposals = session.scalars(
+            select(PredictionProposal).where(PredictionProposal.inference_job_id == child_id)
+        ).all()
+        pre_id_choice = {
+            key: child.request_json[key]
+            for key in (
+                "model_id",
+                "runtime_selection_id",
+                "runtime_selection_sha256",
+                "device",
+                "confidence_threshold",
+                "iou_threshold",
+            )
+        } | {"checkpoint_sha256": model.sha256}
+        evidence["source_sha256"][4 + index] = canonical_json_sha256(
+            {
+                "choice": pre_id_choice,
+                "predictions": sorted(
+                    canonical_json_sha256(_prediction_fields(row)) for row in proposals
+                ),
+                "invalid_images": [],
+            }
+        )
+        if missing == "raster" and index == 1:
+            mask = next(row for row in proposals if row.mask_path)
+            (test_settings.resolved_data_dir / mask.mask_path).unlink()
+        if missing == "ambiguous" and index == 0:
+            duplicate_id = str(uuid4())
+            session.add(
+                Job(
+                    id=duplicate_id,
+                    **{
+                        col.name: getattr(child, col.name)
+                        for col in Job.__table__.columns
+                        if col.name not in {"id", "deduplication_key"}
+                    },
+                )
+            )
+            session.flush()
+            for proposal in proposals:
+                session.add(
+                    PredictionProposal(
+                        inference_job_id=duplicate_id,
+                        **{
+                            col.name: getattr(proposal, col.name)
+                            for col in PredictionProposal.__table__.columns
+                            if col.name not in {"id", "inference_job_id"}
+                        },
+                    )
+                )
+        if missing == "job" and index == 0:
+            for proposal in proposals:
+                session.delete(proposal)
+            session.delete(child)
+    digest = canonical_json_sha256(snapshot)
+    job.result_json = {"snapshot": snapshot, "content_sha256": digest, "source_id_map": {}}
+    session.commit()
+    return snapshot, digest
+
+
+@pytest.mark.parametrize(
+    ("task", "missing"),
+    [
+        ("detector", None),
+        ("detector", "job"),
+        ("detector", "ambiguous"),
+        ("mask", None),
+        ("mask", "raster"),
+    ],
+)
+def test_pre_inference_id_report_preserves_history_and_requires_proof(
+    client: TestClient,
+    test_settings: Settings,
+    reviewed_runtime: None,
+    task: str,
+    missing: str | None,
+) -> None:
+    project, job_id, _ = _compare(client, task)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        snapshot, digest = _record_pre_id_comparison(session, job_id, test_settings, missing)
+        if missing is None:
+            assert (
+                replay(session, test_settings, project, job_id, digest)["content_sha256"] == digest
+            )
+    raw = _archive(client, project)
+    for _ in range(2):
+        imported = import_archive(client, raw)  # type: ignore[no-untyped-call]
+        assert imported.status_code == 201, imported.text
+        target = imported.json()["project_id"]
+        mapped = imported.json()["package"]["options_json"]["origin_id_map"][job_id]
+        report = client.get(
+            f"/api/v1/projects/{target}/paired-model-comparisons/{mapped}/export"
+        ).json()
+        assert report["snapshot"] == snapshot
+        assert report["content_sha256"] == digest
+        assert report["verification_status"] == "unverified_legacy"
+        with app.state.session_factory() as session:
+            if missing is None:
+                assert (
+                    replay(session, test_settings, target, mapped, digest)["snapshot"] == snapshot
+                )
+            else:
+                with pytest.raises(
+                    ConflictError,
+                    match=r"original evaluation jobs|cannot be verified|worker outputs",
+                ):
+                    replay(session, test_settings, target, mapped, digest)
+        raw = _archive(client, target)
+
+
+@pytest.mark.parametrize("stage", ["queue", "worker"])
+def test_verified_research_package_refuses_unverified_legacy_comparison(
+    client: TestClient, reviewed_runtime: None, stage: str
+) -> None:
+    project, selection, _ = _reproducibility_fixture(client)
+    job_id = selection["comparison_id"]
+    root = f"/api/v1/projects/{project}"
+    endpoint = f"{root}/reproducibility-packages"
+    pending = None
+    if stage == "worker":
+        response = client.post(endpoint, json=selection)
+        assert response.status_code == 202, response.text
+        pending = response.json()
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        row = session.get(Job, job_id)
+        result = deepcopy(row.result_json)
+        result["snapshot"]["evidence"].pop("inference_job_ids")
+        result["content_sha256"] = canonical_json_sha256(result["snapshot"])
+        row.result_json = result
+        session.commit()
+
+    historical = client.get(f"{root}/paired-model-comparisons/{job_id}/export")
+    assert historical.status_code == 200, historical.text
+    assert historical.json()["verification_status"] == "unverified_legacy"
+    if pending is None:
+        rejected = client.post(endpoint, json=selection)
+        assert rejected.status_code == 409, rejected.text
+        assert "create a new comparison" in rejected.json()["detail"].lower()
+        assert client.get(endpoint).json() == []
+    else:
+        assert not process_project_exchange_export_job(
+            app.state.settings, app.state.session_factory, pending["job_id"]
+        )
+        identifier = pending["package"]["id"]
+        package = client.get(f"{REPRO}/{identifier}").json()
+        assert package["status"] == "failed", package
+        assert "create a new comparison" in package["error_message"].lower()
+        assert client.get(f"{REPRO}/{identifier}/download").status_code == 409
+
+
+def test_legacy_bundle_requires_original_outputs_even_with_rehashed_zip(
+    client: TestClient, test_settings: Settings, reviewed_runtime: None
+) -> None:
+    project, selection, _ = _reproducibility_fixture(client)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        _, digest = _record_pre_id_comparison(session, selection["comparison_id"], test_settings)
+    package, raw = _export(client, project, selection, with_media=True, with_weights=False)
+    assert package["manifest"]["proof"]["evidence"]["comparison"]["content_sha256"] == digest
+    verified = client.post(f"{REPRO}/inspect", files=_upload(raw)).json()
+    assert verified["compatible"], verified
+    reopened = client.post(f"{REPRO}/import", files=_upload(raw))
+    assert reopened.status_code == 201, reopened.text
+    assert reopened.json()["proof_sha256"] == package["proof_sha256"]
+
+    def remove_original_outputs(_manifest: dict[str, Any], sections: dict[str, Any]) -> None:
+        jobs = sections["jobs"]
+        omitted = next(
+            row["id"]
+            for row in jobs
+            if row["job_type"] == "inference" and row["request_json"].get("evaluation_only")
+        )
+        sections["jobs"] = [row for row in jobs if row["id"] != omitted]
+        sections["prediction_proposals"] = [
+            row for row in sections["prediction_proposals"] if row["inference_job_id"] != omitted
+        ]
+
+    parts = _zip_body(raw)
+    manifest = json.loads(parts["manifest.json"])
+    path = "project.reefvision.zip"
+    nested = rewrite(parts[path], remove_original_outputs)  # type: ignore[no-untyped-call]
+    assert import_archive(client, nested).status_code == 201  # type: ignore[no-untyped-call]
+    with ZipFile(BytesIO(nested)) as archive:
+        manifest["exchange_manifest_sha256"] = canonical_json_sha256(
+            json.loads(archive.read("reefvision-exchange-manifest.json"))
+        )
+    incomplete = _archive_with_replacement(parts, manifest, path, nested)
+    before = client.get("/api/v1/projects").json()
+    incompatible = client.post(f"{REPRO}/inspect", files=_upload(incomplete)).json()
+    assert not incompatible["compatible"], incompatible
+    assert "create a new comparison" in incompatible["errors"][0].lower()
+    denied = client.post(f"{REPRO}/import", files=_upload(incomplete))
+    assert denied.status_code == 400, denied.text
+    assert client.get("/api/v1/projects").json() == before

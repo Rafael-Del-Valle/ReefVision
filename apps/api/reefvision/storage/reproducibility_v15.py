@@ -50,6 +50,7 @@ class NativeResearchArchive:
     sections: dict[str, list[dict[str, Any]]]
     inspection: ProjectExchangeInspectionResponse
     omitted: list[SourceOmission]
+    verified_paired_comparison_ids: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -152,7 +153,8 @@ def read_native_research_archive(source: BinaryIO) -> NativeResearchArchive:
     # filesystem inventory checks before providing any underlying package bytes for import.
     from reefvision.services.project_exchange_inspection import inspect_project_exchange
 
-    inspected = inspect_project_exchange(source)
+    verified_ids: set[str] = set()
+    inspected = inspect_project_exchange(source, verified_paired_comparison_ids=verified_ids)
     if not inspected.compatible or inspected.format_version != "1.5":
         raise ValidationError(
             "Nested Project Exchange could not be verified: "
@@ -182,6 +184,7 @@ def read_native_research_archive(source: BinaryIO) -> NativeResearchArchive:
         sections,
         inspected,
         _omissions(inspected, manifest, sections),
+        frozenset(verified_ids),
     )
 
 
@@ -210,6 +213,7 @@ def _write_bundle(
         selection=selection,
         project_id=native.manifest["project"]["id"],
         origin_ids=(native.manifest.get("origin") or {}).get("id_map", {}),
+        verified_paired_comparison_ids=native.verified_paired_comparison_ids,
     )
     entries = []
     temporary = destination.with_suffix(".partial")
@@ -263,7 +267,12 @@ def _read_bundle(
             if (digest, size) != (entry.sha256, entry.size_bytes):
                 raise ValueError(f"Package entry checksum differs: {entry.path}")
         verified = read_native_research_archive(native)
-        evidence = verify_proof(manifest.proof, verified.sections, verified.manifest)
+        evidence = verify_proof(
+            manifest.proof,
+            verified.sections,
+            verified.manifest,
+            verified_paired_comparison_ids=verified.verified_paired_comparison_ids,
+        )
         for key in EVIDENCE_SECTIONS:
             path = _section_path(key)
             if archive.read(path) != canonical_json_bytes(evidence.sections[key]):

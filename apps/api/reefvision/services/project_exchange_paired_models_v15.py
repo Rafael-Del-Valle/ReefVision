@@ -25,10 +25,14 @@ from reefvision.db.models import (
     Project,
     TrainingRun,
 )
-from reefvision.domain.errors import ReefVisionError, ValidationError
+from reefvision.domain.errors import NotFoundError, ReefVisionError, ValidationError
 from reefvision.schemas.model_runtime import RuntimeReceipt
 from reefvision.schemas.paired_models_v15 import ComparisonEvidence, ComparisonRequest
-from reefvision.services.model_comparison_stills_v15 import RecordedImageRuns, compare_image_models
+from reefvision.services.model_comparison_stills_v15 import (
+    RecordedImageRuns,
+    UnverifiedLegacyInference,
+    compare_image_models,
+)
 from reefvision.services.model_comparison_video_v15 import compare_video_models
 from reefvision.services.paired_models_v15 import JOB_TYPE, summarize_groups
 from reefvision.storage.datasets import canonical_json_sha256
@@ -82,6 +86,12 @@ def _sources(snapshot: Row) -> set[str]:
         ids.update(lineage.get("model_selection_job_ids", []))
         ids.update(lineage.get("checkpoint_dependencies", {}))
         ids.update(row["id"] for row in lineage.get("datasets", []))
+    if selection["task"] in IMAGE_TASKS and not evidence.get("inference_job_ids"):
+        # The original algorithm hashed a project class UUID in each prediction.
+        for model in snapshot["models"]:
+            receipt = model["receipt"]
+            if receipt["source_project_id"] == snapshot["project_id"]:
+                ids.update(value for value in receipt["class_mapping"].values() if value)
     return ids
 
 
@@ -102,7 +112,11 @@ def _add_raster(paths: dict[str, str], row: Row) -> None:
         raise ValidationError("Paired model raster path and checksum must be uniquely declared")
 
 
-def paired_comparison_raster_paths(sections: Sections) -> dict[str, str]:
+def paired_comparison_raster_paths(
+    sections: Sections,
+    *,
+    include_legacy: bool = True,
+) -> dict[str, str]:
     """Return project-relative managed paths required to verify archived raster scores."""
     paths: dict[str, str] = {}
     for job in _completed(sections):
@@ -115,6 +129,23 @@ def paired_comparison_raster_paths(sections: Sections) -> dict[str, str]:
         child_ids = {
             _local(identifier, mapping) for identifier in evidence.get("inference_job_ids", [])
         }
+        if not child_ids:
+            if not include_legacy:
+                continue
+            request = job["request_json"]
+            selection_ids = {request["left"]["id"], request["right"]["id"]}
+            child_ids = {
+                row["id"]
+                for row in sections.get("jobs", [])
+                if row.get("job_type") == "inference"
+                and row.get("project_id") == job["project_id"]
+                and row.get("status") == "succeeded"
+                and row["request_json"].get("evaluation_only") is True
+                and row["request_json"].get("runtime_selection_id") in selection_ids
+                and row.get("completed_at")
+                and row["completed_at"] <= job["completed_at"]
+                and (not job.get("started_at") or row["created_at"] >= job["started_at"])
+            }
         for item in sections.get("dataset_version_items", []):
             if (
                 item["dataset_version_id"] == dataset
@@ -201,7 +232,7 @@ def _validate_record(
     project_id: str,
     origin_map: Mapping[str, str],
     read_raster: RasterReader,
-) -> None:
+) -> bool:
     result = job["result_json"]
     snapshot, mapping = result["snapshot"], result["source_id_map"]
     source = ComparisonRequest.model_validate(snapshot["selection"])
@@ -282,7 +313,7 @@ def _validate_record(
         children = tuple(
             _local(identifier, mapping) for identifier in evidence["inference_job_ids"]
         )
-        if len(children) != 2 or len(set(children)) != 2:
+        if children and (len(children) != 2 or len(set(children)) != 2):
             raise ValueError("Still comparison lacks both independently recorded inference jobs")
         for identifier in children:
             child = session.get(Job, identifier)
@@ -296,20 +327,68 @@ def _validate_record(
             or evidence["reference_sha256"] != original_digests[0]
         ):
             raise ValueError("Still source identity differs from the frozen test reference")
-        expected = compare_image_models(
-            session,
-            None,
-            project_id,
-            source.task,
-            {"dataset_version_id": ids[0]},
-            picks,
-            recorded=RecordedImageRuns(
-                (children[0], children[1]),
-                read_raster,
-                {value: key for key, value in mapping.items()},
-                datetime.fromisoformat(job["completed_at"]),
-            ),
+        frozen_groups = dict(
+            session.execute(
+                select(DatasetVersionItem.image_id, DatasetVersionItem.group_key).where(
+                    DatasetVersionItem.dataset_version_id == ids[0],
+                    DatasetVersionItem.split == "test",
+                )
+            ).all()
         )
+        archived_groups = [
+            (_local(obs["media_id"], mapping), group["group_id"])
+            for group in evidence["groups"]
+            for obs in group["observations"]
+            if obs["media_kind"] == "image" and obs["frame"] is None
+        ]
+        if len(archived_groups) != len(frozen_groups) or dict(archived_groups) != frozen_groups:
+            raise ValueError("Comparison does not bind exactly the frozen image groups")
+        evidence_hashes = evidence["source_sha256"]
+        if len(evidence_hashes) != 6 or evidence_hashes[:4] != [
+            pick[field]
+            for field in ("checkpoint_sha256", "runtime_selection_sha256")
+            for pick in picks
+        ]:
+            raise ValueError(
+                "Paired snapshot does not bind both selected model and runtime digests"
+            )
+        if not children and source.task == "mask":
+            # Early exchanges could omit these pixels. Retain the report as unverified history.
+            job_sections = sections | {
+                "jobs": [
+                    row
+                    for row in sections["jobs"]
+                    if row["job_type"] != JOB_TYPE or row["id"] == job["id"]
+                ]
+            }
+            try:
+                for path in paired_comparison_raster_paths(job_sections):
+                    read_raster(path)
+            except NotFoundError:
+                return False
+        try:
+            expected = compare_image_models(
+                session,
+                None,
+                project_id,
+                source.task,
+                {"dataset_version_id": ids[0]},
+                picks,
+                recorded=RecordedImageRuns(
+                    (children[0], children[1]) if children else None,
+                    read_raster,
+                    {value: key for key, value in mapping.items()},
+                    datetime.fromisoformat(job["completed_at"]),
+                    legacy_digests=None if children else (evidence_hashes[4], evidence_hashes[5]),
+                    started_at=datetime.fromisoformat(job["started_at"])
+                    if job.get("started_at")
+                    else None,
+                ),
+            )
+        except UnverifiedLegacyInference:
+            if not children:
+                return False
+            raise
         if expected["source_sha256"] != evidence["source_sha256"] or _lineage(
             expected, {}, include_digests=not mapping
         ) != _lineage(evidence, mapping, include_digests=not mapping):
@@ -337,6 +416,7 @@ def _validate_record(
         )
     ):
         raise ValueError("Paired observations do not match their frozen model outputs")
+    return True
 
 
 def _artifact_checks(sections: Sections, records: dict[str, Row]) -> None:
@@ -389,28 +469,31 @@ def validate_paired_models_exchange(
     origin_map: Mapping[str, str],
     *,
     read_raster: RasterReader | None = None,
-) -> None:
+) -> frozenset[str]:
     try:
         jobs = _completed(sections)
         _artifact_checks(sections, {row["id"]: row for row in jobs})
         if not jobs:
-            return
+            return frozenset()
         paths = paired_comparison_raster_paths(sections)
 
         def verified_raster(path: str) -> bytes:
             if read_raster is None or path not in paths:
-                raise ValidationError("A required archived comparison raster is missing")
+                raise NotFoundError("An archived paired comparison raster is missing")
             payload = read_raster(path)
             if sha256(payload).hexdigest() != paths[path]:
                 raise ValidationError("Archived comparison raster checksum changed")
             return payload
 
         # Verify even raster inputs later excluded from metrics.
-        for path in paths:
+        for path in paired_comparison_raster_paths(sections, include_legacy=False):
             verified_raster(path)
         with _archive_session(sections) as session:
-            for row in jobs:
-                _validate_record(session, row, sections, project_id, origin_map, verified_raster)
+            return frozenset(
+                row["id"]
+                for row in jobs
+                if _validate_record(session, row, sections, project_id, origin_map, verified_raster)
+            )
     except (
         ReefVisionError,
         SQLAlchemyError,
@@ -536,7 +619,7 @@ def restore_paired_model_comparisons(
                 *(item["id"] for lineage in data["lineage"] for item in lineage["datasets"]),
             }
             dataset_ids.update(_local(key, mapping) for key in datasets)
-            children.update(_local(key, mapping) for key in data["inference_job_ids"])
+            children.update(_local(key, mapping) for key in data.get("inference_job_ids", []))
             relevant_model_ids.update(
                 _local(model["model_id"], mapping) for model in snapshot["models"]
             )

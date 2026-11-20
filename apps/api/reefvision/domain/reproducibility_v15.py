@@ -63,6 +63,7 @@ def derive_evidence(
     selection: ReproducibilitySelection,
     project_id: str,
     origin_ids: Mapping[str, str],
+    verified_paired_comparison_ids: frozenset[str] = frozenset(),
 ) -> ReproducibilityEvidence:
     """Select local archive rows and preserve their original scientific identities."""
     try:
@@ -112,6 +113,15 @@ def derive_evidence(
 
         request = ComparisonRequest.model_validate(comparison["selection"])
         scored = ComparisonEvidence.model_validate(comparison["evidence"])
+        if (
+            request.task in ("detector", "mask")
+            and not scored.inference_job_ids
+            and job["id"] not in verified_paired_comparison_ids
+        ):
+            raise ValueError(
+                "The archived comparison lacks uniquely verified evaluation outputs. "
+                "Restore the original evaluation jobs and media, or create a new comparison."
+            )
         if len(comparison["models"]) != 2:
             raise ValueError("Paired comparison does not bind two reviewed model identities")
         models = [RuntimeReceipt.model_validate(row["receipt"]) for row in comparison["models"]]
@@ -219,6 +229,8 @@ def verify_proof(
     proof: ReproducibilityProof,
     sections: dict[str, list[dict[str, Any]]],
     manifest: Mapping[str, Any],
+    *,
+    verified_paired_comparison_ids: frozenset[str] = frozenset(),
 ) -> ReproducibilityEvidence:
     local_ids = (manifest.get("origin") or {}).get("id_map", {})
     selection = ReproducibilitySelection.model_validate(
@@ -237,6 +249,7 @@ def verify_proof(
         selection=selection,
         project_id=manifest["project"]["id"],
         origin_ids=local_ids,
+        verified_paired_comparison_ids=verified_paired_comparison_ids,
     )
     if evidence.proof != proof:
         raise ValidationError("Reproducibility proof differs from the underlying frozen evidence")
@@ -244,7 +257,10 @@ def verify_proof(
 
 
 def validate_native_proofs(
-    sections: dict[str, list[dict[str, Any]]], manifest: Mapping[str, Any]
+    sections: dict[str, list[dict[str, Any]]],
+    manifest: Mapping[str, Any],
+    *,
+    verified_paired_comparison_ids: frozenset[str] = frozenset(),
 ) -> None:
     leaves = manifest.get(HISTORICAL_PROOFS, [])
     if not isinstance(leaves, list):
@@ -255,7 +271,12 @@ def validate_native_proofs(
             proof = ReproducibilityProof.model_validate(raw)
             if proof.proof_sha256 in proofs:
                 raise ValueError("Duplicate archived reproducibility proof")
-            verify_proof(proof, sections, manifest)
+            verify_proof(
+                proof,
+                sections,
+                manifest,
+                verified_paired_comparison_ids=verified_paired_comparison_ids,
+            )
             proofs[proof.proof_sha256] = proof
 
         artifacts = [
