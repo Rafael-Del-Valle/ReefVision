@@ -48,6 +48,7 @@ from reefvision.db.models import (
     WorkflowNodeRun,
     WorkflowRun,
 )
+from reefvision.db.models.field_capture import FieldCaptureObservation
 from reefvision.db.models.pose_active_learning import (
     PoseActiveLearningCandidate,
     PoseActiveLearningRound,
@@ -72,6 +73,14 @@ from reefvision.db.models.pose_training_dataset import (
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.project_exchange import ProjectExchangePackageResponse
 from reefvision.services.project_exchange import MANIFEST_NAME, ProjectExchangeService
+from reefvision.services.project_exchange_field_v15 import (
+    FIELD_EXCHANGE_FORMAT,
+    FIELD_ORIGIN,
+    field_exchange_records,
+    field_owned_project_path,
+    gather_field_media,
+    has_field_capture_batches,
+)
 from reefvision.services.project_exchange_integrated import (
     FORMAT_VERSION as INTEGRATED_FORMAT_VERSION,
 )
@@ -146,6 +155,8 @@ class ProjectExchangeV1Service(ProjectExchangeService):
     """Project exchange service with executable-workflow provenance included."""
 
     def _format_version(self, project_id: str) -> str:
+        if has_field_capture_batches(self.session, project_id):
+            return FIELD_EXCHANGE_FORMAT
         if has_integrated_records(self.session, project_id):
             return INTEGRATED_FORMAT_VERSION
         return super()._format_version(project_id)
@@ -558,6 +569,7 @@ class ProjectExchangeV1Service(ProjectExchangeService):
         integrated = integrated_records(self.session, project.id)
         if any(integrated.values()):
             sections.update(integrated)
+        sections.update(field_exchange_records(self.session, project.id))
         return sections
 
     def _telemetry_sidecars(
@@ -688,6 +700,8 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             if relative_to_data.startswith(exchange_prefix):
                 continue
             relative_to_project = path.relative_to(project_root).as_posix()
+            if field_owned_project_path(relative_to_project):
+                continue
             descriptor: dict[str, object] = {
                 "kind": "generated",
                 "source_relative_path": relative_to_project,
@@ -712,12 +726,21 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             raise ValidationError(
                 "Project Exchange must include original media when the project has spatial sources"
             )
+        if not includes_media and self.session.scalar(
+            select(FieldCaptureObservation.id)
+            .where(FieldCaptureObservation.project_id == queued_package.project_id)
+            .limit(1)
+        ):
+            raise ValidationError(
+                "Project Exchange must include original media for field observations"
+            )
         super().build_export(package_id)
         package = self._package(package_id)
         project = self._project(package.project_id)
         manifest = dict(package.manifest_json)
         records = self._records(project)
         spatial_sources: list[tuple[dict[str, object], Path]] = []
+        field_sources: list[tuple[dict[str, object], Path | None]] = []
         if bool(package.options_json.get("include_media", False)):
             source_service = SpatialSourceAssetService(self.session, self.settings)
             for asset in cast(Sequence[SpatialSourceAsset], records["spatial_source_assets"]):
@@ -733,6 +756,15 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                 spatial_sources.append((descriptor, source_path))
             media = list(manifest.get("media", []))
             media.extend(descriptor for descriptor, _ in spatial_sources)
+            field_sources = gather_field_media(
+                self.settings,
+                project.storage_root,
+                cast(
+                    Sequence[FieldCaptureObservation], records.get("field_capture_observations", [])
+                ),
+                media,
+            )
+            media.extend(descriptor for descriptor, _ in field_sources)
             manifest["media"] = media
         telemetry_sidecars = self._telemetry_sidecars(
             project,
@@ -751,7 +783,7 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             "existing_projects_must_not_be_overwritten": True,
             "source_ids_are_preserved_in_import_provenance": True,
         }
-        if package.format_version == INTEGRATED_FORMAT_VERSION or any(
+        if package.format_version in {INTEGRATED_FORMAT_VERSION, FIELD_EXCHANGE_FORMAT} or any(
             is_spatial_workflow_graph(graph.graph_json)
             for graph in cast(Sequence[WorkflowGraphRecord], records["workflow_graphs"])
         ):
@@ -770,6 +802,8 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                     "manifest_sha256": parent.manifest_sha256,
                     "id_map": source.get("origin_id_map") or source.get("id_map", {}),
                 }
+                if package.format_version == FIELD_EXCHANGE_FORMAT and source.get(FIELD_ORIGIN):
+                    manifest[FIELD_ORIGIN] = source[FIELD_ORIGIN]
 
         archive_path = resolve_managed_project_path(self.settings, package.archive_path)
         temporary = archive_path.with_suffix(archive_path.suffix + ".manifest.part")
@@ -798,6 +832,10 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                         source_path,
                         arcname=str(descriptor["path"]),
                     )
+
+                for descriptor, field_path in field_sources:
+                    if field_path is not None:
+                        target_archive.write(field_path, arcname=str(descriptor["path"]))
 
                 for descriptor, source_path in generated:
                     target_archive.write(

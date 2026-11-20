@@ -78,6 +78,7 @@ from reefvision.services.pose_training_datasets import (
     MANIFEST_SCHEMA_VERSION,
     PoseTrainingDatasetService,
 )
+from reefvision.services.project_exchange_field_v15 import FIELD_SECTION_MODELS
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -126,6 +127,7 @@ def register_v1_sections() -> None:
             "spatial_condition_revisions": SpatialConditionRevision,
         }
     )
+    base_import.SECTION_MODELS.update(FIELD_SECTION_MODELS)
 
     _insert_after(
         "project_class_visibility_defaults",
@@ -156,6 +158,10 @@ def register_v1_sections() -> None:
     _insert_after("spatial_asset_metadata_revisions", "spatial_calibration_reviews")
     _insert_after("spatial_condition_rubrics", "spatial_asset_metadata_revisions")
     _insert_after("spatial_condition_revisions", "spatial_condition_rubrics")
+    _insert_after("field_capture_batches", "videos")
+    _insert_after("field_capture_observations", "field_capture_batches")
+    _insert_after("field_capture_reconciliations", "field_capture_observations")
+    _insert_after("field_capture_reviews", "field_capture_reconciliations")
 
     _insert_after("pose_landmark_schemas", "models")
     _insert_after(
