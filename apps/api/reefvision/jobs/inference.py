@@ -35,6 +35,7 @@ from reefvision.ml.semantic_segmentation import (
     SEMANTIC_SEGMENTATION_TASK,
     semantic_provider_for_name,
 )
+from reefvision.ml.sleap_nn_provider import SLEAP_NN_ACTIONABLE_RETIREMENT, SLEAP_NN_PROVIDER_ID
 from reefvision.repositories.images import ImageRepository
 from reefvision.repositories.models import ModelRepository
 from reefvision.services.annotations import _polygon_area, _polygon_self_intersects
@@ -338,6 +339,12 @@ def process_inference_job(
         session.commit()
         request = dict(job.request_json)
         model = _model(session, str(request["model_id"]))
+        if model.provider_name.strip().casefold() == SLEAP_NN_PROVIDER_ID:
+            job.status = "failed"
+            job.error_message = SLEAP_NN_ACTIONABLE_RETIREMENT
+            job.completed_at = _utc_now()
+            session.commit()
+            return False
         model_path = resolve_managed_project_path(settings, model.managed_path)
         image_ids = [str(image_id) for image_id in request["image_ids"]]
         inference_settings = DetectionSettings(

@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 import reefvision.jobs.inference as inference_module
 import reefvision.ml.assist_runtime as assist_runtime_module
-from reefvision.db.models import Job, PredictionProposal
+from reefvision.db.models import Job, ModelRegistration, PredictionProposal
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.worker import recover_interrupted_jobs
 from reefvision.ml.providers import (
@@ -226,6 +226,64 @@ def test_register_model_and_create_inference_job(
     assert payload["job_type"] == "inference"
     assert payload["status"] == "queued"
     assert payload["progress_total"] == 1
+
+
+@pytest.mark.parametrize("existing_job", [False, True])
+def test_retired_pose_inference_cannot_start_or_remain_running(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, existing_job: bool
+) -> None:
+    monkeypatch.setattr(
+        ModelService,
+        "_provider_for_purpose",
+        lambda self, purpose: FakePoseRegistrationProvider(),
+    )
+    project = create_project(client)
+    image_id = import_one(client, project["id"])["successful"][0]["image_id"]
+    model = register_model(
+        client,
+        project["id"],
+        purpose="detector",
+        filename="pose-fixture.pt",
+        display_name="Historical tracking model",
+    )
+    endpoint = f"/api/v1/projects/{project['id']}/inference-jobs"
+    payload = {"model_id": model["id"], "image_ids": [image_id], "device": "cpu"}
+    job_id = None
+    if existing_job:
+        queued = client.post(endpoint, json=payload)
+        assert queued.status_code == 200, queued.text
+        job_id = queued.json()["id"]
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        registered = session.get(ModelRegistration, model["id"])
+        assert registered is not None
+        registered.provider_name = "sleap_nn"
+        registered.framework = "sleap_nn"
+        registered.provider_version = "0.3.3"
+        registered.metadata_json = {
+            **registered.metadata_json,
+            "historical_provider_receipt": "preserve the original registration",
+        }
+        session.commit()
+    record_path = f"/api/v1/models/{model['id']}"
+    historical = client.get(record_path).json()
+    assert historical["provider_name"] == "sleap_nn"
+
+    if job_id is None:
+        refused = client.post(endpoint, json=payload)
+        assert refused.status_code == 400, (refused.status_code, refused.json().get("status"))
+        assert "retired" in refused.json()["detail"]
+        with app.state.session_factory() as session:
+            assert session.scalar(select(Job).where(Job.job_type == "inference")) is None
+    else:
+        assert process_inference_job(app.state.settings, app.state.session_factory, job_id) is False
+        failed = client.get(f"/api/v1/jobs/{job_id}").json()
+        assert failed["status"] == "failed"
+        assert "retired" in failed["error_message"]
+        assert failed["completed_at"] is not None
+        assert not client.get(f"/api/v1/images/{image_id}/prediction-proposals").json()["items"]
+
+    assert client.get(record_path).json() == historical
 
 
 def test_reefpose_registration_job_execution_persists_landmark_provenance(
