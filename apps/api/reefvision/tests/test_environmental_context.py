@@ -352,6 +352,75 @@ def test_cache_list_rejects_rehashed_missing_foreign_or_duplicate_record_lineage
     assert {item["id"] for item in records.json()["items"]} == set(original_ids)
 
 
+
+@pytest.mark.parametrize(
+    "alteration", ["changed_record_key", "same_project_substitution"]
+)
+def test_environment_cache_rejects_unrelated_same_project_record_lineage(client, alteration):
+    """A record's project and a rehashed payload alone do not prove dataset lineage."""
+    from sqlalchemy import select
+
+    from reefvision.db.models.scientific_record import EnvironmentalCacheEntry, ScientificRecord
+    from reefvision.domain.errors import ConflictError
+    from reefvision.schemas.environmental_context import NOAAImportRequest
+    from reefvision.services.environmental_context import EnvironmentalContextService
+    from reefvision.services.scientific_data import content_hash
+
+    project = create_project(client, "Same-project NOAA cache lineage")
+    unrelated_id = None
+    if alteration == "same_project_substitution":
+        response = client.post(
+            f"/api/v1/projects/{project['id']}/scientific-records",
+            json={"records": [observation()]},
+        )
+        assert response.status_code == 201, response.text
+        unrelated_id = str(response.json()["items"][0]["id"])
+
+    request = NOAAImportRequest(station_id="8665530", day="2026-04-03")
+    with (
+        client.app.state.session_factory() as session,
+        httpx.Client(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=noaa_fixture()))
+        ) as http,
+    ):
+        service = EnvironmentalContextService(
+            session, http=http, now=datetime(2026, 4, 4, tzinfo=UTC)
+        )
+        imported = service.import_noaa(project["id"], request)
+        original_ids = [str(item.id) for item in imported.items]
+        assert len(original_ids) == 2
+        entry = session.scalar(select(EnvironmentalCacheEntry))
+        assert entry is not None
+        cache_key = entry.cache_key
+
+        if alteration == "changed_record_key":
+            record = session.get(ScientificRecord, original_ids[1])
+            assert record is not None
+            record.environmental_cache_key = "unrelated-dataset"
+        else:
+            assert unrelated_id is not None
+            tampered = deepcopy(entry.payload_json)
+            tampered["record_ids"] = [original_ids[0], unrelated_id]
+            entry.payload_json = tampered
+            entry.content_sha256 = content_hash(tampered)
+        session.commit()
+
+        with pytest.raises(ConflictError, match="another dataset"):
+            service.cached_dataset(project["id"], cache_key)
+        with pytest.raises(ConflictError, match="another dataset"):
+            service.datasets(project["id"])
+        with pytest.raises(ConflictError, match="another dataset"):
+            service.import_noaa(project["id"], request.model_copy(update={"offline": True}))
+
+    # Validation is read-only: even corrupted lineage must not delete evidence.
+    response = client.get(f"/api/v1/projects/{project['id']}/scientific-records")
+    assert response.status_code == 200, response.text
+    expected = set(original_ids)
+    if unrelated_id is not None:
+        expected.add(unrelated_id)
+    assert {str(item["id"]) for item in response.json()["items"]} == expected
+
+
 def test_environment_lookup_uses_explicit_space_time_depth_and_qc_limits(client):
     project = create_project(client)
     records = [
