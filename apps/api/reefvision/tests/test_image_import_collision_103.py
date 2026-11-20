@@ -532,9 +532,7 @@ def test_transient_camera_original_read_denial_preserves_recoverable_duplicate(
 
     with monkeypatch.context() as patch:
         patch.setattr(Path, "open", reject_camera_read)
-        denied = import_one(
-            client, project["id"], filename="CANON_RESEND.JPEG", content=source
-        )
+        denied = import_one(client, project["id"], filename="CANON_RESEND.JPEG", content=source)
 
     assert denied["successful"] == [], denied
     assert denied["duplicates"] == [], denied
@@ -550,3 +548,39 @@ def test_transient_camera_original_read_denial_preserves_recoverable_duplicate(
     assert retried["successful"] == [], retried
     assert retried["duplicates"][0]["duplicate_image_id"] == image_id
     assert managed.read_bytes() == source
+
+
+def test_corrupted_duplicate_does_not_block_another_camera_image_in_batch(
+    client: TestClient,
+    test_settings: Settings,
+) -> None:
+    """A damaged earlier original must not abort an independent camera import."""
+    project = create_project(client, "Mixed camera batch after damaged duplicate")
+    original = image_bytes("JPEG", size=(61, 45))
+    new_exposure = image_bytes("JPEG", size=(62, 46))
+    first = import_one(client, project["id"], filename="SONY_OLD.JPG", content=original)
+    original_id = first["successful"][0]["image_id"]
+    record = client.get(f"/api/v1/images/{original_id}").json()
+    managed = Path(test_settings.resolved_data_dir) / record["managed_path"]
+    tampered = bytes([original[0] ^ 1]) + original[1:]
+    managed.write_bytes(tampered)
+
+    response = client.post(
+        f"/api/v1/projects/{project['id']}/imports/images",
+        files=[
+            ("files", ("SONY_OLD_RESEND.JPEG", original, "image/jpeg")),
+            ("files", ("CANON_NEW.JPG", new_exposure, "image/jpeg")),
+        ],
+        data={"relative_paths": ["camera/old.jpeg", "camera/new.jpg"]},
+    )
+
+    assert response.status_code == 200, response.text
+    report = response.json()
+    assert [item["filename"] for item in report["failed"]] == ["SONY_OLD_RESEND.JPEG"]
+    assert "missing or damaged managed original" in report["failed"][0]["detail"]
+    assert report["duplicates"] == []
+    assert [item["filename"] for item in report["successful"]] == ["CANON_NEW.JPG"]
+    new_id = report["successful"][0]["image_id"]
+    assert client.get(f"/api/v1/images/{new_id}/content").content == new_exposure
+    assert client.get(f"/api/v1/projects/{project['id']}/images").json()["total"] == 2
+    assert managed.read_bytes() == tampered
