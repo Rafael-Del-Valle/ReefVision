@@ -336,6 +336,8 @@ def test_camera_jpeg_exif_time_qc_preserves_original_bytes(
         assert inspected.capture_timestamp is not None
         assert inspected.capture_timestamp.isoformat() == expected_utc
         assert "capture_time_warning" not in inspected.metadata
+
+
 def test_committed_camera_import_does_not_require_a_second_database_refresh(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -358,9 +360,7 @@ def test_committed_camera_import_does_not_require_a_second_database_refresh(
 
     monkeypatch.setattr(Session, "refresh", reject_import_refresh)
     try:
-        report = import_one(
-            client, project["id"], filename="SONY_DSC_0103.JPG", content=source
-        )
+        report = import_one(client, project["id"], filename="SONY_DSC_0103.JPG", content=source)
     finally:
         monkeypatch.setattr(Session, "refresh", original_refresh)
 
@@ -377,8 +377,6 @@ def test_committed_camera_import_does_not_require_a_second_database_refresh(
     assert job.json()["status"] == "queued"
     assert client.get(f"/api/v1/projects/{project['id']}/images").json()["total"] == 1
 
-    duplicate = import_one(
-        client, project["id"], filename="camera-resend.JPEG", content=source
-    )
+    duplicate = import_one(client, project["id"], filename="camera-resend.JPEG", content=source)
     assert duplicate["successful"] == []
     assert duplicate["duplicates"][0]["duplicate_image_id"] == entry["image_id"]
