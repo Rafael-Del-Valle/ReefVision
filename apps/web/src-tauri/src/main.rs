@@ -286,6 +286,18 @@ function Test-FiniteMetricValue {
   }
   return -not [double]::IsNaN($number) -and -not [double]::IsInfinity($number)
 }
+# Standard YOLO box, classification and distribution-focal losses are
+# nonnegative. A negative persisted component is unusable evidence, not a
+# valid measurement. Other scientific model metrics may be signed.
+function Test-ValidScientificMetricValue {
+  param([string]$Name, [AllowNull()][object]$Value)
+  if (-not (Test-FiniteMetricValue -Value $Value)) { return $false }
+  if ($Name -cin @('train/box_loss', 'train/cls_loss', 'train/dfl_loss',
+                    'val/box_loss', 'val/cls_loss', 'val/dfl_loss')) {
+    return [Convert]::ToDouble($Value, [Globalization.CultureInfo]::InvariantCulture) -ge 0
+  }
+  return $true
+}
 Write-Host 'ReefVision training monitor (read-only). Close this window to stop monitoring.'
 while ($true) {
   try {
@@ -314,7 +326,7 @@ while ($true) {
     $unmeasuredLosses = @{}
     if ($null -ne $run.metrics) {
       foreach ($metric in $run.metrics.PSObject.Properties) {
-        if (Test-FiniteMetricValue -Value $metric.Value) {
+        if (Test-ValidScientificMetricValue -Name $metric.Name -Value $metric.Value) {
           $latestMetrics[$metric.Name] = $metric.Value
           $metricSourceNotes[$metric.Name] = ' [summary metric; epoch association unverified]'
         }
@@ -325,7 +337,7 @@ while ($true) {
         $values = @($series.Value)
         $foundFiniteSample = $false
         for ($index = $values.Count - 1; $index -ge 0; $index -= 1) {
-          if (Test-FiniteMetricValue -Value $values[$index]) {
+          if (Test-ValidScientificMetricValue -Name $series.Name -Value $values[$index]) {
             $foundFiniteSample = $true
             $latestMetrics[$series.Name] = $values[$index]
             $metricSourceNotes[$series.Name] = (' [history entry {0}/{1}; epoch association unverified]' -f ($index + 1), $values.Count)

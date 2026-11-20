@@ -183,6 +183,27 @@ if (Test-FiniteMetricValue -Value $structuredLoss) {
 }
 
 
+# Execute the actual QC gate, rather than merely checking its source text:
+# canonical YOLO box/cls/dfl losses are nonnegative but signed scientific
+# comparison metrics and exact zero must remain valid.
+$scientificGate = [regex]::Match($source, '(?ms)^function Test-ValidScientificMetricValue \{.*?^\}')
+if (-not $scientificGate.Success) {
+  throw 'Training monitor must validate canonical YOLO loss components.'
+}
+Invoke-Expression $scientificGate.Value
+foreach ($key in @('train/box_loss', 'train/cls_loss', 'train/dfl_loss',
+                   'val/box_loss', 'val/cls_loss', 'val/dfl_loss')) {
+  if ((Test-ValidScientificMetricValue -Name $key -Value -0.001) -or
+      (Test-ValidScientificMetricValue -Name $key -Value ([double]::NaN)) -or
+      -not (Test-ValidScientificMetricValue -Name $key -Value 0)) {
+    throw ('Canonical YOLO loss validity was corrupted: {0}' -f $key)
+  }
+}
+if (-not (Test-ValidScientificMetricValue -Name 'scientific/correlation' -Value -0.25) -or
+    (Test-ValidScientificMetricValue -Name 'train/box_loss' -Value '-0.25')) {
+  throw 'Scientific loss QC must preserve signed non-loss metrics and reject string losses.'
+}
+
 # PowerShell single-quoted regex strings use one backslash for regex escapes.
 # Double backslashes would match literal backslashes instead of HTTP verbs,
 # allowing the request inventory assertion to miss the real monitor calls.
@@ -303,7 +324,7 @@ foreach ($lossKey in @('train/box_loss', 'train/cls_loss', 'train/dfl_loss')) {
     throw ('Required measured training loss is missing: {0}' -f $lossKey)
   }
 }
-if ($monitorScript -notmatch 'Test-FiniteMetricValue\s+-Value\s+\$values\[\$index\]') {
+if ($monitorScript -notmatch 'Test-ValidScientificMetricValue\s+-Name\s+\$series\.Name\s+-Value\s+\$values\[\$index\]') {
   throw 'Persisted epoch loss history must reject nonfinite measurements.'
 }
 
@@ -552,6 +573,40 @@ foreach ($expected in @(
 }
 if ($latestMetrics.Count -ne 3) {
   throw 'Mixed numeric epoch histories introduced an unexpected metric.'
+}
+
+# Corrupted negative YOLO losses must not be rendered as a valid current
+# measurement. Keep earlier history and summary fallback explicitly labeled;
+# preserve legitimately signed non-loss scientific metrics.
+$run = [pscustomobject]@{
+  metrics = [pscustomobject]@{
+    'train/box_loss' = -0.8
+    'train/cls_loss' = 0.4
+    'val/dfl_loss' = -0.7
+    'scientific/correlation' = -0.25
+  }
+  metrics_history = [pscustomobject]@{
+    'train/box_loss' = @(0.5, -0.1)
+    'train/cls_loss' = @(-0.2)
+    'train/dfl_loss' = @(-0.9)
+    'val/dfl_loss' = @(-0.6)
+    'scientific/correlation' = @(-0.4, -0.3)
+  }
+}
+Invoke-Expression $selectionCode
+if ($latestMetrics['train/box_loss'] -ne 0.5 -or
+    $latestMetrics['train/cls_loss'] -ne 0.4 -or
+    $latestMetrics['scientific/correlation'] -ne -0.3) {
+  throw 'Negative component handling lost valid scientific metric evidence.'
+}
+if ($latestMetrics.ContainsKey('train/dfl_loss') -or
+    $latestMetrics.ContainsKey('val/dfl_loss') -or
+    $unmeasuredLosses.Count -ne 2) {
+  throw 'Negative persisted YOLO losses were presented as measured values.'
+}
+if ($staleMetricSamples['train/box_loss'] -notmatch 'latest unavailable' -or
+    $staleMetricSamples['train/cls_loss'] -notmatch 'summary fallback') {
+  throw 'Corrupt YOLO history obscured prior/summary loss provenance.'
 }
 
 Write-Host 'PowerShell training console sanitizer regression passed.'
