@@ -494,6 +494,200 @@
     "ordered_nodeids_sha256": "a5de103414691aa2cf5f8916ea1899eddae02fdeaf23a88d51a1e30d62c6f7ba",
     "receipt_sha256": "77698a9dd5fecdc80fde6c4bdb5da4462462803f6ab297e62634bf825e3a196d"
   },
+  "previous_hosted_suites": {
+    "source": "8821ed9a1b71aff8e99751b0c6d66def06028970",
+    "receipt_sha256": "85b15c3e4494d300cab427c5739c462626912f586537e7d3ab97d430abf1d143",
+    "workflows": [
+      {
+        "id": 44790315653,
+        "name": "Milestone 9 Acceptance",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315653",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 44790315527,
+        "name": "Milestone 6 Acceptance",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315527",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 44790315456,
+        "name": "Milestone 6 Video Activity",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315456",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 44790315560,
+        "name": "Milestone 10 Acceptance",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315560",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 44790315391,
+        "name": "Milestone 8 Acceptance",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315391",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 44790315323,
+        "name": "Milestone 6 Video Science",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315323",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 44790315413,
+        "name": "Milestone 6 Video Reports",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315413",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 44790315335,
+        "name": "Milestone 6 Video Occupancy",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315335",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 44790315442,
+        "name": "Milestone 6 Hardening",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315442",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 44790315526,
+        "name": "Milestone 7 Acceptance",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315526",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 44790315425,
+        "name": "Pose Workflow Validation",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315425",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 44790315516,
+        "name": "CI",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315516",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 44790315334,
+        "name": "Build Windows Desktop Release Candidate",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315334",
+        "conclusion": "success",
+        "run_attempt": 1
+      },
+      {
+        "id": 44790315479,
+        "name": "ReefVision 1.0 Acceptance",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315479",
+        "conclusion": "success",
+        "run_attempt": 1
+      }
+    ],
+    "suites": [
+      {
+        "id": 136475929041,
+        "name": "backend",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315516/job/136475929041",
+        "conclusion": "success",
+        "totals": [
+          "1324 files already formatted",
+          "Success: no issues found in 711 source files",
+          "5918 passed, 11 skipped, 2 warnings in 2851.96s"
+        ]
+      },
+      {
+        "id": 136475929291,
+        "name": "frontend",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315516/job/136475929291",
+        "conclusion": "success",
+        "totals": [
+          "Test Files  136 passed (136)",
+          "Tests  906 passed (906)",
+          "15 passed (29.5s)"
+        ]
+      },
+      {
+        "id": 136475929047,
+        "name": "Desktop frontend and E2E",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315479/job/136475929047",
+        "conclusion": "success",
+        "totals": [
+          "Test Files  136 passed (136)",
+          "Tests  906 passed (906)",
+          "Test Files  1 passed (1)",
+          "Tests  1 passed (1)",
+          "15 passed (23.3s)"
+        ]
+      },
+      {
+        "id": 136475929313,
+        "name": "SAM 2.1 real online checkpoint and prompted inference",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315479/job/136475929313",
+        "conclusion": "success",
+        "totals": [
+          "1 passed in 14.34s"
+        ]
+      },
+      {
+        "id": 136475929346,
+        "name": "Backend, migrations, and scientific workflows",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315479/job/136475929346",
+        "conclusion": "success",
+        "totals": [
+          "1324 files already formatted",
+          "Success: no issues found in 707 source files",
+          "5911 passed, 18 skipped, 2 warnings in 3370.52s",
+          "126 passed, 1 warning in 96.81s"
+        ]
+      },
+      {
+        "id": 136475929359,
+        "name": "SAM 2.1 Windows-pinned provider versions on CPU",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315479/job/136475929359",
+        "conclusion": "success",
+        "totals": [
+          "1 passed, 1 warning in 20.03s"
+        ]
+      },
+      {
+        "id": 136475929481,
+        "name": "SAM 2.1 real inference on native Windows Python 3.12",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315479/job/136475929481",
+        "conclusion": "success",
+        "totals": [
+          "1 passed, 1 warning in 35.74s"
+        ]
+      },
+      {
+        "id": 136517258098,
+        "name": "Windows MSI release build",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315479/job/136517258098",
+        "conclusion": "success",
+        "totals": []
+      },
+      {
+        "id": 136529019235,
+        "name": "ReefVision 1.0 software gate",
+        "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44790315479/job/136529019235",
+        "conclusion": "success",
+        "totals": []
+      }
+    ]
+  },
   "earlier_offline_observations": [
     {
       "status": "NATIVE_PRODUCT_OPERATIONS_PASSED_EXACT_HARNESS_SAMPLING_GATE_FAILED",
@@ -526,6 +720,25 @@
       "policy_changes_during_measurement": [],
       "uninstall_exit_code": 0,
       "receipt_sha256": "24343da7c27430a04609589fd59be7734134e87321f8ef38fdcd10f4edc0ba19"
+    },
+    {
+      "status": "HARNESS_REACHED_35_SECOND_COLD_SIDECAR_LIMIT",
+      "source_commit": "3a9ce1622e4f9e230e2ee14432ee7d2f32510870",
+      "original_build_run": 44798678615,
+      "original_msi_sha256": "3b596ee3ba5e9188776cd3208245c277a72013877677c9a16e359ee6da04c3be",
+      "proof_run": 44804427243,
+      "proof_job": 136524578570,
+      "proof_artifact": 14662926947,
+      "artifact_sha256": "37a1b06594e80ce0229f8a85aba41940b1d520347a62474f00ab5dc21ee33810",
+      "original_msi_exit": 0,
+      "sidecar_first_log_utc": "2026-11-20T19:47:51.967097+00:00",
+      "sidecar_final_log_utc": "2026-11-20T19:47:53.993768+00:00",
+      "sidecar_first_stage": "Starting ReefVision desktop API on 127.0.0.1:0",
+      "sidecar_final_stage": "Loading FastAPI application factory",
+      "original_error": "The packaged sidecar did not publish a loopback port.",
+      "uninstall_exit_code": 0,
+      "network_restored": true,
+      "receipt_sha256": "9a7dcdad02cdbd074a1bd8805041cb5962c821ef5846c90a3721c2189d5dfe14"
     }
   ],
   "frozen_detector_workflow": {
@@ -646,5 +859,123 @@
       "fixture-source/dismiss-welcome.mjs": "9dd357716a02501c570040cd13b3c448e5d7e9eeff48a27a6bb7265bea5793b5"
     },
     "receipt_sha256": "688643332de1688dc68581f59c61144500e237ee1486a18685f27c9f537fa070"
+  },
+  "windows_installer": {
+    "workflow_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678615",
+    "workflow_run_id": 44798678615,
+    "msi_sha256_independently_expected": "3b596ee3ba5e9188776cd3208245c277a72013877677c9a16e359ee6da04c3be",
+    "receipt_sha256": "bfcdbf29c6053da2857326e6c62c2111d94c5db58bdb75fafe1e5c66fc485261",
+    "clean_stages": {
+      "PASS": 18,
+      "SKIPPED": 11
+    },
+    "roles": {
+      "clean": {
+        "job_id": 136518262631,
+        "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678615/job/136518262631",
+        "artifact": {
+          "id": 14663040393,
+          "sha256": "3441f4f21e04d4c7d3a3e30f9252c3caea9b9612505bb0f4ccab7722aa3fcd95",
+          "files_rehashed": 34
+        }
+      },
+      "published-1.0.3": {
+        "job_id": 136518262510,
+        "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678615/job/136518262510",
+        "artifact": {
+          "id": 14662461536,
+          "sha256": "c800c26518706558861ffb151b543ff35d67192d707adfd0b4da43e9fb75f0b2",
+          "files_rehashed": 6
+        }
+      },
+      "validated-1.3": {
+        "job_id": 136518262528,
+        "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678615/job/136518262528",
+        "artifact": {
+          "id": 14662452426,
+          "sha256": "a6715184b71b70336ecbefc1535583c0c1bff731f1517ef087c1a5cfe45e2da6",
+          "files_rehashed": 12
+        }
+      },
+      "validated-1.4": {
+        "job_id": 136518262392,
+        "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678615/job/136518262392",
+        "artifact": {
+          "id": 14662063085,
+          "sha256": "fc39012ed3bd72ed3318c6f6aae3d3990625d344ba2009ce076c421cf1377611",
+          "files_rehashed": 7
+        }
+      },
+      "validated-1.5": {
+        "job_id": 136518262525,
+        "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678615/job/136518262525",
+        "artifact": {
+          "id": 14663395877,
+          "sha256": "b6dacfae90066096340abc58a4b4d3142f7fa416b614c52f247cec831195a929",
+          "files_rehashed": 11
+        }
+      },
+      "draft-1.4-0038": {
+        "job_id": 136518262488,
+        "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678615/job/136518262488",
+        "artifact": {
+          "id": 14661214430,
+          "sha256": "4de78fdfc4821cc5e408a9c5ff6346952852c4565de34bf37680c9fab0b19bcc",
+          "files_rehashed": 9
+        }
+      },
+      "draft-1.4-0039": {
+        "job_id": 136518262494,
+        "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678615/job/136518262494",
+        "artifact": {
+          "id": 14661149722,
+          "sha256": "d051c68ba25eeef9daaeedea19ae347289b3424f52342d0484915616dcd2cbc0",
+          "files_rehashed": 9
+        }
+      },
+      "historical-qc": {
+        "job_id": 136518262534,
+        "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798678615/job/136518262534",
+        "artifact": {
+          "id": 14662775276,
+          "sha256": "9b33a87d97c048db50eef67a5d295d36e3234f927a31a186b925bac35d25b5c8",
+          "files_rehashed": 67
+        }
+      }
+    },
+    "clean_journeys": {
+      "first-use": {
+        "startTime": "2026-11-20T19:33:26.167Z",
+        "duration": 10054.968,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "workspace": {
+        "startTime": "2026-11-20T19:38:06.617Z",
+        "duration": 55593.173,
+        "expected": 5,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "research": {
+        "startTime": "2026-11-20T19:33:37.327Z",
+        "duration": 122083.006,
+        "expected": 6,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "spatial": {
+        "startTime": "2026-11-20T19:35:40.145Z",
+        "duration": 145716.07700000002,
+        "expected": 10,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      }
+    }
   }
 }
