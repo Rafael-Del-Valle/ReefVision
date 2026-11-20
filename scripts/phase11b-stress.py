@@ -355,14 +355,18 @@ def main() -> int:
                 project = require(
                     client.post(
                         "/api/v1/projects",
-                        json={
-                            "name": "Phase 11B isolated stress",
-                            "template": "octocoral",
-                        },
+                        json={"name": "Phase 11B isolated stress"},
                     ),
                     201,
                 )
                 project_id = str(project["id"])
+                label = require(
+                    client.post(
+                        f"/api/v1/projects/{project_id}/classes",
+                        json={"class_index": 0, "name": "phase11b", "display_color": "#287568"},
+                    ),
+                    201,
+                )
 
                 image_started = time.perf_counter()
                 with Path(large_image["path"]).open("rb") as stream:
@@ -412,7 +416,7 @@ def main() -> int:
                     client.get(f"/api/v1/images/{image_id}/annotations"),
                     200,
                 )
-                label_id = str(project["label_classes"][0]["id"])
+                label_id = str(label["id"])
                 annotation_id = str(uuid4())
                 saved_annotation = require(
                     client.put(
