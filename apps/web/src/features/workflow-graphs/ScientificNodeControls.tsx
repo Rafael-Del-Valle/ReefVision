@@ -39,6 +39,7 @@ const scientificNodes = new Set([
   "mesh_surface_preview",
   "point_cloud_preview",
   "mesh_longitudinal_comparison",
+  "provider_manifest_snapshot",
 ]);
 
 export const hasScientificNodeControls = (nodeType: string) =>
@@ -136,6 +137,11 @@ export function scientificConfigurationIssue(
   ) {
     return "Choose a frozen growth analysis and declare its paired visits, independent unit, estimand and missingness policy.";
   }
+  if (
+    nodeType === "provider_manifest_snapshot" &&
+    !string(parameters.record_id)
+  )
+    return "Choose an inspect-only local provider manifest.";
   if (nodeType === "scientific_comparison") {
     if (
       string(parameters.comparison_id) ||
@@ -1201,6 +1207,84 @@ function SpatialTimestamp({
   );
 }
 
+type LocalProviderManifestChoice = {
+  provider_id: string;
+  display_name: string;
+  source_kind: "built_in" | "local_manifest";
+  discovery_status: string;
+  source_filename: string | null;
+  source_sha256: string | null;
+};
+
+function ProviderManifestSnapshotFields({
+  parameters,
+  onChange,
+}: {
+  parameters: Parameters;
+  onChange: (value: Parameters) => void;
+}) {
+  const manifests = useQuery({
+    queryKey: ["workflow-provider-manifests"],
+    queryFn: ({ signal }) =>
+      request<LocalProviderManifestChoice[]>("/advanced-providers/manifests", {
+        signal,
+      }),
+  });
+  const localManifests = (manifests.data ?? []).filter(
+    (item) => item.source_kind === "local_manifest",
+  );
+  const selected = localManifests.find(
+    (item) => item.provider_id === string(parameters.record_id),
+  );
+
+  return (
+    <fieldset>
+      <legend>Provider manifest provenance</legend>
+      <p>
+        This node snapshots metadata only and never executes provider code,
+        installs packages, or loads checkpoints.
+      </p>
+      {manifests.isPending && <p role="status">Loading local manifests…</p>}
+      {manifests.error && <p role="alert">{manifests.error.message}</p>}
+      <label>
+        Local provider manifest
+        <select
+          value={string(parameters.record_id)}
+          onChange={(event) => {
+            const manifest = localManifests.find(
+              (item) => item.provider_id === event.target.value,
+            );
+            onChange({
+              ...parameters,
+              record_id: event.target.value,
+              expected_source_sha256: manifest?.source_sha256 ?? null,
+            });
+          }}
+        >
+          <option value="">Choose a local manifest</option>
+          {localManifests.map((manifest) => (
+            <option key={manifest.provider_id} value={manifest.provider_id}>
+              {manifest.display_name} · {manifest.discovery_status}
+            </option>
+          ))}
+        </select>
+      </label>
+      {selected && (
+        <p className="annotation-helper">
+          {selected.source_filename ?? "Unknown source file"} · SHA-256{" "}
+          {selected.source_sha256 ?? "unavailable"}
+        </p>
+      )}
+      {!manifests.isPending && localManifests.length === 0 && (
+        <p className="muted-copy">
+          No local JSON manifests were found in the ReefVision data directory
+          under provider-manifests.
+        </p>
+      )}
+    </fieldset>
+  );
+}
+
 function SpatialMeasurementFields({
   projectId,
   kind,
@@ -1764,6 +1848,13 @@ export function ScientificNodeControls({
   onChange: (value: Parameters) => void;
 }) {
   const base = `/projects/${projectId}`;
+  if (nodeType === "provider_manifest_snapshot")
+    return (
+      <ProviderManifestSnapshotFields
+        parameters={parameters}
+        onChange={onChange}
+      />
+    );
   if (nodeType === "mesh_surface_preview" || nodeType === "point_cloud_preview")
     return (
       <SpatialMeasurementFields

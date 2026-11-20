@@ -1,96 +1,33 @@
 # ReefVision 1.5.0 Report
 
-## v1.5.0-J completion state
+## Current release state
 
-This repository now contains an honest `v1.5.0-J` foundation slice rather than a full multi-provider completion. The implemented work adds a unified provider hub, runtime backend reporting, Model Hub catalog UI, and a prompt-assisted `Detect then segment` workflow that routes one pending detector proposal through a registered assist model and preserves provenance when the mask is accepted.
+ReefVision 1.5 is **in progress**. This report records only the early local provider/plugin foundation implemented on the stacked `develop/reefvision-1.5` branch. It does not close the other 1.5 feature-inventory entries, and it does not claim a complete plugin SDK.
 
-## Implemented providers
+## Implemented provider foundation
 
-- `ultralytics`
-  - formal provider catalog entry
-  - pinned dependency preflight
-  - local checkpoint registration
-  - detection inference
-  - segmentation-checkpoint registration for box-proposal workflows
-  - packaged desktop operation claimed through the existing pinned stack
-- `segment_anything`
-  - formal provider catalog entry
-  - pinned dependency preflight
-  - local checkpoint registration
-  - box and brush prompting
-  - prompt-assisted proposal segmentation in the annotation editor
-  - packaged desktop operation claimed through the existing pinned stack
+- Strict discovery of direct `.json` files in `<data_dir>/provider-manifests`.
+- Bounded file reads and a closed manifest schema with stable identity, version, capability, and availability fields.
+- Failure isolation: invalid UTF-8, JSON, schemas, duplicates, symlinks, directories, built-in ID conflicts, and oversized files remain visible as unavailable records without preventing other manifests from loading.
+- No imports, entry-point resolution, package installation, command execution, or model loading.
+- Provider-catalog API metadata for source kind, schema version, capabilities, availability, source file and digest, and discovery errors.
+- An explicit blocked preflight for local manifests; local records are not accepted by execution routes.
+- A tested project path at **Home → open project → Models & AI → Providers**. The workspace exposes discovery evidence and keeps local execution controls disabled.
+- A metadata-only `provider_manifest_snapshot` Workflow Builder node. It records manifest metadata and the source digest, can preserve invalid records as unavailable evidence, and refuses a changed digest when one was pinned.
 
-## Requested providers still blocked
+## Safety boundary
 
-- `rt_detr`
-- `grounding_dino`
-- `owlv2`
-- `florence2`
-- `sam2`
-- `mobilesam`
-- `fastsam`
-- `reefvision_unet`
-- `bytetrack`
-- `botsort`
+The 1.5 foundation is an inspection and provenance layer, not a runtime extension system. A manifest cannot grant code execution authority. Executable plugin loading, lifecycle controls, permissions, compatibility negotiation, and a stable SDK remain tracked separately for 2.0.
 
-These providers are represented in the catalog with explicit capability and availability metadata, but they remain unavailable because ReefVision does not yet have pinned dependencies, packaged desktop validation, or formal provider implementations for them.
+## Verification state
 
-## Capability-matrix summary
+The provider-foundation inventory entry is verified at source SHA `6d054d532b3faad9eb1b6a377e26ea54d92c6046`. Source tests, the normal browser path, and Workflow Builder snapshot coverage passed. The exact-head Windows clean-install and published-1.0.3 upgrade runs seeded a declarative manifest in the isolated application data directory, verified its packaged-API source digest, and confirmed that installed preflight remained inspect-only and blocked. No representative scientific dataset or physical GPU is required for this metadata-only foundation.
 
-- Implemented image detection: `ultralytics`
-- Implemented click/box/brush prompting: `segment_anything`
-- Implemented packaged desktop operation: `ultralytics`, `segment_anything`
-- Runtime backend reporting: `pytorch`, `torchscript`, `onnxruntime`, `openvino`, `tensorrt`
-- Training, video propagation, semantic segmentation, and tracking remain cataloged but unavailable in this slice
+## Versioning and migrations
 
-## Prompt Assist workflow
+- The application version remains on the 1.4 line while the broader 1.5 release is incomplete.
+- This slice adds no database schema changes and no Alembic migration.
 
-The annotation editor now supports:
+## Remaining 1.5 scope
 
-1. select one pending detector proposal
-2. choose a registered assist model
-3. send the proposal box to the assist model
-4. review the candidate mask overlay
-5. accept or discard the result
-
-Accepted masks remain `assist_mask` annotations, and when they originate from a proposal they now also:
-
-- set `source_prediction_id`
-- update the proposal review status
-- store assist acceptance provenance on the proposal
-- keep source-prediction provenance on the final annotation
-
-## Runtime and packaging notes
-
-- Base packaged stack still centers on the pinned PyTorch runtime.
-- Optional provider-pack architecture remains the intended path for larger Transformers, OpenVINO, or video-oriented families.
-- No dynamic package installation is performed at app startup or when prompt assist runs.
-
-## Tests run
-
-Backend:
-
-```powershell
-.\reefvision\.venv\Scripts\python.exe -m pytest reefvision\apps\api\reefvision\tests\test_provider_dependencies.py reefvision\apps\api\reefvision\tests\test_model_inference.py -q
-```
-
-Frontend:
-
-```powershell
-C:\Program Files\nodejs\npm.cmd --prefix reefvision\apps\web run test -- src/App.test.tsx src/features/annotation-editor/AnnotationEditor.test.tsx
-```
-
-Static checks:
-
-```powershell
-.\reefvision\.venv\Scripts\python.exe -m ruff check reefvision\apps\api
-C:\Program Files\nodejs\npm.cmd --prefix reefvision\apps\web run typecheck
-```
-
-## Known limitations
-
-- The app version string still remains on the `1.4.0` line in this repository snapshot.
-- The provider hub exposes future families honestly, but only two providers are actually wired end to end today.
-- Ultralytics segmentation checkpoints currently feed ReefVision's box-proposal review workflow rather than editable instance masks.
-- The runtime catalog reports backend availability, but ONNX Runtime, OpenVINO, and TensorRT are not yet wired into model execution.
+Experimental design, reviewer lab, field capture, model catalog/runtime work, model comparison, reproducibility packaging, and every other 1.5 inventory entry retain their independent status. Passing the provider-foundation gates does not close them.

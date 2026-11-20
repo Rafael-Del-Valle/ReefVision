@@ -86,6 +86,51 @@ async function mockApi(page: Parameters<typeof test>[0]["page"]) {
       return;
     }
 
+    if (url.pathname.endsWith("/advanced-providers/manifests")) {
+      await route.fulfill({
+        json: [
+          {
+            provider_id: "local:reef-survey-inspector",
+            display_name: "Reef Survey Inspector",
+            maturity: "local_manifest",
+            execution_supported: false,
+            execution_surface: "blocked",
+            supported_tasks: ["detection"],
+            prompt_fields_by_task: {},
+            output_contracts_by_task: {},
+            required_model_extensions: [],
+            required_packages: [],
+            recommended_devices: [],
+            known_limitations: ["Inspect-only local manifest"],
+            integration_notes: [],
+            source_kind: "local_manifest",
+            manifest_version: 1,
+            declared_capabilities: ["detection"],
+            availability_status: "unavailable",
+            availability_reason:
+              "Provider code is never loaded from a manifest.",
+            source_filename: "reef-survey-inspector.json",
+            source_sha256: "a".repeat(64),
+            discovery_status: "valid",
+            discovery_errors: [],
+          },
+        ],
+      });
+      return;
+    }
+
+    if (url.pathname.endsWith(`/projects/${project.id}/model-catalog`)) {
+      await route.fulfill({
+        json: {
+          project_id: project.id,
+          models: [],
+          workflows: [],
+          tasks: [],
+        },
+      });
+      return;
+    }
+
     await route.abort();
   });
 }
@@ -284,4 +329,40 @@ test("keeps the complete three-column scientist workbench usable at the default 
   await expect(page.getByLabel("Inspector layout controls")).toBeVisible();
 
   expect(await hasHorizontalOverflow(page)).toBe(false);
+});
+
+test("finds inspect-only provider manifests through normal project navigation", async ({
+  page,
+}) => {
+  await mockApi(page);
+  await mountBuiltApp(page);
+
+  await page
+    .getByRole("button", { name: "Open Phase 12 Acceptance Project" })
+    .click();
+  await page.getByRole("tab", { name: "Models & AI", exact: true }).click();
+  await page.getByRole("tab", { name: "Providers", exact: true }).click();
+
+  const workspace = page.locator("section.feature-workspace").filter({
+    hasText:
+      "Local JSON manifests are inspected without loading provider code.",
+  });
+  await expect(
+    workspace.getByRole("heading", { name: "Providers" }),
+  ).toBeVisible();
+  await expect(
+    workspace.getByText(
+      "Local JSON manifests are inspected without loading provider code.",
+    ),
+  ).toBeVisible();
+  await expect(
+    workspace.getByRole("combobox", { name: "Provider", exact: true }),
+  ).toHaveValue("local:reef-survey-inspector");
+  await expect(workspace.getByText("reef-survey-inspector.json")).toBeVisible();
+  await expect(
+    workspace.getByRole("button", { name: "Run preflight" }),
+  ).toBeDisabled();
+  await expect(
+    workspace.getByRole("button", { name: "Run provider" }),
+  ).toBeDisabled();
 });
