@@ -9,7 +9,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
-from reefvision.db.models import ModelRegistration, ModelRuntimeSelection, Project
+from reefvision.db.models import (
+    ModelRegistration,
+    ModelRuntimeSelection,
+    Project,
+    ProjectExchangePackage,
+)
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.ml.reviewed_runtime import resolve_reviewed_runtime
 from reefvision.schemas.model_runtime import (
@@ -19,6 +24,8 @@ from reefvision.schemas.model_runtime import (
     RuntimePreview,
     RuntimeReceipt,
     RuntimeSelectionResponse,
+    read_runtime_receipt,
+    runtime_source_links_match,
 )
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import hash_model_file
@@ -90,15 +97,41 @@ def verify_checkpoint(
         raise ConflictError("The checkpoint bytes differ from the reviewed registration")
 
 
-def _response(row: ModelRuntimeSelection) -> RuntimeSelectionResponse:
-    if canonical_json_sha256(row.snapshot_json) != row.content_sha256:
-        raise ConflictError("The stored model selection digest is invalid")
+def _project_origin_ids(session: Session, project_id: str) -> dict[str, str]:
+    package = session.scalar(
+        select(ProjectExchangePackage)
+        .where(
+            ProjectExchangePackage.project_id == project_id,
+            ProjectExchangePackage.direction == "import",
+            ProjectExchangePackage.status == "complete",
+        )
+        .order_by(ProjectExchangePackage.created_at.desc(), ProjectExchangePackage.id)
+        .limit(1)
+    )
+    origin = package.options_json.get("origin_id_map", {}) if package else {}
+    return dict(origin) if isinstance(origin, dict) else {}
+
+
+def _response(row: ModelRuntimeSelection, origin_ids: dict[str, str]) -> RuntimeSelectionResponse:
+    try:
+        receipt = read_runtime_receipt(row.snapshot_json, row.content_sha256)
+    except ValueError as exc:
+        raise ConflictError("The stored model selection receipt or digest is invalid") from exc
+    if not runtime_source_links_match(
+        receipt,
+        row.source_id_map_json,
+        origin_ids,
+        project_id=row.project_id,
+        model_id=row.model_id,
+    ):
+        raise ConflictError("The model selection source project or model linkage differs")
     return RuntimeSelectionResponse.model_validate(
         {
             "id": row.id,
             "model_id": row.model_id,
             "project_id": row.project_id,
-            "snapshot": row.snapshot_json,
+            "snapshot": receipt,
+            "requires_re_review": receipt.requires_re_review,
             "content_sha256": row.content_sha256,
             "created_at": row.created_at.replace(tzinfo=UTC)
             if row.created_at.tzinfo is None
@@ -120,13 +153,14 @@ class ModelRuntimeService:
             .where(ModelRuntimeSelection.project_id == project_id)
             .order_by(ModelRuntimeSelection.created_at.desc(), ModelRuntimeSelection.id)
         )
-        return [_response(row) for row in rows]
+        origin = _project_origin_ids(self.session, project_id)
+        return [_response(row, origin) for row in rows]
 
     def get(self, project_id: str, selection_id: str) -> RuntimeSelectionResponse:
         row = self.session.get(ModelRuntimeSelection, selection_id)
         if row is None or row.project_id != project_id:
             raise NotFoundError("Reviewed model selection not found in this project")
-        return _response(row)
+        return _response(row, _project_origin_ids(self.session, project_id))
 
     def preview(self, project_id: str, draft: RuntimeDraft) -> RuntimePreview:
         model = self.session.get(ModelRegistration, str(draft.model_id))
@@ -184,8 +218,9 @@ class ModelRuntimeService:
             ModelRuntimeSelection.content_sha256 == preview.content_sha256,
         )
         existing = self.session.scalar(lookup)
+        origin = _project_origin_ids(self.session, project_id)
         if existing:
-            return _response(existing)
+            return _response(existing, origin)
         row = ModelRuntimeSelection(
             project_id=project_id,
             model_id=str(payload.draft.model_id),
@@ -200,8 +235,8 @@ class ModelRuntimeService:
             existing = self.session.scalar(lookup)
             if existing is None:
                 raise
-            return _response(existing)
-        return _response(row)
+            return _response(existing, origin)
+        return _response(row, origin)
 
     def verify(
         self, project_id: str, selection_id: str, *, model_id: str, digest: str | None = None
@@ -212,6 +247,11 @@ class ModelRuntimeService:
         ):
             raise ConflictError(
                 "The model or selection digest differs from the reviewed configuration"
+            )
+        if pinned.requires_re_review:
+            raise ConflictError(
+                "This historical configuration needs a new review of the class mapping "
+                "and applied settings before execution."
             )
         model = self.session.get(ModelRegistration, model_id)
         receipt = pinned.snapshot

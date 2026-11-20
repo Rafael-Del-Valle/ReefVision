@@ -22,7 +22,7 @@ interface RuntimeSnapshot {
     iou_threshold: number;
   };
   prompt: string;
-  applied_image_settings: string[];
+  applied_image_settings?: string[];
 }
 
 interface Preview {
@@ -33,6 +33,7 @@ interface Preview {
 interface Selection extends Preview {
   id: string;
   model_id: string;
+  requires_re_review: boolean;
 }
 
 export function useSelections(projectId: string) {
@@ -50,10 +51,12 @@ export function ModelSelectionField({
   projectId,
   value,
   onChange,
+  allowHistorical = false,
 }: {
   projectId: string;
   value: string;
   onChange: (selection: Selection | undefined) => void;
+  allowHistorical?: boolean;
 }) {
   const records = useSelections(projectId);
   return (
@@ -68,9 +71,14 @@ export function ModelSelectionField({
         >
           <option value="">Choose a saved configuration</option>
           {records.data?.map((row) => (
-            <option key={row.id} value={row.id}>
+            <option
+              key={row.id}
+              value={row.id}
+              disabled={row.requires_re_review && !allowHistorical}
+            >
               {row.snapshot.display_name} · {row.snapshot.settings.device} ·{" "}
               {row.content_sha256.slice(0, 12)}
+              {row.requires_re_review ? " · Review again in Model Hub" : ""}
             </option>
           ))}
         </select>
@@ -80,7 +88,13 @@ export function ModelSelectionField({
   );
 }
 
-function Receipt({ snapshot }: { snapshot: RuntimeSnapshot }) {
+function Receipt({
+  snapshot,
+  digest,
+}: {
+  snapshot: RuntimeSnapshot;
+  digest?: string;
+}) {
   const options = snapshot.settings;
   return (
     <dl>
@@ -92,6 +106,14 @@ function Receipt({ snapshot }: { snapshot: RuntimeSnapshot }) {
       <dd>
         <code>{snapshot.checkpoint_sha256}</code>
       </dd>
+      {digest && (
+        <>
+          <dt>Receipt SHA-256</dt>
+          <dd>
+            <code>{digest}</code>
+          </dd>
+        </>
+      )}
       <dt>Provider</dt>
       <dd>
         {snapshot.provider_id} {snapshot.provider_version}
@@ -102,15 +124,19 @@ function Receipt({ snapshot }: { snapshot: RuntimeSnapshot }) {
       </dd>
       <dt>Confidence threshold</dt>
       <dd>
-        {snapshot.applied_image_settings.includes("confidence_threshold")
-          ? options.confidence_threshold
-          : "Unused by this model"}
+        {snapshot.applied_image_settings
+          ? snapshot.applied_image_settings.includes("confidence_threshold")
+            ? options.confidence_threshold
+            : "Unused by this model"
+          : options.confidence_threshold + " · Application not recorded"}
       </dd>
       <dt>IoU threshold</dt>
       <dd>
-        {snapshot.applied_image_settings.includes("iou_threshold")
-          ? options.iou_threshold
-          : "Unused by this model"}
+        {snapshot.applied_image_settings
+          ? snapshot.applied_image_settings.includes("iou_threshold")
+            ? options.iou_threshold
+            : "Unused by this model"
+          : options.iou_threshold + " · Application not recorded"}
       </dd>
       {snapshot.prompt && (
         <>
@@ -176,7 +202,7 @@ export function ReviewedModelRuntime({
     queryKey: ["reviewed-inference-images", projectId, page],
     queryFn: ({ signal }) =>
       getImages(projectId, { page, pageSize: 40 }, signal),
-    enabled: !!active,
+    enabled: Boolean(active && !active.requires_re_review),
   });
   const run = useMutation({
     mutationFn: ({ pin, image }: { pin: Selection; image: string }) =>
@@ -287,6 +313,7 @@ export function ReviewedModelRuntime({
       <ModelSelectionField
         projectId={projectId}
         value={selected}
+        allowHistorical
         onChange={(row) => {
           setSelected(row?.id ?? "");
           setJobId("");
@@ -294,8 +321,30 @@ export function ReviewedModelRuntime({
         }}
       />
       {active && (
+        <Receipt snapshot={active.snapshot} digest={active.content_sha256} />
+      )}
+      {active?.requires_re_review && (
         <div>
-          <Receipt snapshot={active.snapshot} />
+          <p>
+            Review this historical configuration again to confirm its current
+            class mapping and applied settings.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setModelId(active.model_id);
+              setRuntime(active.snapshot.runtime_id);
+              setDevice(active.snapshot.settings.device);
+              setPrompt(active.snapshot.prompt);
+              preview.reset();
+            }}
+          >
+            Review configuration again
+          </button>
+        </div>
+      )}
+      {active && !active.requires_re_review && (
+        <div>
           <label>
             Inference image
             <select

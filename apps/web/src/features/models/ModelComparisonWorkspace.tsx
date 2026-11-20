@@ -319,8 +319,8 @@ export function ModelComparisonWorkspace({
   const base = "/projects/" + projectId + "/paired-model-comparisons";
   const image = task === "detector" || task === "mask";
   const models = useSelections(projectId);
-  const a = models.data?.find((x) => x.id === left),
-    b = models.data?.find((x) => x.id === right);
+  const a = models.data?.find((x) => x.id === left && !x.requires_re_review),
+    b = models.data?.find((x) => x.id === right && !x.requires_re_review);
   const sources = useQuery({
     queryKey: ["paired-sources", projectId, task],
     queryFn: ({ signal }) =>
@@ -388,9 +388,10 @@ export function ModelComparisonWorkspace({
           {models.data
             ?.filter((m) => compatible[task].includes(m.snapshot.task))
             .map((m) => (
-              <option key={m.id} value={m.id}>
+              <option key={m.id} value={m.id} disabled={m.requires_re_review}>
                 {m.snapshot.display_name} · {m.snapshot.settings.device} ·{" "}
                 {m.content_sha256.slice(0, 12)}
+                {m.requires_re_review ? " · Review again in Model Hub" : ""}
               </option>
             ))}
         </select>
