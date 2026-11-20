@@ -664,14 +664,21 @@ test("keeps unsaved boxes visible after a failed save and allows retry", async (
 });
 
 test("renders and selects from a 1500-annotation image", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
   const annotations = Array.from({ length: 1500 }, (_, index) => ({
     id: `annotation-${index + 1}`,
     image_id: baseImage.id,
     label_class_id: index % 2 === 0 ? "class-1" : "class-2",
-    x_min: (index % 30) * 40,
-    y_min: Math.floor(index / 30) * 20,
-    x_max: (index % 30) * 40 + 24,
-    y_max: Math.floor(index / 30) * 20 + 16,
+    // Use the empty band below the grid so the test label overlaps its box
+    // at fit on narrow desktops, regardless of the platform's font metrics.
+    ...(index === 0
+      ? { x_min: 40, y_min: 1040, x_max: 280, y_max: 1152 }
+      : {
+          x_min: (index % 30) * 40,
+          y_min: Math.floor(index / 30) * 20,
+          x_max: (index % 30) * 40 + 24,
+          y_max: Math.floor(index / 30) * 20 + 16,
+        }),
     source_type: "human",
     source_model_id: null,
     source_prediction_id: null,
