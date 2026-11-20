@@ -703,28 +703,116 @@ describe("AnnotationEditor", () => {
     expect(viewport.getAttribute("transform")).toBe(middlePannedTransform);
   });
 
+  it("keeps wheel zoom while continuing a pointer-isolated annotation pan", async () => {
+    mockBasicEditorRequests();
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    stubCanvasRect();
+    const canvas = screen.getByTestId("annotation-canvas");
+    const viewport = screen.getByTestId("viewport-transform");
+    fireEvent.pointerDown(canvas, {
+      button: 0,
+      altKey: true,
+      pointerId: 41,
+      clientX: 100,
+      clientY: 100,
+    });
+    fireEvent.pointerMove(window, {
+      pointerId: 41,
+      clientX: 140,
+      clientY: 125,
+    });
+    const panned = viewport.getAttribute("transform");
+    fireEvent.wheel(canvas, {
+      deltaY: -120,
+      clientX: 230,
+      clientY: 210,
+    });
+    const zoomed = viewport.getAttribute("transform");
+    expect(zoomed).not.toBe(panned);
+    const zoomScale = zoomed?.match(/scale\([^)]+\)/)?.[0];
+    expect(zoomScale).toBeDefined();
+    fireEvent.pointerMove(window, {
+      pointerId: 99,
+      clientX: 800,
+      clientY: 800,
+    });
+    expect(viewport.getAttribute("transform")).toBe(zoomed);
+    fireEvent.pointerMove(window, {
+      pointerId: 41,
+      clientX: 180,
+      clientY: 155,
+    });
+    const resumed = viewport.getAttribute("transform");
+    expect(resumed).not.toBe(zoomed);
+    expect(resumed).toContain(zoomScale);
+    expect(screen.getByTestId("annotation-annotation-1")).toHaveAttribute(
+      "x",
+      "100",
+    );
+    fireEvent.pointerUp(window, { pointerId: 41 });
+    fireEvent.pointerMove(window, {
+      pointerId: 41,
+      clientX: 280,
+      clientY: 300,
+    });
+    expect(viewport.getAttribute("transform")).toBe(resumed);
+  });
+
   it("ignores unrelated pointer movement, release, reentry and cancellation during active pan", async () => {
     mockBasicEditorRequests();
     renderEditor();
-    await screen.findByRole("heading", { name: session.image.original_filename });
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
     stubCanvasRect();
     const canvas = screen.getByTestId("annotation-canvas");
     const viewport = screen.getByTestId("viewport-transform");
     const original = viewport.getAttribute("transform");
-    fireEvent.pointerDown(canvas, { button: 0, altKey: true, pointerId: 11, clientX: 100, clientY: 100 });
-    fireEvent.pointerMove(window, { pointerId: 22, clientX: 800, clientY: 800 });
+    fireEvent.pointerDown(canvas, {
+      button: 0,
+      altKey: true,
+      pointerId: 11,
+      clientX: 100,
+      clientY: 100,
+    });
+    fireEvent.pointerMove(window, {
+      pointerId: 22,
+      clientX: 800,
+      clientY: 800,
+    });
     fireEvent.pointerUp(window, { pointerId: 22 });
-    fireEvent.pointerDown(canvas, { button: 0, altKey: true, pointerId: 22, clientX: 800, clientY: 800 });
+    fireEvent.pointerDown(canvas, {
+      button: 0,
+      altKey: true,
+      pointerId: 22,
+      clientX: 800,
+      clientY: 800,
+    });
     expect(viewport.getAttribute("transform")).toBe(original);
-    fireEvent.pointerMove(window, { pointerId: 11, clientX: 140, clientY: 130 });
+    fireEvent.pointerMove(window, {
+      pointerId: 11,
+      clientX: 140,
+      clientY: 130,
+    });
     const firstMove = viewport.getAttribute("transform");
     expect(firstMove).not.toBe(original);
     fireEvent.pointerCancel(window, { pointerId: 22 });
-    fireEvent.pointerMove(window, { pointerId: 11, clientX: 180, clientY: 160 });
+    fireEvent.pointerMove(window, {
+      pointerId: 11,
+      clientX: 180,
+      clientY: 160,
+    });
     const secondMove = viewport.getAttribute("transform");
     expect(secondMove).not.toBe(firstMove);
     fireEvent.pointerUp(window, { pointerId: 11 });
-    fireEvent.pointerMove(window, { pointerId: 11, clientX: 200, clientY: 190 });
+    fireEvent.pointerMove(window, {
+      pointerId: 11,
+      clientX: 200,
+      clientY: 190,
+    });
     expect(viewport.getAttribute("transform")).toBe(secondMove);
     expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
   });
@@ -732,18 +820,33 @@ describe("AnnotationEditor", () => {
   it("does not finish a coral box annotation on a secondary pointer release", async () => {
     mockBasicEditorRequests();
     renderEditor();
-    await screen.findByRole("heading", { name: session.image.original_filename });
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
     stubCanvasRect();
     await userEvent.click(screen.getByRole("button", { name: "Box tool" }));
     await userEvent.click(screen.getByTestId("class-tool-1"));
     const canvas = screen.getByTestId("annotation-canvas");
     const objects = screen.getByRole("listbox", { name: "Objects" });
     expect(within(objects).getAllByRole("option")).toHaveLength(1);
-    fireEvent.pointerDown(canvas, { pointerId: 31, button: 0, clientX: 150, clientY: 150 });
-    fireEvent.pointerMove(window, { pointerId: 32, clientX: 500, clientY: 500 });
+    fireEvent.pointerDown(canvas, {
+      pointerId: 31,
+      button: 0,
+      clientX: 150,
+      clientY: 150,
+    });
+    fireEvent.pointerMove(window, {
+      pointerId: 32,
+      clientX: 500,
+      clientY: 500,
+    });
     fireEvent.pointerUp(window, { pointerId: 32 });
     expect(within(objects).getAllByRole("option")).toHaveLength(1);
-    fireEvent.pointerMove(window, { pointerId: 31, clientX: 240, clientY: 250 });
+    fireEvent.pointerMove(window, {
+      pointerId: 31,
+      clientX: 240,
+      clientY: 250,
+    });
     fireEvent.pointerCancel(window, { pointerId: 32 });
     fireEvent.pointerUp(window, { pointerId: 31 });
     expect(within(objects).getAllByRole("option")).toHaveLength(2);
