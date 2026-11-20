@@ -49,6 +49,8 @@ interface Observation {
   exclusion: string | null;
 }
 interface Result {
+  verification_status?: "unverified_legacy";
+  verification_message?: string;
   snapshot: {
     comparison_id: string;
     summary: {
@@ -154,6 +156,9 @@ function ResultPanel({
   return (
     <section aria-label="Paired comparison results">
       <h3>Paired results</h3>
+      {report.verification_status === "unverified_legacy" && (
+        <p role="status">{report.verification_message}</p>
+      )}
       <p>
         {evidence.evaluation_status === "held_out" ? "Held-out" : "Exploratory"}{" "}
         · {summary.group_count} independent groups ·{" "}

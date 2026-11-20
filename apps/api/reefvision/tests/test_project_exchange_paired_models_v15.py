@@ -399,6 +399,11 @@ def test_pre_inference_id_report_preserves_history_and_requires_proof(
         assert report["snapshot"] == snapshot
         assert report["content_sha256"] == digest
         assert report["verification_status"] == "unverified_legacy"
+        current = f"/api/v1/projects/{target}/paired-model-comparisons/{mapped}"
+        assert client.get(current).json()["result_json"] == report
+        sheet = client.get(current + "/export?format=csv").text
+        assert "verification_status,verification_message" in sheet.splitlines()[0]
+        assert "unverified_legacy" in sheet and report["verification_message"] in sheet
         with app.state.session_factory() as session:
             if missing is None:
                 assert (

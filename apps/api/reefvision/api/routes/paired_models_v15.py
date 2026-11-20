@@ -65,8 +65,12 @@ def history(
 
 
 @router.get("/{comparison_id}", response_model=ComparisonJobResponse)
-def current(project_id: UUID, comparison_id: UUID, session: Db) -> Job:
-    return comparison.get_job(session, str(project_id), str(comparison_id))
+def current(project_id: UUID, comparison_id: UUID, session: Db) -> ComparisonJobResponse:
+    job = comparison.get_job(session, str(project_id), str(comparison_id))
+    response = ComparisonJobResponse.model_validate(job)
+    if job.status == "succeeded":
+        response.result_json = comparison.read_report(session, str(project_id), str(comparison_id))
+    return response
 
 
 @router.get("/{comparison_id}/export")
@@ -81,6 +85,9 @@ def export(
         return JSONResponse(report, headers=headers)
     buffer = StringIO(newline="")
     writer = csv.writer(buffer)
+    verification = {
+        key: report[key] for key in ("verification_status", "verification_message") if key in report
+    }
     writer.writerow(
         (
             "group",
@@ -94,6 +101,7 @@ def export(
             "right",
             "exclusion",
             "report_sha256",
+            *verification,
         )
     )
     for group in report["snapshot"]["evidence"]["groups"]:
@@ -112,6 +120,7 @@ def export(
                         metric.get("right"),
                         obs.get("exclusion"),
                         report["content_sha256"],
+                        *verification.values(),
                     )
                 )
     return Response(buffer.getvalue(), media_type="text/csv", headers=headers)
