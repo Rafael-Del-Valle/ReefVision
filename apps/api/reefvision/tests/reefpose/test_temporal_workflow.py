@@ -190,6 +190,142 @@ def test_temporal_dataset_rejects_group_split_leakage(client: TestClient) -> Non
     assert "split" in response.text.lower()
 
 
+@pytest.mark.parametrize("shared_dimension", [None, "animal_id", "recording_id"])
+def test_temporal_split_groups_respect_typed_source_aliases(
+    client: TestClient, shared_dimension: str | None
+) -> None:
+    path, sources = _setup(client)
+    for index, source in enumerate(sources):
+        source["grouping"] = {"recording_id": f"Recording-{index}", "animal_id": f"Animal-{index}"}
+    if shared_dimension:
+        first_group = sources[0]["grouping"][shared_dimension]
+        # The full-width character is the same alias under the declared normalization.
+        full_width_first = chr(ord(first_group[0]) + 0xFEE0)
+        sources[2]["grouping"][shared_dimension] = f"{full_width_first}{first_group[1:].upper()}"
+
+    result = client.post(f"{path}/datasets", json={"name": "Typed splits", "sources": sources})
+    if shared_dimension:
+        assert result.status_code == 400, result.text
+        assert "cannot cross dataset splits" in result.text
+        assert client.get(f"{path}/datasets").json() == []
+    else:
+        assert result.status_code == 201, result.text
+        manifest = client.get(f"{path}/datasets/{result.json()['id']}").json()["manifest"]
+        assert [row["source_grouping"] for row in manifest["sources"]] == [
+            source["grouping"] for source in sources
+        ]
+        assert len({row["group_key"] for row in manifest["sources"]}) == 3
+
+
+@pytest.mark.parametrize(
+    ("training_history", "test_grouping", "expected"),
+    [
+        ("declared", {"recording_id": "recording-test", "animal_id": "animal-test"}, "held_out"),
+        ("declared", {"recording_id": "recording-test", "animal_id": "ANIMAL-DEV"}, "exposed"),
+        ("declared", {"recording_id": "RECORDING-DEV", "animal_id": "animal-test"}, "exposed"),
+        ("legacy", {"recording_id": "recording-test", "animal_id": "animal-test"}, "unverified"),
+        (
+            "unknown_parent",
+            {"recording_id": "recording-test", "animal_id": "animal-test"},
+            "unverified",
+        ),
+    ],
+)
+def test_frozen_frame_ancestry_sets_test_eligibility(
+    client: TestClient, training_history: str, test_grouping: dict[str, str], expected: str
+) -> None:
+    path, sources = _setup(client)
+    project_path = path.removesuffix("/temporal-reefpose")
+    training_track_id = sources[0]["reviewed_track_id"]
+    with client.app.state.session_factory() as session:
+        training_track = session.get(VideoTrack, training_track_id)
+        assert training_track is not None
+        video = session.get(VideoAsset, training_track.video_id)
+        assert video is not None
+        video_id = video.id
+        video_hash = video.sha256
+        # Current tags may expose overlap, but cannot retroactively prove an old declaration.
+        video.metadata_json = {"group_key": "current-catalogue-tag"}
+        training_track.keyframes_json = training_track.keyframes_json[:2]
+        session.commit()
+
+    temporal = client.post(
+        f"/api/v1/video-tracks/{training_track_id}/pose-temporal-associations", json={}
+    )
+    assert temporal.status_code == 200, temporal.text
+    declaration = {"recording_id": "recording-dev", "animal_id": "animal-dev"}
+    payload: dict[str, Any] = {
+        "name": "Reviewed development frames",
+        "video_id": video_id,
+        "track_ids": [training_track_id],
+        "selection_unit": "frame",
+        "requested_size": 1,
+    }
+    if training_history != "legacy":
+        payload["grouping"] = declaration
+    acquisition = client.post(f"{project_path}/pose-active-learning-rounds", json=payload)
+    assert acquisition.status_code == 201, acquisition.text
+    round_id = acquisition.json()["id"]
+    round_path = f"/api/v1/pose-active-learning-rounds/{round_id}"
+    [candidate] = client.get(f"{round_path}/candidates").json()
+    review = client.put(
+        f"/api/v1/pose-active-learning-candidates/{candidate['id']}/review",
+        json={"action": "verify", "reviewed_by": "Fixture reviewer"},
+    )
+    assert review.status_code == 200, review.text
+    freeze = client.post(f"{round_path}/training-dataset", json={"name": "Frozen reviewed poses"})
+    assert freeze.status_code == 201, freeze.text
+    dataset = freeze.json()
+    [item] = client.get(f"/api/v1/pose-training-datasets/{dataset['id']}/items").json()
+    assert item["video_sha256"] == video_hash
+    assert item["acquisition_provenance_json"].get("source_grouping") == payload.get("grouping")
+
+    # The fixture models a registered checkpoint and binds the actual saved dataset.
+    # No model weights or accelerator are needed to verify the persisted split decision.
+    with client.app.state.session_factory() as session:
+        prediction = session.get(VideoTrack, sources[2]["frame_track_id"])
+        assert prediction is not None
+        model = session.get(ModelRegistration, prediction.source_model_id)
+        assert model is not None
+        metadata = {
+            **(model.metadata_json or {}),
+            "source_pose_training_dataset_id": dataset["id"],
+            "source_pose_training_dataset_manifest_sha256": dataset["manifest_sha256"],
+            "source_pose_validation_mode": "none",
+        }
+        if training_history == "unknown_parent":
+            metadata["source_initial_pose_model_id"] = str(uuid4())
+            metadata["source_initial_pose_model_sha256"] = "c" * 64
+        model.metadata_json = metadata
+        session.commit()
+
+    frozen = client.post(
+        f"{path}/datasets",
+        json={
+            "name": "Validation evidence",
+            "sources": [{**sources[2], "grouping": test_grouping}],
+        },
+    )
+    assert frozen.status_code == 201, frozen.text
+    reopened = client.get(f"{path}/datasets/{frozen.json()['id']}").json()
+    lineage = reopened["manifest"]["frame_lineage"]
+    assert lineage["state"] == expected
+    assert lineage["datasets"] == [
+        {"id": dataset["id"], "sha256": dataset["manifest_sha256"], "role": "training"}
+    ]
+    assert lineage["recordings"][0]["sha256"] == video_hash
+    assert "group:current-catalogue-tag" in lineage["recordings"][0]["groups"]
+    if training_history == "legacy":
+        assert "declared_groups" not in lineage
+    else:
+        assert lineage["declared_groups"] is True
+        assert {"group:animal:animal-dev", "group:recording:recording-dev"} <= set(
+            lineage["recordings"][0]["groups"]
+        )
+    if training_history == "unknown_parent":
+        assert lineage["complete"] is False
+
+
 def test_temporal_dataset_requires_explicit_subject_pairing(client: TestClient) -> None:
     path, sources = _setup(client)
     sources[0].pop("confirm_same_animal")
