@@ -2694,6 +2694,82 @@ describe("Gallery", () => {
     expect(filmstrip.scrollLeft).toBe(800);
   });
 
+  it.each(["constructor", "observe-strip", "observe-thumbnail", "disconnect"] as const)(
+    "keeps filmstrip focus and scrolling usable when WebView2 observer %s throws",
+    async (failure) => {
+      class BrokenResizeObserver {
+        constructor(_callback: ResizeObserverCallback) {
+          if (failure === "constructor") {
+            throw new Error("Observer constructor unavailable");
+          }
+        }
+
+        observe(target: Element) {
+          if (
+            (failure === "observe-strip" &&
+              target.classList.contains("rv-media-filmstrip")) ||
+            (failure === "observe-thumbnail" &&
+              target.matches('button[aria-current="true"]'))
+          ) {
+            throw new Error("Observer registration unavailable");
+          }
+        }
+
+        disconnect() {
+          if (failure === "disconnect") {
+            throw new Error("Observer cleanup unavailable");
+          }
+        }
+      }
+
+      vi.stubGlobal("ResizeObserver", BrokenResizeObserver);
+      const secondImage: ProjectImage = {
+        ...image,
+        id: "image-2",
+        original_filename: "swiftia-02.png",
+      };
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        jsonResponse({
+          items: [image, secondImage],
+          total: 2,
+          page: 1,
+          page_size: 24,
+          pages: 1,
+        }),
+      );
+
+      try {
+        const { unmount } = renderGallery();
+        const filmstrip = await screen.findByRole("list", {
+          name: "Nearby images",
+        });
+        const second = screen.getByRole("listitem", {
+          name: "Focus swiftia-02.png",
+        });
+        const stripRect = { left: Number.NaN, right: 400 };
+        vi.spyOn(filmstrip, "getBoundingClientRect").mockImplementation(
+          () => stripRect as DOMRect,
+        );
+        vi.spyOn(second, "getBoundingClientRect").mockReturnValue({
+          left: 450,
+          right: 550,
+        } as DOMRect);
+
+        await userEvent.click(second);
+        expect(second).toHaveAttribute("aria-current", "true");
+        stripRect.left = 100;
+        fireEvent.resize(window);
+        await waitFor(() => expect(filmstrip.scrollLeft).toBe(150));
+        expect(
+          screen.getByAltText("Focused project image: swiftia-02.png"),
+        ).toBeInTheDocument();
+        expect(() => unmount()).not.toThrow();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
   it("defers active-image alignment until collapsed pane geometry recovers", async () => {
     const nextImage: ProjectImage = {
       ...image,
