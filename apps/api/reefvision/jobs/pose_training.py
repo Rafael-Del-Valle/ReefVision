@@ -1103,9 +1103,7 @@ def process_pose_training_job(
             )
             # Capture the original persisted provenance before invoking the
             # trainer; a later manifest rewrite cannot authorize altered inputs.
-            frozen_materialization = dict(run.artifact_manifest_json or {}).get(
-                "materialization"
-            )
+            frozen_materialization = dict(run.artifact_manifest_json or {}).get("materialization")
             _verify_prelaunch_pose_dataset(dataset_root, frozen_materialization)
 
             train_args = dict(run.training_config_json or {})
