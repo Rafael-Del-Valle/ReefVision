@@ -75,7 +75,10 @@ def parse_ascii_ply_points(
     text: str, *, colors_out: list[list[int]] | None = None
 ) -> list[list[float]]:
     """Read XYZ and optionally retain validated raw PLY RGB bytes."""
-    if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_PLY_BYTES:
+    # ASCII PLY has one byte per character. Check the scalar text before
+    # attempting any UTF-8 encoding: JSON permits unpaired UTF-16 surrogates,
+    # which cannot be encoded and must fail as a controlled input error.
+    if not isinstance(text, str) or len(text) > MAX_PLY_BYTES:
         raise ValueError("Point-cloud PLY exceeds the 256000-byte preview limit")
     if not text.isascii():
         raise ValueError("Point-cloud PLY must contain ASCII text only")

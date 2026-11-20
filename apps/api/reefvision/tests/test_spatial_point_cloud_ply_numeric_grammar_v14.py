@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from json import dumps
 from typing import cast
 
 import pytest
@@ -64,6 +65,81 @@ def test_hidden_ascii_control_characters_rejected(control: str) -> None:
 def test_crlf_and_tabs_remain_valid_ply_whitespace() -> None:
     valid = PLY.replace("1 2 3", "1\t2\t3").replace("\n", "\r\n")
     assert parse_ascii_ply_points(valid) == [[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]]
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        PLY.replace("end_header", "comment field survey \ud800\nend_header"),
+        PLY.replace("end_header", "comment field survey \U0001f419\nend_header"),
+        PLY.replace("1 2 3", "1 2 3\udfff"),
+    ],
+)
+def test_non_ascii_point_cloud_ply_fails_cleanly_at_parser_and_api(
+    client: TestClient, invalid: str
+) -> None:
+    """Never raise UnicodeEncodeError or infer geometry from malformed source."""
+    with pytest.raises(ValueError, match="ASCII text only"):
+        parse_ascii_ply_points(invalid)
+
+    project_id = str(create_project(client, "Non-ASCII point-cloud PLY rejection")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(
+        f"{base}/spatial/point-cloud-preview",
+        content=dumps({**PARAMS, "ply_text": invalid}, ensure_ascii=True),
+        headers={"content-type": "application/json"},
+    )
+    assert response.status_code in (400, 422), response.text
+    if response.status_code == 400:
+        assert response.json()["detail"] == "Point-cloud PLY must contain ASCII text only"
+
+
+def test_non_ascii_point_cloud_ply_saved_workflow_fails_without_measurement(
+    client: TestClient,
+) -> None:
+    """Typed saved graphs cannot turn non-ASCII metadata into a surveyed cloud."""
+    invalid = PLY.replace("end_header", "comment survey caf\u00e9\nend_header")
+    project_id = str(create_project(client, "Non-ASCII PLY workflow rejection")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    params = {**PARAMS, "ply_text": invalid}
+    standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert standalone.status_code == 400, standalone.text
+
+    graph = {
+        "graph_id": "non-ascii-ply-fail-closed-v14",
+        "name": "Preserve provisional point-cloud source integrity",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert run.status_code == 202, run.text
+    app = cast(FastAPI, client.app)
+    assert not process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "failed"
+    assert not any(
+        artifact["data_type"] == "point_cloud_measurement_preview"
+        for artifact in detail.json()["artifacts"]
+    )
 
 
 def test_invalid_late_coordinate_does_not_mutate_caller_colors() -> None:
