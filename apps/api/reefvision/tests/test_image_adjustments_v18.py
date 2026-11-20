@@ -14,6 +14,7 @@ from reefvision.config import Settings
 from reefvision.jobs.inference import process_inference_job
 from reefvision.ml.providers import DetectionPrediction, PixelBox
 from reefvision.services.models import ModelService
+from reefvision.storage.image_adjustments_v18 import AdjustmentRendition, publish_adjusted_rendition
 from reefvision.tests.test_images import create_project, import_one
 from reefvision.tests.test_model_inference import FakeDetectorRegistrationProvider, register_model
 
@@ -45,6 +46,18 @@ def source_fixture(mode: str = "RGB", orientation: int = 6) -> bytes:
     stream = BytesIO()
     image.save(stream, format="PNG", exif=metadata)
     return stream.getvalue()
+
+
+def test_atomic_adjustment_publication_with_standard_long_windows_path(tmp_path: Path) -> None:
+    # The full digest name may fit ordinary Win32 paths while repeating it in
+    # the same-directory staging filename exceeds the limit.
+    parent = tmp_path / ("p" * max(1, 189 - len(str(tmp_path))))
+    png = source_fixture()
+    digest = sha256(png).hexdigest()
+    path = parent / f"{digest}.png"
+    publish_adjusted_rendition(path, AdjustmentRendition(png, digest, ""))
+    assert path.read_bytes() == png
+    assert list(parent.iterdir()) == [path]
 
 
 def make_source(client: TestClient, mode: str = "RGB") -> tuple[dict[str, Any], str, bytes]:
