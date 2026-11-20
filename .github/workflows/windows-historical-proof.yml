@@ -1,0 +1,134 @@
+name: Windows Historical QC Original MSI Proof
+
+on:
+  push:
+    branches: [codex/reefvision-1.6-historical-proof]
+    paths:
+      - '.github/workflows/windows-historical-proof.yml'
+      - '.github/historical-proof/**'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  historical-qc:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    env:
+      CANDIDATE_RUN: '44768324452'
+      CANDIDATE_SHA: '83b0a98b278b98e779842538f811b2c6f5b6b4c8'
+      CANDIDATE_MSI: '595323074d044a8a2c7b62cc2760aa46ad796f205b5d3b4c7b2062cf960c530e'
+      PREVIOUS_RUN: '44748544977'
+      PREVIOUS_SHA: 'b846f57e916ef53abc9a2d25ece9927eb9dfb582'
+      PREVIOUS_MSI: '893786a369e2a05cadb802be6c3b78986d2910951f377048e91c8e3055bb6c2d'
+      PREVIOUS_PROVENANCE: '152d0f93c35b2bcd9440e569a5d2afba4bd00849935a7c4c3961c83c43e49bbb'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: '83b0a98b278b98e779842538f811b2c6f5b6b4c8'
+          path: original-candidate
+      - uses: actions/checkout@v4
+        with:
+          ref: 'b846f57e916ef53abc9a2d25ece9927eb9dfb582'
+          path: original-previous
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify original 1.6 and 1.5 MSI transport and extract both without installing
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = "${env:SystemDrive}/rvqa-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          if (Test-Path -LiteralPath $root) { throw 'Expected a fresh disposable verification root.' }
+          $evidence = (New-Item -ItemType Directory -Path '.artifacts/windows-qc-history' -Force).FullName
+          $payloads = [ordered]@{}
+          foreach ($record in @(
+            @{role='candidate'; version='1.6.0'; run=$env:CANDIDATE_RUN; source=$env:CANDIDATE_SHA; msi=$env:CANDIDATE_MSI; cabinets=6},
+            @{role='previous'; version='1.5.0'; run=$env:PREVIOUS_RUN; source=$env:PREVIOUS_SHA; msi=$env:PREVIOUS_MSI; cabinets=5}
+          )) {
+            $role = $record.role
+            $stage = "$root-$($record.version)"
+            & ./.github/historical-proof/stage-original.ps1 -RepositoryRoot "original-$role" `
+              -RunId $record.run -SourceCommit $record.source -Version $record.version -Root $stage
+            $stagedEvidence = Join-Path $stage 'evidence'
+            $transportPath = Join-Path $stagedEvidence 'verified-transport.json'
+            $payloadPath = Join-Path $stagedEvidence 'verified-payload.json'
+            Copy-Item -LiteralPath $transportPath -Destination (Join-Path $evidence "$role-transport-evidence.json")
+            $transport = Get-Content -LiteralPath $transportPath -Raw | ConvertFrom-Json
+            $verified = Get-Content -LiteralPath $payloadPath -Raw | ConvertFrom-Json
+            $directory = Join-Path $stage 'payload'
+            $msi = Join-Path $directory "ReefVision_$($record.version)_x64_en-US.msi"
+            $provenance = (Get-FileHash -LiteralPath (Join-Path $directory 'build-provenance.json')).Hash.ToLowerInvariant()
+            if ($transport.original_msi_sha256 -cne $record.msi -or
+                @($verified.media | Where-Object { -not $_.embedded -and $_.cabinet }).Count -ne $record.cabinets -or
+                ($role -eq 'previous' -and $provenance -cne $env:PREVIOUS_PROVENANCE)) {
+              throw "Original $role installer identity changed."
+            }
+            $destination = (New-Item -ItemType Directory -Path (Join-Path $root $role) -Force).FullName
+            $log = Join-Path $evidence "$role-extraction.log"
+            $argsMsi = @('/a', ('"{0}"' -f $msi), ('TARGETDIR="{0}"' -f $destination), '/qn', '/norestart', '/L*v', ('"{0}"' -f $log))
+            $process = Start-Process -FilePath "$env:SystemRoot\System32\msiexec.exe" -ArgumentList $argsMsi -PassThru -Wait -WindowStyle Hidden
+            if ($process.ExitCode -ne 0) { throw "Administrative extraction of $role failed ($($process.ExitCode))." }
+            $sidecar = Join-Path $destination 'PFiles\ReefVision\backend\reefvision-api\reefvision-api.exe'
+            $payloads[$role] = [ordered]@{
+              source_commit = $record.source; original_run_id = [long]$record.run
+              original_run_url = $transport.build_run_url; installer_sha256 = $transport.original_msi_sha256
+              provenance_sha256 = $provenance; extracted_sidecar_sha256 = (Get-FileHash -LiteralPath $sidecar).Hash.ToLowerInvariant()
+              identity = $verified.identity; media = $verified.media; files = $verified.files
+            }
+          }
+          $payloads | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $evidence 'qc-history-payloads.json')
+          "QC_HISTORY_ROOT=$root" >> $env:GITHUB_ENV
+          "QC_HISTORY_EVIDENCE=$evidence" >> $env:GITHUB_ENV
+
+      - name: Apply just the listener fix and verify its live ownership controls
+        shell: pwsh
+        working-directory: original-candidate
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((git rev-parse HEAD).Trim() -cne $env:CANDIDATE_SHA) { throw 'Expected the original 1.6 candidate source.' }
+          $patch = Join-Path $env:GITHUB_WORKSPACE '.github/historical-proof/listener-ownership.patch'
+          git apply --unidiff-zero --whitespace=error --include=scripts/acceptance_windows_qc_history.py --include=scripts/test_windows_qc_listener.py $patch
+          if ($LASTEXITCODE -ne 0) { throw 'Could not apply the reviewed historical listener verifier repair.' }
+          $fixturePins = @(Get-Content requirements/providers-windows-cu121-py312.txt |
+            Where-Object { $_ -match '^(numpy|opencv-contrib-python|psutil)==' })
+          if ($fixturePins.Count -ne 3) { throw 'The original Windows provider pins are incomplete.' }
+          python -m pip install --disable-pip-version-check -e . @fixturePins
+          if ($LASTEXITCODE -ne 0) { throw 'Could not install the exact historical source and listener dependencies.' }
+          python scripts/test_windows_qc_listener.py -v 2>&1 |
+            Tee-Object -FilePath (Join-Path $env:QC_HISTORY_EVIDENCE 'listener-controls.log')
+          if ($LASTEXITCODE -ne 0) { throw 'Focused listener regression failed.' }
+
+      - name: Verify the five historical migrations, recoveries, and rollback on the original packages
+        shell: pwsh
+        working-directory: original-candidate
+        run: |
+          $root = $env:QC_HISTORY_ROOT
+          $data = Join-Path $root 'data'
+          $evidence = $env:QC_HISTORY_EVIDENCE
+          python scripts/create_windows_qc_history_controls.py $data 2>&1 |
+            Tee-Object -FilePath (Join-Path $evidence 'fixture-sources.log')
+          if ($LASTEXITCODE -ne 0) { throw 'Authentic historical fixture generation failed.' }
+          $sidecar = 'PFiles\ReefVision\backend\reefvision-api\reefvision-api.exe'
+          python scripts/acceptance_windows_qc_history.py $data (Join-Path $root "candidate\$sidecar") (Join-Path $root "previous\$sidecar") $evidence 2>&1 |
+            Tee-Object -FilePath (Join-Path $evidence 'verifier.log')
+          if ($LASTEXITCODE -ne 0) { throw 'Installed historical lineage or backup verification failed.' }
+
+      - name: Retain digest-bound historical receipts and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReefVision-1.6.0-Windows-Historical-QC-Original-Payload-Proof
+          path: |
+            .artifacts/windows-qc-history/*.json
+            .artifacts/windows-qc-history/*.log
+          if-no-files-found: warn
+          retention-days: 14
