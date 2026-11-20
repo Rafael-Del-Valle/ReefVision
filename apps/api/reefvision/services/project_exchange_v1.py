@@ -38,6 +38,8 @@ from reefvision.db.models import (
     SkeletonAnalysisRevision,
     SpatialAssetMetadataRevision,
     SpatialCalibrationReviewRecord,
+    SpatialConditionRevision,
+    SpatialConditionRubric,
     SpatialSourceAsset,
     TrainingDraft,
     VideoAsset,
@@ -278,6 +280,18 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                 ),
             }
         )
+
+        for name, condition_model in (
+            ("spatial_condition_rubrics", SpatialConditionRubric),
+            ("spatial_condition_revisions", SpatialConditionRevision),
+        ):
+            rows = list(
+                self.session.scalars(
+                    select(condition_model).where(condition_model.project_id == project.id)
+                )
+            )
+            if rows:
+                sections[name] = rows
 
         pose_schemas = list(
             self.session.scalars(

@@ -107,6 +107,10 @@ from reefvision.db.models.scientific_record import (
 from reefvision.db.models.skeleton_analysis import SkeletonAnalysisRevision
 from reefvision.db.models.spatial_asset_metadata_revision_v14 import SpatialAssetMetadataRevision
 from reefvision.db.models.spatial_calibration_review_v14 import SpatialCalibrationReviewRecord
+from reefvision.db.models.spatial_condition_v14 import (
+    SpatialConditionRevision,
+    SpatialConditionRubric,
+)
 from reefvision.db.models.spatial_source_asset_v14 import SpatialSourceAsset
 from reefvision.db.models.temporal_reefpose import (
     TemporalReefPoseDataset,
@@ -205,6 +209,8 @@ __all__ = [
     "SkeletonAnalysisRevision",
     "SpatialAssetMetadataRevision",
     "SpatialCalibrationReviewRecord",
+    "SpatialConditionRevision",
+    "SpatialConditionRubric",
     "SpatialSourceAsset",
     "TemporalReefPoseDataset",
     "TemporalReefPoseFrame",
