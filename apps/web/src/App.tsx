@@ -330,6 +330,9 @@ function ReefVisionMainApp() {
   const [projectName, setProjectName] = useState("");
   const [description, setDescription] = useState("");
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [focusLauncherAfterWelcome, setFocusLauncherAfterWelcome] =
+    useState(false);
+  const mainContentRef = useRef<HTMLElement>(null);
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
   const keyboardShortcutsButtonRef = useRef<HTMLButtonElement | null>(null);
   const [workspacePresetId, setWorkspacePresetId] =
@@ -426,6 +429,36 @@ function ReefVisionMainApp() {
       setShowOnboarding(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (!focusLauncherAfterWelcome || showOnboarding) return;
+    if (showCreate || selectedProjectId || activeView !== "gallery") {
+      setFocusLauncherAfterWelcome(false);
+      return;
+    }
+    if (projectSummaries.isPending || projectSummaries.isFetching) return;
+    // Preserve focus when the researcher moved while summaries were loading.
+    if (document.activeElement === document.body) {
+      const launcher = mainContentRef.current;
+      const action =
+        launcher?.querySelector<HTMLButtonElement>(
+          ".rv-project-launcher-open",
+        ) ??
+        launcher?.querySelector<HTMLButtonElement>(
+          ".rv-launcher-actions button",
+        );
+      action?.focus();
+    }
+    setFocusLauncherAfterWelcome(false);
+  }, [
+    activeView,
+    focusLauncherAfterWelcome,
+    projectSummaries.isFetching,
+    projectSummaries.isPending,
+    selectedProjectId,
+    showCreate,
+    showOnboarding,
+  ]);
 
   useEffect(() => {
     setInferenceSelectedImageIds([]);
@@ -847,6 +880,7 @@ function ReefVisionMainApp() {
 
       <section
         id="reefvision-main-content"
+        ref={mainContentRef}
         className="rv-phase12-surface"
         tabIndex={-1}
       >
@@ -1395,6 +1429,17 @@ function ReefVisionMainApp() {
       {showOnboarding && (
         <OnboardingModal
           version={health.data?.version ?? applicationVersion}
+          hasProject={Boolean(selectedProjectId)}
+          onStartProject={(action) => {
+            setSelectedProjectId(null);
+            setEditorLaunch(null);
+            setActiveView("gallery");
+            if (action === "create") {
+              setShowCreate(true);
+            } else {
+              setFocusLauncherAfterWelcome(true);
+            }
+          }}
           onClose={() => setShowOnboarding(false)}
           onDismissPermanently={dismissOnboardingPermanently}
         />

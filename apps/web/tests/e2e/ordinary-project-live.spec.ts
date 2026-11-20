@@ -7,22 +7,13 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
   desktop,
 }, info) => {
   const { page, api, web } = desktop;
+  const firstUse = process.env.REEFVISION_FIRST_USE_ACCEPTANCE === "1";
+  const outsideLoopback = new Set<string>();
   page.setDefaultTimeout(15_000);
   if (desktop.surface === "source-browser") {
     await page.setViewportSize({ width: 1440, height: 960 });
   }
   const name = `Synthetic ordinary 2D ${randomUUID().slice(0, 8)}`;
-  const created = await page.request.post(`${api}/projects`, {
-    data: { name, template: "blank" },
-  });
-  expect(created.status()).toBe(201);
-  const project = await created.json();
-  const root = `${api}/projects/${project.id}`;
-  const category = await page.request.post(`${root}/classes`, {
-    data: { class_index: 0, name: "Fixture animal", display_color: "#28A95C" },
-  });
-  expect(category.status()).toBe(201);
-  const label = await category.json();
   const basename = "field-still-fixture.png";
   const image = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAFAAAAA8CAIAAAB+RarbAAAAeUlEQVR4nOXOQQEAIBCAMKSZSYxjbVucD5Zg655NicRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjL8D0x6O+gGf/8sEBAAAAABJRU5ErkJggg==",
@@ -36,16 +27,105 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
         response.request().method() === "POST" && response.url() === url,
     );
   const json = async (url: string) => (await page.request.get(url)).json();
-  await page.addInitScript(() =>
-    localStorage.setItem("reefvision.onboarding.dismissed.1.5.0", "true"),
-  );
+  const device = firstUse ? await page.context().newCDPSession(page) : null;
+  const scale = 1.5;
+  if (device) {
+    const localOrigins = new Set([new URL(api).origin, new URL(web).origin]);
+    await page.route(/^https?:\/\//, (route) => {
+      const origin = new URL(route.request().url()).origin;
+      if (localOrigins.has(origin)) return route.continue();
+      outsideLoopback.add(origin);
+      return route.abort("internetdisconnected");
+    });
+    await device.send("Emulation.setDeviceMetricsOverride", {
+      width: 960,
+      height: 640,
+      deviceScaleFactor: scale,
+      mobile: false,
+    });
+  } else {
+    await page.addInitScript(() =>
+      localStorage.setItem("reefvision.onboarding.dismissed.1.5.0", "true"),
+    );
+  }
   const openProject = async () => {
     await page.goto(web);
     await page
       .getByRole("button", { name: `Open ${name}`, exact: true })
       .click();
   };
-  await openProject();
+  let project;
+  let label;
+  if (firstUse) {
+    expect(await json(`${api}/project-summaries`)).toEqual([]);
+    await page.goto(web);
+    expect(await page.evaluate(() => window.devicePixelRatio)).toBe(scale);
+    const welcome = page.getByRole("dialog", { name: /Welcome to ReefVision/ });
+    await expect(welcome).toBeVisible();
+    const close = welcome.getByRole("button", { name: "Close", exact: true });
+    await expect(close).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(
+      welcome.getByRole("button", { name: "Don't show on startup" }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(close).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(
+      welcome.getByRole("button", { name: "Create a project" }),
+    ).toBeFocused();
+    await page.keyboard.press("Enter");
+    const form = page.getByRole("dialog", { name: "Create project" });
+    const projectName = form.getByRole("textbox", { name: "Project name" });
+    await expect(projectName).toBeFocused();
+    expect(await json(`${api}/project-summaries`)).toEqual([]);
+    await page.keyboard.type(name);
+    const creating = post(`${api}/projects`);
+    await page.keyboard.press("Enter");
+    const created = await creating;
+    expect(created.status(), await created.text()).toBe(201);
+    project = await created.json();
+    await page.getByRole("tab", { name: "Classes", exact: true }).click();
+    const newClass = page.locator("form").filter({
+      has: page.getByRole("heading", { name: "Add annotation class" }),
+    });
+    await newClass
+      .getByRole("textbox", { name: "Name", exact: true })
+      .fill("Fixture animal");
+    const adding = post(`${api}/projects/${project.id}/classes`);
+    await newClass
+      .getByRole("button", { name: "Add class", exact: true })
+      .click();
+    const category = await adding;
+    expect(category.status(), await category.text()).toBe(201);
+    label = await category.json();
+    await page.getByRole("button", { name: "Help", exact: true }).click();
+    await welcome
+      .getByRole("button", { name: "Don't show on startup" })
+      .click();
+    await openProject();
+    await expect(welcome).toHaveCount(0);
+  } else {
+    const created = await page.request.post(`${api}/projects`, {
+      data: { name, template: "blank" },
+    });
+    expect(created.status()).toBe(201);
+    project = await created.json();
+    const category = await page.request.post(
+      `${api}/projects/${project.id}/classes`,
+      {
+        data: {
+          class_index: 0,
+          name: "Fixture animal",
+          display_color: "#28A95C",
+        },
+      },
+    );
+    expect(category.status()).toBe(201);
+    label = await category.json();
+    await openProject();
+  }
+  const root = `${api}/projects/${project.id}`;
   const importing = post(`${root}/imports/images`);
   await page
     .getByLabel("Import files", { exact: true })
@@ -79,6 +159,44 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
   await page.mouse.move(end.x, end.y, { steps: 8 });
   await page.mouse.up();
   await expect(boxes).toHaveCount(1);
+  if (firstUse) {
+    const undoButton = editor.getByRole("button", {
+      name: "Undo",
+      exact: true,
+    });
+    await undoButton.scrollIntoViewIfNeeded();
+    const hit = await undoButton.evaluate((button) => {
+      const box = button.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        box.x + box.width / 2,
+        box.y + box.height / 2,
+      );
+      const selector = (element: Element | null) =>
+        element ? `${element.tagName}.${element.className}` : null;
+      const snapshot = (element: Element) => ({
+        rect: element.getBoundingClientRect().toJSON(),
+        position: getComputedStyle(element).position,
+        overflow: getComputedStyle(element).overflow,
+        zIndex: getComputedStyle(element).zIndex,
+      });
+      return {
+        reachable: button === hit || button.contains(hit),
+        hit: selector(hit),
+        hitParent: selector(hit?.parentElement ?? null),
+        button: snapshot(button),
+        sidebar: snapshot(button.closest(".annotation-editor-sidebar")!),
+        body: snapshot(document.querySelector(".annotation-editor-body")!),
+        inspector: snapshot(
+          document.querySelector(".annotation-inspector-heading")!,
+        ),
+      };
+    });
+    await writeFile(
+      info.outputPath("compact-editor-hit.json"),
+      JSON.stringify(hit, null, 2),
+    );
+    expect(hit.reachable).toBe(true);
+  }
   await editor.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(boxes).toHaveCount(0);
   await editor.getByRole("button", { name: "Redo", exact: true }).click();
@@ -253,4 +371,33 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
       2,
     ),
   );
+  if (device) {
+    expect([...outsideLoopback]).toEqual([]);
+    await writeFile(
+      info.outputPath("first-use-evidence.json"),
+      JSON.stringify(
+        {
+          surface: desktop.surface,
+          application_version: (await json(`${api}/system/version`))
+            .application_version,
+          empty_before_project_submission: true,
+          welcome_focus_handoff: true,
+          startup_dismissal_persisted: true,
+          emulated_device_scale_factor: scale,
+          emulated_viewport_css_px: [960, 640],
+          nonlocal_browser_http_blocked: true,
+          external_http_attempt_count: outsideLoopback.size,
+          project_id: project.id,
+          image_sha256: saved.image.sha256,
+          annotation_status: saved.image.annotation_status,
+          export_sha256: hash(bytes),
+        },
+        null,
+        2,
+      ),
+    );
+    await device.send("Emulation.clearDeviceMetricsOverride");
+    await device.detach();
+    await page.unroute(/^https?:\/\//);
+  }
 });
