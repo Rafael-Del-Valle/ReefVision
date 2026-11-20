@@ -15,6 +15,7 @@ from time import monotonic, sleep
 from typing import Any
 
 import httpx
+import psutil
 from create_windows_qc_history_controls import (
     DATABASE,
     HISTORIES,
@@ -185,22 +186,21 @@ def sidecar(executable: Path, profile: Path, logs: Path, label: str, *, safe: bo
 
 
 def validate_listener_owner(port: int, process: subprocess.Popen) -> None:
-    powershell = Path(os.environ["SYSTEMROOT"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
-    source = (
-        "$listeners = @(Get-NetTCPConnection -LocalAddress 127.0.0.1 "
-        f"-LocalPort {port} -State Listen); "
-        "if ($listeners.Count -ne 1) { exit 1 }; "
-        "$owner = $listeners[0].OwningProcess; "
-        f"if ($owner -eq {process.pid}) {{ exit 0 }}; "
-        "$observed = Get-CimInstance Win32_Process -Filter ('ProcessId={0}' -f $owner); "
-        f"if ($observed.ParentProcessId -ne {process.pid}) {{ exit 1 }}"
-    )
-    subprocess.run(
-        [str(powershell), "-NoProfile", "-NonInteractive", "-Command", source],
-        check=True,
-        timeout=12,
-        creationflags=subprocess.CREATE_NO_WINDOW,
-    )
+    listeners = [
+        row.pid
+        for row in psutil.net_connections(kind="tcp4")
+        if row.status == psutil.CONN_LISTEN and row.laddr == ("127.0.0.1", port)
+    ]
+    if len(listeners) != 1 or (owner := listeners[0]) is None:
+        raise RuntimeError(f"Expected one loopback listener with a known owner on 127.0.0.1:{port}")
+    try:
+        parent = psutil.Process(owner).ppid() if owner != process.pid else process.pid
+    except (psutil.NoSuchProcess, psutil.AccessDenied) as error:
+        raise RuntimeError(f"Could not verify PID {owner} owning 127.0.0.1:{port}") from error
+    if process.poll() is not None or parent != process.pid:
+        raise RuntimeError(
+            f"127.0.0.1:{port} does not belong to the launched sidecar PID {process.pid}"
+        )
 
 
 @contextmanager

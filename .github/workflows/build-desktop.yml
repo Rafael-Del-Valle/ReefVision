@@ -334,11 +334,13 @@ jobs:
       - name: Generate five populated controls using the original source APIs
         shell: pwsh
         run: |
-          # The original science projection module imports OpenCV when the API starts.
-          $visionPins = @(Get-Content requirements/providers-windows-cu121-py312.txt |
-            Where-Object { $_ -match '^(numpy|opencv-contrib-python)==' })
-          python -m pip install --disable-pip-version-check -e . @visionPins
+          # Original science imports OpenCV. The verifier uses the Windows TCP owner table.
+          $fixturePins = @(Get-Content requirements/providers-windows-cu121-py312.txt |
+            Where-Object { $_ -match '^(numpy|opencv-contrib-python|psutil)==' })
+          python -m pip install --disable-pip-version-check -e . @fixturePins
           if ($LASTEXITCODE -ne 0) { throw 'Could not install the source dependencies used by historical fixture generation.' }
+          python scripts/test_windows_qc_listener.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Historical listener ownership controls failed.' }
           python scripts/create_windows_qc_history_controls.py (Join-Path $env:REEFVISION_QC_HISTORY_ROOT 'data') 2>&1 |
             Tee-Object -FilePath '.artifacts/windows-qc-history/fixture-sources.log'
           if ($LASTEXITCODE -ne 0) { throw 'Historical source fixture generation failed.' }
