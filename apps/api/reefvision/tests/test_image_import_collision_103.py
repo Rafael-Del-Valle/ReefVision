@@ -418,3 +418,58 @@ def test_committed_camera_import_does_not_require_a_second_database_refresh(
     duplicate = import_one(client, project["id"], filename="camera-resend.JPEG", content=source)
     assert duplicate["successful"] == []
     assert duplicate["duplicates"][0]["duplicate_image_id"] == entry["image_id"]
+
+
+@pytest.mark.parametrize("damage", ["missing", "truncated", "same_size_corruption"])
+def test_camera_duplicate_requires_intact_managed_original(
+    client: TestClient,
+    test_settings: Settings,
+    damage: str,
+) -> None:
+    """A database hash must never conceal loss of scientific source pixels."""
+    project = create_project(client, "Duplicate camera source integrity")
+    original_bytes = image_bytes("JPEG", size=(53, 39))
+    first = import_one(
+        client,
+        project["id"],
+        filename="SONY_DSC_2026.JPG",
+        content=original_bytes,
+    )
+    image_id = first["successful"][0]["image_id"]
+    record = client.get(f"/api/v1/images/{image_id}").json()
+    managed = Path(test_settings.resolved_data_dir) / record["managed_path"]
+    assert managed.read_bytes() == original_bytes
+
+    if damage == "missing":
+        managed.unlink()
+    elif damage == "truncated":
+        managed.write_bytes(original_bytes[:-1])
+    else:
+        # A byte-count-only verification must not accept a changed original.
+        managed.write_bytes(bytes([original_bytes[0] ^ 1]) + original_bytes[1:])
+
+    reupload = import_one(
+        client,
+        project["id"],
+        filename="CANON_DUPLICATE.JPEG",
+        content=original_bytes,
+    )
+    assert reupload["successful"] == [], reupload
+    assert reupload["duplicates"] == [], reupload
+    assert len(reupload["failed"]) == 1, reupload
+    assert "missing or damaged" in reupload["failed"][0]["detail"]
+    assert client.get(f"/api/v1/projects/{project['id']}/images").json()["total"] == 1
+    assert (not managed.exists()) if damage == "missing" else (managed.read_bytes() != original_bytes)
+
+
+def test_camera_duplicate_of_verified_original_remains_a_duplicate(
+    client: TestClient,
+) -> None:
+    """Verification does not block legitimate byte-identical JPG/JPEG aliases."""
+    project = create_project(client, "Valid duplicate camera exposure")
+    original = image_bytes("JPEG", size=(54, 40))
+    first = import_one(client, project["id"], filename="DSC_001.JPG", content=original)
+    reupload = import_one(client, project["id"], filename="DSC_001.JPEG", content=original)
+    assert reupload["failed"] == [], reupload
+    assert reupload["successful"] == [], reupload
+    assert reupload["duplicates"][0]["duplicate_image_id"] == first["successful"][0]["image_id"]

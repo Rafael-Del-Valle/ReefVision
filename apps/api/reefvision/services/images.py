@@ -55,6 +55,30 @@ def _cleanup_import_path(path: Path) -> None:
         LOGGER.warning("Could not clean up import artifact %s", path, exc_info=True)
 
 
+def _duplicate_original_verified(settings: Settings, image: ImageAsset) -> bool:
+    """Do not call a camera upload a duplicate of a damaged stored original.
+
+    The database checksum describes the original bytes at import time, not
+    proof that a removable or externally modified volume still holds them.
+    Verification is read-only; never modify an existing scientific original.
+    """
+    digest = hashlib.sha256()
+    size = 0
+    try:
+        original = resolve_managed_project_path(settings, image.managed_path)
+        with original.open("rb") as stored:
+            while block := stored.read(1024 * 1024):
+                digest.update(block)
+                size += len(block)
+    except (OSError, ValidationError):
+        LOGGER.warning(
+            "Cannot verify previously imported camera original %s", image.id,
+            exc_info=True,
+        )
+        return False
+    return size == image.file_size_bytes and digest.hexdigest() == image.sha256
+
+
 class ImageService:
     def __init__(self, session: Session, settings: Settings) -> None:
         self.session = session
@@ -99,16 +123,35 @@ class ImageService:
                 inspected = inspect_staged_image(staging, sha256, size)
                 duplicate = self.images.find_duplicate(project_id, sha256)
                 if duplicate is not None:
+                    # The database hash alone cannot prove that the managed
+                    # original still exists or remains byte-for-byte intact.
+                    # An incorrect duplicate response would discard a sound
+                    # re-upload and conceal loss of scientific source data.
+                    intact = _duplicate_original_verified(self.settings, duplicate)
                     _cleanup_import_path(staging)
-                    report["duplicates"].append(
-                        ImportItemResponse(
-                            filename=filename,
-                            relative_path=relative_path,
-                            status="duplicate",
-                            detail="Exact file already exists in this project",
-                            duplicate_image_id=duplicate.id,
+                    if intact:
+                        report["duplicates"].append(
+                            ImportItemResponse(
+                                filename=filename,
+                                relative_path=relative_path,
+                                status="duplicate",
+                                detail="Exact file already exists in this project",
+                                duplicate_image_id=duplicate.id,
+                            )
                         )
-                    )
+                    else:
+                        report["failed"].append(
+                            ImportItemResponse(
+                                filename=filename,
+                                relative_path=relative_path,
+                                status="failed",
+                                detail=(
+                                    "Matching database image has a missing or damaged "
+                                    "managed original; resolve the integrity issue "
+                                    "before retrying"
+                                ),
+                            )
+                        )
                     continue
 
                 image_id = str(uuid4())
