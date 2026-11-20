@@ -251,12 +251,15 @@ function Format-SafeText {
   # rendered field instead of inventing numeric evidence; the persisted job
   # history and raw training log remain unchanged.
   $terminalEdit = '(?:\x1b[\]PX^_][\s\S]*?(?:\x07|\x9c|\x1b\\|$)|[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)|(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]|\p{Cf}|\x08)'
-  # Reject edits that splice digits/decimal points into fabricated
-  # losses, or letters/slashes/digits into fabricated loss/metric labels.
-  # A control after a numeric loss followed by ordinary prose (e.g. a bidi
-  # separator before a note) must not erase the genuine preceding reading.
-  $splicedMetric = "(?<=[0-9.])$terminalEdit(?=[0-9.])|(?<=[A-Za-z_/])$terminalEdit(?=[A-Za-z0-9_/])"
-  if ([regex]::IsMatch($text, $splicedMetric)) {
+  # Reject spliced numeric tokens and metric labels, including a
+  # decimal point or alphanumeric suffix. Preserve a benign OSC inside a
+  # non-loss label (metrics/scientific_qc) and bidi-separated descriptive
+  # prose rather than hiding an otherwise genuine recorded measurement.
+  $splicedMetric = "(?<=[0-9.])$terminalEdit(?=[0-9.])|(?<=[A-Za-z_])$terminalEdit(?=[A-Za-z0-9_/])"
+  # A control after train/ or val/ can fabricate a canonical box/cls/dfl
+  # loss label even when the left neighbor is '/', not an ASCII letter.
+  $lossLabelSplice = "(?:train/|val/)$terminalEdit(?:box_loss|cls_loss|dfl_loss|seg_loss|loss)\b"
+  if ([regex]::IsMatch($text, $splicedMetric) -or [regex]::IsMatch($text, $lossLabelSplice)) {
     return '[terminal-edited field omitted]'
   }
   $text = [regex]::Replace($text, '\x1b[\]PX^_][\s\S]*?(?:\x07|\x9c|\x1b\\|$)', '')
