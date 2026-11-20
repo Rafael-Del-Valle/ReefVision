@@ -121,7 +121,82 @@
       "seconds": {
         "restore": 11.92,
         "reopen": 2.32
+      },
+      "independent_fresh_copy_comparison": {
+        "backup_id": "e7a4350d-4cfa-4123-ba22-6fedb7ae22cb",
+        "backup_manifest_sha256": "dfb45c445e28e3c9e09c8be82816970e2df79668c9bbff5699e3c637dfef55b4",
+        "archived_members": 37,
+        "archived_bytes": 4944486,
+        "database_sha256": "7dba897692dd47c25525850a4fe4bd8037b1301b72482ca9b9be6c9e39f04563",
+        "schema": "b16_integrated_0001",
+        "sqlite_integrity_and_foreign_keys": "ok",
+        "table_inventory_sha256": "1a34fd62e0087fc518ad825b42c1ff3dde260fcec2db00f34dbb983a61768cf8",
+        "project_files": 31,
+        "project_files_sha256": "30bc3759eefe2ad3446d42d85e0c582b06520dd7bf76fd2cf22d8b492f933be6",
+        "tables_checked": 109,
+        "raw_ledger_sha256": "54a1db31149e6e35ca2e0277e3a0cc0a5e9455c59429f4c09f7ff3fed331d50b"
       }
     }
+  },
+  "frontend": {
+    "test_files_passed": 136,
+    "tests_passed": 906,
+    "vitest_log_sha256": "a56686033d53db0f5dc3956f250a590c5ce59e26ce1a89e4b7ee34eed9d46e64",
+    "prettier": "passed",
+    "prettier_log_sha256": "1e193205ec8053adea4eaf2325ff613f9a267fcddf630e3ff7fc459461e5fda9"
+  },
+  "previous_installer_offline": {
+    "source_commit": "8821ed9a1b71aff8e99751b0c6d66def06028970",
+    "harness_commit": "8ba6380bd85a3b7a77f542c50c45a2f71fdea137",
+    "build_run_id": 44790315334,
+    "proof_run_id": 44798440624,
+    "proof_job_id": 136504000547,
+    "proof_run_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44798440624",
+    "proof_artifact_id": 14659319422,
+    "proof_artifact_sha256": "5c660aca10fb5633e1ea3cdbc16042d70cf49b00a56fb08bcdd8634be16c7a64",
+    "hosted_report_sha256": "a564ae06fceef1a088cb81d41b225deb6bead1a609ea6580938847295b8d0df1",
+    "deny_duration_seconds": 190.965954,
+    "controls": {
+      "ordinary": {
+        "observations": 191,
+        "reachable": 0,
+        "maximum_gap_seconds": 8.014314
+      },
+      "system": {
+        "observations": 191,
+        "reachable": 0,
+        "maximum_gap_seconds": 8.6390888
+      }
+    },
+    "desktop_integrity_rid": 8192,
+    "msi_install_exit_code": 0,
+    "native_cleanup": {
+      "desktop_closed": true,
+      "launch_process_closed": true,
+      "profile_removed": true,
+      "account_removed": true
+    },
+    "msi_sha256": "e16beecec17ac17cb19d4c7916147ac3f72c97c2dbb9336ef360abe92ef4fc9f",
+    "verified_receipt_sha256": "549a0c17721be614e1d705f835d3246301060400092fb9fa01ae1e04d0e8534d",
+    "first_launch": {
+      "backend_pid": 2376,
+      "desktop_pid": 7564,
+      "schema": "b16_integrated_0001",
+      "version": "1.6.0"
+    },
+    "second_launch": {
+      "backend_pid": 5064,
+      "desktop_pid": 7944,
+      "schema": "b16_integrated_0001",
+      "version": "1.6.0"
+    },
+    "reopened_review": {
+      "project_id": "2fc52a2a-04e3-4a4d-bd10-8d07154ea0d2",
+      "image_sha256": "11da437ad33072b11627e77994f869a1f92c4c0b94e0b64f920567853ff0674b",
+      "annotation_status": "reviewed",
+      "export_sha256": "163f48de14831fd402a1b0da81020c6b2631add153fb170a0da04d55e0253406"
+    },
+    "observed_policy_changes": 0,
+    "uninstall_exit_code": 0
   }
 }
