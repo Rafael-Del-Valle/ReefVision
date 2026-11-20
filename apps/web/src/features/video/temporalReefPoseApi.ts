@@ -14,6 +14,11 @@ export interface TemporalTrack {
   model_id?: string;
 }
 
+export interface ReefPoseSourceGrouping {
+  recording_id: string;
+  animal_id: string;
+}
+
 export interface TemporalSource {
   frame_track_id: string;
   reviewed_track_id?: string;
@@ -21,6 +26,7 @@ export interface TemporalSource {
   identity_observation_run_id?: string;
   animal_identity_id?: string;
   group_key?: string;
+  grouping?: ReefPoseSourceGrouping;
   discontinuity_frames?: number[];
 }
 

@@ -102,6 +102,7 @@ def _training(
     frame_model_sha256 = manifest["frame_model"]["checkpoint_sha256"]
     sources = manifest["sources"]
     landmark_ids = [item["id"] for item in manifest["schema"]["landmarks"]]
+    development = [source for source in sources if source["split"] != "test"]
     lineage = {
         "source_temporal_dataset_id": row.dataset_id,
         "source_temporal_dataset_sha256": source_dataset_sha256,
@@ -109,26 +110,19 @@ def _training(
         "frame_model_sha256": frame_model_sha256,
         "landmark_ids": landmark_ids,
         "training_group_keys": sorted(
-            {
-                group
-                for source in sources
-                if source["split"] in {"train", "validation"}
-                for group in source["groups"]
-            }
+            {group for source in development for group in source["groups"]}
         ),
         "training_recording_hashes": sorted(
-            {
-                source["recording"]["sha256"]
-                for source in sources
-                if source["split"] in {"train", "validation"}
-            }
+            {source["recording"]["sha256"] for source in development}
         ),
         "training_groups_complete": all(
-            any(group.startswith("group:") for group in source["groups"])
-            for source in sources
-            if source["split"] in {"train", "validation"}
+            any(group.startswith("group:") for group in source["groups"]) for source in development
         ),
     }
+    if any(source.get("source_grouping") for source in development):
+        lineage["training_declared_groups_complete"] = all(
+            source.get("source_grouping") for source in development
+        )
     recovery_path = f"{storage_root}/training/temporal/{row.id}/last.pt"
     registered_path = f"{storage_root}/models/{row.id}-temporal.pt"
     resume = read_temporal_checkpoint(settings, recovery_path)
@@ -243,6 +237,7 @@ def _loaded_model(
             "training_group_keys",
             "training_recording_hashes",
             "training_groups_complete",
+            "training_declared_groups_complete",
             "landmark_ids",
         )
     ):
@@ -382,11 +377,14 @@ def _evaluation(
         )
     state = manifest["frame_lineage"]["state"]
     grouped_test = all(any(group.startswith("group:") for group in item["groups"]) for item in test)
-    temporal_state = (
-        "held_out"
-        if grouped_test and registration.metadata_json.get("training_groups_complete")
-        else "recording_disjoint_group_unverified"
+    typed_test = [bool(item.get("source_grouping")) for item in test]
+    typed_training = registration.metadata_json.get("training_declared_groups_complete")
+    compatible_grouping = (
+        all(typed_test) and typed_training is True
+        if any(typed_test) or typed_training is not None
+        else grouped_test and registration.metadata_json.get("training_groups_complete")
     )
+    temporal_state = "held_out" if compatible_grouping else "recording_disjoint_group_unverified"
     device = next(model.parameters()).device
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)

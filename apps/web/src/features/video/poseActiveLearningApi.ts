@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from "../../runtime";
+import type { ReefPoseSourceGrouping } from "./temporalReefPoseApi";
 
 export type PoseActiveLearningSelectionUnit = "frame" | "clip";
 export type PoseTrainingExportFormat =
@@ -88,6 +89,7 @@ interface PoseActiveLearningCreatePayload {
   name: string;
   video_id: string;
   track_ids?: string[];
+  grouping?: ReefPoseSourceGrouping;
   model_ids?: string[];
   selection_unit: PoseActiveLearningSelectionUnit;
   requested_size: number;

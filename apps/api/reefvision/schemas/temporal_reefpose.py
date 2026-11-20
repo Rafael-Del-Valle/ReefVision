@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Annotated, Any, Literal
+from unicodedata import normalize
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, TypeAdapter, model_validator
@@ -19,6 +20,19 @@ class TemporalRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
+class ReefPoseSourceGrouping(TemporalRequest):
+    """Recording and animal identifiers declared from the researcher's source records."""
+
+    recording_id: str = Field(min_length=1, max_length=200)
+    animal_id: str = Field(min_length=1, max_length=200)
+
+    def split_tokens(self) -> list[str]:
+        return [
+            f"group:{kind}:{normalize('NFKC', identifier).strip().casefold()}"
+            for kind, identifier in (("recording", self.recording_id), ("animal", self.animal_id))
+        ]
+
+
 class TemporalSource(TemporalRequest):
     frame_track_id: UUID
     reviewed_track_id: UUID | None = None
@@ -26,6 +40,7 @@ class TemporalSource(TemporalRequest):
     identity_observation_run_id: UUID | None = None
     animal_identity_id: UUID | None = None
     group_key: str | None = Field(default=None, min_length=1, max_length=200)
+    grouping: ReefPoseSourceGrouping | None = None
     discontinuity_frames: list[Annotated[int, Field(ge=0)]] = Field(
         default_factory=list, max_length=10000
     )

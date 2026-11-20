@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC
-from typing import Literal, cast
+from typing import Any, Literal, cast
 from uuid import uuid4
 
 from pydantic import ValidationError as SchemaError
@@ -310,6 +310,44 @@ class EcologyPoseLinkService:
         return select(model).join(
             latest, (model.link_id == latest.c.link_id) & (model.revision == latest.c.revision)
         )
+
+    def reviewed_grouping_evidence(
+        self, video: VideoAsset, track_id: str, frames: set[int]
+    ) -> dict[str, Any] | None:
+        """Find a current reviewed organism link covering exactly the requested pose source."""
+        if not frames:
+            return None
+        model = EcologyPoseLinkRevision
+        statement = self._current_statement(video.project_id).where(
+            model.action != "unlink",
+            model.source_json["video_id"].as_string() == video.id,
+            model.source_json["video_sha256"].as_string() == video.sha256,
+            model.frame_start <= min(frames),
+            model.frame_end >= max(frames),
+        )
+        for row in self.session.scalars(statement):
+            source = self._validated_source(row)
+            covered = {
+                item.frame_index
+                for item in source.observations
+                if item.source_video_track_id == track_id
+            }
+            if not frames <= covered or self._stale_reason(row, source) is not None:
+                continue
+            try:
+                organism = self._organism(video.project_id, row.organism_revision_id)
+            except ConflictError:
+                continue
+            return {
+                "link_revision_id": row.id,
+                "link_source_sha256": row.source_sha256,
+                "organism_revision_id": organism.id,
+                "organism_key": organism.organism_key,
+                "experimental_unit_type": organism.experimental_unit_type,
+                "experimental_unit_id": organism.experimental_unit_id,
+                "study_assignment": organism.study_assignment,
+            }
+        return None
 
     def _assert_scope_available(
         self,

@@ -107,7 +107,10 @@ const candidate: api.PoseActiveLearningCandidate = {
   },
 };
 
-function renderPanel(onOpenCandidate = vi.fn()) {
+function renderPanel(
+  onOpenCandidate = vi.fn(),
+  selectedTrack?: { id: string; track_number: number },
+) {
   const client = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -119,6 +122,7 @@ function renderPanel(onOpenCandidate = vi.fn()) {
       <PoseActiveLearningPanel
         projectId="project-1"
         videoId="video-1"
+        selectedTrack={selectedTrack}
         onOpenCandidate={onOpenCandidate}
       />
     </QueryClientProvider>,
@@ -228,6 +232,48 @@ describe("PoseActiveLearningPanel", () => {
         expect.objectContaining({
           selection_mode: "uncertainty_diverse",
           diversity_weight: 0.35,
+        }),
+      ),
+    );
+  });
+
+  it("captures both source identifiers for the selected track and displays reviewed evidence", async () => {
+    const provenance = {
+      source_grouping: {
+        recording_id: "Site-X Clip-01",
+        animal_id: "Animal-4",
+      },
+      source_grouping_study: {
+        organism_key: "organism-4",
+        link_source_sha256: "a".repeat(64),
+      },
+    };
+    vi.mocked(api.getPoseActiveLearningRounds).mockResolvedValue([
+      { ...round, selection_manifest_json: provenance },
+    ]);
+    renderPanel(vi.fn(), { id: "track-1", track_number: 4 });
+
+    expect(
+      await screen.findByText(/Reviewed organism organism-4/),
+    ).toBeVisible();
+    const create = screen.getByRole("button", {
+      name: "Create pose acquisition round",
+    });
+    fireEvent.change(screen.getByLabelText("Recording ID"), {
+      target: { value: "Site-X Clip-01" },
+    });
+    expect(create).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Animal ID across recordings"), {
+      target: { value: "Animal-4" },
+    });
+    fireEvent.click(create);
+
+    await waitFor(() =>
+      expect(api.createPoseActiveLearningRound).toHaveBeenCalledWith(
+        "project-1",
+        expect.objectContaining({
+          track_ids: ["track-1"],
+          grouping: provenance.source_grouping,
         }),
       ),
     );

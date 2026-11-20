@@ -21,6 +21,7 @@ from reefvision.db.models import (
     PoseLandmarkCorrection,
     PoseLandmarkIdentityBreak,
     PoseLandmarkObservation,
+    PoseLandmarkSchema,
     PoseLandmarkSchemaRevision,
     PoseLandmarkTrack,
     PoseModelSchemaBinding,
@@ -191,6 +192,29 @@ class PoseTemporalTrackingService:
         self,
         track: VideoTrack,
     ) -> tuple[str, int, list[str]]:
+        explicit = (track.metadata_json or {}).get("pose_landmark_schema")
+        if (
+            track.source_model_id is None
+            and isinstance(explicit, dict)
+            and explicit.get("schema_id")
+        ):
+            video = self._video(track.video_id)
+            revision = self.session.scalar(
+                select(PoseLandmarkSchemaRevision)
+                .join(PoseLandmarkSchema)
+                .where(
+                    PoseLandmarkSchema.project_id == video.project_id,
+                    PoseLandmarkSchemaRevision.schema_id == explicit["schema_id"],
+                    PoseLandmarkSchemaRevision.revision == explicit.get("schema_revision"),
+                    PoseLandmarkSchemaRevision.content_hash == explicit.get("content_hash"),
+                )
+            )
+            if revision is None:
+                raise ValidationError(
+                    "Pose track schema binding does not match a saved project revision"
+                )
+            return revision.schema_id, revision.revision, list(revision.expanded_labels_json)
+
         if track.source_model_id is not None:
             binding = self.session.get(PoseModelSchemaBinding, track.source_model_id)
             if binding is not None:

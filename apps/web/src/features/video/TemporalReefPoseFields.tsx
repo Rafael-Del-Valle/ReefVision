@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { ReefPoseGroupingFields } from "./ReefPoseGroupingFields";
 import {
   getTemporalDatasets,
   getTemporalInputs,
@@ -390,6 +391,12 @@ export function TemporalReefPoseFields({
             })
           }
         />
+        {training && (
+          <ReefPoseGroupingFields
+            grouping={source.grouping}
+            onChange={(grouping) => update({ ...source, grouping })}
+          />
+        )}
         {training && (
           <label>
             Recording group

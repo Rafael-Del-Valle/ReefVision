@@ -87,8 +87,15 @@ def _lineage_state(lineage: dict[str, Any], sources: list[dict[str, Any]]) -> st
         for source in sources
     ):
         return "exposed"
-    grouped = all(any(key.startswith("group:") for key in source["groups"]) for source in sources)
-    return "held_out" if lineage["complete"] and sources and grouped else "unverified"
+
+    if (
+        lineage["complete"]
+        and lineage.get("declared_groups")
+        and sources
+        and all(source.get("source_grouping") for source in sources)
+    ):
+        return "held_out"
+    return "unverified"
 
 
 def _compatible(data: dict[str, Any], model: ModelRegistration) -> dict[str, Any]:
