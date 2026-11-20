@@ -1,0 +1,9 @@
+diff --git a/apps/web/tests/e2e/monitoring-live.spec.ts b/apps/web/tests/e2e/monitoring-live.spec.ts
+index 3957a41e1..ad6003651 100644
+--- a/apps/web/tests/e2e/monitoring-live.spec.ts
++++ b/apps/web/tests/e2e/monitoring-live.spec.ts
+@@ -360 +360,3 @@ test("reviews monitoring findings and compares only compatible project-local ass
+-  await page.getByLabel("Saved assessment").selectOption(a.assessment.id);
++  await page
++    .getByRole("combobox", { name: "Saved assessment", exact: true })
++    .selectOption(a.assessment.id);
