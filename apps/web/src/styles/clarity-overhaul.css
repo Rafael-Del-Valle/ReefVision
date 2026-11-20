@@ -1254,6 +1254,10 @@ select:hover {
     border-left: 0;
   }
 
+  .annotation-inspector-heading {
+    position: static;
+  }
+
   .annotation-canvas-panel {
     min-height: 56vh;
   }

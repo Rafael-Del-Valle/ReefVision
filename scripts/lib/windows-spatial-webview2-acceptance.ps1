@@ -222,6 +222,66 @@ function Get-ReefVisionInstalledJourneyEvidence([scriptblock]$RunJourney) {
     }
 }
 
+function Invoke-ReefVisionFirstUseAcceptance {
+    param(
+        [Parameter(Mandatory)][string]$NodePath,
+        [Parameter(Mandatory)][string]$RepositoryRoot,
+        [Parameter(Mandatory)][string]$EvidenceRoot,
+        [Parameter(Mandatory)][string]$Api,
+        [Parameter(Mandatory)][int]$DebugPort,
+        [Parameter(Mandatory)][int]$DesktopProcessId,
+        [Parameter(Mandatory)][string]$ExpectedVersion,
+        [string]$ExpectedBrowserSid,
+        [string]$BrowserArtifactsDirectory
+    )
+    $endpoint = Wait-ReefVisionWebView2DebugEndpoint -Port $DebugPort -DesktopProcessId $DesktopProcessId `
+        -ExpectedBrowserSid $ExpectedBrowserSid -FailureEvidencePath (Join-Path $EvidenceRoot 'first-use-webview2-startup.log') `
+        -AttachmentEvidencePath (Join-Path $EvidenceRoot 'first-use-webview2-attached.log')
+    $report = Join-Path $EvidenceRoot 'first-use-playwright.json'
+    $log = Join-Path $EvidenceRoot 'first-use-playwright.log'
+    $output = Join-Path $EvidenceRoot 'first-use-playwright'
+    $variables = @{
+        REEFVISION_GUIDED_TEST_API = $Api
+        REEFVISION_SPATIAL_WEBVIEW2_ENDPOINT = $endpoint
+        REEFVISION_SPATIAL_WEBVIEW2_ARTIFACTS_DIR = $BrowserArtifactsDirectory
+        REEFVISION_FIRST_USE_ACCEPTANCE = '1'
+        PLAYWRIGHT_JSON_OUTPUT_FILE = $report
+    }
+    $previous = @{}
+    Push-Location -LiteralPath (Join-Path $RepositoryRoot 'apps/web')
+    try {
+        foreach ($name in $variables.Keys) {
+            $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+            [Environment]::SetEnvironmentVariable($name, $variables[$name], 'Process')
+        }
+        & $NodePath 'node_modules/@playwright/test/cli.js' test ordinary-project-live.spec.ts --workers=1 --retries=0 --reporter=list,json --output=$output *> $log
+        if ($LASTEXITCODE -ne 0) {
+            $tail = Get-Content -LiteralPath $log -Tail 25 | Out-String
+            throw "Installed first-use journey failed with exit code $LASTEXITCODE. $tail"
+        }
+    } finally {
+        Pop-Location
+        foreach ($name in $previous.Keys) {
+            [Environment]::SetEnvironmentVariable($name, $previous[$name], 'Process')
+        }
+    }
+    $stats = (Get-Content -LiteralPath $report -Raw | ConvertFrom-Json).stats
+    $files = @(Get-ChildItem -LiteralPath $output -Recurse -File -Filter 'first-use-evidence.json')
+    if ($stats.expected -ne 1 -or $stats.skipped -ne 0 -or $stats.unexpected -ne 0 -or $stats.flaky -ne 0 -or $files.Count -ne 1) {
+        throw 'The installed first-use suite must produce exactly one passing native receipt.'
+    }
+    $proof = Get-Content -LiteralPath $files[0].FullName -Raw | ConvertFrom-Json
+    if ($proof.surface -ne 'tauri-webview2' -or $proof.application_version -ne $ExpectedVersion -or
+        $proof.empty_before_project_submission -ne $true -or $proof.welcome_focus_handoff -ne $true -or
+        $proof.startup_dismissal_persisted -ne $true -or $proof.emulated_device_scale_factor -ne 1.5 -or
+        !$proof.nonlocal_browser_http_blocked -or $proof.external_http_attempt_count -ne 0 -or
+        $proof.annotation_status -ne 'reviewed' -or $proof.image_sha256 -notmatch '^[a-f0-9]{64}$' -or
+        $proof.export_sha256 -notmatch '^[a-f0-9]{64}$') {
+        throw 'The first-use receipt lacks the fresh-profile, keyboard, scale, offline, review or export evidence.'
+    }
+    return $proof
+}
+
 function Invoke-ReefVisionSpatialWebView2Acceptance {
     param(
         [Parameter(Mandatory = $true)][string]$NodePath,

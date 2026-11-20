@@ -10,6 +10,7 @@ param(
     [string]$LineageVerificationPath = '',
     [string]$ExpectedInitialSchemaRevision = '',
     [string]$SpatialWorkflowNodePath = '',
+    [switch]$FirstUseAcceptance,
     [switch]$ResearchWorkflowAcceptance,
     [switch]$HostedStandardUserWebView2,
     [switch]$VerifyPreviousInstallerRejectsUpgradedProfile,
@@ -36,6 +37,9 @@ if (-not $DisposableTest -and -not $PlanOnly) {
 if ($DisposableTest -and $PlanOnly) { throw '-DisposableTest and -PlanOnly are mutually exclusive.' }
 if ($ResearchWorkflowAcceptance -and -not $SpatialWorkflowNodePath) {
     throw 'Installed research journeys require -SpatialWorkflowNodePath for the packaged WebView2 driver.'
+}
+if ($FirstUseAcceptance -and (-not $SpatialWorkflowNodePath -or -not $SkipUpgrade)) {
+    throw 'Installed first use requires the packaged WebView2 driver and a fresh candidate install.'
 }
 if ($HostedStandardUserWebView2) {
     if (-not $DisposableTest -or -not $SpatialWorkflowNodePath) {
@@ -147,6 +151,7 @@ $report = [ordered]@{
     first_launch = New-ReefVisionEvidenceResult
     frontend_backend_connectivity = New-ReefVisionEvidenceResult
     webview2 = New-ReefVisionEvidenceResult
+    first_use_workflow = if ($FirstUseAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Installed first-use acceptance not requested' }
     spatial_workflow = if ($SpatialWorkflowNodePath) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Packaged spatial WebView2 acceptance not requested' }
     research_workflow = if ($ResearchWorkflowAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Packaged research WebView2 acceptance not requested' }
     schema_migration = New-ReefVisionEvidenceResult
@@ -632,6 +637,17 @@ try {
                 $spatialPort = Wait-BackendPort -Path (Join-Path $SpatialDataRoot 'runtime\backend-port.txt') -DesktopProcess $spatialDesktop -BackendLogPath (Join-Path $SpatialDataRoot 'logs\backend.log')
                 $spatialApi = "http://127.0.0.1:$spatialPort/api/v1"
                 $null = Assert-AcceptancePackagedBackend -Api $spatialApi -ExpectedAppVersion $ProductVersion -ExpectedRevision $ExpectedSchemaRevision
+                if ($FirstUseAcceptance) {
+                    try {
+                        $firstUse = Invoke-ReefVisionFirstUseAcceptance -NodePath $SpatialWorkflowNodePath -RepositoryRoot $RepositoryRoot `
+                            -EvidenceRoot $EvidenceRoot -Api $spatialApi -DebugPort $debugPort -DesktopProcessId $spatialDesktop.Id `
+                            -ExpectedVersion $ProductVersion -ExpectedBrowserSid $browserSid -BrowserArtifactsDirectory $browserArtifacts
+                        $report.first_use_workflow = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Fresh installed profile completed keyboard onboarding, reviewed an annotation, and downloaded YOLO export SHA-256 $($firstUse.export_sha256)."
+                    } catch {
+                        $report.first_use_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $_.Exception.Message
+                        throw
+                    }
+                }
                 if ($ResearchWorkflowAcceptance) {
                     $report.research_workflow = Get-ReefVisionResearchJourneyEvidence {
                         Invoke-ReefVisionResearchJourneyAcceptance -NodePath $SpatialWorkflowNodePath -RepositoryRoot $RepositoryRoot `
@@ -665,6 +681,9 @@ try {
         }
         if ($ResearchWorkflowAcceptance -and $report.research_workflow.status -eq 'NOT RUN') {
             $report.research_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $report.spatial_workflow.detail
+        }
+        if ($FirstUseAcceptance -and $report.first_use_workflow.status -eq 'NOT RUN') {
+            $report.first_use_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $report.spatial_workflow.detail
         }
         Save-Report
     }
@@ -1106,6 +1125,9 @@ try {
     }
     if ($report.spatial_workflow.status -eq 'FAIL') {
         throw $report.spatial_workflow.detail
+    }
+    if ($report.first_use_workflow.status -eq 'FAIL') {
+        throw $report.first_use_workflow.detail
     }
     if ($report.research_workflow.status -eq 'FAIL') {
         throw $report.research_workflow.detail
