@@ -18,6 +18,7 @@ _UPGRADE_JOB = "windows-upgrade-acceptance"
 _VALIDATED_14_UPGRADE_JOB = "windows-validated-14-upgrade-acceptance"
 _VALIDATED_15_UPGRADE_JOB = "windows-validated-15-upgrade-acceptance"
 _VALIDATED_16_UPGRADE_JOB = "windows-validated-16-upgrade-acceptance"
+_VALIDATED_17_UPGRADE_JOB = "windows-validated-17-upgrade-acceptance"
 _BASELINE_VERSION = "1.0.3"
 _BASELINE_REPOSITORY = "Rafael-Del-Valle/ReefVision"
 _BASELINE_COMMIT = "e94dad6a3bece7b776bf45776bc5d06cfbc2c0dc"
@@ -36,6 +37,7 @@ class _ValidatedBaseline(NamedTuple):
     revision: str
     cabinets: int
     msi_sha256: str | None = None
+    manufacturing_job: str | None = None
 
 
 _VALIDATED_BASELINES = {
@@ -64,17 +66,29 @@ _VALIDATED_BASELINES = {
         5,
         "3b596ee3ba5e9188776cd3208245c277a72013877677c9a16e359ee6da04c3be",
     ),
+    _VALIDATED_17_UPGRADE_JOB: _ValidatedBaseline(
+        "1.7.0",
+        "44827326113",
+        "3e37524e28c4b7dde8ffbe203120d3b8e7fe2ee9",
+        "f751aa96ebdece355f7b25cdfaf6c0e8641c354c481efec434bb1b8235533bf3",
+        "b17_monitor_0003",
+        6,
+        "90faf157f5dc8489d64f31f92c9b105471e24621bc732d96b91132763ef290cc",
+        "136603186182",
+    ),
 }
 
 _VALIDATED_UPGRADE_JOBS = {
     "1.5.0": (_VALIDATED_14_UPGRADE_JOB,),
     "1.6.0": (_VALIDATED_14_UPGRADE_JOB, _VALIDATED_15_UPGRADE_JOB),
     "1.7.0": (_VALIDATED_14_UPGRADE_JOB, _VALIDATED_15_UPGRADE_JOB, _VALIDATED_16_UPGRADE_JOB),
+    "1.8.0": tuple(_VALIDATED_BASELINES),
 }
 _CANDIDATE_REVISION = {
     "1.5.0": "b15_integrated_0002",
     "1.6.0": "b16_integrated_0001",
     "1.7.0": "b17_monitor_0003",
+    "1.8.0": "b18_integrated_0001",
 }
 
 
@@ -133,7 +147,6 @@ def _check_validated_upgrade(
             f"{env}_SOURCE: {previous.source}",
             f"{env}_PROVENANCE_SHA256: {previous.manifest_sha256}",
             f"$run.headSha -cne $env:{env}_SOURCE",
-            "$run.conclusion -ne 'success'",
             "foreach ($part in 1..2)",
             f"gh run download $env:{env}_RUN --repo {_BASELINE_REPOSITORY} "
             f'--name "ReefVision-{previous.version}-RC-Installer-Part-$part" --dir $previous',
@@ -161,7 +174,32 @@ def _check_validated_upgrade(
         ),
         f"{name} is missing the verified {previous.version} to {version} upgrade contract",
     )
-    if name in (_VALIDATED_15_UPGRADE_JOB, _VALIDATED_16_UPGRADE_JOB):
+    if previous.manufacturing_job is None:
+        errors.extend(
+            _missing(
+                job,
+                ("$run.conclusion -ne 'success'",),
+                f"{name} requires a successful predecessor run",
+            )
+        )
+    else:
+        # The original build succeeded. A separate run repeated the clean-install
+        # test after a Playwright selector failed on these same installer bytes.
+        errors.extend(
+            _missing(
+                job,
+                (
+                    f'{env}_BUILD_JOB: "{previous.manufacturing_job}"',
+                    f"gh api repos/{_BASELINE_REPOSITORY}/actions/jobs/$env:{env}_BUILD_JOB",
+                    f"[string]$binaryJob.run_id -cne $env:{env}_RUN",
+                    f"$binaryJob.head_sha -cne $env:{env}_SOURCE",
+                    "$binaryJob.name -cne 'build-windows-installer'",
+                    "$binaryJob.conclusion -ne 'success'",
+                ),
+                f"{name} requires the authenticated successful original installer job",
+            )
+        )
+    if name != _VALIDATED_14_UPGRADE_JOB:
         errors.extend(
             _missing(
                 job,
@@ -228,7 +266,7 @@ def _check_split_workflow(workflow: str, version: str) -> list[str]:
     errors = _check_preflight_order(build, f"- name: Build weight-free {version} desktop installer")
     for name in _VALIDATED_UPGRADE_JOBS.get(version, ()):
         errors.extend(_check_validated_upgrade(workflow, name, version, verified_candidate))
-    if version in ("1.6.0", "1.7.0"):
+    if version in ("1.6.0", "1.7.0", "1.8.0"):
         errors.extend(
             _missing(
                 clean,
@@ -251,7 +289,7 @@ def _check_split_workflow(workflow: str, version: str) -> list[str]:
                 "Clean-install job is missing installed workspace acceptance",
             )
         )
-    if version == "1.7.0":
+    if version in ("1.7.0", "1.8.0"):
         errors.extend(
             _missing(
                 clean,

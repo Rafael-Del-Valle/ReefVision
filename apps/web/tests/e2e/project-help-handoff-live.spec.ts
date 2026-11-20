@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
+import { writeFile } from "node:fs/promises";
 import { expect, type Locator } from "@playwright/test";
+import { verifyResearchDesktop } from "./disposableResearchDesktop";
 import { test } from "./spatialDesktop";
 
 test("hands keyboard focus from Help to each available workspace", async ({
   desktop,
-}) => {
+}, info) => {
   const { page, api, web } = desktop;
+  const runtime = await verifyResearchDesktop(page, api);
   const projectName = `Help handoff ${randomUUID().slice(0, 8)}`;
   const created = await page.request.post(`${api}/projects`, {
     data: { name: projectName, template: "blank" },
@@ -57,7 +60,11 @@ test("hands keyboard focus from Help to each available workspace", async ({
       mobile: false,
     });
     await page.goto(web);
-    await expect(guide).toBeVisible();
+    await expect(help).toBeVisible();
+    if (await guide.isVisible()) await page.keyboard.press("Escape");
+    const home = page.getByRole("button", { name: "Home", exact: true });
+    if (await home.isVisible()) await home.click();
+    await openHelp();
     expect(await page.evaluate(() => window.devicePixelRatio)).toBe(1.5);
     await test.step("launcher supports System and explains project-only destinations", async () => {
       for (const { name } of actions) await expect(action(name)).toBeDisabled();
@@ -131,6 +138,18 @@ test("hands keyboard focus from Help to each available workspace", async ({
         system.getByRole("heading", { name: "System status", exact: true }),
       ).toBeVisible();
     });
+    await writeFile(
+      info.outputPath("help-handoff-evidence.json"),
+      JSON.stringify({
+        ...runtime,
+        surface: desktop.surface,
+        opened_project: projectName,
+        selected_tabs: actions.map((action) => action.tab),
+        system_keyboard_handoff: true,
+        collapsed_rail_focus: true,
+        device_scale_factor: 1.5,
+      }),
+    );
   } finally {
     await device.send("Emulation.clearDeviceMetricsOverride");
     await device.detach();

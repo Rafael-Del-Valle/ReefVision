@@ -121,6 +121,7 @@ function Invoke-ReefVisionInstalledMonitoringAcceptance {
             REEFVISION_ACQUISITION_TEST_VERSION=$Version
             REEFVISION_ACQUISITION_TEST_SCHEMA=$Revision
             REEFVISION_MONITORING_EXPECTED_DATA_DIR=$Profile
+            REEFVISION_MONITORING_EXPECTED_VERSION=$Version
             REEFVISION_MONITORING_EXPECTED_SCHEMA=$Revision
             REEFVISION_MONITORING_BIO_FIXTURE=''
         }

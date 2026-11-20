@@ -318,10 +318,14 @@ function Invoke-ReefVisionWorkspaceAcceptance {
         [Parameter(Mandatory)][string]$Api,
         [Parameter(Mandatory)][int]$DebugPort,
         [Parameter(Mandatory)][int]$DesktopProcessId,
+        [Parameter(Mandatory)][string]$Profile,
+        [Parameter(Mandatory)][string]$Version,
+        [Parameter(Mandatory)][string]$Revision,
         [string]$ExpectedBrowserSid,
         [string]$BrowserArtifactsDirectory
     )
     $journeys = [ordered]@{
+        help_handoff = @('project-help-handoff-live.spec.ts', 'help-handoff-evidence.json')
         class_lifecycle = @('safe-class-lifecycle-live.spec.ts', 'class-lifecycle-evidence.json')
         quality_control = @('qc-review-workflow-live.spec.ts', 'qc-review-workflow.json')
         dense_image = @('dense-image-live.spec.ts', 'dense-image-evidence.json')
@@ -332,7 +336,11 @@ function Invoke-ReefVisionWorkspaceAcceptance {
     $output = Invoke-ReefVisionInstalledPlaywrightSuite -NodePath $NodePath -RepositoryRoot $RepositoryRoot `
         -EvidenceRoot $EvidenceRoot -Api $Api -DebugPort $DebugPort -DesktopProcessId $DesktopProcessId `
         -ExpectedBrowserSid $ExpectedBrowserSid -BrowserArtifactsDirectory $BrowserArtifactsDirectory `
-        -Suite 'workspace' -Specs $specs
+        -Suite 'workspace' -Specs $specs -AdditionalEnvironment @{
+            REEFVISION_RESEARCH_TEST_PROFILE=$Profile
+            REEFVISION_RESEARCH_TEST_VERSION=$Version
+            REEFVISION_RESEARCH_TEST_SCHEMA=$Revision
+        }
     $result = [ordered]@{surface = 'tauri-webview2'; completed_journeys = $specs.Count}
     foreach ($key in $journeys.Keys) {
         $files = @(Get-ChildItem -LiteralPath $output -Recurse -File -Filter $journeys[$key][1])
@@ -340,6 +348,13 @@ function Invoke-ReefVisionWorkspaceAcceptance {
         $receipt = Get-Content -LiteralPath $files[0].FullName -Raw | ConvertFrom-Json
         if ($receipt.surface -ne $result.surface) { throw "The $key receipt was not produced by installed ReefVision WebView2." }
         $result[$key] = $receipt
+    }
+    $help = $result.help_handoff
+    if ($help.application_version -cne $Version -or $help.schema_revision -cne $Revision -or
+        [IO.Path]::GetFullPath($help.profile) -ine [IO.Path]::GetFullPath($Profile) -or
+        ($help.selected_tabs -join ',') -cne 'Classes,Review queue,Workflow builder' -or
+        !$help.system_keyboard_handoff -or !$help.collapsed_rail_focus -or $help.device_scale_factor -ne 1.5) {
+        throw 'The installed keyboard Help journey did not reopen each workspace in the requested disposable profile.'
     }
     $sha = '^[a-f0-9]{64}$'
     $classes = $result.class_lifecycle

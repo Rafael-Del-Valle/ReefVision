@@ -41,7 +41,7 @@ test("keeps YOLO export reachable while the project inspector is open", async ({
   expect(saved.status(), await saved.text()).toBe(201);
 
   await page.addInitScript(() =>
-    localStorage.setItem("reefvision.onboarding.dismissed.1.7.0", "true"),
+    localStorage.setItem("reefvision.onboarding.dismissed.1.8.0", "true"),
   );
   await page.goto(web);
   await page.getByRole("button", { name: `Open ${name}`, exact: true }).click();

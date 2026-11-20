@@ -49,7 +49,7 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
     });
   } else {
     await page.addInitScript(() =>
-      localStorage.setItem("reefvision.onboarding.dismissed.1.7.0", "true"),
+      localStorage.setItem("reefvision.onboarding.dismissed.1.8.0", "true"),
     );
   }
   const openProject = async () => {

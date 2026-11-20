@@ -33,7 +33,7 @@ test("declares grouped pose acquisition, verifies a pose, and freezes the same d
   const root = `${api}/projects/${fixture.round.project_id}`;
   const video = `${api}/videos/${item.video_id}`;
   await page.addInitScript(() =>
-    localStorage.setItem("reefvision.onboarding.dismissed.1.7.0", "true"),
+    localStorage.setItem("reefvision.onboarding.dismissed.1.8.0", "true"),
   );
   await page.goto(web);
   await page
