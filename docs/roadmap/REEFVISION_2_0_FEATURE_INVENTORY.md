@@ -2,16 +2,16 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T23:04:46Z`
+Updated: `2026-11-20T23:33:03Z`
 Candidate target: `2.0`
 
 ## Status summary
 
 | Status | Count |
 | --- | ---: |
-| blocked | 18 |
+| blocked | 19 |
 | explicitly_deferred | 4 |
-| in_progress | 18 |
+| in_progress | 17 |
 | verified | 37 |
 
 ## Features
@@ -70,7 +70,7 @@ Candidate target: `2.0`
 | 1.6 | First-run onboarding and Windows usability acceptance | verified | Installed first launch → Create or open project |
 | 1.6 | Prioritized QC queues, reviewer assignment, bulk actions, and idempotent retry | verified | Review → QC queues |
 | 1.7 | Local cross-project monitoring summaries | verified | Research → Monitoring → Project summaries |
-| 1.7 | Recorded, simulated, and physical acquisition sources | in_progress | Project → Acquisition sources |
+| 1.7 | Recorded, simulated, and physical acquisition sources | blocked | Project → Acquisition sources |
 | 1.7 | Durable recurring acquisition, inference, QC, and report schedules | verified | Video & automation → Schedules |
 | 1.7 | Environmental and biological monitoring with reviewed anomaly proposals | blocked | Research → Monitoring |
 | 1.8 | Bioacoustics import, annotation, review, and aligned analysis | in_progress | Project assets → Import audio → Review |
@@ -1243,21 +1243,22 @@ Evidence:
 - `source`: A frozen comparison survived two separate Project Exchange imports. Its original project identities, decisions and canonical bytes stayed intact; the imported graph resolved its local owning row. Independent projects sharing the same original were excluded symmetrically. — `docs/validation/monitoring-76731aa95.json` (`rv17-cross-project-monitoring-exchange-76731aa95`)
 - `browser`: Research → Monitoring → Project summaries displayed three local projects. Two comparable sites had 4/5 and 5/5 accepted slots, and a third window was excluded. A new review preserved the earlier exported snapshot and two replay artifacts matched. — `docs/validation/monitoring-76731aa95.json` (`rv17-cross-project-monitoring-comparison-76731aa95`)
 - `browser`: After project transfer, normal Research navigation reopened the frozen comparison of three historical sites. Its canonical snapshot remained byte-identical. The new export carried fresh local owner and row IDs, and its bytes matched the rebound saved graph output. — `docs/validation/combined-monitoring-3e37524e2.json` (`rv17-cross-project-monitoring-restored-export-3e37524e2`)
-- `windows_installed`: none recorded
+- `windows_installed`: The researcher compared three local projects in the registered monitoring workspace. Their project identities and observation windows stayed distinct. The corrected original-MSI clean-install role also passed uninstall and data-retention checks. — `docs/validation/installed-monitoring-3e37524e2.json` (`rv17-cross-project-monitoring-registered-3e37524e2`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
 ### rv17-device-sources: Recorded, simulated, and physical acquisition sources
 
 - Target: `1.7`
-- Status: `in_progress`
+- Status: `blocked`
 - Dependencies: `rv15-field-capture`, `rv17-durable-schedules`
 - Entry point: Project → Acquisition sources
 - Workflow Builder: `required`
+- Missing input: An authorized, connected camera or supported sensor with its identifier and protocol, permission to record a prepared scene and an independent UTC clock with uncertainty. In Project → Video & automation → Acquisition sources, capture before and after a witnessed physical disconnect and reconnect, then compare source identity, retained sequence, timestamps and hashes.
 
 Acceptance checks:
 
-- **in_progress** — Configure simulated/recorded sources and consent-gated physical devices with clock, identity, retry, and source provenance. (`rv17-device-sources-check`)
+- **blocked** — Configure simulated/recorded sources and consent-gated physical devices with clock, identity, retry, and source provenance. (`rv17-device-sources-check`)
 
 Evidence:
 
@@ -1265,7 +1266,7 @@ Evidence:
 - `browser`: Project → Video & automation → Acquisition sources captured two sealed observations around a real read failure and explicit reconnect. A simulated scheduled capture and two saved receipt runs preserved its digest. The ordinary UI required consent before physical access. — `docs/validation/monitoring-76731aa95.json` (`rv17-device-sources-capture-76731aa95`)
 - `browser`: System status restored all nine files in the device fixture. A restarted recovery reopened three recorded and simulated capture receipts with their original hashes. Project Exchange into a fresh profile paused the separately carried camera and required new approval before any capture. — `docs/validation/combined-monitoring-3e37524e2.json` (`rv17-device-sources-backup-transfer-3e37524e2`)
 - `browser`: The original MSI binaries ran under ordinary Windows WebView2. The researcher opened a sealed recording, recovered after disconnect, ran a scheduled simulator and replayed its receipt twice with the same digest. The camera approval dialog was cancelled before capture. — `docs/validation/installed-monitoring-3e37524e2.json` (`rv17-device-sources-native-recording-3e37524e2`)
-- `windows_installed`: none recorded
+- `windows_installed`: In the registered 1.7 desktop, an ordinary Windows account created a recorded source, recovered the next observation after disconnect, and executed a scheduled simulated source. The camera consent dialog was cancelled. The full clean-install retry passed all 24 desktop journeys and both scheduler phases. — `docs/validation/installed-monitoring-3e37524e2.json` (`rv17-device-sources-registered-3e37524e2`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -1291,6 +1292,7 @@ Evidence:
 - `browser`: On the combined 1.7 schema, four independently opened saved schedules completed from Project navigation. The researcher opened each actual job and output. The CPU detector kept 15 pending proposals on two held-out images and excluded four training images. QC retained two ranked items and the report retained one confirmed event in 4.7 s. — `docs/validation/combined-monitoring-3e37524e2.json` (`rv17-durable-schedules-all-purposes-3e37524e2`)
 - `browser`: After a valid scheduled detector lost its copied checkpoint, the original MSI desktop displayed the failed Reviewed model runtime node. One occurrence produced zero inference jobs and zero proposals. A separate desktop process reopened the paused schedule and downloaded the same failure receipt. — `docs/validation/installed-monitoring-3e37524e2.json` (`rv17-schedules-unavailable-checkpoint-3e37524e2`)
 - `windows_installed`: After Windows Installer registered the candidate, the same ordinary account reopened its saved schedule in a new desktop and sidecar process, inspected one coalesced catch-up job and matching replay receipts. The paused control stayed empty. — `docs/validation/durable-schedules-e60ed5503.json` (`rv17-scheduler-registered-restart`)
+- `windows_installed`: Both native scheduler phases passed under a registered standard account on the combined 1.7 schema. The account reopened its missed occurrence and paused control. Eight historical installation and upgrade roles passed on the same MSI. — `docs/validation/installed-monitoring-3e37524e2.json` (`rv17-durable-schedules-combined-registered-3e37524e2`)
 - `physical_hardware`: The official MSI desktop submitted one detector occurrence to the physical RTX 3090. Two held-out images produced 19 pending proposals. Four training images were excluded. The sidecar GPU process, six original images, seven existing annotations and checkpoint were independently checked. — `docs/validation/installed-monitoring-3e37524e2.json` (`rv17-schedules-original-package-cuda-3e37524e2`)
 - `representative_data`: none recorded
 
@@ -1313,7 +1315,7 @@ Evidence:
 - `browser`: The researcher reviewed four proposed environmental findings and exported a dated biological assessment with one confirmed event across 4.7 seconds. Two saved replays matched. All inputs are documented fixtures. — `docs/validation/monitoring-76731aa95.json` (`rv17-monitoring-alerts-proposals-76731aa95`)
 - `browser`: In the restored project the researcher reopened one confirmed and three dismissed alerts tied to their original proposals. A complete six-file profile backup separately recovered the review rows unchanged. Dated biological observations and controlled environmental inputs remain fixtures. — `docs/validation/combined-monitoring-3e37524e2.json` (`rv17-monitoring-alerts-restored-review-3e37524e2`)
 - `browser`: In the original MSI desktop, the researcher reopened the saved monitoring result and reviewed a generated recording with one confirmed event over 4.7 seconds. The corrected browser selector passed both native journeys on the original package. — `docs/validation/installed-monitoring-3e37524e2.json` (`rv17-monitoring-alerts-native-review-3e37524e2`)
-- `windows_installed`: none recorded
+- `windows_installed`: The registered ordinary Windows account reviewed environmental proposals, reopened the frozen result and replayed it on generated observations. The full clean-install retry used the same MSI and cabinets as the original trial. — `docs/validation/installed-monitoring-3e37524e2.json` (`rv17-monitoring-alerts-registered-3e37524e2`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 

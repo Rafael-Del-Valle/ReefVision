@@ -59,7 +59,13 @@
       }
     ],
     "provenance_sha256": "f751aa96ebdece355f7b25cdfaf6c0e8641c354c481efec434bb1b8235533bf3",
-    "verified_installer_folder": "candidate-review/1.7/checkpoints/3e37524e2/official/installer"
+    "verified_installer_folder": "candidate-review/1.7/checkpoints/3e37524e2/official/installer",
+    "windows_packaging_tests": {
+      "job": 136603186182,
+      "focused_backend_passed": 23,
+      "rust_passed": 8,
+      "rust_failed": 0
+    }
   },
   "native_desktop": {
     "surface": "administrative-original-msi",
@@ -516,6 +522,216 @@
       {
         "path": "source/current-donor-79/donor79-execution.log",
         "sha256": "9c02324bb1c56117cb6ced31f299b3eb582b708ca0867ff48a7a365a6d5d7ecc"
+      }
+    ]
+  },
+  "registered_clean_first_correction": {
+    "run": 44831963508,
+    "job": 136618848147,
+    "source": "3e37524e28c4b7dde8ffbe203120d3b8e7fe2ee9",
+    "driver": "8b98324a5f97dd183c9ce11f55921578100252ea",
+    "registered_clean_command": "success",
+    "artifact_upload": "failed across two drive roots",
+    "workflow_conclusion": "failure",
+    "stdout_sha256": "45a62c09f4597737e3aba171dcad4c1fc142ff1dc60802e6351e53e640324ada",
+    "retained": "registered-retest/attempt-44831963508/original-index.json"
+  },
+  "registered_installer_results": {
+    "source_commit": "3e37524e28c4b7dde8ffbe203120d3b8e7fe2ee9",
+    "original_build_run_id": 44827326113,
+    "original_msi_sha256": "90faf157f5dc8489d64f31f92c9b105471e24621bc732d96b91132763ef290cc",
+    "media_cabinets": 6,
+    "validated_registered_roles": 9,
+    "same_original_msi": true,
+    "original_clean": {
+      "job_id": 136614617006,
+      "conclusion": "failure",
+      "artifact": {
+        "id": 14676249149,
+        "sha256": "ba99aaa4b8afbefb5828a6a4df2981e7afadca3c3d2df69aa507e2df63c433ec",
+        "files_rehashed": 52
+      }
+    },
+    "corrected_clean": {
+      "job_id": 136629658079,
+      "proof_run": 44835185157,
+      "driver_commit": "8b98324a5f97dd183c9ce11f55921578100252ea",
+      "artifact": {
+        "id": 14678243938,
+        "sha256": "c99851bcfcf218a33b670d802815a23bab2c43373de20c1f4eaa944cf75993de",
+        "retained_files": 61
+      },
+      "registered_lifecycle_passes": 20,
+      "native_journeys": {
+        "first-use": 1,
+        "workspace": 5,
+        "research": 6,
+        "spatial": 10,
+        "monitoring": 2
+      },
+      "scheduler_phases": 2
+    },
+    "original_lineage_jobs": {
+      "published-1.0.3": 136614616746,
+      "validated-1.3": 136614616849,
+      "validated-1.4": 136614616861,
+      "validated-1.5": 136614616860,
+      "validated-1.6": 136614616852,
+      "draft-1.4-0038": 136614616826,
+      "draft-1.4-0039": 136614616729,
+      "historical-qc": 136614616657
+    },
+    "retained_role_members": 193,
+    "offline": {
+      "run_id": 44832181000,
+      "seconds": 138.2404184,
+      "control_counts": {
+        "ordinary": 346,
+        "system": 343
+      },
+      "restored_and_uninstalled": true
+    },
+    "scope": "Original registered Windows roles and exact-runtime retests on disposable generated profiles. No physical capture or external scientific outcome.",
+    "evidence": {
+      "package": {
+        "path": "independent-package-validation.json",
+        "sha256": "18192b3140a9acb953cdb0d85e8452fd95176ff580901e625a664825151a9106"
+      },
+      "original_matrix": {
+        "path": "hosted/original-matrix-validation.json",
+        "sha256": "74a072d0a58338fde6fc8ffafb931a0fe80e200e0cdf125a81b5e18859a0dbad"
+      },
+      "registered_clean_retest": {
+        "path": "registered-retest/attempt-44835185157/registered-retest-index.json",
+        "sha256": "94ff0c4bf362ab4a0af3be103020a261671eba4e25cf99c5c38921fdfece82b6"
+      },
+      "registered_clean_first_corrected_run": {
+        "path": "registered-retest/attempt-44831963508/job.json",
+        "sha256": "935b2cd094e72e51438835b78e24a1924391ac486e4f561f4b6fff2aac73bc95"
+      },
+      "registered_clean_first_corrected_run_log": {
+        "path": "registered-retest/attempt-44831963508/job.log",
+        "sha256": "45a62c09f4597737e3aba171dcad4c1fc142ff1dc60802e6351e53e640324ada"
+      },
+      "offline": {
+        "path": "offline/attempt-44832181000/offline-index.json",
+        "sha256": "1ea62499b499455b4c4da02def7a56625198c57b5f84106483107838e80d681c"
+      },
+      "offline_first_attempt": {
+        "path": "offline/offline-index.json",
+        "sha256": "b2edae9661e523774204abe710961d24a03b579cd2fcbcfc0c47c842fb2c8cce"
+      },
+      "physical_native": {
+        "path": "evidence/native-combined/native-index.json",
+        "sha256": "006ae5b3792642d3548f9b83af2526403a76066481e9aa5885205b4c5b9e2b3d"
+      },
+      "physical_first_attempt": {
+        "path": "evidence/native-combined/attempt-1/attempt-1.json",
+        "sha256": "e992e6a2cf43279d18a43570d63438b96e02e0d629f1de52fed167dfb6d0936f"
+      }
+    },
+    "qualification_sha256": "b8e121b8496d4f8c7ab8295de19d0186b70e1a00275dba2c95986489f74a4691",
+    "registered_clean_stage_counts": {
+      "PASS": 20,
+      "SKIPPED": 11
+    },
+    "clean_phases": {
+      "install": "PASS",
+      "shortcuts": "PASS",
+      "first_launch": "PASS",
+      "frontend_backend_connectivity": "PASS",
+      "webview2": "PASS",
+      "first_use_workflow": "PASS",
+      "workspace_workflow": "PASS",
+      "schedule_workflow": "PASS",
+      "monitoring_workflow": "PASS",
+      "spatial_workflow": "PASS",
+      "research_workflow": "PASS",
+      "schema_migration": "PASS",
+      "model_policy": "PASS",
+      "provider_manifests": "PASS",
+      "sam2_live": "SKIPPED",
+      "external_annotation_imports": "PASS",
+      "camera_jpeg": "SKIPPED",
+      "confidence_review": "SKIPPED",
+      "project_persistence": "PASS",
+      "restart": "PASS",
+      "project_exchange": "PASS",
+      "lineage_preflight": "SKIPPED",
+      "lineage_initial_evidence": "SKIPPED",
+      "lineage_final_evidence": "SKIPPED",
+      "lineage_exchange_roundtrip": "SKIPPED",
+      "lineage_restore": "SKIPPED",
+      "historical_schema_rejection": "SKIPPED",
+      "historical_backup_reopen": "SKIPPED",
+      "upgrade": "SKIPPED",
+      "uninstall": "PASS",
+      "data_retention": "PASS"
+    }
+  },
+  "hosted_source_suites": {
+    "file": "source/hosted-source-suites.json",
+    "sha256": "5e29662cf4fb791116ef9373393a33461c003836753abad5d9e5eeb00407ee08",
+    "jobs": [
+      {
+        "id": 136603256330,
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44827326046/job/136603256330",
+        "summaries": [
+          "1366 files already formatted",
+          "Success: no issues found in 741 source files",
+          "5981 passed, 11 skipped, 2 warnings in 3011.60s"
+        ]
+      },
+      {
+        "id": 136603256630,
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44827326046/job/136603256630",
+        "summaries": [
+          "Test Files  140 passed (140)",
+          "Tests  920 passed (920)",
+          "15 passed (21.2s)"
+        ]
+      },
+      {
+        "id": 136603240824,
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44827326030/job/136603240824",
+        "summaries": [
+          "1366 files already formatted",
+          "Success: no issues found in 737 source files",
+          "5974 passed, 18 skipped, 2 warnings in 3120.94s",
+          "126 passed, 1 warning in 84.84s"
+        ]
+      },
+      {
+        "id": 136603241114,
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44827326030/job/136603241114",
+        "summaries": [
+          "1 passed, 1 warning in 36.44s"
+        ]
+      },
+      {
+        "id": 136603241180,
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44827326030/job/136603241180",
+        "summaries": [
+          "1 passed, 1 warning in 15.12s"
+        ]
+      },
+      {
+        "id": 136603241241,
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44827326030/job/136603241241",
+        "summaries": [
+          "Test Files  140 passed (140)",
+          "Tests  920 passed (920)",
+          "Test Files  1 passed (1)",
+          "Tests  1 passed (1)",
+          "15 passed (21.0s)"
+        ]
+      },
+      {
+        "id": 136603241459,
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44827326030/job/136603241459",
+        "summaries": [
+          "1 passed in 10.50s"
+        ]
       }
     ]
   }
