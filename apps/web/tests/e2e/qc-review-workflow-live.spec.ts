@@ -458,7 +458,7 @@ test("coordinates frozen QC review and reopens two saved workflow runs", async (
   }>(await inspecting, 200);
   expect(inspection.compatible).toBe(true);
   expect(inspection.format_version).toBe("1.6");
-  expect(inspection.section_counts.review_queue_item_events).toBe(4);
+  expect(inspection.section_counts.review_queue_item_events).toBe(5);
   expect(inspection.section_counts.review_queue_bulk_requests).toBe(1);
   expect(inspection.included_media_count).toBe(2);
   await expect(page.getByText("Format: 1.6", { exact: true })).toBeVisible();
@@ -490,6 +490,11 @@ test("coordinates frozen QC review and reopens two saved workflow runs", async (
   );
   const rankOneId =
     mapping[standaloneItems.find((item) => item.rank_position === 1)!.id];
+  const restoredRankOne = importedRanked.find((item) => item.id === rankOneId);
+  expect(restoredRankOne?.review_state).toBe("completed");
+  expect(
+    importedRanked.find((item) => item.rank_position === 2)?.review_state,
+  ).toBe("in_progress");
   const history = await checked<{
     current_assignee: string;
     items: { event_type: string; actor: string; comment: string | null }[];
@@ -504,6 +509,7 @@ test("coordinates frozen QC review and reopens two saved workflow runs", async (
     ["assign", reviewer],
     ["comment", reviewer],
     ["triage_start", reviewer],
+    ["triage_complete", reviewer],
   ]);
   expect(history.items[1].comment).toBe(note);
   for (const image of images) {
@@ -559,6 +565,9 @@ test("coordinates frozen QC review and reopens two saved workflow runs", async (
           manifest_sha256: inspection.manifest_sha256,
           imported_project_id: copy.project_id,
           imported_queue_id: importedQueueId,
+          audited_event_count:
+            inspection.section_counts.review_queue_item_events,
+          reopened_rank_one_review_state: restoredRankOne?.review_state,
           imported_workflow_run_id: restoredRun.runId,
           imported_workflow_payload_sha256: restoredRun.artifact.payload_sha256,
           item_events: inspection.section_counts.review_queue_item_events,
