@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T05:18:00Z`
+Updated: `2026-11-20T05:45:00Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -780,6 +780,7 @@ Evidence:
 - `browser`: From System status, create a managed backup, verify it, restore into a new folder, then read the independent SQLite copy and compare IDs, annotations, original bytes and inventory digests. The native fixture passed on the 78a02c20c shell with the production-script fixed 63fd94bfc sidecar. — `apps/web/tests/e2e/backup-restore-live.spec.ts` (`rv14-system-restore-ui`)
 - `windows_installed`: Exact-head source 36c80224a Windows acceptance passed a published 1.0.3 upgrade with schema migration, persistence, Project Exchange, uninstall, and data retention. This is partial evidence and does not substitute for representative 1.3 and legacy draft-1.4 profiles. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396` (`rv14-lineage-win-103`)
 - `windows_installed`: Exact-head source 36c80224a passed all three installed synthetic profiles. Verified 1.3 MSI upgrade, 0038 and 0039 profile migration, evidence preservation, exchange round trips, and backup restoration. The historical 1.3 build rejected the upgraded schema and the upgraded database hash remained unchanged. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396` (`rv14-lineage-win-synthetic`)
+- `windows_installed`: Installed candidate 72254d9a0 passed the published 1.0.3 upgrade, both historical numeric profile fixtures, and rollback using the genuine f44053a90 1.3 installer. The old reader preserved the upgraded database digest and reopened its separately restored pre-upgrade backup. The richer 1.3 fixture also showed that the packaged product Restore action still required the later resource-path fix. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44677664711` (`rv14-exact-87-installed`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -827,6 +828,7 @@ Evidence:
 - `source`: Synthetic registration tests validate rigid source-to-target transforms, residual and correspondence metadata, calibration/source/geometry bindings, review independence and chronology, uncertainty bounds, and stale-evidence rejection. — `apps/api/reefvision/tests/test_spatial_mesh_registration_geometry_binding_v14.py` (`rv14-registration-binding-source`)
 - `browser`: Save both dated surveys, their source hashes, measured registration residual, correspondence count and local review in a graph and export the resulting evidence on replay. — `apps/web/tests/e2e/spatial-guided-workflow-live.spec.ts` (`rv14-registration-project-replay`)
 - `browser`: Workflow Builder exposes frames, method, residual, correspondence count, evidence note, and accepted/rejected/disputed/unresolved review states with separate operator and reviewer attribution. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-registration-guided-ui`)
+- `browser`: Enter an exact 4 × 4 source-to-target matrix and three meter error bounds from the selected project mesh. A 90-degree rotation plus translation gave provisional centroid separation 0.266796843 m with caller bounds 0.166796843–0.366796843 m. An incomplete matrix blocked preview and a nonrigid matrix returned 422. Two saved runs matched the standalone artifact and Exchange preserved the original receipt. — `apps/web/tests/e2e/project-spatial-comparison-live.spec.ts` (`rv14-registration-project-rigid`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
