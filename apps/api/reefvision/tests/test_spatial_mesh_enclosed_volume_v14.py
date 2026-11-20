@@ -617,25 +617,39 @@ def test_source_volume_below_binary64_recovers_after_large_calibration(
     assert hashes[0] == hashes[1]
 
 
+@pytest.mark.parametrize(
+    ("offsets", "axis_signs"),
+    [
+        ((100_000_000.0,) * 3, (1, 1, 1)),
+        ((-100_000_000.0,) * 3, (-1, 1, 1)),
+        ((100_000_000.0, -100_000_000.0, 100_000_000.0), (-1, 1, -1)),
+    ],
+)
 @pytest.mark.parametrize("reverse_winding", [False, True])
 def test_large_source_translation_preserves_volume_and_saved_workflow(
-    client: TestClient, reverse_winding: bool
+    client: TestClient,
+    reverse_winding: bool,
+    offsets: tuple[float, float, float],
+    axis_signs: tuple[int, int, int],
 ) -> None:
-    """A large coordinate origin must not change a tetrahedron's provisional volume."""
-    offset = 100_000_000.0
-    vertices = [[offset + coordinate for coordinate in point] for point in TETRA_VERTICES]
+    """Signed source origins and axis reflections must not invent volume changes."""
+    vertices = [
+        [offsets[axis] + axis_signs[axis] * point[axis] for axis in range(3)]
+        for point in TETRA_VERTICES
+    ]
     faces = [list(reversed(face)) for face in TETRA_FACES] if reverse_winding else TETRA_FACES
-    signed = signed_enclosed_volume_mesh_units(
-        [tuple(vertex) for vertex in vertices], faces
-    )
-    assert signed == pytest.approx((-1 if reverse_winding else 1) / 6)
+    signed = signed_enclosed_volume_mesh_units([tuple(vertex) for vertex in vertices], faces)
+    handedness = axis_signs[0] * axis_signs[1] * axis_signs[2]
+    assert signed == pytest.approx(handedness * (-1 if reverse_winding else 1) / 6)
 
     parameters = _params(vertices=vertices, faces=faces)
     expected_volume_m3 = 0.01**3 / 6
     direct = measure_mesh_preview(**parameters)
     assert direct["enclosed_volume_m3"] == pytest.approx(expected_volume_m3)
-    assert direct["edge_connected_patch_enclosed_volumes_m3"] == pytest.approx(
-        [expected_volume_m3]
+    assert direct["edge_connected_patch_enclosed_volumes_m3"] == pytest.approx([expected_volume_m3])
+    assert direct["axis_aligned_dimensions_m"] == pytest.approx([0.01, 0.01, 0.01])
+    assert direct["enclosed_volume_scale_interval_m3"] == pytest.approx(
+        [expected_volume_m3 * 0.9**3, expected_volume_m3 * 1.1**3]
     )
 
     parameters["specimen_id"] = "synthetic-translated-unverified"
@@ -645,6 +659,10 @@ def test_large_source_translation_preserves_volume_and_saved_workflow(
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["enclosed_volume_m3"] == pytest.approx(expected_volume_m3)
+    assert payload["axis_aligned_dimensions_m"] == pytest.approx([0.01, 0.01, 0.01])
+    assert payload["enclosed_volume_scale_interval_m3"] == pytest.approx(
+        [expected_volume_m3 * 0.9**3, expected_volume_m3 * 1.1**3]
+    )
     assert "enclosed_volume_zero_or_underflow" not in payload["qc_warnings"]
     assert payload["measurement_status"] == "caller_supplied_unverified"
     assert payload["provenance"]["calibration_verified"] is False
