@@ -660,6 +660,7 @@ def test_pose_materialization_preserves_prior_scientific_data(
     assert not (destination / "data.yaml").exists()
     assert not (destination / "images").exists()
 
+
 def test_pose_materialization_rejects_failed_final_holdout_cleanup(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
