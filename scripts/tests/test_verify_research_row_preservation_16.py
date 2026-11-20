@@ -1286,7 +1286,7 @@ def test_protected_scientific_and_reviewer_triggers_survive_upgrade(
                 )
     baseline_bytes, candidate_bytes = before.read_bytes(), after.read_bytes()
     code, report = _run(before, after)
-    valid = mode in {"same", "formatted", "additional_guard"}
+    valid = mode in {"same", "formatted"}
     assert code == (0 if valid else 2)
     assert report["status"] == ("PASS_PRESERVATION_ONLY" if valid else "HOLD")
     assert next(entry["status"] for entry in report["tables"] if entry["table"] == table) == (

@@ -311,3 +311,25 @@ This optional offline migration preflight is not a scientific analysis node;
 existing saved executable typed Workflow Builder QC, units, retries,
 provenance and mandatory researcher review are unchanged. The independent
 1.1/1.6 Alembic-0038 conflict and explicit release approval remain HOLD.
+
+## 2026-11-20 — New SQLite triggers on protected research/QC tables require review (Track D)
+
+The offline 1.1/1.6 migration-copy verifier previously required only that
+*existing* triggers survived. A candidate upgrade could add an AFTER INSERT
+trigger on a preexisting scientific or reviewer table that doubles future
+measurements or changes review evidence, and still return a preservation-only
+PASS when historical rows match. Added triggers now cause
+`changed_trigger_contract` and HOLD; the comparison preserves normal SQL
+whitespace/case normalization, permits additions to entirely new tables, and
+does not expose source trigger SQL or biological identifiers.
+
+Regression coverage includes two protected tables, a disposable independent
+SQLite future-write oracle, read-only byte preservation, private-data
+redaction, existing benign new-trigger expectations, and an unrelated
+new-table trigger control. This is a **preservation-only** preflight, never
+automatic migration approval. Repository CI, 1.1/1.6 revision-0038
+reconciliation, real MSI/CAB installed-Windows GUI/upgrade/rollback, saved
+scientific workflow acceptance and explicit researcher approval remain HOLD.
+No Workflow Builder operation was added: the verifier is an out-of-band
+offline migration diagnostic, and existing executable typed QC graphs,
+provenance, retries and researcher-review gates were not changed.
