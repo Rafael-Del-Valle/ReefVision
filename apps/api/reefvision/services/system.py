@@ -12,7 +12,6 @@ from pathlib import Path
 from uuid import uuid4
 
 from alembic.config import Config
-from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from alembic.util import CommandError
 from sqlalchemy import Engine
@@ -21,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from reefvision import __version__
 from reefvision.config import Settings
+from reefvision.db.legacy_sqlite_lineage import read_migration_heads
 from reefvision.db.migration_lineage import resolve_legacy_revision
 from reefvision.db.models import Job
 from reefvision.desktop import resolve_alembic_paths
@@ -55,6 +55,7 @@ class MigrationSnapshot:
     current_schema_revision: str | None
     expected_schema_revision: str | None
     pending_revisions: list[str]
+    blocking_detail: str | None = None
 
 
 class SystemService:
@@ -112,7 +113,8 @@ class SystemService:
             warnings.append("The database has not been initialized with an Alembic revision yet.")
         if snapshot.schema_status == "database_newer_than_code":
             blocking_issues.append(
-                "The database revision is not recognized by this ReefVision build."
+                snapshot.blocking_detail
+                or "The database revision is not recognized by this ReefVision build."
             )
 
         disk_free_bytes: int | None = None
@@ -333,11 +335,14 @@ class SystemService:
         )
         database_path = self._database_path()
         database_exists = bool(database_path and database_path.is_file())
+        current_heads: tuple[str, ...] = ()
+        blocking_detail = None
         with self.engine.connect() as connection:
-            current_heads = MigrationContext.configure(connection).get_current_heads()
             try:
+                current_heads = read_migration_heads(connection)
                 alias = resolve_legacy_revision(connection, current_heads)
-            except CommandError:
+            except CommandError as exc:
+                blocking_detail = str(exc)
                 recognized = False
                 applied = set()
             else:
@@ -374,9 +379,12 @@ class SystemService:
             current_schema_revision=current_revision,
             expected_schema_revision=head_revision,
             pending_revisions=pending,
+            blocking_detail=blocking_detail,
         )
 
     def _compatibility_details(self, snapshot: MigrationSnapshot) -> list[str]:
+        if snapshot.blocking_detail:
+            return [snapshot.blocking_detail]
         if snapshot.schema_status == "up_to_date":
             return ["The database schema matches the current ReefVision code."]
         if snapshot.schema_status == "uninitialized":

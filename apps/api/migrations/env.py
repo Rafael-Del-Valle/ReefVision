@@ -9,6 +9,7 @@ from sqlalchemy import engine_from_config, pool, text
 from reefvision.config import get_settings
 from reefvision.db import models as _models  # noqa: F401
 from reefvision.db.base import Base
+from reefvision.db.legacy_sqlite_lineage import read_migration_heads
 from reefvision.db.migration_lineage import LEGACY_NUMERIC_REVISIONS, resolve_legacy_revision
 
 config = context.config
@@ -61,7 +62,7 @@ def run_migrations_online() -> None:
             # the first write outside the transaction. Lock before inspection.
             if connection.dialect.name == "sqlite":
                 connection.exec_driver_sql("BEGIN IMMEDIATE")
-            heads = migration_context.get_current_heads()
+            heads = read_migration_heads(connection)
             replacement = resolve_legacy_revision(connection, heads)
             if replacement is not None:
                 connection.execute(
