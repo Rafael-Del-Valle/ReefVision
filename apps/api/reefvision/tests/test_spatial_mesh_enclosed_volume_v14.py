@@ -735,10 +735,11 @@ def test_large_source_translation_preserves_volume_and_saved_workflow(
 
 
 @pytest.mark.parametrize("reverse_winding", [False, True])
+@pytest.mark.parametrize("reference_frame", ["original", "shifted_reflected"])
 def test_concave_prism_volume_surface_and_saved_workflow(
-    client: TestClient, reverse_winding: bool
+    client: TestClient, reverse_winding: bool, reference_frame: str
 ) -> None:
-    """A deeply concave closed surface must preserve exact analytic volume."""
+    """An analytic concave closed mesh must retain scale and frame parity."""
     # This extreme U-shaped synthetic prism is a numerical cancellation
     # fixture, NOT a real coral, validated reconstruction or field scale.
     length = 100_000_000.0
@@ -755,6 +756,13 @@ def test_concave_prism_volume_surface_and_saved_workflow(
         (0.0, length),
     ]
     vertices = [[x, y, z] for z in (0.0, height) for x, y in outline]
+    if reference_frame == "shifted_reflected":
+        # Preserve geometry but reverse frame handedness and translate every axis.
+        # An origin-dependent tetrahedral sum must not distort an enclosed mesh.
+        vertices = [
+            [length - point[0], point[1] - length, point[2] + length]
+            for point in vertices
+        ]
     # Six top triangles tessellate only the U, not its empty central notch.
     top_triangles = [
         (7, 0, 5),
@@ -788,19 +796,22 @@ def test_concave_prism_volume_surface_and_saved_workflow(
     expected_source_volume = analytic_section_area * height
     expected_source_area = 2 * analytic_section_area + analytic_perimeter * height
     signed = signed_enclosed_volume_mesh_units([tuple(point) for point in vertices], faces)
-    assert signed == pytest.approx(
-        -expected_source_volume if reverse_winding else expected_source_volume,
-        rel=1e-12,
-        abs=0,
+    orientation = (-1 if reverse_winding else 1) * (
+        -1 if reference_frame == "shifted_reflected" else 1
     )
+    assert signed == pytest.approx(orientation * expected_source_volume, rel=1e-12, abs=0)
     parameters = _params(vertices=vertices, faces=faces)
     direct = measure_mesh_preview(**parameters)
     expected_volume_m3 = expected_source_volume * 0.01**3
     expected_area_m2 = expected_source_area * 0.01**2
-    assert direct["enclosed_volume_m3"] == pytest.approx(
-        expected_volume_m3, rel=1e-12, abs=0
-    )
+    assert direct["enclosed_volume_m3"] == pytest.approx(expected_volume_m3, rel=1e-12, abs=0)
     assert direct["surface_area_m2"] == pytest.approx(expected_area_m2, rel=1e-12)
+    assert direct["surface_area_scale_interval_m2"] == pytest.approx(
+        [expected_area_m2 * 0.9**2, expected_area_m2 * 1.1**2]
+    )
+    assert direct["axis_aligned_dimensions_m"] == pytest.approx(
+        [length * 0.01, length * 0.01, height * 0.01]
+    )
     assert direct["edge_connected_patch_count"] == 1
     assert direct["enclosed_volume_scale_interval_m3"] == pytest.approx(
         [expected_volume_m3 * 0.9**3, expected_volume_m3 * 1.1**3]
@@ -813,15 +824,19 @@ def test_concave_prism_volume_surface_and_saved_workflow(
     standalone = client.post(f"{base}/spatial/mesh-preview", json=request)
     assert standalone.status_code == 200, standalone.text
     payload = standalone.json()
-    assert payload["enclosed_volume_m3"] == pytest.approx(
-        expected_volume_m3, rel=1e-12, abs=0
-    )
+    assert payload["enclosed_volume_m3"] == pytest.approx(expected_volume_m3, rel=1e-12, abs=0)
     assert payload["surface_area_m2"] == pytest.approx(expected_area_m2, rel=1e-12)
+    assert payload["surface_area_scale_interval_m2"] == pytest.approx(
+        [expected_area_m2 * 0.9**2, expected_area_m2 * 1.1**2]
+    )
+    assert payload["axis_aligned_dimensions_m"] == pytest.approx(
+        [length * 0.01, length * 0.01, height * 0.01]
+    )
     assert payload["provenance"]["calibration_verified"] is False
     assert payload["provenance"]["specimen_identity_verified"] is False
 
     graph = {
-        "graph_id": "mesh-concave-analytic-volume-v14",
+        "graph_id": f"mesh-concave-analytic-volume-{reference_frame}-{reverse_winding}-v14",
         "name": "Provisional concave mesh analytic reference",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
