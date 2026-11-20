@@ -224,6 +224,9 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                         errors.append(f"Section JSON is invalid: {name} line {line_number}")
                         break
             if not errors:
+                from reefvision.services.project_exchange_paired_growth import (
+                    validate_paired_growth_exchange,
+                )
                 from reefvision.services.project_exchange_spatial import (
                     validate_spatial_exchange_records,
                 )
@@ -235,6 +238,9 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                 else:
                     try:
                         validate_spatial_exchange_records(project_id, section_rows)
+                        validate_paired_growth_exchange(
+                            project_id, section_rows, manifest.get("origin")
+                        )
                         if version == "1.0" and manifest.get("origin") is not None:
                             from reefvision.services.project_exchange_integrated import (
                                 validate_origin,
