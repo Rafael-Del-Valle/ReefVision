@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
 from typing import Any
 
@@ -54,6 +55,16 @@ def _reject_symlinked_training_path(settings: Settings, relative_path: str) -> N
         current = current / component
         if current.is_symlink():
             raise ValidationError("Pose training artifact path contains a symbolic link")
+        if sys.platform == "win32":
+            # Windows NTFS directory junctions can redirect registered seed
+            # models and recovered checkpoints without being symbolic links.
+            # Check the original path before Path.resolve() hides the reparse point.
+            try:
+                attributes = getattr(current.lstat(), "st_file_attributes", 0)
+            except (FileNotFoundError, NotADirectoryError):
+                attributes = 0
+            if attributes & 0x400:
+                raise ValidationError("Pose training artifact path contains a Windows junction")
 
 
 PoseTrainingProcessor = Callable[
