@@ -14,6 +14,7 @@ param(
     [switch]$ResearchWorkflowAcceptance,
     [switch]$WorkspaceWorkflowAcceptance,
     [switch]$ScheduleWorkflowAcceptance,
+    [switch]$MonitoringWorkflowAcceptance,
     [switch]$HostedStandardUserWebView2,
     [switch]$VerifyPreviousInstallerRejectsUpgradedProfile,
     [switch]$PreviousInstallerSupportsIsolatedAcceptance,
@@ -33,6 +34,7 @@ $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'lib\windows-research-webview2-acceptance.ps1')
 . (Join-Path $PSScriptRoot 'lib\windows-standard-user-webview2.ps1')
 . (Join-Path $PSScriptRoot 'lib\windows-scheduler-webview2-acceptance.ps1')
+. (Join-Path $PSScriptRoot 'lib\windows-monitoring-webview2-acceptance.ps1')
 
 if (-not $DisposableTest -and -not $PlanOnly) {
     throw 'Refusing destructive MSI acceptance. Supply -DisposableTest on a disposable Windows VM/machine, or use -PlanOnly.'
@@ -50,6 +52,10 @@ if ($WorkspaceWorkflowAcceptance -and (-not $SpatialWorkflowNodePath -or -not $S
 if ($ScheduleWorkflowAcceptance -and (-not $HostedStandardUserWebView2 -or -not $SkipUpgrade -or
     -not $ExpectedVersion -or -not $ExpectedSchemaRevision)) {
     throw 'Installed schedule restart acceptance requires a fresh hosted standard-user install with an expected version and schema.'
+}
+if ($MonitoringWorkflowAcceptance -and (-not $HostedStandardUserWebView2 -or -not $SkipUpgrade -or
+    -not $ExpectedVersion -or -not $ExpectedSchemaRevision)) {
+    throw 'Installed acquisition and monitoring acceptance requires a fresh hosted standard-user install with an expected version and schema.'
 }
 if ($HostedStandardUserWebView2) {
     if (-not $DisposableTest -or -not $SpatialWorkflowNodePath) {
@@ -165,6 +171,7 @@ $report = [ordered]@{
     first_use_workflow = if ($FirstUseAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Installed first-use acceptance not requested' }
     workspace_workflow = if ($WorkspaceWorkflowAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Installed workspace acceptance not requested' }
     schedule_workflow = if ($ScheduleWorkflowAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Installed scheduler restart acceptance not requested' }
+    monitoring_workflow = if ($MonitoringWorkflowAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Installed acquisition and monitoring acceptance not requested' }
     spatial_workflow = if ($SpatialWorkflowNodePath) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Packaged spatial WebView2 acceptance not requested' }
     research_workflow = if ($ResearchWorkflowAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Packaged research WebView2 acceptance not requested' }
     schema_migration = New-ReefVisionEvidenceResult
@@ -683,6 +690,20 @@ try {
                         $report.workspace_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $_.Exception.Message
                     }
                 }
+                if ($MonitoringWorkflowAcceptance) {
+                    try {
+                        $monitoring = Invoke-ReefVisionInstalledMonitoringAcceptance -NodePath $SpatialWorkflowNodePath `
+                            -RepositoryRoot $RepositoryRoot -EvidenceRoot $EvidenceRoot -Profile $SpatialDataRoot `
+                            -BackendPort $spatialPort -DebugPort $debugPort -DesktopProcessId $spatialDesktop.Id `
+                            -BrowserSid $browserSid -BrowserArtifactsDirectory $browserArtifacts `
+                            -BackendExecutable (Join-Path $InstallRoot 'backend\reefvision-api\reefvision-api.exe') `
+                            -Version $ProductVersion -Revision $ExpectedSchemaRevision
+                        $monitoring | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'monitoring-workflow-evidence.json')
+                        $report.monitoring_workflow = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Two installed WebView2 journeys verified recorded recovery, scheduled simulation, alert review, project-local comparison, export and saved workflow replays.'
+                    } catch {
+                        $report.monitoring_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $_.Exception.Message
+                    }
+                }
                 $spatialResult
             } finally {
                 try {
@@ -713,6 +734,9 @@ try {
         }
         if ($WorkspaceWorkflowAcceptance -and $report.workspace_workflow.status -eq 'NOT RUN') {
             $report.workspace_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $report.spatial_workflow.detail
+        }
+        if ($MonitoringWorkflowAcceptance -and $report.monitoring_workflow.status -eq 'NOT RUN') {
+            $report.monitoring_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $report.spatial_workflow.detail
         }
         Save-Report
     }
@@ -1210,6 +1234,9 @@ try {
     }
     if ($report.schedule_workflow.status -eq 'FAIL') {
         throw $report.schedule_workflow.detail
+    }
+    if ($report.monitoring_workflow.status -eq 'FAIL') {
+        throw $report.monitoring_workflow.detail
     }
     if ($report.research_workflow.status -eq 'FAIL') {
         throw $report.research_workflow.detail
