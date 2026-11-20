@@ -20,7 +20,7 @@ from reefvision.schemas.reproducibility_v15 import (
     ReproducibilityQueued,
     ReproducibilitySelection,
 )
-from reefvision.services.paired_models_v15 import read_report
+from reefvision.services.paired_models_v15 import require_verified_report
 from reefvision.services.reproducibility_lineage_v15 import PACKAGE_OPTION
 from reefvision.services.reviewer_lab_v15 import ReviewerLabService
 from reefvision.services.study_design import StudyDesignService
@@ -88,7 +88,7 @@ class ReproducibilityService:
 
         StudyDesignService(self.session).get(project_id, str(request.study_design_id))
         ReviewerLabService(self.session, project_id).report(str(request.reviewer_report_id))
-        read_report(self.session, project_id, str(request.comparison_id))
+        require_verified_report(self.session, self.settings, project_id, str(request.comparison_id))
         selection = request.model_dump(
             mode="json",
             exclude={"include_media", "include_model_weights"},

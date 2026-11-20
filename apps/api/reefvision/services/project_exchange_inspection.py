@@ -9,7 +9,7 @@ from collections import Counter
 from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any, BinaryIO
 
-from reefvision.domain.errors import ValidationError
+from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.domain.reproducibility_v15 import validate_native_proofs
 from reefvision.schemas.project_exchange import (
     ProjectExchangeInspectionResponse,
@@ -145,7 +145,9 @@ def _integrated_media_gaps(
     ]
 
 
-def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionResponse:
+def inspect_project_exchange(
+    source: BinaryIO, *, verified_paired_comparison_ids: set[str] | None = None
+) -> ProjectExchangeInspectionResponse:
     warnings: list[str] = []
     errors: list[str] = []
     section_counts: dict[str, int] = {}
@@ -253,7 +255,6 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                             version, project_id, section_rows, manifest.get("origin")
                         )
                         validate_spatial_exchange_records(project_id, section_rows)
-                        validate_native_proofs(section_rows, manifest)
                         validate_paired_growth_exchange(
                             project_id, section_rows, manifest.get("origin")
                         )
@@ -420,6 +421,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                     path.split("/", 1)[0] in {"exchanges", "exchange-import"} for path in paths
                 ):
                     raise ValidationError("Exchange generated file destinations overlap")
+            verified_comparisons: frozenset[str] = frozenset()
             if not errors and source_project_rows:
                 from reefvision.services.project_exchange_paired_models_v15 import (
                     validate_paired_models_exchange,
@@ -432,7 +434,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
 
                 def read_raster(path: str) -> bytes:
                     if not path.startswith(prefix) or path[len(prefix) :] not in raster_members:
-                        raise ValidationError("A required paired comparison raster is missing")
+                        raise NotFoundError("A required paired comparison raster is missing")
                     member = raster_members[path[len(prefix) :]]
                     with archive.open(member) as stream:
                         data = stream.read(MAX_MASK_PNG_BYTES + 1)
@@ -440,12 +442,20 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                         raise ValidationError("Paired raster is too large")
                     return data
 
-                validate_paired_models_exchange(
+                verified_comparisons = validate_paired_models_exchange(
                     source_record["id"],
                     section_rows,
                     (manifest.get("origin") or {}).get("id_map", {}),
                     read_raster=read_raster,
                 )
+            if not errors:
+                validate_native_proofs(
+                    section_rows,
+                    manifest,
+                    verified_paired_comparison_ids=verified_comparisons,
+                )
+                if verified_paired_comparison_ids is not None:
+                    verified_paired_comparison_ids.update(verified_comparisons)
     except (zipfile.BadZipFile, OSError, ValueError, TypeError, KeyError, ValidationError) as exc:
         errors.append(f"Archive could not be inspected: {exc}")
 
