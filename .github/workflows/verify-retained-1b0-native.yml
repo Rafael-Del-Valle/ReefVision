@@ -1,0 +1,82 @@
+name: Verify retained 1.4 MSI through all ten native journeys
+on:
+  push:
+    branches: [codex/reefvision-webview2-host-probe-1b0]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  installed-standard-user:
+    runs-on: windows-2022
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve the exact 1b0 MSI and every external cabinet
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ReefVision-1.4.0-RC-Installer-Part-*
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          run-id: 44687304789
+          path: ${{ runner.temp }}/retained-1b0-installer
+      - name: Verify retained MSI, cabinet checksums and source provenance
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'retained-1b0-installer'
+          $provenance = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $installer -Version '1.4.0' -ExpectedFilename 'ReefVision_1.4.0_x64_en-US.msi' -SourceCommit '1b0f29cff52f3f180073a5637119437be2ab58c2' -RequireProvenance
+          New-Item -ItemType Directory .artifacts/retained-native-provenance -Force | Out-Null
+          [ordered]@{
+            payload_source='1b0f29cff52f3f180073a5637119437be2ab58c2'
+            harness_source='e5c4106ba6d67aad0d0bdc0b1d3f20bcd2d898e9'
+            diagnostic_source=(git rev-parse HEAD)
+            source_run=44687304789
+            payload=$provenance
+          } | ConvertTo-Json -Depth 10 | Set-Content .artifacts/retained-native-provenance/payload.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install the Playwright driver
+        working-directory: apps/web
+        run: npm ci --no-audit --no-fund
+      - name: Exercise the installed product under the standard Windows user
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'retained-1b0-installer/ReefVision_1.4.0_x64_en-US.msi'
+          $node=(Get-Command node.exe -ErrorAction Stop).Source
+          $env:PATH = @(
+              (Join-Path $env:SystemRoot 'System32'),
+              $env:SystemRoot,
+              (Join-Path $env:SystemRoot 'System32\Wbem'),
+              (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0'),
+              (Join-Path $env:ProgramFiles 'PowerShell\7')
+          ) -join ';'
+          foreach ($command in @('python', 'python3', 'node', 'npm', 'rustc', 'cargo')) {
+              if (Get-Command $command -ErrorAction SilentlyContinue) { throw "Unexpected developer runtime on isolated PATH: $command" }
+          }
+          $parameters = @{
+              InstallerPath=$installer
+              ExpectedVersion='1.4.0'
+              ExpectedSchemaRevision='b14_condition_0041'
+              AcceptanceRoot='C:\reefvision-1-4-0-retained-1b0-acceptance'
+              SpatialWorkflowNodePath=$node
+              HostedStandardUserWebView2=$true
+              SkipUpgrade=$true
+              DisposableTest=$true
+              KeepArtifacts=$true
+          }
+          ./scripts/acceptance-windows-clean-install.ps1 @parameters
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ReefVision-1b0-Hosted-Ten-Journey-Evidence
+          path: |
+            .artifacts/retained-native-provenance/payload.json
+            .artifacts/windows-clean-acceptance-*/report.json
+            .artifacts/windows-clean-acceptance-*/*.log
+            .artifacts/windows-clean-acceptance-*/spatial-playwright.json
+            .artifacts/windows-clean-acceptance-*/spatial-playwright/**/*.json
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 14
