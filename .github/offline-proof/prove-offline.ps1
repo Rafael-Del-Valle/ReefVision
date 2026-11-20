@@ -117,19 +117,22 @@ $task = "ReefVisionOfflineRestore-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
 $taskRegistered = $false
 $armed = Join-Path $Root 'network-armed'
 $systemProbeTask = "$task-TcpProbe"
+$systemReconnectTask = "$task-ReconnectProbe"
 $systemProbeRegistered = $false
+$systemReconnectRegistered = $false
 $ordinaryProbe = $null
+$ordinaryReconnect = $null
 $account = $null
 $debugPort = 0
 $oldPath = $env:PATH
 
-function Wait-TcpControls([bool]$ExpectedOnline) {
-    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(14)
+function Wait-TcpControls([bool]$ExpectedOnline, [string]$ProbeFile='tcp.jsonl', [int]$Timeout=14) {
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds($Timeout)
     $started = [DateTimeOffset]::UtcNow
     do {
         $last = [ordered]@{}
         foreach ($role in 'ordinary','system') {
-            $probeLog = Join-Path $Root "probe-$role/tcp.jsonl"
+            $probeLog = Join-Path $Root "probe-$role/$ProbeFile"
             if (-not (Test-Path -LiteralPath $probeLog -PathType Leaf)) { continue }
             $sample = Get-Content -LiteralPath $probeLog -Tail 1 | ConvertFrom-Json -ErrorAction SilentlyContinue
             if ($sample -and [DateTimeOffset]$sample.utc -ge $started -and
@@ -141,7 +144,7 @@ function Wait-TcpControls([bool]$ExpectedOnline) {
         if ($last.Count -eq 2) { return $last }
         Start-Sleep -Milliseconds 250
     } while ([DateTimeOffset]::UtcNow -lt $deadline)
-    throw "The real ordinary-account and SYSTEM TCP control did not establish expected online=$ExpectedOnline."
+    throw "The real ordinary-account and SYSTEM TCP control did not establish expected online=$ExpectedOnline in $ProbeFile."
 }
 
 function Assert-OfflinePhase([string]$Phase) {
@@ -310,6 +313,7 @@ try {
     throw
 } finally {
     try {
+        $reconnectFailure = $null
         if ($taskRegistered -and (Test-Path -LiteralPath $armed)) {
             Start-ScheduledTask -TaskName $task
             $onlineBy = [DateTimeOffset]::UtcNow.AddSeconds(40)
@@ -324,12 +328,36 @@ try {
             if (-not $record.cleanup.network_restored) { throw 'The planned watchdog remains registered because the online control has not recovered.' }
             $hosts = Join-Path $env:SystemRoot 'System32/drivers/etc/hosts'
             if ((Get-FileHash -LiteralPath $hosts).Hash -cne $record.original_policy.hosts_sha256) { throw 'Original Windows hosts bytes were not restored.' }
-            $record.cleanup.controls = Wait-TcpControls $true
+            try {
+                $oldSystemTask = Get-ScheduledTask -TaskName $systemProbeTask
+                $oldSystemInfo = Get-ScheduledTaskInfo -TaskName $systemProbeTask
+                $record.cleanup.measurement_system_task = [ordered]@{
+                    state=[string]$oldSystemTask.State; last_result=$oldSystemInfo.LastTaskResult
+                }
+                # Preserve the measurement logs and require separate real TCP observations
+                # from the same two Windows principals after policy restoration.
+                $systemReconnectAction = New-ScheduledTaskAction -Execute $action.Execute -Argument "$probeArgs system -Phase reconnect"
+                Register-ScheduledTask -TaskName $systemReconnectTask -Action $systemReconnectAction `
+                    -Principal $principal -Settings $probeSettings | Out-Null
+                $systemReconnectRegistered = $true
+                Start-ScheduledTask -TaskName $systemReconnectTask
+                $ordinaryReconnect = Start-Process -FilePath $action.Execute -ArgumentList "$probeArgs ordinary -Phase reconnect" `
+                    -Credential $account.credential -LoadUserProfile -UseNewEnvironment -PassThru -WindowStyle Hidden
+                $record.cleanup.controls = Wait-TcpControls $true -ProbeFile 'reconnect-tcp.jsonl' -Timeout 25
+                if ($record.cleanup.controls.ordinary.sid -cne $record.before.controls.ordinary.sid -or
+                    $record.cleanup.controls.system.sid -cne $record.before.controls.system.sid -or
+                    $record.cleanup.controls.ordinary.pid -eq $record.before.controls.ordinary.pid -or
+                    $record.cleanup.controls.system.pid -eq $record.before.controls.system.pid) {
+                    throw 'Reconnect probes must run in new processes under the original proof principals.'
+                }
+            } catch { $reconnectFailure = $_.Exception.Message }
         }
         if ($taskRegistered) { Unregister-ScheduledTask -TaskName $task -Confirm:$false }
         Set-Content -LiteralPath (Join-Path $Root 'stop-probes') -Value $token
         if ($ordinaryProbe -and -not $ordinaryProbe.WaitForExit(8000)) { $ordinaryProbe.Kill(); $null=$ordinaryProbe.WaitForExit(8000) }
+        if ($ordinaryReconnect -and -not $ordinaryReconnect.WaitForExit(8000)) { $ordinaryReconnect.Kill(); $null=$ordinaryReconnect.WaitForExit(8000) }
         if ($systemProbeRegistered) { Stop-ScheduledTask -TaskName $systemProbeTask; Unregister-ScheduledTask -TaskName $systemProbeTask -Confirm:$false }
+        if ($systemReconnectRegistered) { Stop-ScheduledTask -TaskName $systemReconnectTask; Unregister-ScheduledTask -TaskName $systemReconnectTask -Confirm:$false }
         if ($account) { Remove-ReefVisionHostedGuiAccount -Account $account -EvidenceRoot $evidence }
         if ($debugPort) { Wait-ReefVisionWebView2DebugClosure -Port $debugPort }
         if (@(Get-ReefVisionInstalledRegistrations | Where-Object PSChildName -eq $product).Count) {
@@ -338,6 +366,7 @@ try {
             if ($uninstall.ExitCode -ne 0 -or @(Get-ReefVisionInstalledRegistrations).Count) { throw 'Could not remove the disposable registered installation after reconnection.' }
             $record.cleanup.uninstall_exit_code = $uninstall.ExitCode
         }
+        if ($reconnectFailure) { throw $reconnectFailure }
         if ($record.status -eq 'OFFLINE_OPERATIONS_PASSED') { $record.status = 'PASS' }
     } catch {
         $record.status = 'FAIL'
@@ -348,6 +377,10 @@ try {
         foreach ($role in 'ordinary','system') {
             $log = Join-Path $Root "probe-$role/tcp.jsonl"
             if (Test-Path -LiteralPath $log -PathType Leaf) { Copy-Item -LiteralPath $log -Destination (Join-Path $evidence "$role-tcp-control.jsonl") }
+            $reconnectLog = Join-Path $Root "probe-$role/reconnect-tcp.jsonl"
+            if (Test-Path -LiteralPath $reconnectLog -PathType Leaf) {
+                Copy-Item -LiteralPath $reconnectLog -Destination (Join-Path $evidence "$role-reconnect-tcp-control.jsonl")
+            }
         }
         Write-ReefVisionEvidenceReport -Report $record -Path $report
     }

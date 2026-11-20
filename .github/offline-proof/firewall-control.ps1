@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory)][string]$Plan,
-    [Parameter(Mandatory)][ValidateSet('system','ordinary')][string]$Role
+    [Parameter(Mandatory)][ValidateSet('system','ordinary')][string]$Role,
+    [ValidateSet('measurement','reconnect')][string]$Phase = 'measurement'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -12,7 +13,8 @@ $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 if (($Role -eq 'system' -and $sid -cne 'S-1-5-18') -or ($Role -eq 'ordinary' -and $sid -cne $config.ordinary_sid)) {
     throw 'Firewall control is running as an unexpected Windows principal.'
 }
-$destination = Join-Path $root "probe-$Role/tcp.jsonl"
+$leaf = if ($Phase -eq 'reconnect') { 'reconnect-tcp.jsonl' } else { 'tcp.jsonl' }
+$destination = Join-Path $root "probe-$Role/$leaf"
 $clock = [Diagnostics.Stopwatch]::StartNew()
 $previousSampleEnd = $null
 while (-not (Test-Path -LiteralPath (Join-Path $root 'stop-probes')) -and
