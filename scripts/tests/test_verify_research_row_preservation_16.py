@@ -1949,6 +1949,8 @@ def test_pose_and_behavior_lineage_structure_or_addition(
     assert report["upgrade_authorized"] is False
     assert before.read_bytes() == original_bytes
     assert after.read_bytes() == candidate_bytes
+
+
 @pytest.mark.parametrize("aliased_copy", ["baseline", "candidate"])
 def test_database_copy_rejects_symlinked_parent_before_resolve(
     tmp_path: Path, aliased_copy: str

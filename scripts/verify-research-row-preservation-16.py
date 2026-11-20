@@ -766,7 +766,6 @@ def _assert_asset_root_ancestry(root: Path) -> None:
             raise ValueError("asset_symlink_not_allowed")
 
 
-
 def _assert_database_copy_isolated(path: Path) -> None:
     """Require a genuine standalone offline SQLite copy, not an external alias.
 
