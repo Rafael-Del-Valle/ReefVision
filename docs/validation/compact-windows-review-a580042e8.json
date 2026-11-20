@@ -217,6 +217,28 @@
       "system_denied_observations": 149,
       "firewall_policy_changes": 0,
       "verified_receipt_sha256": "7d75a8e2e4a38a1b660f05e851c335851f70175d94e56e5f6f13b49d101025d0"
+    },
+    "onboarding": {
+      "source": "83b0a98b278b98e779842538f811b2c6f5b6b4c8",
+      "msi_sha256": "595323074d044a8a2c7b62cc2760aa46ad796f205b5d3b4c7b2062cf960c530e",
+      "clean_job": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44768324452/job/136420579045",
+      "native_first_use": {
+        "source_sha256": "11da437ad33072b11627e77994f869a1f92c4c0b94e0b64f920567853ff0674b",
+        "review": "reviewed",
+        "export_sha256": "1c5a1488b44344b250f9ff2854b7c13b765fbdf12e87ddac1175c96e082f2832",
+        "viewport_css_px": [
+          960,
+          640
+        ],
+        "emulated_scale": 1.5,
+        "keyboard_handoff": true,
+        "welcome_dismissal_persisted": true,
+        "reopened_image_sha256": "11da437ad33072b11627e77994f869a1f92c4c0b94e0b64f920567853ff0674b"
+      },
+      "offline_install_reopen_uninstall": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44778755971",
+      "previous_msi_upgrade_and_recovery": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44777874134/job/136432429548",
+      "pre_upgrade_restore": "Historical 1.5.0 reopened a separate b15_integrated_0002 recovery of 10 verified files; project, original SHA-256 431ced6916a2a21a156e38701afe55bbd7f88969fbbfc56d7fe099d47f265460 and annotation coordinates matched. Backup manifest SHA-256 c0ec402bf1ca69ea54458e2e091cb21be9cbe83cf9b2ff58d72a581356ef3261.",
+      "separate_open_qc_workflow": "The ranked control was obstructed on this original package. The corrected package has its own installed acceptance run."
     }
   },
   "reproduce": {

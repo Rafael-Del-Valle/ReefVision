@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T17:18:31Z`
+Updated: `2026-11-20T17:37:55Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -11,8 +11,8 @@ Candidate target: `2.0`
 | --- | ---: |
 | blocked | 17 |
 | explicitly_deferred | 4 |
-| in_progress | 23 |
-| verified | 33 |
+| in_progress | 22 |
+| verified | 34 |
 
 ## Features
 
@@ -67,7 +67,7 @@ Candidate target: `2.0`
 | 1.6 | Safe class management after use | verified | Annotate → Classes |
 | 1.6 | Class visibility, dense annotation editing, and large-gallery performance | verified | Annotate → View controls and gallery |
 | 1.6 | Independent migration-lineage 0038 reconciliation | verified | Applied migration IDs are never edited. |
-| 1.6 | First-run onboarding and Windows usability acceptance | in_progress | Installed first launch → Create or open project |
+| 1.6 | First-run onboarding and Windows usability acceptance | verified | Installed first launch → Create or open project |
 | 1.6 | Prioritized QC queues, reviewer assignment, bulk actions, and idempotent retry | in_progress | Review → QC queues |
 | 1.7 | Local cross-project monitoring summaries | in_progress | Research → Monitoring → Project summaries |
 | 1.7 | Recorded, simulated, and physical acquisition sources | in_progress | Project → Acquisition sources |
@@ -1171,14 +1171,14 @@ Evidence:
 ### rv16-onboarding-installer: First-run onboarding and Windows usability acceptance
 
 - Target: `1.6`
-- Status: `in_progress`
+- Status: `verified`
 - Dependencies: `rv16-class-visibility-dense-editing`, `rv16-lineage-reconciliation`
 - Entry point: Installed first launch → Create or open project
 - Workflow Builder: `not_applicable`
 
 Acceptance checks:
 
-- **in_progress** — Complete clean install, first project/import/annotation/review/export, upgrade, relaunch, rollback, uninstall, keyboard, DPI, and offline checks. (`rv16-onboarding-installer-check`)
+- **verified** — Complete clean install, first project/import/annotation/review/export, upgrade, relaunch, rollback, uninstall, keyboard, DPI, and offline checks. (`rv16-onboarding-installer-check`)
 
 Evidence:
 
@@ -1186,6 +1186,7 @@ Evidence:
 - `browser`: At 960 by 640 CSS pixels and 150% scale, a new researcher used the keyboard to create a project, imported an original, annotated, undid and redid, reviewed, reopened and downloaded YOLO. No external HTTP attempts were recorded. — `docs/validation/research-workflows-1-6.json` (`rv16-first-use-compact`)
 - `browser`: The corrected source-built WebView2 opened the first project, imported the original, reviewed the annotation, downloaded YOLO data and reopened the saved result. — `docs/validation/compact-windows-review-a580042e8.json` (`rv16-onboarding-installer-native-first-use-a580042e8`)
 - `windows_installed`: The original 1.6 MSI installed, launched, exported a reviewed annotation, reopened it after restart and uninstalled under outbound deny. Both ordinary and SYSTEM controls recorded 149 denied observations over 147 seconds. — `docs/validation/compact-windows-review-a580042e8.json` (`rv16-onboarding-installer-offline-83b0a98b2`)
+- `windows_installed`: The same original MSI passed compact keyboard and DPI first use under an ordinary account, offline import, annotation, export and reopen, clean removal with retention, and a separate 1.5 upgrade and verified prior-reader rollback. — `docs/validation/compact-windows-review-a580042e8.json` (`rv16-onboarding-original-offline-upgrade-83b0a98b2`)
 - `physical_hardware`: The native packaged first launch at 960 by 640 CSS pixels and emulated 150% scaling preserved keyboard focus and dismissal. The researcher imported image and video, edited, undid and redid, reviewed, exported YOLO and reopened. The browser attempted zero external HTTP requests. A separate eight-project 1.5 backup reopened with all 303 project files. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-onboarding-installer-physical-83b0`)
 - `representative_data`: none recorded
 
