@@ -42,6 +42,25 @@ afterEach(() => {
 });
 
 describe("project spatial source API", () => {
+  it("reads the latest metadata receipt after a full page of immutable revisions", async () => {
+    const first = Array.from({ length: 100 }, (_, index) => ({
+      revision: index + 1,
+    }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => first })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ revision: 101 }],
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    const revisions = await listSpatialAssetMetadataRevisions(
+      "project",
+      "asset",
+    );
+    expect(revisions.at(-1)?.revision).toBe(101);
+    expect(fetchMock.mock.calls[1][0]).toContain("offset=100");
+  });
   it("lists only the selected project originals", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

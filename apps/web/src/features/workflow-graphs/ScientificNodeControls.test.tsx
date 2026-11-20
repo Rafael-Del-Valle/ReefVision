@@ -102,6 +102,7 @@ it("configures a project-owned mesh measurement from the guided workspace", asyn
     expected_source_payload_sha256: "b".repeat(64),
     calibration_review: { independent_reviewer_id: "original-reviewer" },
     surface_path_vertex_pairs: [[0, 1]],
+    anatomical_branch: { base_landmark: "previous branch" },
   });
   const pending = await screen.findByRole("option", {
     name: "colony.obj · OBJ · queued (unavailable)",
@@ -131,6 +132,7 @@ it("configures a project-owned mesh measurement from the guided workspace", asyn
     calibration_review: null,
     calibration_review_id: null,
     surface_path_vertex_pairs: null,
+    anatomical_branch: null,
   });
   expect(screen.getByRole("status").textContent).toContain(
     '"meters_per_unit":0.001',

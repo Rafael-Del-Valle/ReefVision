@@ -52,6 +52,9 @@ test("records and replays a provisional centerline from a selected project mesh"
     await page
       .getByLabel("Project 3D source", { exact: true })
       .selectOption(source.id);
+    await page
+      .getByRole("button", { name: "Anatomical branch length", exact: true })
+      .click();
   }
   await openSelectedMesh();
   const mesh = page.getByRole("region", { name: "Project 3D source assets" });

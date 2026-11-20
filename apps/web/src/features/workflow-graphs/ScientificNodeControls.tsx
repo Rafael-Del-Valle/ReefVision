@@ -1094,6 +1094,7 @@ function SpatialMeasurementFields({
             faces: null,
             surface_path_vertex_pairs: null,
             surface_trace_vertex_paths: null,
+            anatomical_branch: null,
           }
         : { points: null, point_index_pairs: null }),
     });

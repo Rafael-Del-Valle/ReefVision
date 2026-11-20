@@ -150,11 +150,19 @@ function meters(value: number) {
 }
 
 export function AnatomicalBranchPanel(props: AnatomicalBranchPanelProps) {
+  const [open, setOpen] = useState(false);
   return (
-    <AnatomicalBranchSession
-      key={`${props.projectId}:${props.asset.id}`}
-      {...props}
-    />
+    <>
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>
+        Anatomical branch length
+      </button>
+      {open && (
+        <AnatomicalBranchSession
+          key={`${props.projectId}:${props.asset.id}`}
+          {...props}
+        />
+      )}
+    </>
   );
 }
 
