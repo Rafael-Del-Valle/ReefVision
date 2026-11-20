@@ -71,6 +71,53 @@ describe("annotation editor geometry", () => {
     ]);
   });
 
+  it("translates 200,000 biological boxes without a JavaScript argument-stack overflow", () => {
+    const originals = Array.from({ length: 200_000 }, (_, index) => {
+      const x_min = 10 + (index % 1000);
+      const y_min = 10 + Math.floor(index / 1000);
+      return {
+        id: `coral-${index}`,
+        label_class_id: "swiftia",
+        x_min,
+        y_min,
+        x_max: x_min + 3,
+        y_max: y_min + 3,
+      };
+    });
+
+    const moved = translateAnnotations(
+      originals,
+      { x: 500, y: -500 },
+      { width: 1100, height: 300 },
+    );
+
+    expect(moved).toHaveLength(originals.length);
+    // Entire selection moves as one group, constrained by its extreme boxes.
+    expect(moved[0]).toEqual({
+      ...originals[0],
+      x_min: 98,
+      x_max: 101,
+      y_min: 0,
+      y_max: 3,
+    });
+    expect(moved[199_999].x_max).toBe(1100);
+    expect(moved[123_456].id).toBe(originals[123_456].id);
+    // Neither source records nor their taxonomic class are rewritten.
+    expect(originals[0].x_min).toBe(10);
+    expect(originals[199_999].x_max).toBe(1012);
+    expect(moved[123_456].label_class_id).toBe("swiftia");
+  });
+
+  it("returns an empty selection without attempting geometry reduction", () => {
+    expect(
+      translateAnnotations(
+        [],
+        { x: 200, y: -200 },
+        { width: 1100, height: 300 },
+      ),
+    ).toEqual([]);
+  });
+
   it("resizes boxes while respecting image bounds and minimum area", () => {
     expect(
       resizeAnnotation(

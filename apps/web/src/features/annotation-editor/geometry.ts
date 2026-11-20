@@ -113,14 +113,20 @@ export function translateAnnotations(
   delta: Point,
   imageSize: ImageSize,
 ): EditorAnnotation[] {
-  const maxLeft = Math.max(...annotations.map((item) => -item.x_min));
-  const maxUp = Math.max(...annotations.map((item) => -item.y_min));
-  const maxRight = Math.min(
-    ...annotations.map((item) => imageSize.width - item.x_max),
-  );
-  const maxDown = Math.min(
-    ...annotations.map((item) => imageSize.height - item.y_max),
-  );
+  if (annotations.length === 0) return [];
+
+  // One pass avoids spreading large coral selections into Math.max/min
+  // (which overflows the JavaScript argument stack on dense images).
+  let maxLeft = -Infinity;
+  let maxUp = -Infinity;
+  let maxRight = Infinity;
+  let maxDown = Infinity;
+  for (const item of annotations) {
+    maxLeft = Math.max(maxLeft, -item.x_min);
+    maxUp = Math.max(maxUp, -item.y_min);
+    maxRight = Math.min(maxRight, imageSize.width - item.x_max);
+    maxDown = Math.min(maxDown, imageSize.height - item.y_max);
+  }
 
   const dx = clamp(delta.x, maxLeft, maxRight);
   const dy = clamp(delta.y, maxUp, maxDown);

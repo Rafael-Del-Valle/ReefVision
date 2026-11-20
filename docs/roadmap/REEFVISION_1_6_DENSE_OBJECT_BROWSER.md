@@ -150,3 +150,28 @@ and executable saved Workflow Builder runs/provenance are unchanged. The React
 regression verifies pan → wheel zoom → pan continuity, zoom retention, reset
 cancellation and preserved overlay geometry. Exact-head frontend/Playwright and
 real Windows installed-GUI acceptance remain independently required.
+
+## Bounded group translation of dense annotations (Track D)
+
+The inherited 1.0–1.5 multi-selection geometry used
+`Math.max(...annotations.map(...))` and `Math.min(...annotations.map(...))`
+to constrain an entire selected group within source-image bounds. At dense
+selection sizes (200,000 objects in the Node/V8 reproduction), spreading an
+array into function arguments raises `RangeError: Maximum call stack size
+exceeded` before the researcher can move those selected objects.
+
+The editor now computes the exact same four group bounds in one streaming
+pass, with no argument spread or four full temporary arrays. Empty selections
+return an empty result. All selected boxes still move together, stay within
+the source-image, preserve ID and class identities, and leave original
+annotation objects untouched. The existing undo/redo and save paths are
+unchanged. No sample counts, QC decisions, models, source images, datasets,
+or persisted Workflow Builder inputs/outputs/provenance are modified. Since
+this is an editor-only geometric interaction, no scientific workflow node
+or migration is introduced.
+
+`geometry.test.ts` now includes a **200,000-annotation** bounded group
+translation, extreme image-edge constraints, object immutability and an
+empty-selection case. Exact-head frontend/Vitest/Playwright and installed
+Windows GUI acceptance remain required; an independent Node/V8 reproduction
+is not a substitute for repository CI.
