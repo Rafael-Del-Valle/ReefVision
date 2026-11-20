@@ -43,6 +43,7 @@ from reefvision.ml.pose_evaluation import (
     PoseEvaluationRuntime,
     PoseEvaluationSchema,
     create_pose_evaluation_runtime,
+    reject_retired_pose_evaluation_provider,
 )
 from reefvision.schemas.pose_evaluation import (
     PoseEvaluationCreateRequest,
@@ -480,6 +481,7 @@ class PoseEvaluationService:
             raise ValidationError("Pose evaluation inputs must belong to the selected project")
         if model.task != "pose":
             raise ValidationError("Pose evaluation requires a registered pose model")
+        reject_retired_pose_evaluation_provider(model.provider_name)
         if not provider_neutral and model.provider_name != "reefpose":
             raise ValidationError("This evaluator currently requires a native ReefPose model")
         if dataset.status != "complete" or dataset.item_count < 1:

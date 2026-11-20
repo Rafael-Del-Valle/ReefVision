@@ -217,5 +217,6 @@ def test_sleap_runtime_is_explicitly_excluded_without_importing_optional_runtime
     with pytest.raises(PoseEvaluationProviderExclusion) as error:
         create_pose_evaluation_runtime(_model("sleap_nn"), Path("model.zip"), SCHEMA, "cpu")
 
-    assert error.value.code in {"provider_runtime_unavailable", "still_frame_unsupported"}
-    assert "sleap" in str(error.value).lower()
+    assert error.value.code == "provider_runtime_unavailable"
+    assert "retired" in str(error.value)
+    assert "ReefPose" in str(error.value)
