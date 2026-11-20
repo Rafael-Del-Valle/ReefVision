@@ -1176,6 +1176,25 @@ def test_pose_run_output_rejects_windows_junction_into_another_run(tmp_path: Pat
     finally:
         stage_junction.rmdir()
 
+    # A junction inserted inside an already-frozen dataset must not be
+    # silently skipped by hashing or followed into another scientific run.
+    frozen_dataset = current_run / "pose-dataset"
+    frozen_dataset.mkdir()
+    nested_junction = frozen_dataset / "reviewed-frames"
+    subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(nested_junction), str(prior_output)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    try:
+        assert not nested_junction.is_symlink()
+        with pytest.raises(ValidationError, match="Pose dataset contains a Windows junction"):
+            _materialized_pose_dataset_sha256(frozen_dataset)
+        assert checkpoint.read_bytes() == b"preserve-registered-pose-weights"
+    finally:
+        nested_junction.rmdir()
+
 
 def test_pose_training_output_cleanup_rejects_locked_previous_checkpoint(
     tmp_path: Path,
