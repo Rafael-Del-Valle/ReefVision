@@ -55,6 +55,36 @@ export interface ScheduleOccurrence {
   inputs_sha256: string;
 }
 
+export interface WorkflowScheduleReceipt {
+  receipt_sha256: string;
+  receipt: {
+    schema_version: "workflow-schedule-receipt-0001";
+    project_id: string;
+    schedule_id: string;
+    occurrence_id: string;
+    scheduled_at: string;
+    dispatched_at: string;
+    purpose: SchedulePurpose;
+    missed_intervals: number;
+    workflow_graph_record_id: string;
+    graph_sha256: string;
+    inputs: Record<string, unknown>;
+    inputs_sha256: string;
+    workflow_run_id: string | null;
+    job_id: string | null;
+    status: "succeeded" | "failed" | "cancelled";
+    detail: string | null;
+    workflow_provenance_sha256: string | null;
+    artifacts: {
+      artifact_id: string;
+      producer_node_run_id: string;
+      producer_port_id: string;
+      data_type: string;
+      payload_sha256: string;
+    }[];
+  };
+}
+
 export interface WorkflowScheduleCreate {
   name: string;
   purpose: SchedulePurpose;
@@ -135,5 +165,14 @@ export function cancelScheduleOccurrence(
   return request<ScheduleOccurrence>(
     `${schedulePath(projectId, scheduleId)}/occurrences/${encodeURIComponent(occurrenceId)}/cancel`,
     { method: "POST" },
+  );
+}
+
+export function getScheduleOccurrenceReceipt(
+  projectId: string,
+  occurrenceId: string,
+) {
+  return request<WorkflowScheduleReceipt>(
+    `/projects/${encodeURIComponent(projectId)}/workflow-schedule-occurrences/${encodeURIComponent(occurrenceId)}/receipt`,
   );
 }

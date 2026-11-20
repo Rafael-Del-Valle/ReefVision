@@ -6,6 +6,8 @@ import {
   listSavedWorkflowGraphs,
   type WorkflowGraphRecord,
 } from "../workflow-graphs/workflowGraphApi";
+import { ScheduleReceiptActions } from "./ScheduleReceiptActions";
+import { ScheduledJobDetails } from "./ScheduledJobDetails";
 import {
   cancelScheduleOccurrence,
   createWorkflowSchedule,
@@ -49,10 +51,16 @@ const stoppable = new Set<ScheduleOccurrenceStatus>([
   "running",
   "waiting_for_review",
 ]);
+const receipted = new Set<ScheduleOccurrenceStatus>([
+  "succeeded",
+  "failed",
+  "cancelled",
+]);
 
 interface WorkspaceProps {
   projectId: string;
   onOpenWorkflowRun: (runId: string, savedGraph?: WorkflowGraphRecord) => void;
+  onOpenWorkflowGraph?: (graph: WorkflowGraphRecord) => void;
 }
 
 const asUtcInput = (stamp: string) =>
@@ -255,14 +263,18 @@ function ScheduleForm({
 
 function OccurrenceRow({
   item,
+  scheduleName,
   onOpen,
   onCancel,
   pending,
+  onOpenWorkflowGraph,
 }: {
   item: ScheduleOccurrence;
+  scheduleName: string;
   onOpen: (runId: string) => void;
   onCancel: (item: ScheduleOccurrence) => void;
   pending: boolean;
+  onOpenWorkflowGraph: WorkspaceProps["onOpenWorkflowGraph"];
 }) {
   const runId = item.workflow_run_id;
 
@@ -312,6 +324,13 @@ function OccurrenceRow({
         </dl>
       </div>
       <div className="dashboard-actions">
+        {runId && item.job_id && (
+          <ScheduledJobDetails
+            projectId={item.project_id}
+            jobId={item.job_id}
+            runId={runId}
+          />
+        )}
         {runId && (
           <button
             type="button"
@@ -331,12 +350,23 @@ function OccurrenceRow({
             Cancel occurrence
           </button>
         )}
+        {receipted.has(item.status) && (
+          <ScheduleReceiptActions
+            item={item}
+            scheduleName={scheduleName}
+            onOpenWorkflowGraph={onOpenWorkflowGraph}
+          />
+        )}
       </div>
     </article>
   );
 }
 
-function Schedules({ projectId, onOpenWorkflowRun }: WorkspaceProps) {
+function Schedules({
+  projectId,
+  onOpenWorkflowRun,
+  onOpenWorkflowGraph,
+}: WorkspaceProps) {
   const queryClient = useQueryClient();
   const { confirm, confirmationDialog } = useActionConfirmation();
   const [selectedId, setSelectedId] = useState("");
@@ -553,7 +583,9 @@ function Schedules({ projectId, onOpenWorkflowRun }: WorkspaceProps) {
               <OccurrenceRow
                 key={item.id}
                 item={item}
+                scheduleName={current.name}
                 pending={pending}
+                onOpenWorkflowGraph={onOpenWorkflowGraph}
                 onOpen={(runId) => {
                   const graph = graphs.data?.find(
                     (record) => record.graph_sha256 === item.graph_sha256,
