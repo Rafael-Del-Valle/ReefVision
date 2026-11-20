@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import * as api from "../../api/client";
+import * as ecologyApi from "../ecology/ecologyAnalysisApi";
 import * as workflowApi from "./workflowGraphApi";
 import {
   hasScientificNodeControls,
@@ -42,6 +43,70 @@ function renderControls(type: string, initial: Record<string, unknown> = {}) {
 }
 
 afterEach(() => vi.restoreAllMocks());
+
+it("binds a guided paired contrast to an eligible reviewed source", async () => {
+  const record = {
+    id: "growth",
+    content_sha256: "a".repeat(64),
+    stale: false,
+    snapshot: {
+      reviewed_by: "Reviewer",
+      selection: {
+        kind: "growth",
+        metric: "box_width",
+        sources: [],
+        sampling_plan: [
+          {
+            experimental_unit_id: "Tank A",
+            organism_keys: ["a"],
+            dates: ["2026-01-01", "2026-01-08"],
+          },
+        ],
+      },
+      result: { kind: "growth" },
+    },
+  } as unknown as ecologyApi.EcologyAnalysis;
+  vi.spyOn(ecologyApi, "listEcologyAnalyses").mockResolvedValue({
+    items: [record],
+    total: 1,
+  });
+  vi.spyOn(api, "request").mockResolvedValue(record);
+  renderControls("paired_growth_contrast");
+  expect(hasScientificNodeControls("paired_growth_contrast")).toBe(true);
+  expect(await screen.findByRole("option", { name: /Reviewer/ })).toBeVisible();
+  fireEvent.change(screen.getByLabelText("Frozen growth analysis"), {
+    target: { value: "growth" },
+  });
+  fireEvent.change(await screen.findByLabelText("Baseline UTC date"), {
+    target: { value: "2026-01-01" },
+  });
+  fireEvent.change(screen.getByLabelText("Follow-up UTC date"), {
+    target: { value: "2026-01-08" },
+  });
+  fireEvent.change(screen.getByLabelText("Independent unit type"), {
+    target: { value: "tank" },
+  });
+  fireEvent.change(screen.getByLabelText("Declared estimand"), {
+    target: { value: "Mean within-tank change" },
+  });
+  fireEvent.click(screen.getByRole("checkbox", { name: /Exclude a unit/ }));
+  const parameters = JSON.parse(screen.getByRole("status").textContent || "{}");
+  expect(parameters).toMatchObject({
+    analysis_id: "growth",
+    source_sha256: record.content_sha256,
+    experimental_unit_type: "tank",
+    missingness_policy: "complete_unit",
+  });
+  expect(
+    scientificConfigurationIssue("paired_growth_contrast", parameters),
+  ).toBeUndefined();
+  expect(
+    scientificConfigurationIssue("paired_growth_contrast", {
+      ...parameters,
+      source_sha256: "",
+    }),
+  ).toBeTruthy();
+});
 
 it("replays a current project comparison and clears the calculation choice", async () => {
   const request = vi.spyOn(api, "request").mockImplementation(async (path) => {

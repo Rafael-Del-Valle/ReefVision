@@ -24,6 +24,7 @@ import {
 import { LocalMeshPreview } from "./LocalMeshPreview";
 import { LocalPointCloudPreview } from "./LocalPointCloudPreview";
 import { ProjectSpatialAssetPreview } from "./ProjectSpatialAssetPreview";
+import { downloadPairedReport } from "../ecology/pairedGrowthContrastApi";
 import { MeshArtifactViewer } from "./MeshArtifactViewer";
 import { PointCloudArtifactViewer } from "./PointCloudArtifactViewer";
 import { WorkflowVisualEditor } from "./WorkflowVisualEditor";
@@ -48,6 +49,26 @@ function ScienceArtifact({
 }) {
   const data = artifact.payload_json;
   const api = `${getApiBaseUrl()}/projects/${projectId}`;
+  if (
+    artifact.data_type === "paired_growth_contrast" &&
+    typeof data.report_sha256 === "string"
+  ) {
+    const digest = data.report_sha256;
+    return (
+      <div>
+        <p>
+          Paired growth contrast · {String(data.included_unit_count)}{" "}
+          independent units
+        </p>
+        <button
+          type="button"
+          onClick={() => downloadPairedReport(data, digest)}
+        >
+          Download paired result JSON
+        </button>
+      </div>
+    );
+  }
   if (artifact.data_type === "acquisition_quality_result")
     return onOpen ? (
       <button type="button" onClick={() => onOpen("quality_control")}>
