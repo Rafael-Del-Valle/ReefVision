@@ -210,6 +210,7 @@ test("supports keyboard skip navigation and the minimum desktop viewport without
     name: "Skip to main content",
   });
 
+  await expect(skipLink).toBeAttached();
   await page.keyboard.press("Tab");
 
   await expect(skipLink).toBeFocused();
