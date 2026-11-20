@@ -72,7 +72,7 @@ def sqlite_table_signatures(connection: Connection) -> dict[str, str]:
     tables: dict[str, list[list[str]]] = {}
     attached: dict[str, list[list[str]]] = defaultdict(list)
     for row in rows:
-        kind, name, table, sql = cast(tuple[str, str, str, str | None], row._tuple())
+        kind, name, table, sql = cast(tuple[str, str, str, str | None], tuple(row))
         if sql is None:
             raise ValueError("SQLite did not report a schema definition")
         if kind == "table":
