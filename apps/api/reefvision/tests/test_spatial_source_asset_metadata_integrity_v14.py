@@ -150,10 +150,11 @@ def test_corrupt_imported_source_metadata_fails_standalone_and_saved_workflow(
     assert detail.json()["run"]["status"] == "failed"
     assert not any(item["data_type"] == artifact_type for item in detail.json()["artifacts"])
 
+
 def test_surrogate_filename_rejected_before_import_or_replay() -> None:
     """Unpaired UTF-16 surrogates are not valid portable source identities."""
     from reefvision.services.spatial_source_assets_v14 import _safe_original_filename
 
-    assert not _safe_original_filename("coral\\ud800.obj")
-    assert not _safe_original_filename("coral\\udfff.ply")
+    assert not _safe_original_filename("coral\ud800.obj")
+    assert not _safe_original_filename("coral\udfff.ply")
     assert _safe_original_filename("coral_🐠.obj")
