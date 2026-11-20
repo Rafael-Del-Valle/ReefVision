@@ -226,9 +226,12 @@ def read_nwb(sio: Any, path: Path) -> Any:
     if envelope is None:
         raise ValueError(
             "NWB import requires checksum-bound ReefVision source frame mapping metadata. "
-            "SLEAP-IO 0.9.2 reindexes external NWB frames, so generic frame confirmation "
-            "cannot safely restore them. Export NWB from ReefVision, or convert the source "
-            "to SLP with verified frame indices before importing. Nothing was imported."
+            "Earlier standalone ReefVision exports recorded the source video checksum in "
+            "a separate manifest. The import also needs a checksum binding the NWB pose "
+            "payload to its frame mapping. Keep the original archive and re-export NWB "
+            "from the source ReefVision project with a current build. If only the archive "
+            "remains, use an independent neutral conversion that verifies the source "
+            "frame and track mappings."
         )
     metadata = envelope["metadata"]
     if metadata.get("version") != 1:

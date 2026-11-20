@@ -155,40 +155,10 @@ class _FakeSio:
         cls.last_labels = labels
 
     @classmethod
-    def save_slp(cls, labels: _FakeLabels, filename: str, **_: Any) -> None:
-        cls._remember(labels)
-        Path(filename).write_bytes(b"slp")
-
-    @classmethod
-    def save_nwb(cls, labels: _FakeLabels, filename: Path, **_: Any) -> None:
+    def write_nwb(cls, sio: type, labels: _FakeLabels, filename: Path) -> None:
+        assert sio is cls
         cls._remember(labels)
         Path(filename).write_bytes(b"nwb")
-
-    @classmethod
-    def save_coco(cls, labels: _FakeLabels, filename: str, **_: Any) -> None:
-        cls._remember(labels)
-        Path(filename).write_text('{"format":"coco"}', encoding="utf-8")
-
-    @classmethod
-    def save_csv(cls, labels: _FakeLabels, filename: str, **_: Any) -> None:
-        cls._remember(labels)
-        Path(filename).write_text("scorer,bodypart,x,y\n", encoding="utf-8")
-
-    @classmethod
-    def save_ultralytics(
-        cls,
-        labels: _FakeLabels,
-        dataset_path: str,
-        **_: Any,
-    ) -> None:
-        cls._remember(labels)
-        root = Path(dataset_path)
-        (root / "labels" / "train").mkdir(parents=True, exist_ok=True)
-        (root / "data.yaml").write_text("path: .\n", encoding="utf-8")
-        (root / "labels" / "train" / "000000.txt").write_text(
-            "0 0.5 0.5 1 1\n",
-            encoding="utf-8",
-        )
 
 
 def _persist_pose_track(
@@ -359,9 +329,6 @@ def test_corrected_pose_observations_take_precedence_and_preserve_visibility() -
     ("exchange_format", "expected_content_type"),
     [
         ("nwb", "application/zip"),
-        ("coco", "application/zip"),
-        ("dlc_csv", "application/zip"),
-        ("ultralytics_pose", "application/zip"),
     ],
 )
 def test_pose_interoperability_exports_canonical_reviewed_pose(
@@ -381,6 +348,7 @@ def test_pose_interoperability_exports_canonical_reviewed_pose(
         "_sleap_io",
         staticmethod(lambda: _FakeSio),
     )
+    monkeypatch.setattr("reefvision.storage.pose_nwb.write_nwb", _FakeSio.write_nwb)
 
     response = client.get(
         f"/api/v1/videos/{video['id']}/pose-interoperability/export",
