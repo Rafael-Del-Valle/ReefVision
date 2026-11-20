@@ -1,6 +1,7 @@
 """Build replayable monitoring results from scoped canonical observations."""
 
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from math import ceil, fsum, isfinite
@@ -13,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from reefvision.db.models.scientific_record import ScientificRecord
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
-from reefvision.schemas.ecology_event_summary import EventSessionSummary
+from reefvision.schemas.ecology_event_summary import EventSessionSummary, EventSummaryRead
 from reefvision.schemas.monitoring import (
     BiologicalMonitoringRuleRead,
     EnvironmentalMonitoringRuleRead,
@@ -38,6 +39,70 @@ _MAX_OBSERVATIONS = 10_000
 def monitoring_utc(value: datetime) -> datetime:
     """SQLite removes the UTC offset from timezone-aware stored columns."""
     return value.astimezone(UTC) if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+def sort_monitoring_evidence(
+    sources: list[MonitoringSourceReference],
+    exclusions: list[MonitoringExclusion],
+    sessions: list[MonitoringBiologicalSession],
+) -> None:
+    """Give equivalent locally rebound evidence a deterministic order."""
+    undated = datetime.min.replace(tzinfo=UTC)
+    sources.sort(key=lambda item: (item.observed_at or undated, str(item.id)))
+    exclusions.sort(
+        key=lambda item: (
+            item.observed_at or undated,
+            str(item.source_id or ""),
+            item.session_id or "",
+            item.reason,
+        )
+    )
+    sessions.sort(key=lambda item: (item.observed_at, str(item.summary_id), item.link_revision_id))
+
+
+def monitoring_evidence_checksum(
+    rule_sha256: str,
+    window: MonitoringWindow,
+    sources: list[MonitoringSourceReference],
+    exclusions: list[MonitoringExclusion],
+    sessions: list[MonitoringBiologicalSession],
+) -> str:
+    return canonical_json_sha256(
+        {
+            "rule_sha256": rule_sha256,
+            "window": window.model_dump(mode="json", include={"window_start", "window_end"}),
+            "sources": [row.model_dump(mode="json") for row in sources],
+            "exclusions": [row.model_dump(mode="json") for row in exclusions],
+            "biological_sessions": [row.model_dump(mode="json") for row in sessions],
+        }
+    )
+
+
+def biological_session_evidence(
+    summary_id: UUID, item: EventSessionSummary, source_id_map: Mapping[str, str]
+) -> MonitoringBiologicalSession:
+    assert item.observed_at is not None
+    return MonitoringBiologicalSession(
+        summary_id=summary_id,
+        link_revision_id=source_id_map.get(item.link_revision_id, item.link_revision_id),
+        link_source_sha256=item.link_source_sha256,
+        organism_key=item.organism_key,
+        unit_type=item.unit_type,
+        unit_id=item.unit_id,
+        video_id=source_id_map.get(item.video_id, item.video_id),
+        video_sha256=item.video_sha256,
+        measurement_sha256=item.measurement_sha256,
+        event_revision_digest=item.event_revision_digest,
+        event_ids=[source_id_map.get(event.id, event.id) for event in item.events],
+        observed_at=item.observed_at,
+        frame_start=item.frame_start,
+        frame_end=item.frame_end,
+        valid_duration_s=item.valid_duration_s,
+        confirmed_event_count=item.confirmed_complete_count,
+        unreviewed_count=item.unreviewed_count,
+        partial_count=item.partial_count,
+        excluded_confirmed_count=item.excluded_confirmed_count,
+    )
 
 
 @dataclass
@@ -68,14 +133,9 @@ class MonitoringEvidence:
     def result(
         self, rule: MonitoringRuleRead, window: MonitoringWindow
     ) -> MonitoringAssessmentResult:
-        evidence_sha256 = canonical_json_sha256(
-            {
-                "rule_sha256": rule.rule_sha256,
-                "window": window.model_dump(mode="json", include={"window_start", "window_end"}),
-                "sources": [row.model_dump(mode="json") for row in self.source_refs],
-                "exclusions": [row.model_dump(mode="json") for row in self.exclusions],
-                "biological_sessions": [row.model_dump(mode="json") for row in self.sessions],
-            }
+        sort_monitoring_evidence(self.source_refs, self.exclusions, self.sessions)
+        evidence_sha256 = monitoring_evidence_checksum(
+            rule.rule_sha256, window, self.source_refs, self.exclusions, self.sessions
         )
         return MonitoringAssessmentResult(
             project_id=rule.project_id,
@@ -332,9 +392,9 @@ def _summary_candidates(
     rule: BiologicalMonitoringRuleRead,
     window: MonitoringWindow,
     evidence: MonitoringEvidence,
-) -> list[tuple[UUID, EventSessionSummary]]:
+) -> list[tuple[EventSummaryRead, EventSessionSummary]]:
     reader = EcologyEventSummaryService(session)
-    candidates: list[tuple[UUID, EventSessionSummary]] = []
+    candidates: list[tuple[EventSummaryRead, EventSessionSummary]] = []
     for summary_id in rule.parameters.summary_ids:
         try:
             record = reader.get(str(rule.project_id), str(summary_id))
@@ -370,14 +430,18 @@ def _summary_candidates(
                         kind="reviewed_event_summary",
                         source=summary_id,
                         at=at,
-                        session_id=item.link_revision_id,
+                        session_id=record.source_id_map.get(
+                            item.link_revision_id, item.link_revision_id
+                        ),
                     )
                 else:
-                    candidates.append((summary_id, item))
+                    candidates.append((record, item))
     return candidates
 
 
-def _overlapping_sessions(candidates: list[tuple[UUID, EventSessionSummary]]) -> set[int]:
+def _overlapping_sessions(
+    candidates: list[tuple[EventSummaryRead, EventSessionSummary]],
+) -> set[int]:
     groups: dict[tuple[str, str], list[int]] = defaultdict(list)
     for index, (_, item) in enumerate(candidates):
         groups[(item.video_sha256, item.organism_key)].append(index)
@@ -400,40 +464,17 @@ def _biological(
     evidence = MonitoringEvidence("confirmed_events_per_valid_minute_by_dated_reviewed_session_v1")
     candidates = _summary_candidates(session, rule, window, evidence)
     duplicates = _overlapping_sessions(candidates)
-    for index, (summary_id, item) in enumerate(candidates):
+    for index, (record, item) in enumerate(candidates):
         if index in duplicates:
             evidence.exclude(
                 "overlapping_session",
                 kind="reviewed_event_summary",
-                source=summary_id,
+                source=record.id,
                 at=item.observed_at,
-                session_id=item.link_revision_id,
+                session_id=record.source_id_map.get(item.link_revision_id, item.link_revision_id),
             )
             continue
-        assert item.observed_at is not None
-        evidence.sessions.append(
-            MonitoringBiologicalSession(
-                summary_id=summary_id,
-                link_revision_id=item.link_revision_id,
-                link_source_sha256=item.link_source_sha256,
-                organism_key=item.organism_key,
-                unit_type=item.unit_type,
-                unit_id=item.unit_id,
-                video_id=item.video_id,
-                video_sha256=item.video_sha256,
-                measurement_sha256=item.measurement_sha256,
-                event_revision_digest=item.event_revision_digest,
-                event_ids=[event.id for event in item.events],
-                observed_at=item.observed_at,
-                frame_start=item.frame_start,
-                frame_end=item.frame_end,
-                valid_duration_s=item.valid_duration_s,
-                confirmed_event_count=item.confirmed_complete_count,
-                unreviewed_count=item.unreviewed_count,
-                partial_count=item.partial_count,
-                excluded_confirmed_count=item.excluded_confirmed_count,
-            )
-        )
+        evidence.sessions.append(biological_session_evidence(record.id, item, record.source_id_map))
     duration = fsum(item.valid_duration_s for item in evidence.sessions)
     count = sum(item.confirmed_event_count for item in evidence.sessions)
     evidence.effort = MonitoringEffort(
