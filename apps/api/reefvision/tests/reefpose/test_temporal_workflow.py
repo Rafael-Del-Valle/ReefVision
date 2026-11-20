@@ -472,6 +472,8 @@ def test_repeat_temporal_training_preserves_the_registered_checkpoint(
     )
     if stored.exists():
         assert sha256(stored.read_bytes()).hexdigest() == result["checkpoint_sha256"]
+    if existing == "compatible":
+        _assert_repeated_training_exchange(client, path, first_run, repeated_run)
 
 
 def test_concurrent_temporal_training_reuses_one_registered_checkpoint(
@@ -675,15 +677,8 @@ def _measurement_reuses_reviewed_revision(
     assert historical["pose_output_provenance"]["review_revision"] == 1
 
 
-def _exchange_review(
-    client: TestClient,
-    path: str,
-    dataset: dict[str, Any],
-    prediction: dict[str, Any],
-    review: dict[str, Any],
-) -> None:
+def _export_temporal_archive(client: TestClient, path: str) -> bytes:
     from reefvision.jobs.project_exchange import process_project_exchange_export_job
-    from reefvision.tests.test_scientific_project_exchange import import_archive, rewrite
 
     project_id = path.split("/")[-2]
     queued = client.post(
@@ -697,16 +692,66 @@ def _exchange_review(
     )
     exported = client.get(f"/api/v1/exchange-packages/{job['package']['id']}/download")
     assert exported.status_code == 200, exported.text
+    return exported.content
+
+
+def _assert_repeated_training_exchange(
+    client: TestClient, path: str, first: dict[str, Any], repeated: dict[str, Any]
+) -> None:
+    from reefvision.tests.test_scientific_project_exchange import import_archive
+
+    archive = _export_temporal_archive(client, path)
+    imported = import_archive(client, archive)
+    assert imported.status_code == 201, imported.text
+    new_project = f"/api/v1/projects/{imported.json()['project_id']}"
+    new_path = f"{new_project}/temporal-reefpose"
+    models = client.get(f"{new_project}/models", params={"purpose": "pose_temporal"})
+    assert models.status_code == 200, models.text
+    [model] = models.json()
+    assert model["id"] != first["result"]["model_id"]
+    assert model["sha256"] == first["result"]["checkpoint_sha256"]
+    stored = resolve_managed_project_path(client.app.state.settings, model["managed_path"])
+    assert sha256(stored.read_bytes()).hexdigest() == model["sha256"]
+
+    restored = {row["configuration"]["name"]: row for row in client.get(f"{new_path}/runs").json()}
+    assert set(restored) == {first["configuration"]["name"], repeated["configuration"]["name"]}
+    new_first, new_repeat = (restored[row["configuration"]["name"]] for row in (first, repeated))
+    assert {new_first["id"], new_repeat["id"]}.isdisjoint({first["id"], repeated["id"]})
+    assert new_first["id"] != new_repeat["id"]
+    assert new_first["job_id"] != new_repeat["job_id"]
+    assert model["metadata_json"]["source_temporal_run_id"] == new_first["id"]
+    [dataset] = client.get(f"{new_path}/datasets").json()
+    assert model["metadata_json"]["source_temporal_dataset_id"] == dataset["id"]
+    assert model["metadata_json"]["source_temporal_dataset_sha256"] == dataset["manifest_sha256"]
+    for original, recovered in ((first, new_first), (repeated, new_repeat)):
+        assert recovered["status"] == "succeeded", recovered
+        assert recovered["configuration"] == {
+            **original["configuration"],
+            "dataset_id": dataset["id"],
+        }
+        assert recovered["result"] == {**original["result"], "model_id": model["id"]}
+
+
+def _exchange_review(
+    client: TestClient,
+    path: str,
+    dataset: dict[str, Any],
+    prediction: dict[str, Any],
+    review: dict[str, Any],
+) -> None:
+    from reefvision.tests.test_scientific_project_exchange import import_archive, rewrite
+
+    archive = _export_temporal_archive(client, path)
 
     def change_target(_manifest: dict[str, Any], sections: dict[str, Any]) -> None:
         frozen = sections["temporal_reefpose_datasets"][0]
         frozen["manifest_json"]["sources"][0]["frames"][0]["target_points"][0]["x"] = 50
         frozen["manifest_sha256"] = canonical_json_sha256(frozen["manifest_json"])
 
-    tampered = import_archive(client, rewrite(exported.content, change_target))
+    tampered = import_archive(client, rewrite(archive, change_target))
     assert tampered.status_code == 400, tampered.text
     assert "targets differ from reviewed landmarks" in tampered.text
-    imported = import_archive(client, exported.content)
+    imported = import_archive(client, archive)
     assert imported.status_code == 201, imported.text
     new_path = f"/api/v1/projects/{imported.json()['project_id']}/temporal-reefpose"
     new_datasets = client.get(f"{new_path}/datasets").json()
