@@ -284,16 +284,21 @@ def test_nonzero_volume_lost_to_float_cancellation_replays_saved_graph(
         [list(reversed(face)) for face in expected_faces],
     )
     assert inward == pytest.approx(expected_volume, rel=1e-12, abs=0)
-    # The origin is taken from the first face. Rotating face order changes that
-    # origin, so the exact fallback must keep its sign and magnitude invariant.
-    for face_offset in range(len(expected_faces)):
-        ordered_faces = expected_faces[face_offset:] + expected_faces[:face_offset]
+    # Select each of the four *distinct vertex origins*. Cyclically rotating
+    # a triangle preserves its winding but changes the first-face origin.
+    for source_origin in range(len(vertices)):
         for reversed_winding in (False, True):
-            oriented_faces = (
-                [list(reversed(face)) for face in ordered_faces]
-                if reversed_winding
-                else ordered_faces
+            ordered_faces = [
+                list(reversed(face)) if reversed_winding else list(face)
+                for face in expected_faces
+            ]
+            root_face_index = next(
+                index for index, face in enumerate(ordered_faces) if source_origin in face
             )
+            first_face = ordered_faces.pop(root_face_index)
+            first_offset = first_face.index(source_origin)
+            first_face = first_face[first_offset:] + first_face[:first_offset]
+            oriented_faces = [first_face, *ordered_faces]
             expected_signed = expected_volume if reversed_winding else -expected_volume
             assert signed_enclosed_volume_mesh_units(
                 [tuple(vertex) for vertex in vertices], oriented_faces
@@ -312,7 +317,11 @@ def test_nonzero_volume_lost_to_float_cancellation_replays_saved_graph(
         == 0.0
     )
 
-    parameters = _params(vertices=vertices)
+    # This winding previously produced a nonzero but incorrect floating
+    # residual; persist and replay it through the actual API/workflow paths.
+    parameters = _params(
+        vertices=vertices, faces=[list(reversed(face)) for face in expected_faces]
+    )
     parameters["meters_per_unit"] = 1.0
     direct = measure_mesh_preview(**parameters)
     assert direct["enclosed_volume_m3"] == pytest.approx(expected_volume, rel=1e-12, abs=0)
