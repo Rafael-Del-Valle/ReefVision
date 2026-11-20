@@ -241,7 +241,6 @@ def test_true_zero_area_preserves_valid_zero_uncertainty_interval() -> None:
     assert "surface_area_scale_interval_numeric_unrepresentable" not in result["qc_warnings"]
 
 
-
 def test_positive_area_with_subresolution_uncertainty_is_not_falsely_exact() -> None:
     """An ordinary mesh area must not acquire equal bounds from roundoff."""
     request = {
