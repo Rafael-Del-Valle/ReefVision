@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
+from reefvision.services.spatial_mesh_volume_v14 import signed_enclosed_volume_mesh_units
 from reefvision.tests.test_annotations import create_project
 
 TETRA_FACES = [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]]
@@ -255,3 +256,109 @@ def test_mesh_observation_metadata_rejects_naive_time_and_invalid_identity(
     ):
         response = client.post(endpoint, json={**_params(), **invalid})
         assert response.status_code == 422, response.text
+
+
+def test_nonzero_volume_lost_to_float_cancellation_replays_saved_graph(
+    client: TestClient,
+) -> None:
+    """Exact source-float orientation recovers finite volume, never identity."""
+    # Each small transverse offset is one binary64 ULP at 1e8. Summed
+    # floating-point face determinants cancel to zero, but the volume is real.
+    vertices = [
+        [0.0, 0.0, 0.0],
+        [-1e8, -1e8, 1e8],
+        [-100000000.00000001, -1e8, 1e8],
+        [-1e8, -99999999.99999999, 1e8],
+    ]
+    expected_volume = 1e8 * (2.0**-26) ** 2 / 6
+    expected_faces = TETRA_FACES
+    signed = signed_enclosed_volume_mesh_units(
+        [tuple(vertex) for vertex in vertices], expected_faces
+    )
+    assert signed == pytest.approx(-expected_volume, rel=1e-12, abs=0)
+    inward = signed_enclosed_volume_mesh_units(
+        [tuple(vertex) for vertex in vertices],
+        [list(reversed(face)) for face in expected_faces],
+    )
+    assert inward == pytest.approx(expected_volume, rel=1e-12, abs=0)
+    # Exactly planar, nondegenerate coordinates must not invent an enclosed volume.
+    assert signed_enclosed_volume_mesh_units(
+        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0),
+         (0.0, 1.0, 0.0), (1.0, 1.0, 0.0)],
+        expected_faces,
+    ) == 0.0
+
+    parameters = _params(vertices=vertices)
+    parameters["meters_per_unit"] = 1.0
+    direct = measure_mesh_preview(**parameters)
+    assert direct["enclosed_volume_m3"] == pytest.approx(
+        expected_volume, rel=1e-12, abs=0
+    )
+    assert direct["edge_connected_patch_enclosed_volumes_m3"] == pytest.approx(
+        [expected_volume], rel=1e-12, abs=0
+    )
+    assert "enclosed_volume_zero_or_underflow" not in direct["qc_warnings"]
+    assert direct["measurement_status"] == "caller_supplied_unverified"
+    assert direct["provenance"]["calibration_verified"] is False
+
+    project_id = str(create_project(client, "Cancellation-stable volume QC")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    request = {
+        **parameters,
+        "specimen_id": "cancellation-synthetic-unverified",
+        "observation_id": "synthetic-not-field-validation",
+    }
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=request)
+    assert standalone.status_code == 200, standalone.text
+    payload = standalone.json()
+    assert payload["enclosed_volume_m3"] == pytest.approx(
+        expected_volume, rel=1e-12, abs=0
+    )
+    assert payload["provenance"]["specimen_identity_verified"] is False
+
+    graph = {
+        "graph_id": "mesh-nonzero-volume-cancellation-v14",
+        "name": "Finite source volume cancellation regression",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "mesh",
+                "node_type": "mesh_surface_preview",
+                "parameters": request,
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(
+            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+        )
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifacts = [
+            artifact
+            for artifact in detail.json()["artifacts"]
+            if artifact["data_type"] == "mesh_measurement_preview"
+        ]
+        assert len(artifacts) == 1
+        assert artifacts[0]["payload_json"] == payload
+        hashes.append(artifacts[0]["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
