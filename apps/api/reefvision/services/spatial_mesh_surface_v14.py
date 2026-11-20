@@ -771,16 +771,20 @@ def measure_mesh_preview(
     # An absent interval at 100% is a mathematically unbounded upper limit,
     # not a floating-point error. Unknown error and rejected volumes are
     # likewise not numeric interval failures.
-    if relative_scale_uncertainty is not None and 0 < relative_scale_uncertainty < 1 and (
-        (surface_volume_ratio_per_m is not None and ratio_scale_interval_per_m is None)
-        or (
-            patch_ratio_scale_intervals_per_m is not None
-            and any(
-                ratio is not None and interval is None
-                for ratio, interval in zip(
-                    patch_surface_volume_ratios_per_m,
-                    patch_ratio_scale_intervals_per_m,
-                    strict=True,
+    if (
+        relative_scale_uncertainty is not None
+        and 0 < relative_scale_uncertainty < 1
+        and (
+            (surface_volume_ratio_per_m is not None and ratio_scale_interval_per_m is None)
+            or (
+                patch_ratio_scale_intervals_per_m is not None
+                and any(
+                    ratio is not None and interval is None
+                    for ratio, interval in zip(
+                        patch_surface_volume_ratios_per_m,
+                        patch_ratio_scale_intervals_per_m,
+                        strict=True,
+                    )
                 )
             )
         )
