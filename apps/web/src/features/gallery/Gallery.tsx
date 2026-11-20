@@ -61,7 +61,8 @@ interface ThumbnailPollState {
 }
 
 export function galleryPendingThumbnailPollingDecision(
-  page: { items: Array<{ id: string; thumbnail_path: string | null }> } | undefined,
+  page:
+    { items: Array<{ id: string; thumbnail_path: string | null }> } | undefined,
   successfulLoads: number,
   previous: ThumbnailPollState | null,
   queryKey: string,
@@ -75,8 +76,7 @@ export function galleryPendingThumbnailPollingDecision(
   // cannot inherit an exhausted budget from a different view.
   const signature = `${queryKey}:${JSON.stringify(pendingIds)}`;
   const state =
-    previous?.signature === signature &&
-    successfulLoads >= previous.firstLoad
+    previous?.signature === signature && successfulLoads >= previous.firstLoad
       ? previous
       : { signature, firstLoad: successfulLoads };
   return {
