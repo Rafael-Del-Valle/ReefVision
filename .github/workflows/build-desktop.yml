@@ -255,6 +255,107 @@ jobs:
           include-hidden-files: true
           retention-days: 14
 
+  windows-qc-history-acceptance:
+    name: Windows historical science and QC migration, backup, and rollback
+    runs-on: windows-2022
+    needs: build-windows-installer
+    timeout-minutes: 55
+    env:
+      SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      GH_TOKEN: ${{ github.token }}
+      REEFVISION_1_5_RUN: "44748544977"
+      REEFVISION_1_5_SOURCE: b846f57e916ef53abc9a2d25ece9927eb9dfb582
+      REEFVISION_1_5_PROVENANCE_SHA256: 152d0f93c35b2bcd9440e569a5d2afba4bd00849935a7c4c3961c83c43e49bbb
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ReefVision-1.6.0-RC-Installer-Part-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/reefvision-qc-history/candidate
+
+      - name: Verify and extract both original Windows MSI payloads
+        shell: pwsh
+        run: |
+          $evidence = New-Item -ItemType Directory -Path '.artifacts/windows-qc-history'
+          $payloadRoot = Join-Path $env:RUNNER_TEMP 'reefvision-qc-history'
+          $previous = New-Item -ItemType Directory -Path (Join-Path $payloadRoot 'previous')
+          $run = gh run view $env:REEFVISION_1_5_RUN --repo Rafael-Del-Valle/ReefVision --json headSha,conclusion,url | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $run.headSha -cne $env:REEFVISION_1_5_SOURCE -or $run.conclusion -ne 'success') {
+            throw 'The retained 1.5 installer does not identify the validated successful source.'
+          }
+          foreach ($part in 1..2) {
+            gh run download $env:REEFVISION_1_5_RUN --repo Rafael-Del-Valle/ReefVision --name "ReefVision-1.5.0-RC-Installer-Part-$part" --dir $previous.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Validated 1.5 installer part $part is unavailable." }
+          }
+          $previousDigest = (Get-FileHash -LiteralPath (Join-Path $previous.FullName 'build-provenance.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($previousDigest -cne $env:REEFVISION_1_5_PROVENANCE_SHA256) { throw 'Validated 1.5 installer provenance differs from its pinned digest.' }
+          $root = "C:\rvq-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          if (Test-Path -LiteralPath $root) { throw 'The isolated historical QC run directory already exists.' }
+          New-Item -ItemType Directory -Path $root | Out-Null
+          $payloads = [ordered]@{ previous_run = $run.url }
+          foreach ($role in @('candidate', 'previous')) {
+            $version = if ($role -eq 'candidate') { '1.6.0' } else { '1.5.0' }
+            $source = if ($role -eq 'candidate') { $env:SOURCE_COMMIT } else { $env:REEFVISION_1_5_SOURCE }
+            $folder = Join-Path $payloadRoot $role
+            $filename = "ReefVision_${version}_x64_en-US.msi"
+            $msi = Join-Path $folder $filename
+            $destination = Join-Path $root $role
+            $payload = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $folder -Version $version -ExpectedFilename $filename -SourceCommit $source -RequireProvenance
+            $log = Join-Path $evidence.FullName "$role-extraction.log"
+            $argsMsi = @('/a', ('"{0}"' -f $msi), ('TARGETDIR="{0}"' -f $destination), '/qn', '/norestart', '/L*v', ('"{0}"' -f $log))
+            $process = Start-Process -FilePath "$env:SystemRoot\System32\msiexec.exe" -ArgumentList $argsMsi -PassThru -Wait -WindowStyle Hidden
+            if ($process.ExitCode -ne 0) { throw "$role administrative extraction failed ($($process.ExitCode))." }
+            $sidecar = Join-Path $destination 'PFiles\ReefVision\backend\reefvision-api\reefvision-api.exe'
+            if (-not (Test-Path -LiteralPath $sidecar -PathType Leaf)) { throw "$role verified payload did not extract the expected sidecar." }
+            $payloads[$role] = [ordered]@{
+              source_commit = $source
+              installer_sha256 = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash.ToLowerInvariant()
+              provenance_sha256 = (Get-FileHash -LiteralPath (Join-Path $folder 'build-provenance.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+              extracted_sidecar_sha256 = (Get-FileHash -LiteralPath $sidecar -Algorithm SHA256).Hash.ToLowerInvariant()
+              identity = $payload.identity
+              media = $payload.media
+              files = $payload.files
+            }
+          }
+          $payloads | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $evidence.FullName 'qc-history-payloads.json')
+          "REEFVISION_QC_HISTORY_ROOT=$root" >> $env:GITHUB_ENV
+
+      - name: Generate five populated controls using the original source APIs
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check -e .
+          if ($LASTEXITCODE -ne 0) { throw 'Could not install the source dependencies used by historical fixture generation.' }
+          python scripts/create_windows_qc_history_controls.py (Join-Path $env:REEFVISION_QC_HISTORY_ROOT 'data') 2>&1 |
+            Tee-Object -FilePath '.artifacts/windows-qc-history/fixture-sources.log'
+          if ($LASTEXITCODE -ne 0) { throw 'Historical source fixture generation failed.' }
+
+      - name: Verify packaged upgrade and recovery for both 0038 histories and QC through 0041
+        shell: pwsh
+        run: |
+          $root = $env:REEFVISION_QC_HISTORY_ROOT
+          $sidecar = 'PFiles\ReefVision\backend\reefvision-api\reefvision-api.exe'
+          python scripts/acceptance_windows_qc_history.py (Join-Path $root 'data') (Join-Path $root "candidate\$sidecar") (Join-Path $root "previous\$sidecar") '.artifacts/windows-qc-history'
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged historical lineage or backup acceptance failed.' }
+
+      - name: Retain historical lineage receipts and sanitized logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReefVision-1.6.0-Windows-Historical-QC-Acceptance
+          path: |
+            .artifacts/windows-qc-history/*.json
+            .artifacts/windows-qc-history/*.log
+          if-no-files-found: warn
+          retention-days: 14
+
   windows-upgrade-acceptance:
     name: Upgrade 1.0.3 to 1.6.0 and preserve the project on disposable Windows
     runs-on: windows-latest
