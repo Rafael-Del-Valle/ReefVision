@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T11:58:29Z`
+Updated: `2026-11-20T12:27:39Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -795,6 +795,8 @@ Evidence:
 - `windows_installed`: The official 1b0f29cff six-CAB MSI passed ten GUI journeys and all fourteen exercised install, restart, Exchange, uninstall and retention stages using its ordinary Windows profile. Byte-verified native downloads succeeded with the default inspector open. The four predecessor upgrades passed separately. Representative prior-user profiles remain open. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44693974894` (`rv14-ordinary-profile-installed-ten`)
 - `windows_installed`: Official 1.4 MSI plus six cabinets. Clean install, backup recovery and four supported upgrades passed on disposable generated profiles. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44697377337` (`rv14-lineage-upgrade-msi-fb2276c87`)
 - `windows_installed`: The 1.5 MSI passed clean installation, upgrades from published 1.0.3 and validated 1.4 and 1.3, and both historical 1.4 draft schema fixtures. A separately restored verified backup reopened in the older application. A generated two-project fixture on the physical host preserved both checkpoints and all seven project files. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44722744547` (`rv14-windows-lineage-3c8e2d070`)
+- `windows_installed`: The 9645531ea local MSI sidecar restored the verified 3c8e2d070 backup using the normal Backup API. All 312 files matched. Eight reopened projects retained 41 data fingerprints, 52 images, two videos and five available registered checkpoints. SQLite remained byte-identical, SHA-256 1819e2e76f3735c51adb34498475fea101908e199425dc8e61db8fd630f95d61. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv14-restore-eight-projects-9645531ea`)
+- `windows_installed`: Two historical revisions independently recorded 0038. The 1.5 package preserved the generated 68 degrees Fahrenheit observation, original uncertainty, normalized units and calibration from science commit e1cd11d38. It refused QC revision d4dc3a3aa before opening an API port and preserved all three audit events and the original database bytes. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv14-historical-science-qc-controls-3c8e2d070`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -943,7 +945,8 @@ Evidence:
 
 Acceptance checks:
 
-- **blocked** — Create and freeze a study design with nesting, repeated measures, exclusions, estimands, and analysis choices before reporting. (`rv15-experimental-design-check`)
+- **blocked** — Create and freeze a study design with nesting, repeated measures, exclusions, estimands, and analysis choices before reporting. Evaluate the design, units, exclusions and estimate on an independently prespecified representative study. (`rv15-experimental-design-check`)
+- **verified** — Create and freeze the prospective design on generated repeated sampling units, reopen the assigned roster, and reproduce the saved analysis checksum twice. (`rv15-experimental-design-installed-fixture-workflow`)
 
 Evidence:
 
@@ -1008,7 +1011,8 @@ Evidence:
 
 Acceptance checks:
 
-- **blocked** — Compare compatible models on the same immutable holdout with task-specific metrics, paired differences, exclusions, and disagreement navigation. (`rv15-model-comparison-check`)
+- **blocked** — Compare compatible models on the same immutable holdout with task-specific metrics, paired differences, exclusions, and disagreement navigation. Compare task-specific errors and exclusions with independent labels, compatible registered checkpoints and prespecified held-out scoring margins. (`rv15-model-comparison-check`)
+- **verified** — Run compatible registered local models on frozen fixture groups, inspect disagreements from the normal desktop, replay the saved result twice and retain the paired report and exports. (`rv15-model-comparison-installed-fixture-workflow`)
 
 Evidence:
 
@@ -1020,7 +1024,7 @@ Evidence:
 - `browser`: In Chromium the project Model comparison workspace accepted both independently scored model reports, decoded the correct H.264 originals, and reopened a pose disagreement at frame 2 and an event disagreement in another video at 0.2 seconds. Both tested original hashes matched the frozen reference. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv15-model-comparison-playable-video-seek`)
 - `browser`: A real Chromium project compared two independently scratch-trained CPU segmentation models on six untouched images in two frozen groups. The models returned 12 and 46 polygons and missed all reference instances at the chosen match threshold. The direct report, exports and two saved runs retained the same result. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv15-model-comparison-actual-instance-masks`)
 - `windows_installed`: Standard-user WebView2 on the clean Windows install from 3c8e2d070. The researcher opened an original from the paired-group disagreement report, exported the results and repeated the saved comparison. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44722744547/job/136258835916` (`rv15-model-comparison-installed-3c8e2d070`)
-- `physical_hardware`: none recorded
+- `physical_hardware`: The packaged RTX 3090 ran both registered segmentation checkpoints on the same six held-out fixture images in two groups with twelve reference masks. Two saved executions reproduced artifact SHA-256 74edffb4568870ecee97e0a7401e8f55d04d50844ba8fa2c26686ba2619c7958. The redacted physical receipt has SHA-256 82a6f7a7ee1f6c39e37abac9f01cf2f8715193c9046ea189838dbf5fea04cc7e. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv15-model-comparison-native-mask-pairs-3c8e2d070`)
 - `representative_data`: none recorded
 
 ### rv15-provider-foundations: Early local provider and plugin foundations
@@ -1075,7 +1079,8 @@ Evidence:
 
 Acceptance checks:
 
-- **blocked** — Assign blinded reviews, preserve independent decisions, adjudicate disagreement, and export agreement with role/revision provenance. (`rv15-reviewer-lab-check`)
+- **blocked** — Assign blinded reviews, preserve independent decisions, adjudicate disagreement, and export agreement with role/revision provenance. Measure agreement and adjudicated discrepancies on an independently labeled representative review set under a prespecified rubric. (`rv15-reviewer-lab-check`)
+- **verified** — Assign two locally identified fixture reviewers, persist their blinded decisions, adjudicate disagreement with a separately authorized role and reproduce the sealed report twice. (`rv15-reviewer-lab-installed-fixture-workflow`)
 
 Evidence:
 
