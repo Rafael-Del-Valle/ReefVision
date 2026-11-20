@@ -8,12 +8,13 @@ import shutil
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
-from uuid import uuid4
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import Job
+from reefvision.domain.errors import ValidationError
 from reefvision.storage.backups import (
     BACKUP_COMPLETION_MARKER_FILENAME,
     BACKUP_MANIFEST_FILENAME,
@@ -21,7 +22,10 @@ from reefvision.storage.backups import (
     backup_member_path,
     backup_root_path,
     copy_file_with_sha256,
+    discard_restore_staging,
+    has_restore_job_receipt,
     hash_file,
+    restore_staging_path,
     verify_backup_directory,
 )
 
@@ -41,34 +45,32 @@ def ensure_job_not_cancelled(factory: sessionmaker[Session], job_id: str) -> Non
 
 def process_restore_job(settings: Settings, factory: sessionmaker[Session], job_id: str) -> bool:
     with factory() as session:
-        job = session.get(Job, job_id)
-        if job is None or job.job_type != "restore" or job.status != "queued":
+        request = session.scalar(
+            update(Job)
+            .where(Job.id == job_id, Job.job_type == "restore", Job.status == "queued")
+            .values(
+                status="running",
+                started_at=datetime.now(UTC),
+                error_message=None,
+                result_json={"stage": "verifying_backup"},
+            )
+            .returning(Job.request_json)
+        )
+        if request is None:
             return False
-        job.status = "running"
-        job.started_at = datetime.now(UTC)
-        job.error_message = None
-        job.result_json = {"stage": "verifying_backup"}
         session.commit()
-        request = dict(job.request_json)
 
     backup_id = str(request["backup_id"])
     backup_relative = str(request["backup_path"])
     destination_relative = str(request["destination_path"])
-    workspace: Path | None = None
-
     try:
+        discard_restore_staging(settings, job_id)
         backup_root = backup_root_path(settings, backup_relative)
         destination_root = backup_root_path(settings, destination_relative)
         ensure_job_not_cancelled(factory, job_id)
         verification = verify_backup_directory(backup_root, backup_id=backup_id)
         if verification["status"] not in {"valid", "valid_with_warnings"}:
             raise RuntimeError("Restore requires a valid backup verification result")
-
-        if backup_io_path(destination_root).exists():
-            raise FileExistsError("The selected restore destination already exists")
-        workspace = _create_restore_workspace(settings)
-        staging_root = workspace / "r"
-        backup_io_path(staging_root).mkdir()
 
         manifest = json.loads(
             backup_io_path(backup_root / BACKUP_MANIFEST_FILENAME).read_text(encoding="utf-8")
@@ -80,6 +82,31 @@ def process_restore_job(settings: Settings, factory: sessionmaker[Session], job_
         if not isinstance(database_filename, str) or not database_filename:
             raise RuntimeError("Backup manifest database filename is missing")
 
+        if backup_io_path(destination_root).exists():
+            if not has_restore_job_receipt(destination_root, job_id, request):
+                raise FileExistsError("The selected restore destination already exists")
+            # The prior process published the directory before committing the job result.
+            _verify_restored_copy(
+                destination_root, inventory=inventory, database_filename=database_filename
+            )
+            if hash_file(destination_root / "restored-from-backup-complete.json") != hash_file(
+                backup_root / BACKUP_COMPLETION_MARKER_FILENAME
+            ):
+                raise RuntimeError(
+                    "The published recovery has a different backup completion marker"
+                )
+            _finalize_success(
+                factory,
+                job_id=job_id,
+                destination_path=destination_relative,
+                restored_count=len(inventory),
+                restored_bytes=int(verification["total_size_bytes"]),
+                verification_status=verification["status"],
+            )
+            return True
+
+        staging_root = restore_staging_path(settings, job_id)
+        staging_root.mkdir(parents=True)
         _update_job_state(
             factory,
             job_id=job_id,
@@ -120,6 +147,7 @@ def process_restore_job(settings: Settings, factory: sessionmaker[Session], job_
         ensure_job_not_cancelled(factory, job_id)
         _write_restore_receipt(
             staging_root,
+            job_id=job_id,
             backup_id=backup_id,
             backup_relative=backup_relative,
             destination_relative=destination_relative,
@@ -163,22 +191,24 @@ def process_restore_job(settings: Settings, factory: sessionmaker[Session], job_
         )
         return False
     finally:
-        if workspace is not None:
-            shutil.rmtree(backup_io_path(workspace), ignore_errors=True)
-
-
-def _create_restore_workspace(settings: Settings) -> Path:
-    parent = backup_root_path(settings, ".t")
-    backup_io_path(parent).mkdir(parents=True, exist_ok=True)
-    # Keep ".t/<six chars>/r" shorter than even "recoveries/a" on Windows.
-    for _ in range(10):
-        workspace = parent / uuid4().hex[:6]
         try:
-            backup_io_path(workspace).mkdir()
-        except FileExistsError:
-            continue
-        return workspace
-    raise FileExistsError("Could not reserve a private restore staging directory")
+            discard_restore_staging(settings, job_id)
+        except (OSError, ValidationError, ValueError):
+            LOGGER.exception("Could not clean private staging for restore job %s", job_id)
+
+
+def recover_cancel_requested_restore(settings: Settings, job: Job) -> None:
+    try:
+        name = job.request_json.get("destination_path")
+        if isinstance(name, str):
+            destination = backup_root_path(settings, name)
+            if has_restore_job_receipt(destination, job.id, job.request_json):
+                # Startup will requeue the published recovery for checksum verification.
+                job.status = "running"
+                return
+        discard_restore_staging(settings, job.id)
+    except (OSError, ValidationError, ValueError, KeyError):
+        LOGGER.exception("Could not inspect the interrupted restore job %s", job.id)
 
 
 def _publish_restore(
@@ -251,6 +281,7 @@ def _verify_restored_copy(
 def _write_restore_receipt(
     restore_root: Path,
     *,
+    job_id: str,
     backup_id: str,
     backup_relative: str,
     destination_relative: str,
@@ -258,6 +289,7 @@ def _write_restore_receipt(
     restore_root = backup_io_path(restore_root)
     restore_root.mkdir(parents=True, exist_ok=True)
     payload = {
+        "restore_job_id": job_id,
         "backup_id": backup_id,
         "source_backup_path": backup_relative,
         "restored_destination": destination_relative,
