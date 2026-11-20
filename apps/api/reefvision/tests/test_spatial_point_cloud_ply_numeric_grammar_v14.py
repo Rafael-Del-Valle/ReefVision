@@ -70,8 +70,8 @@ def test_crlf_and_tabs_remain_valid_ply_whitespace() -> None:
 @pytest.mark.parametrize(
     "invalid",
     [
-        PLY.replace("end_header", "comment field survey \ud800\\nend_header"),
-        PLY.replace("end_header", "comment field survey \U0001f419\\nend_header"),
+        PLY.replace("end_header", "comment field survey \ud800\nend_header"),
+        PLY.replace("end_header", "comment field survey \U0001f419\nend_header"),
         PLY.replace("1 2 3", "1 2 3\udfff"),
     ],
 )
@@ -98,9 +98,7 @@ def test_non_ascii_point_cloud_ply_saved_workflow_fails_without_measurement(
     client: TestClient,
 ) -> None:
     """Typed saved graphs cannot turn non-ASCII metadata into a surveyed cloud."""
-    invalid = PLY.replace("end_header", "comment survey caf\\u00e9\\nend_header")
-    # The inserted source really contains non-ASCII text, not escape characters.
-    invalid = invalid.replace("\\u00e9", "\u00e9")
+    invalid = PLY.replace("end_header", "comment survey caf\u00e9\nend_header")
     project_id = str(create_project(client, "Non-ASCII PLY workflow rejection")["id"])
     base = f"/api/v1/projects/{project_id}"
     params = {**PARAMS, "ply_text": invalid}
