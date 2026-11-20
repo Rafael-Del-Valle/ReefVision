@@ -1,0 +1,82 @@
+name: Verify original MSI pre-upgrade backup and rollback
+
+on:
+  pull_request:
+    branches: [codex/reefvision-1.6-verified-workflows]
+    paths: [".github/workflows/windows-previous-package-proof.yml"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  previous-package:
+    if: github.repository == 'Rafael-Del-Valle/ReefVision' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: windows-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Check the backup queue acceptance harness
+        shell: pwsh
+        run: ./scripts/test-windows-clean-install-harness.ps1
+
+      - name: Retrieve and verify both original installer packages
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pins = @(
+            @{version='1.5.0'; run=44748544977; source='b846f57e916ef53abc9a2d25ece9927eb9dfb582'; provenance='152d0f93c35b2bcd9440e569a5d2afba4bd00849935a7c4c3961c83c43e49bbb'; msi='893786a369e2a05cadb802be6c3b78986d2910951f377048e91c8e3055bb6c2d'; cabinets=5},
+            @{version='1.6.0'; run=44768324452; source='83b0a98b278b98e779842538f811b2c6f5b6b4c8'; provenance='bf95edcd92cb8feea8290a0e495c209f922d757bb068bb7526fa657b9ae6961c'; msi='595323074d044a8a2c7b62cc2760aa46ad796f205b5d3b4c7b2062cf960c530e'; cabinets=6}
+          )
+          $records = foreach ($pin in $pins) {
+            $run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$($pin.run)" | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0 -or $run.head_sha -cne $pin.source -or $run.id -ne $pin.run -or $run.name -cne 'Build Windows Desktop Release Candidate') {
+              throw 'Original installer workflow identity changed.'
+            }
+            $folder = Join-Path $env:RUNNER_TEMP "rv-original-$($pin.version)"
+            $null = New-Item -Type Directory -Path $folder
+            foreach ($part in 1..2) {
+              gh run download $pin.run --repo $env:GITHUB_REPOSITORY --name "ReefVision-$($pin.version)-RC-Installer-Part-$part" --dir $folder
+              if ($LASTEXITCODE -ne 0) { throw "Could not collect original $($pin.version) part $part." }
+            }
+            $filename = "ReefVision_$($pin.version)_x64_en-US.msi"
+            if ((Get-FileHash -LiteralPath (Join-Path $folder 'build-provenance.json')).Hash -ine $pin.provenance -or
+                (Get-FileHash -LiteralPath (Join-Path $folder $filename)).Hash -ine $pin.msi) { throw 'Original package digests differ.' }
+            $checked = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $folder -Version $pin.version -ExpectedFilename $filename -SourceCommit $pin.source -RequireProvenance
+            if (@($checked.media | Where-Object { $_.cabinet -and -not $_.embedded }).Count -ne $pin.cabinets) { throw 'Original cabinet set differs.' }
+            [pscustomobject]@{original=$pin; payload=$checked; workflow_url=$run.html_url}
+          }
+          $null = New-Item -Type Directory -Force .artifacts
+          $records | ConvertTo-Json -Depth 12 | Set-Content .artifacts/previous-package-originals.json
+
+      - name: Install 1.5, back up, upgrade to 1.6 and reopen an independent 1.5 restoration
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $previous = Join-Path $env:RUNNER_TEMP 'rv-original-1.5.0/ReefVision_1.5.0_x64_en-US.msi'
+          $candidate = Join-Path $env:RUNNER_TEMP 'rv-original-1.6.0/ReefVision_1.6.0_x64_en-US.msi'
+          $env:PATH = @("$env:SystemRoot/System32", $env:SystemRoot, "$env:SystemRoot/System32/Wbem", "$env:SystemRoot/System32/WindowsPowerShell/v1.0", "$env:ProgramFiles/PowerShell/7") -join ';'
+          foreach ($tool in 'python','python3','node','npm','rustc','cargo') {
+            if (Get-Command $tool -ErrorAction SilentlyContinue) { throw "Developer runtime on the test PATH: $tool" }
+          }
+          ./scripts/acceptance-windows-clean-install.ps1 -InstallerPath $candidate -PreviousInstallerPath $previous `
+            -PreviousInstallerSupportsIsolatedAcceptance -VerifyPreviousInstallerRejectsUpgradedProfile `
+            -ExpectedVersion '1.6.0' -ExpectedInitialSchemaRevision 'b15_integrated_0002' -ExpectedSchemaRevision 'b16_integrated_0001' `
+            -AcceptanceRoot 'C:\rv-original-previous-package' -DisposableTest -KeepArtifacts
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ReefVision-original-1.5-upgrade-to-1.6-proof
+          path: |
+            .artifacts/previous-package-originals.json
+            .artifacts/windows-clean-acceptance-*/report.json
+            .artifacts/windows-clean-acceptance-*/*.log
+          include-hidden-files: true
+          if-no-files-found: error
