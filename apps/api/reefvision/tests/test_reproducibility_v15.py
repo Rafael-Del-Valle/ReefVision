@@ -219,27 +219,46 @@ def _upload(raw: bytes) -> dict[str, tuple[str, bytes, str]]:
     return {"file": ("fixture.reproducibility.zip", raw, "application/zip")}
 
 
+def _archive_with_replacement(
+    parts: dict[str, bytes],
+    manifest: dict[str, Any],
+    path: str,
+    body: bytes,
+) -> bytes:
+    parts[path] = body
+    for descriptor in manifest["entries"]:
+        if descriptor["path"] == path:
+            descriptor["size_bytes"] = len(body)
+            descriptor["sha256"] = sha256(body).hexdigest()
+    parts["manifest.json"] = canonical_json_bytes(manifest)
+    result = BytesIO()
+    with ZipFile(result, "w") as target:
+        for name, payload in parts.items():
+            target.writestr(name, payload)
+    return result.getvalue()
+
+
 def _modified_methods(raw: bytes) -> bytes:
     parts = _zip_body(raw)
     manifest = json.loads(parts["manifest.json"])
     path = "evidence/methods.json"
     methods = json.loads(parts[path])
     methods["review_criterion"] = "Artificially substituted analysis methods"
-    parts[path] = canonical_json_bytes(methods)
-    for descriptor in manifest["entries"]:
-        if descriptor["path"] == path:
-            descriptor["size_bytes"] = len(parts[path])
-            descriptor["sha256"] = sha256(parts[path]).hexdigest()
     manifest["proof"]["section_sha256"]["methods"] = canonical_json_sha256(methods)
     manifest["proof"]["proof_sha256"] = canonical_json_sha256(
         {key: value for key, value in manifest["proof"].items() if key != "proof_sha256"}
     )
-    parts["manifest.json"] = canonical_json_bytes(manifest)
-    result = BytesIO()
-    with ZipFile(result, "w") as target:
-        for name, body in parts.items():
-            target.writestr(name, body)
-    return result.getvalue()
+    return _archive_with_replacement(parts, manifest, path, canonical_json_bytes(methods))
+
+
+def _modified_native_inventory(raw: bytes) -> bytes:
+    parts = _zip_body(raw)
+    manifest = json.loads(parts["manifest.json"])
+    path = "project.reefvision.zip"
+    native = BytesIO(parts[path])
+    with ZipFile(native, "a") as changed:
+        changed.writestr("unlisted.json", b"{}")
+    return _archive_with_replacement(parts, manifest, path, native.getvalue())
 
 
 def test_real_evidence_reopens_in_two_copies_and_tampering_is_preflighted(
@@ -247,6 +266,16 @@ def test_real_evidence_reopens_in_two_copies_and_tampering_is_preflighted(
     reviewed_runtime: None,
 ) -> None:
     project, entitlements, keys = _fixture(client)
+    app = cast(FastAPI, client.app)
+    duplicate_checkpoint = (
+        app.state.settings.resolved_data_dir
+        / "projects"
+        / project
+        / "training-artifacts"
+        / "best.pt"
+    )
+    duplicate_checkpoint.parent.mkdir()
+    duplicate_checkpoint.write_bytes(b"Unselected checkpoint bytes")
     first, first_raw = _export(client, project, entitlements, with_weights=True, with_media=True)
     source_manifest = first["manifest"]
     proof = source_manifest["proof"]
@@ -274,17 +303,25 @@ def test_real_evidence_reopens_in_two_copies_and_tampering_is_preflighted(
     assert verified["compatible"], verified
     assert verified["manifest_sha256"] == canonical_json_sha256(package["manifest"])
     assert len(verified["manifest"]["omitted_sources"]) == 2
+    omitted_zip = _zip_body(_zip_body(raw)["project.reefvision.zip"])
+    assert not any(name.endswith(".pt") for name in omitted_zip)
+    assert b"Unselected checkpoint bytes" not in omitted_zip.values()
     assert all(
         "model inference" in item["requires_relink_for"]
         for item in verified["manifest"]["omitted_sources"]
     )
 
-    damaged = _modified_methods(raw)
     before = client.get("/api/v1/projects").json()
-    inspected = successful(client.post(f"{REPRO}/inspect", files=_upload(damaged)))
-    assert not inspected["compatible"]
-    assert client.post(f"{REPRO}/import", files=_upload(damaged)).status_code == 400
-    assert client.get("/api/v1/projects").json() == before
+    for damaged, diagnostic in (
+        (_modified_methods(raw), "differs from the underlying frozen evidence"),
+        (_modified_native_inventory(raw), "undeclared"),
+    ):
+        inspected = successful(client.post(f"{REPRO}/inspect", files=_upload(damaged)))
+        assert not inspected["compatible"]
+        assert any(diagnostic in error for error in inspected["errors"])
+        rejected = client.post(f"{REPRO}/import", files=_upload(damaged))
+        assert rejected.status_code == 400 and diagnostic in rejected.json()["detail"]
+        assert client.get("/api/v1/projects").json() == before
 
     for copy in range(2):
         restored = successful(client.post(f"{REPRO}/import", files=_upload(raw)), 201)

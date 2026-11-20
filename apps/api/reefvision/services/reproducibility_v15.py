@@ -103,7 +103,6 @@ class ReproducibilityService:
             ResearchExchangeRequest(
                 include_media=request.include_media,
                 include_model_weights=request.include_model_weights,
-                include_generated_artifacts=True,
                 reproducibility={"selection": selection},
             ),
         )
