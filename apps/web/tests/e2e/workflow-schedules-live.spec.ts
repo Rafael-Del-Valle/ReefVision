@@ -507,7 +507,8 @@ test("schedules a frozen QC workflow and follows its durable occurrence to revie
     await expect(row.getByText(/coalesced intervals?/)).toBeVisible();
   }
   const jobResponse = page.waitForResponse(
-    (response) => response.url() === `${api}/jobs/${occurrence.job_id}`,
+    (response) =>
+      response.url().split("?")[0] === `${api}/jobs/${occurrence.job_id}`,
   );
   await row.getByRole("button", { name: "Open job", exact: true }).click();
   const job = await checked<{
