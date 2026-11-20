@@ -91,7 +91,9 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
         actor = "actor VARCHAR(100)"
     if variant == "unexpected_default":
         actor = "actor VARCHAR(100) NOT NULL DEFAULT 'PRIVATE_FUTURE_ACTOR'"
-    comment_column = "comment TEXT NOT NULL" if variant == "optional_notnull" else "comment TEXT"
+    comment_column = (
+        "comment TEXT NOT NULL" if variant == "optional_notnull" else "comment TEXT"
+    )
     unique = ", UNIQUE (review_queue_item_id, client_request_id)"
     if variant == "missing_unique":
         unique = ""
