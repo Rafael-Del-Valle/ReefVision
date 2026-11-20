@@ -362,6 +362,7 @@ def test_exchange_binds_historical_workflow_report_to_condition_ledger(
 
     restored = import_archive(client, raw)
     assert restored.status_code == 201, restored.text
+    assert restored.json()["package"]["format_version"] == "1.0"
     restored_base = f"/api/v1/projects/{restored.json()['project_id']}"
     [local_asset] = client.get(f"{restored_base}/spatial/assets").json()
     assert local_asset["id"] != asset["id"]
@@ -376,6 +377,23 @@ def test_exchange_binds_historical_workflow_report_to_condition_ledger(
     [local_artifact] = [
         item for item in detail["artifacts"] if item["data_type"] == "spatial_condition_report"
     ]
+    condition_node = next(node for node in detail["nodes"] if node["node_id"] == "condition")
+    [output] = condition_node["result_json"]["outputs"]
+    assert output["artifact_id"] == local_artifact["id"]
+    assert output["payload_sha256"] == local_artifact["payload_sha256"]
+    workflow_provenance = detail["run"]["result_json"]["provenance_manifest"]
+    assert workflow_provenance["project_id"] == local_asset["project_id"]
+    assert workflow_provenance["graph"]["graph_sha256"] == detail["run"]["graph_sha256"]
+    [terminal_report] = [
+        item
+        for item in workflow_provenance["terminal_artifacts"]
+        if item["data_type"] == "spatial_condition_report"
+    ]
+    assert terminal_report["payload_sha256"] == local_artifact["payload_sha256"]
+    assert (
+        canonical_json_sha256(workflow_provenance)
+        == detail["run"]["result_json"]["provenance_sha256"]
+    )
     snapshot = local_artifact["payload_json"]
     assert snapshot["revision_id"] == local_review["id"]
     assert local_review["stale_source_metadata"] is True
@@ -384,6 +402,25 @@ def test_exchange_binds_historical_workflow_report_to_condition_ledger(
     assert snapshot["revisions"][-1]["resolved_label"] == "fixture-alpha"
     assert snapshot["revisions"][-1]["observation"]["reference_evidence"] == asset["id"]
     assert client.get(f"{restored_base}/spatial/assets/{asset['id']}").status_code == 404
+
+    # Exporting a restored project must preserve the first project's evidence IDs.
+    restored_again = import_archive(
+        client, export_archive(client, test_settings, local_asset["project_id"])
+    )
+    assert restored_again.status_code == 201, restored_again.json().get("detail")
+    second_project_id = restored_again.json()["project_id"]
+    second_provenance = restored_again.json()["package"]["options_json"]
+    origin_ids = second_provenance["origin_id_map"]
+    assert origin_ids[project_id] == second_project_id
+    assert origin_ids[asset["id"]] == second_provenance["id_map"][local_asset["id"]]
+    second_base = f"/api/v1/projects/{second_project_id}"
+    [second_asset] = client.get(f"{second_base}/spatial/assets").json()
+    assert second_asset["id"] == origin_ids[asset["id"]]
+    assert second_asset["sha256"] == asset["sha256"]
+    second_scope = f"{second_base}/spatial/assets/{second_asset['id']}/condition-observations"
+    _, second_review = client.get(second_scope).json()
+    assert second_review["id"] == origin_ids[revision_id]
+    assert second_review["observation"]["reference_evidence"] == asset["id"]
     assert client.get(report_url).json() == original_report
 
 
