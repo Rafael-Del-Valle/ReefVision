@@ -284,6 +284,13 @@ def _validate_record(
         )
         if len(children) != 2 or len(set(children)) != 2:
             raise ValueError("Still comparison lacks both independently recorded inference jobs")
+        for identifier in children:
+            child = session.get(Job, identifier)
+            if child is None or child.request_json.get("paired_owner_run_id") not in (
+                None,
+                job["id"],
+            ):
+                raise ValueError("A still inference job belongs to a different comparison")
         if (
             evidence["reference_id"] != str(source.sources[0].id)
             or evidence["reference_sha256"] != original_digests[0]

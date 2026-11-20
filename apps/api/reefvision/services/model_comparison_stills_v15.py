@@ -14,6 +14,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
@@ -33,6 +34,7 @@ from reefvision.domain.annotation_comparison import (
 )
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.jobs.inference import process_inference_job
+from reefvision.repositories.jobs import paired_owner_active
 from reefvision.schemas.paired_growth_contrast import Digest
 from reefvision.schemas.static_comparison import (
     ReferenceAnnotation,
@@ -364,6 +366,54 @@ def _prediction_fields(row: PredictionProposal) -> dict[str, Any]:
     }
 
 
+def _require_active_owner(session: Session, project_id: str, owner_run_id: str | None) -> None:
+    if owner_run_id is not None and not paired_owner_active(session, project_id, owner_run_id):
+        raise ConflictError("The paired comparison was stopped before its inference completed")
+
+
+def _inference_child(
+    session: Session,
+    project_id: str,
+    request: dict[str, Any],
+    owner_run_id: str | None,
+    reference_sha256: str,
+) -> Job:
+    deduplication_key = None
+    if owner_run_id is not None:
+        request["paired_owner_run_id"] = owner_run_id
+        deduplication_key = canonical_json_sha256(
+            {
+                "method": "paired-image-inference.v1",
+                "project_id": project_id,
+                "reference_sha256": reference_sha256,
+                "request": request,
+            }
+        )
+        existing = session.scalar(select(Job).where(Job.deduplication_key == deduplication_key))
+        if existing is not None:
+            return existing
+    job = Job(
+        project_id=project_id,
+        job_type="inference",
+        status="queued",
+        progress_current=0,
+        progress_total=len(request["image_ids"]),
+        request_json=request,
+        deduplication_key=deduplication_key,
+    )
+    session.add(job)
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        if deduplication_key is not None:
+            existing = session.scalar(select(Job).where(Job.deduplication_key == deduplication_key))
+            if existing is not None:
+                return existing
+        raise
+    return job
+
+
 def _run_side(
     session: Session,
     settings: Settings | None,
@@ -373,6 +423,8 @@ def _run_side(
     *,
     recorded_job_id: str | None = None,
     original_ids: Mapping[str, str] | None = None,
+    owner_run_id: str | None = None,
+    reference_sha256: str,
 ) -> ModelOutputs:
     choice = model.choice.model_dump(mode="json")
     request = {key: value for key, value in choice.items() if key != "checkpoint_sha256"}
@@ -386,21 +438,17 @@ def _run_side(
         job_id = recorded_job_id
     else:
         assert settings is not None
-        job = Job(
-            project_id=project_id,
-            job_type="inference",
-            status="queued",
-            progress_current=0,
-            progress_total=len(image_ids),
-            request_json=expected_request,
+        _require_active_owner(session, project_id, owner_run_id)
+        job = _inference_child(
+            session, project_id, expected_request, owner_run_id, reference_sha256
         )
-        session.add(job)
-        session.commit()
         job_id = job.id
-        process_inference_job(
-            settings, sessionmaker(bind=session.get_bind(), expire_on_commit=False), job_id
-        )
-        session.expire_all()
+        if job.status == "queued":
+            process_inference_job(
+                settings, sessionmaker(bind=session.get_bind(), expire_on_commit=False), job_id
+            )
+            session.expire_all()
+        _require_active_owner(session, project_id, owner_run_id)
     finished = session.get(Job, job_id)
     if finished is None or finished.status != "succeeded":
         detail = finished.error_message if finished is not None else "inference receipt missing"
@@ -637,7 +685,9 @@ def compare_image_models(
     selections: Sequence[Mapping[str, Any]],
     *,
     recorded: RecordedImageRuns | None = None,
+    owner_run_id: str | None = None,
 ) -> dict[str, Any]:
+    _require_active_owner(session, project_id, owner_run_id)
     if (
         task not in {"detector", "mask"}
         or set(source_ids) != {"dataset_version_id"}
@@ -736,6 +786,8 @@ def compare_image_models(
             targets,
             recorded_job_id=recorded.job_ids[index] if recorded else None,
             original_ids=recorded.original_ids if recorded else None,
+            owner_run_id=owner_run_id,
+            reference_sha256=reference_sha256,
         )
         for index, model in enumerate((left, right))
     )
