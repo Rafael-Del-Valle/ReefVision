@@ -689,7 +689,13 @@ def test_pose_training_rechecks_frozen_holdout_bytes_before_gpu_launch(
         destination=destination,
     )
     _verify_prelaunch_pose_dataset(destination, materialization)
-    _verify_postlaunch_pose_dataset(destination, materialization)
+    _verify_postlaunch_pose_dataset(destination, materialization, materialization)
+
+    # The GPU worker must also reject changed persisted provenance even
+    # when the frozen training and validation bytes are untouched.
+    altered_provenance = {**materialization, "validation_mode": "none"}
+    with pytest.raises(ValidationError, match="materialization provenance changed"):
+        _verify_postlaunch_pose_dataset(destination, materialization, altered_provenance)
 
     holdout_label = destination / "labels" / "val" / "frame_00000001.txt"
     holdout_label.write_bytes(holdout_label.read_bytes() + b"changed")
@@ -698,7 +704,7 @@ def test_pose_training_rechecks_frozen_holdout_bytes_before_gpu_launch(
     # A modified validation label must also invalidate the completed GPU job,
     # even if it passed the earlier preflight verification.
     with pytest.raises(ValidationError, match="changed during GPU training"):
-        _verify_postlaunch_pose_dataset(destination, materialization)
+        _verify_postlaunch_pose_dataset(destination, materialization, materialization)
 
     with pytest.raises(ValidationError, match="missing materialized dataset provenance"):
         _verify_prelaunch_pose_dataset(destination, None)
