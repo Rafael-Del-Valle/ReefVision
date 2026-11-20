@@ -145,6 +145,7 @@ from reefvision.db.models.workflow_execution import (
     WorkflowNodeRun,
     WorkflowRun,
 )
+from reefvision.db.models.workflow_schedule import WorkflowSchedule, WorkflowScheduleOccurrence
 
 __all__ = [
     "ActiveLearningRound",
@@ -255,4 +256,6 @@ __all__ = [
     "WorkflowGraphRecord",
     "WorkflowNodeRun",
     "WorkflowRun",
+    "WorkflowSchedule",
+    "WorkflowScheduleOccurrence",
 ]
