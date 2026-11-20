@@ -59,7 +59,8 @@ function Test-ExternalTcp([Net.IPAddress]$Address) {
 }
 
 function Read-PackagedSession($Account, $Desktop) {
-    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(35)
+    # Match the installed clean acceptance allowance for frozen sidecar startup.
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(180)
     $port = ''
     do {
         if ($Desktop.HasExited) { throw 'The installed desktop exited before the packaged sidecar opened.' }
