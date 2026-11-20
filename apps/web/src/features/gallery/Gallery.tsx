@@ -819,6 +819,9 @@ function GalleryContent({
   }
 
   const visibleImages = images.data?.items ?? [];
+  // A server-side reorder can move the focused thumbnail even while its image
+  // ID is unchanged. Re-align after list ordering changes, not only on resize.
+  const filmstripOrderKey = visibleImages.map((item) => item.id).join("|");
   // A cross-page navigation already knows which edge to focus. Resolve it
   // before rendering or notifying scientific consumers; otherwise the first
   // image on the destination page briefly appears even when navigating to
@@ -919,7 +922,7 @@ function GalleryContent({
       }
       window.removeEventListener("resize", alignFocusedThumbnail);
     };
-  }, [focusedImage?.id]);
+  }, [focusedImage?.id, filmstripOrderKey]);
 
   useEffect(() => {
     const filmstrip = filmstripRef.current;

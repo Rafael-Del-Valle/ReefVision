@@ -2831,6 +2831,68 @@ describe("Gallery", () => {
     },
   );
 
+  it("re-aligns the focused thumbnail after a server-side reorder without changing scientific focus", async () => {
+    const secondImage: ProjectImage = {
+      ...image,
+      id: "image-2",
+      original_filename: "swiftia-02.png",
+    };
+    const response = (items: ProjectImage[]) => ({
+      items,
+      total: 2,
+      page: 1,
+      page_size: 24,
+      pages: 1,
+    });
+    const onFocusedImageChange = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(response([image, secondImage])),
+    );
+    const { queryClient } = renderGallery(
+      undefined,
+      undefined,
+      onFocusedImageChange,
+    );
+    const filmstrip = await screen.findByRole("list", {
+      name: "Nearby images",
+    });
+    const second = screen.getByRole("listitem", {
+      name: "Focus swiftia-02.png",
+    });
+    vi.spyOn(filmstrip, "getBoundingClientRect").mockReturnValue({
+      left: 100,
+      right: 400,
+    } as DOMRect);
+    let thumbnailLeft = 200;
+    vi.spyOn(second, "getBoundingClientRect").mockImplementation(
+      () =>
+        ({
+          left: thumbnailLeft,
+          right: thumbnailLeft + 70,
+        }) as DOMRect,
+    );
+
+    await userEvent.click(second);
+    expect(filmstrip.scrollLeft).toBe(0);
+    expect(second).toHaveAttribute("aria-current", "true");
+
+    // Sorting or a concurrent annotation update can reorder thumbnails while
+    // the selected scientific image stays unchanged. No resize event occurs.
+    thumbnailLeft = 425;
+    await act(async () => {
+      queryClient.setQueriesData(
+        { queryKey: ["images", project.id] },
+        response([secondImage, image]),
+      );
+    });
+    await waitFor(() => expect(filmstrip.scrollLeft).toBe(95));
+    expect(second).toHaveAttribute("aria-current", "true");
+    expect(
+      screen.getByAltText("Focused project image: swiftia-02.png"),
+    ).toBeInTheDocument();
+    expect(onFocusedImageChange).toHaveBeenLastCalledWith("image-2");
+  });
+
   it("defers active-image alignment until collapsed pane geometry recovers", async () => {
     const nextImage: ProjectImage = {
       ...image,
