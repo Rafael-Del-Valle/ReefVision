@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 import {
   expect,
@@ -20,6 +21,7 @@ import type {
 import type {
   ScheduleOccurrence,
   WorkflowSchedule,
+  WorkflowScheduleReceipt,
 } from "../../src/features/workflow-schedules/workflowScheduleApi";
 import { test } from "./spatialDesktop";
 
@@ -39,6 +41,7 @@ interface RestartWitness {
   graphSha256: string;
   schedule: WorkflowSchedule;
   first: ScheduleOccurrence;
+  paused: WorkflowSchedule;
 }
 
 const graphLabel = "QC review queue from a frozen dataset";
@@ -58,6 +61,49 @@ function waitForWrite(page: Page, url: string, method = "POST") {
     (response) =>
       response.url() === url && response.request().method() === method,
   );
+}
+
+async function verifyDisposableRuntime(page: Page, api: string) {
+  const data = process.env.REEFVISION_SCHEDULE_TEST_EXPECTED_DATA_DIR;
+  const version = process.env.REEFVISION_SCHEDULE_TEST_EXPECTED_VERSION;
+  const schema = process.env.REEFVISION_SCHEDULE_TEST_EXPECTED_SCHEMA;
+  if (!data || !version || !schema) {
+    throw new Error(
+      "Schedule acceptance requires an independently recorded disposable data directory, application version, and schema.",
+    );
+  }
+  expect(new URL(api).origin).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+  const expected = await realpath(data);
+  const markers = await Promise.all(
+    [".reefvision-clean-install-acceptance", ".reefvision-disposable-qa"].map(
+      (marker) =>
+        stat(join(expected, marker))
+          .then((result) => result.isFile())
+          .catch(() => false),
+    ),
+  );
+  expect(markers).toContain(true);
+  const runtime = await checked<{
+    data_dir: string;
+    database_path: string;
+    application_version: string;
+    current_schema_revision: string;
+    expected_schema_revision: string;
+    safe_mode: boolean;
+  }>(await page.request.get(`${api}/system/version`), 200);
+  expect(runtime).toEqual(
+    expect.objectContaining({
+      application_version: version,
+      current_schema_revision: schema,
+      expected_schema_revision: schema,
+      safe_mode: false,
+    }),
+  );
+  expect(await realpath(runtime.data_dir)).toBe(expected);
+  expect(await realpath(runtime.database_path)).toBe(
+    await realpath(join(expected, "reefvision.db")),
+  );
+  return runtime;
 }
 
 async function openProject(page: Page, web: string, name: string) {
@@ -195,10 +241,12 @@ test("schedules a frozen QC workflow and follows its durable occurrence to revie
     phase === "after-restart"
       ? (JSON.parse(await readFile(witnessPath!, "utf8")) as RestartWitness)
       : null;
+  const runtime = await verifyDisposableRuntime(page, api);
   const health = await checked<{ version: string }>(
     await page.request.get(`${api}/health`),
     200,
   );
+  expect(health.version).toBe(runtime.application_version);
   await page.addInitScript((version) => {
     localStorage.setItem(`reefvision.onboarding.dismissed.${version}`, "true");
   }, health.version);
@@ -245,13 +293,14 @@ test("schedules a frozen QC workflow and follows its durable occurrence to revie
       page.getByRole("heading", { name: "Schedules", exact: true }),
     ).toBeVisible();
   }
-  async function createSchedule(
+  async function fillSchedule(
     name: string,
     offset: number,
     minimumFreeBytes = 0,
+    purpose = "Quality control",
   ) {
     await page.getByLabel("Schedule name").fill(name);
-    await page.getByLabel("Purpose").selectOption({ label: "Quality control" });
+    await page.getByLabel("Purpose").selectOption({ label: purpose });
     await page.getByLabel("Saved workflow revision").selectOption({
       label: `${graph.name} (revision ${graph.revision})`,
     });
@@ -266,6 +315,14 @@ test("schedules a frozen QC workflow and follows its durable occurrence to revie
       .fill(String(minimumFreeBytes));
     const date = new Date(Date.now() + offset).toISOString().slice(0, 19);
     await page.getByLabel("First due (UTC)").fill(date);
+    return date;
+  }
+  async function createSchedule(
+    name: string,
+    offset: number,
+    minimumFreeBytes = 0,
+  ) {
+    const date = await fillSchedule(name, offset, minimumFreeBytes);
     const creation = waitForWrite(page, schedules);
     await page.getByRole("button", { name: "Create schedule" }).click();
     const record = await checked<WorkflowSchedule>(await creation, 201);
@@ -315,14 +372,35 @@ test("schedules a frozen QC workflow and follows its durable occurrence to revie
   }
 
   await openSchedules();
-  let blockedScheduleId: string | undefined;
-  if (phase === "single") {
+  let pausedControl: WorkflowSchedule;
+  let rejectedPurpose: string | undefined;
+  if (preceding) {
+    pausedControl = preceding.paused;
+    const persisted = await current(pausedControl.id);
+    expect(persisted).toEqual(pausedControl);
+    expect(Date.parse(persisted.next_due_at)).toBeLessThan(Date.now());
+    expect(await history(pausedControl.id)).toEqual([]);
+    await select(pausedControl.name);
+    await expect(
+      page.getByRole("button", { name: "Resume schedule", exact: true }),
+    ).toBeVisible();
+  } else {
+    const refusedName = "Wrong typed outcome";
+    await fillSchedule(refusedName, 60_000, 0, "Report");
+    const attempt = waitForWrite(page, schedules);
+    await page.getByRole("button", { name: "Create schedule" }).click();
+    const error = await checked<{ detail: string }>(await attempt, 400);
+    expect(error.detail).toContain("must end in a typed report result");
+    await expect(page.getByRole("alert")).toHaveText(error.detail);
+    await expect(
+      page.getByRole("button", { name: refusedName, exact: true }),
+    ).toHaveCount(0);
+    rejectedPurpose = error.detail;
     const blocked = await createSchedule(
       "Storage limited QC",
       -2_000,
       Number.MAX_SAFE_INTEGER,
     );
-    blockedScheduleId = blocked.id;
     await select(blocked.name);
     await expect(
       page.getByText("Blocked by free space", { exact: false }),
@@ -330,7 +408,7 @@ test("schedules a frozen QC workflow and follows its durable occurrence to revie
     expect((await current(blocked.id)).last_status).toBe("blocked_storage");
     expect((await current(blocked.id)).next_due_at).toBe(blocked.next_due_at);
     expect(await history(blocked.id)).toEqual([]);
-    await pause(blocked);
+    pausedControl = await pause(blocked);
   }
   const schedule =
     preceding?.schedule ??
@@ -407,6 +485,7 @@ test("schedules a frozen QC workflow and follows its durable occurrence to revie
           graphSha256: graph.graph_sha256,
           schedule: advanced,
           first: occurrence,
+          paused: pausedControl,
         } satisfies RestartWitness,
         null,
         2,
@@ -425,6 +504,33 @@ test("schedules a frozen QC workflow and follows its durable occurrence to revie
   if (preceding) {
     await expect(row.getByText(/coalesced intervals?/)).toBeVisible();
   }
+  const jobResponse = page.waitForResponse(
+    (response) => response.url() === `${api}/jobs/${occurrence.job_id}`,
+  );
+  await row.getByRole("button", { name: "Open job", exact: true }).click();
+  const job = await checked<{
+    id: string;
+    project_id: string;
+    request_json: Record<string, unknown>;
+    status: string;
+  }>(await jobResponse, 200);
+  expect(job).toEqual(
+    expect.objectContaining({
+      id: occurrence.job_id,
+      project_id: fixture.projectId,
+      request_json: expect.objectContaining({
+        workflow_run_id: occurrence.workflow_run_id,
+      }),
+      status: "succeeded",
+    }),
+  );
+  const jobDetails = row.getByRole("region", { name: "Scheduled job details" });
+  await expect(
+    jobDetails.getByRole("heading", { name: "succeeded", exact: true }),
+  ).toBeVisible();
+  await expect(
+    row.getByText(occurrence.job_id!, { exact: true }),
+  ).toBeVisible();
   await row.getByRole("button", { name: "Open workflow run" }).click();
   await expect(
     page.getByText("review_queue_reference", { exact: true }),
@@ -454,14 +560,138 @@ test("schedules a frozen QC workflow and follows its durable occurrence to revie
     expect(digest).toBe(image.sha256);
     originalHashes.push({ id: image.id, sha256: digest });
   }
-  await info.attach("schedule-proof", {
-    contentType: "application/json",
-    body: JSON.stringify(
+  let receiptProof: Record<string, unknown> | undefined;
+  if (phase !== "before-restart") {
+    await openSchedules();
+    await select(schedule.name);
+    const terminal = page
+      .getByRole("article")
+      .filter({ hasText: occurrence.id });
+    const receiptURL = `${root}/workflow-schedule-occurrences/${occurrence.id}/receipt`;
+    const receiptResponse = page.waitForResponse(
+      (response) => response.url() === receiptURL,
+    );
+    const transfer = page.waitForEvent("download");
+    await terminal
+      .getByRole("button", { name: "Download receipt JSON" })
+      .click();
+    const standalone = await checked<WorkflowScheduleReceipt>(
+      await receiptResponse,
+      200,
+    );
+    const download = await transfer;
+    expect(standalone.receipt_sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(download.suggestedFilename()).toBe(
+      `workflow-schedule-receipt-${standalone.receipt_sha256}.json`,
+    );
+    const receiptBytes = await readFile(await download.path());
+    expect(JSON.parse(receiptBytes.toString("utf8"))).toEqual(standalone);
+    expect(standalone.receipt).toEqual(
+      expect.objectContaining({
+        project_id: fixture.projectId,
+        schedule_id: schedule.id,
+        occurrence_id: occurrence.id,
+        workflow_graph_record_id: graph.id,
+        graph_sha256: occurrence.graph_sha256,
+        inputs_sha256: occurrence.inputs_sha256,
+        workflow_run_id: occurrence.workflow_run_id,
+        job_id: occurrence.job_id,
+        status: "succeeded",
+        artifacts: expect.arrayContaining([
+          expect.objectContaining({
+            artifact_id: artifact.id,
+            data_type: "review_queue_reference",
+            payload_sha256: artifact.payload_sha256,
+          }),
+        ]),
+      }),
+    );
+    const savedNode = waitForWrite(page, `${root}/workflow-graphs`);
+    await terminal
+      .getByRole("button", { name: "Save receipt workflow" })
+      .click();
+    const receiptGraph = await checked<WorkflowGraphRecord>(
+      await savedNode,
+      201,
+    );
+    const revision = page.getByRole("listitem").filter({
+      hasText: receiptGraph.name,
+      has: page.getByRole("button", {
+        name: "Run saved revision",
+        exact: true,
+      }),
+    });
+    await expect(revision).toBeVisible();
+    const replays = [];
+    for (const replayNumber of [1, 2]) {
+      if (replayNumber > 1) {
+        await openProject(page, web, fixture.projectName);
+        await page
+          .getByRole("tab", { name: "Workflow builder", exact: true })
+          .click();
+        await revision
+          .getByRole("button", { name: "Load", exact: true })
+          .click();
+      }
+      const queued = waitForWrite(page, `${root}/workflow-runs`);
+      await revision
+        .getByRole("button", { name: "Run saved revision", exact: true })
+        .click();
+      const { id } = await checked<{ id: string }>(await queued, 202);
+      let detail!: WorkflowRunDetail;
+      await expect
+        .poll(
+          async () => {
+            detail = await checked<WorkflowRunDetail>(
+              await page.request.get(`${api}/workflow-runs/${id}`),
+              200,
+            );
+            return detail.run.status;
+          },
+          { timeout: 45_000 },
+        )
+        .not.toMatch(/queued|running/);
+      expect(detail.run.status, detail.run.error_message ?? undefined).toBe(
+        "succeeded",
+      );
+      expect(detail.run.workflow_graph_record_id).toBe(receiptGraph.id);
+      const result = detail.artifacts.find(
+        ({ data_type }) => data_type === "workflow_schedule_receipt",
+      )!;
+      expect(result.producer_port_id).toBe("receipt");
+      expect(result.payload_json).toEqual(standalone);
+      replays.push({ id, payloadSha256: result.payload_sha256 });
+      await expect(
+        page.getByText("workflow_schedule_receipt", { exact: true }).last(),
+      ).toBeVisible();
+    }
+    expect(replays[0].id).not.toBe(replays[1].id);
+    expect(replays[0].payloadSha256).toBe(replays[1].payloadSha256);
+    expect((await history(schedule.id)).map(({ id }) => id)).toEqual(
+      list.map(({ id }) => id),
+    );
+    expect((await current(schedule.id)).enabled).toBe(false);
+    expect(await history(pausedControl.id)).toEqual([]);
+    receiptProof = {
+      receiptSha256: standalone.receipt_sha256,
+      downloadedFileSha256: sha256(receiptBytes),
+      graphId: receiptGraph.id,
+      graphSha256: receiptGraph.graph_sha256,
+      replays,
+    };
+  }
+  const proofPath = info.outputPath("schedule-proof.json");
+  await writeFile(
+    proofPath,
+    JSON.stringify(
       {
         surface,
         phase,
         version: health.version,
-        blockedScheduleId,
+        schema: runtime.current_schema_revision,
+        pausedControl,
+        rejectedPurpose,
+        receiptProof,
         projectId: fixture.projectId,
         graphId: graph.id,
         graphSha256: graph.graph_sha256,
@@ -470,6 +700,7 @@ test("schedules a frozen QC workflow and follows its durable occurrence to revie
         originalHashes,
         schedule: await current(schedule.id),
         occurrence,
+        job: { id: job.id, project_id: job.project_id, status: job.status },
         queueId,
         artifactSha256: artifact.payload_sha256,
         ranked: ranked.map(
@@ -484,5 +715,9 @@ test("schedules a frozen QC workflow and follows its durable occurrence to revie
       null,
       2,
     ),
+  );
+  await info.attach("schedule-proof", {
+    contentType: "application/json",
+    path: proofPath,
   });
 });

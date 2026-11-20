@@ -8,10 +8,14 @@ import {
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { listSavedWorkflowGraphs } from "../workflow-graphs/workflowGraphApi";
+import {
+  listSavedWorkflowGraphs,
+  saveWorkflowGraph,
+} from "../workflow-graphs/workflowGraphApi";
 import {
   cancelScheduleOccurrence,
   createWorkflowSchedule,
+  getScheduleOccurrenceReceipt,
   listScheduleOccurrences,
   listWorkflowSchedules,
   updateWorkflowSchedule,
@@ -22,6 +26,7 @@ import { WorkflowSchedulesWorkspace } from "./WorkflowSchedulesWorkspace";
 
 vi.mock("../workflow-graphs/workflowGraphApi", () => ({
   listSavedWorkflowGraphs: vi.fn(),
+  saveWorkflowGraph: vi.fn(),
 }));
 vi.mock("./workflowScheduleApi", () => ({
   schedulePageSize: 20,
@@ -30,6 +35,7 @@ vi.mock("./workflowScheduleApi", () => ({
   createWorkflowSchedule: vi.fn(),
   updateWorkflowSchedule: vi.fn(),
   cancelScheduleOccurrence: vi.fn(),
+  getScheduleOccurrenceReceipt: vi.fn(),
 }));
 
 const graph = {
@@ -78,7 +84,10 @@ const occurrence: ScheduleOccurrence = {
   inputs_sha256: schedule.inputs_sha256,
 };
 
-function renderWorkspace(onOpenWorkflowRun = vi.fn()) {
+function renderWorkspace(
+  onOpenWorkflowRun = vi.fn(),
+  onOpenWorkflowGraph = vi.fn(),
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -87,6 +96,7 @@ function renderWorkspace(onOpenWorkflowRun = vi.fn()) {
       <WorkflowSchedulesWorkspace
         projectId={schedule.project_id}
         onOpenWorkflowRun={onOpenWorkflowRun}
+        onOpenWorkflowGraph={onOpenWorkflowGraph}
       />
     </QueryClientProvider>,
   );
@@ -233,5 +243,76 @@ describe("workflow schedules", () => {
         },
       ),
     );
+  });
+
+  it("saves a read-only replay for an exact terminal occurrence and hands off its graph", async () => {
+    vi.mocked(listWorkflowSchedules).mockResolvedValue({
+      items: [schedule],
+      total: 1,
+    });
+    vi.mocked(listScheduleOccurrences).mockResolvedValue({
+      items: [{ ...occurrence, status: "succeeded" }],
+      total: 1,
+    });
+    vi.mocked(saveWorkflowGraph).mockResolvedValue(graph);
+    vi.mocked(getScheduleOccurrenceReceipt).mockResolvedValue({
+      receipt_sha256: "c".repeat(64),
+      receipt: {
+        schema_version: "workflow-schedule-receipt-0001",
+        project_id: schedule.project_id,
+        occurrence_id: occurrence.id,
+        schedule_id: schedule.id,
+        scheduled_at: occurrence.scheduled_at,
+        dispatched_at: occurrence.created_at,
+        purpose: schedule.purpose,
+        missed_intervals: occurrence.missed_intervals,
+        workflow_graph_record_id: schedule.workflow_graph_record_id,
+        graph_sha256: schedule.graph_sha256,
+        inputs: schedule.inputs,
+        inputs_sha256: schedule.inputs_sha256,
+        workflow_run_id: occurrence.workflow_run_id,
+        job_id: occurrence.job_id,
+        status: "succeeded",
+        detail: null,
+        workflow_provenance_sha256: "d".repeat(64),
+        artifacts: [],
+      },
+    });
+    const open = vi.fn();
+    renderWorkspace(vi.fn(), open);
+    fireEvent.click(await screen.findByRole("button", { name: "Morning QC" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Save receipt workflow" }),
+    );
+    await waitFor(() => expect(open).toHaveBeenCalledWith(graph));
+    expect(getScheduleOccurrenceReceipt).toHaveBeenCalledWith(
+      schedule.project_id,
+      occurrence.id,
+    );
+    expect(saveWorkflowGraph).toHaveBeenCalledWith(
+      schedule.project_id,
+      expect.objectContaining({
+        nodes: [
+          { node_id: "project", node_type: "project_source" },
+          {
+            node_id: "receipt",
+            node_type: "workflow_schedule_receipt",
+            parameters: {
+              occurrence_id: occurrence.id,
+              scheduled_at: occurrence.scheduled_at,
+            },
+          },
+        ],
+        edges: [
+          expect.objectContaining({
+            source_node_id: "project",
+            source_port_id: "project",
+            target_node_id: "receipt",
+            target_port_id: "project",
+          }),
+        ],
+      }),
+    );
+    expect(createWorkflowSchedule).not.toHaveBeenCalled();
   });
 });
