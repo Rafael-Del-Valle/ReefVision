@@ -20,11 +20,16 @@ def _create_scientific(db: sqlite3.Connection, variant: str) -> None:
     column = "source_kind VARCHAR(30) NOT NULL,"
     if variant == "missing_column":
         column = ""
+    if variant == "unexpected_default":
+        column = "source_kind VARCHAR(30) NOT NULL DEFAULT 'PRIVATE_FUTURE_SOURCE',"
     foreign_key = "REFERENCES images(id) ON DELETE RESTRICT"
     if variant == "wrong_fk":
         foreign_key = "REFERENCES images(id) ON DELETE SET NULL"
     if variant == "wrong_onupdate_fk":
         foreign_key = "REFERENCES images(id) ON UPDATE CASCADE ON DELETE RESTRICT"
+    image_column = "image_id VARCHAR(36)"
+    if variant == "optional_notnull":
+        image_column += " NOT NULL DEFAULT 'PRIVATE_FUTURE_IMAGE'"
     extra = ", generated_tag TEXT GENERATED ALWAYS AS (id) VIRTUAL"
     if variant != "hidden_column":
         extra = ""
@@ -35,7 +40,7 @@ def _create_scientific(db: sqlite3.Connection, variant: str) -> None:
         "variable VARCHAR(100) NOT NULL, "
         f"{column} "
         "observed_at DATETIME NOT NULL, "
-        f"image_id VARCHAR(36) {foreign_key}, "
+        f"{image_column} {foreign_key}, "
         "video_id VARCHAR(36) REFERENCES videos(id) ON DELETE RESTRICT, "
         "track_id VARCHAR(36) REFERENCES video_tracks(id) ON DELETE RESTRICT, "
         "model_run_id VARCHAR(36) REFERENCES jobs(id) ON DELETE RESTRICT, "
@@ -84,6 +89,9 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
     actor = "actor VARCHAR(100) NOT NULL"
     if variant == "nullable_actor":
         actor = "actor VARCHAR(100)"
+    if variant == "unexpected_default":
+        actor = "actor VARCHAR(100) NOT NULL DEFAULT 'PRIVATE_FUTURE_ACTOR'"
+    comment_column = "comment TEXT NOT NULL" if variant == "optional_notnull" else "comment TEXT"
     unique = ", UNIQUE (review_queue_item_id, client_request_id)"
     if variant == "missing_unique":
         unique = ""
@@ -95,7 +103,7 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
         "REFERENCES review_queue_items(id) ON DELETE CASCADE, "
         "project_id VARCHAR(36) NOT NULL REFERENCES projects(id) ON DELETE CASCADE, "
         "client_request_id VARCHAR(36) NOT NULL, event_type VARCHAR(20) NOT NULL, "
-        f"{actor}, comment TEXT, assignee VARCHAR(100), "
+        f"{actor}, {comment_column}, assignee VARCHAR(100), "
         f"created_at DATETIME NOT NULL{unique})"
     )
     if variant != "missing_index":
@@ -132,6 +140,8 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
     ("family", "variant"),
     [
         ("scientific", "valid"),
+        ("scientific", "unexpected_default"),
+        ("scientific", "optional_notnull"),
         ("scientific", "missing_column"),
         ("scientific", "wrong_fk"),
         ("scientific", "wrong_onupdate_fk"),
@@ -142,6 +152,8 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
         ("scientific", "hidden_column"),
         ("scientific", "unexpected_trigger"),
         ("qc", "valid"),
+        ("qc", "unexpected_default"),
+        ("qc", "optional_notnull"),
         ("qc", "wrong_fk"),
         ("qc", "wrong_onupdate_fk"),
         ("qc", "partial_lookup"),
@@ -229,6 +241,8 @@ def test_strict_structural_audit_rejects_forged_scientific_0038(
         ("scientific", "unexpected_trigger"),
         ("qc", "unexpected_trigger"),
         ("scientific", "wrong_onupdate_fk"),
+        ("scientific", "unexpected_default"),
+        ("qc", "optional_notnull"),
         ("scientific", "partial_lookup"),
         ("qc", "nocase_lookup"),
     ],
