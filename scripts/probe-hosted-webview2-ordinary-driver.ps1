@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$ContextFile,[switch]$FreshOrdinaryChild)
+param([Parameter(Mandatory)][string]$ContextFile)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 $context = Get-Content -LiteralPath $ContextFile -Raw | ConvertFrom-Json
@@ -32,29 +32,6 @@ public static class ReefVisionOrdinaryKnownFolder {
 '@
 $downloadsId = '374DE290-123F-4565-9164-39C4925E467B'
 $documentsId = 'FDD39AD0-238F-46AF-ADB4-6C85480369C7'
-$launchRecordPath = Join-Path $context.output 'ordinary-driver-environment.json'
-if (-not $FreshOrdinaryChild) {
-    $inheritedProfile = $env:USERPROFILE
-    $inheritedDownloads = [ReefVisionOrdinaryKnownFolder]::Get($downloadsId,[IntPtr]::Zero)
-    $inheritedDocuments = [ReefVisionOrdinaryKnownFolder]::Get($documentsId,[IntPtr]::Zero)
-    $ordinaryProfile = Set-ReefVisionHostedUserProfile $identity
-    $registryPath = 'Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders'
-    $ordinaryShell = [Microsoft.Win32.Registry]::Users.OpenSubKey("$($identity.User.Value)\$registryPath")
-    try {
-        $registryDownloads = if ($ordinaryShell) {
-            $ordinaryShell.GetValue("{$downloadsId}",$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
-        }
-    } finally {
-        if ($ordinaryShell) { $ordinaryShell.Dispose() }
-    }
-    [ordered]@{
-        inherited_user_profile=$inheritedProfile; inherited_known_downloads=$inheritedDownloads
-        inherited_known_documents=$inheritedDocuments; ordinary_user_profile=$ordinaryProfile
-        ordinary_shell_downloads_raw_value=$registryDownloads
-    } | ConvertTo-Json | Set-Content -LiteralPath $launchRecordPath
-    & (Get-Process -Id $PID).Path -NoProfile -NonInteractive -File $PSCommandPath -ContextFile $ContextFile -FreshOrdinaryChild
-    exit $LASTEXITCODE
-}
 $ordinaryProfile = $env:USERPROFILE
 $downloads = [ReefVisionOrdinaryKnownFolder]::Get($downloadsId,[IntPtr]::Zero)
 $documents = [ReefVisionOrdinaryKnownFolder]::Get($documentsId,[IntPtr]::Zero)

@@ -1,7 +1,7 @@
 name: Probe ordinary-user WebView2 acceptance
 on:
   push:
-    branches: [codex/reefvision-webview2-host-probe-20261120]
+    branches: [codex/reefvision-webview2-host-probe-native-env]
 permissions:
   contents: read
   actions: read

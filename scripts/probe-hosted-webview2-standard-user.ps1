@@ -225,7 +225,7 @@ try {
     } | ConvertTo-Json | Set-Content -LiteralPath $driverContext
     $protocolLog=Join-Path $driverOutput 'raw-protocol.log'
     $driverArgs='-NoProfile -NonInteractive -File "{0}" -ContextFile "{1}"' -f $driverScript,$driverContext
-    $ordinaryDriver=Start-Process -FilePath $driver.Path -ArgumentList $driverArgs -Credential $account.credential -LoadUserProfile -PassThru -WindowStyle Hidden -WorkingDirectory $driverRoot -RedirectStandardOutput (Join-Path $driverOutput 'driver.stdout') -RedirectStandardError $protocolLog
+    $ordinaryDriver=Start-Process -FilePath $driver.Path -ArgumentList $driverArgs -Credential $account.credential -LoadUserProfile -UseNewEnvironment -PassThru -WindowStyle Hidden -WorkingDirectory $driverRoot -RedirectStandardOutput (Join-Path $driverOutput 'driver.stdout') -RedirectStandardError $protocolLog
     $driverDeadline=[DateTime]::UtcNow.AddSeconds(120)
     $nativeSaveDialog=$false
     do {

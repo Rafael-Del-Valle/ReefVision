@@ -9,33 +9,6 @@ function Assert-ReefVisionHostedStandardUserMode {
     }
 }
 
-function Set-ReefVisionHostedUserProfile([System.Security.Principal.WindowsIdentity]$Identity) {
-    Assert-ReefVisionHostedStandardUserMode
-    if ($Identity.Name -notmatch '^([^\\]+)\\(rvweb-[a-f0-9]{10})$') {
-        throw 'The profile must belong to this temporary test user.'
-    }
-    $domain,$username = $Matches[1],$Matches[2]
-    $profile = [Microsoft.Win32.Registry]::GetValue(
-        "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$($Identity.User.Value)",
-        'ProfileImagePath', $null)
-    if (-not $profile -or (Split-Path -Leaf $profile) -ine $username -or
-        -not (Test-Path -LiteralPath $profile -PathType Container)) {
-        throw 'Windows did not load the profile of the temporary account.'
-    }
-    $drive = [IO.Path]::GetPathRoot($profile)
-    $env:USERPROFILE = $profile
-    $env:HOMEDRIVE = $drive.TrimEnd('\')
-    $env:HOMEPATH = $profile.Substring($env:HOMEDRIVE.Length)
-    $env:USERNAME = $username
-    $env:USERDOMAIN = $domain
-    $env:APPDATA = Join-Path $profile 'AppData/Roaming'
-    $env:LOCALAPPDATA = Join-Path $profile 'AppData/Local'
-    $env:TEMP = Join-Path $env:LOCALAPPDATA 'Temp'
-    $env:TMP = $env:TEMP
-    New-Item -ItemType Directory -Path $env:TEMP -Force | Out-Null
-    return $profile
-}
-
 function Invoke-ReefVisionCredentialDesktop([string]$ContextFile) {
     $context = Get-Content -LiteralPath $ContextFile -Raw | ConvertFrom-Json
     $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
@@ -44,8 +17,6 @@ function Invoke-ReefVisionCredentialDesktop([string]$ContextFile) {
         $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)) {
         throw 'The hosted GUI launcher did not use its designated standard Windows account.'
     }
-    $inheritedProfile = $env:USERPROFILE
-    $ordinaryProfile = Set-ReefVisionHostedUserProfile $identity
     # The credential process independently declares its PATH; it need not inherit the driver's.
     $env:PATH = @((Join-Path $env:SystemRoot 'System32'), $env:SystemRoot,
         (Join-Path $env:SystemRoot 'System32\Wbem'), (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0')) -join ';'
@@ -64,7 +35,7 @@ function Invoke-ReefVisionCredentialDesktop([string]$ContextFile) {
     }
     $receipt = [ordered]@{
         launcher_pid=$PID; desktop_pid=$desktop.Id; user_sid=$identity.User.Value
-        inherited_windows_profile=$inheritedProfile; ordinary_windows_profile=$ordinaryProfile
+        windows_user_profile=$env:USERPROFILE
     }
     $pending = $context.receipt + '.tmp'
     $receipt | ConvertTo-Json | Set-Content -LiteralPath $pending
@@ -206,7 +177,7 @@ function Start-ReefVisionHostedGui {
     $launchArgs = '-NoProfile -NonInteractive -File "{0}" -LaunchContext "{1}"' -f $launcherSource,$context
     $Account.launcher_errors = Join-Path $handshake 'launcher.stderr'
     $Account.launcher = Start-Process -FilePath $hostProcess.Path -ArgumentList $launchArgs -Credential $Account.credential `
-        -LoadUserProfile -PassThru -WindowStyle Hidden -WorkingDirectory $bootstrap `
+        -LoadUserProfile -UseNewEnvironment -PassThru -WindowStyle Hidden -WorkingDirectory $bootstrap `
         -RedirectStandardOutput (Join-Path $handshake 'launcher.stdout') -RedirectStandardError $Account.launcher_errors
     $deadline = [DateTime]::UtcNow.AddSeconds(35)
     do {
@@ -237,7 +208,7 @@ function Start-ReefVisionHostedGui {
         desktop_pid=$desktop.Id; launcher_pid=$Account.launcher.Id; windows_session=$child.SessionId
         desktop_owner_sid=$owner.Sid; desktop_integrity=$integrity; driver_integrity=Get-ReefVisionProcessIntegrity $hostProcess
         desktop_sha256=(Get-FileHash -LiteralPath $Executable).Hash.ToLowerInvariant()
-        inherited_windows_profile=$launch.inherited_windows_profile; ordinary_windows_profile=$launch.ordinary_windows_profile
+        desktop_windows_user_profile=$launch.windows_user_profile
     } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'spatial-standard-user-identity.log')
     return $desktop
 }
