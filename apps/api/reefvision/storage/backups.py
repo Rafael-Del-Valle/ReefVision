@@ -78,6 +78,35 @@ def backup_root_path(settings: Settings, relative_path: str) -> Path:
     return resolve_managed_project_path(settings, relative_path)
 
 
+def backup_io_path(path: Path) -> Path:
+    """Use an extended Windows path for filesystem operations, never stored metadata."""
+    if os.name != "nt" or not path.is_absolute():
+        return path
+    text = str(path)
+    if text.startswith(("\\\\?\\", "\\\\.\\")):
+        return path
+    if text.startswith("\\\\"):
+        return Path("\\\\?\\UNC\\" + text[2:])
+    return Path("\\\\?\\" + text)
+
+
+def backup_member_path(root: Path, member: str) -> Path:
+    """Validate a managed inventory member before opening it with platform I/O."""
+    relative = PurePosixPath(member)
+    if (
+        not relative.parts
+        or relative.is_absolute()
+        or ".." in relative.parts
+        or (os.name == "nt" and (":" in member or "\\" in member))
+    ):
+        raise ValidationError("Backup inventory path is not a relative managed path")
+    candidate = root.joinpath(*relative.parts)
+    filesystem_root = backup_io_path(root).resolve()
+    if not backup_io_path(candidate).resolve().is_relative_to(filesystem_root):
+        raise ValidationError("Backup inventory path escapes its managed directory")
+    return candidate
+
+
 def build_backup_plan(
     settings: Settings,
     *,
@@ -151,10 +180,21 @@ def create_sqlite_snapshot(source_path: Path, destination_path: Path) -> None:
         raise
 
 
-def copy_file_with_sha256(source_path: Path, destination_path: Path) -> tuple[str, int]:
+def copy_file_with_sha256(
+    source_path: Path, destination_path: Path, *, staged: bool = False
+) -> tuple[str, int]:
+    source_path = backup_io_path(source_path)
+    destination_path = backup_io_path(destination_path)
     destination_path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination_path.with_suffix(destination_path.suffix + ".part")
-    temporary.unlink(missing_ok=True)
+    # A private, unpublished restore tree is committed as a whole. It needs no
+    # second level of temporary file names that makes Windows paths longer.
+    temporary = (
+        destination_path
+        if staged
+        else destination_path.with_suffix(destination_path.suffix + ".part")
+    )
+    if not staged:
+        temporary.unlink(missing_ok=True)
     digest = hashlib.sha256()
     total = 0
     try:
@@ -165,17 +205,19 @@ def copy_file_with_sha256(source_path: Path, destination_path: Path) -> tuple[st
                 total += len(chunk)
             destination.flush()
             os.fsync(destination.fileno())
-        os.replace(temporary, destination_path)
+        if not staged:
+            os.replace(temporary, destination_path)
         return digest.hexdigest(), total
     except Exception:
-        temporary.unlink(missing_ok=True)
+        if not staged:
+            temporary.unlink(missing_ok=True)
         raise
 
 
 def hash_file(path: Path) -> tuple[str, int]:
     digest = hashlib.sha256()
     total = 0
-    with path.open("rb") as handle:
+    with backup_io_path(path).open("rb") as handle:
         while chunk := handle.read(1024 * 1024):
             digest.update(chunk)
             total += len(chunk)
@@ -251,11 +293,13 @@ def verify_backup_directory(backup_root: Path, *, backup_id: str) -> dict[str, A
     file_count = 0
 
     manifest: dict[str, Any] | None = None
-    if not manifest_path.is_file():
+    manifest_io_path = backup_io_path(manifest_path)
+    completion_io_path = backup_io_path(completion_path)
+    if not manifest_io_path.is_file():
         errors.append("Backup manifest is missing.")
     else:
         try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest = json.loads(manifest_io_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             errors.append(f"Backup manifest could not be read: {exc}")
 
@@ -308,8 +352,12 @@ def verify_backup_directory(backup_root: Path, *, backup_id: str) -> dict[str, A
                     continue
                 seen_paths.add(relative_path)
                 computed_total += size_bytes
-                path = backup_root / PurePosixPath(relative_path)
-                if not path.is_file():
+                try:
+                    path = backup_member_path(backup_root, relative_path)
+                except ValidationError as exc:
+                    errors.append(str(exc))
+                    continue
+                if not backup_io_path(path).is_file():
                     missing_files.append(relative_path)
                     continue
                 actual_sha256, actual_size = hash_file(path)
@@ -321,10 +369,10 @@ def verify_backup_directory(backup_root: Path, *, backup_id: str) -> dict[str, A
             if total_size_bytes is not None and computed_total != total_size_bytes:
                 warnings.append("The manifest total size does not match the inventory sum.")
 
-    completion_marker_present = completion_path.is_file()
+    completion_marker_present = completion_io_path.is_file()
     if completion_marker_present:
         try:
-            completion = json.loads(completion_path.read_text(encoding="utf-8"))
+            completion = json.loads(completion_io_path.read_text(encoding="utf-8"))
             if not isinstance(completion, dict):
                 raise ValueError("Completion marker is not a JSON object")
             expected_backup_id = _string_value(completion.get("backup_id"))

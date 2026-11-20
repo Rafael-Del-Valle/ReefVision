@@ -30,6 +30,7 @@ from reefvision.schemas.backups import (
 from reefvision.schemas.jobs import JobResponse
 from reefvision.storage.backups import (
     BACKUP_FORMAT_VERSION,
+    backup_io_path,
     backup_root_path,
     build_backup_plan,
     default_backup_paths,
@@ -123,7 +124,7 @@ class BackupService:
     def verify_backup(self, backup_id: str) -> BackupVerificationResponse:
         backup = self._backup(backup_id)
         root = self._backup_root(backup)
-        if not root.is_dir():
+        if not backup_io_path(root).is_dir():
             raise NotFoundError("Managed backup directory is missing")
         report = verify_backup_directory(root, backup_id=backup.id)
         backup.result_json = {**(backup.result_json or {}), "last_verification": report}
@@ -146,7 +147,7 @@ class BackupService:
 
         backup = self._backup(backup_id)
         backup_root = self._backup_root(backup)
-        if not backup_root.is_dir():
+        if not backup_io_path(backup_root).is_dir():
             raise NotFoundError("Managed backup directory is missing")
 
         verification = verify_backup_directory(backup_root, backup_id=backup.id)
@@ -156,9 +157,8 @@ class BackupService:
 
         destination_name = self._restore_destination_name(payload.destination_name, backup.id)
         destination_path = f"recoveries/{destination_name}"
-        staging_path = f"recoveries/.t/{destination_name}"
         destination_root = backup_root_path(self.settings, destination_path)
-        if destination_root.exists():
+        if backup_io_path(destination_root).exists():
             raise ConflictError("The selected restore destination already exists")
 
         total_size_bytes = verification.get("total_size_bytes")
@@ -178,7 +178,6 @@ class BackupService:
             request_json={
                 "backup_id": backup.id,
                 "backup_path": backup.destination_path,
-                "staging_path": staging_path,
                 "destination_path": destination_path,
                 "warnings": verification["warnings"],
             },

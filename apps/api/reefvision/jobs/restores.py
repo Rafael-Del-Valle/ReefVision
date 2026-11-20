@@ -8,6 +8,7 @@ import shutil
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -16,6 +17,8 @@ from reefvision.db.models import Job
 from reefvision.storage.backups import (
     BACKUP_COMPLETION_MARKER_FILENAME,
     BACKUP_MANIFEST_FILENAME,
+    backup_io_path,
+    backup_member_path,
     backup_root_path,
     copy_file_with_sha256,
     hash_file,
@@ -50,24 +53,26 @@ def process_restore_job(settings: Settings, factory: sessionmaker[Session], job_
 
     backup_id = str(request["backup_id"])
     backup_relative = str(request["backup_path"])
-    staging_relative = str(request["staging_path"])
     destination_relative = str(request["destination_path"])
-    backup_root = backup_root_path(settings, backup_relative)
-    staging_root = backup_root_path(settings, staging_relative)
-    destination_root = backup_root_path(settings, destination_relative)
+    workspace: Path | None = None
 
     try:
+        backup_root = backup_root_path(settings, backup_relative)
+        destination_root = backup_root_path(settings, destination_relative)
         ensure_job_not_cancelled(factory, job_id)
         verification = verify_backup_directory(backup_root, backup_id=backup_id)
         if verification["status"] not in {"valid", "valid_with_warnings"}:
             raise RuntimeError("Restore requires a valid backup verification result")
 
-        shutil.rmtree(staging_root, ignore_errors=True)
-        if destination_root.exists():
+        if backup_io_path(destination_root).exists():
             raise FileExistsError("The selected restore destination already exists")
-        staging_root.mkdir(parents=True, exist_ok=False)
+        workspace = _create_restore_workspace(settings)
+        staging_root = workspace / "r"
+        backup_io_path(staging_root).mkdir()
 
-        manifest = json.loads((backup_root / BACKUP_MANIFEST_FILENAME).read_text(encoding="utf-8"))
+        manifest = json.loads(
+            backup_io_path(backup_root / BACKUP_MANIFEST_FILENAME).read_text(encoding="utf-8")
+        )
         inventory = manifest.get("file_inventory")
         if not isinstance(inventory, list):
             raise RuntimeError("Backup manifest file inventory is missing")
@@ -85,6 +90,7 @@ def process_restore_job(settings: Settings, factory: sessionmaker[Session], job_
 
         restored_count = 0
         restored_bytes = 0
+        restored_paths: list[Path] = []
         for entry in inventory:
             ensure_job_not_cancelled(factory, job_id)
             if not isinstance(entry, dict):
@@ -92,13 +98,14 @@ def process_restore_job(settings: Settings, factory: sessionmaker[Session], job_
             relative_path = entry.get("path")
             if not isinstance(relative_path, str):
                 raise RuntimeError("Backup manifest path entry is invalid")
-            source = backup_root / PurePosixPath(relative_path)
+            source = backup_member_path(backup_root, relative_path)
             destination = _restore_target_path(
                 staging_root,
                 backup_path=relative_path,
                 database_filename=database_filename,
             )
-            _, size_bytes = copy_file_with_sha256(source, destination)
+            _, size_bytes = copy_file_with_sha256(source, destination, staged=True)
+            restored_paths.append(destination.relative_to(staging_root))
             restored_count += 1
             restored_bytes += size_bytes
             _update_job_state(
@@ -123,9 +130,11 @@ def process_restore_job(settings: Settings, factory: sessionmaker[Session], job_
             database_filename=database_filename,
         )
         completion_source = backup_root / BACKUP_COMPLETION_MARKER_FILENAME
-        shutil.copy2(completion_source, staging_root / "restored-from-backup-complete.json")
-        destination_root.parent.mkdir(parents=True, exist_ok=True)
-        staging_root.rename(destination_root)
+        shutil.copy2(
+            backup_io_path(completion_source),
+            backup_io_path(staging_root / "restored-from-backup-complete.json"),
+        )
+        _publish_restore(staging_root, destination_root, restored_paths)
         _finalize_success(
             factory,
             job_id=job_id,
@@ -140,7 +149,6 @@ def process_restore_job(settings: Settings, factory: sessionmaker[Session], job_
         )
         return True
     except JobCancelled:
-        shutil.rmtree(staging_root, ignore_errors=True)
         _finalize_cancel(factory, job_id=job_id)
         LOGGER.info(
             "ReefVision restore cancelled",
@@ -148,13 +156,52 @@ def process_restore_job(settings: Settings, factory: sessionmaker[Session], job_
         )
         return False
     except Exception as exc:
-        shutil.rmtree(staging_root, ignore_errors=True)
         _finalize_failure(factory, job_id=job_id, message=str(exc))
         LOGGER.exception(
             "ReefVision restore failed",
             extra={"event_id": "restore_failed", "component": "restore", "job_id": job_id},
         )
         return False
+    finally:
+        if workspace is not None:
+            shutil.rmtree(backup_io_path(workspace), ignore_errors=True)
+
+
+def _create_restore_workspace(settings: Settings) -> Path:
+    parent = backup_root_path(settings, ".t")
+    backup_io_path(parent).mkdir(parents=True, exist_ok=True)
+    # Keep ".t/<six chars>/r" shorter than even "recoveries/a" on Windows.
+    for _ in range(10):
+        workspace = parent / uuid4().hex[:6]
+        try:
+            backup_io_path(workspace).mkdir()
+        except FileExistsError:
+            continue
+        return workspace
+    raise FileExistsError("Could not reserve a private restore staging directory")
+
+
+def _publish_restore(
+    staging_root: Path, destination_root: Path, restored_paths: list[Path]
+) -> None:
+    destination = backup_io_path(destination_root)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        raise FileExistsError("The selected restore destination already exists")
+    staging = backup_io_path(staging_root)
+    staging.rename(destination)
+    try:
+        # The staging hashes have already been checked. Opening without reading
+        # checks that the final path is accessible with the same managed I/O.
+        for relative in restored_paths:
+            with (destination / relative).open("rb"):
+                pass
+    except OSError as exc:
+        destination.rename(staging)
+        raise RuntimeError(
+            "Restored files could not be opened at the selected recovery location. "
+            "Check that the location is accessible or try a shorter recovery name."
+        ) from exc
 
 
 def _restore_target_path(
@@ -167,10 +214,10 @@ def _restore_target_path(
     if relative.parts[:1] == ("database",):
         if relative.name != database_filename:
             raise RuntimeError("Backup database filename does not match the manifest")
-        return restore_root / database_filename
+        return backup_member_path(restore_root, database_filename)
     if relative.parts[:1] != ("data",):
         raise RuntimeError(f"Backup inventory entry is not restorable: {backup_path}")
-    return restore_root.joinpath(*relative.parts[1:])
+    return backup_member_path(restore_root, relative.relative_to("data").as_posix())
 
 
 def _verify_restored_copy(
@@ -208,6 +255,7 @@ def _write_restore_receipt(
     backup_relative: str,
     destination_relative: str,
 ) -> None:
+    restore_root = backup_io_path(restore_root)
     restore_root.mkdir(parents=True, exist_ok=True)
     payload = {
         "backup_id": backup_id,
