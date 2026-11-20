@@ -37,7 +37,10 @@ import { Gallery } from "./features/gallery/Gallery";
 import { ScientificHeatmapsPanel } from "./features/scientific-heatmaps/ScientificHeatmapsPanel";
 import { InteroperabilityWorkspace } from "./features/interoperability/InteroperabilityWorkspace";
 import { ModelManager } from "./features/models/ModelManager";
-import { OnboardingModal } from "./features/onboarding/OnboardingModal";
+import {
+  OnboardingModal,
+  type OnboardingWorkspace,
+} from "./features/onboarding/OnboardingModal";
 import { QualityControlDashboard } from "./features/quality-control/QualityControlDashboard";
 import { ReproducibilityWorkspace } from "./features/reproducibility/ReproducibilityWorkspace";
 import type { WorkflowGraphRecord } from "./features/workflow-graphs/workflowGraphApi";
@@ -334,7 +337,10 @@ function ReefVisionMainApp() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [focusLauncherAfterWelcome, setFocusLauncherAfterWelcome] =
     useState(false);
+  const [focusWorkspaceAfterWelcome, setFocusWorkspaceAfterWelcome] =
+    useState<OnboardingWorkspace | null>(null);
   const mainContentRef = useRef<HTMLElement>(null);
+  const systemSurfaceRef = useRef<HTMLElement>(null);
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
   const keyboardShortcutsButtonRef = useRef<HTMLButtonElement | null>(null);
   const [workspacePresetId, setWorkspacePresetId] =
@@ -366,8 +372,9 @@ function ReefVisionMainApp() {
   }, [activeView, qcCoordinationOpen]);
   const navigateToView = useCallback(
     (view: ProjectView) => {
-      if (view !== activeView && preventQcNavigation()) return;
+      if (view !== activeView && preventQcNavigation()) return false;
       setActiveView(view);
+      return true;
     },
     [activeView, preventQcNavigation],
   );
@@ -464,6 +471,21 @@ function ReefVisionMainApp() {
     showCreate,
     showOnboarding,
   ]);
+
+  useEffect(() => {
+    if (!focusWorkspaceAfterWelcome || showOnboarding) return;
+    setFocusWorkspaceAfterWelcome(null);
+    if (activeView !== focusWorkspaceAfterWelcome) return;
+    if (activeView === "system") {
+      systemSurfaceRef.current?.focus();
+    } else {
+      const main = mainContentRef.current;
+      const control = main?.querySelector<HTMLElement>(
+        ".rv-project-nav-items [aria-selected='true'], button[aria-label='Show project navigation']",
+      );
+      (control ?? main)?.focus();
+    }
+  }, [activeView, focusWorkspaceAfterWelcome, showOnboarding]);
 
   useEffect(() => {
     setInferenceSelectedImageIds([]);
@@ -593,6 +615,25 @@ function ReefVisionMainApp() {
   function dismissOnboardingPermanently() {
     window.localStorage.setItem(ONBOARDING_DISMISS_KEY, "true");
     setShowOnboarding(false);
+  }
+
+  function openSystemStatus() {
+    if (preventQcNavigation()) return false;
+    setSelectedProjectId(null);
+    setEditorLaunch(null);
+    setActiveView("system");
+    return true;
+  }
+
+  function openOnboardingWorkspace(workspace: OnboardingWorkspace) {
+    if (workspace === "system") {
+      if (!openSystemStatus()) return false;
+    } else {
+      if (!navigateToView(workspace)) return false;
+      setEditorLaunch(null);
+    }
+    setFocusWorkspaceAfterWelcome(workspace);
+    return true;
   }
 
   function handleTabKeys<T extends string>(
@@ -846,12 +887,7 @@ function ReefVisionMainApp() {
           <button
             type="button"
             className="secondary"
-            onClick={() => {
-              if (preventQcNavigation()) return;
-              setSelectedProjectId(null);
-              setEditorLaunch(null);
-              setActiveView("system");
-            }}
+            onClick={openSystemStatus}
           >
             System status
           </button>
@@ -913,19 +949,20 @@ function ReefVisionMainApp() {
             onImportPackage={() => {
               setShowImport(true);
             }}
-            onOpenSystem={() => {
-              setSelectedProjectId(null);
-              setEditorLaunch(null);
-              setActiveView("system");
-            }}
+            onOpenSystem={openSystemStatus}
             onOpenOnboarding={() => setShowOnboarding(true)}
           />
         )}
 
         {activeView === "system" && (
-          <div className="rv-system-surface">
+          <section
+            className="rv-system-surface"
+            aria-label="System status workspace"
+            ref={systemSurfaceRef}
+            tabIndex={-1}
+          >
             <SystemPanel onOpenOnboarding={() => setShowOnboarding(true)} />
-          </div>
+          </section>
         )}
 
         {selectedProjectId &&
@@ -973,12 +1010,7 @@ function ReefVisionMainApp() {
               setEditorLaunch(null);
               setActiveView("gallery");
             }}
-            onSystem={() => {
-              if (preventQcNavigation()) return;
-              setSelectedProjectId(null);
-              setEditorLaunch(null);
-              setActiveView("system");
-            }}
+            onSystem={openSystemStatus}
             onArchive={async () => {
               if (preventQcNavigation()) return;
               if (
@@ -1446,7 +1478,7 @@ function ReefVisionMainApp() {
       {showOnboarding && (
         <OnboardingModal
           version={health.data?.version ?? applicationVersion}
-          hasProject={Boolean(selectedProjectId)}
+          hasProject={Boolean(selectedProject)}
           onStartProject={(action) => {
             if (preventQcNavigation()) return;
             setSelectedProjectId(null);
@@ -1458,6 +1490,7 @@ function ReefVisionMainApp() {
               setFocusLauncherAfterWelcome(true);
             }
           }}
+          onOpenWorkspace={openOnboardingWorkspace}
           onClose={() => setShowOnboarding(false)}
           onDismissPermanently={dismissOnboardingPermanently}
         />
