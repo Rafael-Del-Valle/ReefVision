@@ -41,6 +41,12 @@ from reefvision.db.models.environmental_analysis import (
 )
 from reefvision.db.models.experiment_record import ExperimentRecord
 from reefvision.db.models.export_record import ExportRecord
+from reefvision.db.models.field_capture import (
+    FieldCaptureBatch,
+    FieldCaptureObservation,
+    FieldCaptureReconciliationRecord,
+    FieldCaptureReview,
+)
 from reefvision.db.models.geo_referenced_observation import GeoReferencedObservation
 from reefvision.db.models.image import ImageAsset
 from reefvision.db.models.image_label import ImageLabel
@@ -161,6 +167,10 @@ __all__ = [
     "EnvironmentalEventDefinition",
     "ExperimentRecord",
     "ExportRecord",
+    "FieldCaptureBatch",
+    "FieldCaptureObservation",
+    "FieldCaptureReconciliationRecord",
+    "FieldCaptureReview",
     "GeoReferencedObservation",
     "ImageAsset",
     "ImageLabel",
