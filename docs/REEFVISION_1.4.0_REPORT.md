@@ -591,10 +591,10 @@ Windows installed GUI/MSI/CAB and physical GPU gates remain release blockers.
 ## Track C: ASCII PLY point-cloud Unicode safety and persisted QC (2026-11-19)
 
 A malformed, JSON-escaped unpaired Unicode surrogate in a point-cloud PLY
-comment or coordinate record previously reached \`text.encode("utf-8")\`
-before the ASCII-source check. This could leak \`UnicodeEncodeError\` rather
+comment or coordinate record previously reached `text.encode("utf-8")`
+before the ASCII-source check. This could leak `UnicodeEncodeError` rather
 than return a controlled scientific-input rejection. The bounded PLY reader now
-checks its character-count limit followed by \`isascii()\`, which is a
+checks its character-count limit followed by `isascii()`, which is a
 byte-equivalent size check for the only accepted source alphabet. Well-formed
 but non-ASCII labels are also rejected (unlike OBJ, ASCII PLY remains
 ASCII-only), and permitted ASCII coordinates, comments, and source checksums
