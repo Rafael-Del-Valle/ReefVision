@@ -251,9 +251,11 @@ function Format-SafeText {
   # rendered field instead of inventing numeric evidence; the persisted job
   # history and raw training log remain unchanged.
   $terminalEdit = '(?:\x1b[\]PX^_][\s\S]*?(?:\x07|\x9c|\x1b\\|$)|[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)|(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]|\p{Cf}|\x08)'
-  # Check numeric digit joins and interrupted ASCII metric labels, without
-  # discarding unrelated safe losses separated from later prose by bidi text.
-  $splicedMetric = "(?<=[0-9])$terminalEdit(?=[0-9])|(?<=[A-Za-z_])$terminalEdit(?=[A-Za-z_/])"
+  # Do not join scientific metric-token fragments across a terminal edit.
+  # Digits, decimal points and slashes matter: 0 + OSC + .25, 0. + SGR
+  # + 25, or train/ + OSC + box_loss can otherwise become invented evidence.
+  # Reject only adjacent ASCII token fragments, not ordinary separated prose.
+  $splicedMetric = "(?<=[A-Za-z0-9._/+%\\-])$terminalEdit(?=[A-Za-z0-9._/+%\\-])"
   if ([regex]::IsMatch($text, $splicedMetric)) {
     return '[terminal-edited field omitted]'
   }

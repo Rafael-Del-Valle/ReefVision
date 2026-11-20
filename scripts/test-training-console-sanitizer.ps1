@@ -53,7 +53,14 @@ $splicedFields = @(
   ('train/dfl_loss=0.1' + [char]0x200B + '0'),
   ('train/box_loss=0.2' + [char]0x0008 + '5'),
   ('train/cls_loss=0.3' + [char]0x0090 + 'forged payload' + [char]0x009C + '0'),
-  ('train/box' + [char]0x001B + ']0;forged title' + [char]0x0007 + '_loss=0.25')
+  ('train/box' + [char]0x001B + ']0;forged title' + [char]0x0007 + '_loss=0.25'),
+  # Missing decimal-point/slash token joins also fabricate scientific values
+  # or loss identities; never silently render the resulting fake metric.
+  ('train/box_loss=0.' + [char]0x001B + ']0;forged title' + [char]0x0007 + '25'),
+  ('train/cls_loss=0' + [char]0x001B + '[0m' + '.30'),
+  ('train/dfl_loss=0.' + [char]0x2060 + '10'),
+  ('train/' + [char]0x001B + ']0;forged title' + [char]0x0007 + 'box_loss=0.25'),
+  ('metrics/mAP' + [char]0x001B + '[32m' + '50(B)')
 )
 foreach ($field in $splicedFields) {
   if ((Format-SafeText $field) -cne '[terminal-edited field omitted]') {
