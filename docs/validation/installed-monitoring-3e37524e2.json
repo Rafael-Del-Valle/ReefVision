@@ -733,6 +733,49 @@
           "1 passed in 10.50s"
         ]
       }
-    ]
+    ],
+    "all_terminal_workflows": {
+      "count": 20,
+      "outcomes": {
+        "44827325887": "success",
+        "44827326041": "success",
+        "44827326105": "success",
+        "44827325961": "success",
+        "44827325867": "success",
+        "44827325962": "success",
+        "44827326200": "success",
+        "44827326056": "success",
+        "44827326312": "success",
+        "44827326092": "success",
+        "44827326149": "success",
+        "44827326065": "success",
+        "44827326015": "success",
+        "44827326194": "success",
+        "44827326251": "success",
+        "44827326389": "success",
+        "44827326075": "success",
+        "44827326113": "failure",
+        "44827326046": "success",
+        "44827326030": "success"
+      },
+      "sha256": "d514d32b633eefe84646b89616c8b8db80776e6cbe65794cc56fc04fd179ca51",
+      "path": "source/hosted-terminal-workflows.json"
+    }
+  },
+  "second_build": {
+    "workflow_head_commit": "3e37524e28c4b7dde8ffbe203120d3b8e7fe2ee9",
+    "build_provenance_commit": "17523693fa0f879fd7d45bae54f51b1df1330071",
+    "identical_source_tree": "d1b2bb12844d5f7ab7f0c72d3c58f5cd5de07ede",
+    "workflow_run_id": 44827326030,
+    "workflow_run_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44827326030",
+    "job_id": 136629819549,
+    "artifact_id": 14678299585,
+    "artifact_sha256": "9443d8ed270e8a4d27c2a36eb05e9db2197f0168dad1cb0a6e5807ef0f744723",
+    "build_provenance_sha256": "ccab3342ca32322e6834a9ef7100a649cb79f6654eeb529b920450b6a704c890",
+    "msi_sha256": "9fa2ef44a1c7629afc28b7f27bd04e4695684edf9d78a04489687584f474a06f",
+    "cabinets": 5,
+    "independently_installed": false,
+    "comparison_sha256": "a3937e1b6f4770c49d2601da9e2f3e8d80b6b6fbada0bd81ca8803091f15a0a0",
+    "comparison_path": "second-build/verified-artifact-comparison.json"
   }
 }
