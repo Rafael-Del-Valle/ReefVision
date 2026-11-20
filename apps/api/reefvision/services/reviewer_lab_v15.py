@@ -3,6 +3,7 @@
 from collections import defaultdict
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from functools import cached_property
 from typing import Any
 from uuid import uuid4
 
@@ -10,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.db.models.image import ImageAsset
+from reefvision.db.models.project_exchange_package import ProjectExchangePackage
 from reefvision.db.models.review_queue_item import ReviewQueueItem
 from reefvision.db.models.reviewer_lab_v15 import (
     ReviewerLabDecisionRecord,
@@ -35,6 +37,10 @@ from reefvision.schemas.reviewer_lab_v15 import (
     ReviewerLabSubject,
     ReviewerLabSubjectView,
     ReviewSlot,
+)
+from reefvision.services.review_queue_exchange_checksums import (
+    matches_pinned_queue_item,
+    queue_item_snapshot,
 )
 from reefvision.services.reviewer_lab_roles_v15 import ReviewerLabRoles
 from reefvision.storage.datasets import canonical_json_sha256
@@ -74,6 +80,26 @@ class ReviewerLabService:
         self.project_id = project_id
         self.roles = ReviewerLabRoles(session, project_id)
 
+    @cached_property
+    def _origin_ids(self) -> dict[str, str]:
+        package = self.session.scalar(
+            select(ProjectExchangePackage)
+            .where(
+                ProjectExchangePackage.project_id == self.project_id,
+                ProjectExchangePackage.direction == "import",
+                ProjectExchangePackage.status == "complete",
+            )
+            .order_by(ProjectExchangePackage.created_at.desc(), ProjectExchangePackage.id)
+            .limit(1)
+        )
+        if package is None:
+            return {}
+        values = (package.options_json or {}).get("origin_id_map", {})
+        return dict(values) if isinstance(values, dict) else {}
+
+    def _live_id(self, identifier: str) -> str:
+        return self._origin_ids.get(identifier, identifier)
+
     def _image(self, image_id: str) -> ImageAsset:
         row = self.session.get(ImageAsset, image_id)
         if row is None or row.project_id != self.project_id:
@@ -102,8 +128,12 @@ class ReviewerLabService:
 
     def _current_source(self, subject: ReviewerLabSubject) -> ImageAsset:
         try:
-            image = self._image(subject.image_id)
-            item = self._queue_item(subject.queue_item_id) if subject.queue_item_id else None
+            image = self._image(self._live_id(subject.image_id))
+            item = (
+                self._queue_item(self._live_id(subject.queue_item_id))
+                if subject.queue_item_id
+                else None
+            )
         except NotFoundError as exc:
             raise ConflictError("A pinned review source is unavailable") from exc
         if (
@@ -112,9 +142,13 @@ class ReviewerLabService:
         ):
             raise ConflictError("A pinned source changed. Start a new independent review round.")
         if item and (
-            item.review_queue_id != subject.queue_id
-            or item.image_id != subject.image_id
-            or item.input_checksum != subject.queue_input_sha256
+            item.review_queue_id != self._live_id(subject.queue_id or "")
+            or item.image_id != image.id
+            or not matches_pinned_queue_item(
+                item.review_queue.configuration_json,
+                queue_item_snapshot(item),
+                subject.queue_input_sha256,
+            )
         ):
             raise ConflictError("A pinned review queue item changed. Start a new review round.")
         return image
@@ -138,20 +172,22 @@ class ReviewerLabService:
             )
         )
 
-    @staticmethod
-    def _slot(plan: ReviewerLabPlan, actor: ReviewerLabRole) -> ReviewSlot | None:
+    def _slot(self, plan: ReviewerLabPlan, actor: ReviewerLabRole) -> ReviewSlot | None:
         if actor.role == "manager":
             return None
         for role, slot in zip(plan.reviewers, ("first", "second"), strict=True):
-            if actor.role == "reviewer" and actor.member_id == role.member_id:
+            if actor.role == "reviewer" and actor.member_id == self._live_id(role.member_id):
                 return "first" if slot == "first" else "second"
-        if actor.role == "adjudicator" and actor.member_id == plan.adjudicator.member_id:
+        if actor.role == "adjudicator" and actor.member_id == self._live_id(
+            plan.adjudicator.member_id
+        ):
             return "adjudication"
         raise NotFoundError("Independent review round not found")
 
-    @staticmethod
-    def _subject(plan: ReviewerLabPlan, subject_id: str) -> ReviewerLabSubject:
-        subject = next((item for item in plan.subjects if item.id == subject_id), None)
+    def _subject(self, plan: ReviewerLabPlan, subject_id: str) -> ReviewerLabSubject:
+        subject = next(
+            (item for item in plan.subjects if self._live_id(item.id) == subject_id), None
+        )
         if subject is None:
             raise NotFoundError("Independent review subject not found")
         return subject
@@ -181,9 +217,11 @@ class ReviewerLabService:
 
         first, second = (self.roles.current(str(member)) for member in payload.reviewer_member_ids)
         adjudicator = self.roles.current(str(payload.adjudicator_member_id))
-        if any(role.role != "reviewer" or not role.active for role in (first, second)):
+        if any(
+            role.role != "reviewer" or not self.roles.has_access(role) for role in (first, second)
+        ):
             raise ValidationError("Both assigned reviewers must hold active local reviewer roles")
-        if adjudicator.role != "adjudicator" or not adjudicator.active:
+        if adjudicator.role != "adjudicator" or not self.roles.has_access(adjudicator):
             raise ValidationError("Assign a separate active local adjudicator")
         targets = [self._snapshot(item) for item in payload.sources]
         if len({item.image_id for item in targets}) != len(targets):
@@ -222,12 +260,23 @@ class ReviewerLabService:
         if include_subjects:
             decisions = self._decisions(record.id)
             for subject in plan.subjects:
-                rows = decisions.get(subject.id, {})
+                live_subject_id = self._live_id(subject.id)
+                rows = decisions.get(live_subject_id, {})
                 first, second, resolution = (
                     rows.get(key) for key in ("first", "second", "adjudication")
                 )
                 complete = bool(first and second and (first.value == second.value or resolution))
-                view = ReviewerLabSubjectView(**subject.model_dump())
+                view = ReviewerLabSubjectView(
+                    **{
+                        **subject.model_dump(),
+                        "id": live_subject_id,
+                        "image_id": self._live_id(subject.image_id),
+                        "queue_id": self._live_id(subject.queue_id) if subject.queue_id else None,
+                        "queue_item_id": self._live_id(subject.queue_item_id)
+                        if subject.queue_item_id
+                        else None,
+                    }
+                )
                 if slot in ("first", "second") and (decision := rows.get(slot)):
                     view.own_decision = ReviewerLabDecision.model_validate(decision)
                 if slot == "adjudication" and first and second:
@@ -345,7 +394,7 @@ class ReviewerLabService:
         role_ids = set()
         for source in plan.subjects:
             self._current_source(source)
-            entries = per_subject.get(source.id, {})
+            entries = per_subject.get(self._live_id(source.id), {})
             first, second, resolution = (
                 entries.get(slot) for slot in ("first", "second", "adjudication")
             )
