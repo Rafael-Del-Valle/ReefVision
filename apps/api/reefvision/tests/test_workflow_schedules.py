@@ -17,7 +17,7 @@ from sqlalchemy import event, select
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
-from reefvision.db.models import Job, WorkflowGraphRecord, WorkflowRun
+from reefvision.db.models import Job, ModelRegistration, WorkflowGraphRecord, WorkflowRun
 from reefvision.db.session import create_database_engine, create_session_factory
 from reefvision.jobs.worker import recover_interrupted_jobs
 from reefvision.jobs.workflow import process_workflow_run_job
@@ -223,6 +223,125 @@ def test_storage_block_and_changed_saved_graph_are_visible(
     assert "checksum" in failed["detail"]
     assert failed["workflow_run_id"] is None
     assert failed["job_id"] is None
+
+
+@pytest.mark.parametrize("unavailable_after", ["schedule", "queue", "other_project"])
+def test_unavailable_model_names_the_node_without_starting_inference(
+    client: TestClient,
+    unavailable_after: str,
+) -> None:
+    project_id = str(create_project(client, "Scheduled detector")["id"])
+    app = cast(FastAPI, client.app)
+    settings, factory = app.state.settings, app.state.session_factory
+    with factory.begin() as session:
+        model = ModelRegistration(
+            project_id=project_id,
+            purpose="detector",
+            display_name="Private fixture model",
+            source_filename="detector.pt",
+            managed_path=f"projects/{project_id}/models/detector.pt",
+            sha256="d" * 64,
+            file_size_bytes=10,
+            framework="test",
+            task="detect",
+            provider_name="ultralytics",
+            provider_version="test",
+            class_map_json={},
+            input_size_json={"width": 640, "height": 640},
+            metadata_json={},
+        )
+        session.add(model)
+        session.flush()
+        model_id = model.id
+
+    graph = {
+        "graph_id": "scheduled-detector",
+        "name": "Scheduled detector",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "images", "node_type": "project_images"},
+            {
+                "node_id": "detector-source",
+                "node_type": "registered_model_source",
+                "parameters": {"model_id": model_id},
+            },
+            {"node_id": "detect", "node_type": "detection_inference"},
+        ],
+        "edges": [
+            {
+                "edge_id": f"{source}-{target}",
+                "source_node_id": source,
+                "source_port_id": port,
+                "target_node_id": target,
+                "target_port_id": port,
+            }
+            for source, target, port in (
+                ("project", "images", "project"),
+                ("project", "detector-source", "project"),
+                ("images", "detect", "images"),
+                ("detector-source", "detect", "model"),
+            )
+        ],
+    }
+    saved = _save_graph(client, project_id, graph)
+    schedule = client.post(
+        _schedule_url(project_id),
+        json=_settings(str(saved["id"]), _DUE, purpose="inference"),
+    )
+    assert schedule.status_code == 201, schedule.text
+    endpoint = f"{_schedule_url(project_id)}/{schedule.json()['id']}/occurrences"
+    if unavailable_after == "queue":
+        assert dispatch_due_schedules(settings, factory, now=_DUE) == 1
+        queued = client.get(endpoint).json()["items"][0]
+        assert queued["status"] == "queued"
+
+    if unavailable_after == "other_project":
+        other = create_project(client, "Unrelated private project")
+        with factory.begin() as session:
+            session.get_one(ModelRegistration, model_id).project_id = other["id"]
+    else:
+        removed = client.delete(f"/api/v1/models/{model_id}")
+        assert removed.status_code == 204, removed.text
+
+    workflows = f"/api/v1/projects/{project_id}/workflow-runs"
+    manual = client.post(workflows, json={"graph_record_id": saved["id"]})
+    reason = (
+        "Registered Model (detector-source) — The selected model is unavailable in this project"
+    )
+    assert manual.status_code == 400, manual.text
+    assert manual.json()["detail"] == f"Workflow graph is no longer valid. {reason}"
+    if unavailable_after == "queue":
+        assert not process_workflow_run_job(settings, factory, queued["job_id"])
+        detail = client.get(f"/api/v1/workflow-runs/{queued['workflow_run_id']}").json()
+        assert detail["run"]["status"] == "failed"
+        assert detail["artifacts"] == []
+        expected = f"Workflow graph no longer validates. {reason}"
+        assert detail["run"]["error_message"] == expected
+    else:
+        assert dispatch_due_schedules(settings, factory, now=_DUE) == 1
+        expected = manual.json()["detail"]
+
+    history = client.get(endpoint).json()
+    assert history["total"] == 1
+    failed = history["items"][0]
+    assert failed["status"] == "failed"
+    assert failed["detail"] == expected
+    assert failed["graph_sha256"] == saved["graph_sha256"]
+    with factory() as session:
+        record = session.get_one(WorkflowGraphRecord, saved["id"])
+        assert record.graph_sha256 == saved["graph_sha256"]
+        assert record.graph_json == saved["graph_json"]
+        assert list(session.scalars(select(Job).where(Job.job_type == "inference"))) == []
+        run_ids = list(session.scalars(select(WorkflowRun.id)))
+        job_ids = list(session.scalars(select(Job.id).where(Job.job_type == "workflow_run")))
+        if unavailable_after == "queue":
+            assert run_ids == [failed["workflow_run_id"]] == [queued["workflow_run_id"]]
+            assert job_ids == [failed["job_id"]] == [queued["job_id"]]
+        else:
+            assert failed["workflow_run_id"] is None
+            assert failed["job_id"] is None
+            assert run_ids == []
+            assert job_ids == []
 
 
 def test_failed_dispatch_rolls_back_workflow_and_reuses_the_slot(
