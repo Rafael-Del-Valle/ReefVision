@@ -931,6 +931,10 @@ textarea {
   gap: 0.7rem;
 }
 
+.version-manifest-links {
+  overflow-wrap: anywhere;
+}
+
 .version-preview-metrics,
 .version-class-counts {
   display: flex;
