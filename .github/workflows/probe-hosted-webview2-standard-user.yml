@@ -1,0 +1,38 @@
+name: Probe ordinary-user WebView2 acceptance
+on:
+  push:
+    branches: [codex/reefvision-webview2-host-probe-20261120]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  ordinary-user:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve retained candidate MSI and external cabinets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ReefVision-1.4.0-RC-Installer-Part-*
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          run-id: 44677664711
+          path: ${{ runner.temp }}/retained-722-installer
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install the Playwright driver
+        working-directory: apps/web
+        run: npm ci --no-audit --no-fund
+      - name: Drive actual MSI desktop as a temporary standard user
+        shell: pwsh
+        run: |
+          ./scripts/probe-hosted-webview2-standard-user.ps1 -InstallerDirectory (Join-Path $env:RUNNER_TEMP 'retained-722-installer') -EvidenceRoot (Join-Path $env:RUNNER_TEMP 'standard-user-webview2-evidence')
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ReefVision-hosted-standard-user-WebView2-probe
+          path: ${{ runner.temp }}/standard-user-webview2-evidence/**
+          if-no-files-found: warn
+          retention-days: 7
