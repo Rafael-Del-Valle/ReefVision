@@ -12,6 +12,7 @@ import { CoralGrowthPanel } from "./CoralGrowthPanel";
 import { EcologyAnalysisPanel } from "./EcologyAnalysisPanel";
 import { EventSummaryPanel } from "./EventSummaryPanel";
 import { ResearchReportsPanel } from "./ResearchReportsPanel";
+import { StudyDesignPanel } from "./StudyDesignPanel";
 import {
   PoseOrganismLinksPanel,
   type PoseEvidenceNavigation,
@@ -642,6 +643,7 @@ export function EcologyWorkspace({
     | "analyses"
     | "events"
     | "reports"
+    | "study"
   >(initialPoseOrganism ? "pose" : "registry");
   const [selected, setSelected] = useState(initialPoseOrganism ?? "");
   const query = useQuery({
@@ -736,8 +738,22 @@ export function EcologyWorkspace({
         >
           Research reports
         </button>
+        <button
+          type="button"
+          className="secondary"
+          aria-pressed={view === "study"}
+          onClick={() => setView("study")}
+        >
+          Study design
+        </button>
       </div>
-      {view === "reports" ? (
+      {view === "study" ? (
+        <StudyDesignPanel
+          key={projectId}
+          projectId={projectId}
+          identities={query.data?.identities ?? []}
+        />
+      ) : view === "reports" ? (
         <ResearchReportsPanel key={projectId} projectId={projectId} />
       ) : view === "events" ? (
         <EventSummaryPanel

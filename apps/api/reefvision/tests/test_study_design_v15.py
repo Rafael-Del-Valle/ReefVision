@@ -1,10 +1,13 @@
+from copy import deepcopy
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from reefvision.db.models.study_design import StudyDesignRevision
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_paired_growth_contrast import (
     _revise_planned_identity,
@@ -57,6 +60,37 @@ def _freeze(client: TestClient, project: str, body: dict[str, Any]) -> dict[str,
     return response.json()
 
 
+def _save_workflow(client: TestClient, project: str, revision: str, digest: str) -> str:
+    graph = {
+        "graph_id": "known-study-design",
+        "name": "Replay tank design",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "study",
+                "node_type": "reviewed_study_design",
+                "parameters": {
+                    "design_revision_id": revision,
+                    "design_sha256": digest,
+                },
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "project-study",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "study",
+                "target_port_id": "project",
+            },
+        ],
+    }
+    graph_path = f"/api/v1/projects/{project}/workflow-graphs"
+    saved = client.post(graph_path, json={"graph": graph, "create_new_revision": True})
+    assert saved.status_code == 201, saved.text
+    return str(saved.json()["id"])
+
+
 def test_retrospective_design_reopens_exports_and_replays_twice(client: TestClient) -> None:
     project, _, analysis, _ = _study(client, reviewed_assignments=True)
     path = _path(project)
@@ -77,35 +111,7 @@ def test_retrospective_design_reopens_exports_and_replays_twice(client: TestClie
     export = client.get(f"{path}/{record['id']}/design.json")
     assert export.json() == snapshot
     assert export.headers["X-ReefVision-Content-SHA256"] == record["content_sha256"]
-
-    graph = {
-        "graph_id": "known-study-design",
-        "name": "Replay tank design",
-        "nodes": [
-            {"node_id": "project", "node_type": "project_source"},
-            {
-                "node_id": "study",
-                "node_type": "reviewed_study_design",
-                "parameters": {
-                    "design_revision_id": record["id"],
-                    "design_sha256": record["content_sha256"],
-                },
-            },
-        ],
-        "edges": [
-            {
-                "edge_id": "project-study",
-                "source_node_id": "project",
-                "source_port_id": "project",
-                "target_node_id": "study",
-                "target_port_id": "project",
-            },
-        ],
-    }
-    graph_path = f"/api/v1/projects/{project}/workflow-graphs"
-    saved = client.post(graph_path, json={"graph": graph, "create_new_revision": True})
-    assert saved.status_code == 201, saved.text
-    graph_id = saved.json()["id"]
+    graph_id = _save_workflow(client, project, record["id"], record["content_sha256"])
 
     newer = _freeze(
         client,
@@ -136,6 +142,47 @@ def test_retrospective_design_reopens_exports_and_replays_twice(client: TestClie
     assert stale["run"]["status"] == "failed", stale
     assert "identity revision changed" in stale["run"]["error_message"]
     assert client.get(f"{path}/{record['id']}/design.json").json() == snapshot
+
+
+def test_frozen_study_checks_checksum_live_link_and_paired_values(client: TestClient) -> None:
+    project, _, analysis, _ = _study(client, reviewed_assignments=True)
+    record = _freeze(client, project, {"declaration": _declaration(), **_source(analysis)})
+    revision = record["id"]
+    path = f"{_path(project)}/{revision}"
+    session_factory = cast(FastAPI, client.app).state.session_factory
+    with session_factory() as session:
+        row = session.get(StudyDesignRevision, revision)
+        row.growth_analysis_id = None
+        session.commit()
+    mismatch = client.get(path)
+    assert mismatch.status_code == 409, mismatch.text
+    assert "live references do not match" in mismatch.text
+
+    forged = deepcopy(record["snapshot"])
+    report = forged["binding"]["paired_report"]
+    report["mean_difference"] = -8.0
+    report["report_sha256"] = canonical_json_sha256(
+        {key: value for key, value in report.items() if key != "report_sha256"}
+    )
+    with session_factory() as session:
+        row = session.get(StudyDesignRevision, revision)
+        row.growth_analysis_id = analysis["id"]
+        row.snapshot_json = forged
+        session.commit()
+    failed_export = client.get(f"{path}/design.json")
+    assert failed_export.status_code == 400, failed_export.text
+    assert "checksum mismatch" in failed_export.text
+
+    digest = canonical_json_sha256(forged)
+    with session_factory() as session:
+        row = session.get(StudyDesignRevision, revision)
+        row.content_sha256 = digest
+        session.commit()
+    graph_id = _save_workflow(client, project, revision, digest)
+    run = _run_graph(client, project, graph_id)
+    assert run["run"]["status"] == "failed", run
+    assert "Replayed growth evidence differs" in run["run"]["error_message"]
+    assert not any(artifact["data_type"] == "study_design_report" for artifact in run["artifacts"])
 
 
 def test_prospective_freeze_then_evidence_binding_is_a_new_revision(
