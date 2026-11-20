@@ -279,8 +279,32 @@ describe("ClassManagerPanel", () => {
     expect(await screen.findByText("Reassign preview")).toBeInTheDocument();
     expect(screen.getByText(/Historical class only/)).toBeInTheDocument();
 
+    const reassign = within(sourceClassRow()).getByRole("button", {
+      name: "Run reassign",
+    });
+    const executionRequests = () =>
+      fetchMock.mock.calls.filter(
+        ([url, options]) =>
+          String(url).endsWith("/classes/class-1/reassign") &&
+          options?.method === "POST",
+      );
+    await userEvent.click(reassign);
+    const confirmation = await screen.findByRole("alertdialog", {
+      name: "Reassign class",
+    });
+    expect(executionRequests()).toHaveLength(0);
+    expect(
+      within(confirmation).getByRole("button", { name: "Cancel" }),
+    ).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(executionRequests()).toHaveLength(0);
+    expect(reassign).toHaveFocus();
+    await userEvent.click(reassign);
     await userEvent.click(
-      within(sourceClassRow()).getByRole("button", { name: "Run reassign" }),
+      within(await screen.findByRole("alertdialog")).getByRole("button", {
+        name: "Run reassign",
+      }),
     );
 
     await waitFor(() =>
@@ -293,6 +317,7 @@ describe("ClassManagerPanel", () => {
           `/projects/${project.id}/classes/class-1/reassign`,
         ) && requestInit?.method === "POST",
     );
+    expect(executionRequests()).toHaveLength(1);
     expect(executeCall).toBeDefined();
     expect(executeCall?.[1]?.body).toContain("operation-1");
     expect(executeCall?.[1]?.body).toContain("a".repeat(64));

@@ -264,6 +264,39 @@ test("coordinates frozen QC review and reopens two saved workflow runs", async (
     ).status(),
   ).toBe(409);
 
+  const firstItemId = standaloneItems.find(
+    (item) => item.rank_position === 1,
+  )!.id;
+  const rankedState = async () =>
+    (await queueItems(standalone.id)).find((item) => item.id === firstItemId)
+      ?.review_state;
+  await page.getByLabel("Single-item reviewer label").fill(reviewer);
+  const complete = getRankedArticle(1).getByRole("button", {
+    name: "Mark complete",
+    exact: true,
+  });
+  await complete.click();
+  const confirmation = page.getByRole("alertdialog", {
+    name: "Complete QC review",
+  });
+  await expect(
+    confirmation.getByRole("button", { name: "Cancel" }),
+  ).toBeFocused();
+  expect(await rankedState()).toBe("in_progress");
+  await page.keyboard.press("Escape");
+  await expect(confirmation).toHaveCount(0);
+  await expect(complete).toBeFocused();
+  expect(await rankedState()).toBe("in_progress");
+  await complete.click();
+  const completing = waitForPost(
+    `${api}/review-queue-items/${firstItemId}/complete`,
+  );
+  await confirmation.getByRole("button", { name: "Complete review" }).click();
+  expect(
+    (await checked<ReviewQueueItem>(await completing, 200)).review_state,
+  ).toBe("completed");
+  await expect.poll(rankedState).toBe("completed");
+
   await openWorkflows();
   await page
     .getByRole("combobox", { name: /^Template/ })
@@ -390,6 +423,7 @@ test("coordinates frozen QC review and reopens two saved workflow runs", async (
         dataset_version_id: version.id,
         dataset_manifest_sha256: version.manifest_sha256,
         standalone_queue_id: standalone.id,
+        explicit_completion_confirmed: true,
         bulk_request: originalRequest,
         graph_id: graph.id,
         graph_sha256: graph.graph_sha256,
