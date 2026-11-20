@@ -11,6 +11,7 @@ import {
 
 import type { Project } from "../../src/api/client";
 import type { ScientificRecord } from "../../src/features/environmental-context/environmentalContextApi";
+import type { EventSummary } from "../../src/features/ecology/EventSummaryPanel";
 import type {
   MonitoringAlert,
   MonitoringAssessment,
@@ -488,6 +489,89 @@ test("reviews monitoring findings and compares only compatible project-local ass
       [...items].sort((first, second) => first.id.localeCompare(second.id));
     expect(rows(originals.items)).toEqual(rows(site.original));
   }
+  const biologyFixture = process.env.REEFVISION_MONITORING_BIO_FIXTURE;
+  let biological: Record<string, unknown> | undefined;
+  if (biologyFixture) {
+    const fixture = JSON.parse(await readFile(biologyFixture, "utf8")) as {
+      project_id: string;
+      summary_id: string;
+      protocol_sha256: string;
+      video_sha256: string;
+    };
+    const project = await checked<Project>(
+      await page.request.get(`${api}/projects/${fixture.project_id}`),
+      200,
+    );
+    const reviewed = await checked<EventSummary>(
+      await page.request.get(
+        `${api}/projects/${project.id}/ecology/event-summaries/${fixture.summary_id}`,
+      ),
+      200,
+    );
+    expect(reviewed.stale_reasons).toEqual([]);
+    expect(reviewed.snapshot.protocol_sha256).toBe(fixture.protocol_sha256);
+    await openMonitoring(page, web, project);
+    await page
+      .getByRole("button", { name: "New monitoring rule", exact: true })
+      .click();
+    await page.getByLabel("Source type").selectOption("biological");
+    await page.getByLabel("Rule name").fill("Dated reviewed event effort");
+    await page
+      .getByRole("checkbox", {
+        name: reviewed.snapshot.selection.name,
+        exact: true,
+      })
+      .check();
+    await page.getByLabel("Minimum effort (seconds)").fill("1");
+    const ruleResponse = waitPost(page, `${monitor(project)}/rules`);
+    await page.getByRole("button", { name: "Create monitoring rule" }).click();
+    const rule = await checked<MonitoringRule>(await ruleResponse, 201);
+    expect(rule).toEqual(
+      expect.objectContaining({
+        kind: "biological",
+        protocol: fixture.protocol_sha256,
+        metric: "confirmed_events_per_minute",
+        unit: "events/min",
+      }),
+    );
+    await page.getByLabel("Window start (UTC)").fill("2026-01-01T10:00");
+    await page.getByLabel("Window end (UTC)").fill("2026-01-01T10:01");
+    const assessed = waitPost(page, `${monitor(project)}/assessments`);
+    await page
+      .getByRole("button", { name: "Assess monitoring window" })
+      .click();
+    const record = await checked<MonitoringAssessment>(await assessed, 201);
+    expect(record.result.estimate).toBeCloseTo(60 / 4.7, 10);
+    expect(record.result.effort.valid_duration_s).toBeCloseTo(4.7, 10);
+    expect(record.result.effort.confirmed_event_count).toBe(1);
+    expect(record.result.biological_sessions).toHaveLength(1);
+    expect(record.result.biological_sessions?.[0]).toEqual(
+      expect.objectContaining({
+        summary_id: reviewed.id,
+        video_sha256: fixture.video_sha256,
+        confirmed_event_count: 1,
+      }),
+    );
+    await page
+      .getByText("Reviewed biological sessions (1)", { exact: true })
+      .click();
+    await expect(
+      page.getByText(fixture.video_sha256, { exact: true }),
+    ).toBeVisible();
+    biological = {
+      project_id: project.id,
+      summary_id: reviewed.id,
+      assessment_id: record.id,
+      result_sha256: record.result_sha256,
+      evidence_sha256: record.evidence_sha256,
+      method: record.result.method,
+      protocol_sha256: record.result.protocol,
+      estimate: record.result.estimate,
+      unit: record.result.unit,
+      effort: record.result.effort,
+      video_sha256: fixture.video_sha256,
+    };
+  }
   const path = info.outputPath("monitoring-proof.json");
   await writeFile(
     path,
@@ -497,6 +581,7 @@ test("reviews monitoring findings and compares only compatible project-local ass
         version,
         schema,
         generated_fixture: true,
+        biological,
         assessments: [a, b, c].map(({ assessment }) => ({
           project_id: assessment.project_id,
           id: assessment.id,
