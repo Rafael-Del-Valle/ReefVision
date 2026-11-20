@@ -114,6 +114,20 @@
       "build": "26300",
       "verified_and_reputable_policy_state": 0,
       "enforcing_device_acceptance": "open"
+    },
+    "embedded_webview2_installer": {
+      "binary": "MicrosoftEdgeWebView2RuntimeInstaller.exe",
+      "bytes": 294099168,
+      "sha256": "47bc51387aff95c1275ce38cfbbb5fbab99b43b33214049877bbcdbcc7a970d5",
+      "action": "InvokeStandalone",
+      "arguments": "/silent /install",
+      "condition": "NOT(REMOVE OR INSTALLED_WEBVIEW2_VERSION)",
+      "authenticode": {
+        "status": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+        "thumbprint": "1C74821BF8D0EC04326C05EAED18ADB3841B44F9",
+        "version": "1.3.315.17"
+      }
     }
   },
   "offline_install": {
@@ -300,6 +314,76 @@
     "status": "queued",
     "conclusion": null,
     "verified_roles": {
+      "clean": {
+        "job_id": 136461222544,
+        "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44779080692/job/136461222544",
+        "artifact": {
+          "id": 14656335886,
+          "sha256": "65e8edb90c70668cfd3f50205530f9d7d2c274fb3d31e62e8b84c98d2425ec8b",
+          "files_rehashed": 34
+        },
+        "suites": {
+          "first-use": {
+            "startTime": "2026-11-20T17:56:37.456Z",
+            "duration": 12785.56,
+            "expected": 1,
+            "skipped": 0,
+            "unexpected": 0,
+            "flaky": 0
+          },
+          "workspace": {
+            "startTime": "2026-11-20T18:02:05.486Z",
+            "duration": 62717.625,
+            "expected": 5,
+            "skipped": 0,
+            "unexpected": 0,
+            "flaky": 0
+          },
+          "research": {
+            "startTime": "2026-11-20T17:56:51.463Z",
+            "duration": 146210.772,
+            "expected": 6,
+            "skipped": 0,
+            "unexpected": 0,
+            "flaky": 0
+          },
+          "spatial": {
+            "startTime": "2026-11-20T17:59:18.685Z",
+            "duration": 165862.057,
+            "expected": 10,
+            "skipped": 0,
+            "unexpected": 0,
+            "flaky": 0
+          }
+        },
+        "stage_counts": {
+          "PASS": 18,
+          "SKIPPED": 11
+        },
+        "standard_user": {
+          "desktop_integrity": 8192,
+          "driver_integrity": 12288,
+          "desktop_sha256": "41bdf17415591f81a00d2a7e56e173d55cb07c3e7d10caa000fd233fdfac3c1a"
+        }
+      },
+      "published-1.0.3": {
+        "job_id": 136461222449,
+        "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44779080692/job/136461222449",
+        "artifact": {
+          "id": 14655506866,
+          "sha256": "3fb3e432eca451c9b395f183f860bd82295f7940b465213152e0b84d4cfda6e9",
+          "files_rehashed": 6
+        }
+      },
+      "validated-1.4": {
+        "job_id": 136461222527,
+        "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44779080692/job/136461222527",
+        "artifact": {
+          "id": 14654109936,
+          "sha256": "8e31f135852546c41c01fe7afd1ea1a30be75127b7e687ff9b23ba473a7e2e8d",
+          "files_rehashed": 7
+        }
+      },
       "draft-1.4-0039": {
         "job_id": 136461222594,
         "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44779080692/job/136461222594",

@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T17:37:55Z`
+Updated: `2026-11-20T18:06:47Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -11,8 +11,8 @@ Candidate target: `2.0`
 | --- | ---: |
 | blocked | 17 |
 | explicitly_deferred | 4 |
-| in_progress | 22 |
-| verified | 34 |
+| in_progress | 21 |
+| verified | 35 |
 
 ## Features
 
@@ -68,7 +68,7 @@ Candidate target: `2.0`
 | 1.6 | Class visibility, dense annotation editing, and large-gallery performance | verified | Annotate → View controls and gallery |
 | 1.6 | Independent migration-lineage 0038 reconciliation | verified | Applied migration IDs are never edited. |
 | 1.6 | First-run onboarding and Windows usability acceptance | verified | Installed first launch → Create or open project |
-| 1.6 | Prioritized QC queues, reviewer assignment, bulk actions, and idempotent retry | in_progress | Review → QC queues |
+| 1.6 | Prioritized QC queues, reviewer assignment, bulk actions, and idempotent retry | verified | Review → QC queues |
 | 1.7 | Local cross-project monitoring summaries | in_progress | Research → Monitoring → Project summaries |
 | 1.7 | Recorded, simulated, and physical acquisition sources | in_progress | Project → Acquisition sources |
 | 1.7 | Durable recurring acquisition, inference, QC, and report schedules | in_progress | Video & automation → Schedules |
@@ -1124,6 +1124,7 @@ Evidence:
 - `source`: Thirty-five backend checks cover class use, archived classes, reassignment and protected historical records. — `docs/validation/research-workflows-1-6.json` (`rv16-class-safe-writes`)
 - `browser`: Classes retained the frozen manifest and exported YOLO mapping after a reviewed reassignment and reopen. Polygon and image-level references prevented deletion. — `docs/validation/research-workflows-1-6.json` (`rv16-class-frozen-export`)
 - `windows_installed`: On the original 1.6 MSI under an ordinary Windows account, the class lifecycle test passed. The researcher reviewed the reassignment, reopened the project and verified the earlier frozen export. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44768324452/job/136420579045` (`rv16-class-management-original-msi-used-classes`)
+- `windows_installed`: The corrected original MSI passed the standard-user class lifecycle, including explicit reassignment after annotations exist and reopening the frozen export. — `docs/validation/installed-workflows-a580042e8.json` (`rv16-class-management-original-a580042e8`)
 - `physical_hardware`: In native Classes, confirmed reassignment advanced the live annotation from revision 2 to 3. Mask and image-classification references remained protected. The frozen dataset manifest and YOLO mapping survived reopening. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-class-management-physical-83b0`)
 - `representative_data`: none recorded
 
@@ -1144,6 +1145,7 @@ Evidence:
 - `source`: 175 video tests exercised draft and persisted editing. A source-built WebView2 journey preserved a hidden mask and untouched keyframe and rejected a stale revision. — `docs/validation/research-workflows-1-6.json` (`rv16-video-edits-source`)
 - `browser`: On 5,000 decoded fixture images, 24 cards appeared in 106.6 ms and the first thumbnail in 143.1 ms. The 1,500-box editor supported selection, hide, solo, undo, redo and reopen. — `docs/validation/research-workflows-1-6.json` (`rv16-gallery-canvas`)
 - `windows_installed`: The standard-user 1.6 installation passed the dense image, native decision and reversible video tests with hidden geometry preserved. A physical MSI run on the same source preserved 1,500 boxes including 750 hidden boxes in the 5,000-image fixture. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44768324452/job/136420579045` (`rv16-class-visibility-dense-editing-original-msi-dense-image-video`)
+- `windows_installed`: The corrected original MSI passed dense still and video editing under an ordinary account. The physical package retained 1,500 existing boxes, including 750 hidden boxes, on a 5,000-image fixture. — `docs/validation/installed-workflows-a580042e8.json` (`rv16-class-visibility-dense-editing-original-a580042e8`)
 - `physical_hardware`: Physical WebView2 opened 24 of 5,000 gallery images in 75.8 ms. The focused image and filmstrip decoded in 207.9 ms. A new annotation survived save and reopen with 1,500 prior boxes and 750 hidden boxes preserved. The separate image, mask and video editing trials produced explicit 409 conflicts and preserved drafts on Cancel. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-class-visibility-dense-editing-physical-83b0`)
 - `representative_data`: none recorded
 
@@ -1193,21 +1195,21 @@ Evidence:
 ### rv16-qc-queues-bulk-retry: Prioritized QC queues, reviewer assignment, bulk actions, and idempotent retry
 
 - Target: `1.6`
-- Status: `in_progress`
+- Status: `verified`
 - Dependencies: `rv15-reviewer-lab`
 - Entry point: Review → QC queues
 - Workflow Builder: `required`
 
 Acceptance checks:
 
-- **in_progress** — Prioritize and assign review, apply bounded bulk decisions transactionally, and retry without duplicate scientific records. (`rv16-qc-queues-bulk-retry-check`)
+- **verified** — Prioritize and assign review, apply bounded bulk decisions transactionally, and retry without duplicate scientific records. (`rv16-qc-queues-bulk-retry-check`)
 
 Evidence:
 
 - `source`: Seven Project Exchange tests verified stable retry identity, source ownership, damaged data refusal, and two saved frozen QC runs in each of two generations of imported projects. — `docs/validation/research-workflows-1-6.json` (`rv16-frozen-qc-exchange`)
 - `browser`: The ordinary Review workspace froze evidence, assigned and annotated items, bulk-started reviews and replayed the guided graph twice. A retry in a new backend process changed zero records. — `docs/validation/research-workflows-1-6.json` (`rv16-frozen-qc-review`)
 - `browser`: With the inspector open, the source-built Windows desktop reached the ranked assignment at 1056 and 1440 CSS pixels. The ordinary review, frozen replays and project recovery completed. — `docs/validation/compact-windows-review-a580042e8.json` (`rv16-qc-queues-bulk-retry-compact-review-a580042e8`)
-- `windows_installed`: none recorded
+- `windows_installed`: The corrected original MSI passed the ranked reviewer assignment and bounded bulk action under an ordinary Windows account. The saved QC graph ran twice, and after Project Exchange the reopened queue retained the completed item, five audit events and one keyed bulk request. — `docs/validation/installed-workflows-a580042e8.json` (`rv16-qc-queues-bulk-retry-original-a580042e8`)
 - `physical_hardware`: The packaged native Review workspace froze a ranked queue, assigned items and confirmed completion. Two saved runs executed. ZIP exchange preserved five ledger events, a keyed bulk request and two original images; a reopened graph completed in the restored project. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-qc-queues-bulk-retry-physical-83b0`)
 - `representative_data`: none recorded
 
