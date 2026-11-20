@@ -1175,6 +1175,10 @@ def test_pose_run_output_rejects_windows_junction_into_another_run(tmp_path: Pat
                 validation_content=None,
                 destination=junction / "frozen-export",
             )
+        # Fingerprinting must also reject a junction swapped in at the root,
+        # not only junctions discovered underneath the dataset directory.
+        with pytest.raises(ValidationError, match="dataset path contains a Windows junction"):
+            _materialized_pose_dataset_sha256(junction)
         assert checkpoint.read_bytes() == b"preserve-registered-pose-weights"
     finally:
         junction.rmdir()
@@ -1321,6 +1325,19 @@ def test_pose_materialization_rejects_symlinked_export_destinations(
         )
     assert marker.read_text(encoding="utf-8") == "unchanged"
     assert not (outside / "data.yaml").exists()
+
+    # The redirected root has the same bytes as the sealed input, so a
+    # fingerprint comparison alone cannot establish the saved run lineage.
+    sealed_digest = _materialized_pose_dataset_sha256(outside)
+    with pytest.raises(ValidationError, match="dataset path contains a symbolic link"):
+        _verify_prelaunch_pose_dataset(
+            linked_destination,
+            {
+                "materialized_dataset_sha256": sealed_digest,
+                "materialized_dataset_fingerprint_algorithm": "relative-posix-path-v1",
+            },
+        )
+    assert marker.read_text(encoding="utf-8") == "unchanged"
 
     linked_parent = tmp_path / "redirected-run"
     linked_parent.symlink_to(outside, target_is_directory=True)
