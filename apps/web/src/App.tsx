@@ -1431,6 +1431,7 @@ function ReefVisionMainApp() {
           version={health.data?.version ?? applicationVersion}
           hasProject={Boolean(selectedProjectId)}
           onStartProject={(action) => {
+            if (preventQcNavigation()) return;
             setSelectedProjectId(null);
             setEditorLaunch(null);
             setActiveView("gallery");
