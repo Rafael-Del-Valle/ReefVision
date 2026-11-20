@@ -1,0 +1,213 @@
+import { expect } from "@playwright/test";
+import { createHash, randomUUID } from "node:crypto";
+import { readFile, writeFile } from "node:fs/promises";
+import { test } from "./spatialDesktop";
+
+test("imports an image and video, persists a reviewed edit, and exports YOLO", async ({
+  desktop,
+}, info) => {
+  const { page, api, web } = desktop;
+  page.setDefaultTimeout(15_000);
+  if (desktop.surface === "source-browser") {
+    await page.setViewportSize({ width: 1440, height: 960 });
+  }
+  const name = `Synthetic ordinary 2D ${randomUUID().slice(0, 8)}`;
+  const created = await page.request.post(`${api}/projects`, {
+    data: { name, template: "blank" },
+  });
+  expect(created.status()).toBe(201);
+  const project = await created.json();
+  const root = `${api}/projects/${project.id}`;
+  const category = await page.request.post(`${root}/classes`, {
+    data: { class_index: 0, name: "Fixture animal", display_color: "#28A95C" },
+  });
+  expect(category.status()).toBe(201);
+  const label = await category.json();
+  const basename = "field-still-fixture.png";
+  const image = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAFAAAAA8CAIAAAB+RarbAAAAeUlEQVR4nOXOQQEAIBCAMKSZSYxjbVucD5Zg655NicRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjL8D0x6O+gGf/8sEBAAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  const hash = (bytes: Buffer) =>
+    createHash("sha256").update(bytes).digest("hex");
+  const post = (url: string) =>
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" && response.url() === url,
+    );
+  const json = async (url: string) => (await page.request.get(url)).json();
+  await page.addInitScript(() =>
+    localStorage.setItem("reefvision.onboarding.dismissed.1.4.0", "true"),
+  );
+  const openProject = async () => {
+    await page.goto(web);
+    await page
+      .getByRole("button", { name: `Open ${name}`, exact: true })
+      .click();
+  };
+  await openProject();
+  const importing = post(`${root}/imports/images`);
+  await page
+    .getByLabel("Import files", { exact: true })
+    .setInputFiles({ name: basename, mimeType: "image/png", buffer: image });
+  const imported = await importing;
+  expect(imported.status(), await imported.text()).toBe(200);
+  const images = await imported.json();
+  expect(images.successful, JSON.stringify(images)).toHaveLength(1);
+  const imageId = images.successful[0].image_id;
+  const annotate = () =>
+    page
+      .getByRole("article", { name: new RegExp(basename) })
+      .getByRole("button", { name: "Annotate" })
+      .click();
+  await annotate();
+  const editor = page.getByTestId("annotation-editor");
+  const canvas = editor.getByTestId("annotation-canvas");
+  const boxes = canvas.locator("[data-testid^='annotation-']");
+  await editor.getByRole("button", { name: "Box tool", exact: true }).click();
+  await expect(canvas).toHaveClass(/tool-box/);
+  await canvas.scrollIntoViewIfNeeded();
+  const { start, end } = await canvas.evaluate((svg) => {
+    const matrix = svg.querySelector("g")?.getScreenCTM();
+    if (!matrix) throw new Error("No source pixel transform");
+    const s = new DOMPoint(20, 15).matrixTransform(matrix);
+    const e = new DOMPoint(55, 40).matrixTransform(matrix);
+    return { start: { x: s.x, y: s.y }, end: { x: e.x, y: e.y } };
+  });
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(end.x, end.y, { steps: 8 });
+  await page.mouse.up();
+  await expect(boxes).toHaveCount(1);
+  await editor.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(boxes).toHaveCount(0);
+  await editor.getByRole("button", { name: "Redo", exact: true }).click();
+  await expect(boxes).toHaveCount(1);
+  await editor.getByLabel("Annotation status").selectOption("reviewed");
+  await editor.getByRole("button", { name: "Save now" }).click();
+  await expect(editor.getByTestId("annotation-save-state")).toHaveText("Saved");
+  const saved = await json(`${api}/images/${imageId}/annotations`);
+  expect(saved.image.annotation_status).toBe("reviewed");
+  expect(saved.image.sha256).toBe(hash(image));
+  expect(saved.annotations).toHaveLength(1);
+  const box = saved.annotations[0];
+  expect(box.label_class_id).toBe(label.id);
+  expect(box.x_min).toBeCloseTo(20, 0);
+  expect(box.x_max).toBeCloseTo(55, 0);
+  expect(box.y_min).toBeCloseTo(15, 0);
+  expect(box.y_max).toBeCloseTo(40, 0);
+  await openProject();
+  await annotate();
+  await expect(canvas.getByTestId(`annotation-${box.id}`)).toBeVisible();
+  await expect(editor.getByLabel("Annotation status")).toHaveValue("reviewed");
+  await openProject();
+  await page
+    .getByRole("tab", { name: "Dataset versions", exact: true })
+    .click();
+  await page.getByLabel("Version name").fill("Frozen ordinary fixture");
+  await page.getByLabel("Split method").selectOption("random");
+  await page.getByLabel("Train ratio").fill("1");
+  await page.getByLabel("Validation ratio").fill("0");
+  await page.getByLabel("Test ratio").fill("0");
+  const freezing = post(`${root}/dataset-versions`);
+  await page.getByRole("button", { name: "Create immutable version" }).click();
+  const frozen = await freezing;
+  expect(frozen.ok(), await frozen.text()).toBeTruthy();
+  const snapshot = await frozen.json();
+  expect(snapshot.manifest_sha256).toMatch(/^[a-f0-9]{64}$/);
+  const exporting = post(`${api}/dataset-versions/${snapshot.id}/exports`);
+  await page.getByRole("button", { name: "Export YOLO dataset" }).click();
+  const exported = await exporting;
+  expect(exported.ok(), await exported.text()).toBeTruthy();
+  const { export: record, job } = await exported.json();
+  await expect
+    .poll(
+      async () => {
+        const current = await json(`${api}/jobs/${job.id}`);
+        expect(current.status, current.error_message).not.toBe("failed");
+        return current.status;
+      },
+      { timeout: 20_000 },
+    )
+    .toBe("succeeded");
+  const manifest = await json(`${api}/exports/${record.id}/manifest`);
+  expect(manifest).toMatchObject({
+    export_id: record.id,
+    dataset_version_id: snapshot.id,
+    dataset_version_manifest_sha256: snapshot.manifest_sha256,
+    class_map: [{ id: label.id, class_index: 0, name: label.name }],
+    items: [
+      {
+        image_id: imageId,
+        image_sha256: hash(image),
+        annotation_count: 1,
+        split: "train",
+      },
+    ],
+  });
+  const archive = await page.request.get(
+    `${api}/exports/${record.id}/download`,
+  );
+  expect(archive.ok()).toBeTruthy();
+  const downloadEvent = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Download zip", exact: true }).click();
+  const download = await downloadEvent;
+  expect(download.suggestedFilename()).toMatch(/\.zip$/i);
+  const exportedZip = info.outputPath("ordinary-2d-export.zip");
+  await download.saveAs(exportedZip);
+  const bytes = await readFile(exportedZip);
+  expect(hash(bytes)).toBe(hash(await archive.body()));
+  expect(bytes.subarray(0, 2).toString()).toBe("PK");
+  // Twelve synthetic frames generated by scripts/seed_temporal_reefpose_live.py.
+  const video = await readFile(
+    new URL("./fixtures/synthetic-ordinary-clip.mp4", import.meta.url),
+  );
+  await page
+    .getByRole("tab", { name: "Video & automation", exact: true })
+    .click();
+  await page
+    .getByRole("tab", { name: "Video & tracking", exact: true })
+    .click();
+  await page.getByLabel("Video file", { exact: true }).setInputFiles({
+    name: "field-clip-fixture.mp4",
+    mimeType: "video/mp4",
+    buffer: video,
+  });
+  const videoPosted = post(`${root}/imports/videos`);
+  await page.getByRole("button", { name: "Import video", exact: true }).click();
+  const videoResponse = await videoPosted;
+  expect(videoResponse.ok(), await videoResponse.text()).toBeTruthy();
+  const recording = await videoResponse.json();
+  expect(recording.sha256).toBe(hash(video));
+  const videoContent = await page.request.get(
+    `${api}/videos/${recording.id}/content`,
+  );
+  expect(videoContent.ok()).toBeTruthy();
+  expect(hash(await videoContent.body())).toBe(hash(video));
+  await expect(
+    page
+      .getByTestId("video-tracking-workspace")
+      .getByRole("option", { name: /field-clip-fixture/ }),
+  ).toHaveAttribute("value", recording.id);
+  await writeFile(
+    info.outputPath("ordinary-2d-webview2.json"),
+    JSON.stringify(
+      {
+        surface: desktop.surface,
+        project_id: project.id,
+        image_id: imageId,
+        image_sha256: saved.image.sha256,
+        annotation: box,
+        dataset_version_id: snapshot.id,
+        manifest_sha256: snapshot.manifest_sha256,
+        export_id: record.id,
+        export_sha256: hash(bytes),
+        class_map: manifest.class_map,
+        video_id: recording.id,
+        video_sha256: hash(video),
+      },
+      null,
+      2,
+    ),
+  );
+});
