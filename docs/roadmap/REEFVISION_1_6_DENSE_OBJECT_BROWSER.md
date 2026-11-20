@@ -118,3 +118,18 @@ scientific outputs and saved executable Workflow Builder graphs remain
 unaltered. Exact-head TypeScript/Vitest/Playwright, native Windows
 installed-GUI profiling on real dense media, and researcher approval remain
 release requirements; this is not a new scientific Workflow Builder node.
+
+## Pointer-identity isolation for dense image pan gestures (Track D)
+
+Alt+drag and middle-button panning now track the initiating pointer ID. Additional
+pen/touch pointers cannot replace the drag origin, move the viewport, or end a
+different pointer's active drag. The active pointer's release/cancel and a
+window blur still clear the gesture. This is display-only: original image
+pixels, annotation/mask coordinates, selected IDs, class visibility, QC review
+decisions, and saved executable Workflow Builder graph/run provenance are never
+altered. No new workflow node or database migration is required.
+
+Two frontend regressions exercise interleaved pointer-down/move/up/cancel,
+source-geometry preservation, and blur cancellation. Browser E2E on dense
+representative media and installed Windows pen/touch usability remain required
+for 1.6 acceptance.

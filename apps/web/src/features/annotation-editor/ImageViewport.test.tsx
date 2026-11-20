@@ -75,6 +75,119 @@ describe("ImageViewport", () => {
     expect(transform.style.transform).not.toContain("scale(1)");
   });
 
+  it("isolates active panning from a second pointer and its release", () => {
+    render(
+      <ImageViewport width={1600} height={1200} label="Multi-pointer viewport">
+        <svg aria-label="Retained biological annotation">
+          <rect x="10" y="20" width="30" height="40" />
+        </svg>
+      </ImageViewport>,
+    );
+    const frame = screen.getByRole("region", {
+      name: "Multi-pointer viewport",
+    });
+    const transform = screen.getByTestId("image-viewport-transform");
+    const original = transform.style.transform;
+
+    fireEvent.pointerDown(frame, {
+      pointerId: 7,
+      button: 0,
+      altKey: true,
+      clientX: 10,
+      clientY: 20,
+    });
+    fireEvent.pointerDown(frame, {
+      pointerId: 8,
+      button: 0,
+      altKey: true,
+      clientX: 300,
+      clientY: 400,
+    });
+    fireEvent.pointerMove(window, {
+      pointerId: 8,
+      clientX: 800,
+      clientY: 900,
+    });
+    fireEvent.pointerUp(window, { pointerId: 8 });
+    expect(transform.style.transform).toBe(original);
+
+    fireEvent.pointerMove(window, {
+      pointerId: 7,
+      clientX: 50,
+      clientY: 60,
+    });
+    const afterPrimaryMove = transform.style.transform;
+    expect(afterPrimaryMove).not.toBe(original);
+    fireEvent.pointerMove(window, {
+      pointerId: 8,
+      clientX: 900,
+      clientY: 900,
+    });
+    expect(transform.style.transform).toBe(afterPrimaryMove);
+
+    fireEvent.pointerUp(window, { pointerId: 7 });
+    fireEvent.pointerMove(window, {
+      pointerId: 7,
+      clientX: 120,
+      clientY: 150,
+    });
+    expect(transform.style.transform).toBe(afterPrimaryMove);
+    expect(screen.getByLabelText("Retained biological annotation").querySelector("rect")).toHaveAttribute(
+      "x",
+      "10",
+    );
+  });
+
+  it("ignores foreign pointer cancellation but cancels on active pointer or window blur", () => {
+    render(
+      <ImageViewport width={1600} height={1200} label="Pointer cancel viewport">
+        <svg />
+      </ImageViewport>,
+    );
+    const frame = screen.getByRole("region", {
+      name: "Pointer cancel viewport",
+    });
+    const transform = screen.getByTestId("image-viewport-transform");
+
+    fireEvent.pointerDown(frame, {
+      pointerId: 1,
+      button: 1,
+      clientX: 20,
+      clientY: 20,
+    });
+    fireEvent.pointerCancel(window, { pointerId: 2 });
+    const beforeMove = transform.style.transform;
+    fireEvent.pointerMove(window, {
+      pointerId: 1,
+      clientX: 40,
+      clientY: 40,
+    });
+    expect(transform.style.transform).not.toBe(beforeMove);
+    const afterMove = transform.style.transform;
+
+    fireEvent.pointerCancel(window, { pointerId: 1 });
+    fireEvent.pointerMove(window, {
+      pointerId: 1,
+      clientX: 90,
+      clientY: 90,
+    });
+    expect(transform.style.transform).toBe(afterMove);
+
+    fireEvent.pointerDown(frame, {
+      pointerId: 3,
+      button: 1,
+      clientX: 10,
+      clientY: 10,
+    });
+    fireEvent.blur(window);
+    fireEvent.pointerMove(window, {
+      pointerId: 3,
+      clientX: 200,
+      clientY: 200,
+    });
+    expect(transform.style.transform).toBe(afterMove);
+  });
+
   it("preserves Alt-modified polygon vertex gestures", () => {
     const onPointerDown = vi.fn();
     render(
