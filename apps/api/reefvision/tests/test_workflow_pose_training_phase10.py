@@ -2629,6 +2629,16 @@ def test_pose_workflow_pins_offline_amp_from_verified_truth(
         persisted = session.get(TrainingRun, result["training_run_id"])
         assert persisted is not None
         assert persisted.training_config_json["amp"] is False
+        # Windows forces single-process loading at the GPU worker. The saved
+        # experiment must reflect those actual settings, not requested defaults.
+        assert persisted.training_config_json["workers"] == (
+            0 if sys.platform == "win32" else 2
+        )
+        if sys.platform == "win32":
+            assert any(
+                "Windows pose training uses workers=0" in warning
+                for warning in persisted.warnings_json
+            )
 
 
 def test_pose_workflow_requires_effective_fp32_precision_from_verified_truth(
