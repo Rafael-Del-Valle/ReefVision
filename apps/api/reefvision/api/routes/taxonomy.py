@@ -1,9 +1,10 @@
 """Project-local taxonomy, independent known-presence review and detectable visits."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import RedirectResponse
 
 from reefvision.api.routes.reviewer_lab_v15 import Access, DbSession, require_actor
 from reefvision.schemas.reviewer_lab_v15 import ReviewerLabRole
@@ -15,6 +16,7 @@ from reefvision.schemas.taxonomy import (
     PresenceReviewCreate,
     PresenceReviewRead,
     TaxonomyPage,
+    TaxonomySource,
     TaxonProposalCreate,
     TaxonProposalRead,
     TaxonReviewCreate,
@@ -45,6 +47,18 @@ def _write_actor(
     if independent and actor.role not in ("reviewer", "adjudicator"):
         raise HTTPException(403, "Review requires a current local reviewer or adjudicator role")
     return actor
+
+
+@router.get("/source/{kind}/{source_id}", response_class=RedirectResponse)
+def open_source(
+    kind: Literal["image", "video"],
+    source_id: UUID,
+    sha256: Annotated[str, Query(pattern=r"^[a-f0-9]{64}$")],
+    taxonomy: Taxonomy,
+) -> RedirectResponse:
+    bound = taxonomy.verify_source(TaxonomySource(kind=kind, id=source_id, sha256=sha256))
+    plural = "images" if kind == "image" else "videos"
+    return RedirectResponse(f"/api/v1/{plural}/{bound}/content")
 
 
 @router.get("/proposals")

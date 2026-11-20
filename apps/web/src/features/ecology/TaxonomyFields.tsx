@@ -7,6 +7,7 @@ import {
   type TaxonomySource,
   type VisitOutcome,
   taxonomyPage,
+  taxonomyOriginalUrl,
 } from "./taxonomyApi";
 
 export const outcomes: Record<VisitOutcome, string> = {
@@ -217,15 +218,14 @@ export function SourcePicker({
 export function SourceEvidence({
   source,
   label,
+  projectId,
 }: {
   source?: TaxonomySource | null;
   label: string;
+  projectId: string;
 }) {
   if (!source) return null;
-  const url =
-    source.kind === "image"
-      ? imageContentUrl(source.id)
-      : videoContentUrl(source.id);
+  const url = taxonomyOriginalUrl(projectId, source);
   return (
     <p>
       {label}{" "}

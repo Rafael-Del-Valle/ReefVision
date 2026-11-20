@@ -98,6 +98,7 @@ function ReviewHistory({
               </p>
               <p>{item.review.reason}</p>
               <SourceEvidence
+                projectId={projectId}
                 source={item.review.source}
                 label="Separate presence evidence"
               />
@@ -261,6 +262,7 @@ export function TaxonProposals({
           </p>
           <p>{selected.proposal.reason}</p>
           <SourceEvidence
+            projectId={projectId}
             source={selected.proposal.source}
             label="Pinned taxonomy evidence"
           />
@@ -436,6 +438,7 @@ export function SamplingVisits({
           </p>
           <p>{selected.visit.notes}</p>
           <SourceEvidence
+            projectId={projectId}
             source={selected.visit.source}
             label="Pinned observation evidence"
           />
