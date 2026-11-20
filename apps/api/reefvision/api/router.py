@@ -53,6 +53,7 @@ from reefvision.api.routes.model_agreement import router as model_agreement_rout
 from reefvision.api.routes.model_catalog import router as model_catalog_router
 from reefvision.api.routes.model_runtime import router as model_runtime_router
 from reefvision.api.routes.models import router as models_router
+from reefvision.api.routes.paired_models_v15 import router as paired_models_router
 from reefvision.api.routes.pose_active_learning import router as pose_active_learning_router
 from reefvision.api.routes.pose_biological_measurement import (
     router as pose_biological_measurement_router,
@@ -144,6 +145,7 @@ api_router.include_router(dataset_versions_router)
 api_router.include_router(jobs_router)
 api_router.include_router(model_catalog_router)
 api_router.include_router(model_runtime_router)
+api_router.include_router(paired_models_router)
 api_router.include_router(sam2_models_router)
 api_router.include_router(models_router)
 api_router.include_router(predictions_router)

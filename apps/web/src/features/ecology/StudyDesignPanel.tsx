@@ -7,6 +7,7 @@ import {
   type EcologyAnalysis,
 } from "./ecologyAnalysisApi";
 import type { Identity, Metric } from "./ecologyApi";
+import { getRegistry } from "./ecologyApi";
 import {
   bindStudyDesign,
   getStudyDesign,
@@ -643,6 +644,21 @@ function DesignReceipt({
         </button>
       </div>
     </article>
+  );
+}
+
+export function StudyDesignWorkspace({ projectId }: { projectId: string }) {
+  const registry = useQuery({
+    queryKey: ["ecology-registry", projectId],
+    queryFn: ({ signal }) => getRegistry(projectId, signal),
+  });
+  if (registry.error) return <p role="alert">{registry.error.message}</p>;
+  if (!registry.data) return <p>Loading the project roster…</p>;
+  return (
+    <StudyDesignPanel
+      projectId={projectId}
+      identities={registry.data.identities}
+    />
   );
 }
 

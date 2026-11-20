@@ -75,6 +75,8 @@ import {
 } from "./components/layout/workspacePresets";
 import "./styles/design-system.css";
 import { EcologyWorkspace } from "./features/ecology/EcologyWorkspace";
+import { StudyDesignWorkspace } from "./features/ecology/StudyDesignPanel";
+import { ModelComparisonWorkspace } from "./features/models/ModelComparisonWorkspace";
 
 import "./styles/app.css";
 import "./styles/phase12-workspace.css";
@@ -98,7 +100,9 @@ type ProjectView =
   | "computed_metrics"
   | "scientific_heatmaps"
   | "ecology"
+  | "study_design"
   | "models"
+  | "model_comparison"
   | "training"
   | "classification"
   | "video"
@@ -195,6 +199,11 @@ const PROJECT_NAV_GROUPS: Array<{
           "Train from architectures and register local trained models.",
       },
       {
+        id: "model_comparison",
+        label: "Model comparison",
+        description: "Compare reviewed checkpoints on frozen images or video.",
+      },
+      {
         id: "training",
         label: "Training",
         description: "Launch and inspect reproducible model-training runs.",
@@ -214,6 +223,19 @@ const PROJECT_NAV_GROUPS: Array<{
         label: "Providers",
         description:
           "Inspect local manifests and use supported prompt, segmentation, depth, OCR, and VLM provider tools.",
+      },
+    ],
+  },
+  {
+    id: "research",
+    label: "Research",
+    description: "Freeze the study design and review its evidence.",
+    items: [
+      {
+        id: "study_design",
+        label: "Study design",
+        description:
+          "Declare treatments, independent units, exclusions and the statistical plan.",
       },
     ],
   },
@@ -1060,6 +1082,12 @@ function ReefVisionMainApp() {
                 }}
               />
             )}
+            {activeView === "study_design" && (
+              <StudyDesignWorkspace
+                key={selectedProject.id}
+                projectId={selectedProject.id}
+              />
+            )}
             {activeView === "scientific_heatmaps" && (
               <ScientificHeatmapsPanel
                 key={selectedProject.id}
@@ -1107,6 +1135,31 @@ function ReefVisionMainApp() {
               <ActiveLearningWorkspace
                 project={selectedProject}
                 onOpenReviewQueue={() => setActiveView("review_queue")}
+              />
+            )}
+            {activeView === "model_comparison" && (
+              <ModelComparisonWorkspace
+                key={selectedProject.id}
+                projectId={selectedProject.id}
+                onWorkflow={() => setActiveView("workflows")}
+                onOpen={(kind, id, frame, seconds) => {
+                  if (kind === "image") {
+                    setEditorLaunch({
+                      imageId: id,
+                      returnLabel: "Back to model comparison",
+                      contextTitle: "Paired comparison evidence",
+                    });
+                  } else {
+                    setVideoWorkspaceCommand({
+                      id: ++videoWorkspaceCommandSequenceRef.current,
+                      type: "open_comparison_frame",
+                      videoId: id,
+                      frameIndex: frame,
+                      seconds,
+                    });
+                    setActiveView("video");
+                  }
+                }}
               />
             )}
             {activeView === "models" && (

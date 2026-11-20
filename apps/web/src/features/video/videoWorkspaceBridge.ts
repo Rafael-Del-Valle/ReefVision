@@ -68,6 +68,13 @@ export interface PoseEvidenceNavigation {
 }
 
 export type VideoWorkspaceCommand =
+  | {
+      id: number;
+      type: "open_comparison_frame";
+      videoId: string;
+      frameIndex: number | null;
+      seconds: number | null;
+    }
   | ({ id: number; type: "open_pose_evidence" } & PoseEvidenceNavigation)
   | {
       id: number;

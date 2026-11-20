@@ -35,7 +35,7 @@ interface Selection extends Preview {
   model_id: string;
 }
 
-function useSelections(projectId: string) {
+export function useSelections(projectId: string) {
   return useQuery({
     queryKey: ["reviewed-model-selections", projectId],
     queryFn: ({ signal }) =>

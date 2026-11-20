@@ -9,7 +9,9 @@ export type WorkspaceInspectorView =
   | "computed_metrics"
   | "scientific_heatmaps"
   | "ecology"
+  | "study_design"
   | "models"
+  | "model_comparison"
   | "training"
   | "classification"
   | "video"
@@ -52,7 +54,9 @@ export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "computed_metrics",
   "scientific_heatmaps",
   "ecology",
+  "study_design",
   "models",
+  "model_comparison",
   "training",
   "classification",
   "video",
@@ -69,6 +73,36 @@ const WORKSPACE_INSPECTORS: Record<
   WorkspaceInspectorView,
   WorkspaceInspectorDefinition
 > = {
+  model_comparison: {
+    title: "Model comparison",
+    summary:
+      "Inspect paired observations and differences between two reviewed checkpoints.",
+    boundary: "review",
+    recordPolicy:
+      "Reference groups, exclusions and model identities are frozen with the report.",
+    actions: [
+      {
+        label: "Model Hub",
+        target: "models",
+        description: "Review model and runtime compatibility.",
+      },
+    ],
+  },
+  study_design: {
+    title: "Study design",
+    summary:
+      "Review the frozen roster, independent units and paired growth evidence.",
+    boundary: "record",
+    recordPolicy:
+      "Each saved revision retains the declaration and its review time.",
+    actions: [
+      {
+        label: "Organisms & ecology",
+        target: "ecology",
+        description: "Review assignments and calibrated growth evidence.",
+      },
+    ],
+  },
   field_capture: {
     title: "Field evidence",
     summary:

@@ -20,7 +20,7 @@ test("captures local field originals and replays a transferred batch", async ({
     await page.setViewportSize({ width: 1350, height: 900 });
   }
   await page.addInitScript(() =>
-    localStorage.setItem("reefvision.onboarding.dismissed.1.4.0", "true"),
+    localStorage.setItem("reefvision.onboarding.dismissed.1.5.0", "true"),
   );
   const marker = randomUUID().slice(0, 8);
   async function project(name: string) {

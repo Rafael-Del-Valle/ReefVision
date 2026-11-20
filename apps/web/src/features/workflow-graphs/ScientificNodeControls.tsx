@@ -39,6 +39,7 @@ const scientificNodes = new Set([
   "ecology_verified_analysis",
   "paired_growth_contrast",
   "reviewed_study_design",
+  "paired_model_comparison",
   "mesh_surface_preview",
   "point_cloud_preview",
   "mesh_longitudinal_comparison",
@@ -133,6 +134,13 @@ export function scientificConfigurationIssue(
   parameters: Parameters,
 ): string | undefined {
   const config = object(parameters.configuration);
+  if (
+    nodeType === "paired_model_comparison" &&
+    (!string(parameters.comparison_id) ||
+      !/^[0-9a-f]{64}$/.test(string(parameters.comparison_sha256)))
+  ) {
+    return "Choose a completed paired model comparison.";
+  }
   if (
     nodeType === "reviewed_model_runtime" &&
     (!string(parameters.selection_id) ||
@@ -1884,6 +1892,50 @@ export function ScientificNodeControls({
       <ProviderManifestSnapshotFields
         parameters={parameters}
         onChange={onChange}
+      />
+    );
+  if (nodeType === "paired_model_comparison")
+    return (
+      <Records
+        queryKey={[base, "saved", "paired-model-comparisons"]}
+        load={async (offset, signal) => {
+          const page = await request<
+            {
+              id: string;
+              task: string;
+              status: string;
+              content_sha256: string | null;
+            }[]
+          >(
+            base +
+              "/paired-model-comparisons?limit=" +
+              PAGE +
+              "&offset=" +
+              offset +
+              "&completed_only=true",
+            { signal },
+          );
+          return page.map((item) => ({
+            id: item.id,
+            label: item.task + " · " + item.id.slice(0, 8),
+            digest: item.content_sha256 ?? "",
+          }));
+        }}
+        render={(options) => (
+          <SourceSelect
+            label="Paired model comparison"
+            value={string(parameters.comparison_id)}
+            options={options}
+            onChange={(id) =>
+              onChange({
+                ...parameters,
+                comparison_id: id,
+                comparison_sha256:
+                  options.find((item) => item.id === id)?.digest ?? "",
+              })
+            }
+          />
+        )}
       />
     );
   if (nodeType === "reviewed_study_design")
