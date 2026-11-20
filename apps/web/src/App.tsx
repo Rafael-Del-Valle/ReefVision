@@ -58,6 +58,7 @@ import {
   LoadingState,
 } from "./components/ui/AsyncState";
 import { StatusBadge } from "./components/ui/StatusBadge";
+import { useActionConfirmation } from "./components/ui/ActionConfirmation";
 import { KeyboardShortcutsDialog } from "./components/ui/KeyboardShortcutsDialog";
 import { ProjectLauncher } from "./components/layout/ProjectLauncher";
 import { ProjectImportDialog } from "./components/layout/ProjectImportDialog";
@@ -296,6 +297,7 @@ const PROJECT_NAV_GROUPS: Array<{
 ];
 
 function ReefVisionMainApp() {
+  const { confirm, confirmationDialog } = useActionConfirmation();
   const queryClient = useQueryClient();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     null,
@@ -791,6 +793,7 @@ function ReefVisionMainApp() {
 
   return (
     <main className="app-shell">
+      {confirmationDialog}
       <a className="rv-skip-link" href="#reefvision-main-content">
         Skip to main content
       </a>
@@ -976,12 +979,15 @@ function ReefVisionMainApp() {
               setEditorLaunch(null);
               setActiveView("system");
             }}
-            onArchive={() => {
+            onArchive={async () => {
               if (preventQcNavigation()) return;
               if (
-                window.confirm(
-                  `Archive “${selectedProject.name}”? It will be hidden from the project launcher. Its files and research records will be retained.`,
-                )
+                await confirm({
+                  title: "Archive project?",
+                  message: `Hide “${selectedProject.name}” from the project launcher? Its files and research records will be retained.`,
+                  confirmLabel: "Archive project",
+                  destructive: true,
+                })
               ) {
                 archiveMutation.mutate(selectedProject.id);
               }

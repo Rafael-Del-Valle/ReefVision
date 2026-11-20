@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -137,7 +143,6 @@ beforeEach(() => {
     action: "rollback",
     active_model_id: null,
   } as unknown as Awaited<ReturnType<typeof rollbackSegmentationDeployment>>);
-  vi.spyOn(window, "confirm").mockReturnValue(true);
 });
 
 describe("SegmentationEvaluationPanel", () => {
@@ -457,10 +462,23 @@ describe("SegmentationEvaluationPanel", () => {
       target: { value: "Reviewed immutable mask holdout and approved" },
     });
     expect(promote).toBeEnabled();
-    vi.mocked(window.confirm).mockReturnValueOnce(false);
     fireEvent.click(promote);
+    const decision = await screen.findByRole("alertdialog", {
+      name: "Promote segmentation model?",
+    });
+    fireEvent.click(within(decision).getByRole("button", { name: "Cancel" }));
     expect(promoteSegmentationCandidate).not.toHaveBeenCalled();
     fireEvent.click(promote);
+    const approval = await screen.findByRole("alertdialog");
+    // A later form update must not replace the operator attached to the open decision.
+    fireEvent.change(screen.getByLabelText("Operator identity"), {
+      target: { value: "Another operator" },
+    });
+    fireEvent.click(
+      within(approval).getByRole("button", {
+        name: "Promote model",
+      }),
+    );
     await waitFor(() => {
       expect(promoteSegmentationCandidate).toHaveBeenCalledWith(
         project.id,
@@ -490,6 +508,14 @@ describe("SegmentationEvaluationPanel", () => {
       target: { value: "Revert to prior verified segmentation deployment" },
     });
     fireEvent.click(rollback);
+    expect(rollbackSegmentationDeployment).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(
+        await screen.findByRole("alertdialog", {
+          name: "Roll back segmentation deployment?",
+        }),
+      ).getByRole("button", { name: "Roll back deployment" }),
+    );
     await waitFor(() => {
       expect(rollbackSegmentationDeployment).toHaveBeenCalledWith(
         project.id,

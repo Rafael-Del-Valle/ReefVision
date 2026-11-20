@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 import { getRuntimeContext, openDesktopTrainingConsole } from "../../runtime";
+import { useActionConfirmation } from "../ui/ActionConfirmation";
 
 import {
   cancelTrainingRun,
@@ -80,6 +81,7 @@ function metricValue(value: number): string {
 }
 
 export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
+  const { confirm, confirmationDialog } = useActionConfirmation();
   const queryClient = useQueryClient();
   const [openingRunId, setOpeningRunId] = useState<string | null>(null);
   // React state updates are batched; block rapid duplicate clicks synchronously
@@ -158,6 +160,7 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
       className="rv-inspector-card rv-training-monitor"
       aria-label="Training monitor"
     >
+      {confirmationDialog}
       <div className="rv-inspector-card-heading">
         <strong>Training monitor</strong>
         <span className={activeRuns.length > 0 ? "training-active" : undefined}>
@@ -300,11 +303,14 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
                       cancelMutation.isPending &&
                       cancelMutation.variables === run.id
                     }
-                    onClick={() => {
+                    onClick={async () => {
                       if (
-                        window.confirm(
-                          `Cancel training run ${run.run_name}? Safely written artifacts will be retained.`,
-                        )
+                        await confirm({
+                          title: "Cancel training run?",
+                          message: `Stop “${run.run_name}”? Safely written artifacts will be retained.`,
+                          confirmLabel: "Cancel training run",
+                          destructive: true,
+                        })
                       ) {
                         cancelMutation.mutate(run.id);
                       }

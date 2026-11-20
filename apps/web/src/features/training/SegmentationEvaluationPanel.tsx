@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { useActionConfirmation } from "../../components/ui/ActionConfirmation";
 
 import {
   getDatasetVersions,
@@ -32,6 +33,7 @@ function metricsFrom(job: JobRecord | undefined, name: string) {
 }
 
 export function SegmentationEvaluationPanel({ project }: { project: Project }) {
+  const { confirm, confirmationDialog } = useActionConfirmation();
   const queryClient = useQueryClient();
   const [datasetId, setDatasetId] = useState("");
   const [candidateId, setCandidateId] = useState("");
@@ -118,40 +120,30 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
     },
   });
   const promote = useMutation({
-    mutationFn: () =>
-      promoteSegmentationCandidate(
-        project.id,
-        evaluationId,
-        activeId,
-        approvedBy.trim(),
-        reason.trim(),
-      ),
-    onSuccess: async (audit) => {
-      setAuditMessage(`Promotion audit recorded: ${audit.id}`);
+    mutationFn: (request: Parameters<typeof promoteSegmentationCandidate>) =>
+      promoteSegmentationCandidate(...request),
+    onSuccess: async (audit, [projectId]) => {
+      if (project.id === projectId)
+        setAuditMessage(`Promotion audit recorded: ${audit.id}`);
       await queryClient.invalidateQueries({
-        queryKey: ["models", project.id],
+        queryKey: ["models", projectId],
       });
       await queryClient.invalidateQueries({
-        queryKey: ["segmentation-deployment-audit", project.id],
+        queryKey: ["segmentation-deployment-audit", projectId],
       });
     },
   });
   const rollback = useMutation({
-    mutationFn: () =>
-      rollbackSegmentationDeployment(
-        project.id,
-        rollbackId ?? "",
-        activeId ?? "",
-        approvedBy.trim(),
-        reason.trim(),
-      ),
-    onSuccess: async (audit) => {
-      setAuditMessage(`Rollback audit recorded: ${audit.id}`);
+    mutationFn: (request: Parameters<typeof rollbackSegmentationDeployment>) =>
+      rollbackSegmentationDeployment(...request),
+    onSuccess: async (audit, [projectId]) => {
+      if (project.id === projectId)
+        setAuditMessage(`Rollback audit recorded: ${audit.id}`);
       await queryClient.invalidateQueries({
-        queryKey: ["models", project.id],
+        queryKey: ["models", projectId],
       });
       await queryClient.invalidateQueries({
-        queryKey: ["segmentation-deployment-audit", project.id],
+        queryKey: ["segmentation-deployment-audit", projectId],
       });
     },
   });
@@ -211,6 +203,7 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
 
   return (
     <article className="system-card" aria-label="Segmentation evaluation">
+      {confirmationDialog}
       <h4>Evaluate segmentation candidate</h4>
       <p className="system-subtle">
         Queue evaluation-only inference on an immutable, verified-mask holdout.
@@ -529,13 +522,22 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
               blockedByMultipleActive ||
               promote.isPending
             }
-            onClick={() => {
+            onClick={async () => {
               if (
-                window.confirm(
-                  "Promote the evaluated segmentation candidate? This changes the active segmenter.",
-                )
+                await confirm({
+                  title: "Promote segmentation model?",
+                  message:
+                    "This will make the evaluated candidate the active segmenter for this project.",
+                  confirmLabel: "Promote model",
+                })
               ) {
-                promote.mutate();
+                promote.mutate([
+                  project.id,
+                  evaluationId,
+                  activeId,
+                  approvedBy.trim(),
+                  reason.trim(),
+                ]);
               }
             }}
           >
@@ -551,13 +553,24 @@ export function SegmentationEvaluationPanel({ project }: { project: Project }) {
               blockedByMultipleActive ||
               rollback.isPending
             }
-            onClick={() => {
+            onClick={async () => {
               if (
-                window.confirm(
-                  "Rollback the active segmentation deployment? This changes the active segmenter.",
-                )
+                activeId &&
+                rollbackId &&
+                (await confirm({
+                  title: "Roll back segmentation deployment?",
+                  message:
+                    "This will restore the previous active segmenter for this project.",
+                  confirmLabel: "Roll back deployment",
+                }))
               ) {
-                rollback.mutate();
+                rollback.mutate([
+                  project.id,
+                  rollbackId,
+                  activeId,
+                  approvedBy.trim(),
+                  reason.trim(),
+                ]);
               }
             }}
           >

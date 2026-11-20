@@ -988,6 +988,15 @@ function mockApi({
       if (url.endsWith(`/projects/${project.id}`)) {
         return jsonResponse(project);
       }
+      if (
+        url.endsWith(`/projects/${project.id}/archive`) &&
+        init?.method === "POST"
+      ) {
+        return jsonResponse({
+          ...project,
+          archived_at: "2026-11-20T15:00:00Z",
+        });
+      }
       if (url.includes(`/projects/${project.id}/images`)) {
         return jsonResponse({
           items: images,
@@ -1136,6 +1145,37 @@ function renderApp() {
 }
 
 describe("App", () => {
+  it("archives a project only after the researcher approves the named project", async () => {
+    const fetchMock = mockApi({ projects: [project] });
+    renderApp();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /CPT Coral Study/ }),
+    );
+    await userEvent.click(await screen.findByText("Project options"));
+    const trigger = screen.getByRole("button", { name: "Archive project" });
+    const requests = () =>
+      fetchMock.mock.calls.filter(
+        ([url, init]) =>
+          String(url).endsWith(`/projects/${project.id}/archive`) &&
+          init?.method === "POST",
+      );
+    await userEvent.click(trigger);
+    const first = await screen.findByRole("alertdialog", {
+      name: "Archive project?",
+    });
+    expect(within(first).getByText(/CPT Coral Study/)).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+    expect(requests()).toHaveLength(0);
+    expect(trigger).toHaveFocus();
+    await userEvent.click(trigger);
+    await userEvent.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", {
+        name: "Archive project",
+      }),
+    );
+    await waitFor(() => expect(requests()).toHaveLength(1));
+  });
+
   it("shows API status and an empty project dashboard", async () => {
     mockApi({ projects: [] });
     renderApp();
