@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from fractions import Fraction
 from typing import cast
 
 import pytest
@@ -10,7 +11,6 @@ from fastapi.testclient import TestClient
 
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
-from reefvision.services.spatial_mesh_volume_v14 import signed_enclosed_volume_mesh_units
 from reefvision.tests.test_annotations import create_project
 
 LARGE_TETRA_VERTICES = [
@@ -241,6 +241,9 @@ def test_tiny_volume_standalone_and_replayed_saved_graph_preserve_provenance(
     assert ("enclosed_volume_source_unit_numeric_recovery" in standalone["qc_warnings"]) is (
         coordinate_extent < 1
     )
+    if coordinate_extent < 1:
+        exact_calibrated = float((Fraction(coordinate_extent) * Fraction(scale)) ** 3 / 6)
+        assert standalone["enclosed_volume_m3"] == exact_calibrated
     assert standalone["provenance"]["calibration_verified"] is False
     assert standalone["provenance"]["specimen_identity_verified"] is False
     assert standalone["provenance"]["coordinate_registration_verified"] is False
@@ -295,7 +298,7 @@ def test_tiny_volume_standalone_and_replayed_saved_graph_preserve_provenance(
 def test_source_unit_underflow_recovers_volume_with_review_flag(
     reverse_winding: bool,
 ) -> None:
-    """Recomputing in calibrated units must not silently validate reconstruction."""
+    """Calibrating before binary64 rounding preserves provisional status."""
     extent = 1e-110
     vertices = [
         [0.0, 0.0, 0.0],
@@ -304,15 +307,12 @@ def test_source_unit_underflow_recovers_volume_with_review_flag(
         [0.0, 0.0, extent],
     ]
     faces = [[a, c, b] for a, b, c in CLOSED_FACES] if reverse_winding else CLOSED_FACES
-    assert signed_enclosed_volume_mesh_units([tuple(vertex) for vertex in vertices], faces) == 0
     params = {**_params(1e6), "vertices": vertices, "faces": faces}
     result = measure_mesh_preview(**params)
-    expected = (extent * 1e6) ** 3 / 6
+    expected = float((Fraction(extent) * Fraction(1e6)) ** 3 / 6)
     assert expected > 0
-    assert result["enclosed_volume_m3"] == pytest.approx(expected, rel=1e-8, abs=0)
-    assert result["edge_connected_patch_enclosed_volumes_m3"] == pytest.approx(
-        [expected], rel=1e-8, abs=0
-    )
+    assert result["enclosed_volume_m3"] == expected
+    assert result["edge_connected_patch_enclosed_volumes_m3"] == [expected]
     assert result["enclosed_volume_scale_interval_m3"] == pytest.approx(
         [expected * 0.9**3, expected * 1.1**3], rel=1e-8, abs=0
     )
@@ -322,26 +322,22 @@ def test_source_unit_underflow_recovers_volume_with_review_flag(
     assert result["provenance"]["calibration_verified"] is False
 
 
-def test_unrepresentable_volume_after_large_scale_is_still_withheld() -> None:
-    """Recovery must not turn a genuinely underflowed volume into measured zero."""
+def test_unrepresentable_volume_after_large_scale_is_rejected() -> None:
+    """Positive area can remain measurable even when the enclosure cannot."""
     extent = 1e-120
-    result = measure_mesh_preview(
-        **{
-            **_params(1e6),
-            "vertices": [
-                [0.0, 0.0, 0.0],
-                [extent, 0.0, 0.0],
-                [0.0, extent, 0.0],
-                [0.0, 0.0, extent],
-            ],
-        }
+    vertices = [
+        [0.0, 0.0, 0.0],
+        [extent, 0.0, 0.0],
+        [0.0, extent, 0.0],
+        [0.0, 0.0, extent],
+    ]
+    control = measure_mesh_preview(
+        **(_params(1e6) | {"vertices": vertices, "faces": CLOSED_FACES[:-1]})
     )
-    assert result["surface_area_m2"] > 0
-    assert result["enclosed_volume_m3"] is None
-    assert result["edge_connected_patch_enclosed_volumes_m3"] == [None]
-    assert "enclosed_volume_zero_or_underflow" in result["qc_warnings"]
-    assert "enclosed_volume_source_unit_numeric_recovery" not in result["qc_warnings"]
-    assert result["provenance"]["calibration_verified"] is False
+    assert control["surface_area_m2"] > 0
+    assert control["enclosed_volume_m3"] is None
+    with pytest.raises(ValueError, match="volume underflowed numeric precision after calibration"):
+        measure_mesh_preview(**(_params(1e6) | {"vertices": vertices}))
 
 
 def test_cubic_volume_subresolution_scale_qc_standalone_and_saved_graph(
