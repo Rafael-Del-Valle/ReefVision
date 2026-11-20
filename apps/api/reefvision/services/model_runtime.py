@@ -108,7 +108,8 @@ def _project_origin_ids(session: Session, project_id: str) -> dict[str, str]:
         .order_by(ProjectExchangePackage.created_at.desc(), ProjectExchangePackage.id)
         .limit(1)
     )
-    origin = package.options_json.get("origin_id_map", {}) if package else {}
+    options = package.options_json if package else {}
+    origin = options.get("origin_id_map") or options.get("id_map", {})
     return dict(origin) if isinstance(origin, dict) else {}
 
 
