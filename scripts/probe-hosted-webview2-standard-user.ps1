@@ -99,9 +99,9 @@ function Read-ProbeBrowserContext([int]$DesktopProcessId,[int]$DebugPort,[string
         foreach ($scope in @($base,(Join-Path $base 'WebView2'))) {
             $settings = Get-ItemProperty -LiteralPath $scope -ErrorAction SilentlyContinue
             $presence = [ordered]@{}
-            foreach ($name in 'DeveloperToolsAvailability','RemoteDebuggingAllowed') {
+            foreach ($name in 'DeveloperToolsAvailability','RemoteDebuggingAllowed','DownloadRestrictions','PromptForDownloadLocation','DefaultDownloadDirectory','DownloadDirectory') {
                 $value = if ($settings) { $settings.PSObject.Properties[$name] } else { $null }
-                $presence[$name] = if ($value -and $value.Value -is [int]) { $value.Value } else { $null }
+                $presence[$name] = if ($value -and $value.Value -is [int]) { $value.Value } elseif ($value) { 'configured' } else { $null }
             }
             $overrides = [ordered]@{}
             foreach ($name in 'AdditionalBrowserArguments','UserDataFolder','BrowserExecutableFolder') {
@@ -206,18 +206,67 @@ try {
     if ($browserOwner.ReturnValue -ne 0 -or $browserOwner.Sid -ne $sid -or -not $usesIsolatedBrowserData) {
         throw 'The owned WebView2 listener did not use the standard account and isolated browser data.'
     }
-    $env:PLAYWRIGHT_JSON_OUTPUT_FILE = Join-Path $EvidenceRoot 'ordinary-project-playwright.json'
-    Push-Location -LiteralPath (Join-Path $repo 'apps/web')
-    try {
-        & $node ./node_modules/@playwright/test/cli.js test ordinary-project-live.spec.ts --workers=1 --retries=0 --reporter=list,json --trace=off --output="$root/playwright"
-        $testExitCode = $LASTEXITCODE
-        foreach ($name in 'ordinary-2d-webview2.json','probe-native-viewport.json') {
-            Get-ChildItem -LiteralPath (Join-Path $root 'playwright') -File -Recurse -Filter $name |
-                Copy-Item -Destination $EvidenceRoot
+    Write-Probe 'browser-context.json' (Read-ProbeBrowserContext -DesktopProcessId $desktop.Id -DebugPort $debugPort -UserSid $sid -BrowserData $webview2)
+    $driverRoot=Join-Path $root 'ordinary-driver'
+    $driverOutput=Join-Path $driverRoot 'output'
+    New-Item -ItemType Directory -Path $driverOutput | Out-Null
+    $driverScript=Join-Path $driverRoot 'driver.ps1'
+    $driverNode=Join-Path $driverRoot 'node.exe'
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'probe-hosted-webview2-ordinary-driver.ps1') -Destination $driverScript
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'lib/windows-standard-user-webview2.ps1') -Destination $driverRoot
+    Copy-Item -LiteralPath $node -Destination $driverNode
+    $web=Join-Path $repo 'apps/web'
+    Grant-ReefVisionHostedGuiAccess -Path $web -Sid $account.sid -Rights 'RX'
+    Grant-ReefVisionHostedGuiAccess -Path $driverOutput -Sid $account.sid -Rights 'M'
+    $driverContext=Join-Path $driverRoot 'context.json'
+    [ordered]@{
+        api=$api; endpoint=$env:REEFVISION_SPATIAL_WEBVIEW2_ENDPOINT; browser_artifacts=$account.browser_artifacts
+        user_sid=$sid; node=$driverNode; output=$driverOutput; web=$web
+    } | ConvertTo-Json | Set-Content -LiteralPath $driverContext
+    $protocolLog=Join-Path $driverOutput 'raw-protocol.log'
+    $driverArgs='-NoProfile -NonInteractive -File "{0}" -ContextFile "{1}"' -f $driverScript,$driverContext
+    $ordinaryDriver=Start-Process -FilePath $driver.Path -ArgumentList $driverArgs -Credential $account.credential -LoadUserProfile -PassThru -WindowStyle Hidden -WorkingDirectory $driverRoot -RedirectStandardOutput (Join-Path $driverOutput 'driver.stdout') -RedirectStandardError $protocolLog
+    $driverDeadline=[DateTime]::UtcNow.AddSeconds(120)
+    $nativeSaveDialog=$false
+    do {
+        $ordinaryDriver.Refresh()
+        if ($ordinaryDriver.HasExited) { break }
+        foreach ($process in @(Get-Process -Id @($desktop.Id,$browser.ProcessId) -ErrorAction SilentlyContinue)) {
+            if ($process.MainWindowTitle -match '(?i)^(Save As|Save|Downloads)$') { $nativeSaveDialog=$true }
         }
-        if ($testExitCode -ne 0) { throw 'The genuine standard-user WebView2 journey failed.' }
-    } finally { Pop-Location }
-    $stats = (Get-Content -LiteralPath $env:PLAYWRIGHT_JSON_OUTPUT_FILE -Raw | ConvertFrom-Json).stats
+        Start-Sleep -Milliseconds 250
+    } while ([DateTime]::UtcNow -lt $driverDeadline)
+    if (-not $ordinaryDriver.HasExited) { $ordinaryDriver.Kill($true); $null=$ordinaryDriver.WaitForExit(10000) }
+    Write-Probe 'native-save-dialog.json' @{matching_main_window_observed=$nativeSaveDialog; observer='actual shell and owned browser main-window titles'}
+    $trace = @(foreach ($line in (Get-Content -LiteralPath $protocolLog -ErrorAction SilentlyContinue)) {
+        if ($line -notmatch '"method":"Browser[.](setDownloadBehavior|downloadWillBegin|downloadProgress)"') { continue }
+        $first=$line.IndexOf('{')
+        $last=$line.LastIndexOf('}')
+        if ($first -lt 0 -or $last -le $first) { continue }
+        try { $packet=$line.Substring($first,$last-$first+1) | ConvertFrom-Json -AsHashtable } catch { continue }
+        $details=$packet['params']
+        $url=if ($details['url']) { ([string]$details['url']).Split('?')[0] } else { $null }
+        [ordered]@{
+            method=$packet['method']; url=$url; filename=$details['suggestedFilename']; state=$details['state']
+            received_bytes=$details['receivedBytes']; total_bytes=$details['totalBytes']; configured_path=$details['downloadPath']
+            reported_path=$details['filePath']; behavior=$details['behavior']
+        }
+    })
+    Write-Probe 'browser-download-events.json' @{events=$trace}
+    $folderAcl=Get-Acl -LiteralPath $account.browser_artifacts
+    Write-Probe 'browser-artifacts-acl.json' @{
+        owner=$folderAcl.Owner; path=$account.browser_artifacts
+        ordinary_user_rights=@($folderAcl.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier]) |
+            Where-Object { $_.IdentityReference.Value -eq $sid } | ForEach-Object { $_.FileSystemRights.ToString() })
+        ordinary_account_can_read_sentinel=(Test-Path -LiteralPath (Join-Path $account.browser_artifacts 'standard-account-write-test.txt'))
+    }
+    foreach ($name in 'ordinary-project-playwright.json','ordinary-driver-identity.json','ordinary-2d-webview2.json','probe-native-viewport.json','probe-download-network.json') {
+        Get-ChildItem -LiteralPath $driverOutput -File -Recurse -Filter $name | Copy-Item -Destination $EvidenceRoot
+    }
+    $ordinaryIdentity=Get-Content -LiteralPath (Join-Path $EvidenceRoot 'ordinary-driver-identity.json') -Raw | ConvertFrom-Json
+    if ($ordinaryIdentity.integrity -ne 8192 -or $ordinaryIdentity.user_sid -ne $sid) { throw 'Driver and app did not run as the same ordinary Windows user.' }
+    if ($ordinaryDriver.ExitCode -ne 0) { throw 'The same-ordinary-account WebView2 download journey failed.' }
+    $stats = (Get-Content -LiteralPath (Join-Path $EvidenceRoot 'ordinary-project-playwright.json') -Raw | ConvertFrom-Json).stats
     if ($stats.expected -ne 1 -or $stats.unexpected -ne 0 -or $stats.skipped -ne 0) { throw 'Expected one physical WebView2 Playwright journey.' }
 } finally {
     try {

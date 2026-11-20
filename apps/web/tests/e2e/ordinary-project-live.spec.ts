@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 import { createHash, randomUUID } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import { test } from "./spatialDesktop";
 
 test("imports an image and video, persists a reviewed edit, and exports YOLO", async ({
@@ -120,11 +120,18 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
     height: window.innerHeight,
     document_width: document.documentElement.clientWidth,
     workbench_width: document.querySelector(".rv-workbench-stage")?.clientWidth,
-    inspector_left: document.querySelector(".rv-workbench-inspector")?.getBoundingClientRect().left,
+    inspector_left: document
+      .querySelector(".rv-workbench-inspector")
+      ?.getBoundingClientRect().left,
   }));
-  await writeFile(info.outputPath("probe-native-viewport.json"), JSON.stringify(viewport, null, 2));
+  await writeFile(
+    info.outputPath("probe-native-viewport.json"),
+    JSON.stringify(viewport, null, 2),
+  );
   // The retained 722 MSI predates the narrow Dataset versions layout fix.
-  await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Hide inspector", exact: true })
+    .click();
   const exporting = post(`${api}/dataset-versions/${snapshot.id}/exports`);
   await page.getByRole("button", { name: "Export YOLO dataset" }).click();
   const exported = await exporting;
@@ -159,12 +166,78 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
     `${api}/exports/${record.id}/download`,
   );
   expect(archive.ok()).toBeTruthy();
-  const downloadEvent = page.waitForEvent("download");
-  await page.getByRole("link", { name: "Download zip", exact: true }).click();
-  const download = await downloadEvent;
-  expect(download.suggestedFilename()).toMatch(/\.zip$/i);
   const exportedZip = info.outputPath("ordinary-2d-export.zip");
-  await download.saveAs(exportedZip);
+  const events: object[] = [];
+  const requests = new Set<string>();
+  const native = await page.context().newCDPSession(page);
+  native.on("Network.requestWillBeSent", (event) => {
+    if (event.request.url.split("?")[0] === archive.url()) {
+      requests.add(event.requestId);
+      events.push({
+        event: "request",
+        method: event.request.method,
+        url: event.request.url.split("?")[0],
+      });
+    }
+  });
+  native.on("Network.responseReceived", (event) => {
+    if (requests.has(event.requestId)) {
+      events.push({
+        event: "response",
+        status: event.response.status,
+        mime_type: event.response.mimeType,
+      });
+    }
+  });
+  native.on("Network.loadingFailed", (event) => {
+    if (requests.has(event.requestId)) {
+      events.push({
+        event: "failed",
+        reason: event.errorText,
+        blocked_reason: event.blockedReason,
+        canceled: event.canceled,
+      });
+    }
+  });
+  await native.send("Network.enable");
+  let browserDownload: { filename: string; status?: string | null } | null =
+    null;
+  try {
+    const downloadEvent = page.waitForEvent("download");
+    await page.getByRole("link", { name: "Download zip", exact: true }).click();
+    const download = await downloadEvent;
+    browserDownload = { filename: download.suggestedFilename() };
+    expect(download.suggestedFilename()).toMatch(/\.zip$/i);
+    try {
+      await download.saveAs(exportedZip);
+    } finally {
+      browserDownload.status = await download.failure();
+    }
+  } finally {
+    const sourceBytes = await archive.body();
+    const artifactPath = process.env.REEFVISION_SPATIAL_WEBVIEW2_ARTIFACTS_DIR!;
+    await writeFile(
+      info.outputPath("probe-download-network.json"),
+      JSON.stringify(
+        {
+          source: {
+            url: archive.url(),
+            status: archive.status(),
+            content_type: archive.headers()["content-type"],
+            bytes: sourceBytes.byteLength,
+            sha256: hash(sourceBytes),
+          },
+          events,
+          browser_download: browserDownload,
+          artifact_path: artifactPath,
+          artifact_files: await readdir(artifactPath).catch(() => []),
+        },
+        null,
+        2,
+      ),
+    );
+    await native.detach();
+  }
   const bytes = await readFile(exportedZip);
   expect(hash(bytes)).toBe(hash(await archive.body()));
   expect(bytes.subarray(0, 2).toString()).toBe("PK");
