@@ -86,6 +86,7 @@ WorkflowDataType = Literal[
     "project_exchange_package",
     "provider_manifest_snapshot",
     "reviewed_model_reference",
+    "review_queue_reference",
 ]
 
 

@@ -1,0 +1,1351 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { addReviewQueueEvent, getReviewQueueEvents } from "../../api/client";
+import { ReviewQueueCoordinationPanel } from "./ReviewQueueCoordinationPanel";
+
+vi.mock("../../api/client", () => ({
+  addReviewQueueEvent: vi.fn(),
+  getReviewQueueEvents: vi.fn(),
+}));
+
+function mount(onClose = vi.fn()) {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <ReviewQueueCoordinationPanel
+        queueId="queue-1"
+        itemId="item-1"
+        onClose={onClose}
+      />
+    </QueryClientProvider>,
+  );
+  return onClose;
+}
+
+function responseForCall(
+  index = vi.mocked(addReviewQueueEvent).mock.calls.length - 1,
+): Awaited<ReturnType<typeof addReviewQueueEvent>> {
+  const [queueId, itemId, payload] =
+    vi.mocked(addReviewQueueEvent).mock.calls[index]!;
+  return {
+    id: "event-1",
+    review_queue_id: queueId,
+    review_queue_item_id: itemId,
+    project_id: "project-1",
+    client_request_id: payload.client_request_id,
+    event_type: payload.event_type,
+    actor: payload.actor,
+    comment: payload.comment ?? null,
+    assignee: payload.assignee ?? null,
+    created_at: "2026-10-18T20:00:00Z",
+  };
+}
+
+describe("ReviewQueueCoordinationPanel", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getReviewQueueEvents).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 50,
+      current_assignee: null,
+      requires_researcher_review: true,
+    });
+    vi.mocked(addReviewQueueEvent).mockImplementation(async () =>
+      responseForCall(),
+    );
+  });
+
+  it.each([
+    ["queue", { review_queue_id: "wrong-queue" }],
+    ["item", { review_queue_item_id: "wrong-item" }],
+    ["request UUID", { client_request_id: "wrong-uuid" }],
+    ["event type", { event_type: "assign" as const }],
+    ["actor", { actor: "different-researcher" }],
+    ["comment", { comment: "Different coral observation" }],
+  ])(
+    "preserves an exact comment retry after mismatched %s response",
+    async (_field, mismatch) => {
+      vi.mocked(addReviewQueueEvent)
+        .mockImplementationOnce(async () => ({
+          ...responseForCall(),
+          ...mismatch,
+        }))
+        .mockImplementationOnce(async () => responseForCall());
+      const client = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const invalidate = vi.spyOn(client, "invalidateQueries");
+      render(
+        <QueryClientProvider client={client}>
+          <ReviewQueueCoordinationPanel
+            queueId="queue-1"
+            itemId="item-1"
+            onClose={vi.fn()}
+          />
+        </QueryClientProvider>,
+      );
+      await screen.findByText("Assigned reviewer: Unassigned");
+      fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+        target: { value: "scientist" },
+      });
+      fireEvent.change(screen.getByLabelText("Review comment"), {
+        target: { value: "Inspect coral polyp condition" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+      await screen.findByRole("button", { name: "Retry event" });
+      expect(screen.getByLabelText("Review comment")).toHaveProperty(
+        "value",
+        "Inspect coral polyp condition",
+      );
+      expect(invalidate).not.toHaveBeenCalledWith({
+        queryKey: ["review_queue_events", "queue-1", "item-1"],
+      });
+      const original = vi.mocked(addReviewQueueEvent).mock.calls[0];
+      fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+      await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(2));
+      expect(vi.mocked(addReviewQueueEvent).mock.calls[1]).toEqual(original);
+      await waitFor(() =>
+        expect(invalidate).toHaveBeenCalledWith({
+          queryKey: ["review_queue_events", "queue-1", "item-1"],
+        }),
+      );
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", { name: "Retry event" }),
+        ).toBeNull(),
+      );
+    },
+  );
+
+  it("preserves the assignee draft if the server echoes a different reviewer", async () => {
+    vi.mocked(addReviewQueueEvent)
+      .mockImplementationOnce(async () => ({
+        ...responseForCall(),
+        assignee: "another-reviewer",
+      }))
+      .mockImplementationOnce(async () => responseForCall());
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "scientist" },
+    });
+    fireEvent.change(screen.getByLabelText("Reviewer to assign"), {
+      target: { value: "assigned-reviewer" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Assign reviewer" }));
+    await screen.findByRole("button", { name: "Retry event" });
+    expect(screen.getByLabelText("Reviewer to assign")).toHaveProperty(
+      "value",
+      "assigned-reviewer",
+    );
+    const original = vi.mocked(addReviewQueueEvent).mock.calls[0];
+    fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(addReviewQueueEvent).mock.calls[1]).toEqual(original);
+  });
+
+  it("requires explicit confirmation before discarding unsent biological notes", async () => {
+    const onClose = mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Unsubmitted coral condition note" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Close coordination" }));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("group", { name: "Discard unsent coordination drafts" }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Continue editing" }));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "Unsubmitted coral condition note",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Close coordination" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close without saving drafts" }),
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(addReviewQueueEvent).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["Review comment", "Unsent observation for coral A"],
+    ["Reviewer to assign", "reviewer-a"],
+  ])(
+    "requires confirmation to close B when A has an unsent %s draft",
+    async (field, value) => {
+      const onClose = vi.fn();
+      const client = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const view = (itemId: string) => (
+        <QueryClientProvider client={client}>
+          <ReviewQueueCoordinationPanel
+            queueId="queue-a"
+            itemId={itemId}
+            onClose={onClose}
+          />
+        </QueryClientProvider>
+      );
+      const { rerender } = render(view("item-a"));
+      await screen.findByText("Assigned reviewer: Unassigned");
+      fireEvent.change(screen.getByLabelText(field), {
+        target: { value },
+      });
+      rerender(view("item-b"));
+      expect(screen.getByLabelText(field)).toHaveProperty("value", "");
+      fireEvent.click(
+        screen.getByRole("button", { name: "Close coordination" }),
+      );
+      expect(onClose).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole("group", {
+          name: "Discard unsent coordination drafts",
+        }),
+      ).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Continue editing" }));
+      rerender(view("item-a"));
+      expect(screen.getByLabelText(field)).toHaveProperty("value", value);
+      rerender(view("item-b"));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Close coordination" }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Close without saving drafts" }),
+      );
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(addReviewQueueEvent).not.toHaveBeenCalled();
+    },
+  );
+
+  it("blocks closing B while A holds an uncertain event UUID", async () => {
+    vi.mocked(addReviewQueueEvent)
+      .mockRejectedValueOnce(new Error("Uncertain delivery for A"))
+      .mockImplementationOnce(async () => responseForCall());
+    const onClose = vi.fn();
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const view = (itemId: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueCoordinationPanel
+          queueId="queue-a"
+          itemId={itemId}
+          onClose={onClose}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("item-a"));
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "researcher-a" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Uncertain coral note" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await screen.findByRole("button", { name: "Retry event" });
+    const original = vi.mocked(addReviewQueueEvent).mock.calls[0];
+    rerender(view("item-b"));
+    const close = screen.getByRole("button", {
+      name: "Close coordination",
+    }) as HTMLButtonElement;
+    expect(close.disabled).toBe(true);
+    fireEvent.click(close);
+    expect(onClose).not.toHaveBeenCalled();
+
+    rerender(view("item-a"));
+    fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(addReviewQueueEvent).mock.calls[1]).toEqual(original);
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Retry event" })).toBeNull(),
+    );
+    // A successfully replayed comment is sent and its input is cleared.
+    // Start a separate unsent assignment to exercise cross-item close safety.
+    fireEvent.change(screen.getByLabelText("Reviewer to assign"), {
+      target: { value: "second-scientist" },
+    });
+    rerender(view("item-b"));
+    expect(close.disabled).toBe(false);
+    // The resolved retry does not authorize discarding A's remaining draft.
+    fireEvent.click(close);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("group", { name: "Discard unsent coordination drafts" }),
+    ).toBeTruthy();
+  });
+
+  it.each([
+    ["queue-a", "item-b"],
+    ["queue-b", "item-a"],
+  ])(
+    "requires fresh discard approval after navigating away to %s/%s and back",
+    async (otherQueueId, otherItemId) => {
+      const onClose = vi.fn();
+      const client = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const view = (queueId: string, itemId: string) => (
+        <QueryClientProvider client={client}>
+          <ReviewQueueCoordinationPanel
+            queueId={queueId}
+            itemId={itemId}
+            onClose={onClose}
+          />
+        </QueryClientProvider>
+      );
+      const { rerender } = render(view("queue-a", "item-a"));
+      await screen.findByText("Assigned reviewer: Unassigned");
+      fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+        target: { value: "researcher-a" },
+      });
+      fireEvent.change(screen.getByLabelText("Review comment"), {
+        target: { value: "Unsent polyp observation for A" },
+      });
+      fireEvent.click(
+        screen.getByRole("button", { name: "Close coordination" }),
+      );
+      expect(
+        screen.getByRole("group", {
+          name: "Discard unsent coordination drafts",
+        }),
+      ).toBeTruthy();
+
+      // No edits occur while away: the original item key and draft text
+      // are unchanged, but the earlier consent must still be invalid.
+      rerender(view(otherQueueId, otherItemId));
+      expect(
+        screen.queryByRole("group", {
+          name: "Discard unsent coordination drafts",
+        }),
+      ).toBeNull();
+      rerender(view("queue-a", "item-a"));
+      expect(screen.getByLabelText("Review comment")).toHaveProperty(
+        "value",
+        "Unsent polyp observation for A",
+      );
+      expect(
+        screen.queryByRole("button", { name: "Close without saving drafts" }),
+      ).toBeNull();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(addReviewQueueEvent).not.toHaveBeenCalled();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Close coordination" }),
+      );
+      expect(
+        screen.getByRole("group", {
+          name: "Discard unsent coordination drafts",
+        }),
+      ).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Continue editing" }));
+      expect(onClose).not.toHaveBeenCalled();
+      expect(addReviewQueueEvent).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["Review comment", "Revised coral note"],
+    ["Reviewer to assign", "reviewer-b"],
+    ["Your local reviewer label", "scientist-b"],
+  ])(
+    "requires fresh draft-discard approval after editing %s",
+    async (label, value) => {
+      const onClose = mount();
+      await screen.findByText("Assigned reviewer: Unassigned");
+      fireEvent.change(screen.getByLabelText("Review comment"), {
+        target: { value: "Original unsent coral note" },
+      });
+      fireEvent.click(
+        screen.getByRole("button", { name: "Close coordination" }),
+      );
+      expect(
+        screen.getByRole("group", {
+          name: "Discard unsent coordination drafts",
+        }),
+      ).toBeTruthy();
+
+      fireEvent.change(screen.getByLabelText(label), {
+        target: { value },
+      });
+      expect(
+        screen.queryByRole("group", {
+          name: "Discard unsent coordination drafts",
+        }),
+      ).toBeNull();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(addReviewQueueEvent).not.toHaveBeenCalled();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Close coordination" }),
+      );
+      expect(
+        screen.getByRole("group", {
+          name: "Discard unsent coordination drafts",
+        }),
+      ).toBeTruthy();
+    },
+  );
+
+  it("does not resurrect discard approval when a researcher restores old note text", async () => {
+    const onClose = mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Original unsent coral note" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Close coordination" }));
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Revised coral note" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Original unsent coral note" },
+    });
+    expect(
+      screen.queryByRole("group", {
+        name: "Discard unsent coordination drafts",
+      }),
+    ).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(addReviewQueueEvent).not.toHaveBeenCalled();
+  });
+
+  it("requires an explicit warning before abandoning an uncertain audit UUID", async () => {
+    vi.mocked(addReviewQueueEvent).mockRejectedValueOnce(
+      new Error("Delivery outcome unknown"),
+    );
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "researcher-a" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Coral polyp observation" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await screen.findByRole("button", { name: "Retry event" });
+    const originalId =
+      vi.mocked(addReviewQueueEvent).mock.calls[0][2].client_request_id;
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Discard failed action" }),
+    );
+    expect(
+      screen.getByRole("group", {
+        name: "Confirm abandoning uncertain review event",
+      }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry event" })).toBeTruthy();
+    expect(addReviewQueueEvent).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Keep retry available" }),
+    );
+    expect(
+      screen.queryByRole("group", {
+        name: "Confirm abandoning uncertain review event",
+      }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(2));
+    expect(
+      vi.mocked(addReviewQueueEvent).mock.calls[1][2].client_request_id,
+    ).toBe(originalId);
+  });
+
+  it("invalidates an uncertain-event discard warning across A-B-A navigation", async () => {
+    vi.mocked(addReviewQueueEvent).mockRejectedValueOnce(
+      new Error("Delivery outcome unknown"),
+    );
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const view = (queueId: string, itemId: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueCoordinationPanel
+          queueId={queueId}
+          itemId={itemId}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("queue-a", "item-a"));
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "researcher-a" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Uncertain coral note" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await screen.findByRole("button", { name: "Retry event" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Discard failed action" }),
+    );
+    expect(
+      screen.getByRole("group", {
+        name: "Confirm abandoning uncertain review event",
+      }),
+    ).toBeTruthy();
+
+    rerender(view("queue-b", "item-b"));
+    rerender(view("queue-a", "item-a"));
+    expect(
+      screen.queryByRole("group", {
+        name: "Confirm abandoning uncertain review event",
+      }),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Retry event" })).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Discard failed action" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirm abandon retry" }),
+    );
+    expect(screen.queryByRole("button", { name: "Retry event" })).toBeNull();
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "Uncertain coral note",
+    );
+    expect(addReviewQueueEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps an uncertain audit UUID available until the researcher resolves it", async () => {
+    vi.mocked(addReviewQueueEvent).mockRejectedValueOnce(
+      new Error("Uncertain event delivery"),
+    );
+    const onClose = mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "researcher-a" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Tentacle condition needs inspection" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await screen.findByText("Uncertain event delivery");
+    const close = screen.getByRole("button", { name: "Close coordination" });
+    expect(close).toHaveProperty("disabled", true);
+    fireEvent.click(close);
+    expect(onClose).not.toHaveBeenCalled();
+    const originalUuid =
+      vi.mocked(addReviewQueueEvent).mock.calls[0][2].client_request_id;
+    fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(2));
+    expect(
+      vi.mocked(addReviewQueueEvent).mock.calls[1][2].client_request_id,
+    ).toBe(originalUuid);
+    await waitFor(() => expect(close).toHaveProperty("disabled", false));
+    fireEvent.click(close);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not carry a draft-discard confirmation onto another review item", async () => {
+    const onClose = vi.fn();
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const view = (queueId: string, itemId: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueCoordinationPanel
+          queueId={queueId}
+          itemId={itemId}
+          onClose={onClose}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("queue-a", "item-a"));
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Unsent A note" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Close coordination" }));
+    expect(
+      screen.getByRole("group", { name: "Discard unsent coordination drafts" }),
+    ).toBeTruthy();
+
+    rerender(view("queue-b", "item-b"));
+    expect(
+      screen.queryByRole("group", {
+        name: "Discard unsent coordination drafts",
+      }),
+    ).toBeNull();
+    rerender(view("queue-a", "item-a"));
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "Unsent A note",
+    );
+    // Returning to A restores the draft, never the old discard approval.
+    expect(
+      screen.queryByRole("group", {
+        name: "Discard unsent coordination drafts",
+      }),
+    ).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Close coordination" }));
+    expect(
+      screen.getByRole("group", { name: "Discard unsent coordination drafts" }),
+    ).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("posts a comment with trimmed actor and UUID without approving data", async () => {
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "  scientist  " },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "  Inspect tentacle outline  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await waitFor(() => {
+      expect(addReviewQueueEvent).toHaveBeenCalledWith(
+        "queue-1",
+        "item-1",
+        expect.objectContaining({
+          event_type: "comment",
+          actor: "scientist",
+          comment: "Inspect tentacle outline",
+          client_request_id: expect.any(String),
+        }),
+      );
+    });
+    expect(
+      vi.mocked(addReviewQueueEvent).mock.calls[0][2].client_request_id,
+    ).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(
+      screen.queryByRole("button", { name: /approve|verify/i }),
+    ).toBeNull();
+  });
+
+  it("retries an uncertain assignment with exactly the same request UUID", async () => {
+    vi.mocked(addReviewQueueEvent)
+      .mockRejectedValueOnce(new Error("Connection interrupted"))
+      .mockImplementationOnce(async () => responseForCall());
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "scientist" },
+    });
+    fireEvent.change(screen.getByLabelText("Reviewer to assign"), {
+      target: { value: "reviewer-two" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Assign reviewer" }));
+    await screen.findByRole("button", { name: "Retry event" });
+    fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(2));
+    const calls = vi.mocked(addReviewQueueEvent).mock.calls;
+    expect(calls[1][2].client_request_id).toBe(calls[0][2].client_request_id);
+    expect(calls[1][2].event_type).toBe("assign");
+  });
+
+  it("preserves a newer comment draft after the prior comment succeeds", async () => {
+    let resolveEvent!: (
+      value: Awaited<ReturnType<typeof addReviewQueueEvent>>,
+    ) => void;
+    const pending = new Promise<
+      Awaited<ReturnType<typeof addReviewQueueEvent>>
+    >((resolve) => {
+      resolveEvent = resolve;
+    });
+    vi.mocked(addReviewQueueEvent).mockReturnValueOnce(pending);
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "scientist" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Original observation" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "New observation draft" },
+    });
+    await act(async () => {
+      resolveEvent(responseForCall(0));
+      await pending;
+    });
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "New observation draft",
+    );
+    expect(addReviewQueueEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries an uncertain assignment without deleting a newer assignee draft", async () => {
+    vi.mocked(addReviewQueueEvent)
+      .mockRejectedValueOnce(new Error("Connection interrupted"))
+      .mockImplementationOnce(async () => responseForCall());
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "scientist" },
+    });
+    fireEvent.change(screen.getByLabelText("Reviewer to assign"), {
+      target: { value: "reviewer-one" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Assign reviewer" }));
+    await screen.findByRole("button", { name: "Retry event" });
+    fireEvent.change(screen.getByLabelText("Reviewer to assign"), {
+      target: { value: "reviewer-two" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(2));
+    const calls = vi.mocked(addReviewQueueEvent).mock.calls;
+    expect(calls[1][2].assignee).toBe("reviewer-one");
+    expect(calls[1][2].client_request_id).toBe(calls[0][2].client_request_id);
+    await waitFor(() =>
+      expect(screen.getByLabelText("Reviewer to assign")).toHaveProperty(
+        "value",
+        "reviewer-two",
+      ),
+    );
+  });
+
+  it("keeps an edit-and-reverted comment draft after an older response", async () => {
+    let resolveEvent!: (
+      value: Awaited<ReturnType<typeof addReviewQueueEvent>>,
+    ) => void;
+    const pending = new Promise<
+      Awaited<ReturnType<typeof addReviewQueueEvent>>
+    >((resolve) => {
+      resolveEvent = resolve;
+    });
+    vi.mocked(addReviewQueueEvent).mockReturnValueOnce(pending);
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "scientist" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Observation A" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Observation B" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Observation A" },
+    });
+    await act(async () => {
+      resolveEvent(responseForCall(0));
+      await pending;
+    });
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "Observation A",
+    );
+  });
+
+  it("keeps comment draft after actor switch", async () => {
+    let resolveEvent!: (
+      value: Awaited<ReturnType<typeof addReviewQueueEvent>>,
+    ) => void;
+    const pending = new Promise<
+      Awaited<ReturnType<typeof addReviewQueueEvent>>
+    >((resolve) => {
+      resolveEvent = resolve;
+    });
+    vi.mocked(addReviewQueueEvent).mockReturnValueOnce(pending);
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-one" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Unsubmitted observation" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-two" },
+    });
+    await act(async () => {
+      resolveEvent(responseForCall(0));
+      await pending;
+    });
+    expect(vi.mocked(addReviewQueueEvent).mock.calls[0][2].actor).toBe(
+      "reviewer-one",
+    );
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "Unsubmitted observation",
+    );
+  });
+
+  it("keeps assignee draft after actor switch", async () => {
+    let resolveEvent!: (
+      value: Awaited<ReturnType<typeof addReviewQueueEvent>>,
+    ) => void;
+    const pending = new Promise<
+      Awaited<ReturnType<typeof addReviewQueueEvent>>
+    >((resolve) => {
+      resolveEvent = resolve;
+    });
+    vi.mocked(addReviewQueueEvent).mockReturnValueOnce(pending);
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-one" },
+    });
+    fireEvent.change(screen.getByLabelText("Reviewer to assign"), {
+      target: { value: "scientist-three" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Assign reviewer" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-two" },
+    });
+    await act(async () => {
+      resolveEvent(responseForCall(0));
+      await pending;
+    });
+    expect(vi.mocked(addReviewQueueEvent).mock.calls[0][2].actor).toBe(
+      "reviewer-one",
+    );
+    expect(screen.getByLabelText("Reviewer to assign")).toHaveProperty(
+      "value",
+      "scientist-three",
+    );
+  });
+
+  it("retries under original actor without clearing new draft", async () => {
+    vi.mocked(addReviewQueueEvent)
+      .mockRejectedValueOnce(new Error("Connection interrupted"))
+      .mockImplementationOnce(async () => responseForCall());
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-one" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Original observation" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await screen.findByRole("button", { name: "Retry event" });
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-two" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(2));
+    const calls = vi.mocked(addReviewQueueEvent).mock.calls;
+    expect(calls[1][2]).toEqual(calls[0][2]);
+    expect(calls[1][2].actor).toBe("reviewer-one");
+    await waitFor(() =>
+      expect(screen.getByLabelText("Review comment")).toHaveProperty(
+        "value",
+        "Original observation",
+      ),
+    );
+  });
+
+  it("keeps a delayed comment on its original queue after the panel changes items", async () => {
+    let resolveOld!: (
+      value: Awaited<ReturnType<typeof addReviewQueueEvent>>,
+    ) => void;
+    const pendingOld = new Promise<
+      Awaited<ReturnType<typeof addReviewQueueEvent>>
+    >((resolve) => {
+      resolveOld = resolve;
+    });
+    vi.mocked(addReviewQueueEvent).mockReturnValueOnce(pendingOld);
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const view = (queueId: string, itemId: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueCoordinationPanel
+          queueId={queueId}
+          itemId={itemId}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("queue-a", "item-a"));
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-a" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Observation for A" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(1));
+
+    rerender(view("queue-b", "item-b"));
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-b" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Observation for B" },
+    });
+    await act(async () => {
+      resolveOld(responseForCall(0));
+      await pendingOld;
+    });
+    expect(addReviewQueueEvent).toHaveBeenCalledWith(
+      "queue-a",
+      "item-a",
+      expect.objectContaining({
+        actor: "reviewer-a",
+        comment: "Observation for A",
+      }),
+    );
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["review_queue_events", "queue-a", "item-a"],
+    });
+    expect(invalidate).not.toHaveBeenCalledWith({
+      queryKey: ["review_queue_events", "queue-b", "item-b"],
+    });
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "Observation for B",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(2));
+    expect(addReviewQueueEvent).toHaveBeenLastCalledWith(
+      "queue-b",
+      "item-b",
+      expect.objectContaining({
+        actor: "reviewer-b",
+        comment: "Observation for B",
+      }),
+    );
+  });
+
+  it("does not clear a draft when an old response returns after A-B-A navigation", async () => {
+    let resolveOld!: (
+      value: Awaited<ReturnType<typeof addReviewQueueEvent>>,
+    ) => void;
+    const pendingOld = new Promise<
+      Awaited<ReturnType<typeof addReviewQueueEvent>>
+    >((resolve) => {
+      resolveOld = resolve;
+    });
+    vi.mocked(addReviewQueueEvent).mockReturnValueOnce(pendingOld);
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const view = (queueId: string, itemId: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueCoordinationPanel
+          queueId={queueId}
+          itemId={itemId}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("queue-a", "item-a"));
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-a" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Keep this draft" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(1));
+    rerender(view("queue-b", "item-b"));
+    rerender(view("queue-a", "item-a"));
+    await act(async () => {
+      resolveOld(responseForCall(0));
+      await pendingOld;
+    });
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "Keep this draft",
+    );
+  });
+
+  it("keeps unsent reviewer notes and attribution scoped to their review item", async () => {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const view = (queueId: string, itemId: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueCoordinationPanel
+          queueId={queueId}
+          itemId={itemId}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("queue-a", "item-a"));
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "researcher-a" },
+    });
+    fireEvent.change(screen.getByLabelText("Reviewer to assign"), {
+      target: { value: "assignee-a" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Unsent biological note for A" },
+    });
+
+    rerender(view("queue-b", "item-b"));
+    expect(screen.getByLabelText("Your local reviewer label")).toHaveProperty(
+      "value",
+      "",
+    );
+    expect(screen.getByLabelText("Reviewer to assign")).toHaveProperty(
+      "value",
+      "",
+    );
+    expect(screen.getByLabelText("Review comment")).toHaveProperty("value", "");
+    expect(screen.getByRole("button", { name: "Add comment" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "researcher-b" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Note for B" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(1));
+    expect(addReviewQueueEvent).toHaveBeenCalledWith(
+      "queue-b",
+      "item-b",
+      expect.objectContaining({
+        actor: "researcher-b",
+        comment: "Note for B",
+      }),
+    );
+
+    rerender(view("queue-a", "item-a"));
+    expect(screen.getByLabelText("Your local reviewer label")).toHaveProperty(
+      "value",
+      "researcher-a",
+    );
+    expect(screen.getByLabelText("Reviewer to assign")).toHaveProperty(
+      "value",
+      "assignee-a",
+    );
+    expect(screen.getByLabelText("Review comment")).toHaveProperty(
+      "value",
+      "Unsent biological note for A",
+    );
+    expect(addReviewQueueEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("resets history pagination for a new item and restores it on return", async () => {
+    vi.mocked(getReviewQueueEvents).mockImplementation(
+      async (_queueId, _itemId, page) => ({
+        items: [],
+        total: 101,
+        page: page ?? 1,
+        page_size: 50,
+        current_assignee: null,
+        requires_researcher_review: true,
+      }),
+    );
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const view = (queueId: string, itemId: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueCoordinationPanel
+          queueId={queueId}
+          itemId={itemId}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("queue-a", "item-a"));
+    await screen.findByText("Page 1");
+    fireEvent.click(screen.getByRole("button", { name: "Next events" }));
+    await screen.findByText("Page 2");
+    expect(getReviewQueueEvents).toHaveBeenCalledWith(
+      "queue-a",
+      "item-a",
+      2,
+      expect.anything(),
+    );
+
+    rerender(view("queue-b", "item-b"));
+    await screen.findByText("Page 1");
+    expect(getReviewQueueEvents).toHaveBeenCalledWith(
+      "queue-b",
+      "item-b",
+      1,
+      expect.anything(),
+    );
+    rerender(view("queue-a", "item-a"));
+    await screen.findByText("Page 2");
+  });
+
+  it("restores an uncertain event retry after delayed failure across item navigation", async () => {
+    let rejectOriginal!: (reason: Error) => void;
+    const pendingOriginal = new Promise<
+      Awaited<ReturnType<typeof addReviewQueueEvent>>
+    >((_, reject) => {
+      rejectOriginal = reject;
+    });
+    vi.mocked(addReviewQueueEvent)
+      .mockReturnValueOnce(pendingOriginal)
+      .mockImplementationOnce(async () => responseForCall());
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const view = (queueId: string, itemId: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueCoordinationPanel
+          queueId={queueId}
+          itemId={itemId}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("queue-a", "item-a"));
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "researcher-a" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Original observation for A" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(1));
+
+    rerender(view("queue-b", "item-b"));
+    await act(async () => {
+      rejectOriginal(new Error("Uncertain delivery for A"));
+      await pendingOriginal.catch(() => undefined);
+    });
+    expect(screen.queryByRole("button", { name: "Retry event" })).toBeNull();
+    expect(screen.queryByText("Uncertain delivery for A")).toBeNull();
+
+    rerender(view("queue-a", "item-a"));
+    expect(await screen.findByText("Uncertain delivery for A")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(2));
+    const calls = vi.mocked(addReviewQueueEvent).mock.calls;
+    expect(calls[1]).toEqual(calls[0]);
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Retry event" })).toBeNull(),
+    );
+  });
+
+  it("keeps separate uncertain retries and reviewer identities for two items", async () => {
+    vi.mocked(addReviewQueueEvent)
+      .mockRejectedValueOnce(new Error("Uncertain A"))
+      .mockRejectedValueOnce(new Error("Uncertain B"))
+      .mockImplementation(async () => responseForCall());
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const view = (queueId: string, itemId: string) => (
+      <QueryClientProvider client={client}>
+        <ReviewQueueCoordinationPanel
+          queueId={queueId}
+          itemId={itemId}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view("queue-a", "item-a"));
+    await screen.findByText("Assigned reviewer: Unassigned");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-a" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Note A" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await screen.findByText("Uncertain A");
+
+    rerender(view("queue-b", "item-b"));
+    expect(screen.queryByText("Uncertain A")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "reviewer-b" },
+    });
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Note B" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    await screen.findByText("Uncertain B");
+
+    rerender(view("queue-a", "item-a"));
+    expect(screen.getByText("Uncertain A")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(3));
+    expect(vi.mocked(addReviewQueueEvent).mock.calls[2]).toEqual(
+      vi.mocked(addReviewQueueEvent).mock.calls[0],
+    );
+    await waitFor(() => expect(screen.queryByText("Uncertain A")).toBeNull());
+
+    rerender(view("queue-b", "item-b"));
+    expect(screen.getByText("Uncertain B")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry event" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(4));
+    expect(vi.mocked(addReviewQueueEvent).mock.calls[3]).toEqual(
+      vi.mocked(addReviewQueueEvent).mock.calls[1],
+    );
+    expect(vi.mocked(addReviewQueueEvent).mock.calls[0][2].actor).toBe(
+      "reviewer-a",
+    );
+    expect(vi.mocked(addReviewQueueEvent).mock.calls[1][2].actor).toBe(
+      "reviewer-b",
+    );
+  });
+
+  it("warns on reload while an unsent biological note exists", async () => {
+    mount();
+    await screen.findByText("Assigned reviewer: Unassigned");
+    const beforeUnloadPrevented = () => {
+      const event = new Event("beforeunload", { cancelable: true });
+      act(() => {
+        window.dispatchEvent(event);
+      });
+      return event.defaultPrevented;
+    };
+    expect(beforeUnloadPrevented()).toBe(false);
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "Unsubmitted coral health observation" },
+    });
+    expect(beforeUnloadPrevented()).toBe(true);
+    fireEvent.change(screen.getByLabelText("Review comment"), {
+      target: { value: "" },
+    });
+    expect(beforeUnloadPrevented()).toBe(false);
+    expect(addReviewQueueEvent).not.toHaveBeenCalled();
+  });
+
+  it("warns on reload during an in-flight event without a draft", async () => {
+    let resolveEvent!: (
+      value: Awaited<ReturnType<typeof addReviewQueueEvent>>,
+    ) => void;
+    const pending = new Promise<
+      Awaited<ReturnType<typeof addReviewQueueEvent>>
+    >((resolve) => {
+      resolveEvent = resolve;
+    });
+    vi.mocked(getReviewQueueEvents).mockResolvedValueOnce({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 50,
+      current_assignee: "reviewer-a",
+      requires_researcher_review: true,
+    });
+    vi.mocked(addReviewQueueEvent).mockReturnValueOnce(pending);
+    mount();
+    await screen.findByText("Assigned reviewer: reviewer-a");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "scientist" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Unassign reviewer" }));
+    await waitFor(() => expect(addReviewQueueEvent).toHaveBeenCalledTimes(1));
+    const unload = new Event("beforeunload", { cancelable: true });
+    act(() => {
+      window.dispatchEvent(unload);
+    });
+    expect(unload.defaultPrevented).toBe(true);
+    await act(async () => {
+      resolveEvent(responseForCall(0));
+      await pending;
+    });
+    await waitFor(() => {
+      const safeUnload = new Event("beforeunload", { cancelable: true });
+      act(() => {
+        window.dispatchEvent(safeUnload);
+      });
+      expect(safeUnload.defaultPrevented).toBe(false);
+    });
+  });
+
+  it("warns until an uncertain event UUID is explicitly abandoned", async () => {
+    vi.mocked(getReviewQueueEvents).mockResolvedValueOnce({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 50,
+      current_assignee: "reviewer-a",
+      requires_researcher_review: true,
+    });
+    vi.mocked(addReviewQueueEvent).mockRejectedValueOnce(
+      new Error("Network response unknown"),
+    );
+    mount();
+    await screen.findByText("Assigned reviewer: reviewer-a");
+    fireEvent.change(screen.getByLabelText("Your local reviewer label"), {
+      target: { value: "scientist" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Unassign reviewer" }));
+    await screen.findByRole("button", { name: "Retry event" });
+    const uncertainUnload = new Event("beforeunload", { cancelable: true });
+    act(() => {
+      window.dispatchEvent(uncertainUnload);
+    });
+    expect(uncertainUnload.defaultPrevented).toBe(true);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Discard failed action" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirm abandon retry" }),
+    );
+    const clearedUnload = new Event("beforeunload", { cancelable: true });
+    act(() => {
+      window.dispatchEvent(clearedUnload);
+    });
+    expect(clearedUnload.defaultPrevented).toBe(false);
+    expect(addReviewQueueEvent).toHaveBeenCalledTimes(1);
+  });
+});

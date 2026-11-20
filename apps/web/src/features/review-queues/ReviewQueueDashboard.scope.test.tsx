@@ -1,0 +1,1367 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  completeReviewQueueItem,
+  createReviewQueue,
+  getDatasetVersionQualityControlRuns,
+  getDatasetVersionReviewQueues,
+  getDatasetVersions,
+  getQualityControlRuns,
+  getReviewQueueItems,
+  getReviewQueues,
+  regenerateReviewQueue,
+  startReviewQueueItem,
+  type Project,
+  type ReviewQueueItem,
+  type ReviewQueueRecord,
+} from "../../api/client";
+import { ReviewQueueDashboard } from "./ReviewQueueDashboard";
+import { reviewQueuesQueryKey } from "./reviewQueueState";
+
+vi.mock("../../api/client", () => ({
+  completeReviewQueueItem: vi.fn(),
+  createReviewQueue: vi.fn(),
+  regenerateReviewQueue: vi.fn(),
+  startReviewQueueItem: vi.fn(),
+  skipReviewQueueItem: vi.fn(),
+  returnReviewQueueItem: vi.fn(),
+  getDatasetVersionQualityControlRuns: vi.fn(),
+  getDatasetVersionReviewQueues: vi.fn(),
+  getDatasetVersions: vi.fn(),
+  getQualityControlRuns: vi.fn(),
+  getReviewQueueItems: vi.fn(),
+  getReviewQueues: vi.fn(),
+}));
+vi.mock("./QuickConfidenceReviewDialog", () => ({
+  QuickConfidenceReviewDialog: ({
+    onMarkComplete,
+    completionError,
+  }: {
+    onMarkComplete?: () => void;
+    completionError?: string | null;
+  }) => (
+    <>
+      <button onClick={onMarkComplete}>Quick modal complete</button>
+      {completionError && <p role="alert">{completionError}</p>}
+    </>
+  ),
+}));
+vi.mock("./ReviewQueueBulkTriage", () => ({
+  ReviewQueueBulkTriage: ({
+    onProtectedStateChange,
+  }: {
+    onProtectedStateChange?: (queueId: string | null) => void;
+  }) => (
+    <div>
+      <button type="button" onClick={() => onProtectedStateChange?.("queue-a")}>
+        Simulate unresolved bulk request
+      </button>
+      <button type="button" onClick={() => onProtectedStateChange?.(null)}>
+        Resolve unresolved bulk request
+      </button>
+    </div>
+  ),
+}));
+vi.mock("./ReviewQueueCoordinationPanel", () => ({
+  // Stateful stand-in: the real panel separately tests per-item drafts and
+  // UUID retries. Here we test whether the dashboard keeps it mounted.
+  ReviewQueueCoordinationPanel: ({
+    itemId,
+    onClose,
+  }: {
+    itemId: string;
+    onClose: () => void;
+  }) => {
+    const [drafts, setDrafts] = useState<Record<string, string>>({});
+    return (
+      <label>
+        Coordination draft for {itemId}
+        <textarea
+          aria-label="Coordination test draft"
+          value={drafts[itemId] ?? ""}
+          onChange={(event) =>
+            setDrafts((current) => ({
+              ...current,
+              [itemId]: event.target.value,
+            }))
+          }
+        />
+        <button type="button" onClick={onClose}>
+          Close coordination test
+        </button>
+      </label>
+    );
+  },
+}));
+
+function reviewItem(id: string, imageId: string): ReviewQueueItem {
+  return {
+    id,
+    review_queue_id: "queue-a",
+    project_id: "project-a",
+    dataset_version_id: null,
+    image_id: imageId,
+    split: null,
+    review_state: "pending",
+    score: 0.6,
+    rank_position: 1,
+    highest_qc_severity: null,
+    label_class_ids_json: [],
+    model_ids_json: [],
+    related_issue_ids_json: [],
+    signal_values_json: {},
+    normalized_signals_json: {},
+    weights_json: {},
+    score_breakdown_json: [],
+    input_checksum: "a".repeat(64),
+    reason_summary: null,
+    skip_reason: null,
+    created_at: "2026-10-23T12:00:00Z",
+    updated_at: "2026-10-23T12:00:00Z",
+    started_at: null,
+    completed_at: null,
+    returned_at: null,
+  };
+}
+
+function queue(id: string): ReviewQueueRecord {
+  return {
+    id,
+    project_id: id === "queue-b" ? "project-b" : "project-a",
+    dataset_version_id: id === "dataset-queue" ? "dataset-1" : null,
+    scope_type: id === "dataset-queue" ? "dataset_version" : "project",
+    created_at: "2026-10-23T12:00:00Z",
+    formula_id: "qc",
+    formula_version: "1",
+    status: "complete",
+    item_count: 0,
+    configuration_json: {},
+  } as unknown as ReviewQueueRecord;
+}
+
+function project(id: string): Project {
+  return { id, label_classes: [] } as unknown as Project;
+}
+
+function mount(onCoordinationOpenChange = vi.fn()) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  const onSelectedQueueChange = vi.fn();
+  const onOpenImage = vi.fn();
+  const view = (id: string) => (
+    <QueryClientProvider client={client}>
+      <ReviewQueueDashboard
+        project={project(id)}
+        onOpenImage={onOpenImage}
+        onSelectedQueueChange={onSelectedQueueChange}
+        onCoordinationOpenChange={onCoordinationOpenChange}
+      />
+    </QueryClientProvider>
+  );
+  const result = render(view("project-a"));
+  return {
+    ...result,
+    view,
+    onSelectedQueueChange,
+    onCoordinationOpenChange,
+    onOpenImage,
+    client,
+  };
+}
+
+describe("ReviewQueueDashboard scope isolation", () => {
+  beforeEach(() => {
+    // clearAllMocks leaves unused mockReturnValueOnce implementations queued
+    // across parameterized tests, allowing a previous run's resolved mutation
+    // to replace a later researcher's active QC queue.
+    vi.resetAllMocks();
+    vi.mocked(getDatasetVersions).mockResolvedValue([
+      { id: "dataset-1", version_number: 1, name: "Frozen set" },
+    ] as Awaited<ReturnType<typeof getDatasetVersions>>);
+    vi.mocked(getQualityControlRuns).mockResolvedValue([]);
+    vi.mocked(getDatasetVersionQualityControlRuns).mockResolvedValue([]);
+    vi.mocked(getReviewQueues).mockImplementation(async (id) => [
+      queue(id === "project-a" ? "queue-a" : "queue-b"),
+    ]);
+    vi.mocked(getDatasetVersionReviewQueues).mockResolvedValue([
+      queue("dataset-queue"),
+    ]);
+    vi.mocked(getReviewQueueItems).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+  });
+
+  it.each(["-1", "101"])(
+    "blocks an out-of-range %s percent QC review threshold before any API request",
+    (value) => {
+      mount();
+      fireEvent.change(
+        screen.getByLabelText(/Review predictions at or below confidence/),
+        { target: { value } },
+      );
+      expect(
+        screen.getByRole("button", { name: "Generate queue" }),
+      ).toHaveProperty("disabled", true);
+      expect(screen.getByRole("alert").textContent).toContain(
+        "Review confidence threshold must be between 0 and 100%.",
+      );
+      expect(createReviewQueue).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["0", "100"])(
+    "submits valid %s percent QC review thresholds without changing their meaning",
+    async (value) => {
+      vi.mocked(createReviewQueue).mockResolvedValue(queue("queue-new"));
+      mount();
+      fireEvent.change(
+        screen.getByLabelText(/Review predictions at or below confidence/),
+        { target: { value } },
+      );
+      const button = screen.getByRole("button", { name: "Generate queue" });
+      expect(button).toHaveProperty("disabled", false);
+      fireEvent.click(button);
+      await waitFor(() =>
+        expect(createReviewQueue).toHaveBeenCalledWith(
+          "project-a",
+          expect.objectContaining({
+            review_below_confidence: Number(value) / 100,
+          }),
+        ),
+      );
+    },
+  );
+
+  it.each(["generate", "regenerate"] as const)(
+    "rejects a %s response with foreign QC provenance without switching queues",
+    async (operation) => {
+      const foreign = {
+        ...queue("queue-foreign"),
+        project_id: "project-b",
+      };
+      if (operation === "generate") {
+        vi.mocked(createReviewQueue).mockResolvedValueOnce(foreign);
+      } else {
+        vi.mocked(regenerateReviewQueue).mockResolvedValueOnce(foreign);
+      }
+      const { onSelectedQueueChange } = mount();
+      await waitFor(() =>
+        expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a"),
+      );
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: operation === "generate" ? "Generate queue" : "Regenerate",
+        }),
+      );
+      expect(
+        await screen.findByText(
+          /Queue response does not match the requested project\/dataset scope/,
+        ),
+      ).toBeTruthy();
+      expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
+      expect(getReviewQueueItems).not.toHaveBeenCalledWith(
+        "queue-foreign",
+        expect.anything(),
+        expect.anything(),
+      );
+    },
+  );
+
+  it.each([
+    ["wrong dataset", { dataset_version_id: "dataset-foreign" }],
+    ["wrong scope type", { scope_type: "dataset_version" }],
+    ["missing queue ID", { id: "" }],
+  ])("rejects generated QC queue with %s", async (_reason, fields) => {
+    vi.mocked(createReviewQueue).mockResolvedValueOnce({
+      ...queue("queue-new"),
+      ...fields,
+    });
+    const { onSelectedQueueChange } = mount();
+    await waitFor(() =>
+      expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Generate queue" }));
+    expect(
+      await screen.findByText(
+        /Queue response does not match the requested project\/dataset scope/,
+      ),
+    ).toBeTruthy();
+    expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
+    expect(getReviewQueueItems).not.toHaveBeenCalledWith(
+      "queue-new",
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("rejects negative QC ranking weights without creating a queue", () => {
+    mount();
+    fireEvent.change(screen.getByLabelText("low mean confidence"), {
+      target: { value: "-1" },
+    });
+    expect(
+      screen.getByRole("button", { name: "Generate queue" }),
+    ).toHaveProperty("disabled", true);
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Review score weights must be finite, nonnegative, and have a positive finite total.",
+    );
+    expect(createReviewQueue).not.toHaveBeenCalled();
+  });
+
+  it("preserves an empty ranking input instead of silently treating it as zero", async () => {
+    vi.mocked(createReviewQueue).mockResolvedValue(queue("queue-new"));
+    mount();
+    const input = screen.getByLabelText(
+      "low mean confidence",
+    ) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "" } });
+    expect(input.value).toBe("");
+    const generate = screen.getByRole("button", { name: "Generate queue" });
+    expect(generate).toHaveProperty("disabled", true);
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Review score weights must be finite, nonnegative, and have a positive finite total.",
+    );
+    expect(createReviewQueue).not.toHaveBeenCalled();
+
+    // An explicit zero is valid when the other ranking signals remain positive.
+    fireEvent.change(input, { target: { value: "0" } });
+    expect(input.value).toBe("0");
+    expect(generate).toHaveProperty("disabled", false);
+    fireEvent.click(generate);
+    await waitFor(() =>
+      expect(createReviewQueue).toHaveBeenCalledWith(
+        "project-a",
+        expect.objectContaining({
+          signal_weights: expect.objectContaining({
+            low_mean_confidence: 0,
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("rejects an all-zero QC ranking policy and permits explicit correction", () => {
+    mount();
+    const weightLabels = [
+      "low mean confidence",
+      "low min confidence",
+      "pending proposals",
+      "rejection rate",
+      "count disagreement",
+      "unresolved qc severity",
+      "rare class presence",
+      "edited acceptance rate",
+      "unreviewed state",
+      "missing group metadata",
+      "incomplete provenance",
+      "recent import",
+      "stale review state",
+    ];
+    for (const label of weightLabels) {
+      fireEvent.change(screen.getByLabelText(label), {
+        target: { value: "0" },
+      });
+    }
+    const button = screen.getByRole("button", { name: "Generate queue" });
+    expect(button).toHaveProperty("disabled", true);
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Review score weights must be finite, nonnegative, and have a positive finite total.",
+    );
+    fireEvent.change(screen.getByLabelText("low mean confidence"), {
+      target: { value: "1" },
+    });
+    expect(button).toHaveProperty("disabled", false);
+    expect(createReviewQueue).not.toHaveBeenCalled();
+  });
+
+  it("keeps the coordination instance mounted across A-B-A and blocks queue changes", async () => {
+    vi.mocked(getReviewQueueItems).mockResolvedValue({
+      items: [reviewItem("item-a", "image-a"), reviewItem("item-b", "image-b")],
+      total: 2,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+    vi.mocked(getReviewQueues).mockResolvedValue([
+      queue("queue-a"),
+      queue("queue-other"),
+    ]);
+    mount();
+    const open = await screen.findAllByRole("button", {
+      name: "Comments & assignments",
+    });
+    fireEvent.click(open[0]);
+    const draft = screen.getByLabelText(
+      "Coordination test draft",
+    ) as HTMLTextAreaElement;
+    fireEvent.change(draft, {
+      target: { value: "Unsent observation for coral A" },
+    });
+    expect(screen.getByLabelText("Scope").hasAttribute("disabled")).toBe(true);
+    expect(
+      screen
+        .getByRole("button", { name: "Generate queue" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
+      screen
+        .getByRole("button", { name: "Regenerate" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    const queueButtons = document.querySelectorAll<HTMLButtonElement>(
+      ".version-list .version-card",
+    );
+    expect(queueButtons).toHaveLength(2);
+    expect(queueButtons[0]?.disabled).toBe(true);
+    expect(queueButtons[1]?.disabled).toBe(true);
+    // Even clicking the already-selected queue must not bypass guarded close.
+    fireEvent.click(queueButtons[0]);
+    expect(
+      (screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement)
+        .value,
+    ).toBe("Unsent observation for coral A");
+    fireEvent.click(open[1]);
+    expect(
+      (screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement)
+        .value,
+    ).toBe("");
+    fireEvent.click(open[0]);
+    expect(
+      (screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement)
+        .value,
+    ).toBe("Unsent observation for coral A");
+    expect(
+      screen.getByText(
+        /Unsent biological notes and idempotent audit retry IDs/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("pins the original QC queue when a background refresh temporarily omits it", async () => {
+    vi.mocked(getReviewQueueItems).mockResolvedValue({
+      items: [reviewItem("item-a", "image-a")],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+    const { client, onSelectedQueueChange } = mount();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Comments & assignments" }),
+    );
+    fireEvent.change(screen.getByLabelText("Coordination test draft"), {
+      target: { value: "Unsent octocoral polyp observation" },
+    });
+    // Finish the initial query before replacing the cached list. Otherwise
+    // its still-in-flight response can overwrite this synthetic refresh and
+    // the test never exercises the missing-queue protection branch.
+    await waitFor(() =>
+      expect(
+        client.isFetching({
+          queryKey: reviewQueuesQueryKey("project-a", "project", ""),
+        }),
+      ).toBe(0),
+    );
+
+    // A stale or incomplete server list must not unmount the open panel or
+    // change the host's selected queue identity to a foreign queue.
+    // Exercise the real queue-history refetch rather than a synthetic
+    // cache write that can race with the query observer's initial fetch.
+    vi.mocked(getReviewQueues).mockResolvedValue([queue("queue-other")]);
+    await act(async () => {
+      await client.invalidateQueries({
+        queryKey: reviewQueuesQueryKey("project-a", "project", ""),
+      });
+    });
+    expect(
+      await screen.findByText(/temporarily absent from the refreshed/),
+    ).toBeTruthy();
+    expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
+    expect(
+      (screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement)
+        .value,
+    ).toBe("Unsent octocoral polyp observation");
+    const foreignQueue = document.querySelector<HTMLButtonElement>(
+      ".version-list .version-card",
+    );
+    expect(foreignQueue?.disabled).toBe(true);
+    if (foreignQueue) fireEvent.click(foreignQueue);
+    expect(
+      (screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement)
+        .value,
+    ).toBe("Unsent octocoral polyp observation");
+
+    vi.mocked(getReviewQueues).mockResolvedValue([
+      queue("queue-a"),
+      queue("queue-other"),
+    ]);
+    await act(async () => {
+      await client.invalidateQueries({
+        queryKey: reviewQueuesQueryKey("project-a", "project", ""),
+      });
+    });
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/temporarily absent from the refreshed/),
+      ).toBeNull(),
+    );
+    expect(
+      (screen.getByLabelText("Coordination test draft") as HTMLTextAreaElement)
+        .value,
+    ).toBe("Unsent octocoral polyp observation");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close coordination test" }),
+    );
+    expect(screen.queryByLabelText("Coordination test draft")).toBeNull();
+  });
+
+  it("preserves an uncertain bulk retry owner across filters and a missing queue-list entry", async () => {
+    vi.mocked(getReviewQueueItems).mockResolvedValue({
+      items: [reviewItem("item-a", "image-a")],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+    vi.mocked(getReviewQueues).mockResolvedValue([
+      queue("queue-a"),
+      queue("queue-other"),
+    ]);
+    const { client, onSelectedQueueChange, onCoordinationOpenChange } = mount();
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Simulate unresolved bulk request",
+      }),
+    );
+    await waitFor(() =>
+      expect(onCoordinationOpenChange).toHaveBeenLastCalledWith(true),
+    );
+    fireEvent.change(screen.getByLabelText("Review state"), {
+      target: { value: "skipped" },
+    });
+    expect(
+      screen.getByRole("button", { name: "Resolve unresolved bulk request" }),
+    ).toBeTruthy();
+
+    // Exercise a real server-history refresh rather than synthetic cache
+    // replacement; an uncertain bulk retry must remain visible and scoped.
+    await waitFor(() =>
+      expect(
+        client.isFetching({
+          queryKey: reviewQueuesQueryKey("project-a", "project", ""),
+        }),
+      ).toBe(0),
+    );
+    vi.mocked(getReviewQueues).mockResolvedValue([queue("queue-other")]);
+    await act(async () => {
+      await client.invalidateQueries({
+        queryKey: reviewQueuesQueryKey("project-a", "project", ""),
+      });
+    });
+    expect(
+      await screen.findByText(/temporarily absent from the refreshed/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/Protected QC work remains open on its original queue/),
+    ).toBeTruthy();
+    expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
+    expect(
+      screen.getByRole("button", { name: "Resolve unresolved bulk request" }),
+    ).toBeTruthy();
+    expect(
+      document.querySelector<HTMLButtonElement>(".version-list .version-card")
+        ?.disabled,
+    ).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Open quick-review popout" }),
+    ).toHaveProperty("disabled", true);
+    expect(
+      await screen.findByRole("button", { name: "Comments & assignments" }),
+    ).toHaveProperty("disabled", true);
+
+    // Restoring the queue listing clears the warning, not the protected
+    // bulk retry ownership or its original queue selection.
+    vi.mocked(getReviewQueues).mockResolvedValue([
+      queue("queue-a"),
+      queue("queue-other"),
+    ]);
+    await act(async () => {
+      await client.invalidateQueries({
+        queryKey: reviewQueuesQueryKey("project-a", "project", ""),
+      });
+    });
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/temporarily absent from the refreshed/),
+      ).toBeNull(),
+    );
+    expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
+    expect(
+      screen.getByRole("button", { name: "Resolve unresolved bulk request" }),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Resolve unresolved bulk request" }),
+    );
+    await waitFor(() =>
+      expect(onCoordinationOpenChange).toHaveBeenLastCalledWith(false),
+    );
+  });
+
+  it("signals coordination ownership to the host and prevents editor navigation until protected close", async () => {
+    vi.mocked(getReviewQueueItems).mockResolvedValue({
+      items: [reviewItem("item-a", "image-a")],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+    const { onCoordinationOpenChange, onOpenImage } = mount();
+    await waitFor(() =>
+      expect(onCoordinationOpenChange).toHaveBeenLastCalledWith(false),
+    );
+    const openImage = await screen.findByRole("button", { name: "Open image" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Comments & assignments" }),
+    );
+    await waitFor(() =>
+      expect(onCoordinationOpenChange).toHaveBeenLastCalledWith(true),
+    );
+    expect(openImage).toHaveProperty("disabled", true);
+    fireEvent.click(openImage);
+    expect(onOpenImage).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close coordination test" }),
+    );
+    await waitFor(() =>
+      expect(onCoordinationOpenChange).toHaveBeenLastCalledWith(false),
+    );
+    expect(openImage).toHaveProperty("disabled", false);
+    fireEvent.click(openImage);
+    expect(onOpenImage).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "item-a" }),
+    );
+  });
+
+  it("does not fetch items from the previous project after navigation", async () => {
+    const { rerender, view, onSelectedQueueChange } = mount();
+    await waitFor(() => {
+      expect(getReviewQueueItems).toHaveBeenCalledWith(
+        "queue-a",
+        expect.any(Object),
+        expect.anything(),
+      );
+    });
+    vi.mocked(getReviewQueueItems).mockClear();
+    rerender(view("project-b"));
+    await waitFor(() => {
+      expect(getReviewQueueItems).toHaveBeenCalledWith(
+        "queue-b",
+        expect.any(Object),
+        expect.anything(),
+      );
+    });
+    const calls = vi.mocked(getReviewQueueItems).mock.calls;
+    const queueIds = calls.map(([id]) => id);
+    expect(queueIds.every((id) => id === "queue-b")).toBe(true);
+    expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-b");
+  });
+
+  it("drops a prior project's dataset-version selection before fetching", async () => {
+    const { rerender, view } = mount();
+    await waitFor(() => expect(getReviewQueueItems).toHaveBeenCalled());
+    fireEvent.change(screen.getByLabelText("Scope"), {
+      target: { value: "dataset_version" },
+    });
+    fireEvent.change(await screen.findByLabelText("Dataset version"), {
+      target: { value: "dataset-1" },
+    });
+    await waitFor(() =>
+      expect(getReviewQueueItems).toHaveBeenCalledWith(
+        "dataset-queue",
+        expect.any(Object),
+        expect.anything(),
+      ),
+    );
+    vi.mocked(getDatasetVersionReviewQueues).mockClear();
+    vi.mocked(getReviewQueueItems).mockClear();
+    rerender(view("project-b"));
+    await waitFor(() =>
+      expect(getReviewQueueItems).toHaveBeenCalledWith(
+        "queue-b",
+        expect.any(Object),
+        expect.anything(),
+      ),
+    );
+    expect(getDatasetVersionReviewQueues).not.toHaveBeenCalled();
+    const calls = vi.mocked(getReviewQueueItems).mock.calls;
+    const queueIds = calls.map(([id]) => id);
+    expect(queueIds.every((id) => id === "queue-b")).toBe(true);
+  });
+
+  it("never falls back to project queues while dataset version is unset", async () => {
+    mount();
+    await waitFor(() => expect(getReviewQueueItems).toHaveBeenCalled());
+    vi.mocked(getReviewQueues).mockClear();
+    vi.mocked(getReviewQueueItems).mockClear();
+    fireEvent.change(screen.getByLabelText("Scope"), {
+      target: { value: "dataset_version" },
+    });
+    await screen.findByLabelText("Dataset version");
+    const sourceRunSelect = screen.getByLabelText("Source QC run");
+    const generateButton = screen.getByRole("button", {
+      name: "Generate queue",
+    });
+    expect(sourceRunSelect.hasAttribute("disabled")).toBe(true);
+    expect(generateButton.hasAttribute("disabled")).toBe(true);
+    expect(getDatasetVersionQualityControlRuns).not.toHaveBeenCalled();
+    expect(getReviewQueues).not.toHaveBeenCalled();
+    expect(getDatasetVersionReviewQueues).not.toHaveBeenCalled();
+    expect(getReviewQueueItems).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Dataset version"), {
+      target: { value: "dataset-1" },
+    });
+    await waitFor(() => {
+      expect(getReviewQueueItems).toHaveBeenCalledWith(
+        "dataset-queue",
+        expect.any(Object),
+        expect.anything(),
+      );
+    });
+    const calls = vi.mocked(getReviewQueueItems).mock.calls;
+    const queueIds = calls.map(([id]) => id);
+    expect(queueIds.every((id) => id === "dataset-queue")).toBe(true);
+  });
+
+  it("reports a rejected single-item start without claiming a review-state change", async () => {
+    vi.mocked(getReviewQueueItems).mockResolvedValue({
+      items: [reviewItem("item-1", "image-1")],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+    vi.mocked(startReviewQueueItem).mockRejectedValueOnce(
+      new Error("Reviewer state conflict"),
+    );
+    mount();
+    const start = await screen.findByRole("button", { name: "Start review" });
+    fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
+      target: { value: "coral-reviewer" },
+    });
+    fireEvent.click(start);
+    const warning = await screen.findByRole("alert");
+    expect(warning.textContent).toContain(
+      "Start review was not confirmed for item item-1.",
+    );
+    expect(warning.textContent).toContain("Reviewer state conflict");
+    expect(warning.textContent).toContain("audit history before retrying");
+    expect(screen.getByText("pending")).toBeTruthy();
+
+    vi.mocked(startReviewQueueItem).mockResolvedValueOnce(
+      {} as Awaited<ReturnType<typeof startReviewQueueItem>>,
+    );
+    fireEvent.click(start);
+    await waitFor(() =>
+      expect(screen.queryByText(/Start review was not confirmed/)).toBeNull(),
+    );
+    expect(startReviewQueueItem).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not attribute a late failed reviewer action to another queue", async () => {
+    let rejectStart!: (reason?: unknown) => void;
+    const pending = new Promise<
+      Awaited<ReturnType<typeof startReviewQueueItem>>
+    >((_, reject) => {
+      rejectStart = reject;
+    });
+    vi.mocked(startReviewQueueItem).mockReturnValueOnce(pending);
+    vi.mocked(getReviewQueues).mockResolvedValue([
+      queue("queue-a"),
+      queue("queue-other"),
+    ]);
+    vi.mocked(getReviewQueueItems).mockImplementation(async (id) => ({
+      items: [reviewItem(id === "queue-a" ? "item-a" : "item-b", "image-1")],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    }));
+    mount();
+    const start = await screen.findByRole("button", { name: "Start review" });
+    fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
+      target: { value: "reef-scientist" },
+    });
+    fireEvent.click(start);
+    await waitFor(() =>
+      expect(startReviewQueueItem).toHaveBeenCalledWith(
+        "item-a",
+        "reef-scientist",
+      ),
+    );
+    const otherQueue = document.querySelectorAll<HTMLButtonElement>(
+      ".version-list .version-card",
+    )[1];
+    expect(otherQueue).toBeTruthy();
+    fireEvent.click(otherQueue);
+    await waitFor(() =>
+      expect(getReviewQueueItems).toHaveBeenCalledWith(
+        "queue-other",
+        expect.any(Object),
+        expect.anything(),
+      ),
+    );
+    await act(async () => {
+      rejectStart(new Error("Late conflict on queue-a"));
+      try {
+        await pending;
+      } catch {
+        // The mocked rejection is expected; React Query owns the mutation.
+      }
+    });
+    expect(screen.queryByText(/Start review was not confirmed/)).toBeNull();
+  });
+
+  it("requires a reviewer label and confirmation before single-item completion", async () => {
+    vi.mocked(getReviewQueueItems).mockResolvedValue({
+      items: [reviewItem("item-1", "image-1")],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+    vi.mocked(completeReviewQueueItem).mockResolvedValue(
+      {} as Awaited<ReturnType<typeof completeReviewQueueItem>>,
+    );
+    vi.mocked(startReviewQueueItem).mockResolvedValue(
+      {} as Awaited<ReturnType<typeof startReviewQueueItem>>,
+    );
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      mount();
+      const complete = await screen.findByRole("button", {
+        name: "Mark complete",
+      });
+      const start = screen.getByRole("button", { name: "Start review" });
+      expect(complete.hasAttribute("disabled")).toBe(true);
+      expect(start.hasAttribute("disabled")).toBe(true);
+      fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
+        target: { value: "  reef-scientist  " },
+      });
+      expect(complete.hasAttribute("disabled")).toBe(false);
+      fireEvent.click(complete);
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(completeReviewQueueItem).not.toHaveBeenCalled();
+
+      confirm.mockReturnValue(true);
+      fireEvent.click(complete);
+      await waitFor(() =>
+        expect(completeReviewQueueItem).toHaveBeenCalledWith(
+          "item-1",
+          "reef-scientist",
+          true,
+        ),
+      );
+      expect(confirm.mock.calls[0][0]).toMatch(
+        /does not verify model predictions/,
+      );
+      fireEvent.click(start);
+      await waitFor(() =>
+        expect(startReviewQueueItem).toHaveBeenCalledWith(
+          "item-1",
+          "reef-scientist",
+        ),
+      );
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
+  it("keeps a failed quick-modal QC completion visible for researcher verification", async () => {
+    vi.mocked(getReviewQueueItems).mockResolvedValue({
+      items: [reviewItem("item-quick", "image-quick")],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+    vi.mocked(completeReviewQueueItem).mockRejectedValueOnce(
+      new Error("Audit event conflict"),
+    );
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      mount();
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Quick review" }),
+      );
+      fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
+        target: { value: "reef-scientist" },
+      });
+      fireEvent.click(
+        screen.getByRole("button", { name: "Quick modal complete" }),
+      );
+      await waitFor(() =>
+        expect(
+          screen
+            .getAllByRole("alert")
+            .some((alert) => alert.textContent === "Audit event conflict"),
+        ).toBe(true),
+      );
+      expect(
+        screen.getByRole("button", { name: "Quick modal complete" }),
+      ).toBeTruthy();
+      expect(screen.getByText("pending")).toBeTruthy();
+      expect(completeReviewQueueItem).toHaveBeenCalledWith(
+        "item-quick",
+        "reef-scientist",
+        true,
+      );
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
+  it("requires a reviewer label and confirmation from the quick-review modal", async () => {
+    vi.mocked(getReviewQueueItems).mockResolvedValue({
+      items: [reviewItem("item-quick", "image-quick")],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+    vi.mocked(completeReviewQueueItem).mockResolvedValue(
+      {} as Awaited<ReturnType<typeof completeReviewQueueItem>>,
+    );
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      mount();
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Quick review" }),
+      );
+      const quickComplete = await screen.findByRole("button", {
+        name: "Quick modal complete",
+      });
+      fireEvent.click(quickComplete);
+      expect(alert).toHaveBeenCalledTimes(1);
+      expect(completeReviewQueueItem).not.toHaveBeenCalled();
+
+      fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
+        target: { value: "  coral-reviewer  " },
+      });
+      fireEvent.click(quickComplete);
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(completeReviewQueueItem).not.toHaveBeenCalled();
+
+      confirm.mockReturnValue(true);
+      fireEvent.click(quickComplete);
+      await waitFor(() =>
+        expect(completeReviewQueueItem).toHaveBeenCalledWith(
+          "item-quick",
+          "coral-reviewer",
+          true,
+        ),
+      );
+    } finally {
+      alert.mockRestore();
+      confirm.mockRestore();
+    }
+  });
+  it.each(["generate", "regenerate"] as const)(
+    "does not switch away from protected coral coordination when a pending %s completes",
+    async (operation) => {
+      let resolvePending!: (value: ReviewQueueRecord) => void;
+      const pending = new Promise<ReviewQueueRecord>((resolve) => {
+        resolvePending = resolve;
+      });
+      // Only mock the operation under test. A spare one-shot response can
+      // leak into the next parameterized case and silently change queues.
+      if (operation === "generate") {
+        vi.mocked(createReviewQueue).mockReturnValueOnce(pending);
+      } else {
+        vi.mocked(regenerateReviewQueue).mockReturnValueOnce(pending);
+      }
+      vi.mocked(getReviewQueueItems).mockResolvedValue({
+        items: [reviewItem("item-a", "image-a")],
+        total: 1,
+        page: 1,
+        page_size: 25,
+        pages: 1,
+      } as Awaited<ReturnType<typeof getReviewQueueItems>>);
+      const { onSelectedQueueChange } = mount();
+      // Ensure the initial queue and item queries have settled before
+      // starting generation; otherwise the coordination control may not yet
+      // exist when the delayed mutation is deliberately held open.
+      await screen.findByRole("button", { name: "Comments & assignments" });
+      const action = screen.getByRole("button", {
+        name: operation === "generate" ? "Generate queue" : "Regenerate",
+      });
+      fireEvent.click(action);
+      await waitFor(() => {
+        if (operation === "generate") {
+          expect(createReviewQueue).toHaveBeenCalledTimes(1);
+        } else {
+          expect(regenerateReviewQueue).toHaveBeenCalledWith("queue-a");
+        }
+      });
+      // Regeneration can temporarily re-render the item list while the
+      // request is in flight. Wait for the actual coordination control.
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Comments & assignments" }),
+      );
+      fireEvent.change(screen.getByLabelText("Coordination test draft"), {
+        target: { value: "Unsent coral colony health observation" },
+      });
+      expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
+      vi.mocked(getReviewQueues).mockResolvedValue([
+        queue("queue-a"),
+        queue("queue-new"),
+      ]);
+      const queueFetchesBeforeResolution =
+        vi.mocked(getReviewQueues).mock.calls.length;
+      await act(async () => {
+        resolvePending(queue("queue-new"));
+        await pending;
+      });
+      // The queue-history invalidation proves the mutation success handler
+      // ran. Avoid relying on the unrelated ordering of React Query's global
+      // mutation cache or on when an async invalidation changes its status.
+      await waitFor(() =>
+        expect(vi.mocked(getReviewQueues).mock.calls.length).toBeGreaterThan(
+          queueFetchesBeforeResolution,
+        ),
+      );
+      expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
+      expect(
+        (
+          screen.getByLabelText(
+            "Coordination test draft",
+          ) as HTMLTextAreaElement
+        ).value,
+      ).toBe("Unsent coral colony health observation");
+      expect(getReviewQueueItems).not.toHaveBeenCalledWith(
+        "queue-new",
+        expect.anything(),
+        expect.anything(),
+      );
+      expect(
+        screen.getByRole("button", { name: "Generate queue" }),
+      ).toHaveProperty("disabled", true);
+    },
+  );
+
+  it.each(["generate", "regenerate"] as const)(
+    "preserves a manually selected QC queue after pending %s completes",
+    async (operation) => {
+      let resolvePending!: (value: ReviewQueueRecord) => void;
+      const pending = new Promise<ReviewQueueRecord>((resolve) => {
+        resolvePending = resolve;
+      });
+      // Only mock the operation under test. A spare one-shot response can
+      // leak into the next parameterized case and silently change queues.
+      if (operation === "generate") {
+        vi.mocked(createReviewQueue).mockReturnValueOnce(pending);
+      } else {
+        vi.mocked(regenerateReviewQueue).mockReturnValueOnce(pending);
+      }
+      vi.mocked(getReviewQueues).mockResolvedValue([
+        queue("queue-a"),
+        queue("queue-other"),
+      ]);
+      const { onSelectedQueueChange } = mount();
+      await waitFor(() =>
+        expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a"),
+      );
+      const action = screen.getByRole("button", {
+        name: operation === "generate" ? "Generate queue" : "Regenerate",
+      });
+      fireEvent.click(action);
+      await waitFor(() => {
+        if (operation === "generate") {
+          expect(createReviewQueue).toHaveBeenCalledTimes(1);
+        } else {
+          expect(regenerateReviewQueue).toHaveBeenCalledWith("queue-a");
+        }
+      });
+      const history = document.querySelectorAll<HTMLButtonElement>(
+        ".version-list .version-card",
+      );
+      expect(history).toHaveLength(2);
+      fireEvent.click(history[1]);
+      await waitFor(() =>
+        expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-other"),
+      );
+      await waitFor(() =>
+        expect(getReviewQueueItems).toHaveBeenCalledWith(
+          "queue-other",
+          expect.any(Object),
+          expect.anything(),
+        ),
+      );
+      vi.mocked(getReviewQueueItems).mockClear();
+      // onSuccess awaits query-history invalidation. A global mutation-cache
+      // status can still be pending during refetch, so observe the actual
+      // queue-history request that proves the success handler executed.
+      vi.mocked(getReviewQueues).mockResolvedValue([
+        queue("queue-a"),
+        queue("queue-other"),
+        queue("queue-new"),
+      ]);
+      const queueFetchesBeforeResolution =
+        vi.mocked(getReviewQueues).mock.calls.length;
+      await act(async () => {
+        resolvePending(queue("queue-new"));
+        await pending;
+      });
+      await waitFor(() =>
+        expect(vi.mocked(getReviewQueues).mock.calls.length).toBeGreaterThan(
+          queueFetchesBeforeResolution,
+        ),
+      );
+      expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-other");
+      expect(getReviewQueueItems).not.toHaveBeenCalledWith(
+        "queue-new",
+        expect.anything(),
+        expect.anything(),
+      );
+    },
+  );
+
+  it("keeps the new project's selected queue after an old project generation completes", async () => {
+    let resolveOld!: (value: ReviewQueueRecord) => void;
+    const pendingOld = new Promise<ReviewQueueRecord>((resolve) => {
+      resolveOld = resolve;
+    });
+    vi.mocked(createReviewQueue).mockReturnValueOnce(pendingOld);
+    const { rerender, view, onSelectedQueueChange } = mount();
+    await waitFor(() =>
+      expect(getReviewQueueItems).toHaveBeenCalledWith(
+        "queue-a",
+        expect.any(Object),
+        expect.anything(),
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Generate queue" }));
+    await waitFor(() =>
+      expect(createReviewQueue).toHaveBeenCalledWith(
+        "project-a",
+        expect.any(Object),
+      ),
+    );
+
+    rerender(view("project-b"));
+    await waitFor(() =>
+      expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-b"),
+    );
+    await act(async () => {
+      resolveOld(queue("generated-a"));
+      await pendingOld;
+    });
+    expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-b");
+    expect(screen.getByText("Selected queue")).toBeTruthy();
+    expect(vi.mocked(getReviewQueueItems).mock.calls.at(-1)?.[0]).toBe(
+      "queue-b",
+    );
+  });
+
+  it("keeps the new project's selected queue after old queue regeneration completes", async () => {
+    let resolveOld!: (value: ReviewQueueRecord) => void;
+    const pendingOld = new Promise<ReviewQueueRecord>((resolve) => {
+      resolveOld = resolve;
+    });
+    vi.mocked(regenerateReviewQueue).mockReturnValueOnce(pendingOld);
+    const { rerender, view, onSelectedQueueChange } = mount();
+    await waitFor(() =>
+      expect(getReviewQueueItems).toHaveBeenCalledWith(
+        "queue-a",
+        expect.any(Object),
+        expect.anything(),
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
+    await waitFor(() =>
+      expect(regenerateReviewQueue).toHaveBeenCalledWith("queue-a"),
+    );
+
+    rerender(view("project-b"));
+    await waitFor(() =>
+      expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-b"),
+    );
+    await act(async () => {
+      resolveOld(queue("regenerated-a"));
+      await pendingOld;
+    });
+    expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-b");
+    expect(vi.mocked(getReviewQueueItems).mock.calls.at(-1)?.[0]).toBe(
+      "queue-b",
+    );
+  });
+
+  it("does not revive an old generation after leaving and returning to the same project", async () => {
+    let resolveOld!: (value: ReviewQueueRecord) => void;
+    const pendingOld = new Promise<ReviewQueueRecord>((resolve) => {
+      resolveOld = resolve;
+    });
+    vi.mocked(createReviewQueue).mockReturnValueOnce(pendingOld);
+    const { rerender, view, onSelectedQueueChange } = mount();
+    await waitFor(() =>
+      expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Generate queue" }));
+    await waitFor(() =>
+      expect(createReviewQueue).toHaveBeenCalledWith(
+        "project-a",
+        expect.any(Object),
+      ),
+    );
+    rerender(view("project-b"));
+    await waitFor(() =>
+      expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-b"),
+    );
+    rerender(view("project-a"));
+    await waitFor(() =>
+      expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a"),
+    );
+    await act(async () => {
+      resolveOld(queue("old-generated-a"));
+      await pendingOld;
+    });
+    expect(onSelectedQueueChange).toHaveBeenLastCalledWith("queue-a");
+    expect(vi.mocked(getReviewQueueItems).mock.calls.at(-1)?.[0]).toBe(
+      "queue-a",
+    );
+  });
+
+  it("invalidates the originating queue after a delayed single-item start", async () => {
+    let resolveStart!: (
+      value: Awaited<ReturnType<typeof startReviewQueueItem>>,
+    ) => void;
+    const pendingStart = new Promise<
+      Awaited<ReturnType<typeof startReviewQueueItem>>
+    >((resolve) => {
+      resolveStart = resolve;
+    });
+    vi.mocked(startReviewQueueItem).mockReturnValueOnce(pendingStart);
+    vi.mocked(getReviewQueueItems).mockImplementation(async (id) => ({
+      items: [reviewItem(id === "queue-a" ? "item-a" : "item-b", "image-1")],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    }));
+    const { rerender, view, client } = mount();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    await screen.findByRole("button", { name: "Start review" });
+    fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
+      target: { value: "  original-reviewer  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start review" }));
+    await waitFor(() =>
+      expect(startReviewQueueItem).toHaveBeenCalledWith(
+        "item-a",
+        "original-reviewer",
+      ),
+    );
+    rerender(view("project-b"));
+    await waitFor(() =>
+      expect(getReviewQueueItems).toHaveBeenCalledWith(
+        "queue-b",
+        expect.any(Object),
+        expect.anything(),
+      ),
+    );
+    await act(async () => {
+      resolveStart({} as Awaited<ReturnType<typeof startReviewQueueItem>>);
+      await pendingStart;
+    });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["review_queue_items", "queue-a"],
+    });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["review_queue_events", "queue-a"],
+    });
+    expect(invalidate).not.toHaveBeenCalledWith({
+      queryKey: ["review_queue_items", "queue-b"],
+    });
+    expect(invalidate).not.toHaveBeenCalledWith({
+      queryKey: ["review_queue_events", "queue-b"],
+    });
+  });
+
+  it("does not close a new project's quick review after an old completion", async () => {
+    let resolveComplete!: (
+      value: Awaited<ReturnType<typeof completeReviewQueueItem>>,
+    ) => void;
+    const pendingComplete = new Promise<
+      Awaited<ReturnType<typeof completeReviewQueueItem>>
+    >((resolve) => {
+      resolveComplete = resolve;
+    });
+    vi.mocked(completeReviewQueueItem).mockReturnValueOnce(pendingComplete);
+    vi.mocked(getReviewQueueItems).mockImplementation(async (id) => ({
+      items: [reviewItem(id === "queue-a" ? "item-a" : "item-b", "image-1")],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    }));
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      const { rerender, view } = mount();
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Quick review" }),
+      );
+      fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
+        target: { value: "reviewer-a" },
+      });
+      fireEvent.click(
+        screen.getByRole("button", { name: "Quick modal complete" }),
+      );
+      await waitFor(() =>
+        expect(completeReviewQueueItem).toHaveBeenCalledWith(
+          "item-a",
+          "reviewer-a",
+          true,
+        ),
+      );
+      rerender(view("project-b"));
+      await waitFor(() =>
+        expect(getReviewQueueItems).toHaveBeenCalledWith(
+          "queue-b",
+          expect.any(Object),
+          expect.anything(),
+        ),
+      );
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Quick review" }),
+      );
+      expect(
+        screen.getByRole("button", { name: "Quick modal complete" }),
+      ).toBeTruthy();
+      await act(async () => {
+        resolveComplete(
+          {} as Awaited<ReturnType<typeof completeReviewQueueItem>>,
+        );
+        await pendingComplete;
+      });
+      expect(
+        screen.getByRole("button", { name: "Quick modal complete" }),
+      ).toBeTruthy();
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+});

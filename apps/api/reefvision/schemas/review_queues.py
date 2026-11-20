@@ -3,14 +3,20 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from math import isfinite
+from typing import Any, Literal, Self
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 from reefvision.domain.enums import ReviewQueueItemState
+from reefvision.schemas.review_queue_events import has_unsafe_reviewer_label_control
 
 
 class ReviewScoreWeights(BaseModel):
+    # NaN/Inf cannot be scientifically interpreted as priority weights.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     low_mean_confidence: float = Field(default=24.0, ge=0)
     low_min_confidence: float = Field(default=12.0, ge=0)
     pending_proposals: float = Field(default=14.0, ge=0)
@@ -24,6 +30,24 @@ class ReviewScoreWeights(BaseModel):
     incomplete_provenance: float = Field(default=5.0, ge=0)
     recent_import: float = Field(default=4.0, ge=0)
     stale_review_state: float = Field(default=6.0, ge=0)
+
+    @model_validator(mode="after")
+    def require_finite_positive_total_weight(self) -> Self:
+        # Individual finite weights can still overflow when summed; an
+        # all-zero vector also has no meaningful priority normalization.
+        total_weight = sum(self.model_dump().values())
+        if not isfinite(total_weight) or total_weight <= 0:
+            raise ValueError("Review score weights require a finite, positive total")
+        return self
+
+
+def parse_workflow_review_weights(raw: Any) -> ReviewScoreWeights:
+    """Validate saved-graph weights without silently ignoring unknown signals."""
+    if raw is None:
+        return ReviewScoreWeights()
+    if not isinstance(raw, dict) or set(raw) - ReviewScoreWeights.model_fields.keys():
+        raise ValueError("signal_weights must map recognized QC signal names to weights")
+    return ReviewScoreWeights.model_validate(raw)
 
 
 class ReviewQueueCreateRequest(BaseModel):
@@ -103,5 +127,97 @@ class ReviewQueueItemPageResponse(BaseModel):
     pages: int
 
 
-class ReviewQueueItemSkipRequest(BaseModel):
+class ReviewQueueItemActorRequest(BaseModel):
+    """Optional self-reported local reviewer label; never an authenticated identity."""
+
+    actor: str = Field(default="local_user", min_length=1, max_length=100)
+
+    @field_validator("actor")
+    @classmethod
+    def normalize_actor(cls, value: str) -> str:
+        actor = value.strip()
+        if "\x00" in actor:
+            raise ValueError("Reviewer label cannot contain NUL")
+        if has_unsafe_reviewer_label_control(actor):
+            raise ValueError("Reviewer label cannot contain Unicode direction controls")
+        if not actor:
+            raise ValueError("Reviewer label cannot be blank")
+        return actor
+
+
+class ReviewQueueItemCompleteRequest(ReviewQueueItemActorRequest):
+    """Explicit human confirmation for individual queue bookkeeping completion.
+
+    This does not verify annotations, predictions, or biological measurements.
+    """
+
+    review_confirmed: StrictBool
+
+    @model_validator(mode="after")
+    def require_manual_review_confirmation(self) -> Self:
+        if not self.review_confirmed:
+            raise ValueError("Single-item completion requires explicit manual-review confirmation")
+        return self
+
+
+class ReviewQueueItemSkipRequest(ReviewQueueItemActorRequest):
     reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        reason = value.strip()
+        if "\x00" in reason:
+            raise ValueError("Skip reason cannot contain NUL")
+        if not reason:
+            raise ValueError("A nonempty skip reason is required")
+        return reason
+
+
+class ReviewQueueBulkRequest(BaseModel):
+    """Explicit local-operator action; cannot verify biological observations."""
+
+    item_ids: list[str] = Field(min_length=1, max_length=100)
+    action: Literal["start", "skip", "return", "complete"]
+    reason: str | None = Field(default=None, max_length=500)
+    # Self-reported local label, not authenticated account identity.
+    actor: str = Field(default="local_user", min_length=1, max_length=100)
+    review_confirmed: StrictBool = False
+    # Optional stable ID: repeat an uncertain request without reapplying it
+    # after another researcher changes the queue state.
+    client_request_id: UUID | None = None
+
+    @field_validator("actor")
+    @classmethod
+    def normalize_actor(cls, value: str) -> str:
+        actor = value.strip()
+        if "\x00" in actor:
+            raise ValueError("Reviewer label cannot contain NUL")
+        if has_unsafe_reviewer_label_control(actor):
+            raise ValueError("Reviewer label cannot contain Unicode direction controls")
+        if not actor:
+            raise ValueError("Bulk triage actor label cannot be blank")
+        return actor
+
+    @field_validator("reason")
+    @classmethod
+    def reject_nul_reason(cls, value: str | None) -> str | None:
+        if value is not None and "\x00" in value:
+            raise ValueError("Skip reason cannot contain NUL")
+        return value
+
+    @model_validator(mode="after")
+    def require_manual_review_confirmation(self) -> Self:
+        if self.action == "complete" and not self.review_confirmed:
+            raise ValueError("Bulk completion requires explicit manual-review confirmation")
+        if self.action != "complete" and self.review_confirmed:
+            raise ValueError("Review confirmation is only accepted for bulk completion")
+        return self
+
+
+class ReviewQueueBulkResponse(BaseModel):
+    queue_id: str
+    action: Literal["start", "skip", "return", "complete"]
+    changed_count: int
+    items: list[ReviewQueueItemResponse]
+    requires_researcher_review: bool = True

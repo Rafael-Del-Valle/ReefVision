@@ -4,18 +4,23 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
+from math import isfinite
 from statistics import mean
 from typing import Any
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
 from reefvision.db.models import (
     DatasetVersion,
+    DatasetVersionItem,
     QualityControlRun,
     ReviewQueue,
     ReviewQueueItem,
 )
+from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
+from reefvision.domain.enums import QUALITY_CONTROL_ISSUE_STATUSES
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.repositories.review_queues import ReviewQueueRepository
 from reefvision.schemas.review_queues import (
@@ -26,10 +31,20 @@ from reefvision.schemas.review_queues import (
     ReviewQueueResponse,
     ReviewScoreWeights,
 )
+from reefvision.services.frozen_dataset_integrity_16 import validate_frozen_dataset_manifest
+from reefvision.services.measurement_aware_dataset_versions import (
+    MeasurementAwareDatasetVersionService,
+)
 from reefvision.services.quality_control import (
     CURRENT_QC_RULESET_VERSION,
     SEVERITY_SCORES,
     QualityControlService,
+)
+from reefvision.services.review_queue_events import validate_review_item_event_scope
+from reefvision.services.review_queue_transaction_16 import begin_serialized_review_triage
+from reefvision.services.workflow_review_queue_integrity import (
+    V3_SIGNAL_LABELS,
+    queue_item_evidence_sha256,
 )
 from reefvision.storage.datasets import canonical_json_sha256
 
@@ -59,10 +74,15 @@ class ReviewQueueService:
         return queue
 
     def _item(self, item_id: str) -> ReviewQueueItem:
+        # Single and bulk reviewers must see the latest committed state.
+        begin_serialized_review_triage(self.session)
         item = self.queues.get_item(item_id)
         if item is None:
             raise NotFoundError("Review queue item not found")
-        return item
+        # Single-item start/skip/return/complete must not bypass the shared
+        # history/provenance check already used for coordination and bulk QC.
+        # Validate before changing item state or appending another audit event.
+        return validate_review_item_event_scope(self.session, item.review_queue_id, item.id)
 
     def _source_run(
         self,
@@ -94,21 +114,7 @@ class ReviewQueueService:
     ) -> tuple[list[dict[str, Any]], float]:
         weight_map = weights.model_dump(mode="json")
         total_weight = float(sum(weight_map.values()) or 1.0)
-        labels = {
-            "low_mean_confidence": "Low mean prediction confidence",
-            "low_min_confidence": "Low minimum prediction confidence",
-            "pending_proposals": "Many pending proposals",
-            "rejection_rate": "High proposal rejection rate",
-            "count_disagreement": "Model-versus-human count gap",
-            "unresolved_qc_severity": "Unresolved QC severity",
-            "rare_class_presence": "Rare-class presence",
-            "edited_acceptance_rate": "Edited acceptance rate",
-            "unreviewed_state": "Image not marked reviewed",
-            "missing_group_metadata": "Missing group metadata",
-            "incomplete_provenance": "Incomplete provenance",
-            "recent_import": "Recently imported image",
-            "stale_review_state": "Stale review state",
-        }
+        labels = V3_SIGNAL_LABELS
         breakdown: list[dict[str, Any]] = []
         total_score = 0.0
         for signal_id, raw_value in signal_values.items():
@@ -142,8 +148,33 @@ class ReviewQueueService:
         regenerated_from_queue_id: str | None = None,
     ) -> ReviewQueue:
         project = self.quality_control._project(project_id)
-        project_context = self.quality_control._build_project_context(project)
+        # Before ranking a frozen study, bind each immutable per-image record
+        # to its checksummed manifest rather than trusting only aggregate counts.
+        if dataset_version is not None:
+            validate_frozen_dataset_manifest(
+                dataset_version,
+                self.quality_control.versions.items_for_version(dataset_version.id),
+            )
+        # Frozen dataset versions contain reviewed annotation snapshots but no
+        # pending prediction proposals. A confidence selection would silently
+        # return an empty, supposedly completed queue for every frozen image.
+        # Reject it before inserting a queue or modifying review history.
+        if dataset_version is not None and request.review_below_confidence is not None:
+            raise ValidationError(
+                "Frozen dataset versions do not snapshot pending predictions; "
+                "remove review_below_confidence or use a live project queue"
+            )
+        # Dataset-version queues must rank the immutable snapshot, not the
+        # project's later annotation edits or unreviewed live predictions.
+        # Reuse the existing QC snapshot builder instead of reconstructing
+        # partially frozen evidence here.
+        project_context = (
+            self.quality_control._build_dataset_version_context(dataset_version)
+            if dataset_version is not None
+            else self.quality_control._build_project_context(project)
+        )
         split_by_image_id: dict[str, str | None] = {}
+        version_items_by_image_id: dict[str, DatasetVersionItem] = {}
         scoped_image_ids: set[str]
         if dataset_version is None:
             scoped_image_ids = {image.image_id for image in project_context.images}
@@ -153,6 +184,7 @@ class ReviewQueueService:
             )
             scoped_image_ids = {item.image_id for item in version_items}
             split_by_image_id = {item.image_id: item.split for item in version_items}
+            version_items_by_image_id = {item.image_id: item for item in version_items}
         source_run = self._source_run(
             project_id=project.id,
             dataset_version_id=dataset_version.id if dataset_version else None,
@@ -160,7 +192,42 @@ class ReviewQueueService:
         )
         issues_by_image: dict[str, list[Any]] = defaultdict(list)
         if source_run is not None:
-            for issue in self.quality_control.quality_control.issues_for_run(source_run.id):
+            source_issues = self.quality_control.quality_control.issues_for_run(source_run.id)
+            selected_rule_ids = source_run.selected_rule_ids_json
+            # Preserve original QC evidence: restored or externally changed
+            # finding counts and rule attribution must not silently influence
+            # a standalone or saved-workflow review queue.
+            if (
+                type(source_run.issue_count) is not int
+                or source_run.issue_count != len(source_issues)
+                or not isinstance(selected_rule_ids, list)
+                or any(type(rule_id) is not str or not rule_id for rule_id in selected_rule_ids)
+                or len(set(selected_rule_ids)) != len(selected_rule_ids)
+            ):
+                raise ValidationError(
+                    "QC source run finding inventory or selected rules are inconsistent; "
+                    "restore verified QC evidence before review queue creation"
+                )
+            for issue in source_issues:
+                # SQLite does not enforce QC lifecycle enum values. Validate
+                # all source findings before filtering dismissed/resolved rows:
+                # a corrupt status or foreign scientific scope must not make
+                # an audit diagnostic silently disappear from saved provenance.
+                if (
+                    issue.status not in QUALITY_CONTROL_ISSUE_STATUSES
+                    or issue.rule_id not in selected_rule_ids
+                    or issue.project_id != project.id
+                    or issue.dataset_version_id != (dataset_version.id if dataset_version else None)
+                    or (issue.image_id is not None and issue.image_id not in scoped_image_ids)
+                    or issue.severity not in SEVERITY_SCORES
+                ):
+                    raise ValidationError(
+                        "QC source finding has inconsistent scope or severity "
+                        "or an invalid lifecycle status; correct QC source evidence "
+                        "before review queue creation"
+                    )
+                # Legitimately inactive findings and global project diagnostics
+                # have no active per-image priority but retain valid lineage.
                 if issue.status not in {"open", "acknowledged"} or issue.image_id is None:
                     continue
                 issues_by_image[issue.image_id].append(issue)
@@ -170,13 +237,71 @@ class ReviewQueueService:
         if not scoped_images:
             raise ValidationError("No images are available in the requested review-queue scope")
 
+        # Models imported from local tools may contain an invalid confidence
+        # value despite the normal inference API validation. Neither a NaN
+        # priority nor an out-of-range probability is scientific evidence.
+        # Reject all scoped prediction rows before creating a queue or
+        # persisting any workflow-owned review artifact.
+        for image in scoped_images:
+            for prediction in project_context.predictions_by_image.get(image.image_id, []):
+                confidence = prediction.confidence
+                if (
+                    not isinstance(confidence, (int, float))
+                    or not isfinite(confidence)
+                    or not 0.0 <= confidence <= 1.0
+                ):
+                    raise ValidationError(
+                        "Review queue prediction confidence must be finite and within [0, 1]; "
+                        "correct local prediction evidence before QC review"
+                    )
+
+        # Verified polygon/raster masks are independent biological annotations.
+        # Existing QC scores intentionally keep their 1.0 formula; the
+        # immutable input fingerprint must nevertheless distinguish revised
+        # segmentation geometry and measurements at an identical bbox/count.
+        # Reuse dataset snapshotting's managed-raster hashing instead of
+        # inventing a second content-digest or reading the original images.
+        if dataset_version is None:
+            mask_service = MeasurementAwareDatasetVersionService(self.session, self.settings)
+            live_masks = mask_service._masks_for_images([image.image_id for image in scoped_images])
+            mask_evidence_by_image_id = {
+                image_id: sorted(
+                    (mask_service._mask_snapshot(mask) for mask in masks),
+                    key=lambda snapshot: str(snapshot["id"]),
+                )
+                for image_id, masks in live_masks.items()
+            }
+        else:
+            # Frozen mask snapshots already contain immutable raster digests,
+            # polygon vertices, revisions, and measurement provenance. Never
+            # use later live masks to describe a dataset-version queue.
+            mask_evidence_by_image_id = {
+                image_id: sorted(
+                    (dict(snapshot) for snapshot in version_item.mask_annotation_snapshot_json),
+                    key=lambda snapshot: str(snapshot["id"]),
+                )
+                for image_id, version_item in version_items_by_image_id.items()
+            }
+
         class_counts: Counter[str] = Counter()
         for image in scoped_images:
             for annotation in project_context.annotations_by_image.get(image.image_id, []):
                 if annotation.label_class_id:
                     class_counts[annotation.label_class_id] += 1
         max_class_count = max(class_counts.values(), default=1)
+        # Workflow-owned queues use a stable primary key. If two local workers
+        # both miss the initial ownership lookup, SQLite's existing primary-key
+        # constraint prevents them from committing two different snapshots.
+        # Historical workflow queues retain their original random IDs on replay.
+        # Standalone and regenerated queues remain independently generated.
+        owner = request.created_by or "local_user"
+        queue_id = (
+            str(uuid5(NAMESPACE_URL, f"reefvision:qc-queue:v1:{project.id}:{owner}"))
+            if owner.startswith("workflow:") and regenerated_from_queue_id is None
+            else str(uuid4())
+        )
         queue = ReviewQueue(
+            id=queue_id,
             project_id=project.id,
             dataset_version_id=dataset_version.id if dataset_version else None,
             source_quality_control_run_id=source_run.id if source_run else None,
@@ -193,7 +318,7 @@ class ReviewQueueService:
             },
             input_checksums_json={},
             summary_json={},
-            created_by=request.created_by or "local_user",
+            created_by=owner,
             completed_at=_utc_now(),
         )
         self.queues.add_queue(queue)
@@ -208,6 +333,11 @@ class ReviewQueueService:
         ]
         reference_time = max(reference_timestamps) if reference_timestamps else _utc_now()
         for image in scoped_images:
+            version_item = version_items_by_image_id.get(image.image_id)
+            image_group_key = version_item.group_key if version_item else image.group_key
+            image_sha256 = version_item.image_sha256 if version_item else image.sha256
+            image_width_px = version_item.width_px if version_item else image.width_px
+            image_height_px = version_item.height_px if version_item else image.height_px
             annotations = project_context.annotations_by_image.get(image.image_id, [])
             predictions = project_context.predictions_by_image.get(image.image_id, [])
             pending_predictions = [
@@ -284,7 +414,7 @@ class ReviewQueueService:
             )
             unreviewed_state = 1.0 if image.annotation_status != "reviewed" else 0.0
             missing_group_metadata = (
-                0.0 if image.group_key is not None and image.group_key.strip() else 1.0
+                0.0 if image_group_key is not None and image_group_key.strip() else 1.0
             )
             provenance_total = sum(
                 1
@@ -300,20 +430,26 @@ class ReviewQueueService:
             incomplete_provenance = (
                 provenance_missing / provenance_total if provenance_total else 0.0
             )
+            # Dataset-version items do not snapshot per-image import/edit
+            # timestamps. Reading current ImageAsset timestamps would make
+            # frozen study priorities drift after unrelated live edits.
+            # Mark temporal recency signals unavailable (zero contribution)
+            # rather than attributing today's mutable metadata to the version.
             recent_import = 0.0
-            if image.created_at is not None:
-                age_days = max(
-                    (reference_time - _as_utc(image.created_at)).total_seconds() / 86_400.0,
-                    0.0,
-                )
-                recent_import = max(0.0, 1.0 - (age_days / 7.0))
             stale_review_state = 0.0
-            if image.updated_at is not None and image.annotation_status != "reviewed":
-                age_days = max(
-                    (reference_time - _as_utc(image.updated_at)).total_seconds() / 86_400.0,
-                    0.0,
-                )
-                stale_review_state = min(age_days / 30.0, 1.0)
+            if dataset_version is None:
+                if image.created_at is not None:
+                    age_days = max(
+                        (reference_time - _as_utc(image.created_at)).total_seconds() / 86_400.0,
+                        0.0,
+                    )
+                    recent_import = max(0.0, 1.0 - (age_days / 7.0))
+                if image.updated_at is not None and image.annotation_status != "reviewed":
+                    age_days = max(
+                        (reference_time - _as_utc(image.updated_at)).total_seconds() / 86_400.0,
+                        0.0,
+                    )
+                    stale_review_state = min(age_days / 30.0, 1.0)
             signal_values = {
                 "low_mean_confidence": low_mean_confidence,
                 "low_min_confidence": low_min_confidence,
@@ -366,11 +502,108 @@ class ReviewQueueService:
             )
             item_input = {
                 "image_id": image.image_id,
+                # The source-image digest, not its mutable filename or path,
+                # identifies the pixels that a researcher is asked to review.
+                "image_sha256": image_sha256,
+                # Biological experimental grouping and pixel dimensions affect
+                # interpretation even when object counts and priority stay fixed.
+                # Dataset-version queues use frozen image-item metadata, not
+                # later live group reassignment or changed pixel dimensions.
+                "group_key": image_group_key,
+                "width_px": image_width_px,
+                "height_px": image_height_px,
                 "split": split_by_image_id.get(image.image_id),
                 "annotation_status": image.annotation_status,
                 "annotation_count": annotation_count,
+                # A stable count alone cannot distinguish moved, relabeled, or
+                # re-authored biological observations. Bind each new queue's
+                # immutable input checksum to the actual annotation evidence.
+                # Older persisted queue checksums remain valid and untouched.
+                "annotation_evidence": [
+                    {
+                        "id": annotation.id,
+                        "label_class_id": annotation.label_class_id,
+                        "bbox_xyxy": [
+                            annotation.x_min,
+                            annotation.y_min,
+                            annotation.x_max,
+                            annotation.y_max,
+                        ],
+                        "revision": annotation.revision,
+                        "source_type": annotation.source_type,
+                        "source_model_id": annotation.source_model_id,
+                        "source_prediction_id": annotation.source_prediction_id,
+                        "provenance": annotation.provenance_json,
+                    }
+                    for annotation in sorted(annotations, key=lambda item: item.id)
+                ],
+                # Mask changes can alter scientific observations without
+                # changing box annotations, counts, scores, or image pixels.
+                # Persist only the digest of these verified mask inputs in the
+                # item's checksum; never assert that a QC queue verifies them.
+                "verified_mask_annotation_evidence": mask_evidence_by_image_id.get(
+                    image.image_id, []
+                ),
                 "prediction_ids": sorted(item.id for item in predictions),
+                # Prediction IDs alone cannot distinguish changed coordinates,
+                # confidence, labels, or reviewer provenance at the same count.
+                # This remains unverified model evidence, never ground truth.
+                "prediction_evidence": [
+                    {
+                        "id": prediction.id,
+                        "model_id": prediction.model_id,
+                        "model_checksum": prediction.model_checksum,
+                        "inference_job_id": prediction.inference_job_id,
+                        "inference_settings": prediction.inference_settings_json,
+                        "label_class_id": prediction.label_class_id,
+                        "predicted_label": prediction.predicted_label,
+                        "predicted_index": prediction.predicted_index,
+                        "confidence": prediction.confidence,
+                        "bbox_xyxy": [
+                            prediction.x_min,
+                            prediction.y_min,
+                            prediction.x_max,
+                            prediction.y_max,
+                        ],
+                        # A polygon or mask may change without changing its
+                        # enclosing bounding box, class, count or priority.
+                        "geometry_kind": prediction.geometry_kind,
+                        "polygon_xy": prediction.polygon_json,
+                        "mask_content_sha256": prediction.mask_content_sha256,
+                        "review_status": prediction.review_status,
+                        "was_edited": prediction.was_edited,
+                        "accepted_annotation_id": prediction.accepted_annotation_id,
+                        "accepted_mask_annotation_id": prediction.accepted_mask_annotation_id,
+                        "provenance": prediction.provenance_json,
+                    }
+                    for prediction in sorted(predictions, key=lambda item: item.id)
+                ],
                 "issue_ids": sorted(issue.id for issue in image_issues),
+                # A QC issue identifier and its maximum severity do not
+                # identify the underlying scientific finding. Thresholds,
+                # measured values, rule versions and explanations can change
+                # while the image's QC score and issue IDs remain identical.
+                # Hash the complete diagnostic evidence (never expose it as
+                # queue-item output), sorted for deterministic replay.
+                "issue_evidence": [
+                    {
+                        "id": issue.id,
+                        "rule_id": issue.rule_id,
+                        "rule_version": issue.rule_version,
+                        "fingerprint": issue.fingerprint,
+                        "severity": issue.severity,
+                        "status": issue.status,
+                        "title": issue.title,
+                        "explanation": issue.explanation,
+                        "annotation_ids": issue.annotation_ids_json,
+                        "prediction_ids": issue.prediction_ids_json,
+                        "class_ids": issue.class_ids_json,
+                        "measured_values": issue.measured_values_json,
+                        "thresholds": issue.thresholds_json,
+                        "resolution_metadata": issue.resolution_metadata_json,
+                    }
+                    for issue in sorted(image_issues, key=lambda item: item.id)
+                ],
                 "signal_values": signal_values,
                 "weights": request.signal_weights.model_dump(mode="json"),
             }
@@ -410,6 +643,21 @@ class ReviewQueueService:
                 }
             ),
             "item_count": len(items),
+            "integrity_schema_version": "qc-review-queue-v3",
+            # Preserve immutable scientific explanations, not mutable reviewer
+            # state, across saved Workflow Builder retries.
+            "item_evidence_sha256": queue_item_evidence_sha256(items),
+            # Retain the scoring contract independently from the image/score
+            # checksum. A saved Workflow Builder retry must not silently
+            # re-label its formula, ruleset or weight provenance.
+            "scoring_provenance_sha256": canonical_json_sha256(
+                {
+                    "formula_id": queue.formula_id,
+                    "formula_version": queue.formula_version,
+                    "configuration": queue.configuration_json,
+                    "integrity_schema_version": "qc-review-queue-v3",
+                }
+            ),
         }
         queue.summary_json = {
             "average_score": round(mean(item.score for item in items), 2) if items else 0.0,
@@ -493,17 +741,43 @@ class ReviewQueueService:
             pages=pages,
         )
 
-    def start_item(self, item_id: str) -> ReviewQueueItemResponse:
+    def _record_single_item_triage(
+        self,
+        item: ReviewQueueItem,
+        *,
+        action: str,
+        actor: str = "local_user",
+        reason: str | None = None,
+    ) -> None:
+        """Append server-generated state-transition evidence in the same transaction.
+
+        Local actor labels are self-reported and do not authenticate a reviewer
+        or establish biological verification.
+        """
+        self.session.add(
+            ReviewQueueItemEvent(
+                review_queue_id=item.review_queue_id,
+                review_queue_item_id=item.id,
+                project_id=item.project_id,
+                client_request_id=str(uuid4()),
+                event_type=f"triage_{action}",
+                actor=actor,
+                comment=reason,
+            )
+        )
+
+    def start_item(self, item_id: str, *, actor: str = "local_user") -> ReviewQueueItemResponse:
         item = self._item(item_id)
         if item.review_state != "pending":
             raise ConflictError("Only pending queue items can be started")
         item.review_state = "in_progress"
         item.started_at = _utc_now()
+        self._record_single_item_triage(item, action="start", actor=actor)
         self.session.commit()
         self.session.refresh(item)
         return ReviewQueueItemResponse.model_validate(item)
 
-    def complete_item(self, item_id: str) -> ReviewQueueItemResponse:
+    def complete_item(self, item_id: str, *, actor: str = "local_user") -> ReviewQueueItemResponse:
         item = self._item(item_id)
         if item.review_state not in {"pending", "in_progress"}:
             raise ConflictError("Only pending or in-progress queue items can be completed")
@@ -511,6 +785,7 @@ class ReviewQueueService:
         if item.started_at is None:
             item.started_at = _utc_now()
         item.completed_at = _utc_now()
+        self._record_single_item_triage(item, action="complete", actor=actor)
         self.session.commit()
         self.session.refresh(item)
         return ReviewQueueItemResponse.model_validate(item)
@@ -526,28 +801,39 @@ class ReviewQueueService:
         item.review_state = "skipped"
         item.skip_reason = request.reason
         item.completed_at = None
+        self._record_single_item_triage(
+            item, action="skip", actor=request.actor, reason=request.reason
+        )
         self.session.commit()
         self.session.refresh(item)
         return ReviewQueueItemResponse.model_validate(item)
 
-    def return_item(self, item_id: str) -> ReviewQueueItemResponse:
+    def return_item(self, item_id: str, *, actor: str = "local_user") -> ReviewQueueItemResponse:
         item = self._item(item_id)
         if item.review_state != "skipped":
             raise ConflictError("Only skipped queue items can be returned to the queue")
         item.review_state = "pending"
         item.returned_at = _utc_now()
+        self._record_single_item_triage(item, action="return", actor=actor)
         self.session.commit()
         self.session.refresh(item)
         return ReviewQueueItemResponse.model_validate(item)
 
     def regenerate(self, queue_id: str) -> ReviewQueueResponse:
         queue = self._queue(queue_id)
+        # Regeneration is a new manual snapshot, not an interrupted retry of
+        # the saved Workflow Builder node. Reusing its internal owner identity
+        # would create two queues for one run/node and poison future replays.
+        # The explicit regenerated_from_queue_id retains the original lineage.
+        creator = queue.created_by
+        if creator.strip().lower().startswith("workflow:"):
+            creator = "local_user"
         request = ReviewQueueCreateRequest(
             source_quality_control_run_id=queue.source_quality_control_run_id,
             signal_weights=ReviewScoreWeights.model_validate(
                 queue.configuration_json.get("weights", {})
             ),
-            created_by=queue.created_by,
+            created_by=creator,
             review_below_confidence=queue.configuration_json.get("review_below_confidence"),
         )
         if queue.dataset_version_id is not None:

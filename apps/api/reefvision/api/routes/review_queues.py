@@ -2,17 +2,27 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
+from reefvision.domain.errors import ConflictError
 from reefvision.schemas.review_queues import (
+    ReviewQueueBulkRequest,
+    ReviewQueueBulkResponse,
     ReviewQueueCreateRequest,
+    ReviewQueueItemActorRequest,
+    ReviewQueueItemCompleteRequest,
     ReviewQueueItemPageResponse,
     ReviewQueueItemResponse,
     ReviewQueueItemSkipRequest,
     ReviewQueueResponse,
+)
+from reefvision.services.review_queue_bulk import (
+    _is_sqlite_writer_contention,
+    bulk_triage_review_queue,
 )
 from reefvision.services.review_queues import ReviewQueueService
 
@@ -23,6 +33,16 @@ DbSession = Annotated[Session, Depends(get_db_session)]
 def service(request: Request, session: Session) -> ReviewQueueService:
     settings: Settings = request.app.state.settings
     return ReviewQueueService(session, settings)
+
+
+def _reject_reserved_workflow_creator(payload: ReviewQueueCreateRequest) -> None:
+    """Public queue creation cannot impersonate a saved Workflow Builder node."""
+    creator = payload.created_by
+    if creator is not None and creator.strip().lower().startswith("workflow:"):
+        raise HTTPException(
+            status_code=422,
+            detail="The workflow: creator namespace is reserved for saved workflow execution",
+        )
 
 
 @router.get("/projects/{project_id}/review-queues", response_model=list[ReviewQueueResponse])
@@ -45,6 +65,7 @@ def create_project_review_queue(
     request: Request,
     session: DbSession,
 ) -> ReviewQueueResponse:
+    _reject_reserved_workflow_creator(payload)
     return service(request, session).create_queue_for_project(project_id, payload)
 
 
@@ -72,6 +93,7 @@ def create_dataset_version_review_queue(
     request: Request,
     session: DbSession,
 ) -> ReviewQueueResponse:
+    _reject_reserved_workflow_creator(payload)
     return service(request, session).create_queue_for_dataset_version(version_id, payload)
 
 
@@ -109,13 +131,41 @@ def list_review_queue_items(
     )
 
 
+@router.post(
+    "/review-queues/{queue_id}/items/bulk",
+    response_model=ReviewQueueBulkResponse,
+)
+def bulk_review_queue_items(
+    queue_id: str,
+    payload: ReviewQueueBulkRequest,
+    session: DbSession,
+) -> ReviewQueueBulkResponse:
+    """Manual operator triage, never automatic scientific approval.
+
+    SQLite can reject a read *before* the bulk service reaches its commit
+    handler when another local process holds an exclusive database lock.
+    Convert only genuine BUSY/LOCKED errors to retryable HTTP conflicts;
+    preserve unrelated database failures for diagnosis.
+    """
+    try:
+        return bulk_triage_review_queue(session, queue_id, payload)
+    except OperationalError as exc:
+        session.rollback()
+        if session.get_bind().dialect.name != "sqlite" or not _is_sqlite_writer_contention(exc):
+            raise
+        raise ConflictError("SQLite review queue is busy; retry the same bulk request ID") from exc
+
+
 @router.post("/review-queue-items/{item_id}/start", response_model=ReviewQueueItemResponse)
 def start_review_queue_item(
     item_id: str,
     request: Request,
     session: DbSession,
+    payload: ReviewQueueItemActorRequest | None = None,
 ) -> ReviewQueueItemResponse:
-    return service(request, session).start_item(item_id)
+    return service(request, session).start_item(
+        item_id, actor=payload.actor if payload else "local_user"
+    )
 
 
 @router.post("/review-queue-items/{item_id}/complete", response_model=ReviewQueueItemResponse)
@@ -123,8 +173,13 @@ def complete_review_queue_item(
     item_id: str,
     request: Request,
     session: DbSession,
+    payload: ReviewQueueItemCompleteRequest | None = None,
 ) -> ReviewQueueItemResponse:
-    return service(request, session).complete_item(item_id)
+    # The existing bodyless command is a manual transition with local attribution.
+    # New requests that supply attribution must also explicitly confirm completion.
+    return service(request, session).complete_item(
+        item_id, actor=payload.actor if payload else "local_user"
+    )
 
 
 @router.post("/review-queue-items/{item_id}/skip", response_model=ReviewQueueItemResponse)
@@ -142,8 +197,11 @@ def return_review_queue_item(
     item_id: str,
     request: Request,
     session: DbSession,
+    payload: ReviewQueueItemActorRequest | None = None,
 ) -> ReviewQueueItemResponse:
-    return service(request, session).return_item(item_id)
+    return service(request, session).return_item(
+        item_id, actor=payload.actor if payload else "local_user"
+    )
 
 
 @router.post("/review-queues/{queue_id}/regenerate", response_model=ReviewQueueResponse)
