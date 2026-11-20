@@ -62,9 +62,12 @@ def _create_scientific(db: sqlite3.Connection, variant: str) -> None:
             "nocase_lookup": "(project_id COLLATE NOCASE, variable, observed_at)",
             "desc_lookup": "(project_id, variable, observed_at DESC)",
         }.get(variant, "(project_id, variable, observed_at)")
-        db.execute(
-            "CREATE INDEX ix_scientific_project_variable_time ON scientific_records " + columns
+        name = (
+            "ix_scientific_renamed_lookup"
+            if variant == "renamed_lookup"
+            else "ix_scientific_project_variable_time"
         )
+        db.execute(f"CREATE INDEX {name} ON scientific_records " + columns)
     columns = (
         "id, project_id, variable, source_kind, observed_at, payload_json, "
         "content_sha256, created_at"
@@ -131,7 +134,7 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
     if variant == "comment_decoy":
         check += " /* CHECK (event_type IN ('approve')) DEFERRABLE WITHOUT ROWID */"
     unique = ", UNIQUE (review_queue_item_id, client_request_id)"
-    if variant == "missing_unique":
+    if variant in {"missing_unique", "unique_as_index"}:
         unique = ""
     table_options = " WITHOUT ROWID" if variant == "without_rowid" else ""
     db.execute(
@@ -145,18 +148,32 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
         f"{actor}, {comment_column}, assignee VARCHAR(100), "
         f"created_at DATETIME NOT NULL{unique}{check}){table_options}"
     )
+    if variant == "unique_as_index":
+        # Identical keys but wrong SQLite origin ('c' instead of the
+        # declared table UNIQUE constraint's 'u').
+        db.execute(
+            "CREATE UNIQUE INDEX uq_manual_review_event_request "
+            "ON review_queue_item_events (review_queue_item_id, client_request_id)"
+        )
     if variant != "missing_index":
         columns = {
             "partial_lookup": "(review_queue_item_id, created_at) WHERE created_at IS NOT NULL",
             "nocase_lookup": "(review_queue_item_id COLLATE NOCASE, created_at)",
             "desc_lookup": "(review_queue_item_id, created_at DESC)",
         }.get(variant, "(review_queue_item_id, created_at)")
-        db.execute(
-            "CREATE INDEX ix_review_queue_item_events_item_created "
-            "ON review_queue_item_events " + columns
+        name = (
+            "ix_review_renamed_item_lookup"
+            if variant == "renamed_item_lookup"
+            else "ix_review_queue_item_events_item_created"
         )
+        db.execute(f"CREATE INDEX {name} ON review_queue_item_events " + columns)
+    queue_name = (
+        "ix_review_renamed_queue_lookup"
+        if variant == "renamed_queue_lookup"
+        else "ix_review_queue_item_events_queue_created"
+    )
     db.execute(
-        "CREATE INDEX ix_review_queue_item_events_queue_created "
+        f"CREATE INDEX {queue_name} "
         "ON review_queue_item_events (review_queue_id, created_at)"
     )
     db.execute(
@@ -192,6 +209,7 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
         ("scientific", "partial_lookup"),
         ("scientific", "nocase_lookup"),
         ("scientific", "desc_lookup"),
+        ("scientific", "renamed_lookup"),
         ("scientific", "missing_index"),
         ("scientific", "hidden_column"),
         ("scientific", "unexpected_trigger"),
@@ -220,6 +238,9 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
         ("qc", "ignore_conflict"),
         ("scientific", "unexpected_check"),
         ("qc", "desc_lookup"),
+        ("qc", "renamed_item_lookup"),
+        ("qc", "renamed_queue_lookup"),
+        ("qc", "unique_as_index"),
         ("qc", "nullable_actor"),
         ("qc", "missing_unique"),
         ("qc", "missing_index"),
@@ -308,7 +329,11 @@ def test_strict_structural_audit_rejects_forged_scientific_0038(
         ("scientific", "unexpected_default"),
         ("qc", "optional_notnull"),
         ("scientific", "partial_lookup"),
+        ("scientific", "renamed_lookup"),
         ("qc", "nocase_lookup"),
+        ("qc", "renamed_item_lookup"),
+        ("qc", "renamed_queue_lookup"),
+        ("qc", "unique_as_index"),
     ],
 )
 def test_strict_0038_semantic_drift_is_redacted_and_read_only(
