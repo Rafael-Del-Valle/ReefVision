@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T11:43:51Z`
+Updated: `2026-11-20T11:52:26Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -608,6 +608,7 @@ Evidence:
 - `physical_hardware`: RTX 3090 native WebView2 fixture on packaged 78a02c20c exercised training, registration, refinement, review and comparison on 12 common frames. Frame and temporal scored 24 coordinates apiece and both missed the one complete event. The report recorded exploratory lineage. — `docs/REEFVISION_1.4.0_REPORT.md#packaged-reefpose-comparison-on-the-rtx-3090` (`rv13-packaged-exploratory-rtx`)
 - `physical_hardware`: Two source CUDA studies used frozen, disjoint animal and recording declarations. The five-group study scored all 240 coordinates, seven complete reference events and 120 common frames. The two-group study retained the unsupported anatomical frames and unavailable event timing. — `docs/REEFVISION_1_3_HELDOUT_AGREEMENT.md#five-held-out-synthetic-recordings` (`rv13-declared-disjoint-cuda`)
 - `physical_hardware`: The 92e355b6a packaged RTX 3090 worker trained from scratch and scored 240 of 240 landmark positions and 120 of 120 shared anatomical frames on five separately generated held-out recording/animal groups. Mean errors were 5.575 and 4.006 px. Of seven complete reference events, frame missed seven with 15 extra. Temporal missed four with 18 extra. Independent animal labels and field acceptance remain open. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/92#issuecomment-7032104053` (`rv13-packaged-frozen-five`)
+- `physical_hardware`: Engineering evidence on five independent generated groups in the official 1.5 package. All 240 coordinates were scored. Mean frame-only and refined errors were 5.575 and 4.006 px. Against seven synthetic events, frame-only missed seven and added fifteen. The refined model missed four and added eighteen. Representative independent labels and thresholds remain open. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv13-representative-temporal-comparison-physical-3c8e2d070`)
 - `representative_data`: none recorded
 
 ### rv13-study-assignments: Reviewed study, treatment, site, tank, and sampling-unit assignments
@@ -648,6 +649,7 @@ Evidence:
 - `browser`: none recorded
 - `windows_installed`: none recorded
 - `physical_hardware`: On the official Windows 1b0f29cff package, two real training jobs on the RTX 3090 registered the same immutable checkpoint. Project Exchange recovered both training histories, their metrics, the original producing run and the identical checkpoint bytes. — `docs/REEFVISION_1.4.0_REPORT.md#official-windows-build-and-recovery-at-1b0f29cff` (`rv13-packaged-repeat-exchange`)
+- `physical_hardware`: The official 1.5 Windows sidecar trained and registered native frame and temporal checkpoints on a physical RTX 3090 using disjoint generated recording groups. The native Temporal panel then ran a 24-frame causal refinement with zero future-frame use. Physical receipt SHA-256 9539c37a38e7c3a486bfd3503c5d2c1647783869a0ce8ae74059ad61cbd4f637. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv13-temporal-dataset-training-physical-3c8e2d070`)
 - `representative_data`: none recorded
 
 ### rv13-temporal-refinement-review: Temporal ReefPose refinement and explicit frame review
