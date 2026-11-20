@@ -458,9 +458,7 @@ def test_inert_obj_metadata_keeps_standalone_and_workflow_measurements_identical
         OBJ + "# trailing malformed \ud800\n",
     ],
 )
-def test_unpaired_obj_unicode_surrogates_fail_closed(
-    client: TestClient, obj_text: str
-) -> None:
+def test_unpaired_obj_unicode_surrogates_fail_closed(client: TestClient, obj_text: str) -> None:
     """Escaped invalid UTF-16 cannot become immutable UTF-8 mesh source bytes."""
     with pytest.raises(ValueError, match="unpaired Unicode surrogate"):
         parse_obj_triangles(obj_text)
@@ -480,7 +478,7 @@ def test_obj_non_bmp_unicode_comment_remains_supported_in_saved_graph(
     client: TestClient,
 ) -> None:
     """Valid Unicode labels remain inert; source identity stays provisional."""
-    obj_text = "# deepwater coral \U0001F419\n" + OBJ
+    obj_text = "# deepwater coral \U0001f419\n" + OBJ
     assert parse_obj_triangles(obj_text) == parse_obj_triangles(OBJ)
     project_id = str(create_project(client, "OBJ non-BMP metadata")["id"])
     standalone = client.post(
