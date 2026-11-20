@@ -37,7 +37,10 @@ import { Gallery } from "./features/gallery/Gallery";
 import { ScientificHeatmapsPanel } from "./features/scientific-heatmaps/ScientificHeatmapsPanel";
 import { InteroperabilityWorkspace } from "./features/interoperability/InteroperabilityWorkspace";
 import { ModelManager } from "./features/models/ModelManager";
-import { OnboardingModal } from "./features/onboarding/OnboardingModal";
+import {
+  OnboardingModal,
+  type OnboardingWorkspace,
+} from "./features/onboarding/OnboardingModal";
 import { QualityControlDashboard } from "./features/quality-control/QualityControlDashboard";
 import { ReproducibilityWorkspace } from "./features/reproducibility/ReproducibilityWorkspace";
 import type { WorkflowGraphRecord } from "./features/workflow-graphs/workflowGraphApi";
@@ -55,6 +58,7 @@ import { WorkflowGraphWorkspace } from "./features/workflow-graphs/WorkflowGraph
 import { WorkflowSchedulesWorkspace } from "./features/workflow-schedules/WorkflowSchedulesWorkspace";
 import { AcquisitionSourcesWorkspace } from "./features/acquisition-sources/AcquisitionSourcesWorkspace";
 import { MonitoringWorkspace } from "./features/monitoring/MonitoringWorkspace";
+import { ProjectAssetsWorkspace } from "./features/project-assets/ProjectAssetsWorkspace";
 import {
   EmptyState,
   ErrorState,
@@ -100,6 +104,7 @@ interface AnnotationLaunchState {
 type ProjectView =
   | "gallery"
   | "field_capture"
+  | "project_assets"
   | "acquisition_sources"
   | "versions"
   | "interoperability"
@@ -107,6 +112,7 @@ type ProjectView =
   | "computed_metrics"
   | "scientific_heatmaps"
   | "ecology"
+  | "research_ecology"
   | "study_design"
   | "monitoring"
   | "reproducibility"
@@ -125,7 +131,7 @@ type ProjectView =
   | "workflow_schedules"
   | "system";
 
-const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.7.0";
+const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.8.0";
 
 type ProjectTab = Exclude<ProjectView, "system">;
 
@@ -152,6 +158,12 @@ const PROJECT_NAV_GROUPS: Array<{
         label: "Field capture",
         description:
           "Collect local originals and reconcile portable field batches.",
+      },
+      {
+        id: "project_assets",
+        label: "Project assets",
+        description:
+          "Import and review audio recordings and multispectral acquisitions.",
       },
       {
         id: "versions",
@@ -259,6 +271,12 @@ const PROJECT_NAV_GROUPS: Array<{
         description:
           "Verify and exchange frozen study, review and model evidence.",
       },
+      {
+        id: "research_ecology",
+        label: "Organisms & ecology",
+        description:
+          "Review taxa and assess detection from repeated survey visits.",
+      },
     ],
   },
   {
@@ -359,7 +377,10 @@ function ReefVisionMainApp() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [focusLauncherAfterWelcome, setFocusLauncherAfterWelcome] =
     useState(false);
+  const [focusWorkspaceAfterWelcome, setFocusWorkspaceAfterWelcome] =
+    useState<OnboardingWorkspace | null>(null);
   const mainContentRef = useRef<HTMLElement>(null);
+  const systemSurfaceRef = useRef<HTMLElement>(null);
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
   const keyboardShortcutsButtonRef = useRef<HTMLButtonElement | null>(null);
   const [workspacePresetId, setWorkspacePresetId] =
@@ -391,8 +412,9 @@ function ReefVisionMainApp() {
   }, [activeView, qcCoordinationOpen]);
   const navigateToView = useCallback(
     (view: ProjectView) => {
-      if (view !== activeView && preventQcNavigation()) return;
+      if (view !== activeView && preventQcNavigation()) return false;
       setActiveView(view);
+      return true;
     },
     [activeView, preventQcNavigation],
   );
@@ -489,6 +511,21 @@ function ReefVisionMainApp() {
     showCreate,
     showOnboarding,
   ]);
+
+  useEffect(() => {
+    if (!focusWorkspaceAfterWelcome || showOnboarding) return;
+    setFocusWorkspaceAfterWelcome(null);
+    if (activeView !== focusWorkspaceAfterWelcome) return;
+    if (activeView === "system") {
+      systemSurfaceRef.current?.focus();
+    } else {
+      const main = mainContentRef.current;
+      const control = main?.querySelector<HTMLElement>(
+        ".rv-project-nav-items [aria-selected='true'], button[aria-label='Show project navigation']",
+      );
+      (control ?? main)?.focus();
+    }
+  }, [activeView, focusWorkspaceAfterWelcome, showOnboarding]);
 
   useEffect(() => {
     setInferenceSelectedImageIds([]);
@@ -623,6 +660,25 @@ function ReefVisionMainApp() {
   function dismissOnboardingPermanently() {
     window.localStorage.setItem(ONBOARDING_DISMISS_KEY, "true");
     setShowOnboarding(false);
+  }
+
+  function openSystemStatus() {
+    if (preventQcNavigation()) return false;
+    setSelectedProjectId(null);
+    setEditorLaunch(null);
+    setActiveView("system");
+    return true;
+  }
+
+  function openOnboardingWorkspace(workspace: OnboardingWorkspace) {
+    if (workspace === "system") {
+      if (!openSystemStatus()) return false;
+    } else {
+      if (!navigateToView(workspace)) return false;
+      setEditorLaunch(null);
+    }
+    setFocusWorkspaceAfterWelcome(workspace);
+    return true;
   }
 
   function handleTabKeys<T extends string>(
@@ -876,12 +932,7 @@ function ReefVisionMainApp() {
           <button
             type="button"
             className="secondary"
-            onClick={() => {
-              if (preventQcNavigation()) return;
-              setSelectedProjectId(null);
-              setEditorLaunch(null);
-              setActiveView("system");
-            }}
+            onClick={openSystemStatus}
           >
             System status
           </button>
@@ -943,19 +994,20 @@ function ReefVisionMainApp() {
             onImportPackage={() => {
               setShowImport(true);
             }}
-            onOpenSystem={() => {
-              setSelectedProjectId(null);
-              setEditorLaunch(null);
-              setActiveView("system");
-            }}
+            onOpenSystem={openSystemStatus}
             onOpenOnboarding={() => setShowOnboarding(true)}
           />
         )}
 
         {activeView === "system" && (
-          <div className="rv-system-surface">
+          <section
+            className="rv-system-surface"
+            aria-label="System status workspace"
+            ref={systemSurfaceRef}
+            tabIndex={-1}
+          >
             <SystemPanel onOpenOnboarding={() => setShowOnboarding(true)} />
-          </div>
+          </section>
         )}
 
         {selectedProjectId &&
@@ -1003,12 +1055,7 @@ function ReefVisionMainApp() {
               setEditorLaunch(null);
               setActiveView("gallery");
             }}
-            onSystem={() => {
-              if (preventQcNavigation()) return;
-              setSelectedProjectId(null);
-              setEditorLaunch(null);
-              setActiveView("system");
-            }}
+            onSystem={openSystemStatus}
             onArchive={async () => {
               if (preventQcNavigation()) return;
               if (
@@ -1162,6 +1209,13 @@ function ReefVisionMainApp() {
                 onOpenWorkflow={() => setActiveView("workflows")}
               />
             )}
+            {activeView === "project_assets" && (
+              <ProjectAssetsWorkspace
+                key={selectedProject.id}
+                projectId={selectedProject.id}
+                onOpenWorkflow={() => setActiveView("workflows")}
+              />
+            )}
             {activeView === "interoperability" && (
               <InteroperabilityWorkspace project={selectedProject} />
             )}
@@ -1180,11 +1234,14 @@ function ReefVisionMainApp() {
                 project={selectedProject}
               />
             )}
-            {activeView === "ecology" && (
+            {(activeView === "ecology" ||
+              activeView === "research_ecology") && (
               <EcologyWorkspace
                 key={selectedProject.id}
                 projectId={selectedProject.id}
                 classes={selectedProject.label_classes}
+                onOpenWorkflow={() => setActiveView("workflows")}
+                onOpenReviewerLab={() => setActiveView("reviewer_lab")}
                 initialPoseOrganism={
                   poseOrganismOrigin?.projectId === selectedProject.id
                     ? poseOrganismOrigin.organismKey
@@ -1508,7 +1565,7 @@ function ReefVisionMainApp() {
       {showOnboarding && (
         <OnboardingModal
           version={health.data?.version ?? applicationVersion}
-          hasProject={Boolean(selectedProjectId)}
+          hasProject={Boolean(selectedProject)}
           onStartProject={(action) => {
             if (preventQcNavigation()) return;
             setSelectedProjectId(null);
@@ -1520,6 +1577,7 @@ function ReefVisionMainApp() {
               setFocusLauncherAfterWelcome(true);
             }
           }}
+          onOpenWorkspace={openOnboardingWorkspace}
           onClose={() => setShowOnboarding(false)}
           onDismissPermanently={dismissOnboardingPermanently}
         />

@@ -259,11 +259,29 @@ test("coordinates frozen QC review and reopens two saved workflow runs", async (
     hasText:
       "Resolve any uncertain audit request and close reviewer coordination",
   });
+  const pendingComment = coordination.getByLabel("Review comment");
+  const draft = "Unsaved note keeps its original queue item";
+  await pendingComment.fill(draft);
+  const help = page.getByRole("button", { name: "Help", exact: true });
+  const guide = page.getByRole("dialog", { name: /Welcome to ReefVision/ });
+  await expect(blocked).toBeHidden();
+  for (const name of ["Open Workflow Builder", "Open System status"]) {
+    await help.focus();
+    await page.keyboard.press("Enter");
+    const destination = guide.getByRole("button", { name, exact: true });
+    await expect(destination).toBeVisible();
+    await destination.press("Enter");
+    await expect(guide).toBeHidden();
+    await expect(help).toBeFocused();
+    await expect(blocked).toBeVisible();
+    await expect(pendingComment).toHaveValue(draft);
+  }
   await page
     .getByRole("tab", { name: "Video & automation", exact: true })
     .click();
   await expect(blocked).toBeVisible();
   await expect(recordedNote).toBeVisible();
+  await pendingComment.clear();
   await coordination
     .getByRole("button", { name: "Close coordination" })
     .click();

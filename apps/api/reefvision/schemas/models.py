@@ -7,6 +7,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator, model_validator
 
+from reefvision.schemas.image_adjustments_v18 import ImageAdjustmentPin
+
 
 def _strip(value: str | None) -> str | None:
     if value is None:
@@ -71,6 +73,7 @@ class InferenceJobCreateRequest(BaseModel):
     model_id: str = Field(min_length=1, max_length=36)
     runtime_selection_id: str | None = Field(default=None, min_length=36, max_length=36)
     image_ids: list[str] = Field(min_length=1)
+    image_adjustment: ImageAdjustmentPin | None = None
     confidence_threshold: FiniteFloat | None = Field(default=None, ge=0, le=1)
     iou_threshold: FiniteFloat | None = Field(default=None, ge=0, le=1)
     device: str = Field(default="auto", min_length=1, max_length=20)

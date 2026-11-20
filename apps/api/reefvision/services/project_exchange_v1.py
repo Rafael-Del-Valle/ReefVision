@@ -98,6 +98,9 @@ from reefvision.services.project_exchange_paired_models_v15 import paired_compar
 from reefvision.services.project_exchange_qc_v16 import FORMAT as QC_FORMAT
 from reefvision.services.project_exchange_qc_v16 import SECTIONS as QC_SECTIONS
 from reefvision.services.project_exchange_qc_v16 import has_qc_history, is_qc_graph
+from reefvision.services.project_exchange_research_v18 import FORMAT as MULTIMODAL_FORMAT
+from reefvision.services.project_exchange_research_v18 import SECTIONS as MULTIMODAL_SECTIONS
+from reefvision.services.project_exchange_research_v18 import has_research_records
 from reefvision.services.project_exchange_schedules import FORMAT as SCHEDULE_FORMAT
 from reefvision.services.project_exchange_schedules import SECTIONS as SCHEDULE_SECTIONS
 from reefvision.services.project_exchange_schedules import has_schedules
@@ -172,6 +175,8 @@ class ProjectExchangeV1Service(ProjectExchangeService):
     """Project exchange service with executable-workflow provenance included."""
 
     def _format_version(self, project_id: str) -> str:
+        if has_research_records(self.session, project_id):
+            return MULTIMODAL_FORMAT
         if has_monitoring_records(self.session, project_id):
             return MONITORING_FORMAT
         if has_schedules(self.session, project_id):
@@ -592,6 +597,9 @@ class ProjectExchangeV1Service(ProjectExchangeService):
         )
 
         integrated = integrated_records(self.session, project.id)
+        if not any(integrated.get(name) for name in MULTIMODAL_SECTIONS):
+            for name in MULTIMODAL_SECTIONS:
+                integrated.pop(name, None)
         with_monitoring = any(integrated.get(name) for name in MONITORING_SECTIONS)
         if not with_monitoring:
             for name in MONITORING_SECTIONS:

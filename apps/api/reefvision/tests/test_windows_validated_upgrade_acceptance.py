@@ -17,19 +17,44 @@ SPEC.loader.exec_module(PREFLIGHT)
 WORKFLOW = (ROOT / ".github/workflows/build-desktop.yml").read_text(encoding="utf-8")
 JOB = "windows-validated-14-upgrade-acceptance"
 VALIDATED_15_JOB = "windows-validated-15-upgrade-acceptance"
-DIRECT_PREDECESSOR_JOB = "windows-validated-16-upgrade-acceptance"
-VERSION = "1.7.0"
+VALIDATED_16_JOB = "windows-validated-16-upgrade-acceptance"
+DIRECT_PREDECESSOR_JOB = "windows-validated-17-upgrade-acceptance"
+VERSION = "1.8.0"
+
+
+@pytest.mark.parametrize(
+    "pin",
+    [
+        'REEFVISION_1_7_RUN: "44827326113"',
+        'REEFVISION_1_7_BUILD_JOB: "136603186182"',
+        "3e37524e28c4b7dde8ffbe203120d3b8e7fe2ee9",
+        "f751aa96ebdece355f7b25cdfaf6c0e8641c354c481efec434bb1b8235533bf3",
+        "90faf157f5dc8489d64f31f92c9b105471e24621bc732d96b91132763ef290cc",
+        "$binaryJob.conclusion -ne 'success'",
+        "$binaryJob.head_sha -cne $env:REEFVISION_1_7_SOURCE",
+        "[string]$binaryJob.run_id -cne $env:REEFVISION_1_7_RUN",
+        "-ExpectedInitialSchemaRevision 'b17_monitor_0003'",
+    ],
+)
+def test_direct_17_upgrade_authenticates_manufacturing_job_and_payload(pin: str) -> None:
+    job = PREFLIGHT._job(WORKFLOW, DIRECT_PREDECESSOR_JOB)
+    assert pin in job
+    assert PREFLIGHT.check_workflow(WORKFLOW, VERSION) == []
+    changed = WORKFLOW.replace(job, job.replace(pin, "altered-1.7-pin"))
+    assert any(
+        DIRECT_PREDECESSOR_JOB in error for error in PREFLIGHT.check_workflow(changed, VERSION)
+    )
 
 
 def test_direct_validated_16_upgrade_is_pinned_and_exercises_rollback() -> None:
-    job = PREFLIGHT._job(WORKFLOW, DIRECT_PREDECESSOR_JOB)
+    job = PREFLIGHT._job(WORKFLOW, VALIDATED_16_JOB)
     assert job, "Windows must directly upgrade the original validated 1.6 MSI"
     assert 'REEFVISION_1_6_RUN: "44798678615"' in job
     assert "3a9ce1622e4f9e230e2ee14432ee7d2f32510870" in job
     assert "d4e53ebfebdf8201526fa7f58acd31392eceba6cdee12b5145e55313452ffb3c" in job
     assert "3b596ee3ba5e9188776cd3208245c277a72013877677c9a16e359ee6da04c3be" in job
     assert "-ExpectedInitialSchemaRevision 'b16_integrated_0001'" in job
-    assert "-ExpectedSchemaRevision 'b17_monitor_0003'" in job
+    assert "-ExpectedSchemaRevision 'b18_spectral_0002'" in job
     assert "-VerifyPreviousInstallerRejectsUpgradedProfile" in job
     assert PREFLIGHT.check_workflow(WORKFLOW, VERSION) == []
     assert PREFLIGHT.check_cab_artifact_partition(WORKFLOW, VERSION) == []
@@ -58,7 +83,7 @@ def test_direct_validated_14_upgrade_is_separate_from_existing_roles() -> None:
             "draft-1.4-0039",
         )
     )
-    assert "name: Installed 1.7 lineage" in lineage
+    assert "name: Installed 1.8 lineage" in lineage
     assert PREFLIGHT._job(WORKFLOW, "windows-qc-history-acceptance")
     assert "*.reefvision.zip" not in upgrade and "*.pt" not in upgrade
 
@@ -74,7 +99,7 @@ def test_direct_validated_14_upgrade_is_separate_from_existing_roles() -> None:
             "-ExpectedInitialSchemaRevision '0039'",
         ),
         (
-            "-ExpectedSchemaRevision 'b17_monitor_0003'",
+            "-ExpectedSchemaRevision 'b18_spectral_0002'",
             "-ExpectedSchemaRevision 'b16_integrated_0001'",
         ),
         ("foreach ($part in 1..2)", "foreach ($part in 1..1)"),
@@ -117,7 +142,7 @@ def test_direct_validated_15_upgrade_rejects_a_different_baseline(
     assert any(VALIDATED_15_JOB in error for error in PREFLIGHT.check_workflow(changed, VERSION))
 
 
-@pytest.mark.parametrize("job_name", [VALIDATED_15_JOB, DIRECT_PREDECESSOR_JOB])
+@pytest.mark.parametrize("job_name", [VALIDATED_15_JOB, VALIDATED_16_JOB, DIRECT_PREDECESSOR_JOB])
 def test_validated_upgrade_requires_independent_rollback(job_name: str) -> None:
     upgrade = PREFLIGHT._job(WORKFLOW, job_name)
     flag = "-VerifyPreviousInstallerRejectsUpgradedProfile "
@@ -139,7 +164,7 @@ def test_validated_upgrade_requires_independent_rollback(job_name: str) -> None:
             "-ExpectedInitialSchemaRevision '0039'",
         ),
         (
-            "-ExpectedSchemaRevision 'b17_monitor_0003'",
+            "-ExpectedSchemaRevision 'b18_spectral_0002'",
             "-ExpectedSchemaRevision 'b16_integrated_0001'",
         ),
     ],
@@ -147,12 +172,10 @@ def test_validated_upgrade_requires_independent_rollback(job_name: str) -> None:
 def test_direct_validated_16_upgrade_preflight_rejects_drift(
     original: str, replacement: str
 ) -> None:
-    upgrade = PREFLIGHT._job(WORKFLOW, DIRECT_PREDECESSOR_JOB)
+    upgrade = PREFLIGHT._job(WORKFLOW, VALIDATED_16_JOB)
     assert original in upgrade
     changed = WORKFLOW.replace(upgrade, upgrade.replace(original, replacement))
-    assert any(
-        DIRECT_PREDECESSOR_JOB in error for error in PREFLIGHT.check_workflow(changed, VERSION)
-    )
+    assert any(VALIDATED_16_JOB in error for error in PREFLIGHT.check_workflow(changed, VERSION))
 
 
 def test_clean_install_requires_the_first_use_journey() -> None:

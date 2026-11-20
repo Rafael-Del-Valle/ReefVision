@@ -11,6 +11,7 @@ from reefvision.services.workflow_acquisition_source import (
     acquisition_replay_node,
     acquisition_source_node,
 )
+from reefvision.services.workflow_bioacoustics import audio_report_node
 from reefvision.services.workflow_coral_growth import coral_growth_node
 from reefvision.services.workflow_coral_skeleton import coral_skeleton_node
 from reefvision.services.workflow_depth_3d import register_video_depth_3d_adapter
@@ -22,6 +23,7 @@ from reefvision.services.workflow_metric_depth_3d import (
 )
 from reefvision.services.workflow_monitoring import monitoring_assessment_node
 from reefvision.services.workflow_monitoring_summary import monitoring_summary_node
+from reefvision.services.workflow_multispectral import multispectral_node
 from reefvision.services.workflow_node_registry import (
     workflow_node_registry as base_workflow_node_registry,
 )
@@ -43,6 +45,7 @@ from reefvision.services.workflow_results_packages import (
 from reefvision.services.workflow_schedule_receipt import schedule_receipt_node
 from reefvision.services.workflow_scientific_comparison import register_scientific_comparison_nodes
 from reefvision.services.workflow_study_design import reviewed_study_design_node
+from reefvision.services.workflow_taxonomy import detectability_node
 from reefvision.services.workflow_temporal_reefpose import register_temporal_reefpose_nodes
 
 register_video_depth_3d_adapter()
@@ -952,7 +955,10 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
     registry["acquisition_capture_replay"] = acquisition_replay_node()
     registry["monitoring_assessment"] = monitoring_assessment_node()
     registry["monitoring_project_summary"] = monitoring_summary_node()
+    registry["multispectral_index"] = multispectral_node()
+    registry["detectability_assessment"] = detectability_node()
     registry["workflow_schedule_receipt"] = schedule_receipt_node()
+    registry["bioacoustic_report"] = audio_report_node()
     registry["ecology_event_summary"] = event_summary_workflow_node()
     registry["research_publication_figure"] = research_report_node()
     registry["image_acquisition_quality"] = acquisition_quality_node()

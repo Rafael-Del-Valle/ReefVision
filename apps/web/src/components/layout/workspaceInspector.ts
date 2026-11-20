@@ -3,6 +3,7 @@ import type { WorkspacePresetId } from "./workspacePresets";
 export type WorkspaceInspectorView =
   | "gallery"
   | "field_capture"
+  | "project_assets"
   | "acquisition_sources"
   | "versions"
   | "interoperability"
@@ -10,6 +11,7 @@ export type WorkspaceInspectorView =
   | "computed_metrics"
   | "scientific_heatmaps"
   | "ecology"
+  | "research_ecology"
   | "study_design"
   | "monitoring"
   | "reproducibility"
@@ -52,6 +54,7 @@ export interface WorkspacePresetInspectorGuidance {
 export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "gallery",
   "field_capture",
+  "project_assets",
   "acquisition_sources",
   "versions",
   "interoperability",
@@ -59,6 +62,7 @@ export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "computed_metrics",
   "scientific_heatmaps",
   "ecology",
+  "research_ecology",
   "study_design",
   "monitoring",
   "reproducibility",
@@ -165,6 +169,20 @@ const WORKSPACE_INSPECTORS: Record<
       },
     ],
   },
+  project_assets: {
+    title: "Project assets",
+    summary: "Review source recordings, sampling clocks and spectral bands.",
+    boundary: "review",
+    recordPolicy:
+      "Reports preserve the original sample clock, calibration and source checksums.",
+    actions: [
+      {
+        label: "Workflow builder",
+        target: "workflows",
+        description: "Run a saved asset analysis.",
+      },
+    ],
+  },
   field_capture: {
     title: "Field evidence",
     summary:
@@ -182,6 +200,27 @@ const WORKSPACE_INSPECTORS: Record<
         label: "Workflow builder",
         target: "workflows",
         description: "Run a saved, sealed field batch reconciliation.",
+      },
+    ],
+  },
+  research_ecology: {
+    title: "Organisms & ecology",
+    summary:
+      "Review taxon proposals and inspect independent-unit survey evidence.",
+    boundary: "review",
+    recordPolicy:
+      "Saved assessments retain source checksums, effort and local review history.",
+    actions: [
+      {
+        label: "Reviewer lab",
+        target: "reviewer_lab",
+        description:
+          "Manage the local roles used for taxonomy and known-presence decisions.",
+      },
+      {
+        label: "Workflow Builder",
+        target: "workflows",
+        description: "Reopen a saved detectability analysis.",
       },
     ],
   },

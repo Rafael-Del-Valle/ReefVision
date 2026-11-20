@@ -26,7 +26,7 @@ test("freezes reviewed tracks, trains, refines, reviews, measures, and evaluates
   const recording = fixture.sources[2];
   const name = `Temporal engineering ${randomUUID().slice(0, 8)}`;
   await page.addInitScript(() =>
-    localStorage.setItem("reefvision.onboarding.dismissed.1.7.0", "true"),
+    localStorage.setItem("reefvision.onboarding.dismissed.1.8.0", "true"),
   );
   await page.goto(web!);
   await page

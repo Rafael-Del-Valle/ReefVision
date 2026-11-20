@@ -15,6 +15,7 @@ from reefvision.api.routes.annotations import router as annotations_router
 from reefvision.api.routes.assist import router as assist_router
 from reefvision.api.routes.backups import router as backups_router
 from reefvision.api.routes.behavior_dynamics import router as behavior_dynamics_router
+from reefvision.api.routes.bioacoustics import router as bioacoustics_router
 from reefvision.api.routes.capabilities import router as capabilities_router
 from reefvision.api.routes.class_operations import router as class_operations_router
 from reefvision.api.routes.class_visibility import router as class_visibility_router
@@ -43,6 +44,7 @@ from reefvision.api.routes.georeferenced_observations import (
     router as georeferenced_observations_router,
 )
 from reefvision.api.routes.health import router as health_router
+from reefvision.api.routes.image_adjustments_v18 import router as image_adjustments_router
 from reefvision.api.routes.images import router as images_router
 from reefvision.api.routes.jobs import router as jobs_router
 from reefvision.api.routes.learning_evaluation import router as learning_evaluation_router
@@ -56,6 +58,7 @@ from reefvision.api.routes.model_runtime import router as model_runtime_router
 from reefvision.api.routes.models import router as models_router
 from reefvision.api.routes.monitoring import router as monitoring_router
 from reefvision.api.routes.monitoring_summaries import router as monitoring_summaries_router
+from reefvision.api.routes.multispectral import router as multispectral_router
 from reefvision.api.routes.paired_models_v15 import router as paired_models_router
 from reefvision.api.routes.pose_active_learning import router as pose_active_learning_router
 from reefvision.api.routes.pose_biological_measurement import (
@@ -100,6 +103,7 @@ from reefvision.api.routes.spatial_source_assets_v14 import (
 from reefvision.api.routes.static_comparison import router as static_comparison_router
 from reefvision.api.routes.study_design import router as study_design_router
 from reefvision.api.routes.system import router as system_router
+from reefvision.api.routes.taxonomy import router as taxonomy_router
 from reefvision.api.routes.temporal_reefpose import router as temporal_reefpose_router
 from reefvision.api.routes.training import router as training_router
 from reefvision.api.routes.video_science import router as video_science_router
@@ -115,6 +119,7 @@ install_workflow_v1_extensions()
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(acquisition_sources_router)
+api_router.include_router(taxonomy_router)
 api_router.include_router(monitoring_router)
 api_router.include_router(monitoring_summaries_router)
 api_router.include_router(environmental_analysis_router)
@@ -141,12 +146,15 @@ api_router.include_router(videos_router)
 api_router.include_router(georeferenced_observations_router)
 api_router.include_router(video_science_router)
 api_router.include_router(behavior_dynamics_router)
+api_router.include_router(bioacoustics_router)
 api_router.include_router(backups_router)
 api_router.include_router(projects_router)
 api_router.include_router(project_exchange_router)
 api_router.include_router(class_operations_router)
 api_router.include_router(class_visibility_router)
 api_router.include_router(images_router)
+api_router.include_router(image_adjustments_router)
+api_router.include_router(multispectral_router)
 api_router.include_router(annotation_imports_router)
 api_router.include_router(annotations_router)
 api_router.include_router(annotation_aggregates_router)

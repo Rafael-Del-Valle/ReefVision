@@ -34,6 +34,7 @@ from reefvision.schemas.models import (
     PoseLandmarkSchemaUpdateRequest,
     RegisterModelFromRunRequest,
 )
+from reefvision.services.image_adjustments_v18 import adjusted_inference_binding
 from reefvision.services.model_runtime import ModelRuntimeService, pinned_job_settings
 from reefvision.services.pose_schemas import definition_for_revision
 from reefvision.services.segmentation_models import SegmentationModelService
@@ -696,6 +697,18 @@ class SemanticModelService(SegmentationModelService):
             raise ValidationError("One or more requested images do not exist")
         if any(image.project_id != project_id for image in images):
             raise ValidationError("Inference images must belong to the same project as the model")
+        adjusted = (
+            adjusted_inference_binding(
+                self.session,
+                self.settings,
+                project_id,
+                payload.image_ids,
+                payload.image_adjustment,
+                model,
+            )
+            if payload.image_adjustment is not None
+            else {}
+        )
         job = Job(
             project_id=project_id,
             job_type="inference",
@@ -717,6 +730,7 @@ class SemanticModelService(SegmentationModelService):
                     else self.settings.inference_default_iou
                 ),
                 **pinned,
+                **adjusted,
             },
         )
         self.session.add(job)

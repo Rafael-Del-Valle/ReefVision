@@ -14,6 +14,13 @@ from reefvision.db.models.behavior_classifier import (
     BehaviorClassifierModel,
     BehaviorPrediction,
 )
+from reefvision.db.models.bioacoustics import (
+    BioacousticAsset,
+    BioacousticClockAnchor,
+    BioacousticProposal,
+    BioacousticReport,
+    BioacousticReview,
+)
 from reefvision.db.models.class_operation import ClassOperation
 from reefvision.db.models.class_visibility_preference import ClassVisibilityPreference
 from reefvision.db.models.classification_dataset import ClassificationDataset
@@ -50,6 +57,7 @@ from reefvision.db.models.field_capture import (
 )
 from reefvision.db.models.geo_referenced_observation import GeoReferencedObservation
 from reefvision.db.models.image import ImageAsset
+from reefvision.db.models.image_adjustment import ImageAdjustmentRecipe
 from reefvision.db.models.image_label import ImageLabel
 from reefvision.db.models.job import Job
 from reefvision.db.models.label_class import LabelClass
@@ -63,6 +71,11 @@ from reefvision.db.models.monitoring import (
     MonitoringAssessment,
     MonitoringProjectSummary,
     MonitoringRule,
+)
+from reefvision.db.models.multispectral import (
+    SpectralAcquisition,
+    SpectralBandBinding,
+    SpectralIndex,
 )
 from reefvision.db.models.pose_active_learning import (
     PoseActiveLearningCandidate,
@@ -138,6 +151,13 @@ from reefvision.db.models.spatial_condition_v14 import (
 )
 from reefvision.db.models.spatial_source_asset_v14 import SpatialSourceAsset
 from reefvision.db.models.study_design import StudyDesignRevision
+from reefvision.db.models.taxonomy import (
+    DetectabilityAssessment,
+    DetectabilityPresenceReview,
+    DetectabilityVisit,
+    TaxonProposal,
+    TaxonReview,
+)
 from reefvision.db.models.temporal_reefpose import (
     TemporalReefPoseDataset,
     TemporalReefPoseFrame,
@@ -167,6 +187,11 @@ __all__ = [
     "BehaviorEthogramRevision",
     "BehaviorPrediction",
     "BehaviorStateDefinition",
+    "BioacousticAsset",
+    "BioacousticClockAnchor",
+    "BioacousticProposal",
+    "BioacousticReport",
+    "BioacousticReview",
     "ClassOperation",
     "ClassVisibilityPreference",
     "ClassificationDataset",
@@ -178,6 +203,9 @@ __all__ = [
     "CoralGrowthRecord",
     "DatasetVersion",
     "DatasetVersionItem",
+    "DetectabilityAssessment",
+    "DetectabilityPresenceReview",
+    "DetectabilityVisit",
     "EcologyAnalysisRecord",
     "EcologyIdentityAnnotationEvidence",
     "EcologyIdentityCalibrationEvidence",
@@ -195,6 +223,7 @@ __all__ = [
     "FieldCaptureReconciliationRecord",
     "FieldCaptureReview",
     "GeoReferencedObservation",
+    "ImageAdjustmentRecipe",
     "ImageAsset",
     "ImageLabel",
     "Job",
@@ -259,7 +288,12 @@ __all__ = [
     "SpatialConditionRevision",
     "SpatialConditionRubric",
     "SpatialSourceAsset",
+    "SpectralAcquisition",
+    "SpectralBandBinding",
+    "SpectralIndex",
     "StudyDesignRevision",
+    "TaxonProposal",
+    "TaxonReview",
     "TemporalReefPoseDataset",
     "TemporalReefPoseFrame",
     "TemporalReefPoseRun",

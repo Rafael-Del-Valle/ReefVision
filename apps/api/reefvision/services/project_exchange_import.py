@@ -128,6 +128,10 @@ from reefvision.services.project_exchange_qc_v16 import (
     validate_qc_exchange,
 )
 from reefvision.services.project_exchange_reports import remap_report_archive_job
+from reefvision.services.project_exchange_research_v18 import (
+    preserve_research_snapshot,
+    validate_research_format,
+)
 from reefvision.services.project_exchange_reviewer_lab_v15 import (
     restore_reviewer_lab_exchange,
     reviewer_lab_exchange_ids,
@@ -481,6 +485,9 @@ def import_project_exchange(
         integrated = integrated_models() if inspection.format_version in INTEGRATED_FORMATS else {}
         models = {**SECTION_MODELS, **integrated}
         order = [*SECTION_ORDER, *integrated]
+        validate_research_format(
+            inspection.format_version or "", old_project_id, section_rows, manifest.get("origin")
+        )
         validate_exchange_records(old_project_id, section_rows, models)
         validate_v15_exchange(
             inspection.format_version or "", old_project_id, section_rows, manifest.get("origin")
@@ -715,6 +722,7 @@ def import_project_exchange(
                     restore_alert_row(section_name, row, values, id_map, digests)
                     restore_device_row(section_name, row, values, id_map, digests)
                     preserve_comparison_snapshot(section_name, row, values)
+                    preserve_research_snapshot(section_name, row, values, id_map)
                     if inspection.format_version in QC_FORMATS:
                         restore_qc_row(section_name, row, values, id_map, qc_requests)
                     if integrated and section_name == "video_tracks":

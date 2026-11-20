@@ -28,7 +28,7 @@ import { test } from "./spatialDesktop";
 const protocol = "example-minute-temperature-v1";
 const windowStart = "2026-11-19T13:00:00Z";
 const windowEnd = "2026-11-19T13:05:00Z";
-const version = "1.7.0";
+const version = process.env.REEFVISION_MONITORING_EXPECTED_VERSION ?? "1.8.0";
 
 async function checked<T>(response: APIResponse | Response, status: number) {
   expect(response.status(), await response.text()).toBe(status);

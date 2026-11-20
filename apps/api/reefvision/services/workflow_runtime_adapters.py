@@ -33,6 +33,7 @@ from reefvision.services.workflow_acquisition_source import (
     execute_acquisition_replay,
     execute_acquisition_source,
 )
+from reefvision.services.workflow_bioacoustics import execute_audio_report
 from reefvision.services.workflow_coral_growth import execute_coral_growth
 from reefvision.services.workflow_coral_skeleton import execute_coral_skeleton
 from reefvision.services.workflow_depth import create_depth_map_artifacts
@@ -41,6 +42,7 @@ from reefvision.services.workflow_ecology_event_summary import execute_event_sum
 from reefvision.services.workflow_field_capture import execute_field_capture_reconcile
 from reefvision.services.workflow_monitoring import execute_monitoring_assessment
 from reefvision.services.workflow_monitoring_summary import execute_monitoring_summary
+from reefvision.services.workflow_multispectral import execute_multispectral
 from reefvision.services.workflow_paired_growth_contrast import execute_paired_growth_contrast
 from reefvision.services.workflow_paired_models_v15 import execute_paired_models
 from reefvision.services.workflow_prompt_assist import create_prompt_assist_mask_proposals
@@ -50,6 +52,7 @@ from reefvision.services.workflow_review import WorkflowReviewRequired
 from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
 from reefvision.services.workflow_schedule_receipt import execute_schedule_receipt
 from reefvision.services.workflow_study_design import execute_reviewed_study_design
+from reefvision.services.workflow_taxonomy import execute_detectability
 from reefvision.services.workflow_vlm import VlmClassDefinition, run_vlm_detection
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -82,7 +85,10 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "acquisition_capture_replay",
     "monitoring_assessment",
     "monitoring_project_summary",
+    "detectability_assessment",
     "workflow_schedule_receipt",
+    "bioacoustic_report",
+    "multispectral_index",
     "ecology_measurement_csv_export",
     "ecology_population_csv_export",
     "ecology_paired_count_comparison",
@@ -1176,7 +1182,10 @@ _ADAPTERS = {
     "acquisition_capture_replay": execute_acquisition_replay,
     "monitoring_assessment": execute_monitoring_assessment,
     "monitoring_project_summary": execute_monitoring_summary,
+    "detectability_assessment": execute_detectability,
     "workflow_schedule_receipt": execute_schedule_receipt,
+    "bioacoustic_report": execute_audio_report,
+    "multispectral_index": execute_multispectral,
     "ecology_event_summary": execute_event_summary,
     "research_publication_figure": execute_research_report,
     "image_acquisition_quality": execute_acquisition_quality,
