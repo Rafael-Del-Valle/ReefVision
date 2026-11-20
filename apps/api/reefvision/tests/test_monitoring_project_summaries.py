@@ -6,7 +6,14 @@ from fastapi.testclient import TestClient
 from reefvision.tests.test_annotations import create_project
 
 
-def _site(client: TestClient, name: str, values: list[float], **parameters: Any) -> tuple[str, str]:
+def _site(
+    client: TestClient,
+    name: str,
+    values: list[float],
+    *,
+    logger: str | None = None,
+    **parameters: Any,
+) -> tuple[str, str]:
     project = create_project(client, name)["id"]
     base = f"/api/v1/projects/{project}"
     readings = [
@@ -18,7 +25,7 @@ def _site(client: TestClient, name: str, values: list[float], **parameters: Any)
             "source_kind": "observed",
             "observed_at": f"2026-11-19T13:0{i}:00Z",
             "provenance": {
-                "source": name,
+                "source": logger or name,
                 "acquired_at": f"2026-11-19T13:0{i}:00Z",
                 "source_metadata": {"protocol": "reef-minute"},
             },
@@ -54,6 +61,23 @@ def _site(client: TestClient, name: str, values: list[float], **parameters: Any)
 
 def _selections(*sites: tuple[str, str]) -> dict[str, Any]:
     return {"selections": [{"project_id": p, "assessment_id": a} for p, a in sites]}
+
+
+def test_same_logger_observations_in_two_projects_do_not_count_as_independent_sites(
+    client: TestClient,
+) -> None:
+    a = _site(client, "Survey original", [20, 20], logger="Repeated source")
+    b = _site(client, "Survey copy", [20, 20], logger="Repeated source")
+    for reference, peer in ((a, b), (b, a)):
+        response = client.post(
+            f"/api/v1/projects/{reference[0]}/monitoring/summaries",
+            json=_selections(reference, peer),
+        )
+        assert response.status_code == 201, response.text
+        for row in response.json()["snapshot"]["rows"]:
+            assert row["status"] == "excluded"
+            assert any("another selected project" in reason for reason in row["reasons"])
+            assert row["effort"]["observed_slots"] == 2 and row["values"]["estimate"] == 20
 
 
 def test_summary_requires_distinct_projects_and_the_owning_reference(client: TestClient) -> None:

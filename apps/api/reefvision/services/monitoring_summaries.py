@@ -1,5 +1,6 @@
 """Compare local monitoring assessments without pooling observations or review authority."""
 
+from collections import Counter
 from datetime import UTC
 from uuid import UUID
 
@@ -89,7 +90,6 @@ class MonitoringSummaryService:
         project = self._project(project_id)
         assessment = self.monitoring.get_assessment(project_id, assessment_id)
         result = assessment.result
-        rule = self.monitoring.get_rule(project_id, str(assessment.rule_id))
         review = self._review(project_id, assessment_id)
         reasons: list[str] = []
         if assessment.source_status == "stale":
@@ -108,13 +108,18 @@ class MonitoringSummaryService:
             reasons.append("A reviewed session has no declared independent sampling unit.")
         # Source selectors identify different sites and specimens. Cadence, QC and alert criteria
         # are still part of comparability, even when two projects use the same protocol label.
-        settings = rule.parameters.model_dump(mode="json", exclude={"source", "summary_ids"})
+        try:
+            rule = self.monitoring.get_rule(project_id, str(assessment.rule_id))
+            settings = rule.parameters.model_dump(mode="json", exclude={"source", "summary_ids"})
+        except (ConflictError, NotFoundError) as exc:
+            reasons.append(str(exc))
+            settings = {}
         return ComparisonRow(
             project_id=selection.project_id,
             project_name=project.name,
             assessment_id=assessment.id,
             rule_id=assessment.rule_id,
-            rule_sha256=rule.rule_sha256,
+            rule_sha256=result.rule_sha256,
             kind=result.kind,
             protocol=result.protocol,
             metric=result.metric,
@@ -148,17 +153,18 @@ class MonitoringSummaryService:
         )
         rows = [self._row(entry) for entry in payload.selections]
         reference = rows[0]
-        seen = _shared_signatures(reference)
+        signatures = [_shared_signatures(row) for row in rows]
+        counts = Counter(digest for project_sources in signatures for digest in project_sources)
+        for row, project_sources in zip(rows, signatures, strict=True):
+            if any(counts[digest] > 1 for digest in project_sources):
+                row.reasons.append(
+                    "Source evidence or a recording also appears in another selected project."
+                )
+                row.status = "excluded"
         for peer in rows[1:]:
             peer.reasons.extend(_compare(reference, peer))
             if reference.reasons:
                 peer.reasons.append("The reference project is excluded from this comparison.")
-            signatures = _shared_signatures(peer)
-            if seen & signatures:
-                peer.reasons.append(
-                    "Source evidence or a recording also appears in another selected project."
-                )
-            seen.update(signatures)
             if peer.reasons:
                 peer.status = "excluded"
         snapshot = ComparisonSnapshot(reference_project_id=reference_id, rows=rows).model_dump(

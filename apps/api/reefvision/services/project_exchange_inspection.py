@@ -25,6 +25,7 @@ from reefvision.services.project_exchange_field_v15 import (
     validate_field_exchange,
     validate_field_origin,
 )
+from reefvision.services.project_exchange_monitoring_v17 import validate_monitoring_exchange
 from reefvision.services.project_exchange_qc_v16 import QC_FORMATS, validate_qc_exchange
 from reefvision.services.project_exchange_schedules import validate_schedule_exchange
 from reefvision.services.project_exchange_v15 import INTEGRATED_FORMATS, validate_v15_exchange
@@ -325,6 +326,14 @@ def inspect_project_exchange(
                 validate_exchange_records(project["id"], section_rows, models)
                 validate_integrated_records(project["id"], section_rows, models)
                 validate_origin(manifest.get("origin"))
+
+            if not errors:
+                try:
+                    validate_monitoring_exchange(
+                        version, manifest["project"]["id"], section_rows, manifest.get("origin")
+                    )
+                except ValidationError as exc:
+                    errors.append(str(exc))
 
             media = _validate_file_inventory(
                 archive=archive,

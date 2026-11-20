@@ -26,6 +26,7 @@ from reefvision.services.ecology_identity import EcologyIdentityService
 from reefvision.services.project_exchange_acquisition import validate_acquisition_exchange
 from reefvision.services.project_exchange_comparison import validate_comparison_exchange
 from reefvision.services.project_exchange_event_summary import validate_event_summary_exchange
+from reefvision.services.project_exchange_monitoring_v17 import SECTIONS as MONITORING_SECTIONS
 from reefvision.services.project_exchange_pose import validate_pose_rows
 from reefvision.services.project_exchange_qc_v16 import EVENTS as QC_EVENTS
 from reefvision.services.project_exchange_qc_v16 import SECTIONS as QC_SECTIONS
@@ -127,6 +128,7 @@ def integrated_models() -> dict[str, type[Base]]:
             *V15_SECTIONS,
             *QC_SECTIONS,
             *SCHEDULE_SECTIONS,
+            *MONITORING_SECTIONS,
         )
     }
 

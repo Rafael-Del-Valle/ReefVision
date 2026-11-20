@@ -31,7 +31,7 @@ from reefvision.services.workflow_review_queue_integrity import (
 from reefvision.storage.datasets import canonical_json_sha256
 
 FORMAT = "1.6"
-QC_FORMATS = {FORMAT, "1.7"}
+QC_FORMATS = {FORMAT, "1.7", "1.7.1"}
 EVENTS = "review_queue_item_events"
 BULK = "review_queue_bulk_requests"
 SECTIONS = (EVENTS, BULK)

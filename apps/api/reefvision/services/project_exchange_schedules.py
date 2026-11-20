@@ -13,6 +13,7 @@ from reefvision.db.models import (
     WorkflowScheduleOccurrence,
 )
 from reefvision.domain.errors import ValidationError
+from reefvision.services.project_exchange_monitoring_v17 import FORMAT as MONITORING_FORMAT
 from reefvision.storage.datasets import canonical_json_sha256
 
 FORMAT = "1.7"
@@ -47,7 +48,7 @@ def _utc_slot(value: str) -> datetime:
 
 def validate_schedule_exchange(version: str, project_id: str, rows: Rows) -> None:
     present = any(rows.get(name) for name in SECTIONS)
-    if version != FORMAT:
+    if version not in {FORMAT, MONITORING_FORMAT}:
         if present:
             raise ValidationError("Scheduled workflow history requires Project Exchange 1.7")
         return

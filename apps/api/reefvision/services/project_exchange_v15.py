@@ -20,7 +20,7 @@ from reefvision.services.project_exchange_study_v15 import (
 )
 
 FORMAT_VERSION = "1.5"
-INTEGRATED_FORMATS = {"1.2", FORMAT_VERSION, "1.6", "1.7"}
+INTEGRATED_FORMATS = {"1.2", FORMAT_VERSION, "1.6", "1.7", "1.7.1"}
 SECTIONS = ("model_runtime_selections", "study_design_revisions", *REVIEWER_LAB_SECTIONS)
 
 
@@ -38,7 +38,7 @@ def validate_v15_exchange(
     validate_study_exchange(project_id, sections, original_to_local)
     validate_reviewer_lab_exchange(sections, project_id=project_id, origin_ids=original_to_local)
     present = any(sections.get(name) for name in (*SECTIONS, "field_capture_batches"))
-    if (present and version not in {FORMAT_VERSION, "1.6", "1.7"}) or (
+    if (present and version not in {FORMAT_VERSION, "1.6", "1.7", "1.7.1"}) or (
         version == FORMAT_VERSION and not present
     ):
         raise ValidationError(

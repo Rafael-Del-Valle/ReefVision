@@ -57,6 +57,9 @@ HISTORICAL_ARTIFACT_TYPES = frozenset(
         "paired_model_report",
         "research_reproducibility_proof",
         "workflow_schedule_receipt",
+        "acquisition_capture_receipt",
+        "monitoring_assessment",
+        "monitoring_project_summary",
         PAIRED_GROWTH_TYPE,
         REVIEWER_LAB_TYPE,
     }
@@ -311,6 +314,20 @@ def restore_workflow_provenance(
 def _restore_parameters(
     node_type: str, parameters: dict[str, Any], digests: dict[str, str]
 ) -> dict[str, Any]:
+    portable_pins = {
+        "acquisition_source_capture": ("source_sha256",),
+        "acquisition_capture_replay": ("content_sha256",),
+        "monitoring_assessment": ("rule_sha256", "assessment_sha256"),
+    }
+    if node_type in portable_pins:
+        return {
+            **parameters,
+            **{
+                key: digests.get(value, value)
+                for key in portable_pins[node_type]
+                if isinstance(value := parameters.get(key), str)
+            },
+        }
     previous = parameters.get("manifest_sha256")
     if (
         node_type == "reefpose_reference_source"
