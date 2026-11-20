@@ -115,6 +115,16 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
   expect(frozen.ok(), await frozen.text()).toBeTruthy();
   const snapshot = await frozen.json();
   expect(snapshot.manifest_sha256).toMatch(/^[a-f0-9]{64}$/);
+  const viewport = await page.evaluate(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
+    document_width: document.documentElement.clientWidth,
+    workbench_width: document.querySelector(".rv-workbench-stage")?.clientWidth,
+    inspector_left: document.querySelector(".rv-workbench-inspector")?.getBoundingClientRect().left,
+  }));
+  await writeFile(info.outputPath("probe-native-viewport.json"), JSON.stringify(viewport, null, 2));
+  // The retained 722 MSI predates the narrow Dataset versions layout fix.
+  await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
   const exporting = post(`${api}/dataset-versions/${snapshot.id}/exports`);
   await page.getByRole("button", { name: "Export YOLO dataset" }).click();
   const exported = await exporting;

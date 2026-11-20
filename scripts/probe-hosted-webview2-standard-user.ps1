@@ -1,51 +1,12 @@
-[CmdletBinding(DefaultParameterSetName='Probe')]
 param(
-    [Parameter(Mandatory, ParameterSetName='Probe')][string]$InstallerDirectory,
-    [Parameter(Mandatory, ParameterSetName='Probe')][string]$EvidenceRoot,
-    [Parameter(Mandatory, ParameterSetName='Launch')][string]$LaunchContext
+    [Parameter(Mandatory)][string]$InstallerDirectory,
+    [Parameter(Mandatory)][string]$EvidenceRoot
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 
 function Set-ProbeRestrictedPath {
     $env:PATH = @((Join-Path $env:SystemRoot 'System32'),$env:SystemRoot,(Join-Path $env:SystemRoot 'System32\Wbem'),(Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0')) -join ';'
-}
-
-if ($PSCmdlet.ParameterSetName -eq 'Launch') {
-    $params = Get-Content -LiteralPath $LaunchContext -Raw | ConvertFrom-Json
-    $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = [System.Security.Principal.WindowsPrincipal]::new($identity)
-    if ($identity.User.Value -ne $params.user_sid -or $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        throw 'The credential launcher must run under the designated standard user.'
-    }
-    . (Join-Path $PSScriptRoot 'lib/windows-clean-acceptance.ps1')
-    Set-ProbeRestrictedPath
-    foreach ($runtime in 'node','npm','python','python3','rustc','cargo') {
-        if (Get-Command $runtime -ErrorAction SilentlyContinue) { throw 'A development runtime reached the standard-user PATH.' }
-    }
-    $desktop = Invoke-ReefVisionIsolatedEnvironment -DataRoot $params.profile -AdditionalEnvironment @{
-        REEFVISION_WINDOWS_ACCEPTANCE = '1'
-        REEFVISION_ACCEPTANCE_DATA_DIR = $params.profile
-        WEBVIEW2_USER_DATA_FOLDER = $params.webview2
-        WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-address=127.0.0.1 --remote-debugging-port=$($params.port)"
-        YOLO_OFFLINE = 'true'
-    } -Action {
-        Start-Process -FilePath $params.executable -WorkingDirectory (Split-Path -Parent $params.executable) -PassThru -WindowStyle Hidden
-    }
-    $identityReport = [ordered]@{
-        launcher_pid=$PID
-        launcher_sid=$identity.User.Value
-        launcher_session=(Get-Process -Id $PID).SessionId
-        launcher_is_admin=$false
-        desktop_pid=$desktop.Id
-    }
-    $pending = $params.receipt + '.tmp'
-    $identityReport | ConvertTo-Json | Set-Content -LiteralPath $pending
-    Move-Item -LiteralPath $pending -Destination $params.receipt
-    # The credential-launched helper holds the temporary user's registry hive
-    # loaded while the GUI and its browser child use it.
-    $desktop.WaitForExit()
-    exit
 }
 
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or
@@ -55,6 +16,7 @@ if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hoste
 
 . (Join-Path $PSScriptRoot 'lib/windows-clean-acceptance.ps1')
 . (Join-Path $PSScriptRoot 'lib/windows-spatial-webview2-acceptance.ps1')
+. (Join-Path $PSScriptRoot 'lib/windows-standard-user-webview2.ps1')
 Add-Type -TypeDefinition @'
 using System;
 using System.ComponentModel;
@@ -100,10 +62,6 @@ public static class ReefVisionProbeProcessToken {
 
 function Write-Probe([string]$Name, $Value) {
     $Value | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $EvidenceRoot $Name)
-}
-function Grant-ProbeAccess([string]$Path,[string]$Sid,[string]$Permission) {
-    & (Join-Path $env:SystemRoot 'System32/icacls.exe') $Path /grant ("*{0}:{1}" -f $Sid,$Permission) | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Could not grant only the probe user access to the exact scratch location.' }
 }
 function Run-ProbeMsi([string[]]$Arguments) {
     $process = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32/msiexec.exe') -ArgumentList $Arguments -Wait -PassThru -WindowStyle Hidden
@@ -178,12 +136,9 @@ $token = [guid]::NewGuid().ToString('N').Substring(0,10)
 $root = Join-Path $env:SystemDrive "rv-web-probe-$token"
 $install = Join-Path $root 'app'
 $profile = Join-Path $root 'data'
-$webview2 = Join-Path $root 'webview'
-$handshake = Join-Path $root 'handshake'
-$bootstrap = Join-Path $root 'bootstrap'
-New-Item -ItemType Directory -Path $EvidenceRoot,$root,$profile,$webview2,$handshake,(Join-Path $bootstrap 'lib') | Out-Null
-Copy-Item -LiteralPath $PSCommandPath -Destination (Join-Path $bootstrap 'launch.ps1')
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'lib/windows-clean-acceptance.ps1') -Destination (Join-Path $bootstrap 'lib')
+$webview2 = Join-Path $root 'data-webview2'
+New-Item -ItemType Directory -Path $EvidenceRoot,$root,$profile | Out-Null
+Set-Content -LiteralPath (Join-Path $root '.reefvision-acceptance-run') -Value $token
 Set-Content -LiteralPath (Join-Path $profile '.reefvision-clean-install-acceptance') -Value $token
 $productCode = [string]$receipt.identity.ProductCode
 foreach ($key in @(
@@ -195,9 +150,7 @@ foreach ($key in @(
 $installLog = Join-Path $root 'msi-install.log'
 $uninstallLog = Join-Path $root 'msi-uninstall.log'
 $desktopPath = Join-Path $install 'ReefVision.exe'
-$userName = "rvweb-$token"
-$user = $null
-$launcher = $null
+$account = $null
 $desktop = $null
 $debugPort = $null
 $registered = $false
@@ -212,42 +165,11 @@ try {
     $registered = $true
     if (-not (Test-Path -LiteralPath $desktopPath -PathType Leaf)) { throw 'The exact probe MSI did not install ReefVision.exe in its disposable path.' }
 
-    $password = ConvertTo-SecureString ('xRv!7' + [guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')) -AsPlainText -Force
-    $user = New-LocalUser -Name $userName -Password $password -Description 'Disposable ReefVision WebView2 probe'
-    Add-LocalGroupMember -SID 'S-1-5-32-545' -Member $user
-    $sid = $user.SID.Value
-    $cred = [System.Management.Automation.PSCredential]::new("$env:COMPUTERNAME\$userName",$password)
-    foreach ($path in @($root,$install)) { Grant-ProbeAccess $path $sid '(OI)(CI)RX' }
-    foreach ($path in @($profile,$webview2,$handshake)) { Grant-ProbeAccess $path $sid '(OI)(CI)M' }
-    $credentialShell = $driver.Path
-    $debugPort = Get-ReefVisionLoopbackDebugPort
-    $ack = Join-Path $handshake 'launcher.json'
-    $context = Join-Path $root 'context.json'
-    [ordered]@{
-        executable=$desktopPath; profile=$profile; webview2=$webview2; port=$debugPort; user_sid=$sid; receipt=$ack
-    } | ConvertTo-Json | Set-Content -LiteralPath $context
-
-    # Use absolute executables; only the Playwright driver has access to Node.
     Set-ProbeRestrictedPath
-    $argsLine = '-NoLogo -NoProfile -NonInteractive -File "{0}" -LaunchContext "{1}"' -f (Join-Path $bootstrap 'launch.ps1'),$context
-    $launcher = Start-Process -FilePath $credentialShell -ArgumentList $argsLine -Credential $cred -LoadUserProfile -PassThru -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput (Join-Path $handshake 'launcher.stdout') -RedirectStandardError (Join-Path $handshake 'launcher.stderr')
-    Wait-ProbeFile -Path $ack -Seconds 35
-    $launch = Get-Content -LiteralPath $ack -Raw | ConvertFrom-Json
-    $desktop = Get-Process -Id $launch.desktop_pid -ErrorAction Stop
-    $child = Get-CimInstance Win32_Process -Filter "ProcessId = $($desktop.Id)"
-    $owner = Invoke-CimMethod -InputObject $child -MethodName GetOwnerSid
-    $integrity = [ReefVisionProbeProcessToken]::Integrity($desktop.Handle)
-    Write-Probe 'desktop-identity.json' ([ordered]@{
-        source_commit=$expectedCommit; msi_sha256=$sha; executable_sha256=(Get-FileHash -LiteralPath $desktopPath).Hash.ToLowerInvariant()
-        driver_integrity=$driverIntegrity; desktop_integrity=$integrity; desktop_owner=$owner.Sid; observed_pid=$desktop.Id
-        parent_pid=$child.ParentProcessId; session=$child.SessionId; launch=$launch
-    })
-    if ($launch.launcher_pid -ne $launcher.Id -or $launch.launcher_sid -ne $sid -or $launch.launcher_is_admin -or
-        $child.ExecutablePath -ine $desktopPath -or $child.ParentProcessId -ne $launcher.Id -or
-        $owner.ReturnValue -ne 0 -or $owner.Sid -ne $sid -or $integrity -ne 8192 -or
-        $child.SessionId -ne $driver.SessionId -or $child.SessionId -ne $launch.launcher_session) {
-        throw 'The running exact desktop did not use the designated ordinary Windows user and interactive session.'
-    }
+    $account = New-ReefVisionHostedGuiAccount -RunRoot $root
+    $sid = $account.sid.Value
+    $debugPort = Get-ReefVisionLoopbackDebugPort
+    $desktop = Start-ReefVisionHostedGui -Account $account -Executable $desktopPath -Profile $profile -DebugPort $debugPort -EvidenceRoot $EvidenceRoot
 
     $portFile = Join-Path $profile 'runtime/backend-port.txt'
     Wait-ProbeFile -Path $portFile -Seconds 120
@@ -260,7 +182,7 @@ try {
     }
     $env:REEFVISION_GUIDED_TEST_API = $api
     try {
-        $env:REEFVISION_SPATIAL_WEBVIEW2_ENDPOINT = Wait-ReefVisionWebView2DebugEndpoint -Port $debugPort -DesktopProcessId $desktop.Id -FailureEvidencePath (Join-Path $EvidenceRoot 'spatial-webview2-startup.log')
+        $env:REEFVISION_SPATIAL_WEBVIEW2_ENDPOINT = Wait-ReefVisionWebView2DebugEndpoint -Port $debugPort -DesktopProcessId $desktop.Id -FailureEvidencePath (Join-Path $EvidenceRoot 'spatial-webview2-startup.log') -AttachmentEvidencePath (Join-Path $EvidenceRoot 'spatial-webview2-attached.log') -ExpectedBrowserSid $sid
     } catch {
         Write-Probe 'browser-context.json' (Read-ProbeBrowserContext -DesktopProcessId $desktop.Id -DebugPort $debugPort -UserSid $sid -BrowserData $webview2)
         $uiaLog = Join-Path $EvidenceRoot 'uia.log'
@@ -287,26 +209,23 @@ try {
     Push-Location -LiteralPath (Join-Path $repo 'apps/web')
     try {
         & $node ./node_modules/@playwright/test/cli.js test ordinary-project-live.spec.ts --workers=1 --retries=0 --reporter=list,json --trace=off --output="$root/playwright"
-        if ($LASTEXITCODE -ne 0) { throw 'The genuine standard-user WebView2 journey failed.' }
+        $testExitCode = $LASTEXITCODE
+        foreach ($name in 'ordinary-2d-webview2.json','probe-native-viewport.json') {
+            Get-ChildItem -LiteralPath (Join-Path $root 'playwright') -File -Recurse -Filter $name |
+                Copy-Item -Destination $EvidenceRoot
+        }
+        if ($testExitCode -ne 0) { throw 'The genuine standard-user WebView2 journey failed.' }
     } finally { Pop-Location }
     $stats = (Get-Content -LiteralPath $env:PLAYWRIGHT_JSON_OUTPUT_FILE -Raw | ConvertFrom-Json).stats
     if ($stats.expected -ne 1 -or $stats.unexpected -ne 0 -or $stats.skipped -ne 0) { throw 'Expected one physical WebView2 Playwright journey.' }
 } finally {
     try {
-        if (-not $desktop -and $user -and $launcher) {
-            $candidate = Get-CimInstance Win32_Process -Filter "ParentProcessId = $($launcher.Id) AND Name = 'ReefVision.exe'" |
-                Where-Object ExecutablePath -EQ $desktopPath | Select-Object -First 1
-            if ($candidate -and (Invoke-CimMethod -InputObject $candidate -MethodName GetOwnerSid).Sid -eq $user.SID.Value) {
-                $desktop = Get-Process -Id $candidate.ProcessId -ErrorAction SilentlyContinue
-            }
-        }
-        if ($desktop) {
-            $desktop.Refresh()
-            if (-not $desktop.HasExited) {
-                $null = $desktop.CloseMainWindow()
-                if (-not $desktop.WaitForExit(15000)) { $desktop.Kill($true); $null = $desktop.WaitForExit(15000) }
-            }
-            $cleanup.desktop_closed = $desktop.HasExited
+        if ($account) {
+            Remove-ReefVisionHostedGuiAccount -Account $account -EvidenceRoot $EvidenceRoot
+            $standardCleanup = Get-Content -LiteralPath (Join-Path $EvidenceRoot 'spatial-standard-user-cleanup.log') -Raw | ConvertFrom-Json
+            $cleanup.desktop_closed = $standardCleanup.desktop_closed
+            $cleanup.temporary_account_removed = $standardCleanup.account_removed
+            $cleanup.temporary_user_profile_removed = $standardCleanup.profile_removed
         }
         if ($debugPort) {
             Wait-ReefVisionWebView2DebugClosure -Port $debugPort
@@ -317,23 +236,7 @@ try {
             $cleanup.uninstalled = -not (Test-Path -LiteralPath $desktopPath)
         }
     } finally {
-        if ($launcher -and -not $launcher.HasExited) { $launcher.Kill($true); $null = $launcher.WaitForExit(10000) }
-        if ($user) {
-            $timeout = [DateTime]::UtcNow.AddSeconds(15)
-            do {
-                $userProfile = Get-CimInstance Win32_UserProfile -Filter "SID = '$($user.SID.Value)'"
-                if (-not $userProfile -or -not $userProfile.Loaded) { break }
-                Start-Sleep -Milliseconds 500
-            } while ([DateTime]::UtcNow -lt $timeout)
-            if ($userProfile -and -not $userProfile.Loaded) {
-                Remove-CimInstance -InputObject $userProfile -ErrorAction Continue
-            }
-            $cleanup.temporary_user_profile_removed = -not (Get-CimInstance Win32_UserProfile -Filter "SID = '$($user.SID.Value)'")
-            Remove-LocalUser -SID $user.SID
-            $cleanup.temporary_account_removed = -not (Get-LocalUser -Name $userName -ErrorAction SilentlyContinue)
-        }
         foreach ($pair in @{
-            'launcher.stderr' = (Join-Path $handshake 'launcher.stderr')
             'backend.log' = (Join-Path $profile 'logs/backend.log')
             'api.log' = (Join-Path $profile 'logs/api.log')
         }.GetEnumerator()) {
