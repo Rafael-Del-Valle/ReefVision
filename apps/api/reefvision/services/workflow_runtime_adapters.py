@@ -33,6 +33,7 @@ from reefvision.services.workflow_acquisition_source import (
     execute_acquisition_replay,
     execute_acquisition_source,
 )
+from reefvision.services.workflow_bioacoustics import execute_audio_report
 from reefvision.services.workflow_coral_growth import execute_coral_growth
 from reefvision.services.workflow_coral_skeleton import execute_coral_skeleton
 from reefvision.services.workflow_depth import create_depth_map_artifacts
@@ -83,6 +84,7 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "monitoring_assessment",
     "monitoring_project_summary",
     "workflow_schedule_receipt",
+    "bioacoustic_report",
     "ecology_measurement_csv_export",
     "ecology_population_csv_export",
     "ecology_paired_count_comparison",
@@ -1177,6 +1179,7 @@ _ADAPTERS = {
     "monitoring_assessment": execute_monitoring_assessment,
     "monitoring_project_summary": execute_monitoring_summary,
     "workflow_schedule_receipt": execute_schedule_receipt,
+    "bioacoustic_report": execute_audio_report,
     "ecology_event_summary": execute_event_summary,
     "research_publication_figure": execute_research_report,
     "image_acquisition_quality": execute_acquisition_quality,

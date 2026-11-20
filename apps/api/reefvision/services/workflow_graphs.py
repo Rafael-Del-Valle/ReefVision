@@ -207,6 +207,7 @@ _ACTIONS: dict[str, str] = {
     "acquisition_capture_replay": "Read one preserved observation from its acquisition receipt.",
     "monitoring_assessment": "Assess pinned source observations and propose alerts.",
     "monitoring_project_summary": "Read a saved monitoring comparison and its attributed reviews.",
+    "bioacoustic_report": "Replay a reviewed bioacoustic report and its declared clock alignment.",
     "workflow_schedule_receipt": "Verify one completed schedule occurrence and its artifacts.",
     "temporal_reefpose_dataset": "Freeze or load a recording-group-split temporal pose dataset.",
     "temporal_reefpose_training": "Train or replay a native temporal pose checkpoint.",

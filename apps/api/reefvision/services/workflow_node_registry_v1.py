@@ -11,6 +11,7 @@ from reefvision.services.workflow_acquisition_source import (
     acquisition_replay_node,
     acquisition_source_node,
 )
+from reefvision.services.workflow_bioacoustics import audio_report_node
 from reefvision.services.workflow_coral_growth import coral_growth_node
 from reefvision.services.workflow_coral_skeleton import coral_skeleton_node
 from reefvision.services.workflow_depth_3d import register_video_depth_3d_adapter
@@ -953,6 +954,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
     registry["monitoring_assessment"] = monitoring_assessment_node()
     registry["monitoring_project_summary"] = monitoring_summary_node()
     registry["workflow_schedule_receipt"] = schedule_receipt_node()
+    registry["bioacoustic_report"] = audio_report_node()
     registry["ecology_event_summary"] = event_summary_workflow_node()
     registry["research_publication_figure"] = research_report_node()
     registry["image_acquisition_quality"] = acquisition_quality_node()
