@@ -586,3 +586,31 @@ and one still running; final-head tests must be checked independently.
 Representative coral validation, independent scientific review, migrations,
 Windows installed GUI/MSI/CAB and physical GPU gates remain release blockers.
 **RELEASE HOLD for 1.4 and 1.5.**
+
+
+## Track C: ASCII PLY point-cloud Unicode safety and persisted QC (2026-11-19)
+
+A malformed, JSON-escaped unpaired Unicode surrogate in a point-cloud PLY
+comment or coordinate record previously reached \`text.encode("utf-8")\`
+before the ASCII-source check. This could leak \`UnicodeEncodeError\` rather
+than return a controlled scientific-input rejection. The bounded PLY reader now
+checks its character-count limit followed by \`isascii()\`, which is a
+byte-equivalent size check for the only accepted source alphabet. Well-formed
+but non-ASCII labels are also rejected (unlike OBJ, ASCII PLY remains
+ASCII-only), and permitted ASCII coordinates, comments, and source checksums
+retain their existing interpretation.
+
+Regression coverage includes direct parser checks, JSON-escaped standalone
+API input with malformed surrogate values, and a typed executable persisted
+Workflow Builder graph with a well-formed but non-ASCII PLY comment. The graph
+must fail without emitting a point-cloud measurement artifact. Existing
+positive standalone/twice-replayed saved-workflow tests continue to guard
+provisional calibration, source provenance, and deterministic SHA-256
+artifacts. The predecessor exact-head Actions completed 20 successful checks
+and three backend Ruff-format failures in the OBJ Unicode regression; those
+reported hunks were corrected in this iteration.
+
+**RELEASE HOLD:** Final-head CI is pending; none of this establishes biological
+identity, calibrated organism surface area or branch length from points,
+independent coral validation, physical GPU testing, or an installed Windows
+MSI/CAB/GUI acceptance result. ReefVision 1.5 remains isolated and unchanged.
