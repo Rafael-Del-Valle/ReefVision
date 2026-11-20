@@ -36,7 +36,7 @@ def test_exact_triangle_area_replays_standalone_and_saved_graph(
     expected_area: float,
 ) -> None:
     """Exact integer XY determinants are -1 and -3, independent of vertex ordering."""
-    points = [tuple(vertex) for vertex in vertices]
+    points = [(vertex[0], vertex[1], vertex[2]) for vertex in vertices]
     assert triangle_area(points[0], points[1], points[2]) == expected_area
     assert triangle_area(points[0], points[2], points[1]) == expected_area
 
