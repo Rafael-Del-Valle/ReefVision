@@ -31,6 +31,8 @@ def detector_lineage(
     model: ModelRegistration,
     reference_images: Sequence[StaticReferenceImage],
     selection_runs: Sequence[Job],
+    *,
+    training_task: str = "detect",
 ) -> StaticLineage:
     return trace_detector_lineage(
         model,
@@ -47,6 +49,7 @@ def detector_lineage(
                 )
             ).all(),
         ),
+        training_task=training_task,
     )
 
 
@@ -55,6 +58,8 @@ def trace_detector_lineage(
     reference_images: Sequence[StaticReferenceImage],
     selection_runs: Sequence[Job],
     lookup: LineageLookup,
+    *,
+    training_task: str = "detect",
 ) -> StaticLineage:
     runs: set[str] = set()
     selection_ids: set[str] = set()
@@ -101,7 +106,7 @@ def trace_detector_lineage(
             run is None
             or run.project_id != model.project_id
             or run.status != "completed"
-            or run.task != "detect"
+            or run.task != (training_task if current.id == model.id else current.task)
             or metadata.get("source_dataset_version_id") != run.dataset_version_id
             or metadata.get("source_dataset_manifest_sha256") != run.dataset_manifest_sha256
             or metadata.get("source_split_manifest_sha256") != run.split_manifest_sha256
@@ -138,7 +143,9 @@ def trace_detector_lineage(
                 (row.request_json or {}).get("incumbent_model_id"),
             )
         }
-        promoted_by = metadata.get("promoted_by_evaluation_id")
+        promoted_by = metadata.get("promoted_by_evaluation_id") or metadata.get(
+            "promoted_by_segmentation_evaluation_id"
+        )
         if promoted_by and promoted_by not in relevant_jobs:
             unknown.add("The deployment's model-selection evidence is unavailable")
         for row in selection_runs:
