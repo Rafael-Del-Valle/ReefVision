@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -17,14 +20,23 @@ from reefvision.config import Settings
 from reefvision.db.models import (
     Annotation,
     AnnotationEvent,
+    ClassificationPrediction,
     DatasetVersion,
     ImageAsset,
+    ImageLabel,
     LabelClass,
+    MaskAnnotation,
+    MaskAnnotationEvent,
     ModelRegistration,
+    ModelRuntimeSelection,
     PredictionProposal,
     Project,
+    ProjectExchangePackage,
     QualityControlIssue,
+    ReviewerLabRoundRecord,
+    ReviewQueue,
     ReviewQueueItem,
+    VideoTrack,
 )
 from reefvision.domain.errors import ConflictError, NotFoundError
 from reefvision.repositories.projects import LabelClassRepository, ProjectRepository
@@ -62,28 +74,64 @@ USAGE_CATEGORY_ORDER = [
     "annotations_active",
     "annotations_deleted",
     "annotation_history",
+    "mask_annotations_active",
+    "mask_annotations_deleted",
+    "mask_annotation_history",
+    "image_labels_active",
+    "image_labels_deleted",
+    "video_tracks_active",
+    "video_tracks_deleted",
+    "classification_predictions",
     "prediction_proposals",
     "quality_control_issues",
     "review_queue_items",
     "dataset_versions",
     "model_registrations",
+    "model_runtime_selections",
+    "reviewer_lab_rounds",
 ]
 
 USAGE_CATEGORY_META: dict[str, tuple[str, bool, bool]] = {
     "annotations_active": ("Active annotations", True, False),
     "annotations_deleted": ("Deleted annotations", False, True),
     "annotation_history": ("Annotation history events", False, True),
+    "mask_annotations_active": ("Active mask annotations", True, False),
+    "mask_annotations_deleted": ("Deleted mask annotations", False, True),
+    "mask_annotation_history": ("Mask annotation history events", False, True),
+    "image_labels_active": ("Active image-level classifications", True, False),
+    "image_labels_deleted": ("Deleted image-level classifications", False, True),
+    "video_tracks_active": ("Active video tracks", False, True),
+    "video_tracks_deleted": ("Deleted video tracks", False, True),
+    "classification_predictions": ("Classification predictions", False, True),
     "prediction_proposals": ("Prediction proposals", True, False),
     "quality_control_issues": ("Quality-control issues", True, False),
     "review_queue_items": ("Review-queue items", True, False),
     "dataset_versions": ("Immutable dataset versions", False, True),
     "model_registrations": ("Registered model class maps", False, True),
+    "model_runtime_selections": ("Frozen model runtime selections", False, True),
+    "reviewer_lab_rounds": ("Pinned Reviewer Lab sources", False, True),
 }
+
+# Class merge and reassign-delete currently handle only boxes, predictions and
+# selected QC records. These modalities must not be orphaned or cascade-deleted.
+UNHANDLED_CLASS_REFERENCE_CATEGORIES = (
+    "mask_annotations_active",
+    "mask_annotations_deleted",
+    "mask_annotation_history",
+    "image_labels_active",
+    "image_labels_deleted",
+    "video_tracks_active",
+    "video_tracks_deleted",
+    "classification_predictions",
+    "reviewer_lab_rounds",
+)
 
 
 @dataclass(slots=True)
 class LabelClassUsageSnapshot:
     counts: dict[str, int]
+    reference_ids: dict[str, list[str]]
+    reference_fingerprint: str
     delete_blockers: list[str]
     compatibility_warnings: list[str]
 
@@ -112,6 +160,17 @@ def _contains_label_class_reference(payload: object, class_id: str) -> bool:
     if not isinstance(payload, dict):
         return False
     return payload.get("label_class_id") == class_id
+
+
+def _model_map_contains_class(class_map: dict[str, Any], class_id: str) -> bool:
+    mapping = class_map.get("mapping")
+    provider_classes = class_map.get("provider_classes")
+    return (isinstance(mapping, dict) and class_id in mapping.values()) or (
+        isinstance(provider_classes, dict)
+        and any(
+            _contains_label_class_reference(entry, class_id) for entry in provider_classes.values()
+        )
+    )
 
 
 def _replace_class_id_list(
@@ -251,18 +310,53 @@ class ProjectService:
             raise NotFoundError("Label class not found")
         return label_class
 
+    def _pinned_reviewer_rounds(
+        self, project_id: str, image_ids: set[str], queue_item_ids: set[str]
+    ) -> list[ReviewerLabRoundRecord]:
+        if not image_ids and not queue_item_ids:
+            return []
+        package = self.session.scalar(
+            select(ProjectExchangePackage)
+            .where(
+                ProjectExchangePackage.project_id == project_id,
+                ProjectExchangePackage.direction == "import",
+                ProjectExchangePackage.status == "complete",
+            )
+            .order_by(ProjectExchangePackage.created_at.desc(), ProjectExchangePackage.id)
+            .limit(1)
+        )
+        raw_map = (package.options_json or {}).get("origin_id_map") if package else None
+        origin_map = raw_map if isinstance(raw_map, dict) else {}
+        rounds = self.session.scalars(
+            select(ReviewerLabRoundRecord).where(ReviewerLabRoundRecord.project_id == project_id)
+        )
+        return [
+            row
+            for row in rounds
+            if any(
+                origin_map.get(subject.get("image_id"), subject.get("image_id")) in image_ids
+                or origin_map.get(subject.get("queue_item_id"), subject.get("queue_item_id"))
+                in queue_item_ids
+                for subject in row.plan_json.get("subjects", [])
+            )
+        ]
+
     def _usage_snapshot(self, label_class: LabelClass) -> LabelClassUsageSnapshot:
-        counts = {key: 0 for key in USAGE_CATEGORY_ORDER}
+        # Class-merge approval must bind to exact references, not just counts.
+        # A one-for-one swap within a category invalidates the review.
+        reference_ids: dict[str, list[str]] = {key: [] for key in USAGE_CATEGORY_ORDER}
 
         annotations = list(
             self.session.scalars(
                 select(Annotation).where(Annotation.label_class_id == label_class.id)
             )
         )
-        counts["annotations_active"] = sum(1 for item in annotations if item.deleted_at is None)
-        counts["annotations_deleted"] = sum(
-            1 for item in annotations if item.deleted_at is not None
-        )
+        reference_ids["annotations_active"] = [
+            str(item.id) for item in annotations if item.deleted_at is None
+        ]
+        reference_ids["annotations_deleted"] = [
+            str(item.id) for item in annotations if item.deleted_at is not None
+        ]
 
         annotation_events = list(
             self.session.scalars(
@@ -271,64 +365,193 @@ class ProjectService:
                 .where(ImageAsset.project_id == label_class.project_id)
             )
         )
-        counts["annotation_history"] = sum(
-            1
+        reference_ids["annotation_history"] = [
+            str(item.id)
             for item in annotation_events
             if _contains_label_class_reference(item.before_json, label_class.id)
             or _contains_label_class_reference(item.after_json, label_class.id)
-        )
+        ]
 
-        counts["prediction_proposals"] = len(
-            list(
-                self.session.scalars(
-                    select(PredictionProposal).where(
-                        PredictionProposal.project_id == label_class.project_id,
-                        PredictionProposal.label_class_id == label_class.id,
-                    )
+        # These scientific modalities also carry class foreign keys. Omitting
+        # them would allow DELETE to cascade through verified masks or image labels.
+        masks = list(
+            self.session.scalars(
+                select(MaskAnnotation).where(MaskAnnotation.label_class_id == label_class.id)
+            )
+        )
+        reference_ids["mask_annotations_active"] = [
+            str(item.id) for item in masks if item.deleted_at is None
+        ]
+        reference_ids["mask_annotations_deleted"] = [
+            str(item.id) for item in masks if item.deleted_at is not None
+        ]
+
+        mask_events = list(
+            self.session.scalars(
+                select(MaskAnnotationEvent)
+                .join(ImageAsset, ImageAsset.id == MaskAnnotationEvent.image_id)
+                .where(ImageAsset.project_id == label_class.project_id)
+            )
+        )
+        reference_ids["mask_annotation_history"] = [
+            str(item.id)
+            for item in mask_events
+            if _contains_label_class_reference(item.before_json, label_class.id)
+            or _contains_label_class_reference(item.after_json, label_class.id)
+        ]
+
+        image_labels = list(
+            self.session.scalars(
+                select(ImageLabel).where(ImageLabel.label_class_id == label_class.id)
+            )
+        )
+        reference_ids["image_labels_active"] = [
+            str(item.id) for item in image_labels if item.deleted_at is None
+        ]
+        reference_ids["image_labels_deleted"] = [
+            str(item.id) for item in image_labels if item.deleted_at is not None
+        ]
+
+        tracks = list(
+            self.session.scalars(
+                select(VideoTrack).where(VideoTrack.label_class_id == label_class.id)
+            )
+        )
+        reference_ids["video_tracks_active"] = [
+            item.id for item in tracks if item.deleted_at is None
+        ]
+        reference_ids["video_tracks_deleted"] = [
+            item.id for item in tracks if item.deleted_at is not None
+        ]
+        reference_ids["classification_predictions"] = list(
+            self.session.scalars(
+                select(ClassificationPrediction.id).where(
+                    ClassificationPrediction.label_class_id == label_class.id
                 )
             )
         )
 
-        counts["quality_control_issues"] = sum(
-            1
+        prediction_records = list(
+            self.session.scalars(
+                select(PredictionProposal).where(
+                    PredictionProposal.project_id == label_class.project_id,
+                    PredictionProposal.label_class_id == label_class.id,
+                )
+            )
+        )
+        reference_ids["prediction_proposals"] = [str(item.id) for item in prediction_records]
+
+        qc_reference_records = [
+            item
             for item in self.session.scalars(
                 select(QualityControlIssue).where(
                     QualityControlIssue.project_id == label_class.project_id
                 )
             )
             if label_class.id in item.class_ids_json
-        )
+        ]
+        reference_ids["quality_control_issues"] = [str(item.id) for item in qc_reference_records]
 
-        counts["review_queue_items"] = sum(
-            1
+        review_reference_records = [
+            item
             for item in self.session.scalars(
                 select(ReviewQueueItem).where(ReviewQueueItem.project_id == label_class.project_id)
             )
             if label_class.id in item.label_class_ids_json
+        ]
+        reference_ids["review_queue_items"] = [str(item.id) for item in review_reference_records]
+        pinned_rounds = self._pinned_reviewer_rounds(
+            label_class.project_id,
+            {item.image_id for item in annotations if item.deleted_at is None}
+            | {item.image_id for item in masks if item.deleted_at is None}
+            | {item.image_id for item in image_labels if item.deleted_at is None},
+            set(reference_ids["review_queue_items"]),
         )
+        reference_ids["reviewer_lab_rounds"] = [row.id for row in pinned_rounds]
 
-        counts["dataset_versions"] = sum(
-            1
+        reference_ids["dataset_versions"] = [
+            str(item.id)
             for item in self.session.scalars(
                 select(DatasetVersion).where(DatasetVersion.project_id == label_class.project_id)
             )
             if any(entry.get("id") == label_class.id for entry in item.class_map_json)
-        )
+        ]
 
-        counts["model_registrations"] = sum(
-            1
+        reference_ids["model_registrations"] = [
+            str(item.id)
             for item in self.session.scalars(
                 select(ModelRegistration).where(
                     ModelRegistration.project_id == label_class.project_id
                 )
             )
-            if label_class.id
-            in {
-                value
-                for value in (item.class_map_json.get("mapping") or {}).values()
-                if isinstance(value, str)
-            }
-        )
+            if _model_map_contains_class(item.class_map_json, label_class.id)
+        ]
+        runtime_selections = [
+            row
+            for row in self.session.scalars(
+                select(ModelRuntimeSelection).where(
+                    ModelRuntimeSelection.project_id == label_class.project_id
+                )
+            )
+            if any(
+                (row.source_id_map_json or {}).get(identifier, identifier) == label_class.id
+                for identifier in (row.snapshot_json.get("class_mapping") or {}).values()
+                if isinstance(identifier, str)
+            )
+        ]
+        reference_ids["model_runtime_selections"] = [row.id for row in runtime_selections]
+
+        counts = {key: len(reference_ids[key]) for key in USAGE_CATEGORY_ORDER}
+        # A stable record ID is insufficient merge-approval evidence: a pending
+        # proposal or QC review can become accepted/closed (or revert) between
+        # the researcher's usage review and execution. Bind those mutable states
+        # and class memberships without changing the public count categories.
+        # Queue ownership matters because saved Workflow Builder QC evidence
+        # must never be relabeled, even while a researcher review is pending.
+        queue_creator_by_id = {
+            queue.id: queue.created_by
+            for queue in self.session.scalars(
+                select(ReviewQueue).where(ReviewQueue.project_id == label_class.project_id)
+            )
+        }
+        canonical_inventory = [
+            label_class.id,
+            [[key, sorted(reference_ids[key])] for key in USAGE_CATEGORY_ORDER],
+            {
+                "active_annotations": [
+                    annotation_snapshot(item)
+                    for item in sorted(annotations, key=lambda item: item.id)
+                    if item.deleted_at is None
+                ],
+                "runtime_selections": sorted(
+                    (row.id, row.content_sha256) for row in runtime_selections
+                ),
+                "reviewer_lab_rounds": sorted((row.id, row.plan_sha256) for row in pinned_rounds),
+                "prediction_review_states": [
+                    [item.id, item.review_status]
+                    for item in sorted(prediction_records, key=lambda item: item.id)
+                ],
+                "qc_review_states": [
+                    [item.id, item.status, sorted(item.class_ids_json)]
+                    for item in sorted(qc_reference_records, key=lambda item: item.id)
+                ],
+                "queue_review_states": [
+                    [
+                        item.id,
+                        item.review_state,
+                        item.review_queue_id,
+                        queue_creator_by_id.get(item.review_queue_id),
+                        sorted(item.label_class_ids_json),
+                    ]
+                    for item in sorted(review_reference_records, key=lambda item: item.id)
+                ],
+            },
+        ]
+        reference_fingerprint = hashlib.sha256(
+            json.dumps(canonical_inventory, ensure_ascii=False, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        ).hexdigest()
 
         delete_blockers: list[str] = []
         if counts["annotations_active"] > 0:
@@ -337,6 +560,21 @@ class ProjectService:
             )
         if counts["annotations_deleted"] > 0 or counts["annotation_history"] > 0:
             delete_blockers.append("Historical annotation records still reference this class.")
+        if counts["mask_annotations_active"] > 0:
+            delete_blockers.append("Verified mask annotations still reference this class.")
+        if counts["mask_annotations_deleted"] > 0 or counts["mask_annotation_history"] > 0:
+            delete_blockers.append("Historical mask records still reference this class.")
+        if counts["image_labels_active"] > 0 or counts["image_labels_deleted"] > 0:
+            delete_blockers.append("Image-level classification labels still reference this class.")
+        for key in (
+            "video_tracks_active",
+            "video_tracks_deleted",
+            "classification_predictions",
+            "reviewer_lab_rounds",
+            "model_runtime_selections",
+        ):
+            if counts[key]:
+                delete_blockers.append(f"{USAGE_CATEGORY_META[key][0]} still reference this class.")
         if counts["prediction_proposals"] > 0:
             delete_blockers.append("Prediction proposals still reference this class.")
         if counts["quality_control_issues"] > 0:
@@ -349,6 +587,14 @@ class ProjectService:
             delete_blockers.append("Registered model class maps still reference this class.")
 
         compatibility_warnings: list[str] = []
+        if counts["mask_annotations_deleted"] > 0 or counts["mask_annotation_history"] > 0:
+            compatibility_warnings.append(
+                "Historical mask annotations and events remain unchanged for auditability."
+            )
+        if counts["image_labels_deleted"] > 0:
+            compatibility_warnings.append(
+                "Deleted image-level classification labels remain in the scientific record."
+            )
         if counts["dataset_versions"] > 0:
             compatibility_warnings.append(
                 "Historical dataset versions keep their original class map for reproducibility."
@@ -364,6 +610,8 @@ class ProjectService:
 
         return LabelClassUsageSnapshot(
             counts=counts,
+            reference_ids=reference_ids,
+            reference_fingerprint=reference_fingerprint,
             delete_blockers=delete_blockers,
             compatibility_warnings=compatibility_warnings,
         )
@@ -377,6 +625,7 @@ class ProjectService:
             class_id=label_class.id,
             project_id=label_class.project_id,
             class_name=label_class.name,
+            reference_fingerprint=snapshot.reference_fingerprint,
             is_active=label_class.is_active,
             archived_at=label_class.archived_at,
             total_references=snapshot.total_references,
@@ -476,6 +725,15 @@ class ProjectService:
         return self.archive_class(class_id)
 
     def delete_class(self, class_id: str) -> None:
+        # Recheck scientific references under SQLite's writer lock. Without
+        # the claim a second editor can add observations between usage
+        # inspection and deletion of a supposedly unused biological class.
+        # Preserve its revision for other local Class Manager readers.
+        self.session.execute(
+            update(LabelClass)
+            .where(LabelClass.id == class_id)
+            .values(updated_at=LabelClass.updated_at)
+        )
         label_class = self._class(class_id)
         usage = self._usage_snapshot(label_class)
         if not usage.can_delete:
@@ -488,6 +746,16 @@ class ProjectService:
     def merge_class(
         self, class_id: str, payload: LabelClassMergeRequest
     ) -> LabelClassMergeResponse:
+        # In local SQLite the first write obtains a database writer lock.
+        # Take it BEFORE reading the reviewed biological identities and usage:
+        # a concurrent editor must not change QC/review evidence between the
+        # approval check and the class merge commit. The no-op update leaves
+        # the class revision untouched, and the lock is held until commit.
+        self.session.execute(
+            update(LabelClass)
+            .where(LabelClass.id == class_id)
+            .values(updated_at=LabelClass.updated_at)
+        )
         source_class = self._class(class_id)
         target_class = self._class(payload.target_class_id)
         if source_class.id == target_class.id:
@@ -496,9 +764,74 @@ class ProjectService:
             raise ConflictError("Classes can only be merged within the same project")
         if not target_class.is_active:
             raise ConflictError("Restore the target class before merging into it")
+        if payload.expected_source_identity is not None:
+            expected_source = payload.expected_source_identity
+            if (
+                source_class.name,
+                source_class.class_index,
+                source_class.scientific_name,
+                source_class.state_name,
+            ) != (
+                expected_source.name,
+                expected_source.class_index,
+                expected_source.scientific_name,
+                expected_source.state_name,
+            ):
+                raise ConflictError(
+                    "Source class identity changed since merge approval. "
+                    "Refresh project classes and confirm the merge again."
+                )
+        if payload.expected_target_identity is not None:
+            expected = payload.expected_target_identity
+            if (
+                target_class.name,
+                target_class.class_index,
+                target_class.scientific_name,
+                target_class.state_name,
+            ) != (
+                expected.name,
+                expected.class_index,
+                expected.scientific_name,
+                expected.state_name,
+            ):
+                raise ConflictError(
+                    "Target class identity changed since merge approval. "
+                    "Refresh project classes and confirm the merge again."
+                )
 
         source_usage = self._usage_snapshot(source_class)
+        if (
+            payload.expected_usage_counts is not None
+            and payload.expected_usage_counts != source_usage.counts
+        ):
+            raise ConflictError(
+                "Class references changed since the usage review. "
+                "Refresh usage and confirm the merge again."
+            )
+        if (
+            payload.expected_usage_fingerprint is not None
+            and payload.expected_usage_fingerprint != source_usage.reference_fingerprint
+        ):
+            raise ConflictError(
+                "Class reference identities changed since the usage review. "
+                "Refresh usage and confirm the merge again."
+            )
+        # The legacy merge implementation reassigns boxes, predictions, QC and
+        # review queues, but not masks or image-level classification labels.
+        # Refuse to archive the source and strand unhandled biological records.
+        if any(source_usage.counts[key] > 0 for key in UNHANDLED_CLASS_REFERENCE_CATEGORIES):
+            groups = ", ".join(
+                USAGE_CATEGORY_META[key][0]
+                for key in UNHANDLED_CLASS_REFERENCE_CATEGORIES
+                if source_usage.counts[key]
+            )
+            raise ConflictError(
+                f"{groups} prevent a safe class merge. Review these records before merging."
+            )
         affected_counts: dict[str, int] = defaultdict(int)
+        # A merge archives the source class; researcher-reviewed observations
+        # must remain tied to their original biological interpretation.
+        retained_review_kinds: set[str] = set()
 
         annotations = list(
             self.session.scalars(
@@ -525,6 +858,12 @@ class ProjectService:
                 )
             )
             affected_counts["annotations_active"] += 1
+        if annotations:
+            self.session.execute(
+                update(ImageAsset)
+                .where(ImageAsset.id.in_({item.image_id for item in annotations}))
+                .values(annotation_revision=ImageAsset.annotation_revision + 1)
+            )
 
         predictions = list(
             self.session.scalars(
@@ -535,6 +874,9 @@ class ProjectService:
             )
         )
         for prediction in predictions:
+            if prediction.review_status != "pending":
+                retained_review_kinds.add("reviewed prediction proposals")
+                continue
             prediction.label_class_id = target_class.id
             prediction.was_edited = True
             affected_counts["prediction_proposals"] += 1
@@ -549,11 +891,27 @@ class ProjectService:
         for issue in quality_control_issues:
             if source_class.id not in issue.class_ids_json:
                 continue
+            if issue.status not in {"open", "acknowledged"}:
+                retained_review_kinds.add("resolved quality-control issues")
+                continue
             issue.class_ids_json = _replace_class_id_list(
                 issue.class_ids_json, source_class.id, target_class.id
             )
             affected_counts["quality_control_issues"] += 1
 
+        # A saved Workflow Builder QC queue is an immutable scientific evidence
+        # snapshot, even while its human-review decision is still pending.
+        # Relabeling such an item makes the persisted evidence checksum fail on
+        # replay; preserve the original class while allowing standalone queues
+        # to retain the legacy mutable-review behavior.
+        workflow_owned_queue_ids = set(
+            self.session.scalars(
+                select(ReviewQueue.id).where(
+                    ReviewQueue.project_id == source_class.project_id,
+                    ReviewQueue.created_by.like("workflow:%"),
+                )
+            )
+        )
         review_queue_items = list(
             self.session.scalars(
                 select(ReviewQueueItem).where(ReviewQueueItem.project_id == source_class.project_id)
@@ -561,6 +919,12 @@ class ProjectService:
         )
         for item in review_queue_items:
             if source_class.id not in item.label_class_ids_json:
+                continue
+            if item.review_queue_id in workflow_owned_queue_ids:
+                retained_review_kinds.add("saved workflow review-queue evidence")
+                continue
+            if item.review_state not in {"pending", "in_progress"}:
+                retained_review_kinds.add("completed review-queue items")
                 continue
             item.label_class_ids_json = _replace_class_id_list(
                 item.label_class_ids_json, source_class.id, target_class.id
@@ -596,5 +960,16 @@ class ProjectService:
                 if count > 0
             ],
             immutable_reference_counts=immutable_reference_counts,
-            warnings=source_usage.compatibility_warnings,
+            warnings=[
+                *source_usage.compatibility_warnings,
+                *(
+                    [
+                        "The archived source class retains historical scientific references: "
+                        + ", ".join(sorted(retained_review_kinds))
+                        + ". These records were not reclassified."
+                    ]
+                    if retained_review_kinds
+                    else []
+                ),
+            ],
         )

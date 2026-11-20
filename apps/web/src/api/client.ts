@@ -102,7 +102,7 @@ export interface LabelClassUsage {
   class_id: string;
   project_id: string;
   class_name: string;
-  reference_fingerprint: string;
+  reference_fingerprint?: string;
   is_active: boolean;
   archived_at: string | null;
   total_references: number;
@@ -1956,18 +1956,14 @@ export async function mergeLabelClass(
     target_class_id: string;
     expected_usage_counts?: Record<string, number>;
     expected_usage_fingerprint?: string;
-    expected_target_identity?: {
-      name: string;
-      class_index: number;
-      scientific_name: string | null;
-      state_name: string | null;
-    };
-    expected_source_identity?: {
-      name: string;
-      class_index: number;
-      scientific_name: string | null;
-      state_name: string | null;
-    };
+    expected_source_identity?: Pick<
+      LabelClass,
+      "name" | "class_index" | "scientific_name" | "state_name"
+    >;
+    expected_target_identity?: Pick<
+      LabelClass,
+      "name" | "class_index" | "scientific_name" | "state_name"
+    >;
   },
 ): Promise<LabelClassMergeResponse> {
   return request<LabelClassMergeResponse>(`/classes/${classId}/merge`, {
