@@ -14,6 +14,13 @@ from reefvision.db.models.behavior_classifier import (
     BehaviorClassifierModel,
     BehaviorPrediction,
 )
+from reefvision.db.models.bioacoustics import (
+    BioacousticAsset,
+    BioacousticClockAnchor,
+    BioacousticProposal,
+    BioacousticReport,
+    BioacousticReview,
+)
 from reefvision.db.models.class_operation import ClassOperation
 from reefvision.db.models.class_visibility_preference import ClassVisibilityPreference
 from reefvision.db.models.classification_dataset import ClassificationDataset
@@ -175,6 +182,11 @@ __all__ = [
     "BehaviorEthogramRevision",
     "BehaviorPrediction",
     "BehaviorStateDefinition",
+    "BioacousticAsset",
+    "BioacousticClockAnchor",
+    "BioacousticProposal",
+    "BioacousticReport",
+    "BioacousticReview",
     "ClassOperation",
     "ClassVisibilityPreference",
     "ClassificationDataset",
