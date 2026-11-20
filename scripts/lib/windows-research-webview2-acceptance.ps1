@@ -5,7 +5,7 @@ function Get-ReefVisionResearchJourneyEvidence {
 
     try {
         $result = & $RunJourney
-        return New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed WebView2 passed $($result.completed_journeys) research journeys. Study SHA-256 $($result.study.study_sha256), reviewer agreement SHA-256 $($result.reviewer.report.content_sha256), field reconciliation SHA-256 $($result.field.report_sha256), reviewed model configuration SHA-256 $($result.model.reviewed_runtime.selection.content_sha256), and paired comparison SHA-256 $($result.comparison.report_sha256)."
+        return New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed WebView2 passed $($result.completed_journeys) research journeys. Study SHA-256 $($result.study.study_sha256), reviewer agreement SHA-256 $($result.reviewer.report.content_sha256), field reconciliation SHA-256 $($result.field.report_sha256), reviewed model configuration SHA-256 $($result.model.reviewed_runtime.selection.content_sha256), paired comparison SHA-256 $($result.comparison.report_sha256), and independently restored package proof SHA-256 $($result.package.proof_sha256)."
     } catch {
         return New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $_.Exception.Message
     }
@@ -27,6 +27,11 @@ function Invoke-ReefVisionResearchJourneyAcceptance {
 
     if ($Api -notmatch '^http://127[.]0[.]0[.]1:[1-9][0-9]{0,4}/api/v1$') {
         throw 'Research acceptance requires an isolated loopback API.'
+    }
+    $runtime = Invoke-RestMethod -Uri "$Api/system/version" -NoProxy -TimeoutSec 5
+    if ($runtime.safe_mode -or -not $runtime.data_dir -or
+        -not (Test-Path -LiteralPath (Join-Path $runtime.data_dir '.reefvision-clean-install-acceptance') -PathType Leaf)) {
+        throw 'Research acceptance requires a writable disposable profile marked by its launcher.'
     }
     $endpoint = $null
     $surface = 'source-browser'
@@ -53,6 +58,7 @@ function Invoke-ReefVisionResearchJourneyAcceptance {
         field = @('field-capture-live.spec.ts', 'captures local field originals and replays a transferred batch', 'field-capture-evidence.json')
         model = @('ordinary-detector-live.spec.ts', 'runs the ordinary local detector from grouped stills through reviewed results and exports', 'ordinary-detector-evidence.json')
         comparison = @('paired-model-comparison-live.spec.ts', 'compares two local detectors on held-out originals and replays the saved comparison', 'paired-model-comparison-evidence.json')
+        package = @('reproducibility-package-live.spec.ts', 'exports and restores a reproducibility package with replayable study, review and model proof', 'reproducibility-package-evidence.json')
     }
     $specs = @($journeys.Values | ForEach-Object { $_[0] })
     $titles = '(?:' + (($journeys.Values | ForEach-Object { [regex]::Escape($_[1]) }) -join '|') + ')$'
@@ -134,6 +140,20 @@ function Invoke-ReefVisionResearchJourneyAcceptance {
         @($comparison.replays).Count -ne 2 -or $comparison.replays[0].id -eq $comparison.replays[1].id -or
         $comparison.replays[0].payload_sha256 -notmatch $hash -or $comparison.replays[0].payload_sha256 -ne $comparison.replays[1].payload_sha256) {
         throw 'Comparison acceptance lacks two distinct CPU checkpoints, held-out originals, verified exports or graph replay.'
+    }
+    $package = $result.package
+    if (($surface -eq 'tauri-webview2' -and $package.fixture_source -ne 'local_cpu_training') -or
+        $package.archive_sha256 -notmatch $hash -or $package.manifest_sha256 -notmatch $hash -or
+        $package.proof_sha256 -notmatch $hash -or $package.original_sha256 -notmatch $hash -or
+        $package.original_archive_member_count -ne 1 -or $package.restored_field_manifest_sha256 -notmatch $hash -or
+        $package.restored_field_original_sha256 -ne $package.original_sha256 -or
+        @($package.omitted_checkpoint_sha256).Count -ne 2 -or $package.reviewer_credential_restored -ne $false -or
+        -not $package.restored_package_id -or $package.restored_package_id -eq $package.package_id -or
+        -not $package.restored_project_id -or $package.restored_project_id -eq $package.project_id -or
+        @($package.runs).Count -ne 2 -or $package.runs[0].id -eq $package.runs[1].id -or
+        $package.runs[0].sha256 -notmatch $hash -or $package.runs[0].sha256 -ne $package.runs[1].sha256 -or
+        $package.restored_proof_replay.sha256 -ne $package.runs[0].sha256) {
+        throw 'Package acceptance lacks a verified archive, distinct restored project, omitted checkpoint proof, or matching portable replays.'
     }
     return [pscustomobject]$result
 }
