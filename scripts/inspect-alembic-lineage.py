@@ -201,6 +201,22 @@ _POST_0037_TABLE_CONTRACTS = {
     },
 }
 
+# Preserve named lookup indexes as well as their key columns. The original
+# 1.1/1.6 migrations explicitly create and later drop these indexes by name;
+# a renamed replacement can satisfy a column-only check yet fail an upgrade
+# or downgrade after researcher data has been copied. SQLite UNIQUE
+# constraints generate internal autoindexes, whose names are not stable.
+_POST_0037_NAMED_LOOKUP_INDEXES = {
+    "scientific_records": {
+        "ix_scientific_project_variable_time": ("project_id", "variable", "observed_at"),
+    },
+    "environmental_cache_entries": {},
+    "review_queue_item_events": {
+        "ix_review_queue_item_events_item_created": ("review_queue_item_id", "created_at"),
+        "ix_review_queue_item_events_queue_created": ("review_queue_id", "created_at"),
+    },
+}
+
 
 def _sqlite_schema_tokens(ddl: str) -> tuple[str, ...] | None:
     """Lex table DDL while preserving SQL literal values and ignoring comments.
@@ -396,6 +412,7 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
         return False
 
     canonical_indexes = set()
+    named_lookup_indexes = {}
     nonprimary_unique_indexes = set()
     has_partial_unique = False
     has_noncanonical_unique_keys = False
@@ -413,6 +430,10 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
         )
         if canonical_keys and not index[4]:
             canonical_indexes.add((columns_in_index, bool(index[2])))
+        if index[3] == "c" and not index[2]:
+            # A structurally equivalent but renamed CREATE INDEX is not the
+            # source migration's index. Future op.drop_index uses its name.
+            named_lookup_indexes[index[1]] = (columns_in_index, canonical_keys and not index[4])
         if index[2] and not canonical_keys:
             # A forged UNIQUE key may collapse distinct researcher request IDs.
             has_noncanonical_unique_keys = True
@@ -423,12 +444,21 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
             # biological observations or reviewer events. Require review.
             nonprimary_unique_indexes.add(columns_in_index)
             has_partial_unique |= bool(index[4])
+            # Source request/cache uniqueness is a table UNIQUE constraint
+            # (origin 'u'), not a manually created index (origin 'c').
+            # That distinction is required for compatible batch migrations.
+            if index[3] != "u":
+                has_noncanonical_unique_keys = True
     required_unique_indexes = {columns for columns, unique in contract["indexes"] if unique}
     return (
         contract["indexes"] <= canonical_indexes
         and not has_partial_unique
         and not has_noncanonical_unique_keys
         and nonprimary_unique_indexes == required_unique_indexes
+        and all(
+            named_lookup_indexes.get(name) == (columns, True)
+            for name, columns in _POST_0037_NAMED_LOOKUP_INDEXES[table].items()
+        )
     )
 
 
