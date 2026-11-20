@@ -48,6 +48,7 @@ import {
   type Project,
 } from "../../api/client";
 import { ErrorState, LoadingState } from "../../components/ui/AsyncState";
+import { useActionConfirmation } from "../../components/ui/ActionConfirmation";
 import { shouldIgnoreShortcutTarget } from "../../components/ui/keyboardShortcuts";
 import {
   annotationEditorReducer,
@@ -267,12 +268,6 @@ function makeAnnotationId(): string {
   return `annotation-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function confirmDiscardUnsavedEdits(actionLabel: string): boolean {
-  return window.confirm(
-    `Saving failed. Discard unsaved local annotation edits and ${actionLabel}?`,
-  );
-}
-
 /**
  * Preserve a thumbnail preview when a source-resolution preload fails.
  * The preview is not a substitute for source imagery during scientific review.
@@ -296,6 +291,7 @@ export function AnnotationEditor({
   onActiveImageChange,
 }: AnnotationEditorProps) {
   const queryClient = useQueryClient();
+  const { confirm, confirmationDialog } = useActionConfirmation();
   const [currentImageId, setCurrentImageId] = useState(initialImageId);
   const [state, dispatch] = useReducer(
     annotationEditorReducer,
@@ -376,6 +372,17 @@ export function AnnotationEditor({
   const savePromiseRef = useRef<Promise<boolean> | null>(null);
   const assistSessionRef = useRef<AssistSession | null>(assistSession);
   const annotationClipboardRef = useRef<AnnotationClipboard | null>(null);
+
+  const resetToSession = useCallback((session: AnnotationSession) => {
+    dispatch({ type: "loadSession", session });
+    loadedImageIdRef.current = session.image.id;
+    setSamReviewProposalId(null);
+    setHideAnnotations(false);
+    setSelectedPredictionIds([]);
+    setPredictionGeometryOverrides({});
+    setInteraction(null);
+    setView(null);
+  }, []);
 
   useEffect(() => {
     stateRef.current = state;
@@ -514,15 +521,8 @@ export function AnnotationEditor({
     ) {
       return;
     }
-    dispatch({ type: "loadSession", session });
-    loadedImageIdRef.current = session.image.id;
-    setSamReviewProposalId(null);
-    setHideAnnotations(false);
-    setSelectedPredictionIds([]);
-    setPredictionGeometryOverrides({});
-    setInteraction(null);
-    setView(null);
-  }, [currentImageId, sessionQuery.data]);
+    resetToSession(session);
+  }, [currentImageId, resetToSession, sessionQuery.data]);
 
   const readyAssistModels = useMemo(
     () =>
@@ -1500,10 +1500,13 @@ export function AnnotationEditor({
   const bulkReviewMutation = useMutation({
     mutationFn: ({
       action,
-      selected,
+      proposals,
+      classId,
     }: {
       action: "accept" | "reject";
-      selected: boolean;
+      imageId: string;
+      proposals: PredictionProposal[];
+      classId: string | null;
     }) => {
       if (thumbnailOnlyPreview)
         throw new Error(
@@ -1513,11 +1516,8 @@ export function AnnotationEditor({
         throw new Error(
           "Save your annotation edits before accepting predictions.",
         );
-      const proposals = visiblePredictions.filter(
-        (proposal) => !selected || selectedPredictionIds.includes(proposal.id),
-      );
       const unlabeled = proposals.some((proposal) => !proposal.label_class_id);
-      if (action === "accept" && unlabeled && !activeClassId)
+      if (action === "accept" && unlabeled && !classId)
         throw new Error(
           "Choose a class before accepting class-agnostic proposals.",
         );
@@ -1533,11 +1533,23 @@ export function AnnotationEditor({
         action,
         proposal_ids: proposals.map((proposal) => proposal.id),
         ...(action === "accept" && unlabeled
-          ? { label_class_id: activeClassId! }
+          ? { label_class_id: classId! }
           : {}),
       });
     },
-    onSuccess: async (_, { action }) => {
+    onSuccess: async (_, { action, imageId }) => {
+      if (currentImageIdRef.current !== imageId) {
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: ["annotation-session", imageId],
+          }),
+          queryClient.invalidateQueries({
+            queryKey: ["predictions", imageId],
+          }),
+          queryClient.invalidateQueries({ queryKey: ["images", project.id] }),
+        ]);
+        return;
+      }
       await Promise.all([
         predictionQuery.refetch(),
         action === "accept" ? sessionQuery.refetch() : Promise.resolve(),
@@ -1547,6 +1559,37 @@ export function AnnotationEditor({
       setSamReviewProposalId(null);
     },
   });
+
+  async function confirmBulkReview(
+    action: "accept" | "reject",
+    selected: boolean,
+  ) {
+    const imageId = currentImageId;
+    const classId = activeClassId;
+    const proposals = visiblePredictions.filter(
+      (proposal) => !selected || selectedPredictionIds.includes(proposal.id),
+    );
+    if (
+      !proposals.length ||
+      thumbnailOnlyPreview ||
+      bulkReviewMutation.isPending
+    )
+      return;
+    const accepted = await confirm({
+      title:
+        action === "accept" ? "Accept predictions?" : "Reject predictions?",
+      message:
+        action === "accept"
+          ? `Accept ${proposals.length} ${selected ? "selected" : "visible"} pending predictions? Class-agnostic masks use the selected class. Original model provenance stays with the accepted annotations.`
+          : `Reject ${proposals.length} visible pending predictions? The prediction records will be preserved.`,
+      confirmLabel:
+        action === "accept" ? "Accept predictions" : "Reject predictions",
+      destructive: action === "reject",
+    });
+    if (accepted && currentImageIdRef.current === imageId) {
+      bulkReviewMutation.mutate({ action, imageId, proposals, classId });
+    }
+  }
 
   // Acceptance writes a new server revision. Keep local edits paused until the
   // existing clean-document hydrator has adopted that revision.
@@ -2311,41 +2354,99 @@ export function AnnotationEditor({
     runSamOnBox,
   ]);
 
+  const confirmDiscardUnsavedEdits = useCallback(
+    (actionLabel: string) =>
+      confirm({
+        title: "Discard annotation edits?",
+        message: `Saving failed. Discard unsaved local annotation edits and ${actionLabel}?`,
+        confirmLabel: "Discard edits",
+        destructive: true,
+      }),
+    [confirm],
+  );
+
   const navigateToImage = useCallback(
     async (imageId: string | null) => {
       if (!imageId) {
         return;
       }
+      const fromImage = currentImageIdRef.current;
       if (!(await flushPendingSave())) {
         if (!isDirty(stateRef.current)) {
           return;
         }
-        if (!confirmDiscardUnsavedEdits("open another image")) {
+        if (!(await confirmDiscardUnsavedEdits("open another image"))) {
           return;
         }
       }
+      if (currentImageIdRef.current !== fromImage) return;
       await clearAssistSession(true);
       setInteraction(null);
       startTransition(() => {
         setCurrentImageId(imageId);
       });
     },
-    [clearAssistSession, flushPendingSave],
+    [clearAssistSession, confirmDiscardUnsavedEdits, flushPendingSave],
   );
 
   const handleClose = useCallback(async () => {
+    const imageId = currentImageIdRef.current;
     if (!(await flushPendingSave())) {
       if (!isDirty(stateRef.current)) {
         return;
       }
-      if (!confirmDiscardUnsavedEdits("return to the gallery")) {
+      if (!(await confirmDiscardUnsavedEdits("return to the gallery"))) {
         return;
       }
     }
+    if (currentImageIdRef.current !== imageId) return;
     await clearAssistSession(true);
     setInteraction(null);
     onClose();
-  }, [clearAssistSession, flushPendingSave, onClose]);
+  }, [
+    clearAssistSession,
+    confirmDiscardUnsavedEdits,
+    flushPendingSave,
+    onClose,
+  ]);
+
+  async function reloadSavedRevision() {
+    const imageId = currentImageId;
+    const documentVersion = stateRef.current.documentVersion;
+    if (
+      !(await confirm({
+        title: "Reload the saved revision?",
+        message:
+          "Discard unsaved local edits and reload the latest saved revision?",
+        confirmLabel: "Discard and reload",
+        destructive: true,
+      }))
+    )
+      return;
+    await savePromiseRef.current;
+    if (
+      currentImageIdRef.current !== imageId ||
+      stateRef.current.documentVersion !== documentVersion
+    )
+      return;
+    const refreshed = await sessionQuery.refetch();
+    if (
+      currentImageIdRef.current !== imageId ||
+      stateRef.current.documentVersion !== documentVersion
+    )
+      return;
+    if (
+      refreshed.isSuccess &&
+      refreshed.data?.image.id === imageId &&
+      refreshed.data.image.annotation_revision >= stateRef.current.baseRevision
+    ) {
+      resetToSession(refreshed.data);
+    } else {
+      setShortcutMessage(
+        "Could not load the saved revision. Your local edits are still open.",
+      );
+    }
+  }
 
   useEffect(() => {
     return () => {
@@ -2598,6 +2699,7 @@ export function AnnotationEditor({
   if (sessionQuery.isPending || !sessionQuery.data || !imageSize) {
     return (
       <div className="annotation-editor-shell">
+        {confirmationDialog}
         <div className="annotation-editor-splash">
           {sessionQuery.error ? (
             <ErrorState
@@ -2657,6 +2759,7 @@ export function AnnotationEditor({
 
   return (
     <div className="annotation-editor-shell" data-testid="annotation-editor">
+      {confirmationDialog}
       <header className="annotation-editor-topbar">
         <div>
           <p className="eyebrow">Manual annotation editor</p>
@@ -2874,15 +2977,7 @@ export function AnnotationEditor({
                   <button
                     type="button"
                     className="secondary"
-                    onClick={async () => {
-                      const shouldReload = window.confirm(
-                        "Discard unsaved local edits and reload the latest saved revision?",
-                      );
-                      if (!shouldReload) {
-                        return;
-                      }
-                      await sessionQuery.refetch();
-                    }}
+                    onClick={() => void reloadSavedRevision()}
                   >
                     Reload latest
                   </button>
@@ -3115,19 +3210,7 @@ export function AnnotationEditor({
                   predictionStatusFilter !== "pending" ||
                   bulkReviewMutation.isPending
                 }
-                onClick={() => {
-                  const count = visiblePredictions.length;
-                  if (
-                    window.confirm(
-                      `Accept ${count} visible pending predictions? Class-agnostic masks use the currently selected class. Original model provenance will be preserved.`,
-                    )
-                  ) {
-                    bulkReviewMutation.mutate({
-                      action: "accept",
-                      selected: false,
-                    });
-                  }
-                }}
+                onClick={() => void confirmBulkReview("accept", false)}
               >
                 Accept visible
               </button>
@@ -3140,17 +3223,7 @@ export function AnnotationEditor({
                   predictionStatusFilter !== "pending" ||
                   bulkReviewMutation.isPending
                 }
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      `Accept ${selectedPredictionIds.length} selected pending predictions? Class-agnostic masks use the currently selected class.`,
-                    )
-                  )
-                    bulkReviewMutation.mutate({
-                      action: "accept",
-                      selected: true,
-                    });
-                }}
+                onClick={() => void confirmBulkReview("accept", true)}
               >
                 Accept selected
               </button>
@@ -3163,19 +3236,7 @@ export function AnnotationEditor({
                   predictionStatusFilter !== "pending" ||
                   bulkReviewMutation.isPending
                 }
-                onClick={() => {
-                  const count = visiblePredictions.length;
-                  if (
-                    window.confirm(
-                      `Reject ${count} pending predictions? The prediction records will be preserved.`,
-                    )
-                  ) {
-                    bulkReviewMutation.mutate({
-                      action: "reject",
-                      selected: false,
-                    });
-                  }
-                }}
+                onClick={() => void confirmBulkReview("reject", false)}
               >
                 Reject visible
               </button>

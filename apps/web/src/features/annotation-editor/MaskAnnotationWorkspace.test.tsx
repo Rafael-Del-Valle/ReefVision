@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { beforeAll, beforeEach, expect, it, vi } from "vitest";
 
@@ -210,6 +211,12 @@ it.each(["raster", "boxes"] as const)(
     await mountEnhancedWithFill();
     navigateEnhanced(destination);
     await screen.findByText("Save unavailable");
+    const confirmation = await screen.findByRole("alertdialog", {
+      name: "Discard mask edits?",
+    });
+    fireEvent.click(
+      within(confirmation).getByRole("button", { name: "Cancel" }),
+    );
     expect(screen.getByTestId("enhanced-annotation-editor")).toHaveAttribute(
       "data-active-annotation-type",
       "masks",
@@ -384,15 +391,27 @@ it("requires an active class before filling", async () => {
 
 it("retains unsaved fill when Brush navigation cannot save", async () => {
   vi.mocked(saveAnnotations).mockRejectedValue(new Error("Save unavailable"));
-  vi.spyOn(window, "confirm").mockReturnValue(false);
+  const nativeConfirm = vi
+    .spyOn(window, "confirm")
+    .mockImplementation(() => Promise.resolve(false) as unknown as boolean);
   await mount();
   fireEvent.click(screen.getByTestId("activate-polygon-fill-tool"));
   seed();
   await screen.findByText("1 masks");
-  fireEvent.click(screen.getByRole("button", { name: "Brush" }));
+  const brush = screen.getByRole("button", { name: "Brush" });
+  brush.focus();
+  fireEvent.click(brush);
   await screen.findByText("Save unavailable");
+  const dialog = await screen.findByRole("alertdialog", {
+    name: "Discard mask edits?",
+  });
+  fireEvent.keyDown(within(dialog).getByRole("button", { name: "Cancel" }), {
+    key: "Escape",
+  });
   expect(openBrush).not.toHaveBeenCalled();
   expect(screen.getByText("1 masks")).toBeInTheDocument();
+  expect(brush).toHaveFocus();
+  expect(nativeConfirm).not.toHaveBeenCalled();
 });
 
 it.each(
