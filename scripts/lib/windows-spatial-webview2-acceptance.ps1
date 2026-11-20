@@ -321,6 +321,7 @@ function Invoke-ReefVisionWorkspaceAcceptance {
         quality_control = @('qc-review-workflow-live.spec.ts', 'qc-review-workflow.json')
         dense_image = @('dense-image-live.spec.ts', 'dense-image-evidence.json')
         manual_video = @('manual-video-editor-live.spec.ts', 'manual-video-editor-evidence.json')
+        editor_decisions = @('editor-confirmations-live.spec.ts', 'editor-confirmation-evidence.json')
     }
     $specs = @($journeys.Values | ForEach-Object { $_[0] })
     $output = Invoke-ReefVisionInstalledPlaywrightSuite -NodePath $NodePath -RepositoryRoot $RepositoryRoot `
@@ -361,6 +362,14 @@ function Invoke-ReefVisionWorkspaceAcceptance {
         $video.track.reopened_rev -le $video.track.saved_rev -or $video.track.saved_rev -le $video.track.from_rev -or
         $video.stale_http_status -ne 409 -or @($video.hidden_track.keyframes).Count -lt 1) {
         throw 'Manual video receipt lacks playable-source identity, saved revisions, stale rejection or hidden geometry.'
+    }
+    $editor = $result.editor_decisions
+    $uuid = '^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$'
+    if ($editor.image_id -notmatch $uuid -or $editor.persisted_mask_id -notmatch $uuid -or
+        $editor.persisted_revision -ne 3 -or $editor.box_after_confirmed_reload -ne 9 -or
+        @($editor.conflicts).Count -ne 2 -or @($editor.conflicts | Where-Object { $_ -ne 409 }).Count -ne 0 -or
+        $editor.canceled_preserved_drafts_and_undo -ne $true) {
+        throw 'Editor decisions receipt lacks both real revision conflicts, the approved reload, or the unchanged saved mask and cancelled drafts.'
     }
     return [pscustomobject]$result
 }
