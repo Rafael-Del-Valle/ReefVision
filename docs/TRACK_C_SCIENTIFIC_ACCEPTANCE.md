@@ -4,6 +4,17 @@ This is a **test plan**, not evidence that ReefVision 1.4 or 1.5 is validated or
 
 ## 1.4: 3D geometry and longitudinal studies
 
+**Source-coordinate triangle cancellation gate (synthetic, not field validation):**
+Two nearly parallel XYZ triangles with exact source determinants of -1 and -3 must
+produce areas of 0.5 and 1.5 source units squared, even if binary64 cross products
+respectively round to zero or a plausible but incorrect nonzero result. Verify both
+winding orders, reject genuinely unrepresentable positive areas rather than publish
+zero, and retain exact collinearity as zero. Test direct measurement, standalone API,
+and two executions of a saved typed Workflow Builder graph; assert complete artifact
+and SHA-256 parity, unverified source specimen identity and scale-only uncertainties.
+Regression: `test_spatial_mesh_area_cancellation_v14.py`. This does not validate coral
+surface reconstruction, biological condition, or branch anatomy.
+
 | Gate | Reproducible acceptance experiment | Required evidence |
 | --- | --- | --- |
 | Import | Load known-good and malformed OBJ, ASCII PLY and GLB 2.0 fixtures; include point-only PLY, excessive vertex/face counts, malformed indices and truncated input. | Deterministic parse outcomes, byte hashes, bounds checks and error messages; no network or remote model downloads. |
