@@ -357,7 +357,9 @@ test("reviews monitoring findings and compares only compatible project-local ass
   }
 
   await openMonitoring(page, web, north.project);
-  await page.getByLabel("Saved assessment").selectOption(a.assessment.id);
+  await page
+    .getByRole("combobox", { name: "Saved assessment", exact: true })
+    .selectOption(a.assessment.id);
   const replaySaved = waitPost(
     page,
     `${api}/projects/${north.project.id}/workflow-graphs`,
