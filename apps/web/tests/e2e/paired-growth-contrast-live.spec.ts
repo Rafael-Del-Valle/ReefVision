@@ -730,12 +730,8 @@ test("study design freezes, reopens, exports and replays a reviewed declaration"
   }
   async function openStudies() {
     await openProject();
-    await page
-      .getByRole("tab", { name: "Organisms & ecology", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "Study design", exact: true })
-      .click();
+    await page.getByRole("tab", { name: "Research", exact: true }).click();
+    await page.getByRole("tab", { name: "Study design", exact: true }).click();
     return page.getByRole("region", { name: "Study design", exact: true });
   }
 

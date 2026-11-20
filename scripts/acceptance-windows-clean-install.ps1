@@ -10,6 +10,7 @@ param(
     [string]$LineageVerificationPath = '',
     [string]$ExpectedInitialSchemaRevision = '',
     [string]$SpatialWorkflowNodePath = '',
+    [switch]$ResearchWorkflowAcceptance,
     [switch]$HostedStandardUserWebView2,
     [switch]$VerifyPreviousInstallerRejectsUpgradedProfile,
     [switch]$PreviousInstallerSupportsIsolatedAcceptance,
@@ -26,12 +27,16 @@ Set-StrictMode -Version Latest
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'lib\windows-clean-acceptance.ps1')
 . (Join-Path $PSScriptRoot 'lib\windows-spatial-webview2-acceptance.ps1')
+. (Join-Path $PSScriptRoot 'lib\windows-research-webview2-acceptance.ps1')
 . (Join-Path $PSScriptRoot 'lib\windows-standard-user-webview2.ps1')
 
 if (-not $DisposableTest -and -not $PlanOnly) {
     throw 'Refusing destructive MSI acceptance. Supply -DisposableTest on a disposable Windows VM/machine, or use -PlanOnly.'
 }
 if ($DisposableTest -and $PlanOnly) { throw '-DisposableTest and -PlanOnly are mutually exclusive.' }
+if ($ResearchWorkflowAcceptance -and -not $SpatialWorkflowNodePath) {
+    throw 'Installed research journeys require -SpatialWorkflowNodePath for the packaged WebView2 driver.'
+}
 if ($HostedStandardUserWebView2) {
     if (-not $DisposableTest -or -not $SpatialWorkflowNodePath) {
         throw 'A hosted standard WebView2 user requires disposable installed spatial acceptance.'
@@ -143,6 +148,7 @@ $report = [ordered]@{
     frontend_backend_connectivity = New-ReefVisionEvidenceResult
     webview2 = New-ReefVisionEvidenceResult
     spatial_workflow = if ($SpatialWorkflowNodePath) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Packaged spatial WebView2 acceptance not requested' }
+    research_workflow = if ($ResearchWorkflowAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Packaged research WebView2 acceptance not requested' }
     schema_migration = New-ReefVisionEvidenceResult
     model_policy = New-ReefVisionEvidenceResult
     provider_manifests = New-ReefVisionEvidenceResult
@@ -626,6 +632,13 @@ try {
                 $spatialPort = Wait-BackendPort -Path (Join-Path $SpatialDataRoot 'runtime\backend-port.txt') -DesktopProcess $spatialDesktop -BackendLogPath (Join-Path $SpatialDataRoot 'logs\backend.log')
                 $spatialApi = "http://127.0.0.1:$spatialPort/api/v1"
                 $null = Assert-AcceptancePackagedBackend -Api $spatialApi -ExpectedAppVersion $ProductVersion -ExpectedRevision $ExpectedSchemaRevision
+                if ($ResearchWorkflowAcceptance) {
+                    $report.research_workflow = Get-ReefVisionResearchJourneyEvidence {
+                        Invoke-ReefVisionResearchJourneyAcceptance -NodePath $SpatialWorkflowNodePath -RepositoryRoot $RepositoryRoot `
+                            -EvidenceRoot $EvidenceRoot -Api $spatialApi -DebugPort $debugPort -DesktopProcessId $spatialDesktop.Id `
+                            -ExpectedBrowserSid $browserSid -BrowserArtifactsDirectory $browserArtifacts
+                    }
+                }
                 Invoke-ReefVisionSpatialWebView2Acceptance -NodePath $SpatialWorkflowNodePath -RepositoryRoot $RepositoryRoot `
                     -EvidenceRoot $EvidenceRoot -Api $spatialApi -DebugPort $debugPort -DesktopProcessId $spatialDesktop.Id `
                     -ExpectedBrowserSid $browserSid -BrowserArtifactsDirectory $browserArtifacts
@@ -649,6 +662,9 @@ try {
                     Wait-ReefVisionWebView2DebugClosure -Port $debugPort
                 }
             }
+        }
+        if ($ResearchWorkflowAcceptance -and $report.research_workflow.status -eq 'NOT RUN') {
+            $report.research_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $report.spatial_workflow.detail
         }
         Save-Report
     }
@@ -1090,6 +1106,9 @@ try {
     }
     if ($report.spatial_workflow.status -eq 'FAIL') {
         throw $report.spatial_workflow.detail
+    }
+    if ($report.research_workflow.status -eq 'FAIL') {
+        throw $report.research_workflow.detail
     }
 } catch {
     $report.failure_reason = $_.Exception.Message
