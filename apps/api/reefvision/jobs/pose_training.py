@@ -348,7 +348,7 @@ def _materialized_pose_dataset_files(destination: Path) -> list[dict[str, str]]:
             try:
                 attributes = getattr(member.lstat(), "st_file_attributes", 0)
             except (FileNotFoundError, NotADirectoryError) as exc:
-                raise ValidationError("Pose dataset member vanished while fingerprinting") from exc
+                raise ValidationError("Pose dataset member disappeared") from exc
             if attributes & 0x400:
                 raise ValidationError("Pose dataset contains a Windows junction")
         if not member.is_file():
