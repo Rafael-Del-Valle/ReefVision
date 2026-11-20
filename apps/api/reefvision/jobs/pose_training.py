@@ -459,6 +459,19 @@ def materialize_pose_training_exports(
     validation_stage = destination.parent / f".{destination.name}-validation"
     if validation_content is not None and validation_stage.is_symlink():
         raise ValidationError("Pose training validation staging path is a symbolic link")
+    if sys.platform == "win32":
+        # A staging junction is a sibling of destination and therefore outside
+        # the managed destination guard. Reject it before any export writes.
+        paths_to_check = [destination, *destination.parents]
+        if validation_content is not None:
+            paths_to_check.append(validation_stage)
+        for component in paths_to_check:
+            try:
+                attributes = getattr(component.lstat(), "st_file_attributes", 0)
+            except (FileNotFoundError, NotADirectoryError):
+                continue
+            if attributes & 0x400:
+                raise ValidationError("Pose training export path contains a Windows junction")
 
     # A failed cleanup must not mix stale scientific frames into a new training run.
     if destination.exists():

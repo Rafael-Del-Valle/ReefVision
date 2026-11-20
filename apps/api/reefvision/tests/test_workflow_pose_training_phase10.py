@@ -1144,9 +1144,37 @@ def test_pose_run_output_rejects_windows_junction_into_another_run(tmp_path: Pat
             ValidationError, match="trainer output path contains a Windows junction"
         ):
             _verified_pose_trainer_save_dir(junction, prior_output)
+        # A direct materialization must reject redirected ancestors as well.
+        with pytest.raises(ValidationError, match="export path contains a Windows junction"):
+            materialize_pose_training_exports(
+                training_content=_pose_export_zip(b"reviewed"),
+                validation_content=None,
+                destination=junction / "frozen-export",
+            )
         assert checkpoint.read_bytes() == b"preserve-registered-pose-weights"
     finally:
         junction.rmdir()
+
+    # The temporary validation-stage directory is a sibling of the frozen
+    # dataset, so it requires its own junction guard before export or cleanup.
+    stage_junction = current_run / ".frozen-export-validation"
+    subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(stage_junction), str(prior_output)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    try:
+        with pytest.raises(ValidationError, match="export path contains a Windows junction"):
+            materialize_pose_training_exports(
+                training_content=_pose_export_zip(b"reviewed-train"),
+                validation_content=_pose_export_zip(b"reviewed-holdout"),
+                destination=current_run / "frozen-export",
+            )
+        assert not (current_run / "frozen-export").exists()
+        assert checkpoint.read_bytes() == b"preserve-registered-pose-weights"
+    finally:
+        stage_junction.rmdir()
 
 
 def test_pose_training_output_cleanup_rejects_locked_previous_checkpoint(
