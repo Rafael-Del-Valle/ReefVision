@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T14:56:08Z`
+Updated: `2026-11-20T15:39:10Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1120,8 +1120,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Thirty-five backend checks cover class use, archived classes, reassignment and protected historical records. — `docs/validation/research-workflows-1-6.json` (`rv16-class-safe-writes`)
+- `browser`: Classes retained the frozen manifest and exported YOLO mapping after a reviewed reassignment and reopen. Polygon and image-level references prevented deletion. — `docs/validation/research-workflows-1-6.json` (`rv16-class-frozen-export`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1140,8 +1140,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: 175 video tests exercised draft and persisted editing. A source-built WebView2 journey preserved a hidden mask and untouched keyframe and rejected a stale revision. — `docs/validation/research-workflows-1-6.json` (`rv16-video-edits-source`)
+- `browser`: On 5,000 decoded fixture images, 24 cards appeared in 106.6 ms and the first thumbnail in 143.1 ms. The 1,500-box editor supported selection, hide, solo, undo, redo and reopen. — `docs/validation/research-workflows-1-6.json` (`rv16-gallery-canvas`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1160,7 +1160,7 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
+- `source`: Six populated profiles from original scientific, QC and 1.5 software retained all original columns, rows, file hashes and foreign keys across migration and two opens. Seventy migration, backup and compatibility tests passed. — `docs/validation/research-workflows-1-6.json` (`rv16-independent-0038-families`)
 - `browser`: none recorded
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
@@ -1181,7 +1181,7 @@ Acceptance checks:
 Evidence:
 
 - `source`: none recorded
-- `browser`: none recorded
+- `browser`: At 960 by 640 CSS pixels and 150% scale, a new researcher used the keyboard to create a project, imported an original, annotated, undid and redid, reviewed, reopened and downloaded YOLO. No external HTTP attempts were recorded. — `docs/validation/research-workflows-1-6.json` (`rv16-first-use-compact`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1200,8 +1200,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Seven Project Exchange tests verified stable retry identity, source ownership, damaged data refusal, and two saved frozen QC runs in each of two generations of imported projects. — `docs/validation/research-workflows-1-6.json` (`rv16-frozen-qc-exchange`)
+- `browser`: The ordinary Review workspace froze evidence, assigned and annotated items, bulk-started reviews and replayed the guided graph twice. A retry in a new backend process changed zero records. — `docs/validation/research-workflows-1-6.json` (`rv16-frozen-qc-review`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded

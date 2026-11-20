@@ -1,0 +1,268 @@
+{
+  "candidate_commit": "7e13bcbad3064b53b033f07f4f5f981f3a061652",
+  "draft_pull_request": 98,
+  "evidence_material": "Generated fixture projects in isolated profiles.",
+  "source_test_suites": {
+    "alembic_backup_rollback_and_lineage": {
+      "tests": 70,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "paired_research_and_exchange_regressions": {
+      "tests": 32,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "combined_class_and_qc_regressions": {
+      "tests": 18,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "class_safety": {
+      "tests": 35,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "frozen_exchange": {
+    "source": "7e13bcbad3064b53b033f07f4f5f981f3a061652",
+    "tests": 7,
+    "failed": 0,
+    "skipped": 0,
+    "prior_observation": "The old import accepted a changed mask census and left source class UUIDs in restored count keys. The desktop subsequently refused saved frozen QC replay.",
+    "checked": "Reject changed mask counts before creating a project. Import an unchanged box and polygon, replay the frozen QC graph twice, re-export into a second project generation and replay twice. Preserve the original manifest and geometry."
+  },
+  "six_independently_created_profiles": {
+    "science0038": {
+      "old_revision": "0038",
+      "new_revision": "b16_integrated_0001",
+      "old_db_sha256": "72270624452b8d05693e39099025ba2042290f515b827424c91f42af155a14c6",
+      "preserved_prior_tables": 57,
+      "all_prior_table_fingerprints_sha256": "ece953ff47f90d1c117dbc143d964e6d31789e56ff1f66eeca50e672b191b26c",
+      "managed_files": 1,
+      "managed_project_hashes_sha256": "403defcb3825b90ffaa62faa09638da66fc1ab70552d43d80db0f8cc98062ed2",
+      "foreign_key_violations": 0,
+      "preflight_read_only": true,
+      "second_desktop_open_byte_identical": true,
+      "original_preserved": true
+    },
+    "qc0038": {
+      "old_revision": "0038",
+      "new_revision": "b16_integrated_0001",
+      "old_db_sha256": "2a25e7a527bc4b3da98a0f5b883432042bdacdf66cbc103f8b85d502be5be49b",
+      "preserved_prior_tables": 56,
+      "all_prior_table_fingerprints_sha256": "d6c8a18a1170f6cbd530c3a9093a21a9e7dd96f2225793f0f3ac3a073a568b7f",
+      "managed_files": 1,
+      "managed_project_hashes_sha256": "8239c6c86e606104d14c8c9b30b23a75198833f423a158e7e98c9facdddc403c",
+      "foreign_key_violations": 0,
+      "preflight_read_only": true,
+      "second_desktop_open_byte_identical": true,
+      "original_preserved": true
+    },
+    "qc0039": {
+      "old_revision": "0039",
+      "new_revision": "b16_integrated_0001",
+      "old_db_sha256": "f296f8e5dd89e25edd0b7bd1ed7ca9530b38f5f9274a34c1d9cf3147bb8d25e1",
+      "preserved_prior_tables": 56,
+      "all_prior_table_fingerprints_sha256": "3a8e992be2aeb18471250a45cc57dc1b01b0de15e8aaeb3bcce817bf9bdfd8ff",
+      "managed_files": 8,
+      "managed_project_hashes_sha256": "68d09b34dae062e93f7b5d50fcd7c2c0f6c9e3f6595a5c67e9bba739e065b4ac",
+      "foreign_key_violations": 0,
+      "preflight_read_only": true,
+      "second_desktop_open_byte_identical": true,
+      "original_preserved": true
+    },
+    "qc0040": {
+      "old_revision": "0040",
+      "new_revision": "b16_integrated_0001",
+      "old_db_sha256": "532fa7d7717cd34aeafd0acc7dfc581332ce1ee2dd7eaf55f4d9e7a624252816",
+      "preserved_prior_tables": 56,
+      "all_prior_table_fingerprints_sha256": "a458f248e2548574d1bfdcb6960f0e40eb27c7d4c6f0e567aae2d6e7d1969a00",
+      "managed_files": 8,
+      "managed_project_hashes_sha256": "68d09b34dae062e93f7b5d50fcd7c2c0f6c9e3f6595a5c67e9bba739e065b4ac",
+      "foreign_key_violations": 0,
+      "preflight_read_only": true,
+      "second_desktop_open_byte_identical": true,
+      "original_preserved": true
+    },
+    "qc0041": {
+      "old_revision": "0041",
+      "new_revision": "b16_integrated_0001",
+      "old_db_sha256": "0b3c2235b9d9907d66752e074f5eeebc7410969ed222fd56b754dc3d97f334ff",
+      "preserved_prior_tables": 57,
+      "all_prior_table_fingerprints_sha256": "d45f8a788c20c9d30230880207ebaf56f4b56cc4110a9822e94a903052fcea2e",
+      "managed_files": 8,
+      "managed_project_hashes_sha256": "68d09b34dae062e93f7b5d50fcd7c2c0f6c9e3f6595a5c67e9bba739e065b4ac",
+      "foreign_key_violations": 0,
+      "preflight_read_only": true,
+      "second_desktop_open_byte_identical": true,
+      "original_preserved": true
+    },
+    "integrated15": {
+      "old_revision": "b15_integrated_0002",
+      "new_revision": "b16_integrated_0001",
+      "old_db_sha256": "3cc846535f07abcdc5c24f61aa18d781e9e94d8f40489de4243c310d502333d3",
+      "preserved_prior_tables": 107,
+      "all_prior_table_fingerprints_sha256": "dbe662bfe6161210ecdd4cf306c28b4b573c483a95310ec6095d075f6a2a3932",
+      "managed_files": 303,
+      "managed_project_hashes_sha256": "cb227e6854b72024bcf6d20b48e2ec8812c9ff41f21d3ac8123a4126ce81bb61",
+      "foreign_key_violations": 0,
+      "preflight_read_only": true,
+      "second_desktop_open_byte_identical": true,
+      "original_preserved": true
+    }
+  },
+  "classes": {
+    "source": "847db19cf100d00f8e87f304bf2effa3cdbd0612",
+    "surface": "source-browser",
+    "project_id": "c5390a1d-0ab4-4b6c-89e5-032c82ca1e33",
+    "original_sha256": "11da437ad33072b11627e77994f869a1f92c4c0b94e0b64f920567853ff0674b",
+    "reassign": {
+      "annotation_id": "80d53c42-357a-4c75-82d4-d5206bceacc3",
+      "from": "11e55f10-2f97-41be-91a8-7b8b90c995bf",
+      "to": "0a078df6-3366-4f65-91e8-9ba86b6ad253",
+      "original_revision": 2,
+      "final_revision": 3
+    },
+    "protected": {
+      "class_id": "48249831-46ff-403c-95c1-1dd437ac9bed",
+      "mask_id": "fc5090d6-0c62-4460-8fa8-8e32d6beb93b",
+      "image_label_id": "702f77db-d885-4347-9b32-f9b3cfac0439"
+    },
+    "frozen": {
+      "dataset_version_id": "f80a55f2-d0d9-4c8e-923a-e2d9016406f1",
+      "manifest_sha256": "d88d2f6a4128431b1809bc47b81c1f9de74f6a0e7c5959f58ab667d3a61861ff",
+      "archive_sha256": "ab1c161546aa89c4e48494d46d761d709299860e4086527bf0da32d4a134d5f1"
+    }
+  },
+  "gallery": {
+    "source": "e26d8af3e942001a5d5526444964ba95a261bfbb",
+    "indexed_files": 5000,
+    "decoded_files": 5000,
+    "annotation_count": 1500,
+    "first_cards_ms": 106.60000000149012,
+    "first_thumbnail_ms": 143.10000000149012,
+    "pages": 209,
+    "source_sha256": "4c4a07b3ef207196303cd2464d8fd6ded2d5fb75f834b0d070a3348d2119183c",
+    "performance_scope": "Browser rendering from project click to all 24 card elements and one animation frame after the focused image, first filmstrip thumbnail and any exposed grid thumbnails finish loading. Editor and action timings include Playwright observation latency. Fixture preflight loaded page metadata and three thumbnail bytes outside the browser."
+  },
+  "source_webview2_video": {
+    "source": "3cd90ac0ec746fb6a243fe97e35e586b370ec8be",
+    "runtime_version": "1.5.0 topic shell",
+    "surface": "tauri-webview2",
+    "video": {
+      "id": "7d50aae0-ba9d-4ff4-a95f-2470c51f8c07",
+      "sha256": "f2633700e978471bfad9d33f87e539d02f9658afeeacfce340fd9d34c9c91b92",
+      "width": 96,
+      "height": 64,
+      "frames": 12,
+      "fps": 10
+    },
+    "track": {
+      "id": "2c583d17-9547-4d2e-a9bd-dcd127a6cea3",
+      "from_rev": 1,
+      "saved_rev": 2,
+      "reopened_rev": 3,
+      "initial_bbox": [
+        8,
+        7,
+        24,
+        19
+      ],
+      "final_bbox": [
+        16,
+        7,
+        24,
+        19
+      ],
+      "untouched_keyframe": {
+        "frame": 8,
+        "bbox": [
+          10,
+          10,
+          50,
+          30
+        ],
+        "confidence": null
+      }
+    },
+    "hidden_track": {
+      "id": "54b75bab-1677-497d-89c9-455c93ca2ac7",
+      "revision": 1,
+      "keyframes": [
+        {
+          "frame": 4,
+          "bbox": [
+            40,
+            12,
+            17,
+            20
+          ],
+          "confidence": null,
+          "mask_polygons": [
+            [
+              [
+                41,
+                13
+              ],
+              [
+                52,
+                14
+              ],
+              [
+                49,
+                29
+              ]
+            ]
+          ]
+        }
+      ]
+    },
+    "stale_http_status": 409,
+    "export_sha256": "13c17635885169c659bc588d5708f24c9b7e3c17ea7cfabdaecd3ff50ea18e4a"
+  },
+  "compact_first_use": {
+    "surface": "source-browser",
+    "application_version": "1.5.0",
+    "empty_before_project_submission": true,
+    "welcome_focus_handoff": true,
+    "startup_dismissal_persisted": true,
+    "emulated_device_scale_factor": 1.5,
+    "emulated_viewport_css_px": [
+      960,
+      640
+    ],
+    "nonlocal_browser_http_blocked": true,
+    "external_http_attempt_count": 0,
+    "project_id": "d3cf2c0d-9bbc-48ee-8f38-f2652bec60c9",
+    "image_sha256": "11da437ad33072b11627e77994f869a1f92c4c0b94e0b64f920567853ff0674b",
+    "annotation_status": "reviewed",
+    "export_sha256": "2a71abcec5a7c50fff17b85c955c85ba620c0e5cf39b6e5f5549ef0c85384dfa"
+  },
+  "qc_browser": {
+    "backend_source": "052342d8b61aaa102799650288ebe032c592ba78",
+    "dataset_manifest_sha256": "d8f6cc3610319dfec08edf935328106b75b2acef2c532012d9c358a8d800503c",
+    "graph_sha256": "9346d8155a2a1796ce92258fbe7c24992b16fd9edc9e2e61c8b2f60a79299060",
+    "workflow_runs": 2,
+    "reopened_in_new_process": true,
+    "retry_changed_count": 0
+  },
+  "retained_fixture_receipts_sha256": {
+    "class-reassign-and-frozen-yolo": "0edce8084b3be14e9ec1824f38aee29b6bab0a553e006f5988973079bf3b6cda",
+    "dense-gallery-and-editor": "c55a2115afe7f5352ea590fe973930668ed55a9bf66df853c6ccfa00c9b49256",
+    "first-use-compact": "7e81492c26791c9cbbf1e2f8e972b8407074b5609dde4af24890ee0343e221bc",
+    "video-edit-webview2": "1b72f74d89780c9b3e9ede7ce73dce1be4783bca9cc1dc4afa9dbd6b73f67549",
+    "qc-frozen-saved-replay": "dd1f24e73bf15303fcb963e2a6b6d2c735f6d0216b62748a85f964e861621307",
+    "qc-bulk-process-restart": "8c3f08c09be037a6e880d3c13d6cab0a27c0fc2501970f8b2b89df2c12962509",
+    "six-profile-migrations": "a03257af0d1ccb84792e073917f6e0dae4bd148b76da158de870be32248d6de3",
+    "predecessor-qc-refusals": "970556fe0ff91185fd339866f943f2bb2f0dc7e8df29780e588eb1128b6df96c"
+  },
+  "open_checks": [
+    "Installed 1.6 Windows candidate on an ordinary account, fresh data and upgrade/restore.",
+    "Independent field review, genuine prior-user backup and Smart App Control enforcing device remain recorded in the owner acceptance register."
+  ]
+}
