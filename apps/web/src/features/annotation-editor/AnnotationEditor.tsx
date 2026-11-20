@@ -4231,6 +4231,7 @@ export function AnnotationEditor({
                           y={proposal.y_min + 14 * strokeScale}
                           fill={labelClass?.display_color ?? "#f5c542"}
                           fontSize={12 * strokeScale}
+                          pointerEvents="none"
                         >
                           {`${labelClass?.name ?? proposal.predicted_label} ${proposal.confidence.toFixed(2)}`}
                         </text>
@@ -4273,6 +4274,7 @@ export function AnnotationEditor({
                           y={annotation.y_min + 14 * strokeScale}
                           fill={labelClass?.display_color ?? "#72dbc9"}
                           fontSize={12 * strokeScale}
+                          pointerEvents="none"
                         >
                           {labelClass?.name ?? annotation.label_class_id}
                         </text>

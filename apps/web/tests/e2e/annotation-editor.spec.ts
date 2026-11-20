@@ -767,15 +767,31 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
   const allAnnotations = page
     .getByTestId("annotation-canvas")
     .locator("[data-testid^='annotation-']");
+  await page.getByRole("button", { name: "Fit (F)", exact: true }).click();
   await expect(allAnnotations).toHaveCount(1500, { timeout: 15000 });
-  await allAnnotations.first().dispatchEvent("pointerdown", {
-    button: 0,
-    buttons: 1,
-    clientX: 1,
-    clientY: 1,
-    pointerId: 1,
-    pointerType: "mouse",
+  const first = page.getByTestId("annotation-annotation-1");
+  const center = await first.evaluate((box) => {
+    const rect = box.getBoundingClientRect();
+    const label = box.parentElement
+      ?.querySelector("text")
+      ?.getBoundingClientRect();
+    if (!label) throw new Error("Expected a visible class label");
+    const left = Math.max(rect.left, label.left);
+    const right = Math.min(rect.right, label.right);
+    const top = Math.max(rect.top, label.top);
+    const bottom = Math.min(rect.bottom, label.bottom);
+    if (left >= right || top >= bottom)
+      throw new Error("Fixture label must overlap its box");
+    const x = (left + right) / 2;
+    const y = (top + bottom) / 2;
+    return {
+      x,
+      y,
+      hit: document.elementFromPoint(x, y)?.getAttribute("data-testid"),
+    };
   });
+  expect(center.hit).toBe("annotation-annotation-1");
+  await page.mouse.click(center.x, center.y);
   await expect(page.getByRole("heading", { name: "1 selected" })).toBeVisible();
 });
 
