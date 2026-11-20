@@ -124,6 +124,16 @@ function ScienceArtifact({
         )}
       </div>
     );
+  if (artifact.data_type === "mesh_longitudinal_comparison")
+    return (
+      <button
+        type="button"
+        className="secondary"
+        onClick={() => downloadSpatialComparison(artifact)}
+      >
+        Download 3D comparison JSON
+      </button>
+    );
   if (artifact.data_type.startsWith("temporal_reefpose") && onOpen)
     return (
       <button type="button" onClick={() => onOpen("video")}>
@@ -131,6 +141,18 @@ function ScienceArtifact({
       </button>
     );
   return null;
+}
+
+function downloadSpatialComparison(artifact: WorkflowArtifact): void {
+  const blob = new Blob([JSON.stringify(artifact, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `3d-comparison-${artifact.id}.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function statusIsActive(status: string | undefined): boolean {
@@ -262,6 +284,13 @@ export function WorkflowGraphWorkspace({
       void runsQuery.refetch();
     },
   });
+  const runSavedMutation = useMutation({
+    mutationFn: (recordId: string) => queueWorkflowRun(project.id, recordId),
+    onSuccess: (run) => {
+      setSelectedRunId(run.id);
+      void runsQuery.refetch();
+    },
+  });
   const resumeReviewMutation = useMutation({
     mutationFn: (nodeRunId: string) =>
       resumeWorkflowReviewNode(
@@ -287,6 +316,7 @@ export function WorkflowGraphWorkspace({
     planMutation.error ??
     saveMutation.error ??
     saveAndRunMutation.error ??
+    runSavedMutation.error ??
     resumeReviewMutation.error ??
     cancelMutation.error;
   const selectedRun = runDetailQuery.data?.run;
@@ -676,6 +706,14 @@ export function WorkflowGraphWorkspace({
                     }
                   >
                     Load
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={runSavedMutation.isPending}
+                    onClick={() => runSavedMutation.mutate(record.id)}
+                  >
+                    Run saved revision
                   </button>
                 </li>
               ))}
