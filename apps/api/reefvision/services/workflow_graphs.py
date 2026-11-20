@@ -196,6 +196,7 @@ _ACTIONS: dict[str, str] = {
     "paired_growth_contrast": "Compare two planned UTC visits from reviewed growth.",
     "reviewed_study_design": "Replay the pinned study design and its reviewed growth evidence.",
     "paired_model_comparison": "Recompute the paired independent-group comparison.",
+    "research_reproducibility_package": "Reopen the verified research package proof.",
     "ecology_event_summary": "Calculate or replay an event summary from reviewed evidence.",
     "scientific_comparison": "Calculate or replay agreement on frozen held-out evidence.",
     "research_publication_figure": "Create or reopen a figure and table with its source.",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import zipfile
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from typing import Any, BinaryIO
@@ -1074,6 +1075,7 @@ def import_project_exchange_v1(
     settings: Settings,
     *,
     project_name: str | None = None,
+    after_restore: Callable[[Project, ProjectExchangePackage], None] | None = None,
 ) -> ProjectExchangeImportResponse:
     """Import the complete 1.0 portable record inventory into a new project."""
 
@@ -1193,6 +1195,8 @@ def import_project_exchange_v1(
             "copied_generated_artifact_count": copied_generated,
             "copied_telemetry_sidecar_count": copied_telemetry,
         }
+        if after_restore is not None:
+            after_restore(project, package)
 
     result = base_import.import_project_exchange(
         source, session, settings, project_name=project_name, finalize=finalize

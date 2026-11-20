@@ -39,6 +39,8 @@ import { InteroperabilityWorkspace } from "./features/interoperability/Interoper
 import { ModelManager } from "./features/models/ModelManager";
 import { OnboardingModal } from "./features/onboarding/OnboardingModal";
 import { QualityControlDashboard } from "./features/quality-control/QualityControlDashboard";
+import { ReproducibilityWorkspace } from "./features/reproducibility/ReproducibilityWorkspace";
+import type { WorkflowGraphRecord } from "./features/workflow-graphs/workflowGraphApi";
 import { ReviewerLab } from "./features/reviewer-lab/ReviewerLab";
 import { ReviewQueueDashboard } from "./features/review-queues/ReviewQueueDashboard";
 import { SystemPanel } from "./features/system/SystemPanel";
@@ -101,6 +103,7 @@ type ProjectView =
   | "scientific_heatmaps"
   | "ecology"
   | "study_design"
+  | "reproducibility"
   | "models"
   | "model_comparison"
   | "training"
@@ -237,6 +240,12 @@ const PROJECT_NAV_GROUPS: Array<{
         description:
           "Declare treatments, independent units, exclusions and the statistical plan.",
       },
+      {
+        id: "reproducibility",
+        label: "Export reproducibility package",
+        description:
+          "Verify and exchange frozen study, review and model evidence.",
+      },
     ],
   },
   {
@@ -293,6 +302,8 @@ function ReefVisionMainApp() {
   );
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [researchGraph, setResearchGraph] =
+    useState<WorkflowGraphRecord | null>(null);
   const [editorLaunch, setEditorLaunch] =
     useState<AnnotationLaunchState | null>(null);
   const [trainingCatalogModelId, setTrainingCatalogModelId] = useState<
@@ -1082,6 +1093,23 @@ function ReefVisionMainApp() {
                 }}
               />
             )}
+            {activeView === "reproducibility" && (
+              <ReproducibilityWorkspace
+                key={selectedProject.id}
+                projectId={selectedProject.id}
+                onOpenProject={(projectId) => {
+                  setSelectedProjectId(projectId);
+                  setEditorLaunch(null);
+                  void queryClient.invalidateQueries({
+                    queryKey: ["project_summaries"],
+                  });
+                }}
+                onOpenWorkflow={(graph) => {
+                  setResearchGraph(graph);
+                  setActiveView("workflows");
+                }}
+              />
+            )}
             {activeView === "study_design" && (
               <StudyDesignWorkspace
                 key={selectedProject.id}
@@ -1108,6 +1136,11 @@ function ReefVisionMainApp() {
                 key={selectedProject.id}
                 project={selectedProject}
                 initialPoseArchitecture={poseArchitecture}
+                initialGraph={
+                  researchGraph?.project_id === selectedProject.id
+                    ? researchGraph.graph_json
+                    : undefined
+                }
                 onOpenScience={setActiveView}
               />
             )}

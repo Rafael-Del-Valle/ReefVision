@@ -10,6 +10,7 @@ from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any, BinaryIO
 
 from reefvision.domain.errors import ValidationError
+from reefvision.domain.reproducibility_v15 import validate_native_proofs
 from reefvision.schemas.project_exchange import (
     ProjectExchangeInspectionResponse,
     ProjectExchangeUnavailableAsset,
@@ -252,6 +253,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                             version, project_id, section_rows, manifest.get("origin")
                         )
                         validate_spatial_exchange_records(project_id, section_rows)
+                        validate_native_proofs(section_rows, manifest)
                         validate_paired_growth_exchange(
                             project_id, section_rows, manifest.get("origin")
                         )

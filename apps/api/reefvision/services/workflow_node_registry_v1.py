@@ -29,6 +29,7 @@ from reefvision.services.workflow_pose_training import (
     register_pose_training_workflow_adapter,
 )
 from reefvision.services.workflow_reefpose_validation import register_reefpose_validation_nodes
+from reefvision.services.workflow_reproducibility_v15 import reproducibility_node
 from reefvision.services.workflow_research_reports import research_report_node
 from reefvision.services.workflow_results_packages import (
     register_results_package_workflow_adapter,
@@ -938,6 +939,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
     registry["paired_growth_contrast"] = paired_growth_contrast_node()
     registry["reviewed_study_design"] = reviewed_study_design_node()
     registry["paired_model_comparison"] = paired_models_node()
+    registry["research_reproducibility_package"] = reproducibility_node()
     registry["field_capture_reconcile"] = field_capture_reconcile_node()
     registry["ecology_event_summary"] = event_summary_workflow_node()
     registry["research_publication_figure"] = research_report_node()
