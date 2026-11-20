@@ -471,13 +471,17 @@ def test_unpaired_obj_unicode_surrogates_fail_closed(client: TestClient, obj_tex
         content=dumps({**PARAMS, "obj_text": obj_text}, ensure_ascii=True),
         headers={"content-type": "application/json"},
     )
-    # Pydantic rejects unpaired UTF-16 before the OBJ parser. Its 422
-    # response must still be valid UTF-8 and preserve a readable error detail.
-    assert response.status_code == 422, response.text
+    # Pydantic versions differ: some reject lone UTF-16 before routing
+    # (422); others pass it to the fail-closed OBJ parser (400). Neither
+    # path may raise UnicodeEncodeError or produce a scientific artifact.
+    assert response.status_code in (400, 422), response.text
     detail = response.json()["detail"]
-    assert detail[0]["type"] == "string_unicode"
-    assert detail[0]["input"].isascii()
-    assert "\\ud" in detail[0]["input"]
+    if response.status_code == 422:
+        assert detail[0]["type"] == "string_unicode"
+        assert detail[0]["input"].isascii()
+        assert "\\ud" in detail[0]["input"]
+    else:
+        assert "unpaired Unicode surrogate" in detail
 
 
 def test_obj_non_bmp_unicode_comment_remains_supported_in_saved_graph(
