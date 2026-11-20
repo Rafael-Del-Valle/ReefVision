@@ -1,9 +1,19 @@
 import { useEffect, useRef, type KeyboardEvent } from "react";
 
+export type OnboardingWorkspace =
+  "classes" | "review_queue" | "workflows" | "system";
+
+const projectActions = [
+  { workspace: "classes", label: "Open class manager" },
+  { workspace: "review_queue", label: "Open QC review" },
+  { workspace: "workflows", label: "Open Workflow Builder" },
+] as const;
+
 interface OnboardingModalProps {
   version: string;
   hasProject: boolean;
   onStartProject: (action: "create" | "choose") => void;
+  onOpenWorkspace: (workspace: OnboardingWorkspace) => boolean;
   onClose: () => void;
   onDismissPermanently: () => void;
 }
@@ -12,6 +22,7 @@ export function OnboardingModal({
   version,
   hasProject,
   onStartProject,
+  onOpenWorkspace,
   onClose,
   onDismissPermanently,
 }: OnboardingModalProps) {
@@ -48,6 +59,11 @@ export function OnboardingModal({
   function startProject(action: "create" | "choose") {
     handingOff.current = true;
     onStartProject(action);
+    onClose();
+  }
+
+  function openWorkspace(workspace: OnboardingWorkspace) {
+    handingOff.current = onOpenWorkspace(workspace);
     onClose();
   }
 
@@ -127,6 +143,20 @@ export function OnboardingModal({
               checkpoint in Model Hub, choose it in the image inspector, then
               review each prediction you want to accept.
             </p>
+            {!hasProject && <p>Open a project to use these tools.</p>}
+            <div className="onboarding-card-actions">
+              {projectActions.map(({ workspace, label }) => (
+                <button
+                  key={workspace}
+                  type="button"
+                  className="secondary"
+                  disabled={!hasProject}
+                  onClick={() => openWorkspace(workspace)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </article>
           <article className="onboarding-card">
             <h3>Add environmental context</h3>
@@ -143,6 +173,15 @@ export function OnboardingModal({
               for project exchange, and System status for backups and recovery.
               Open Help to return to this guide.
             </p>
+            <div className="onboarding-card-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => openWorkspace("system")}
+              >
+                Open System status
+              </button>
+            </div>
           </article>
         </div>
 
