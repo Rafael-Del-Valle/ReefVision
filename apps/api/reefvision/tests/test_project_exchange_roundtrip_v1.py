@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import io
+import json
+from hashlib import sha256
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
+from zipfile import ZipFile
 
 import pytest
 from fastapi import FastAPI
@@ -23,11 +26,111 @@ from reefvision.db.models import (
     WorkflowRun,
 )
 from reefvision.jobs.project_exchange import process_project_exchange_export_job
+from reefvision.jobs.worker import recover_interrupted_jobs
 from reefvision.main import create_app
 from reefvision.services import video_assets as video_assets_module
+from reefvision.services.models import ModelService
 from reefvision.services.workflow_depth_3d import execute_video_depth_3d_adapter
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_images import create_project, image_bytes, import_one
+from reefvision.tests.test_training_recovery import seed_interrupted_run
+from reefvision.tests.test_training_workspace import FakeTrainingRegistrationProvider
+
+
+@pytest.mark.parametrize("include_weights", [False, True])
+def test_generated_exchange_artifacts_follow_model_weight_choice(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    include_weights: bool,
+) -> None:
+    run_id, _, output = seed_interrupted_run(client)
+    best = output / "weights" / "best.pt"
+    last = output / "weights" / "last.pt"
+    with ZipFile(last, "a") as archive:
+        archive.writestr("archive/last-epoch", b"independent last epoch state")
+    periodic = output / "weights" / "epoch23.pt"
+    with ZipFile(periodic, "w") as archive:
+        archive.writestr("archive/data.pkl", b"independent periodic checkpoint metadata")
+    app = cast(FastAPI, client.app)
+    assert recover_interrupted_jobs(app.state.session_factory, test_settings) == 1
+    project = client.get("/api/v1/projects").json()[0]
+    project_root = test_settings.resolved_data_dir / project["storage_root"]
+    monkeypatch.setattr(
+        ModelService,
+        "_provider_for_registration",
+        lambda self, purpose, provider_name: FakeTrainingRegistrationProvider(),
+    )
+    registered = client.post(
+        f"/api/v1/projects/{project['id']}/models/register-from-run",
+        json={"training_run_id": run_id, "display_name": "Reviewed checkpoint"},
+    )
+    assert registered.status_code == 200, registered.text
+    model_id = registered.json()["id"]
+    alias = project_root / "duplicate-custom-name.bin"
+    alias.write_bytes(best.read_bytes())
+    unrelated = project_root / "notes.pt"
+    unrelated.write_bytes(b"Ordinary text analysis report with a team-defined suffix")
+    expected_checkpoints = {
+        sha256(path.read_bytes()).hexdigest() for path in (best, last, periodic)
+    }
+    results_url = f"/api/v1/training-runs/{run_id}/results-packages"
+    bundled = client.post(results_url, json={"include_excel": False, "checkpoint_mode": "best"})
+    assert bundled.status_code == 200, bundled.text
+    created_bundle = bundled.json()
+    bundle_member = f"generated/results-packages/{created_bundle['archive_name']}"
+    bundle_report = f"generated/results-packages/{created_bundle['package_name']}/README.html"
+    without_weights = client.post(
+        results_url, json={"include_excel": False, "checkpoint_mode": "none"}
+    )
+    assert without_weights.status_code == 200, without_weights.text
+    report_archive = f"generated/results-packages/{without_weights.json()['archive_name']}"
+
+    request = client.post(
+        f"/api/v1/projects/{project['id']}/exchange-packages",
+        json={
+            "include_media": False,
+            "include_model_weights": include_weights,
+            "include_generated_artifacts": True,
+        },
+    )
+    assert request.status_code == 202, request.text
+    queued = request.json()
+    assert process_project_exchange_export_job(
+        test_settings, app.state.session_factory, queued["job_id"]
+    )
+    package_id = queued["package"]["id"]
+    downloaded = client.get(f"/api/v1/exchange-packages/{package_id}/download")
+    assert downloaded.status_code == 200, downloaded.text
+    with ZipFile(io.BytesIO(downloaded.content)) as archive:
+        by_member = {name: sha256(archive.read(name)).hexdigest() for name in archive.namelist()}
+        assert archive.read("generated/notes.pt") == unrelated.read_bytes()
+        metrics = (output / "results.csv").relative_to(project_root).as_posix()
+        assert archive.read(f"generated/{metrics}") == (output / "results.csv").read_bytes()
+        assert bundle_report in by_member
+        assert report_archive in by_member
+        manifest = json.loads(archive.read("reefvision-exchange-manifest.json"))
+        model_assets = [item for item in manifest["media"] if item["kind"] == "model"]
+        if include_weights:
+            assert expected_checkpoints <= set(by_member.values())
+            assert [item["record_id"] for item in model_assets] == [model_id]
+            assert bundle_member in by_member
+        else:
+            assert not model_assets
+            assert bundle_member not in by_member
+            assert expected_checkpoints.isdisjoint(by_member.values()), {
+                name: digest for name, digest in by_member.items() if digest in expected_checkpoints
+            }
+        run_records = manifest["sections"]["training_runs"]["path"]
+        history = next(
+            row
+            for row in map(json.loads, archive.read(run_records).splitlines())
+            if row["id"] == run_id
+        )
+        assert history["result_checkpoint_path"].endswith("/weights/best.pt")
+        assert history["artifact_manifest_json"]["last_checkpoint_path"].endswith(
+            "/weights/last.pt"
+        )
 
 
 def test_project_exchange_round_trip_remaps_ids_media_artifacts_and_workflows(
