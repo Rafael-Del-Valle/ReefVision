@@ -13,6 +13,7 @@ from reefvision.schemas.spatial_asset_metadata_revision_v14 import (
 from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvidence
 from reefvision.schemas.spatial_source_asset_v14 import SpatialSourceParseResult
 from reefvision.services.project_exchange_condition_v14 import validate_condition_exchange
+from reefvision.services.project_exchange_mesh_v14 import validate_mesh_workflow_receipts
 from reefvision.services.spatial_asset_metadata_revisions_v14 import (
     spatial_asset_metadata_content,
 )
@@ -168,3 +169,4 @@ def validate_spatial_exchange_records(
             raise ValidationError("Incomplete spatial source parse job cannot carry a result")
 
     validate_condition_exchange(project_id, sections, assets)
+    validate_mesh_workflow_receipts(sections)

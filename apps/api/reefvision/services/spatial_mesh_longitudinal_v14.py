@@ -18,6 +18,18 @@ from reefvision.schemas.spatial_mesh_preview_v14 import (
 )
 
 
+def mesh_review_bundle_sha256(bundle: dict[str, Any]) -> str:
+    return sha256(
+        dumps(
+            bundle,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
 def _is_sha256_fingerprint(value: Any) -> bool:
     """Check format only; caller-supplied hashes remain unverified evidence."""
     return (
@@ -1433,15 +1445,7 @@ def compare_mesh_observations(
         if has_asset_binding:
             review_bundle["before_spatial_source_asset_id"] = first.get("spatial_source_asset_id")
             review_bundle["after_spatial_source_asset_id"] = second.get("spatial_source_asset_id")
-        review_bundle_sha256 = sha256(
-            dumps(
-                review_bundle,
-                sort_keys=True,
-                separators=(",", ":"),
-                ensure_ascii=False,
-                allow_nan=False,
-            ).encode("utf-8")
-        ).hexdigest()
+        review_bundle_sha256 = mesh_review_bundle_sha256(review_bundle)
     result = {
         "schema_version": "mesh-longitudinal-comparison-0001",
         "specimen_id": specimen,

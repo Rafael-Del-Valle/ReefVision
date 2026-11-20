@@ -18,6 +18,11 @@ from reefvision.db.models import (
 )
 from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.services.project_exchange_comparison import restore_comparison_artifact
+from reefvision.services.project_exchange_mesh_v14 import (
+    MESH_NODE_TYPES,
+    restore_mesh_measurement,
+    restore_mesh_parameters,
+)
 from reefvision.services.workflow_provenance import (
     build_workflow_run_provenance,
     verify_succeeded_node_artifacts,
@@ -35,8 +40,24 @@ HISTORICAL_ARTIFACT_TYPES = frozenset(
         "ecology_population_csv",
         "connected_branch_preview",
         "coral_branch_growth",
+        "mesh_longitudinal_comparison",
     }
 )
+
+
+def is_spatial_workflow_graph(graph: dict[str, Any]) -> bool:
+    spatial_nodes = MESH_NODE_TYPES | {"spatial_condition_report"}
+    nodes = graph.get("nodes")
+    return isinstance(nodes, list) and any(
+        isinstance(node, dict) and node.get("node_type") in spatial_nodes for node in nodes
+    )
+
+
+def has_spatial_workflow_history(sections: dict[str, list[dict[str, Any]]]) -> bool:
+    return any(
+        isinstance(row.get("graph_json"), dict) and is_spatial_workflow_graph(row["graph_json"])
+        for row in sections.get("workflow_graphs", [])
+    )
 
 
 def validate_workflow_rows(sections: dict[str, list[dict[str, Any]]]) -> None:
@@ -135,16 +156,25 @@ def restore_workflow_provenance(
     map_values: Callable[[Any, dict[str, str]], Any],
 ) -> None:
     artifacts = {id_map[row["id"]]: row for row in sections.get("workflow_artifacts", [])}
+    source_nodes = {id_map[row["id"]]: row for row in sections.get("workflow_node_runs", [])}
     for original in sections.get("workflow_graphs", []):
         graph = session.get(WorkflowGraphRecord, id_map[original["id"]])
         if graph is None:
             raise ValidationError("Imported workflow graph is missing")
         graph_payload = deepcopy(graph.graph_json)
-        for node in graph_payload["nodes"]:
+        for node, source in zip(
+            graph_payload["nodes"], original["graph_json"]["nodes"], strict=True
+        ):
             if "parameters" in node:
-                node["parameters"] = _restore_parameters(
-                    node["node_type"], node["parameters"], digest_map
-                )
+                node_type = node["node_type"]
+                if node_type in MESH_NODE_TYPES:
+                    node["parameters"] = restore_mesh_parameters(
+                        node_type, source["parameters"], id_map
+                    )
+                else:
+                    node["parameters"] = _restore_parameters(
+                        node_type, node["parameters"], digest_map
+                    )
         graph.graph_json = graph_payload
         graph.graph_sha256 = canonical_json_sha256(graph_payload)
         digest_map[original["graph_sha256"]] = graph.graph_sha256
@@ -161,9 +191,14 @@ def restore_workflow_provenance(
             .order_by(WorkflowNodeRun.execution_order)
         ).all()
         for node in nodes:
-            node.parameters_json = _restore_parameters(
-                node.node_type, node.parameters_json, digest_map
-            )
+            if node.node_type in MESH_NODE_TYPES:
+                node.parameters_json = restore_mesh_parameters(
+                    node.node_type, source_nodes[node.id]["parameters_json"], id_map
+                )
+            else:
+                node.parameters_json = _restore_parameters(
+                    node.node_type, node.parameters_json, digest_map
+                )
             for identifier in node.output_artifact_ids_json or []:
                 artifact = session.get(WorkflowArtifact, identifier)
                 if artifact is None:
@@ -171,7 +206,12 @@ def restore_workflow_provenance(
                 original = artifacts[artifact.id]
                 if artifact.data_type in HISTORICAL_ARTIFACT_TYPES:
                     artifact.payload_json = deepcopy(original["payload_json"])
-                else:
+                elif artifact.data_type == "mesh_measurement_preview":
+                    artifact.payload_json = restore_mesh_measurement(
+                        original["payload_json"], id_map
+                    )
+                elif artifact.data_type != "spatial_condition_report":
+                    # Condition artifacts already use a typed remap during row import.
                     artifact.payload_json = map_values(artifact.payload_json, digest_map)
                     if artifact.data_type == "reefpose_validation_report":
                         artifact.payload_json = _restore_report_link(
