@@ -24,6 +24,7 @@ $harnessSha = (git -C $PSScriptRoot rev-parse HEAD).Trim()
 . (Join-Path $source 'scripts/lib/windows-standard-user-webview2.ps1')
 . (Join-Path $source 'scripts/lib/windows-spatial-webview2-acceptance.ps1')
 . (Join-Path $PSScriptRoot 'firewall-scope.ps1')
+. (Join-Path $PSScriptRoot 'webview-handoff.ps1')
 Assert-ReefVisionNoReparseAncestors -Path $Root
 if (-not (Test-ReefVisionAdministrator)) { throw 'The hosted proof needs an elevated runner and a separate ordinary GUI account.' }
 
@@ -244,12 +245,17 @@ try {
     Copy-Item -LiteralPath $identity -Destination (Join-Path $evidence 'first-ordinary-user-identity.json')
     Assert-OfflinePhase 'after_reviewed_geometry_export_and_reopen'
 
+    $webViewScope = New-OfflineWebViewScope -Port $debugPort -DesktopProcessId $desktop.Id -Sid $account.sid.Value -Root $Root
+    $firstBrowserProcesses = @(Get-OfflineWebViewProcesses $webViewScope)
+    if ($webViewScope.BrowserPid -notin $firstBrowserProcesses) { throw 'The first-launch browser exited before restart measurement.' }
     $null = $desktop.CloseMainWindow()
     if (-not $desktop.WaitForExit(10000) -or -not $account.launcher.WaitForExit(8000)) { throw 'The first native session did not close for a persistence check.' }
     Wait-ReefVisionWebView2DebugClosure -Port $debugPort
     Remove-Item -LiteralPath $portFile -Force -ErrorAction SilentlyContinue
     Move-Item -LiteralPath (Join-Path $Root 'ordinary-user-launch') -Destination (Join-Path $Root 'first-ordinary-user-launch')
-    Move-Item -LiteralPath (Join-Path $Root 'profile-webview2') -Destination (Join-Path $Root 'first-profile-webview2')
+    $record.webview_handoff = Move-OfflineWebViewCache -Root $Root -GetLivePids { Get-OfflineWebViewProcesses $webViewScope }
+    $record.webview_handoff.first_browser_pid = $webViewScope.BrowserPid
+    $record.webview_handoff.first_observed_owned_pids = $firstBrowserProcesses
     $debugPort = Get-ReefVisionLoopbackDebugPort
     $desktop = Start-ReefVisionHostedGui -Account $account -Executable $shell -Profile $profile -DebugPort $debugPort -EvidenceRoot $evidence
     $restarted = Read-PackagedSession $account $desktop
