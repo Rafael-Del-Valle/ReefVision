@@ -304,7 +304,11 @@ def test_source_unit_underflow_recovers_volume_with_review_flag(
         [0.0, 0.0, extent],
     ]
     faces = [[a, c, b] for a, b, c in CLOSED_FACES] if reverse_winding else CLOSED_FACES
-    assert signed_enclosed_volume_mesh_units([tuple(vertex) for vertex in vertices], faces) == 0
+    # The direct source-coordinate helper rejects a positive but unrepresentable
+    # binary64 volume; only the caller-provided larger calibrated frame can
+    # recover a representable value, with explicit provisional provenance.
+    with pytest.raises(ValueError, match="Enclosed mesh volume underflowed numeric precision"):
+        signed_enclosed_volume_mesh_units([tuple(vertex) for vertex in vertices], faces)
     params = {**_params(1e6), "vertices": vertices, "faces": faces}
     result = measure_mesh_preview(**params)
     expected = (extent * 1e6) ** 3 / 6
@@ -322,26 +326,73 @@ def test_source_unit_underflow_recovers_volume_with_review_flag(
     assert result["provenance"]["calibration_verified"] is False
 
 
-def test_unrepresentable_volume_after_large_scale_is_still_withheld() -> None:
-    """Recovery must not turn a genuinely underflowed volume into measured zero."""
+@pytest.mark.parametrize("reverse_winding", [False, True], ids=["forward", "reversed"])
+def test_unrepresentable_volume_after_large_scale_fails_closed_in_saved_graph(
+    client: TestClient, reverse_winding: bool
+) -> None:
+    """Never downgrade known positive volume underflow to an absent measurement."""
     extent = 1e-120
-    result = measure_mesh_preview(
-        **{
-            **_params(1e6),
-            "vertices": [
-                [0.0, 0.0, 0.0],
-                [extent, 0.0, 0.0],
-                [0.0, extent, 0.0],
-                [0.0, 0.0, extent],
-            ],
-        }
-    )
-    assert result["surface_area_m2"] > 0
-    assert result["enclosed_volume_m3"] is None
-    assert result["edge_connected_patch_enclosed_volumes_m3"] == [None]
-    assert "enclosed_volume_zero_or_underflow" in result["qc_warnings"]
-    assert "enclosed_volume_source_unit_numeric_recovery" not in result["qc_warnings"]
-    assert result["provenance"]["calibration_verified"] is False
+    faces = [[a, c, b] for a, b, c in CLOSED_FACES] if reverse_winding else CLOSED_FACES
+    params = {
+        **_params(1e6),
+        "vertices": [
+            [0.0, 0.0, 0.0],
+            [extent, 0.0, 0.0],
+            [0.0, extent, 0.0],
+            [0.0, 0.0, extent],
+        ],
+        "faces": faces,
+        "specimen_id": "synthetic-unverified-underflow",
+        "observation_id": "still-unrepresentable-after-scale",
+        "coordinate_frame_id": "unregistered-source-frame",
+    }
+    # Source volume (edge 1e-120) and calibrated volume (edge 1e-114)
+    # are both strictly positive but below binary64 representation.
+    with pytest.raises(ValueError, match="Enclosed mesh volume underflowed numeric precision"):
+        measure_mesh_preview(**params)
+
+    project_id = str(create_project(client, "Underflowed cubic volume review")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert response.status_code == 400, response.text
+    assert "Enclosed mesh volume underflowed numeric precision" in response.text
+
+    graph = {
+        "graph_id": "unrepresentable-cubic-volume-v14",
+        "name": "Reject false zero-volume scientific evidence",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert not process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "failed"
+        assert not any(
+            artifact["data_type"] == "mesh_measurement_preview"
+            for artifact in detail.json()["artifacts"]
+        )
 
 
 def test_cubic_volume_subresolution_scale_qc_standalone_and_saved_graph(
