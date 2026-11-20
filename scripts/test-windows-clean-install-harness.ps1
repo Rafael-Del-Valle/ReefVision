@@ -22,11 +22,12 @@ Assert-True ($journeyFailure.status -eq 'FAIL') 'A failed installed journey must
 Assert-True ($journeyFailure.detail -eq 'Fixture WebView2 attach timeout.') 'The retained journey failure must identify the original error.'
 $journeySuccess = Get-ReefVisionInstalledJourneyEvidence {
     [pscustomobject]@{
-        completed_journeys = 8; graph_record_id = 'graph-id'; first_run_id = 'first'; replay_run_id = 'second'
+        completed_journeys = 9; graph_record_id = 'graph-id'; first_run_id = 'first'; replay_run_id = 'second'
         artifact = [pscustomobject]@{ payload_sha256 = 'comparison-digest' }
+        ordinary_detector = [pscustomobject]@{ model_id = 'detector-id'; checkpoint_sha256 = 'checkpoint-digest' }
     }
 }
-Assert-True ($journeySuccess.status -eq 'PASS' -and $journeySuccess.detail.Contains('comparison-digest')) 'Successful journeys must retain the exported result identity.'
+Assert-True ($journeySuccess.status -eq 'PASS' -and $journeySuccess.detail.Contains('comparison-digest') -and $journeySuccess.detail.Contains('checkpoint-digest')) 'Successful journeys must retain the spatial export and the trained detector identities.'
 
 $defaultData = Join-Path $env:APPDATA 'org.reefvision.desktop'
 $OldConfig = $env:REEFVISION_CONFIG_DIR
@@ -306,6 +307,9 @@ foreach ($lineageParameter in @(
     Assert-True ($acceptanceParameterNames -contains $lineageParameter) "Installed lineage CLI is missing -$lineageParameter."
 }
 $acceptanceScript = Get-Content -LiteralPath $acceptancePath -Raw
+$installedJourneys = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'lib\windows-spatial-webview2-acceptance.ps1') -Raw
+Assert-True ($installedJourneys.Contains("'ordinary-detector-live.spec.ts'") -and $installedJourneys.Contains("REEFVISION_ORDINARY_DETECTOR_ACCEPTANCE = '1'")) 'The installed desktop must execute the opt-in ordinary detector training, review and export journey.'
+Assert-True ($installedJourneys.Contains("'ordinary-detector-evidence.json'")) 'Installed acceptance must retain the actual software and checkpoint evidence for the detector journey.'
 $retentionCheck = $acceptanceScript.IndexOf('Isolated project data remained after uninstall.')
 $journeyFailureGate = $acceptanceScript.IndexOf('throw $report.spatial_workflow.detail')
 Assert-True ($retentionCheck -ge 0 -and $journeyFailureGate -gt $retentionCheck) 'A failed installed journey must still fail acceptance after uninstall and data retention are recorded.'

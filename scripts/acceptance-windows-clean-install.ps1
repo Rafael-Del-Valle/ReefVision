@@ -226,6 +226,7 @@ function Start-AcceptanceDesktop([string]$ProfileDataRoot = $DataRoot, [int]$Web
     }
     if ($WebViewDebugPort) {
         $isolatedOverrides['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = "--remote-debugging-address=127.0.0.1 --remote-debugging-port=$WebViewDebugPort"
+        $isolatedOverrides['YOLO_OFFLINE'] = 'true'
     }
     if ($LiveSam2Acceptance) {
         # The default clean-install acceptance deliberately forbids network

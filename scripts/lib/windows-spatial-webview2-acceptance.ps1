@@ -199,7 +199,7 @@ function Wait-ReefVisionWebView2DebugClosure([int]$Port) {
 function Get-ReefVisionInstalledJourneyEvidence([scriptblock]$RunJourney) {
     try {
         $result = & $RunJourney
-        $detail = "Installed WebView2 passed $($result.completed_journeys) desktop journeys. Two synthetic originals were reviewed and compared in graph $($result.graph_record_id), runs $($result.first_run_id) and $($result.replay_run_id), with downloaded comparison SHA-256 $($result.artifact.payload_sha256)."
+        $detail = "Installed WebView2 passed $($result.completed_journeys) desktop journeys. Reviewed graph $($result.graph_record_id) ran as $($result.first_run_id) and $($result.replay_run_id) with comparison SHA-256 $($result.artifact.payload_sha256). Scratch detector $($result.ordinary_detector.model_id) produced checkpoint SHA-256 $($result.ordinary_detector.checkpoint_sha256)."
         return New-ReefVisionEvidenceResult -Status 'PASS' -Detail $detail
     } catch {
         return New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $_.Exception.Message
@@ -226,6 +226,7 @@ function Invoke-ReefVisionSpatialWebView2Acceptance {
     $variables = @{
         REEFVISION_GUIDED_TEST_API = $Api
         REEFVISION_SPATIAL_WEBVIEW2_ENDPOINT = $endpoint
+        REEFVISION_ORDINARY_DETECTOR_ACCEPTANCE = '1'
         PLAYWRIGHT_JSON_OUTPUT_FILE = $report
     }
     $previous = @{}
@@ -245,7 +246,8 @@ function Invoke-ReefVisionSpatialWebView2Acceptance {
             'reviewed-coral-growth-live.spec.ts',
             'paired-growth-contrast-live.spec.ts',
             'dataset-export-layout-live.spec.ts',
-            'ordinary-project-live.spec.ts'
+            'ordinary-project-live.spec.ts',
+            'ordinary-detector-live.spec.ts'
         )
         & $NodePath $playwrightCli test @specs --workers=1 --retries=0 --reporter=list,json --output=$output *> $log
         if ($LASTEXITCODE -ne 0) {
@@ -267,6 +269,13 @@ function Invoke-ReefVisionSpatialWebView2Acceptance {
     if ($results.Count -ne 1) { throw 'Expected one completed two-acquisition spatial replay report.' }
     $result = Get-Content -LiteralPath $results[0].FullName -Raw | ConvertFrom-Json
     if ($result.surface -ne 'tauri-webview2') { throw 'The spatial replay did not run in ReefVision WebView2.' }
+    $detectorFiles = @(Get-ChildItem -LiteralPath $output -Recurse -File -Filter 'ordinary-detector-evidence.json')
+    if ($detectorFiles.Count -ne 1) { throw 'Expected one completed ordinary detector report.' }
+    $detector = Get-Content -LiteralPath $detectorFiles[0].FullName -Raw | ConvertFrom-Json
+    if ($detector.surface -ne 'tauri-webview2' -or $detector.device -ne 'cpu' -or $detector.initializer -ne 'scratch' -or $detector.checkpoint_sha256 -notmatch '^[a-f0-9]{64}$') {
+        throw 'The installed detector report lacks verified CPU scratch-training evidence.'
+    }
+    $result | Add-Member -NotePropertyName ordinary_detector -NotePropertyValue $detector
     $result | Add-Member -NotePropertyName completed_journeys -NotePropertyValue $stats.expected
     return $result
 }
