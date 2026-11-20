@@ -481,9 +481,7 @@ def test_representable_subnormal_volume_replays_saved_graph(
     standalone = client.post(f"{base}/spatial/mesh-preview", json=parameters)
     assert standalone.status_code == 200, standalone.text
     payload = standalone.json()
-    assert payload["enclosed_volume_m3"] == pytest.approx(
-        expected_volume, rel=1e-12, abs=0
-    )
+    assert payload["enclosed_volume_m3"] == pytest.approx(expected_volume, rel=1e-12, abs=0)
     assert payload["edge_connected_patch_enclosed_volumes_m3"] == pytest.approx(
         [expected_volume], rel=1e-12, abs=0
     )
