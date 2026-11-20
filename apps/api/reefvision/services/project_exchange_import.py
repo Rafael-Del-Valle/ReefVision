@@ -83,7 +83,7 @@ from reefvision.services.project_exchange_environmental_analysis import (
 )
 from reefvision.services.project_exchange_event_summary import remap_event_summary_archive_job
 from reefvision.services.project_exchange_field_v15 import (
-    FIELD_EXCHANGE_FORMAT,
+    FIELD_EXCHANGE_FORMATS,
     FIELD_MEDIA_KIND,
     FIELD_ORIGIN,
     restore_field_media,
@@ -113,6 +113,13 @@ from reefvision.services.project_exchange_pose import (
     restore_pose_model_lineage,
     restore_pose_reports,
     validate_frozen_pose_frames,
+)
+from reefvision.services.project_exchange_qc_v16 import FORMAT as QC_FORMAT
+from reefvision.services.project_exchange_qc_v16 import (
+    frozen_qc_dataset_ids,
+    remap_event_requests,
+    restore_qc_row,
+    validate_qc_exchange,
 )
 from reefvision.services.project_exchange_reports import remap_report_archive_job
 from reefvision.services.project_exchange_reviewer_lab_v15 import (
@@ -459,7 +466,7 @@ def import_project_exchange(
             if isinstance(member, str):
                 section_rows[section_name] = _read_jsonl(archive, member)
 
-        field_format = inspection.format_version == FIELD_EXCHANGE_FORMAT
+        field_format = inspection.format_version in FIELD_EXCHANGE_FORMATS
         integrated = integrated_models() if inspection.format_version in INTEGRATED_FORMATS else {}
         models = {**SECTION_MODELS, **integrated}
         order = [*SECTION_ORDER, *integrated]
@@ -467,6 +474,7 @@ def import_project_exchange(
         validate_v15_exchange(
             inspection.format_version or "", old_project_id, section_rows, manifest.get("origin")
         )
+        validate_qc_exchange(inspection.format_version or "", old_project_id, section_rows)
         validate_frozen_pose_frames(section_rows)
         validate_acquisition_exchange(section_rows)
         validate_computed_exchange_records(old_project_id, section_rows)
@@ -518,6 +526,11 @@ def import_project_exchange(
                     old_id = row.get("id")
                     if isinstance(old_id, str) and old_id:
                         id_map[old_id] = str(uuid4())
+            qc_requests = (
+                remap_event_requests(section_rows, id_map)
+                if inspection.format_version == QC_FORMAT
+                else {}
+            )
             id_map.update(heldout_scope_mappings(old_project_id, project.id, section_rows))
             original_ids = (manifest.get("origin") or {}).get("id_map", {})
             for subject_id in reviewer_lab_exchange_ids(section_rows, original_ids):
@@ -677,6 +690,8 @@ def import_project_exchange(
                         remap_temporal_exchange_row(
                             section_name, row, values, id_map, digests, track_digests
                         )
+                    if inspection.format_version == QC_FORMAT:
+                        restore_qc_row(section_name, row, values, id_map, qc_requests)
                     if integrated and section_name == "video_tracks":
                         track_digests[row["id"]] = (
                             canonical_json_sha256(row["keyframes_json"]),
@@ -950,16 +965,21 @@ def import_project_exchange(
                         lock.protocol_sha256 = protocol
                 restore_pose_comparisons(session, project.id, digests)
                 from reefvision.services.project_exchange_paired_models_v15 import (
-                    restore_paired_model_comparisons,
+                    restore_frozen_dataset_and_model_lineage,
                 )
 
-                restore_paired_model_comparisons(
+                restore_frozen_dataset_and_model_lineage(
                     session,
                     project.id,
                     section_rows,
                     id_map,
                     digests,
                     source_storage_root=source_storage_root,
+                    linked_dataset_ids=(
+                        frozenset(frozen_qc_dataset_ids(section_rows))
+                        if inspection.format_version == QC_FORMAT
+                        else frozenset()
+                    ),
                 )
                 restore_comparison_jobs(session, project.id, section_rows, id_map, digests)
             if restores_workflow_provenance:

@@ -222,6 +222,158 @@ function Get-ReefVisionInstalledJourneyEvidence([scriptblock]$RunJourney) {
     }
 }
 
+function Invoke-ReefVisionInstalledPlaywrightSuite {
+    param(
+        [Parameter(Mandatory)][string]$NodePath,
+        [Parameter(Mandatory)][string]$RepositoryRoot,
+        [Parameter(Mandatory)][string]$EvidenceRoot,
+        [Parameter(Mandatory)][string]$Api,
+        [Parameter(Mandatory)][int]$DebugPort,
+        [Parameter(Mandatory)][int]$DesktopProcessId,
+        [Parameter(Mandatory)][ValidateSet('first-use', 'workspace')][string]$Suite,
+        [Parameter(Mandatory)][string[]]$Specs,
+        [string]$ExpectedBrowserSid,
+        [string]$BrowserArtifactsDirectory
+    )
+    $endpoint = Wait-ReefVisionWebView2DebugEndpoint -Port $DebugPort -DesktopProcessId $DesktopProcessId `
+        -ExpectedBrowserSid $ExpectedBrowserSid -FailureEvidencePath (Join-Path $EvidenceRoot "$Suite-webview2-startup.log") `
+        -AttachmentEvidencePath (Join-Path $EvidenceRoot "$Suite-webview2-attached.log")
+    $report = Join-Path $EvidenceRoot "$Suite-playwright.json"
+    $log = Join-Path $EvidenceRoot "$Suite-playwright.log"
+    $output = Join-Path $EvidenceRoot "$Suite-playwright"
+    $variables = @{
+        REEFVISION_GUIDED_TEST_API = $Api
+        REEFVISION_SPATIAL_WEBVIEW2_ENDPOINT = $endpoint
+        REEFVISION_SPATIAL_WEBVIEW2_ARTIFACTS_DIR = $BrowserArtifactsDirectory
+        REEFVISION_FIRST_USE_ACCEPTANCE = if ($Suite -eq 'first-use') { '1' } else { '0' }
+        PLAYWRIGHT_JSON_OUTPUT_FILE = $report
+    }
+    $previous = @{}
+    Push-Location -LiteralPath (Join-Path $RepositoryRoot 'apps/web')
+    try {
+        foreach ($name in $variables.Keys) {
+            $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+            [Environment]::SetEnvironmentVariable($name, $variables[$name], 'Process')
+        }
+        & $NodePath 'node_modules/@playwright/test/cli.js' test @Specs --workers=1 --retries=0 --reporter=list,json --output=$output *> $log
+        if ($LASTEXITCODE -ne 0) {
+            $tail = Get-Content -LiteralPath $log -Tail 25 | Out-String
+            throw "Installed $Suite journeys failed with exit code $LASTEXITCODE. $tail"
+        }
+    } finally {
+        Pop-Location
+        foreach ($name in $previous.Keys) {
+            [Environment]::SetEnvironmentVariable($name, $previous[$name], 'Process')
+        }
+    }
+    $stats = (Get-Content -LiteralPath $report -Raw | ConvertFrom-Json).stats
+    if ($stats.expected -ne $Specs.Count -or $stats.skipped -ne 0 -or $stats.unexpected -ne 0 -or $stats.flaky -ne 0) {
+        throw "Every installed $Suite journey must execute successfully."
+    }
+    return $output
+}
+
+function Invoke-ReefVisionFirstUseAcceptance {
+    param(
+        [Parameter(Mandatory)][string]$NodePath,
+        [Parameter(Mandatory)][string]$RepositoryRoot,
+        [Parameter(Mandatory)][string]$EvidenceRoot,
+        [Parameter(Mandatory)][string]$Api,
+        [Parameter(Mandatory)][int]$DebugPort,
+        [Parameter(Mandatory)][int]$DesktopProcessId,
+        [Parameter(Mandatory)][string]$ExpectedVersion,
+        [string]$ExpectedBrowserSid,
+        [string]$BrowserArtifactsDirectory
+    )
+    $output = Invoke-ReefVisionInstalledPlaywrightSuite -NodePath $NodePath -RepositoryRoot $RepositoryRoot `
+        -EvidenceRoot $EvidenceRoot -Api $Api -DebugPort $DebugPort -DesktopProcessId $DesktopProcessId `
+        -ExpectedBrowserSid $ExpectedBrowserSid -BrowserArtifactsDirectory $BrowserArtifactsDirectory `
+        -Suite 'first-use' -Specs @('ordinary-project-live.spec.ts')
+    $files = @(Get-ChildItem -LiteralPath $output -Recurse -File -Filter 'first-use-evidence.json')
+    if ($files.Count -ne 1) {
+        throw 'The installed first-use suite must produce exactly one passing native receipt.'
+    }
+    $proof = Get-Content -LiteralPath $files[0].FullName -Raw | ConvertFrom-Json
+    if ($proof.surface -ne 'tauri-webview2' -or $proof.application_version -ne $ExpectedVersion -or
+        $proof.empty_before_project_submission -ne $true -or $proof.welcome_focus_handoff -ne $true -or
+        $proof.startup_dismissal_persisted -ne $true -or $proof.emulated_device_scale_factor -ne 1.5 -or
+        !$proof.nonlocal_browser_http_blocked -or $proof.external_http_attempt_count -ne 0 -or
+        $proof.annotation_status -ne 'reviewed' -or $proof.image_sha256 -notmatch '^[a-f0-9]{64}$' -or
+        $proof.export_sha256 -notmatch '^[a-f0-9]{64}$') {
+        throw 'The first-use receipt lacks the fresh-profile, keyboard, scale, offline, review or export evidence.'
+    }
+    return $proof
+}
+
+function Invoke-ReefVisionWorkspaceAcceptance {
+    param(
+        [Parameter(Mandatory)][string]$NodePath,
+        [Parameter(Mandatory)][string]$RepositoryRoot,
+        [Parameter(Mandatory)][string]$EvidenceRoot,
+        [Parameter(Mandatory)][string]$Api,
+        [Parameter(Mandatory)][int]$DebugPort,
+        [Parameter(Mandatory)][int]$DesktopProcessId,
+        [string]$ExpectedBrowserSid,
+        [string]$BrowserArtifactsDirectory
+    )
+    $journeys = [ordered]@{
+        class_lifecycle = @('safe-class-lifecycle-live.spec.ts', 'class-lifecycle-evidence.json')
+        quality_control = @('qc-review-workflow-live.spec.ts', 'qc-review-workflow.json')
+        dense_image = @('dense-image-live.spec.ts', 'dense-image-evidence.json')
+        manual_video = @('manual-video-editor-live.spec.ts', 'manual-video-editor-evidence.json')
+        editor_decisions = @('editor-confirmations-live.spec.ts', 'editor-confirmation-evidence.json')
+    }
+    $specs = @($journeys.Values | ForEach-Object { $_[0] })
+    $output = Invoke-ReefVisionInstalledPlaywrightSuite -NodePath $NodePath -RepositoryRoot $RepositoryRoot `
+        -EvidenceRoot $EvidenceRoot -Api $Api -DebugPort $DebugPort -DesktopProcessId $DesktopProcessId `
+        -ExpectedBrowserSid $ExpectedBrowserSid -BrowserArtifactsDirectory $BrowserArtifactsDirectory `
+        -Suite 'workspace' -Specs $specs
+    $result = [ordered]@{surface = 'tauri-webview2'; completed_journeys = $specs.Count}
+    foreach ($key in $journeys.Keys) {
+        $files = @(Get-ChildItem -LiteralPath $output -Recurse -File -Filter $journeys[$key][1])
+        if ($files.Count -ne 1) { throw "Expected a single installed workspace receipt for $key." }
+        $receipt = Get-Content -LiteralPath $files[0].FullName -Raw | ConvertFrom-Json
+        if ($receipt.surface -ne $result.surface) { throw "The $key receipt was not produced by installed ReefVision WebView2." }
+        $result[$key] = $receipt
+    }
+    $sha = '^[a-f0-9]{64}$'
+    $classes = $result.class_lifecycle
+    if ($classes.explicit_confirmation -ne $true -or $classes.frozen.archive_sha256 -notmatch $sha -or
+        $classes.frozen.manifest_sha256 -notmatch $sha -or
+        $classes.original_sha256 -notmatch $sha -or $classes.reassign.final_revision -le $classes.reassign.original_revision) {
+        throw 'Class lifecycle receipt lacks the verified original, revised annotation or frozen export.'
+    }
+    $qc = $result.quality_control
+    if ($qc.explicit_completion_confirmed -ne $true -or
+        $qc.dataset_manifest_sha256 -notmatch $sha -or $qc.graph_sha256 -notmatch $sha -or
+        @($qc.runs).Count -ne 2 -or $qc.runs[0].id -eq $qc.runs[1].id -or
+        $qc.runs[0].payload_sha256 -notmatch $sha -or $qc.runs[1].payload_sha256 -notmatch $sha) {
+        throw 'QC receipt lacks the frozen dataset or both saved ranked review runs.'
+    }
+    $dense = $result.dense_image
+    if ($dense.original_sha256 -notmatch $sha -or $dense.persisted_box_count -ne 1500 -or
+        $dense.hidden_unchanged_count -ne 750 -or $dense.object_page_size -ne 200 -or $dense.last_object_position -ne 1500 -or
+        $dense.rendered_at_zoom -lt 1 -or $dense.rendered_at_zoom -ge 750 -or
+        $dense.editor_reopened -ne $true -or $dense.pointer_undo_redo_verified -ne $true) {
+        throw 'Dense image receipt lacks bounded display, real pointer and undo/redo evidence or persisted source coordinates.'
+    }
+    $video = $result.manual_video
+    if ($video.video.sha256 -notmatch $sha -or $video.video.frames -lt 2 -or $video.export_sha256 -notmatch $sha -or
+        $video.track.reopened_rev -le $video.track.saved_rev -or $video.track.saved_rev -le $video.track.from_rev -or
+        $video.stale_http_status -ne 409 -or @($video.hidden_track.keyframes).Count -lt 1) {
+        throw 'Manual video receipt lacks playable-source identity, saved revisions, stale rejection or hidden geometry.'
+    }
+    $editor = $result.editor_decisions
+    $uuid = '^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$'
+    if ($editor.image_id -notmatch $uuid -or $editor.persisted_mask_id -notmatch $uuid -or
+        $editor.persisted_revision -ne 3 -or $editor.box_after_confirmed_reload -ne 9 -or
+        @($editor.conflicts).Count -ne 2 -or @($editor.conflicts | Where-Object { $_ -ne 409 }).Count -ne 0 -or
+        $editor.canceled_preserved_drafts_and_undo -ne $true) {
+        throw 'Editor decisions receipt lacks both real revision conflicts, the approved reload, or the unchanged saved mask and cancelled drafts.'
+    }
+    return [pscustomobject]$result
+}
+
 function Invoke-ReefVisionSpatialWebView2Acceptance {
     param(
         [Parameter(Mandatory = $true)][string]$NodePath,

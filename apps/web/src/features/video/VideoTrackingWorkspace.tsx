@@ -24,9 +24,23 @@ import {
 } from "./poseInteroperabilityApi";
 import { useGeographicMovementAnalytics } from "./useGeographicMovementAnalytics";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
-import { cancelJob, retryJob, type Project } from "../../api/client";
+import {
+  cancelJob,
+  getClassVisibilityBundle,
+  retryJob,
+  type Project,
+} from "../../api/client";
+import { resolveClassVisibilityState } from "../annotation-editor/classVisibility";
+import { useActionConfirmation } from "../../components/ui/ActionConfirmation";
 import { PoseAnnotationEditor } from "../pose/PoseAnnotationEditor";
 import { AnatomySkeletonDesigner } from "../pose/AnatomySkeletonDesigner";
 import type { AnatomySchemaRevision } from "../pose/anatomyApi";
@@ -62,6 +76,7 @@ import {
   videoFrameUrl,
   type PoseLandmarkGroup,
   type VideoTrackKeyframe,
+  type VideoTrackRecord,
 } from "./videoApi";
 import { trackingBenchmarkCsv, trackingBenchmarkJson } from "./trackingReport";
 import type {
@@ -75,16 +90,13 @@ import {
   videoTimeMatchesPendingSeek,
   type PendingVideoMapSeek,
 } from "./videoMapSynchronization";
+import { sortedKeyframes, useVideoTrackDraft } from "./useVideoTrackDraft";
 
 interface VideoTrackingWorkspaceProps {
   project: Project;
   onWorkspaceContextChange?: (context: VideoWorkspaceContext | null) => void;
   workspaceCommand?: VideoWorkspaceCommand | null;
   onWorkspaceCommandHandled?: (commandId: number) => void;
-}
-
-function sortedKeyframes(items: VideoTrackKeyframe[]): VideoTrackKeyframe[] {
-  return [...items].sort((first, second) => first.frame - second.frame);
 }
 
 function parseMaskPolygons(
@@ -190,6 +202,7 @@ export function VideoTrackingWorkspace({
     frameIndex: number;
   } | null>(null);
   const queryClient = useQueryClient();
+  const { confirm, confirmationDialog } = useActionConfirmation();
   const desktopMode =
     typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -227,15 +240,17 @@ export function VideoTrackingWorkspace({
     state: geographicMovementAnalyticsState,
     reload: reloadGeographicMovementAnalytics,
   } = useGeographicMovementAnalytics(selectedTrackId || null);
-  const [labelClassId, setLabelClassId] = useState(
-    project.label_classes[0]?.id ?? "",
-  );
-  const [interpolation, setInterpolation] = useState<"linear" | "hold">(
-    "linear",
-  );
-  const [trackStatus, setTrackStatus] = useState("verified");
-  const [keyframes, setKeyframes] = useState<VideoTrackKeyframe[]>([]);
+  const defaultClassId =
+    project.label_classes.find((labelClass) => labelClass.is_active)?.id ?? "";
+  const [poseImportClass, setPoseImportClass] = useState("");
+  const poseImportClassId = poseImportClass || defaultClassId;
+  const [visibility, setVisibility] = useState<{
+    projectId: string;
+    hidden?: string[];
+    solo?: string;
+  } | null>(null);
   const [maskEditError, setMaskEditError] = useState<string | null>(null);
+  const [draftFormReset, setDraftFormReset] = useState(0);
   const [poseInteropImportFile, setPoseInteropImportFile] =
     useState<File | null>(null);
   const [poseInteropImportFormat, setPoseInteropImportFormat] =
@@ -301,6 +316,66 @@ export function VideoTrackingWorkspace({
   const selectedTrack = tracksQuery.data?.find(
     (track) => track.id === selectedTrackId,
   );
+  const draftContext = `${project.id}:${selectedVideoId}:${selectedTrackId}`;
+  const draftContextRef = useRef(draftContext);
+  useLayoutEffect(() => {
+    draftContextRef.current = draftContext;
+    setMaskEditError(null);
+  }, [draftContext]);
+  const trackDraft = useVideoTrackDraft(
+    draftContext,
+    selectedTrack,
+    defaultClassId,
+  );
+  const {
+    labelClassId,
+    keyframes,
+    interpolation,
+    status: trackStatus,
+  } = trackDraft.fields;
+  const classVisibilityQuery = useQuery({
+    queryKey: ["class-visibility", project.id],
+    queryFn: ({ signal }) => getClassVisibilityBundle(project.id, signal),
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
+  });
+  const sessionVisibility =
+    visibility?.projectId === project.id ? visibility : null;
+  const hiddenClassIds = useMemo(
+    () =>
+      resolveClassVisibilityState(
+        "video_tracks",
+        classVisibilityQuery.data,
+        { video_tracks: sessionVisibility?.hidden },
+        project.label_classes.map((labelClass) => labelClass.id),
+      ).hiddenClassIds,
+    [
+      classVisibilityQuery.data,
+      project.label_classes,
+      sessionVisibility?.hidden,
+    ],
+  );
+  const soloClassId = sessionVisibility?.solo;
+  const classIsVisible = useCallback(
+    (classId: string) =>
+      soloClassId ? soloClassId === classId : !hiddenClassIds.includes(classId),
+    [hiddenClassIds, soloClassId],
+  );
+  const selectedTrackHidden = Boolean(
+    selectedTrack && !classIsVisible(selectedTrack.label_class_id),
+  );
+  const visibleTracks = useMemo(
+    () =>
+      (tracksQuery.data ?? []).filter((track) =>
+        classIsVisible(track.label_class_id),
+      ),
+    [classIsVisible, tracksQuery.data],
+  );
+  const editableTrack =
+    (!selectedTrackId || !!selectedTrack) && !selectedTrackHidden;
+  const trackSelectionChanged =
+    selectedTrack?.revision !== undefined &&
+    selectedTrack.revision !== trackDraft.revision;
   const interpolationQuery = useQuery({
     queryKey: ["video-track-interpolation", selectedTrackId],
     queryFn: ({ signal }) =>
@@ -570,7 +645,6 @@ export function VideoTrackingWorkspace({
     setFrameIndex(0);
     setPreviewFrameIndex(0);
     setSelectedTrackId("");
-    setKeyframes([]);
     setMaskEditError(null);
     setGroundTruthTrackIds([]);
     setBenchmarkJobIds([]);
@@ -649,34 +723,18 @@ export function VideoTrackingWorkspace({
     selectedVideo?.metadata_json.extraction_every_n_frames,
     sourceOverlayEnabled,
   ]);
-  useEffect(() => {
-    if (!selectedTrack) {
-      setKeyframes([]);
-      setTrackStatus("verified");
-      setMaskEditError(null);
-      return;
-    }
-    setLabelClassId(selectedTrack.label_class_id);
-    setInterpolation(
-      selectedTrack.interpolation === "hold" ? "hold" : "linear",
-    );
-    setTrackStatus(selectedTrack.status);
-    setKeyframes(sortedKeyframes(selectedTrack.keyframes_json));
-    setMaskEditError(null);
-  }, [selectedTrack]);
-
   const poseInteropImportMutation = useMutation({
     mutationFn: () => {
       if (!selectedVideoId) throw new Error("Choose a video first");
       if (!poseInteropImportFile) {
         throw new Error("Choose a pose interoperability file first");
       }
-      if (!labelClassId) throw new Error("Choose a target identity class");
+      if (!poseImportClassId) throw new Error("Choose a target identity class");
       return importPoseInteroperability(
         selectedVideoId,
         poseInteropImportFormat,
         poseInteropImportFile,
-        labelClassId,
+        poseImportClassId,
         confirmPoseInteropFrameMapping,
       );
     },
@@ -781,16 +839,21 @@ export function VideoTrackingWorkspace({
     },
   });
   const saveTrackMutation = useMutation({
-    mutationFn: () => {
-      if (!selectedVideoId || !labelClassId || keyframes.length === 0) {
+    mutationFn: (_selection: { context: string; videoId: string }) => {
+      if (
+        !editableTrack ||
+        !selectedVideoId ||
+        !labelClassId ||
+        keyframes.length === 0
+      ) {
         throw new Error(
           "A video, class, and at least one keyframe are required",
         );
       }
       const normalized = sortedKeyframes(keyframes);
-      if (selectedTrack) {
+      if (selectedTrack && trackDraft.revision !== null) {
         return updateVideoTrack(selectedTrack.id, {
-          base_revision: selectedTrack.revision,
+          base_revision: trackDraft.revision,
           label_class_id: labelClassId,
           keyframes: normalized,
           interpolation,
@@ -805,17 +868,30 @@ export function VideoTrackingWorkspace({
         status: trackStatus,
       });
     },
-    onSuccess: async (track) => {
-      setSelectedTrackId(track.id);
+    onSuccess: async (track, selection) => {
+      const queryKey = ["video-tracks", selection.videoId];
+      await queryClient.cancelQueries({ queryKey });
+      queryClient.setQueryData<VideoTrackRecord[]>(queryKey, (current = []) =>
+        current.some((record) => record.id === track.id)
+          ? current.map((record) => (record.id === track.id ? track : record))
+          : [...current, track],
+      );
+      if (draftContextRef.current === selection.context) {
+        trackDraft.reset();
+        setSelectedTrackId(track.id);
+      }
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: ["video-tracks", selectedVideoId],
+          queryKey,
         }),
         queryClient.invalidateQueries({
           queryKey: ["video-track-interpolation", track.id],
         }),
         queryClient.invalidateQueries({
           queryKey: ["video-track-analytics", track.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["video-frame-spatial-metrics", selection.videoId],
         }),
       ]);
     },
@@ -827,37 +903,39 @@ export function VideoTrackingWorkspace({
     },
     onSuccess: async () => {
       setSelectedTrackId("");
-      setKeyframes([]);
+      trackDraft.reset();
       await queryClient.invalidateQueries({
         queryKey: ["video-tracks", selectedVideoId],
       });
     },
   });
   const deleteMachineTracksMutation = useMutation({
-    mutationFn: () => {
-      if (!selectedVideoId) throw new Error("Select a video first");
-      return deleteVideoTracks(selectedVideoId, true);
-    },
-    onSuccess: async () => {
-      setSelectedTrackId("");
-      setKeyframes([]);
+    mutationFn: ({
+      videoId,
+    }: {
+      videoId: string;
+      context: string;
+      selectedIsMachine: boolean;
+    }) => deleteVideoTracks(videoId, true),
+    onSuccess: async (_, { videoId, context, selectedIsMachine }) => {
+      if (selectedIsMachine && draftContextRef.current === context) {
+        setSelectedTrackId("");
+        trackDraft.reset();
+      }
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: ["video-tracks", selectedVideoId],
+          queryKey: ["video-tracks", videoId],
         }),
         queryClient.invalidateQueries({
-          queryKey: ["video-frame-spatial-metrics", selectedVideoId],
+          queryKey: ["video-frame-spatial-metrics", videoId],
         }),
       ]);
     },
   });
   const deleteModelMutation = useMutation({
-    mutationFn: () => {
-      if (!trackingModelId) throw new Error("Select a model first");
-      return deleteTrackingModel(trackingModelId);
-    },
-    onSuccess: async () => {
-      setTrackingModelId("");
+    mutationFn: (modelId: string) => deleteTrackingModel(modelId),
+    onSuccess: async (_, modelId) => {
+      setTrackingModelId((current) => (current === modelId ? "" : current));
       await queryClient.invalidateQueries({
         queryKey: ["video-tracking-models", project.id],
       });
@@ -1012,13 +1090,24 @@ export function VideoTrackingWorkspace({
       ),
     [previewFrameIndex, interpolationQuery.data?.frames],
   );
-  const poseFrame = useMemo(
-    () => keyframes.find((frame) => frame.frame === previewFrameIndex),
-    [keyframes, previewFrameIndex],
+  const poseFrame = selectedTrackHidden
+    ? undefined
+    : keyframes.find((frame) => frame.frame === previewFrameIndex);
+  const selectedOverlayBox =
+    poseFrame?.bbox ?? (trackDraft.dirty ? undefined : overlayFrame?.bbox);
+  const visibleTrackIds = useMemo(
+    () => new Set(visibleTracks.map((track) => track.id)),
+    [visibleTracks],
+  );
+  const overlayObjects = (spatialMetricsQuery.data?.objects ?? []).filter(
+    (object) =>
+      visibleTrackIds.has(object.track_id) &&
+      (object.track_id !== selectedTrackId ||
+        (!trackDraft.dirty && !selectedOverlayBox)),
   );
   const maskOverlays = useMemo(
     () =>
-      (tracksQuery.data ?? []).flatMap((track) => {
+      visibleTracks.flatMap((track) => {
         const trackKeyframes =
           track.id === selectedTrackId ? keyframes : track.keyframes_json;
         const keyframe = trackKeyframes.find(
@@ -1032,7 +1121,7 @@ export function VideoTrackingWorkspace({
           polygonIndex,
         }));
       }),
-    [keyframes, previewFrameIndex, selectedTrackId, tracksQuery.data],
+    [keyframes, previewFrameIndex, selectedTrackId, visibleTracks],
   );
   const poseEditorSchema = useMemo(
     () =>
@@ -1058,7 +1147,6 @@ export function VideoTrackingWorkspace({
   const error =
     uploadMutation.error ??
     extractionMutation.error ??
-    saveTrackMutation.error ??
     deleteTrackMutation.error ??
     deleteMachineTracksMutation.error ??
     deleteModelMutation.error ??
@@ -1073,6 +1161,11 @@ export function VideoTrackingWorkspace({
   async function savePoseFrameReview(request: PoseSaveRequest) {
     if (!selectedTrack || !activeTrackPoseSchema || !poseFrame) {
       throw new Error("Select a persisted pose track keyframe first");
+    }
+    if (trackDraft.dirty || saveTrackMutation.isPending) {
+      throw new Error(
+        "Save or cancel track edits before saving a pose correction",
+      );
     }
 
     if (
@@ -1118,7 +1211,7 @@ export function VideoTrackingWorkspace({
       throw new Error("Saved track did not return the corrected pose keyframe");
     }
 
-    setKeyframes(sortedKeyframes(updatedTrack.keyframes_json));
+    trackDraft.reset();
 
     if (activePoseActiveLearningCandidate) {
       try {
@@ -1181,16 +1274,22 @@ export function VideoTrackingWorkspace({
     field: "frame" | "x" | "y" | "width" | "height",
     value: number,
   ) {
-    setKeyframes((current) =>
-      current.map((keyframe, keyframeIndex) => {
-        if (keyframeIndex !== index) return keyframe;
-        if (field === "frame") return { ...keyframe, frame: value };
+    trackDraft.change((current) => {
+      const keyframe = current.keyframes[index];
+      if (!keyframe) return current;
+      const keyframes = [...current.keyframes];
+      if (field === "frame") {
+        if (keyframe.frame === value) return current;
+        keyframes[index] = { ...keyframe, frame: value };
+      } else {
         const bbox = [...keyframe.bbox] as [number, number, number, number];
         const bboxIndex = { x: 0, y: 1, width: 2, height: 3 }[field];
+        if (bbox[bboxIndex] === value) return current;
         bbox[bboxIndex] = value;
-        return { ...keyframe, bbox };
-      }),
-    );
+        keyframes[index] = { ...keyframe, bbox };
+      }
+      return { ...current, keyframes };
+    });
   }
 
   function updateKeyframeMaskPolygons(index: number, value: string) {
@@ -1201,13 +1300,18 @@ export function VideoTrackingWorkspace({
         selectedVideo.width_px,
         selectedVideo.height_px,
       );
-      setKeyframes((current) =>
-        current.map((keyframe, keyframeIndex) =>
-          keyframeIndex === index
-            ? { ...keyframe, mask_polygons: maskPolygons }
-            : keyframe,
-        ),
-      );
+      trackDraft.change((current) => {
+        const keyframe = current.keyframes[index];
+        if (
+          !keyframe ||
+          JSON.stringify(maskPolygons ?? []) ===
+            JSON.stringify(keyframe.mask_polygons ?? [])
+        )
+          return current;
+        const keyframes = [...current.keyframes];
+        keyframes[index] = { ...keyframe, mask_polygons: maskPolygons };
+        return { ...current, keyframes };
+      });
       setMaskEditError(null);
     } catch (error) {
       setMaskEditError(
@@ -1451,6 +1555,7 @@ export function VideoTrackingWorkspace({
         geographicMovementAnalyticsState.trackId ?? ""
       }
     >
+      {confirmationDialog}
       <section className="management-card workspace-guide-card">
         <div>
           <p className="eyebrow">Video &amp; tracking</p>
@@ -1629,6 +1734,7 @@ export function VideoTrackingWorkspace({
           Video
           <select
             value={selectedVideoId}
+            disabled={trackDraft.dirty || saveTrackMutation.isPending}
             onChange={(event) => setSelectedVideoId(event.target.value)}
           >
             {(videosQuery.data ?? []).map((video) => (
@@ -1824,9 +1930,10 @@ export function VideoTrackingWorkspace({
                     height: "100%",
                   }}
                 >
-                  {(spatialMetricsQuery.data?.objects ?? []).map((object) => (
+                  {overlayObjects.map((object) => (
                     <rect
                       key={object.track_id}
+                      data-track-id={object.track_id}
                       x={object.bbox[0]}
                       y={object.bbox[1]}
                       width={object.bbox[2]}
@@ -1841,15 +1948,17 @@ export function VideoTrackingWorkspace({
                       vectorEffect="non-scaling-stroke"
                     />
                   ))}
-                  {overlayFrame &&
-                    !(spatialMetricsQuery.data?.objects ?? []).some(
+                  {editableTrack &&
+                    selectedOverlayBox &&
+                    !overlayObjects.some(
                       (object) => object.track_id === selectedTrackId,
                     ) && (
                       <rect
-                        x={overlayFrame.bbox[0]}
-                        y={overlayFrame.bbox[1]}
-                        width={overlayFrame.bbox[2]}
-                        height={overlayFrame.bbox[3]}
+                        data-track-id={selectedTrackId || undefined}
+                        x={selectedOverlayBox[0]}
+                        y={selectedOverlayBox[1]}
+                        width={selectedOverlayBox[2]}
+                        height={selectedOverlayBox[3]}
                         fill="none"
                         stroke="var(--accent-color, #2563eb)"
                         strokeWidth={4}
@@ -2191,8 +2300,8 @@ export function VideoTrackingWorkspace({
               Target identity class
               <select
                 aria-label="Pose interoperability target identity class"
-                value={labelClassId}
-                onChange={(event) => setLabelClassId(event.target.value)}
+                value={poseImportClassId}
+                onChange={(event) => setPoseImportClass(event.target.value)}
               >
                 {project.label_classes
                   .filter((labelClass) => labelClass.is_active)
@@ -2236,7 +2345,7 @@ export function VideoTrackingWorkspace({
               onClick={() => poseInteropImportMutation.mutate()}
               disabled={
                 !poseInteropImportFile ||
-                !labelClassId ||
+                !poseImportClassId ||
                 poseInteropImportMutation.isPending
               }
             >
@@ -2287,199 +2396,404 @@ export function VideoTrackingWorkspace({
       <section className="management-card">
         <p className="eyebrow">Track editor</p>
         <h3>Identities and keyframes</h3>
+        {selectedVideo && project.label_classes.length > 0 && (
+          <div
+            className="annotation-selection-list"
+            role="group"
+            aria-label="Video track class visibility"
+          >
+            <strong>Class visibility</strong>
+            <p className="annotation-helper">
+              Controls the track picker and source-coordinate preview for this
+              session. Exports include all active tracks.
+            </p>
+            {project.label_classes.map((labelClass) => {
+              const id = labelClass.id;
+              const visible = classIsVisible(id);
+              return (
+                <div key={id} className="annotation-selection-row">
+                  <span>{labelClass.name}</span>
+                  <button
+                    type="button"
+                    className="secondary"
+                    aria-label={`${visible ? "Hide" : "Show"} class ${labelClass.name}`}
+                    onClick={() => {
+                      const hidden = soloClassId
+                        ? project.label_classes
+                            .filter((candidate) => candidate.id !== soloClassId)
+                            .map((candidate) => candidate.id)
+                        : hiddenClassIds;
+                      setVisibility({
+                        projectId: project.id,
+                        hidden: visible
+                          ? [...hidden, id]
+                          : hidden.filter((classId) => classId !== id),
+                      });
+                    }}
+                  >
+                    {visible ? "Hide" : "Show"}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    aria-label={`Solo class ${labelClass.name}`}
+                    aria-pressed={soloClassId === id}
+                    onClick={() =>
+                      setVisibility({
+                        projectId: project.id,
+                        hidden: sessionVisibility?.hidden,
+                        solo: soloClassId === id ? undefined : id,
+                      })
+                    }
+                  >
+                    Solo
+                  </button>
+                </div>
+              );
+            })}
+            {sessionVisibility && (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setVisibility(null)}
+              >
+                Reset class visibility
+              </button>
+            )}
+          </div>
+        )}
         <label>
           Existing track
           <select
             value={selectedTrackId}
+            disabled={trackDraft.dirty || saveTrackMutation.isPending}
             onChange={(event) => setSelectedTrackId(event.target.value)}
           >
             <option value="">New track</option>
-            {(tracksQuery.data ?? []).map((track) => (
+            {selectedTrackHidden && (
+              <option value={selectedTrackId}>Selected track is hidden</option>
+            )}
+            {visibleTracks.map((track) => (
               <option key={track.id} value={track.id}>
-                Track {track.track_number} — {track.status}
+                Track {track.track_number} —{" "}
+                {project.label_classes.find(
+                  (item) => item.id === track.label_class_id,
+                )?.name ?? "Class unavailable"}{" "}
+                — {track.status}
               </option>
             ))}
           </select>
         </label>
-        <label>
-          Identity class
-          <select
-            value={labelClassId}
-            onChange={(event) => setLabelClassId(event.target.value)}
-          >
-            {project.label_classes.map((labelClass) => (
-              <option key={labelClass.id} value={labelClass.id}>
-                {labelClass.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Interpolation
-          <select
-            value={interpolation}
-            onChange={(event) =>
-              setInterpolation(
-                event.target.value === "hold" ? "hold" : "linear",
-              )
-            }
-          >
-            <option value="linear">Linear</option>
-            <option value="hold">Hold previous box</option>
-          </select>
-        </label>
-        <label>
-          Status
-          <select
-            value={trackStatus}
-            onChange={(event) => setTrackStatus(event.target.value)}
-          >
-            <option value="verified">Verified</option>
-            <option value="draft">Draft</option>
-            <option value="machine_generated">Machine generated</option>
-            <option value="imported_review_required">
-              Imported — review required
-            </option>
-          </select>
-        </label>
-        <button
-          type="button"
-          className="secondary"
-          disabled={!selectedVideo}
-          onClick={() =>
-            setKeyframes((current) =>
-              sortedKeyframes([
-                ...current.filter((item) => item.frame !== frameIndex),
-                {
-                  frame: frameIndex,
-                  bbox: [10, 10, 50, 30],
-                  confidence: null,
-                },
-              ]),
-            )
-          }
-        >
-          Add keyframe at frame {frameIndex}
-        </button>
-        <div style={{ overflowX: "auto" }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Frame</th>
-                <th>X</th>
-                <th>Y</th>
-                <th>Width</th>
-                <th>Height</th>
-                <th>Mask polygons (source-pixel JSON)</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {keyframes.map((keyframe, index) => (
-                <tr key={`${keyframe.frame}-${index}`}>
-                  {[
-                    ["frame", keyframe.frame],
-                    ["x", keyframe.bbox[0]],
-                    ["y", keyframe.bbox[1]],
-                    ["width", keyframe.bbox[2]],
-                    ["height", keyframe.bbox[3]],
-                  ].map(([field, value]) => (
-                    <td key={field}>
-                      <input
-                        type="number"
-                        min={0}
-                        value={value}
-                        onChange={(event) =>
-                          updateKeyframe(
-                            index,
-                            field as "frame" | "x" | "y" | "width" | "height",
-                            Number(event.target.value),
-                          )
-                        }
-                        style={{ width: 76 }}
-                      />
-                    </td>
-                  ))}
-                  <td>
-                    <textarea
-                      key={`${selectedTrackId}:${keyframe.frame}:${JSON.stringify(keyframe.mask_polygons ?? null)}`}
-                      aria-label={`Mask polygons for frame ${keyframe.frame}`}
-                      defaultValue={JSON.stringify(
-                        keyframe.mask_polygons ?? [],
-                      )}
-                      onBlur={(event) =>
-                        updateKeyframeMaskPolygons(index, event.target.value)
-                      }
-                      rows={3}
-                      style={{ minWidth: 240 }}
-                    />
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className="danger-ghost"
-                      onClick={() =>
-                        setKeyframes((current) =>
-                          current.filter(
-                            (_item, itemIndex) => itemIndex !== index,
-                          ),
-                        )
-                      }
-                    >
-                      Remove
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {maskEditError && (
-          <p role="alert" className="annotation-helper">
-            {maskEditError}
+        {selectedTrackHidden && (
+          <p role="status">
+            Show the selected track’s class to continue editing it.
           </p>
         )}
         <div className="annotation-editor-inline-actions">
           <button
             type="button"
+            className="secondary"
             disabled={
-              saveTrackMutation.isPending ||
-              keyframes.length === 0 ||
-              maskEditError !== null
-            }
-            onClick={() => saveTrackMutation.mutate()}
-          >
-            {saveTrackMutation.isPending ? "Saving..." : "Save track"}
-          </button>
-          <button
-            type="button"
-            className="danger-ghost"
-            disabled={!selectedTrackId || deleteTrackMutation.isPending}
-            onClick={() => deleteTrackMutation.mutate()}
-          >
-            Delete track
-          </button>
-          <button
-            type="button"
-            className="danger-ghost"
-            disabled={
-              !selectedVideoId ||
-              deleteMachineTracksMutation.isPending ||
-              !(tracksQuery.data ?? []).some((track) => track.source_job_id)
+              !editableTrack ||
+              !trackDraft.canUndo ||
+              saveTrackMutation.isPending
             }
             onClick={() => {
-              if (
-                window.confirm(
-                  "Remove all machine-generated tracks for this video? Manual tracks are preserved.",
-                )
-              ) {
-                deleteMachineTracksMutation.mutate();
-              }
+              trackDraft.undo();
+              setMaskEditError(null);
+              setDraftFormReset((current) => current + 1);
             }}
           >
-            Remove machine tracks
+            Undo
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={
+              !editableTrack ||
+              !trackDraft.canRedo ||
+              saveTrackMutation.isPending
+            }
+            onClick={() => {
+              trackDraft.redo();
+              setMaskEditError(null);
+              setDraftFormReset((current) => current + 1);
+            }}
+          >
+            Redo
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={
+              saveTrackMutation.isPending ||
+              (!trackDraft.dirty &&
+                !trackDraft.canRedo &&
+                !maskEditError &&
+                !saveTrackMutation.isError)
+            }
+            onClick={() => {
+              trackDraft.reset();
+              setMaskEditError(null);
+              setDraftFormReset((current) => current + 1);
+              saveTrackMutation.reset();
+              void tracksQuery.refetch();
+            }}
+          >
+            Cancel track edits
           </button>
         </div>
+        {trackSelectionChanged && (
+          <p className="annotation-helper">
+            A newer track revision is available. Cancel track edits to load it.
+          </p>
+        )}
+        {saveTrackMutation.error && (
+          <p role="alert" className="form-error">
+            {saveTrackMutation.error.message}
+          </p>
+        )}
+        <fieldset
+          disabled={!editableTrack || saveTrackMutation.isPending}
+          style={{ minWidth: 0 }}
+        >
+          <legend>Track details</legend>
+          <label>
+            Identity class
+            <select
+              value={labelClassId}
+              onChange={(event) => {
+                const value = event.target.value;
+                trackDraft.change((current) =>
+                  current.labelClassId === value
+                    ? current
+                    : { ...current, labelClassId: value },
+                );
+              }}
+            >
+              {project.label_classes
+                .filter(
+                  (labelClass) =>
+                    labelClass.is_active ||
+                    labelClass.id === selectedTrack?.label_class_id,
+                )
+                .map((labelClass) => (
+                  <option key={labelClass.id} value={labelClass.id}>
+                    {labelClass.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <label>
+            Interpolation
+            <select
+              value={interpolation}
+              onChange={(event) => {
+                const value = event.target.value === "hold" ? "hold" : "linear";
+                trackDraft.change((current) =>
+                  current.interpolation === value
+                    ? current
+                    : { ...current, interpolation: value },
+                );
+              }}
+            >
+              <option value="linear">Linear</option>
+              <option value="hold">Hold previous box</option>
+            </select>
+          </label>
+          <label>
+            Status
+            <select
+              value={trackStatus}
+              onChange={(event) => {
+                const value = event.target.value;
+                trackDraft.change((current) =>
+                  current.status === value
+                    ? current
+                    : { ...current, status: value },
+                );
+              }}
+            >
+              <option value="verified">Verified</option>
+              <option value="draft">Draft</option>
+              <option value="machine_generated">Machine generated</option>
+              <option value="imported_review_required">
+                Imported — review required
+              </option>
+            </select>
+          </label>
+          <button
+            type="button"
+            className="secondary"
+            disabled={
+              !selectedVideo ||
+              keyframes.some((item) => item.frame === frameIndex)
+            }
+            onClick={() => {
+              if (!selectedVideo) return;
+              const x = Math.min(10, selectedVideo.width_px - 1);
+              const y = Math.min(10, selectedVideo.height_px - 1);
+              trackDraft.change((current) => ({
+                ...current,
+                keyframes: sortedKeyframes([
+                  ...current.keyframes,
+                  {
+                    frame: frameIndex,
+                    bbox: [
+                      x,
+                      y,
+                      Math.min(50, selectedVideo.width_px - x),
+                      Math.min(30, selectedVideo.height_px - y),
+                    ],
+                    confidence: null,
+                  },
+                ]),
+              }));
+            }}
+          >
+            Add keyframe at frame {frameIndex}
+          </button>
+          <div style={{ overflowX: "auto" }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Frame</th>
+                  <th>X</th>
+                  <th>Y</th>
+                  <th>Width</th>
+                  <th>Height</th>
+                  <th>Mask polygons (source-pixel JSON)</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {keyframes.map((keyframe, index) => (
+                  <tr key={`${keyframe.frame}-${index}`}>
+                    {[
+                      ["frame", keyframe.frame],
+                      ["x", keyframe.bbox[0]],
+                      ["y", keyframe.bbox[1]],
+                      ["width", keyframe.bbox[2]],
+                      ["height", keyframe.bbox[3]],
+                    ].map(([field, value]) => (
+                      <td key={field}>
+                        <input
+                          type="number"
+                          min={0}
+                          aria-label={`${field} for keyframe ${keyframe.frame}`}
+                          value={value}
+                          onChange={(event) =>
+                            updateKeyframe(
+                              index,
+                              field as "frame" | "x" | "y" | "width" | "height",
+                              Number(event.target.value),
+                            )
+                          }
+                          style={{ width: 76 }}
+                        />
+                      </td>
+                    ))}
+                    <td>
+                      <textarea
+                        key={`${selectedTrackId}:${draftFormReset}:${keyframe.frame}:${JSON.stringify(keyframe.mask_polygons ?? null)}`}
+                        aria-label={`Mask polygons for frame ${keyframe.frame}`}
+                        defaultValue={JSON.stringify(
+                          keyframe.mask_polygons ?? [],
+                        )}
+                        onBlur={(event) =>
+                          updateKeyframeMaskPolygons(index, event.target.value)
+                        }
+                        rows={3}
+                        style={{ minWidth: 240 }}
+                      />
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="danger-ghost"
+                        onClick={() =>
+                          trackDraft.change((current) => ({
+                            ...current,
+                            keyframes: current.keyframes.filter(
+                              (_item, itemIndex) => itemIndex !== index,
+                            ),
+                          }))
+                        }
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {maskEditError && (
+            <p role="alert" className="annotation-helper">
+              {maskEditError}
+            </p>
+          )}
+          <div className="annotation-editor-inline-actions">
+            <button
+              type="button"
+              disabled={
+                saveTrackMutation.isPending ||
+                (!trackDraft.dirty && !!selectedTrack) ||
+                keyframes.length === 0 ||
+                maskEditError !== null
+              }
+              onClick={() =>
+                saveTrackMutation.mutate({
+                  context: draftContext,
+                  videoId: selectedVideoId,
+                })
+              }
+            >
+              {saveTrackMutation.isPending ? "Saving..." : "Save track"}
+            </button>
+            <button
+              type="button"
+              className="danger-ghost"
+              disabled={
+                !selectedTrackId ||
+                trackDraft.dirty ||
+                deleteTrackMutation.isPending
+              }
+              onClick={() => deleteTrackMutation.mutate()}
+            >
+              Delete track
+            </button>
+            <button
+              type="button"
+              className="danger-ghost"
+              disabled={
+                !selectedVideoId ||
+                trackDraft.dirty ||
+                deleteMachineTracksMutation.isPending ||
+                !(tracksQuery.data ?? []).some((track) => track.source_job_id)
+              }
+              onClick={async () => {
+                if (!selectedVideoId) return;
+                const accepted = await confirm({
+                  title: "Remove machine tracks?",
+                  message:
+                    "Remove all machine-generated tracks for this video? Manual tracks are preserved.",
+                  confirmLabel: "Remove machine tracks",
+                  destructive: true,
+                });
+                if (accepted && draftContextRef.current === draftContext) {
+                  deleteMachineTracksMutation.mutate({
+                    videoId: selectedVideoId,
+                    context: draftContext,
+                    selectedIsMachine: !!selectedTrack?.source_job_id,
+                  });
+                }
+              }}
+            >
+              Remove machine tracks
+            </button>
+          </div>
+        </fieldset>
       </section>
 
       <section className="management-card">
@@ -2682,16 +2996,20 @@ export function VideoTrackingWorkspace({
             type="button"
             className="danger-ghost"
             disabled={!trackingModelId || deleteModelMutation.isPending}
-            onClick={() => {
+            onClick={async () => {
+              if (!trackingModelId) return;
               const model = (modelsQuery.data ?? []).find(
                 (item) => item.id === trackingModelId,
               );
               if (
-                window.confirm(
-                  `Remove model "${model?.display_name ?? trackingModelId}" from this project?`,
-                )
+                await confirm({
+                  title: "Remove tracking model?",
+                  message: `Remove model "${model?.display_name ?? trackingModelId}" from this project?`,
+                  confirmLabel: "Remove model",
+                  destructive: true,
+                })
               ) {
-                deleteModelMutation.mutate();
+                deleteModelMutation.mutate(trackingModelId);
               }
             }}
           >

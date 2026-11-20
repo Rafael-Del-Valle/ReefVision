@@ -988,6 +988,15 @@ function mockApi({
       if (url.endsWith(`/projects/${project.id}`)) {
         return jsonResponse(project);
       }
+      if (
+        url.endsWith(`/projects/${project.id}/archive`) &&
+        init?.method === "POST"
+      ) {
+        return jsonResponse({
+          ...project,
+          archived_at: "2026-11-20T15:00:00Z",
+        });
+      }
       if (url.includes(`/projects/${project.id}/images`)) {
         return jsonResponse({
           items: images,
@@ -1121,7 +1130,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-  window.localStorage.setItem("reefvision.onboarding.dismissed.1.5.0", "true");
+  window.localStorage.setItem("reefvision.onboarding.dismissed.1.6.0", "true");
 });
 
 function renderApp() {
@@ -1136,6 +1145,37 @@ function renderApp() {
 }
 
 describe("App", () => {
+  it("archives a project only after the researcher approves the named project", async () => {
+    const fetchMock = mockApi({ projects: [project] });
+    renderApp();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /CPT Coral Study/ }),
+    );
+    await userEvent.click(await screen.findByText("Project options"));
+    const trigger = screen.getByRole("button", { name: "Archive project" });
+    const requests = () =>
+      fetchMock.mock.calls.filter(
+        ([url, init]) =>
+          String(url).endsWith(`/projects/${project.id}/archive`) &&
+          init?.method === "POST",
+      );
+    await userEvent.click(trigger);
+    const first = await screen.findByRole("alertdialog", {
+      name: "Archive project?",
+    });
+    expect(within(first).getByText(/CPT Coral Study/)).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+    expect(requests()).toHaveLength(0);
+    expect(trigger).toHaveFocus();
+    await userEvent.click(trigger);
+    await userEvent.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", {
+        name: "Archive project",
+      }),
+    );
+    await waitFor(() => expect(requests()).toHaveLength(1));
+  });
+
   it("shows API status and an empty project dashboard", async () => {
     mockApi({ projects: [] });
     renderApp();
@@ -1230,7 +1270,7 @@ describe("App", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: /Welcome to ReefVision 1.5.0/,
+        name: /Welcome to ReefVision 1.6.0/,
       }),
     ).toBeInTheDocument();
 
@@ -1240,9 +1280,78 @@ describe("App", () => {
 
     await waitFor(() =>
       expect(
-        screen.queryByRole("heading", { name: /Welcome to ReefVision 1.5.0/ }),
+        screen.queryByRole("heading", { name: /Welcome to ReefVision 1.6.0/ }),
       ).not.toBeInTheDocument(),
     );
+  });
+
+  it("hands keyboard focus to the create form without creating a project", async () => {
+    window.localStorage.clear();
+    mockApi({ projects: [] });
+    renderApp();
+    const welcome = await screen.findByRole("dialog", {
+      name: /Welcome to ReefVision/,
+    });
+    const close = within(welcome).getByRole("button", { name: "Close" });
+    expect(close).toHaveFocus();
+    screen.getByRole("button", { name: "New project" }).focus();
+    expect(close).toHaveFocus();
+    await userEvent.tab({ shift: true });
+    expect(
+      within(welcome).getByRole("button", { name: "Don't show on startup" }),
+    ).toHaveFocus();
+    await userEvent.tab();
+    expect(close).toHaveFocus();
+
+    const create = within(welcome).getByRole("button", {
+      name: "Create a project",
+    });
+    create.focus();
+    await userEvent.keyboard("{Enter}");
+    const form = await screen.findByRole("dialog", { name: "Create project" });
+    expect(
+      within(form).getByRole("textbox", { name: "Project name" }),
+    ).toHaveFocus();
+    expect(window.fetch).not.toHaveBeenCalledWith(
+      expect.stringMatching(/\/projects$/),
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("waits for project summaries before focusing an existing project", async () => {
+    window.localStorage.clear();
+    mockApi({ projects: [project] });
+    const fetchMock = vi.mocked(window.fetch);
+    const original = fetchMock.getMockImplementation()!;
+    let finishLoading!: () => void;
+    const loading = new Promise<void>((resolve) => {
+      finishLoading = resolve;
+    });
+    fetchMock.mockImplementation(async (input, init) => {
+      if (String(input).endsWith("/project-summaries")) await loading;
+      return original(input, init);
+    });
+    renderApp();
+    const choose = await screen.findByRole("button", {
+      name: "Choose an existing project",
+    });
+    choose.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(
+      screen.getByRole("button", { name: "New project" }),
+    ).not.toHaveFocus();
+    finishLoading();
+    const existing = await screen.findByRole("button", {
+      name: `Open ${project.name}`,
+    });
+    await waitFor(() => expect(existing).toHaveFocus());
+    expect(
+      screen.queryByRole("tab", { name: "Classes" }),
+    ).not.toBeInTheDocument();
+    await userEvent.keyboard("{Enter}");
+    expect(
+      await screen.findByRole("tab", { name: "Classes" }),
+    ).toBeInTheDocument();
   });
 
   it("opens a project and displays its stable classes", async () => {

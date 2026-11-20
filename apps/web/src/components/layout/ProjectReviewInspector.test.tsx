@@ -8,6 +8,7 @@ import { ProjectReviewInspector } from "./ProjectReviewInspector";
 
 vi.mock("../../api/client", async (importOriginal) => ({
   ...(await importOriginal<typeof api>()),
+  getReviewQueue: vi.fn(),
   getReviewQueues: vi.fn(),
   getReviewQueueItems: vi.fn(),
 }));
@@ -109,6 +110,9 @@ beforeEach(() => {
   vi.clearAllMocks();
 
   vi.mocked(api.getReviewQueues).mockResolvedValue([queueOne, queueTwo]);
+  vi.mocked(api.getReviewQueue).mockImplementation(async (id) =>
+    id === queueOne.id ? queueOne : queueTwo,
+  );
 
   vi.mocked(api.getReviewQueueItems).mockResolvedValue({
     items: [reviewItem],
@@ -184,6 +188,41 @@ describe("ProjectReviewInspector", () => {
         expect.any(AbortSignal),
       ),
     );
+  });
+
+  it("uses the selected frozen queue absent from the project queue list", async () => {
+    vi.mocked(api.getReviewQueue).mockResolvedValue({
+      ...queueTwo,
+      id: "qc-frozen",
+      dataset_version_id: "frozen-1",
+      scope_type: "dataset_version",
+    });
+
+    renderInspector({ selectedQueueId: "qc-frozen" });
+
+    expect(
+      await screen.findByText("Dataset-version review"),
+    ).toBeInTheDocument();
+    expect(api.getReviewQueueItems).toHaveBeenCalledWith(
+      "qc-frozen",
+      { page: 1, pageSize: 25 },
+      expect.any(AbortSignal),
+    );
+  });
+
+  it("does not fall back to unrelated items on a foreign queue selection", async () => {
+    vi.mocked(api.getReviewQueue).mockResolvedValue({
+      ...queueTwo,
+      id: "foreign-qc",
+      project_id: "foreign-project",
+    });
+
+    renderInspector({ selectedQueueId: "foreign-qc" });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The selected review queue is unavailable for this project.",
+    );
+    expect(api.getReviewQueueItems).not.toHaveBeenCalled();
   });
 
   it("shows the canonical empty state when no review queue exists", async () => {

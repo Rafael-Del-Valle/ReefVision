@@ -11,8 +11,7 @@ from alembic.config import Config
 from alembic.operations import Operations
 from alembic.runtime.migration import MigrationContext
 from alembic.util import CommandError
-from sqlalchemy import Engine, create_engine, inspect
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import Engine, create_engine, event, inspect
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
@@ -23,7 +22,7 @@ from reefvision.storage.datasets import canonical_json_sha256
 
 _API_ROOT = Path(__file__).resolve().parents[2]
 _VERSIONS = _API_ROOT / "migrations" / "versions"
-_INTEGRATED_HEAD = "b15_integrated_0002"
+_INTEGRATED_HEAD = "b16_integrated_0001"
 _POSE_MIGRATIONS = (
     "0038_pose_anatomy_definitions.py",
     "0039_pose_evaluation_runs.py",
@@ -168,7 +167,7 @@ def test_desktop_recovers_early_runtime_schema_preserving_receipts(
     else:
         run_pending_migrations(settings)
         run_pending_migrations(settings)
-        assert _read_heads(engine) == ("b15_integrated_0002",)
+        assert _read_heads(engine) == (_INTEGRATED_HEAD,)
         with engine.connect() as con:
             mapping = con.exec_driver_sql(
                 "SELECT source_id_map_json FROM model_runtime_selections"
@@ -286,16 +285,18 @@ def test_failed_merge_rolls_back_legacy_revision_and_schema_changes(
 ) -> None:
     _, config, engine = migration_db
     _create_standalone_reefpose_db(config, engine, "0044")
-    with engine.begin() as connection:
-        connection.exec_driver_sql(
-            "CREATE TRIGGER block_merge BEFORE UPDATE ON alembic_version "
-            "WHEN NEW.version_num = 'b12_integrated_0002' "
-            "BEGIN SELECT RAISE(ABORT, 'simulated merge failure'); END"
-        )
     before_tables = inspect(engine).get_table_names()
 
-    with pytest.raises(IntegrityError, match="simulated merge failure"):
-        command.upgrade(config, "head")
+    def interrupt_merge(conn, cursor, statement, parameters, context, executemany):
+        if "UPDATE alembic_version" in statement and "b12_integrated_0002" in statement:
+            raise RuntimeError("simulated merge failure")
+
+    event.listen(Engine, "before_cursor_execute", interrupt_merge)
+    try:
+        with pytest.raises(RuntimeError, match="simulated merge failure"):
+            command.upgrade(config, "head")
+    finally:
+        event.remove(Engine, "before_cursor_execute", interrupt_merge)
 
     assert _read_heads(engine) == ("0044",)
     assert inspect(engine).get_table_names() == before_tables
@@ -372,7 +373,7 @@ def test_temporal_migration_preserves_prior_scientific_tables(
     assert tables <= set(inspect(engine).get_table_names())
     command.downgrade(config, prior)
     assert tables.isdisjoint(inspect(engine).get_table_names())
-    assert set(_read_heads(engine)) == {prior, "spatial_0039"}
+    assert set(_read_heads(engine)) == {prior, "spatial_0039", "reviewq_0041"}
     assert {"spatial_source_assets", "spatial_calibration_reviews"} <= set(
         inspect(engine).get_table_names()
     )
@@ -415,3 +416,99 @@ def test_desktop_migrates_its_configured_database(
 
     assert _read_heads(engine) == (_INTEGRATED_HEAD,)
     assert not unrelated_database.exists()
+
+
+@pytest.mark.parametrize("revision", ["0038", "0039", "0040", "0041"])
+def test_desktop_distinguishes_historical_qc_revision(
+    migration_db: MigrationDatabase, revision: str
+) -> None:
+    settings, config, engine = migration_db
+    command.upgrade(config, f"reviewq_{revision}")
+    _create_project(engine)
+    with engine.begin() as connection:
+        connection.exec_driver_sql("UPDATE alembic_version SET version_num = ?", (revision,))
+    database = settings.resolved_data_dir / "reefvision.db"
+    before = database.read_bytes()
+    preflight = SystemService(settings, engine).migration_preflight()
+    assert preflight.compatible_for_upgrade and preflight.current_schema_revision == revision
+    assert f"reviewq_{revision}" not in preflight.pending_revisions
+    assert "0038" in preflight.pending_revisions
+    assert before == database.read_bytes()
+    run_pending_migrations(settings)
+    run_pending_migrations(settings)
+    assert _read_heads(engine) == (_INTEGRATED_HEAD,)
+    with engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT id FROM projects").scalar_one() == _PROJECT_ID
+        assert not connection.exec_driver_sql("PRAGMA foreign_key_check").all()
+
+
+@pytest.mark.parametrize(
+    "drift", ["index", "event vocabulary", "foreign key", "default", "mixed", "ledger trigger"]
+)
+def test_ambiguous_qc_copy_refuses_all_writes(migration_db: MigrationDatabase, drift: str) -> None:
+    settings, config, engine = migration_db
+    command.upgrade(config, "reviewq_0038")
+    with engine.begin() as connection:
+        if drift == "index":
+            connection.exec_driver_sql("DROP INDEX ix_review_queue_item_events_item_created")
+            connection.exec_driver_sql(
+                "CREATE INDEX ix_review_queue_item_events_item_created "
+                "ON review_queue_item_events(review_queue_item_id, created_at DESC) "
+                "WHERE actor != ''"
+            )
+        elif drift == "mixed":
+            connection.exec_driver_sql("CREATE TABLE scientific_records (id TEXT PRIMARY KEY)")
+        elif drift == "ledger trigger":
+            connection.exec_driver_sql(
+                "CREATE TRIGGER extra_ledger_action AFTER UPDATE ON alembic_version "
+                "BEGIN SELECT 1; END"
+            )
+        else:
+            ddl = connection.exec_driver_sql(
+                "SELECT sql FROM sqlite_master WHERE name='review_queue_item_events'"
+            ).scalar_one()
+            indexes = (
+                connection.exec_driver_sql(
+                    "SELECT sql FROM sqlite_master WHERE type='index' AND sql IS NOT NULL "
+                    "AND tbl_name='review_queue_item_events'"
+                )
+                .scalars()
+                .all()
+            )
+            before, after = {
+                "event vocabulary": ("'unassign'", "'triage_complete'"),
+                "foreign key": ("ON DELETE CASCADE", "ON DELETE CASCADE ON UPDATE CASCADE"),
+                "default": (
+                    "actor VARCHAR(100) NOT NULL",
+                    "actor VARCHAR(100) DEFAULT 'local' NOT NULL",
+                ),
+            }[drift]
+            assert before in ddl
+            connection.exec_driver_sql("DROP TABLE review_queue_item_events")
+            connection.exec_driver_sql(ddl.replace(before, after))
+            for statement in indexes:
+                connection.exec_driver_sql(statement)
+        connection.exec_driver_sql("UPDATE alembic_version SET version_num = '0038'")
+    database = settings.resolved_data_dir / "reefvision.db"
+    before_file = database.read_bytes()
+    preflight = SystemService(settings, engine).migration_preflight()
+    assert not preflight.compatible_for_upgrade
+    assert "verified pre-upgrade backup" in " ".join(preflight.blocking_issues)
+    with pytest.raises(CommandError, match="Preserve the original"):
+        run_pending_migrations(settings)
+    assert database.read_bytes() == before_file
+
+
+def test_unversioned_database_is_never_mistaken_for_clean_install(
+    migration_db: MigrationDatabase,
+) -> None:
+    settings, _, engine = migration_db
+    with engine.begin() as con:
+        con.exec_driver_sql("CREATE TABLE observations (record TEXT)")
+        con.exec_driver_sql("INSERT INTO observations VALUES ('recorded field observation')")
+    database = settings.resolved_data_dir / "reefvision.db"
+    before = database.read_bytes()
+    assert not SystemService(settings, engine).migration_preflight().compatible_for_upgrade
+    with pytest.raises(CommandError, match="no recorded migration"):
+        run_pending_migrations(settings)
+    assert before == database.read_bytes()

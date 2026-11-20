@@ -38,19 +38,49 @@ interface WorkflowGraphWorkspaceProps {
   onOpenScience?: (
     view: "ecology" | "models" | "quality_control" | "video",
   ) => void;
+  onOpenReviewQueue?: (queueId: string, datasetVersionId?: string) => void;
 }
 
 function ScienceArtifact({
   artifact,
   projectId,
   onOpen,
+  onOpenReviewQueue,
 }: {
   artifact: WorkflowArtifact;
   projectId: string;
   onOpen: WorkflowGraphWorkspaceProps["onOpenScience"];
+  onOpenReviewQueue: WorkflowGraphWorkspaceProps["onOpenReviewQueue"];
 }) {
   const data = artifact.payload_json;
   const api = `${getApiBaseUrl()}/projects/${projectId}`;
+  if (
+    artifact.data_type === "review_queue_reference" &&
+    data.project_id === projectId &&
+    typeof data.queue_id === "string" &&
+    data.review_status === "requires_researcher_review"
+  ) {
+    const queueId = data.queue_id;
+    const datasetVersionId =
+      typeof data.dataset_version_id === "string"
+        ? data.dataset_version_id
+        : undefined;
+    return (
+      <div>
+        <p>
+          {String(data.item_count)} ranked images · Requires researcher review
+        </p>
+        {onOpenReviewQueue && (
+          <button
+            type="button"
+            onClick={() => onOpenReviewQueue(queueId, datasetVersionId)}
+          >
+            Open generated review queue
+          </button>
+        )}
+      </div>
+    );
+  }
   if (
     artifact.data_type === "research_reproducibility_proof" &&
     typeof data.proof_sha256 === "string"
@@ -243,6 +273,7 @@ export function WorkflowGraphWorkspace({
   initialPoseArchitecture,
   initialGraph,
   onOpenScience,
+  onOpenReviewQueue,
 }: WorkflowGraphWorkspaceProps) {
   const queryClient = useQueryClient();
   const [graphJson, setGraphJson] = useState(() =>
@@ -905,6 +936,7 @@ export function WorkflowGraphWorkspace({
                       artifact={artifact}
                       projectId={project.id}
                       onOpen={onOpenScience}
+                      onOpenReviewQueue={onOpenReviewQueue}
                     />
                     <details>
                       <summary>Inspect artifact</summary>

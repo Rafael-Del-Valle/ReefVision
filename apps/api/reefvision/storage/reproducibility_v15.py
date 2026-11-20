@@ -155,7 +155,7 @@ def read_native_research_archive(source: BinaryIO) -> NativeResearchArchive:
 
     verified_ids: set[str] = set()
     inspected = inspect_project_exchange(source, verified_paired_comparison_ids=verified_ids)
-    if not inspected.compatible or inspected.format_version != "1.5":
+    if not inspected.compatible or inspected.format_version not in {"1.5", "1.6"}:
         raise ValidationError(
             "Nested Project Exchange could not be verified: "
             + ("; ".join(inspected.errors) or "research evidence requires Exchange 1.5")

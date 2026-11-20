@@ -19,10 +19,10 @@ from typing import Protocol, TextIO, cast
 import uvicorn
 from alembic import command
 from alembic.config import Config
-from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 
 from reefvision.config import Settings, clear_settings_cache, get_settings
+from reefvision.db.legacy_sqlite_lineage import read_migration_heads
 from reefvision.logging_utils import configure_rotating_json_logging
 
 LOGGER = logging.getLogger("reefvision.desktop")
@@ -261,7 +261,7 @@ def run_pending_migrations(settings: Settings) -> None:
     engine = create_database_engine(settings)
     try:
         with engine.connect() as connection:
-            current_heads = MigrationContext.configure(connection).get_current_heads()
+            current_heads = read_migration_heads(connection)
     finally:
         engine.dispose()
 

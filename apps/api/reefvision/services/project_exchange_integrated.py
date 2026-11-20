@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import ColumnElement, Table, select
+from sqlalchemy import ColumnElement, Table, literal_column, select
 from sqlalchemy.orm import Session
 
 from reefvision.db.base import Base
@@ -27,6 +27,8 @@ from reefvision.services.project_exchange_acquisition import validate_acquisitio
 from reefvision.services.project_exchange_comparison import validate_comparison_exchange
 from reefvision.services.project_exchange_event_summary import validate_event_summary_exchange
 from reefvision.services.project_exchange_pose import validate_pose_rows
+from reefvision.services.project_exchange_qc_v16 import EVENTS as QC_EVENTS
+from reefvision.services.project_exchange_qc_v16 import SECTIONS as QC_SECTIONS
 from reefvision.services.project_exchange_reports import validate_report_exchange
 from reefvision.services.project_exchange_reviewer_lab_v15 import REVIEWER_LAB_PARENTS
 from reefvision.services.project_exchange_temporal_reefpose import validate_temporal_exchange
@@ -116,7 +118,10 @@ def integrated_models() -> dict[str, type[Base]]:
     by_table = {
         cast(Table, mapper.local_table).name: mapper.class_ for mapper in Base.registry.mappers
     }
-    return {name: by_table[name] for name in (*SECTION_NAMES, *_NEW_SECTION_NAMES, *V15_SECTIONS)}
+    return {
+        name: by_table[name]
+        for name in (*SECTION_NAMES, *_NEW_SECTION_NAMES, *V15_SECTIONS, *QC_SECTIONS)
+    }
 
 
 def integrated_records(session: Session, project_id: str) -> dict[str, Sequence[Base]]:
@@ -131,7 +136,15 @@ def integrated_records(session: Session, project_id: str) -> dict[str, Sequence[
         else:
             owned = table.c.project_id == project_id
         ownership[name] = select(next(iter(table.primary_key))).where(owned)
-        records[name] = list(session.scalars(select(model).where(owned)))
+        query = select(model).where(owned)
+        if name == QC_EVENTS:
+            # SQLite insertion order resolves equal or regressing event clocks.
+            query = (
+                query.order_by(literal_column("rowid"))
+                if session.get_bind().dialect.name == "sqlite"
+                else query.order_by(table.c.created_at, table.c.id)
+            )
+        records[name] = list(session.scalars(query))
     return records
 
 

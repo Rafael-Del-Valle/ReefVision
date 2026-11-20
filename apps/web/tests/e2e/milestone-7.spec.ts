@@ -632,7 +632,22 @@ test("review-queue workflow preserves score context and item state transitions",
       exact: true,
     }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Start review" }).click();
+  const start = page.getByRole("button", { name: "Start review", exact: true });
+  await expect(start).toBeDisabled();
+  const reviewer = "Fixture queue reviewer";
+  await page.getByLabel("Single-item reviewer label").fill(`  ${reviewer}  `);
+  await expect(start).toBeEnabled();
+  const starting = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname.endsWith(
+        "/review-queue-items/queue-item-1/start",
+      ),
+  );
+  await start.click();
+  const started = await starting;
+  expect(started.ok()).toBe(true);
+  expect(started.request().postDataJSON()).toEqual({ actor: reviewer });
   await expect(page.getByText("in_progress")).toBeVisible();
 
   await page.getByRole("button", { name: "Open image" }).click();

@@ -477,6 +477,8 @@ def _refresh_class_operation_checksums(session: Session, project_id: str) -> Non
 
 
 def _refresh_review_queue_checksums(session: Session, project_id: str) -> None:
+    from reefvision.services.project_exchange_qc_v16 import restore_scoring_proof
+
     queues = list(session.scalars(select(ReviewQueue).where(ReviewQueue.project_id == project_id)))
     items = list(
         session.scalars(select(ReviewQueueItem).where(ReviewQueueItem.project_id == project_id))
@@ -513,6 +515,7 @@ def _refresh_review_queue_checksums(session: Session, project_id: str) -> None:
             ),
             "item_count": len(queue_items),
         }
+        restore_scoring_proof(queue, queue_items, source_queue_checksums)
     session.flush()
 
 

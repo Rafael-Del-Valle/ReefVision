@@ -105,7 +105,9 @@ from reefvision.db.models.quality_control_issue import QualityControlIssue
 from reefvision.db.models.quality_control_run import QualityControlRun
 from reefvision.db.models.reefpose_validation import ReefPoseReference
 from reefvision.db.models.review_queue import ReviewQueue
+from reefvision.db.models.review_queue_bulk_request import ReviewQueueBulkRequestRecord
 from reefvision.db.models.review_queue_item import ReviewQueueItem
+from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
 from reefvision.db.models.reviewer_lab_v15 import (
     ReviewerLabCredential,
     ReviewerLabDecisionRecord,
@@ -225,7 +227,9 @@ __all__ = [
     "QualityControlRun",
     "ReefPoseReference",
     "ReviewQueue",
+    "ReviewQueueBulkRequestRecord",
     "ReviewQueueItem",
+    "ReviewQueueItemEvent",
     "ReviewerLabCredential",
     "ReviewerLabDecisionRecord",
     "ReviewerLabMember",

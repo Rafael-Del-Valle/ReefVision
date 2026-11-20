@@ -1563,8 +1563,87 @@ const projectEcology = {
   ],
 };
 
+function createQcQueueWorkflow(frozenDataset: boolean) {
+  const name = frozenDataset
+    ? "QC review queue from a frozen dataset"
+    : "QC review queue from project images";
+  return {
+    graph_id: frozenDataset ? "qc-frozen-dataset" : "qc-project-images",
+    name,
+    schema_version: "workflow-graph-0001",
+    nodes: [
+      {
+        node_id: "project",
+        node_type: "project_source",
+        parameters: {},
+        position: { x: 40, y: 120 },
+      },
+      ...(frozenDataset
+        ? [
+            {
+              node_id: "dataset",
+              node_type: "dataset_version_source",
+              parameters: { dataset_version_id: "" },
+              position: { x: 360, y: 280 },
+            },
+          ]
+        : []),
+      {
+        node_id: "qc",
+        node_type: "qc_review_queue",
+        parameters: {},
+        position: { x: frozenDataset ? 680 : 360, y: 120 },
+      },
+    ],
+    edges: [
+      {
+        edge_id: "project-qc",
+        source_node_id: "project",
+        source_port_id: "project",
+        target_node_id: "qc",
+        target_port_id: "project",
+      },
+      ...(frozenDataset
+        ? [
+            {
+              edge_id: "project-dataset",
+              source_node_id: "project",
+              source_port_id: "project",
+              target_node_id: "dataset",
+              target_port_id: "project",
+            },
+            {
+              edge_id: "dataset-qc",
+              source_node_id: "dataset",
+              source_port_id: "dataset",
+              target_node_id: "qc",
+              target_port_id: "dataset",
+            },
+          ]
+        : []),
+    ],
+  };
+}
+
+const qcProjectQueue = createQcQueueWorkflow(false);
+const qcFrozenDatasetQueue = createQcQueueWorkflow(true);
+
 export const workflowTemplates: WorkflowTemplate[] = [
   ...environmentalAnalysisTemplates,
+  {
+    id: qcProjectQueue.graph_id,
+    name: qcProjectQueue.name,
+    description:
+      "Rank current project images and open the resulting human review queue.",
+    graph: qcProjectQueue,
+  },
+  {
+    id: qcFrozenDatasetQueue.graph_id,
+    name: qcFrozenDatasetQueue.name,
+    description:
+      "Pin a complete dataset version, rank its frozen evidence, and open the resulting human review queue.",
+    graph: qcFrozenDatasetQueue,
+  },
   {
     id: "verified-mask-coverage",
     name: "Verified mask area and coverage",

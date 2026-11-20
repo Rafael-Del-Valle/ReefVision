@@ -6,6 +6,7 @@ from alembic.util import CommandError
 from sqlalchemy import Connection, inspect
 
 from reefvision.db.base import Base
+from reefvision.db.legacy_sqlite_lineage import identify_numeric_history, validate_named_qc_history
 
 # Feature names without a dot are tables. Dotted names are columns or indexes
 # on tables that already existed at the common branch point.
@@ -67,6 +68,11 @@ def resolve_legacy_revision(connection: Connection, heads: tuple[str, ...]) -> s
     """Return a proven ReefPose alias, or validate the existing 1.1 revision."""
 
     legacy_heads = sorted(set(heads) & LEGACY_NUMERIC_REVISIONS)
+    if connection.dialect.name == "sqlite":
+        if legacy_heads:
+            return identify_numeric_history(connection, heads, legacy_heads)
+        validate_named_qc_history(connection, heads)
+        return None
     if not legacy_heads:
         return None
 

@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Project } from "../../api/client";
@@ -113,6 +119,7 @@ vi.mock("./videoApi", async () => {
     getAnnotatedVideoExports: vi.fn(),
     importVideo: vi.fn(),
     updateVideoTrack: vi.fn(),
+    deleteVideoTracks: vi.fn(),
   };
 });
 
@@ -791,6 +798,40 @@ describe("VideoTrackingWorkspace", () => {
       "Segmentation mask 1 for track 8",
     );
     expect(renderedMask).toHaveAttribute("points", "110,130 390,140 380,360");
+    const removeMachine = screen.getByRole("button", {
+      name: "Remove machine tracks",
+    });
+    const originalConfirm = vi
+      .spyOn(window, "confirm")
+      .mockImplementation(() => Promise.resolve(false) as unknown as boolean);
+    removeMachine.focus();
+    fireEvent.click(removeMachine);
+    const removeConfirmation = await screen.findByRole("alertdialog", {
+      name: "Remove machine tracks?",
+    });
+    expect(api.deleteVideoTracks).not.toHaveBeenCalled();
+    fireEvent.keyDown(
+      within(removeConfirmation).getByRole("button", { name: "Cancel" }),
+      {
+        key: "Escape",
+      },
+    );
+    expect(api.deleteVideoTracks).not.toHaveBeenCalled();
+    expect(originalConfirm).not.toHaveBeenCalled();
+    expect(removeMachine).toHaveFocus();
+    originalConfirm.mockRestore();
+    expect(
+      screen.getByRole("button", { name: "Add keyframe at frame 0" }),
+    ).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Hide class Fish" }));
+    expect(
+      screen.queryByLabelText("Segmentation mask 1 for track 8"),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Save track" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Show class Fish" }));
+    expect(
+      screen.getByLabelText("Segmentation mask 1 for track 8"),
+    ).toBeVisible();
 
     const maskEditor = screen.getByLabelText("Mask polygons for frame 0");
     fireEvent.change(maskEditor, {
@@ -799,6 +840,11 @@ describe("VideoTrackingWorkspace", () => {
       },
     });
     fireEvent.blur(maskEditor);
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(
+      screen.getByLabelText("Segmentation mask 1 for track 8"),
+    ).toHaveAttribute("points", "110,130 390,140 380,360");
+    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
     fireEvent.click(screen.getByRole("button", { name: "Save track" }));
 
     await waitFor(() => expect(api.updateVideoTrack).toHaveBeenCalledTimes(1));

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   completeReviewQueueItem,
@@ -20,10 +20,14 @@ import {
   type ReviewQueueRecord,
   type ReviewScoreWeights,
 } from "../../api/client";
+import { useActionConfirmation } from "../../components/ui/ActionConfirmation";
 import { QuickConfidenceReviewDialog } from "./QuickConfidenceReviewDialog";
+import { ReviewQueueBulkTriage } from "./ReviewQueueBulkTriage";
+import { ReviewQueueCoordinationPanel } from "./ReviewQueueCoordinationPanel";
 import {
   reviewQueueItemsQueryKey,
   reviewQueuesQueryKey,
+  scopedReviewQueueId,
 } from "./reviewQueueState";
 
 const defaultWeights: ReviewScoreWeights = {
@@ -42,25 +46,115 @@ const defaultWeights: ReviewScoreWeights = {
   stale_review_state: 6,
 };
 
+type QueueMutationScope = {
+  projectId: string;
+  scopeType: "project" | "dataset_version";
+  datasetVersionId: string;
+  navigationEpoch: number;
+};
+
+type CreateQueueRequest = QueueMutationScope & {
+  selectionRevision: number;
+  sourceRunId: string;
+  weights: ReviewScoreWeights;
+  reviewBelowConfidence: string;
+};
+
+type ItemMutationRequest = QueueMutationScope & {
+  queueId: string;
+  itemId: string;
+  actor: string;
+};
+
+function sameQueueScope(a: QueueMutationScope, b: QueueMutationScope): boolean {
+  return (
+    a.projectId === b.projectId &&
+    a.scopeType === b.scopeType &&
+    a.datasetVersionId === b.datasetVersionId &&
+    a.navigationEpoch === b.navigationEpoch
+  );
+}
+
 function queueLabel(queue: ReviewQueueRecord): string {
   return `${queue.status} | ${queue.item_count} ranked images`;
 }
 
+// Mirror the backend's scientific input constraints before creating a queue.
+// Invalid ranking weights or thresholds must not be silently coerced into a
+// different review policy; the backend remains the final authority.
+function validateQueueConfiguration(
+  weights: ReviewScoreWeights,
+  confidencePercent: string,
+): string | null {
+  const values = Object.values(weights);
+  const total = values.reduce((sum, value) => sum + value, 0);
+  if (
+    !values.every((value) => Number.isFinite(value) && value >= 0) ||
+    !Number.isFinite(total) ||
+    total <= 0
+  ) {
+    return "Review score weights must be finite, nonnegative, and have a positive finite total.";
+  }
+  if (confidencePercent.trim() !== "") {
+    const percent = Number(confidencePercent);
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+      return "Review confidence threshold must be between 0 and 100%.";
+    }
+  }
+  return null;
+}
+
+// A successful HTTP status is not evidence that the returned queue belongs to
+// the researcher's requested project and dataset. Never activate an unrelated
+// queue or open its review panel after a mismatched response.
+function assertQueueResponseScope(
+  queue: ReviewQueueRecord,
+  request: QueueMutationScope,
+): ReviewQueueRecord {
+  const expectedDataset =
+    request.scopeType === "dataset_version" ? request.datasetVersionId : null;
+  if (
+    !queue.id ||
+    queue.project_id !== request.projectId ||
+    queue.scope_type !== request.scopeType ||
+    queue.dataset_version_id !== expectedDataset
+  ) {
+    throw new Error(
+      "Queue response does not match the requested project/dataset scope. Inspect queue history before retrying; the response was not selected.",
+    );
+  }
+  return queue;
+}
+
 export function ReviewQueueDashboard({
   project,
+  initialQueue,
   onOpenImage,
   onSelectedQueueChange,
+  onCoordinationOpenChange,
 }: {
   project: Project;
+  initialQueue?: { queueId: string; datasetVersionId?: string };
   onOpenImage: (item: ReviewQueueItem) => void;
   onSelectedQueueChange?: (queueId: string | null) => void;
+  onCoordinationOpenChange?: (open: boolean) => void;
 }) {
   const queryClient = useQueryClient();
+  const entryDataset = initialQueue?.datasetVersionId ?? "";
+  const entryQueue = initialQueue?.queueId ?? "";
+  const entryScope = entryDataset ? "dataset_version" : "project";
+  const currentScope = useRef<QueueMutationScope>({
+    projectId: project.id,
+    scopeType: entryScope,
+    datasetVersionId: entryDataset,
+    navigationEpoch: 0,
+  });
+  const [scopeProjectId, setScopeProjectId] = useState(project.id);
   const [scopeType, setScopeType] = useState<"project" | "dataset_version">(
-    "project",
+    entryScope,
   );
-  const [datasetVersionId, setDatasetVersionId] = useState("");
-  const [selectedQueueId, setSelectedQueueId] = useState("");
+  const [datasetVersionId, setDatasetVersionId] = useState(entryDataset);
+  const [selectedQueueId, setSelectedQueueId] = useState(entryQueue);
   const [selectedRunId, setSelectedRunId] = useState("");
   const [page, setPage] = useState(1);
   const [labelClassId, setLabelClassId] = useState("");
@@ -68,14 +162,91 @@ export function ReviewQueueDashboard({
   const [qcSeverity, setQcSeverity] = useState("");
   const [reviewState, setReviewState] = useState("");
   const [modelId, setModelId] = useState("");
-  const [weights, setWeights] = useState<ReviewScoreWeights>(defaultWeights);
+  const [singleItemActor, setSingleItemActor] = useState("");
+  const [missingCompletionActor, setMissingCompletionActor] = useState(false);
+  const { confirm, confirmationDialog } = useActionConfirmation();
+  // Keep raw numeric inputs: clearing a weight must not silently become zero
+  // (Number("") === 0). Explicit zero remains a valid weight.
+  const [weightInputs, setWeightInputs] = useState<
+    Record<keyof ReviewScoreWeights, string>
+  >(
+    () =>
+      Object.fromEntries(
+        Object.entries(defaultWeights).map(([key, value]) => [
+          key,
+          String(value),
+        ]),
+      ) as Record<keyof ReviewScoreWeights, string>,
+  );
+  const weights = useMemo(() => {
+    // Begin with the complete typed scoring contract rather than casting an
+    // arbitrary string-keyed object to ReviewScoreWeights. Blank fields remain
+    // invalid (NaN), while a researcher-entered zero stays a valid zero.
+    const parsed: ReviewScoreWeights = { ...defaultWeights };
+    const keys = Object.keys(defaultWeights) as (keyof ReviewScoreWeights)[];
+    for (const key of keys) {
+      const value = weightInputs[key];
+      parsed[key] = value.trim() === "" ? Number.NaN : Number(value);
+    }
+    return parsed;
+  }, [weightInputs]);
   const [reviewBelowConfidence, setReviewBelowConfidence] = useState("");
+  const queueConfigurationError = validateQueueConfiguration(
+    weights,
+    reviewBelowConfidence,
+  );
   const [quickReviewItemId, setQuickReviewItemId] = useState<string | null>(
     null,
   );
+  const [coordinationItemId, setCoordinationItemId] = useState<string | null>(
+    null,
+  );
+  // Pin the original queue while coordination is open. An asynchronous queue
+  // refresh must never unmount drafts or uncertain audit-event retry UUIDs.
+  const [coordinationQueueId, setCoordinationQueueId] = useState<string | null>(
+    null,
+  );
+  const [bulkProtectedQueueId, setBulkProtectedQueueId] = useState<
+    string | null
+  >(null);
+  const reviewProtected =
+    coordinationItemId !== null || bulkProtectedQueueId !== null;
+  // Queue generation may finish after coordination opens. Keep its original
+  // selection until the researcher explicitly closes protected review work.
+  // Background queue generation must not override a later explicit selection.
+  const queueSelectionRevision = useRef(0);
+  const reviewProtectedRef = useRef(reviewProtected);
+  reviewProtectedRef.current = reviewProtected;
   const [openQuickReviewWhenReady, setOpenQuickReviewWhenReady] =
     useState(false);
 
+  // The host workspace must not unmount coordination behind its guarded
+  // close button: that would discard item-local drafts and audit retry UUIDs.
+  useEffect(() => {
+    onCoordinationOpenChange?.(reviewProtected);
+    return () => onCoordinationOpenChange?.(false);
+  }, [reviewProtected, onCoordinationOpenChange]);
+
+  // Mutation completions must never select a queue from a project or dataset
+  // that the researcher has since navigated away from.
+  const previousScope = currentScope.current;
+  const nextScope = {
+    projectId: project.id,
+    scopeType,
+    datasetVersionId,
+    navigationEpoch: previousScope.navigationEpoch,
+  };
+  if (!sameQueueScope(previousScope, nextScope)) {
+    // Even A -> B -> A is a new navigation. A response from the first
+    // visit must not replace the researcher's newer queue selection.
+    nextScope.navigationEpoch += 1;
+  }
+  currentScope.current = nextScope;
+
+  // A dataset-version scope without a selected version is not a project scope.
+  const scopeReady =
+    scopeProjectId === project.id &&
+    (scopeType === "project" || Boolean(datasetVersionId));
   const versions = useQuery({
     queryKey: ["dataset_versions", project.id],
     queryFn: ({ signal }) => getDatasetVersions(project.id, signal),
@@ -86,6 +257,7 @@ export function ReviewQueueDashboard({
       scopeType === "dataset_version" && datasetVersionId
         ? getDatasetVersionQualityControlRuns(datasetVersionId, signal)
         : getQualityControlRuns(project.id, signal),
+    enabled: scopeReady,
   });
   const queues = useQuery({
     queryKey: reviewQueuesQueryKey(project.id, scopeType, datasetVersionId),
@@ -93,10 +265,24 @@ export function ReviewQueueDashboard({
       scopeType === "dataset_version" && datasetVersionId
         ? getDatasetVersionReviewQueues(datasetVersionId, signal)
         : getReviewQueues(project.id, signal),
+    enabled: scopeReady,
   });
+  // Do not query a stale queue from another project or dataset scope.
+  const scopedQueueId = scopedReviewQueueId(selectedQueueId, queues.data);
+  // A transient queue-list omission must not unmount either an unresolved
+  // bulk request or open coordination with unsent notes and audit retry UUIDs.
+  // Only pin the queue belonging to this project and the current selection.
+  const protectedQueueId = coordinationQueueId ?? bulkProtectedQueueId;
+  const activeQueueId =
+    scopedQueueId ||
+    (scopeProjectId === project.id && protectedQueueId === selectedQueueId
+      ? protectedQueueId
+      : "");
+  const currentQueueId = useRef(activeQueueId);
+  currentQueueId.current = activeQueueId;
   const items = useQuery({
     queryKey: reviewQueueItemsQueryKey(
-      selectedQueueId,
+      activeQueueId,
       page,
       labelClassId,
       split,
@@ -106,7 +292,7 @@ export function ReviewQueueDashboard({
     ),
     queryFn: ({ signal }) =>
       getReviewQueueItems(
-        selectedQueueId,
+        activeQueueId,
         {
           page,
           pageSize: 25,
@@ -118,22 +304,46 @@ export function ReviewQueueDashboard({
         },
         signal,
       ),
-    enabled: selectedQueueId.length > 0,
+    enabled: activeQueueId.length > 0,
   });
 
   useEffect(() => {
-    if (!queues.data?.length) {
-      setSelectedQueueId("");
-      return;
-    }
+    // Dataset IDs and QC source runs belong to the prior project too.
+    setSingleItemActor("");
+    setScopeType(entryScope);
+    setDatasetVersionId(entryDataset);
+    setSelectedRunId("");
+    setSelectedQueueId(entryQueue);
+    setQuickReviewItemId(null);
+    setCoordinationItemId(null);
+    setCoordinationQueueId(null);
+    setBulkProtectedQueueId(null);
+    setOpenQuickReviewWhenReady(false);
+    setPage(1);
+    setScopeProjectId(project.id);
+  }, [project.id, entryScope, entryDataset, entryQueue]);
+
+  useEffect(() => {
+    // A just-created queue can be selected before the refreshed list arrives.
+    // Do not erase that selection merely because the previous list was empty.
+    if (!queues.data?.length) return;
     if (!selectedQueueId) {
       setSelectedQueueId(queues.data[0].id);
     }
   }, [queues.data, selectedQueueId]);
 
   useEffect(() => {
-    onSelectedQueueChange?.(selectedQueueId || null);
-  }, [onSelectedQueueChange, selectedQueueId]);
+    // A background refresh can briefly omit the active queue. Keep the
+    // coordination panel and host queue identity pinned until guarded close.
+    onSelectedQueueChange?.(
+      coordinationQueueId || bulkProtectedQueueId || activeQueueId || null,
+    );
+  }, [
+    onSelectedQueueChange,
+    activeQueueId,
+    coordinationQueueId,
+    bulkProtectedQueueId,
+  ]);
 
   useEffect(
     () => () => {
@@ -153,79 +363,167 @@ export function ReviewQueueDashboard({
   }, [items.data, openQuickReviewWhenReady, selectedQueueId]);
 
   const createQueue = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (request: CreateQueueRequest) => {
+      if (
+        !request.projectId ||
+        (request.scopeType === "dataset_version" && !request.datasetVersionId)
+      ) {
+        throw new Error("Review scope is not ready");
+      }
+      const configurationError = validateQueueConfiguration(
+        request.weights,
+        request.reviewBelowConfidence,
+      );
+      if (configurationError) throw new Error(configurationError);
       const payload = {
-        source_quality_control_run_id: selectedRunId || undefined,
-        signal_weights: weights,
+        source_quality_control_run_id: request.sourceRunId || undefined,
+        signal_weights: request.weights,
         review_below_confidence:
-          reviewBelowConfidence === ""
+          request.reviewBelowConfidence === ""
             ? undefined
-            : Number(reviewBelowConfidence) / 100,
+            : Number(request.reviewBelowConfidence) / 100,
       };
-      return scopeType === "dataset_version" && datasetVersionId
-        ? createDatasetVersionReviewQueue(datasetVersionId, payload)
-        : createReviewQueue(project.id, payload);
+      const queue =
+        request.scopeType === "dataset_version"
+          ? await createDatasetVersionReviewQueue(
+              request.datasetVersionId,
+              payload,
+            )
+          : await createReviewQueue(request.projectId, payload);
+      return assertQueueResponseScope(queue, request);
     },
-    onSuccess: async (queue) => {
-      setSelectedQueueId(queue.id);
-      setQuickReviewItemId(null);
-      setOpenQuickReviewWhenReady(reviewBelowConfidence !== "");
+    onSuccess: async (queue, request) => {
+      if (
+        sameQueueScope(currentScope.current, request) &&
+        request.selectionRevision === queueSelectionRevision.current &&
+        !reviewProtectedRef.current
+      ) {
+        setSelectedQueueId(queue.id);
+        setQuickReviewItemId(null);
+        setOpenQuickReviewWhenReady(request.reviewBelowConfidence !== "");
+      }
       await queryClient.invalidateQueries({
-        queryKey: ["review_queues", project.id],
+        queryKey: reviewQueuesQueryKey(
+          request.projectId,
+          request.scopeType,
+          request.datasetVersionId,
+        ),
       });
     },
   });
   const regenerateQueue = useMutation({
-    mutationFn: (queueId: string) => regenerateReviewQueue(queueId),
-    onSuccess: async (queue) => {
-      setSelectedQueueId(queue.id);
+    mutationFn: async (
+      request: QueueMutationScope & {
+        queueId: string;
+        selectionRevision: number;
+      },
+    ) => {
+      const queue = await regenerateReviewQueue(request.queueId);
+      return assertQueueResponseScope(queue, request);
+    },
+    onSuccess: async (queue, request) => {
+      if (
+        sameQueueScope(currentScope.current, request) &&
+        request.selectionRevision === queueSelectionRevision.current &&
+        !reviewProtectedRef.current
+      ) {
+        setSelectedQueueId(queue.id);
+      }
       await queryClient.invalidateQueries({
-        queryKey: ["review_queues", project.id],
+        queryKey: reviewQueuesQueryKey(
+          request.projectId,
+          request.scopeType,
+          request.datasetVersionId,
+        ),
       });
     },
   });
+  // Capture reviewer identity and queue provenance when the researcher acts.
+  // A delayed mutation must not invalidate another project's selected queue.
+  const itemRequest = (itemId: string): ItemMutationRequest => ({
+    ...currentScope.current,
+    queueId: activeQueueId,
+    itemId,
+    actor: singleItemActor.trim(),
+  });
+  const invalidateItemRequest = async (request: ItemMutationRequest) => {
+    await queryClient.invalidateQueries({
+      queryKey: ["review_queue_items", request.queueId],
+    });
+    await queryClient.invalidateQueries({
+      queryKey: ["review_queue_events", request.queueId],
+    });
+  };
   const startItem = useMutation({
-    mutationFn: (itemId: string) => startReviewQueueItem(itemId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["review_queue_items", selectedQueueId],
-      });
-    },
+    mutationFn: (request: ItemMutationRequest) =>
+      startReviewQueueItem(request.itemId, request.actor),
+    onSuccess: (_, request) => invalidateItemRequest(request),
   });
   const completeItem = useMutation({
-    mutationFn: (itemId: string) => completeReviewQueueItem(itemId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["review_queue_items", selectedQueueId],
-      });
-    },
+    mutationFn: (request: ItemMutationRequest) =>
+      completeReviewQueueItem(request.itemId, request.actor, true),
+    onSuccess: (_, request) => invalidateItemRequest(request),
   });
+  const completionInFlight = useRef(false);
+  async function requestCompletion(itemId: string, closeQuickReview = false) {
+    const request = itemRequest(itemId);
+    if (!request.actor) {
+      setMissingCompletionActor(true);
+      return;
+    }
+    setMissingCompletionActor(false);
+    if (!request.queueId || completionInFlight.current) return;
+    const approved = await confirm({
+      title: "Complete QC review",
+      message:
+        "Confirm that you personally reviewed this queue item. Completion does not verify model predictions or annotations.",
+      confirmLabel: "Complete review",
+    });
+    if (
+      !approved ||
+      completionInFlight.current ||
+      !sameQueueScope(currentScope.current, request) ||
+      currentQueueId.current !== request.queueId
+    ) {
+      return;
+    }
+    completionInFlight.current = true;
+    completeItem.mutate(request, {
+      onSuccess: () => {
+        if (
+          closeQuickReview &&
+          sameQueueScope(currentScope.current, request) &&
+          currentQueueId.current === request.queueId
+        ) {
+          setQuickReviewItemId((current) =>
+            current === request.itemId ? null : current,
+          );
+        }
+      },
+      onSettled: () => {
+        completionInFlight.current = false;
+      },
+    });
+  }
   const skipItem = useMutation({
-    mutationFn: async (itemId: string) => {
+    mutationFn: async (request: ItemMutationRequest) => {
       const reason = window.prompt("Skip reason");
       if (!reason?.trim()) {
         throw new Error("A skip reason is required");
       }
-      return skipReviewQueueItem(itemId, reason.trim());
+      return skipReviewQueueItem(request.itemId, reason.trim(), request.actor);
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["review_queue_items", selectedQueueId],
-      });
-    },
+    onSuccess: (_, request) => invalidateItemRequest(request),
   });
   const returnItem = useMutation({
-    mutationFn: (itemId: string) => returnReviewQueueItem(itemId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["review_queue_items", selectedQueueId],
-      });
-    },
+    mutationFn: (request: ItemMutationRequest) =>
+      returnReviewQueueItem(request.itemId, request.actor),
+    onSuccess: (_, request) => invalidateItemRequest(request),
   });
 
   const selectedQueue = useMemo(
-    () => queues.data?.find((queue) => queue.id === selectedQueueId) ?? null,
-    [queues.data, selectedQueueId],
+    () => queues.data?.find((queue) => queue.id === activeQueueId) ?? null,
+    [queues.data, activeQueueId],
   );
   const quickReviewItems = items.data?.items ?? [];
   const quickReviewIndex = quickReviewItems.findIndex(
@@ -239,6 +537,21 @@ export function ReviewQueueDashboard({
     typeof storedThreshold === "number" && Number.isFinite(storedThreshold)
       ? storedThreshold
       : null;
+  // Never hide a failed reviewer action behind an unchanged queue chip.
+  // A late failure from a different project, dataset or historical queue
+  // must not be presented as a failure of the researcher's current item.
+  const failedItemActions = [
+    { label: "Start review", mutation: startItem },
+    { label: "Mark complete", mutation: completeItem },
+    { label: "Skip review", mutation: skipItem },
+    { label: "Return to queue", mutation: returnItem },
+  ].filter(
+    ({ mutation }) =>
+      mutation.isError &&
+      mutation.variables?.queueId === activeQueueId &&
+      mutation.variables !== undefined &&
+      sameQueueScope(currentScope.current, mutation.variables),
+  );
 
   return (
     <section className="dashboard-panel">
@@ -250,7 +563,7 @@ export function ReviewQueueDashboard({
         </div>
         <button
           type="button"
-          disabled={!quickReviewItems.length}
+          disabled={!quickReviewItems.length || reviewProtected}
           onClick={() => setQuickReviewItemId(quickReviewItems[0].id)}
         >
           Open quick-review popout
@@ -269,12 +582,20 @@ export function ReviewQueueDashboard({
             <label>
               Scope
               <select
+                disabled={reviewProtected}
                 value={scopeType}
-                onChange={(event) =>
+                onChange={(event) => {
                   setScopeType(
                     event.target.value as "project" | "dataset_version",
-                  )
-                }
+                  );
+                  setDatasetVersionId("");
+                  setSelectedRunId("");
+                  setSelectedQueueId("");
+                  setQuickReviewItemId(null);
+                  setCoordinationItemId(null);
+                  setOpenQuickReviewWhenReady(false);
+                  setPage(1);
+                }}
               >
                 <option value="project">Entire project</option>
                 <option value="dataset_version">Dataset version</option>
@@ -284,8 +605,18 @@ export function ReviewQueueDashboard({
               <label>
                 Dataset version
                 <select
+                  disabled={reviewProtected}
                   value={datasetVersionId}
-                  onChange={(event) => setDatasetVersionId(event.target.value)}
+                  onChange={(event) => {
+                    setDatasetVersionId(event.target.value);
+                    setSelectedRunId("");
+                    setSelectedQueueId("");
+                    setQuickReviewItemId(null);
+                    setCoordinationItemId(null);
+                    setCoordinationQueueId(null);
+                    setOpenQuickReviewWhenReady(false);
+                    setPage(1);
+                  }}
                 >
                   <option value="">Choose a version</option>
                   {versions.data?.map((version) => (
@@ -299,6 +630,7 @@ export function ReviewQueueDashboard({
             <label>
               Source QC run
               <select
+                disabled={!scopeReady || runs.isPending || reviewProtected}
                 value={selectedRunId}
                 onChange={(event) => setSelectedRunId(event.target.value)}
               >
@@ -330,7 +662,7 @@ export function ReviewQueueDashboard({
               accepted or human-verified.
             </p>
             <div className="dashboard-grid compact-grid">
-              {Object.entries(weights).map(([key, value]) => (
+              {Object.entries(weightInputs).map(([key, value]) => (
                 <label key={key}>
                   {key.replaceAll("_", " ")}
                   <input
@@ -339,23 +671,39 @@ export function ReviewQueueDashboard({
                     step="1"
                     value={value}
                     onChange={(event) =>
-                      setWeights((current) => ({
+                      setWeightInputs((current) => ({
                         ...current,
-                        [key]: Number(event.target.value),
+                        [key]: event.target.value,
                       }))
                     }
                   />
                 </label>
               ))}
             </div>
+            {queueConfigurationError && (
+              <p className="form-error" role="alert">
+                {queueConfigurationError}
+              </p>
+            )}
             <div className="version-actions">
               <button
                 type="button"
                 disabled={
+                  Boolean(queueConfigurationError) ||
+                  !scopeReady ||
+                  reviewProtected ||
                   createQueue.isPending ||
                   (scopeType === "dataset_version" && !datasetVersionId)
                 }
-                onClick={() => createQueue.mutate()}
+                onClick={() =>
+                  createQueue.mutate({
+                    ...currentScope.current,
+                    selectionRevision: queueSelectionRevision.current,
+                    sourceRunId: selectedRunId,
+                    weights: { ...weights },
+                    reviewBelowConfidence,
+                  })
+                }
               >
                 {createQueue.isPending ? "Generating..." : "Generate queue"}
               </button>
@@ -363,7 +711,14 @@ export function ReviewQueueDashboard({
                 <button
                   type="button"
                   className="secondary"
-                  onClick={() => regenerateQueue.mutate(selectedQueue.id)}
+                  disabled={reviewProtected}
+                  onClick={() =>
+                    regenerateQueue.mutate({
+                      ...currentScope.current,
+                      queueId: selectedQueue.id,
+                      selectionRevision: queueSelectionRevision.current,
+                    })
+                  }
                 >
                   Regenerate
                 </button>
@@ -383,6 +738,23 @@ export function ReviewQueueDashboard({
                 <h4>Generated queues</h4>
               </div>
             </div>
+            {reviewProtected && (
+              <p className="annotation-helper" role="status">
+                Resolve open researcher coordination or uncertain bulk QC
+                requests before changing queues or workspace. Unsent biological
+                notes and idempotent audit retry IDs must remain available.
+              </p>
+            )}
+            {protectedQueueId &&
+              !scopedQueueId &&
+              activeQueueId === protectedQueueId && (
+                <p className="annotation-helper" role="status">
+                  The selected queue is temporarily absent from the refreshed
+                  list. Protected QC work remains open on its original queue to
+                  protect unsent notes and audit retry IDs. Close it using its
+                  protected controls before selecting another queue.
+                </p>
+              )}
             <div className="version-list">
               {queues.data?.map((queue) => (
                 <button
@@ -391,7 +763,17 @@ export function ReviewQueueDashboard({
                   className={`version-card ${
                     selectedQueueId === queue.id ? "selected" : ""
                   }`}
-                  onClick={() => setSelectedQueueId(queue.id)}
+                  disabled={reviewProtected}
+                  onClick={() => {
+                    if (reviewProtected) return;
+                    queueSelectionRevision.current += 1;
+                    setSelectedQueueId(queue.id);
+                    setQuickReviewItemId(null);
+                    setCoordinationItemId(null);
+                    setCoordinationQueueId(null);
+                    setOpenQuickReviewWhenReady(false);
+                    setPage(1);
+                  }}
                 >
                   <strong>{new Date(queue.created_at).toLocaleString()}</strong>
                   <span>{queueLabel(queue)}</span>
@@ -502,6 +884,33 @@ export function ReviewQueueDashboard({
             </div>
             {items.isPending && <p>Loading review queue items...</p>}
             {items.error && <p className="form-error">{items.error.message}</p>}
+            {activeQueueId && (
+              <ReviewQueueBulkTriage
+                key={activeQueueId}
+                queueId={activeQueueId}
+                items={items.data?.items ?? []}
+                onProtectedStateChange={setBulkProtectedQueueId}
+                disabled={coordinationItemId !== null}
+              />
+            )}
+            {activeQueueId && (
+              <label>
+                Single-item reviewer label (self-reported, not authenticated)
+                <input
+                  aria-label="Single-item reviewer label"
+                  maxLength={100}
+                  value={singleItemActor}
+                  onChange={(event) => setSingleItemActor(event.target.value)}
+                />
+              </label>
+            )}
+            {failedItemActions.map(({ label, mutation }) => (
+              <p className="form-error" role="alert" key={label}>
+                {label} was not confirmed for item {mutation.variables?.itemId}.
+                Verify its current review state and audit history before
+                retrying. {mutation.error?.message}
+              </p>
+            ))}
             <div className="dashboard-list">
               {items.data?.items.map((item) => (
                 <article key={item.id} className="dashboard-row">
@@ -542,6 +951,7 @@ export function ReviewQueueDashboard({
                   <div className="dashboard-actions">
                     <button
                       type="button"
+                      disabled={reviewProtected}
                       onClick={() => setQuickReviewItemId(item.id)}
                     >
                       Quick review
@@ -549,15 +959,44 @@ export function ReviewQueueDashboard({
                     <button
                       type="button"
                       className="secondary"
-                      onClick={() => onOpenImage(item)}
+                      disabled={reviewProtected}
+                      onClick={() => {
+                        if (!reviewProtected) onOpenImage(item);
+                      }}
                     >
                       Open image
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={
+                        bulkProtectedQueueId !== null ||
+                        (coordinationQueueId !== null &&
+                          coordinationQueueId !== activeQueueId)
+                      }
+                      onClick={() => {
+                        if (
+                          bulkProtectedQueueId !== null ||
+                          (coordinationQueueId !== null &&
+                            coordinationQueueId !== activeQueueId)
+                        )
+                          return;
+                        setCoordinationQueueId(activeQueueId);
+                        setCoordinationItemId(item.id);
+                      }}
+                    >
+                      Comments &amp; assignments
                     </button>
                     {item.review_state === "pending" && (
                       <button
                         type="button"
                         className="secondary"
-                        onClick={() => startItem.mutate(item.id)}
+                        disabled={
+                          reviewProtected ||
+                          !singleItemActor.trim() ||
+                          startItem.isPending
+                        }
+                        onClick={() => startItem.mutate(itemRequest(item.id))}
                       >
                         Start review
                       </button>
@@ -566,7 +1005,12 @@ export function ReviewQueueDashboard({
                       <button
                         type="button"
                         className="secondary"
-                        onClick={() => completeItem.mutate(item.id)}
+                        disabled={
+                          reviewProtected ||
+                          !singleItemActor.trim() ||
+                          completeItem.isPending
+                        }
+                        onClick={() => void requestCompletion(item.id)}
                       >
                         Mark complete
                       </button>
@@ -575,7 +1019,12 @@ export function ReviewQueueDashboard({
                       <button
                         type="button"
                         className="secondary"
-                        onClick={() => skipItem.mutate(item.id)}
+                        disabled={
+                          reviewProtected ||
+                          !singleItemActor.trim() ||
+                          skipItem.isPending
+                        }
+                        onClick={() => skipItem.mutate(itemRequest(item.id))}
                       >
                         Skip
                       </button>
@@ -583,7 +1032,12 @@ export function ReviewQueueDashboard({
                       <button
                         type="button"
                         className="secondary"
-                        onClick={() => returnItem.mutate(item.id)}
+                        disabled={
+                          reviewProtected ||
+                          !singleItemActor.trim() ||
+                          returnItem.isPending
+                        }
+                        onClick={() => returnItem.mutate(itemRequest(item.id))}
                       >
                         Return to queue
                       </button>
@@ -592,12 +1046,22 @@ export function ReviewQueueDashboard({
                 </article>
               ))}
             </div>
+            {coordinationQueueId && coordinationItemId && (
+              <ReviewQueueCoordinationPanel
+                queueId={coordinationQueueId}
+                itemId={coordinationItemId}
+                onClose={() => {
+                  setCoordinationItemId(null);
+                  setCoordinationQueueId(null);
+                }}
+              />
+            )}
             {items.data && items.data.pages > 1 && (
               <nav className="pagination" aria-label="Review queue item pages">
                 <button
                   type="button"
                   className="secondary"
-                  disabled={page === 1}
+                  disabled={page === 1 || reviewProtected}
                   onClick={() => setPage((current) => current - 1)}
                 >
                   Previous
@@ -608,7 +1072,7 @@ export function ReviewQueueDashboard({
                 <button
                   type="button"
                   className="secondary"
-                  disabled={page === items.data.pages}
+                  disabled={page === items.data.pages || reviewProtected}
                   onClick={() => setPage((current) => current + 1)}
                 >
                   Next
@@ -641,13 +1105,23 @@ export function ReviewQueueDashboard({
             onOpenImage(quickReviewItem);
           }}
           onMarkComplete={() =>
-            completeItem.mutate(quickReviewItem.id, {
-              onSuccess: () => setQuickReviewItemId(null),
-            })
+            void requestCompletion(quickReviewItem.id, true)
           }
           markingComplete={completeItem.isPending}
+          completionError={
+            missingCompletionActor && !singleItemActor.trim()
+              ? "Enter a reviewer label before completing this QC item."
+              : completeItem.isError &&
+                  completeItem.variables?.itemId === quickReviewItem.id &&
+                  completeItem.variables?.queueId === activeQueueId &&
+                  completeItem.variables !== undefined &&
+                  sameQueueScope(currentScope.current, completeItem.variables)
+                ? completeItem.error.message
+                : null
+          }
         />
       )}
+      {confirmationDialog}
     </section>
   );
 }

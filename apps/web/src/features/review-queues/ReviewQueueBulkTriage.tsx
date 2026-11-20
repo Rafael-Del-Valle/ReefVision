@@ -1,0 +1,633 @@
+import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+
+import {
+  bulkTriageReviewQueueItems,
+  type ReviewQueueBulkAction,
+  type ReviewQueueItem,
+} from "../../api/client";
+
+interface Props {
+  queueId: string;
+  items: ReviewQueueItem[];
+  onProtectedStateChange?: (queueId: string | null) => void;
+  disabled?: boolean;
+}
+
+type BulkRequest = {
+  item_ids: string[];
+  action: ReviewQueueBulkAction;
+  reason?: string;
+  actor: string;
+  review_confirmed?: boolean;
+  client_request_id: string;
+};
+
+type ScopedBulkRequest = {
+  queueId: string;
+  scopeEpoch: number;
+  payload: BulkRequest;
+  // The exact immutable evidence shown when the researcher approved the batch.
+  // This stays with the original UUID through lost-response retries.
+  evidenceById: Record<string, string>;
+};
+
+type UncertainBulkRequest = {
+  request: ScopedBulkRequest;
+  errorMessage: string;
+};
+
+function newBulkRequestId(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  // Some older desktop WebView2 environments expose getRandomValues but
+  // not randomUUID. Keep the idempotency key cryptographically random.
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20),
+  ].join("-");
+}
+
+// A queue action changes bookkeeping state/timestamps, never the underlying
+// biological evidence. Compare immutable fields in a fixed order rather than
+// relying on JSON object key order from different HTTP response serializers.
+function immutableEvidence(item: ReviewQueueItem): string {
+  return JSON.stringify([
+    item.project_id,
+    item.image_id,
+    item.dataset_version_id,
+    item.input_checksum,
+    item.score,
+    item.rank_position,
+    item.highest_qc_severity,
+    item.label_class_ids_json,
+    item.model_ids_json,
+    item.related_issue_ids_json,
+    item.signal_values_json,
+    item.normalized_signals_json,
+    item.weights_json,
+    item.score_breakdown_json,
+    item.reason_summary,
+    item.split,
+    item.created_at,
+  ]);
+}
+
+function eligible(
+  item: ReviewQueueItem,
+  action: ReviewQueueBulkAction,
+): boolean {
+  if (action === "start") return item.review_state === "pending";
+  if (action === "complete") return item.review_state === "in_progress";
+  if (action === "skip") {
+    return (
+      item.review_state === "pending" || item.review_state === "in_progress"
+    );
+  }
+  return item.review_state === "skipped";
+}
+
+export function ReviewQueueBulkTriage({
+  queueId,
+  items,
+  onProtectedStateChange,
+  disabled = false,
+}: Props) {
+  const queryClient = useQueryClient();
+  // A mounted dashboard can reuse this panel for a different review queue.
+  // Capture the queue and visit at submission, not when a response arrives.
+  const currentScope = useRef({ queueId, epoch: 0 });
+  if (currentScope.current.queueId !== queueId) {
+    currentScope.current = {
+      queueId,
+      epoch: currentScope.current.epoch + 1,
+    };
+  }
+  const [action, setAction] = useState<ReviewQueueBulkAction>("start");
+  const [selected, setSelected] = useState<string[]>([]);
+  const [reason, setReason] = useState("");
+  const [actor, setActor] = useState("");
+  const [confirmedSelectionKey, setConfirmedSelectionKey] = useState<
+    string | null
+  >(null);
+  const [reviewedSelectionKey, setReviewedSelectionKey] = useState<
+    string | null
+  >(null);
+  const [lastResult, setLastResult] = useState<string | null>(null);
+  const [uncertainRequests, setUncertainRequests] = useState<
+    Record<string, UncertainBulkRequest>
+  >({});
+  const uncertainRequest = uncertainRequests[queueId] ?? null;
+  // Discarding a lost-response request can destroy its idempotency key even
+  // when the server has already committed the batch. Require scoped approval.
+  const [discardConfirmation, setDiscardConfirmation] = useState<{
+    queueId: string;
+    requestId: string;
+    scopeEpoch: number;
+  } | null>(null);
+  const discardConfirmed =
+    discardConfirmation !== null &&
+    uncertainRequest !== null &&
+    discardConfirmation.queueId === queueId &&
+    discardConfirmation.scopeEpoch === currentScope.current.epoch &&
+    discardConfirmation.requestId ===
+      uncertainRequest.request.payload.client_request_id;
+  useEffect(() => {
+    // Never carry selected image IDs, evidence approvals or a prior queue's
+    // success banner into another queue. Preserve unresolved UUIDs per queue.
+    setSelected([]);
+    setReason("");
+    setConfirmedSelectionKey(null);
+    setReviewedSelectionKey(null);
+    setLastResult(null);
+    setDiscardConfirmation(null);
+  }, [queueId]);
+  const available = items.filter((item) => eligible(item, action));
+  const selectedIds = selected.filter((id) =>
+    available.some((item) => item.id === id),
+  );
+  // Bind both approvals to the full server-provided biological evidence row,
+  // reviewer identity and skip rationale. Checksums/timestamps alone may stay
+  // unchanged during a partial refresh or a corrected import. Conservatively
+  // require fresh human confirmation whenever any selected evidence changes.
+  // This is only a UI guard; the server still validates each transition.
+  const selectionKey = JSON.stringify({
+    queueId,
+    action,
+    actor: actor.trim(),
+    reason: action === "skip" ? reason.trim() : null,
+    items: selectedIds.map((id) => available.find((item) => item.id === id)),
+  });
+  const confirmed = confirmedSelectionKey === selectionKey;
+  const reviewedConfirmed = reviewedSelectionKey === selectionKey;
+  useEffect(() => {
+    // Prevent stale confirmations from reactivating if a state changes back.
+    setConfirmedSelectionKey(null);
+    setReviewedSelectionKey(null);
+  }, [selectionKey]);
+  const mutation = useMutation({
+    mutationFn: async (request: ScopedBulkRequest) => {
+      const result = await bulkTriageReviewQueueItems(
+        request.queueId,
+        request.payload,
+      );
+      // A lost or mismatched response is not proof that the server did
+      // nothing. Keep the original idempotency UUID for an exact retry.
+      if (
+        !result ||
+        result.queue_id !== request.queueId ||
+        result.action !== request.payload.action ||
+        result.requires_researcher_review !== true
+      ) {
+        throw new Error(
+          "Bulk QC response did not match the submitted queue, action, or researcher-review gate. Retry the identical request before taking another action.",
+        );
+      }
+      // An HTTP 200 with a different set of biological review items is not
+      // evidence that this batch was applied. Exact retries may legitimately
+      // report zero changed items, but must still return the requested items
+      // in their resulting state. Never clear the original UUID on mismatch.
+      const expectedState: ReviewQueueItem["review_state"] = (
+        {
+          start: "in_progress",
+          skip: "skipped",
+          return: "pending",
+          complete: "completed",
+        } as const
+      )[request.payload.action];
+      const expectedIds = new Set(request.payload.item_ids);
+      if (
+        !Number.isInteger(result.changed_count) ||
+        result.changed_count < 0 ||
+        result.changed_count > expectedIds.size ||
+        !Array.isArray(result.items) ||
+        result.items.length !== expectedIds.size ||
+        new Set(result.items.map((item) => item.id)).size !==
+          expectedIds.size ||
+        result.items.some(
+          (item) =>
+            !expectedIds.has(item.id) ||
+            item.review_queue_id !== request.queueId ||
+            item.review_state !== expectedState ||
+            // The researcher's exclusion rationale is part of the scientific
+            // audit record, not just a bookkeeping state transition.
+            (request.payload.action === "skip" &&
+              item.skip_reason !== request.payload.reason) ||
+            immutableEvidence(item) !== request.evidenceById[item.id],
+        )
+      ) {
+        throw new Error(
+          "Bulk QC response item identities, states, exclusion reasons, immutable biological evidence, or changed count did not match the submitted batch. Retry the identical request before taking another action.",
+        );
+      }
+      return result;
+    },
+    onSuccess: async (result, request) => {
+      // A delayed success cannot erase a different queue's uncertain retry.
+      setUncertainRequests((current) => {
+        if (
+          current[request.queueId]?.request.payload.client_request_id !==
+          request.payload.client_request_id
+        ) {
+          return current;
+        }
+        const next = { ...current };
+        delete next[request.queueId];
+        return next;
+      });
+      if (
+        currentScope.current.queueId === request.queueId &&
+        currentScope.current.epoch === request.scopeEpoch
+      ) {
+        setSelected([]);
+        setConfirmedSelectionKey(null);
+        setReviewedSelectionKey(null);
+        setLastResult(
+          `${result.changed_count} items updated; scientific review remains required.`,
+        );
+      }
+      await queryClient.invalidateQueries({
+        queryKey: ["review_queue_items", request.queueId],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["review_queue_events", request.queueId],
+      });
+    },
+    onError: (error, request) => {
+      // A lost response may follow a committed transaction. Keep its original
+      // queue and UUID even if the researcher navigated elsewhere.
+      setDiscardConfirmation(null);
+      setUncertainRequests((current) => ({
+        ...current,
+        [request.queueId]: {
+          request,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        },
+      }));
+    },
+  });
+  const locked = mutation.isPending || uncertainRequest !== null;
+  const [nativeCloseBlocked, setNativeCloseBlocked] = useState(false);
+  const [nativeCloseGuardAttempt, setNativeCloseGuardAttempt] = useState(0);
+  const [nativeCloseGuardUnavailable, setNativeCloseGuardUnavailable] =
+    useState(false);
+  // Bulk mutations can commit before their response arrives. Browser reload
+  // or native desktop closure must not silently destroy the original UUID.
+  // This is best-effort window-close protection, not crash-safe persistence.
+  useEffect(() => {
+    if (!locked || !isTauri()) {
+      setNativeCloseBlocked(false);
+      setNativeCloseGuardUnavailable(false);
+      return;
+    }
+    let active = true;
+    let unlisten: (() => void) | undefined;
+    // The native window accessor or listener registration may throw before
+    // returning a Promise (for example, during a partially initialized
+    // desktop bridge). Preserve the pending request and expose recovery.
+    try {
+      void getCurrentWindow()
+        .onCloseRequested((event) => {
+          if (!active) return;
+          event.preventDefault();
+          setNativeCloseBlocked(true);
+        })
+        .then((stop) => {
+          if (active) {
+            unlisten = stop;
+            setNativeCloseGuardUnavailable(false);
+          } else {
+            stop();
+          }
+        })
+        .catch(() => {
+          if (active) setNativeCloseGuardUnavailable(true);
+        });
+    } catch {
+      if (active) setNativeCloseGuardUnavailable(true);
+    }
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, [locked, nativeCloseGuardAttempt]);
+  useEffect(() => {
+    if (!locked) return;
+    const warnOnUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnOnUnload);
+    return () => window.removeEventListener("beforeunload", warnOnUnload);
+  }, [locked]);
+  useEffect(() => {
+    // The dashboard must keep this instance mounted while an in-flight or
+    // uncertain request owns its idempotency UUID. Never silently drop it on
+    // a filter, page, queue-list refresh, or workspace navigation.
+    onProtectedStateChange?.(locked ? queueId : null);
+    return () => onProtectedStateChange?.(null);
+  }, [locked, onProtectedStateChange, queueId]);
+  const ready =
+    !disabled &&
+    selectedIds.length > 0 &&
+    selectedIds.length <= 100 &&
+    actor.trim().length > 0 &&
+    confirmed &&
+    (action !== "skip" || reason.trim().length > 0) &&
+    (action !== "complete" || reviewedConfirmed);
+
+  function submit() {
+    if (!ready || locked) return;
+    // Pin the queue before the network request can race a background refetch.
+    onProtectedStateChange?.(queueId);
+    mutation.mutate({
+      queueId,
+      scopeEpoch: currentScope.current.epoch,
+      evidenceById: Object.fromEntries(
+        selectedIds.map((id) => [
+          id,
+          immutableEvidence(available.find((item) => item.id === id)!),
+        ]),
+      ),
+      payload: {
+        item_ids: selectedIds,
+        action,
+        actor: actor.trim(),
+        // Stable across an uncertain-response retry; never reapply a stale
+        // triage action after another researcher changes the queue state.
+        client_request_id: newBulkRequestId(),
+        ...(action === "skip" ? { reason: reason.trim() } : {}),
+        ...(action === "complete" ? { review_confirmed: true } : {}),
+      },
+    });
+  }
+
+  return (
+    <section className="dashboard-card" aria-label="Bulk QC triage">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Manual queue management</p>
+          <h4>Bulk QC triage</h4>
+        </div>
+        <span>{selectedIds.length} selected on this page</span>
+      </div>
+      <p className="annotation-helper">
+        Only visible eligible items can be selected. A bulk request is limited
+        to 100 items. These actions never approve model predictions or verify
+        scientific observations.
+      </p>
+      {available.length > 100 && (
+        <p role="note">
+          {available.length} eligible items are visible. Select eligible on page
+          chooses only the first 100 in the current order; review the remaining
+          items in a separate batch.
+        </p>
+      )}
+      <label>
+        Local reviewer label (self-reported, not an authenticated account)
+        <input
+          aria-label="Bulk triage reviewer label"
+          maxLength={100}
+          disabled={locked}
+          value={actor}
+          onChange={(event) => {
+            setActor(event.target.value);
+            setConfirmedSelectionKey(null);
+            setReviewedSelectionKey(null);
+          }}
+        />
+      </label>
+      <label>
+        Triage action
+        <select
+          aria-label="Triage action"
+          value={action}
+          disabled={locked}
+          onChange={(event) => {
+            setAction(event.target.value as ReviewQueueBulkAction);
+            setSelected([]);
+            setConfirmedSelectionKey(null);
+            setReviewedSelectionKey(null);
+            setLastResult(null);
+          }}
+        >
+          <option value="start">Start review</option>
+          <option value="skip">Skip with reason</option>
+          <option value="return">Return skipped items</option>
+          <option value="complete">Complete manually reviewed items</option>
+        </select>
+      </label>
+      <div className="version-actions">
+        <button
+          type="button"
+          className="secondary"
+          disabled={locked || available.length === 0}
+          onClick={() => {
+            setSelected(available.slice(0, 100).map((item) => item.id));
+            setConfirmedSelectionKey(null);
+            setReviewedSelectionKey(null);
+          }}
+        >
+          {`Select eligible on page (${Math.min(available.length, 100)}${
+            available.length > 100 ? ` of ${available.length}` : ""
+          })`}
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          disabled={locked || selected.length === 0}
+          onClick={() => {
+            setSelected([]);
+            setConfirmedSelectionKey(null);
+            setReviewedSelectionKey(null);
+          }}
+        >
+          Clear selection
+        </button>
+      </div>
+      <div role="group" aria-label="Eligible review items">
+        {available.map((item) => (
+          <label key={item.id}>
+            <input
+              type="checkbox"
+              disabled={
+                locked ||
+                (selectedIds.length >= 100 && !selectedIds.includes(item.id))
+              }
+              checked={selectedIds.includes(item.id)}
+              onChange={(event) => {
+                setSelected((current) => {
+                  if (!event.target.checked) {
+                    return current.filter((id) => id !== item.id);
+                  }
+                  if (current.includes(item.id)) return current;
+                  // Recheck the current state as well as the rendered checkbox
+                  // guard: rapid changes must never create a >100-item batch.
+                  const visibleCount = current.filter((id) =>
+                    available.some((row) => row.id === id),
+                  ).length;
+                  return visibleCount >= 100 ? current : [...current, item.id];
+                });
+                setConfirmedSelectionKey(null);
+                setReviewedSelectionKey(null);
+              }}
+            />
+            Rank {item.rank_position} — image {item.image_id} (
+            {item.review_state})
+          </label>
+        ))}
+      </div>
+      {action === "skip" && (
+        <label>
+          Bulk skip reason
+          <textarea
+            aria-label="Bulk skip reason"
+            maxLength={500}
+            disabled={locked}
+            value={reason}
+            onChange={(event) => {
+              setReason(event.target.value);
+              setConfirmedSelectionKey(null);
+            }}
+          />
+        </label>
+      )}
+      {action === "complete" && (
+        <label>
+          <input
+            type="checkbox"
+            aria-label="Confirm each item was manually reviewed"
+            disabled={locked || selectedIds.length === 0}
+            checked={reviewedConfirmed}
+            onChange={(event) =>
+              setReviewedSelectionKey(
+                event.target.checked ? selectionKey : null,
+              )
+            }
+          />
+          I personally inspected every selected item. Completion is queue
+          bookkeeping, not acceptance of model predictions or annotations.
+        </label>
+      )}
+      <label>
+        <input
+          type="checkbox"
+          aria-label="Confirm manual triage"
+          disabled={locked || selectedIds.length === 0}
+          checked={confirmed}
+          onChange={(event) =>
+            setConfirmedSelectionKey(event.target.checked ? selectionKey : null)
+          }
+        />
+        I confirm this queue-only action; biological verification remains
+        manual.
+      </label>
+      <button type="button" disabled={!ready || locked} onClick={submit}>
+        {mutation.isPending
+          ? "Applying..."
+          : `Apply ${action} to ${selectedIds.length} items`}
+      </button>
+      {lastResult && <p role="status">{lastResult}</p>}
+      {nativeCloseBlocked && locked && (
+        <p role="alert">
+          Desktop window close was blocked to preserve an in-flight or uncertain
+          bulk QC request. Resolve or explicitly discard the original request
+          before closing ReefVision.
+        </p>
+      )}
+      {nativeCloseGuardUnavailable && locked && (
+        <p role="alert">
+          Desktop close protection could not be registered. Keep ReefVision open
+          until the bulk QC request is resolved.
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              setNativeCloseGuardUnavailable(false);
+              setNativeCloseGuardAttempt((attempt) => attempt + 1);
+            }}
+          >
+            Retry bulk desktop close protection
+          </button>
+        </p>
+      )}
+      {uncertainRequest && <p role="alert">{uncertainRequest.errorMessage}</p>}
+      {uncertainRequest && (
+        <div role="group" aria-label="Uncertain bulk triage outcome">
+          <p>
+            The outcome may be uncertain. Retry the identical request or discard
+            and refresh the queue before choosing another action.
+          </p>
+          <button
+            type="button"
+            disabled={mutation.isPending}
+            onClick={() => {
+              setDiscardConfirmation(null);
+              mutation.mutate(uncertainRequest.request);
+            }}
+          >
+            Retry identical bulk action
+          </button>
+          {discardConfirmed && (
+            <p role="alert">
+              This batch may already have been committed. Discarding its
+              original request UUID prevents an identical safe retry and a new
+              submission could duplicate audit history. Confirm only after
+              reviewing the refreshed queue and event history before another
+              action.
+            </p>
+          )}
+          <button
+            type="button"
+            className="secondary"
+            disabled={mutation.isPending}
+            onClick={() => {
+              if (!discardConfirmed) {
+                setDiscardConfirmation({
+                  queueId,
+                  requestId: uncertainRequest.request.payload.client_request_id,
+                  scopeEpoch: currentScope.current.epoch,
+                });
+                return;
+              }
+              setDiscardConfirmation(null);
+              setUncertainRequests((current) => {
+                if (
+                  current[queueId]?.request.payload.client_request_id !==
+                  uncertainRequest.request.payload.client_request_id
+                ) {
+                  return current;
+                }
+                const next = { ...current };
+                delete next[queueId];
+                return next;
+              });
+              setSelected([]);
+              setConfirmedSelectionKey(null);
+              setReviewedSelectionKey(null);
+              mutation.reset();
+              void queryClient.invalidateQueries({
+                queryKey: ["review_queue_items", queueId],
+              });
+              void queryClient.invalidateQueries({
+                queryKey: ["review_queue_events", queueId],
+              });
+            }}
+          >
+            {discardConfirmed ? "Discard and refresh" : "Review discard risk"}
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}

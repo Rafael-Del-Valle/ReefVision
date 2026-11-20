@@ -41,6 +41,7 @@ from reefvision.services.workflow_prompt_assist import create_prompt_assist_mask
 from reefvision.services.workflow_reproducibility_v15 import execute_reproducibility
 from reefvision.services.workflow_research_reports import execute_research_report
 from reefvision.services.workflow_review import WorkflowReviewRequired
+from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
 from reefvision.services.workflow_study_design import execute_reviewed_study_design
 from reefvision.services.workflow_vlm import VlmClassDefinition, run_vlm_detection
 from reefvision.storage.projects import resolve_managed_project_path
@@ -74,6 +75,7 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "ecology_population_csv_export",
     "ecology_paired_count_comparison",
     "ecology_paired_count_csv_export",
+    "qc_review_queue",
 }
 
 
@@ -1165,6 +1167,7 @@ _ADAPTERS = {
     "ecology_population_csv_export": _ecology_population_csv_export,
     "ecology_paired_count_comparison": _ecology_paired_count_comparison,
     "ecology_paired_count_csv_export": _ecology_paired_count_csv_export,
+    "qc_review_queue": create_review_queue_workflow_artifact,
 }
 
 

@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T12:38:04Z`
+Updated: `2026-11-20T15:39:10Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -765,6 +765,7 @@ Evidence:
 - `browser`: The ordinary source desktop imported all three generated OBJs, exercised four calibrated previews, reopened both saved graphs, repeated each and downloaded the Exchange package. All three originals and six typed artifacts verified against the source-browser receipt with SHA-256 c46681c4df9075abb7bbdb17c228b05107fce72174eb236c16255428542ef388. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv14-geometry-project-replay-1d3942662`)
 - `windows_installed`: The shipped #96 sidecar and two saved runs reported 170.66666666666666 cubic metres for four exactly coplanar source vertices at the supported scale of 999,998.1 metres per unit. Both downloaded artifacts had SHA-256 c4c7af4515773c08a00abc067dee820fe78eb53e80db7722cc719f6ff732351b. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv14-mesh-coplanar-calibration-3c8e2d070`)
 - `windows_installed`: On the physical Windows host, the MSI-extracted desktop and sidecar reproduced the four previews and both saved graphs. The locally built MSI had SHA-256 5d1f9def34983f23b1d0755a0df549d2cb44148f52b21a0d77a85cc686cc59c7. Its exported ZIP contained 63 verified sections, three originals and six result artifacts, and retained both controlled failures without measurement artifacts. — `docs/validation/spatial-calibration-1d3942662.json` (`rv14-geometry-package-replay-1d3942662`)
+- `windows_installed`: The original b846f57e9 sidecar passed eight standalone enclosure cases and sixteen saved runs. Both polygon windings recovered 1.6666666667e-313 cubic metres after calibration with identical export hashes. Positive source volumes still below representability returned a controlled failure and exact planar controls remained zero. Both new donor regressions passed on the integrated source. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/97` (`rv14-positive-volume-recovery-1787cd57c-on-b846f57e9`)
 - `physical_hardware`: In the packaged 1.5 WebView2, both OBJ windings and a double-precision PLY yielded 3.7007434154171883e-9 cubic metres at fixture scale. The planar control withheld the value. An actual reopen reproduced all four artifact checksums. Physical receipt SHA-256 91cc3210fe28a508a20cea48fb60ffdb988648389071357938184997870c54b7. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv14-physical-volume-3c8e2d070`)
 - `representative_data`: none recorded
 
@@ -789,6 +790,7 @@ Evidence:
 - `source`: Real ancestry merge, unique Alembic graph, schema-fingerprinted legacy upgrades, ambiguity rejection, backup verification, and downgrade/upgrade regressions. — `docs/roadmap/REEFVISION_1_4_MIGRATION_RECONCILIATION.md` (`rv14-lineage-source`)
 - `source`: Locally built production Windows sidecar 63fd94bfc restored a checksum-authenticated f44053a90 backup. All inventory bytes matched, the exact old executable reopened the recovery and accepted a write, and two unsupported backups returned HTTP 409 before creating a destination. — `docs/roadmap/REEFVISION_1_4_MIGRATION_RECONCILIATION.md#packaged-backup-recovery-on-a-disposable-copy` (`rv14-frozen-restore-real`)
 - `source`: A copied generated 1.4 profile preserved classes, geometry, units, review events, both actual local weights, seven files and both project snapshots through the 1.5 source migrator. The original physical 1.4 app reopened a restored database byte-identical to its backup. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv14-lineage-upgrade-rich-14-to-15-restore`)
+- `source`: Twenty-five focused backup and recovery checks passed across two runs on the integrated source. Six real worker exits covered partial copies, publication, cancellation, changed output or another job's receipt. The same job verifies all published content before recording success. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/1776cd4ad7b54ca03fedaf892db0e064230c4b76` (`rv14-restore-restart-worker-b846f57e9`)
 - `browser`: From System status, create a managed backup, verify it, restore into a new folder, then read the independent SQLite copy and compare IDs, annotations, original bytes and inventory digests. The native fixture passed on the 78a02c20c shell with the production-script fixed 63fd94bfc sidecar. — `apps/web/tests/e2e/backup-restore-live.spec.ts` (`rv14-system-restore-ui`)
 - `windows_installed`: Exact-head source 36c80224a Windows acceptance passed a published 1.0.3 upgrade with schema migration, persistence, Project Exchange, uninstall, and data retention. This is partial evidence and does not substitute for representative 1.3 and legacy draft-1.4 profiles. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396` (`rv14-lineage-win-103`)
 - `windows_installed`: Exact-head source 36c80224a passed all three installed synthetic profiles. Verified 1.3 MSI upgrade, 0038 and 0039 profile migration, evidence preservation, exchange round trips, and backup restoration. The historical 1.3 build rejected the upgraded schema and the upgraded database hash remained unchanged. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396` (`rv14-lineage-win-synthetic`)
@@ -800,7 +802,9 @@ Evidence:
 - `windows_installed`: The 1.5 MSI passed clean installation, upgrades from published 1.0.3 and validated 1.4 and 1.3, and both historical 1.4 draft schema fixtures. A separately restored verified backup reopened in the older application. A generated two-project fixture on the physical host preserved both checkpoints and all seven project files. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44722744547` (`rv14-windows-lineage-3c8e2d070`)
 - `windows_installed`: The 9645531ea local MSI sidecar restored the verified 3c8e2d070 backup using the normal Backup API. All 312 files matched. Eight reopened projects retained 41 data fingerprints, 52 images, two videos and five available registered checkpoints. SQLite remained byte-identical, SHA-256 1819e2e76f3735c51adb34498475fea101908e199425dc8e61db8fd630f95d61. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv14-restore-eight-projects-9645531ea`)
 - `windows_installed`: Two historical revisions independently recorded 0038. The 1.5 package preserved the generated 68 degrees Fahrenheit observation, original uncertainty, normalized units and calibration from science commit e1cd11d38. It refused QC revision d4dc3a3aa before opening an API port and preserved all three audit events and the original database bytes. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv14-historical-science-qc-controls-3c8e2d070`)
-- `physical_hardware`: none recorded
+- `physical_hardware`: The locally built 54756d0cf MSI on Windows 11 with long paths disabled restored 398 and 400 files from consecutive backups and retained a 286-character path and its original SHA-256. An earlier archive restored all 794 members, including its 397 nested recovery members. Local MSI SHA-256 af597ff725585c098957c47c25989e6c0fbb06225d0a17cfdd4ad01ac0dfdfca. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/97` (`rv14-restore-long-cycle-54756d0cf`)
+- `physical_hardware`: On the b846f57e9 MSI-extracted Windows sidecar, stopping the worker with 31 staged files left the destination unpublished. Restart resumed the same job, verified all 395 files and 107,232,142 bytes, removed its stage and preserved a separately owned stage. A second interrupted job with a persisted cancellation finished cancelled with no published target. Local MSI SHA-256 ac85ed3b5168e47405a5ac3af6342e4e47cf3c908d7e6fd573529ced26a4af4b. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/97` (`rv14-packaged-restore-replay-b846f57e9`)
+- `physical_hardware`: The original 1.5 MSI restored 398 then 400 files in two physical desktop cycles. An independently interrupted 395-file restore resumed the same job, matched all file hashes, and preserved its original archive and unrelated staging data. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/97` (`rv14-restore-original-msi-restart-b846f57e9`)
 - `representative_data`: none recorded
 
 ### rv14-longitudinal-3d-change: Reviewed longitudinal 3D change
@@ -892,6 +896,7 @@ Evidence:
 - `browser`: none recorded
 - `windows_installed`: none recorded
 - `physical_hardware`: Windows 11 build 26300 reported VerifiedAndReputablePolicyState 0, off. The exact MSI c6e92040617eb055c4ee62afcca86af709ebe73d02602165d474e1259582e05e, desktop executable and sidecar were unsigned. Enforcement acceptance requires a machine with that policy enabled. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv14-policy-3c8e2d070`)
+- `physical_hardware`: The physical Windows 11 host reported Smart App Control off. The original candidate MSI, desktop and sidecar were unsigned. Acceptance on a Windows 11 device enforcing Smart App Control remains open. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/97` (`rv14-policy-original-msi-off-b846f57e9`)
 - `representative_data`: none recorded
 
 ### rv14-spatial-preview: Bounded OBJ/PLY/GLB mesh and point-cloud preview
@@ -956,6 +961,7 @@ Evidence:
 - `source`: 15 integrated source tests covered freeze, original-growth recomputation, two successive Exchange copies, new revisions and tamper rejection. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/2e22871795784f528c9ef27511d7cd93f9d01afb` (`rv15-experimental-design-design-exchange`)
 - `browser`: Fixture roster and calibrated two-visit analysis frozen, reopened, exported and replayed twice. Receipt SHA-256 20a008c011cd3987e63588134af72e125867746f31a23a1f605e4b5a57aa0577. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/95` (`rv15-experimental-design-design-replay`)
 - `windows_installed`: Standard-user WebView2 on the clean Windows install from 3c8e2d070. The researcher froze a prospective roster, bound reviewed measures, reopened it and obtained matching saved runs. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44722744547/job/136258835916` (`rv15-experimental-design-installed-3c8e2d070`)
+- `windows_installed`: The original 1.5 MSI opened Research in a fresh standard-user WebView2 session. The generated repeated-unit study was saved, reopened and replayed with its frozen roster and exclusions. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44748544977/job/136346825319` (`rv15-study-clean-research-b846f57e9`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -978,6 +984,7 @@ Evidence:
 - `source`: PNG/MP4 bytes, known and unknown clocks, reviewed conflicts, canonical media and the original report checksum survived two project copies. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/d3ef97c768e41c9c6b910da90af0fea6308cce3a` (`rv15-field-capture-field-exchange`)
 - `browser`: Project Field capture imported, reconciled and replayed a transferred batch twice. Receipt SHA-256 17280d51612a426c43902079c0e72db3637514765d87b31b05b83c8012ee341b. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/95` (`rv15-field-capture-field-replay`)
 - `windows_installed`: Standard-user WebView2 on the clean Windows install from 3c8e2d070. The researcher imported offline PNG/MP4 fixtures, retained clock uncertainty and a conflict decision, then replayed the reconciled batch twice. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44722744547/job/136258835916` (`rv15-field-capture-installed-3c8e2d070`)
+- `windows_installed`: The installed Research journey imported generated local originals, recorded the field clock and reconciliation decision, and replayed the transferred batch. Independent field logs remain required. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44748544977/job/136346825319` (`rv15-field-clean-research-b846f57e9`)
 - `physical_hardware`: The physical Windows desktop preserved the generated field batch after restore and replay, with signed report SHA-256 b83b00e9035c7dbdc4a98b0325ada2d8082d6d2daf2358c059a690e43f3f15ed. Official MSI SHA-256 c6e92040617eb055c4ee62afcca86af709ebe73d02602165d474e1259582e05e. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv15-field-capture-physical-3c8e2d070`)
 - `representative_data`: none recorded
 
@@ -1001,6 +1008,7 @@ Evidence:
 - `browser`: Direct Model Hub inference and two Detection Inference graph runs matched the source-pixel boxes, labels and scores for all nine CPU and ten CUDA predictions to six decimals on independently trained fixture checkpoints. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/95` (`rv15-model-catalog-runtime-direct-graph-replay`)
 - `windows_installed`: Standard-user WebView2 on the clean Windows install from 3c8e2d070. The researcher inspected and approved a local runtime configuration, ran direct inference and repeated the selection in a saved graph. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44722744547/job/136258835916` (`rv15-model-catalog-runtime-installed-3c8e2d070`)
 - `physical_hardware`: Packaged CUDA on the physical RTX 3090. Direct inference and two saved runs agreed on 9 proposals, with SHA-256 4428cc1865bc9b57380597ea920b021630cd0640dbca579c5db107d58b31e812. Official MSI SHA-256 c6e92040617eb055c4ee62afcca86af709ebe73d02602165d474e1259582e05e. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv15-model-catalog-runtime-physical-3c8e2d070`)
+- `physical_hardware`: The original installer payload opened Models on the physical RTX 3090. A reviewed locally trained detector completed direct inference and two saved graph runs, each with nine matched proposals. Both saved digests were b0dc4cea1b7b7cfaab2329547230f56107a9ee2c8224f79ff37c508730f52f48. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/97` (`rv15-runtime-original-msi-rtx-b846f57e9`)
 - `representative_data`: none recorded
 
 ### rv15-model-comparison: Unified detector, mask, pose, tracking, and event comparison
@@ -1027,7 +1035,9 @@ Evidence:
 - `browser`: In Chromium the project Model comparison workspace accepted both independently scored model reports, decoded the correct H.264 originals, and reopened a pose disagreement at frame 2 and an event disagreement in another video at 0.2 seconds. Both tested original hashes matched the frozen reference. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv15-model-comparison-playable-video-seek`)
 - `browser`: A real Chromium project compared two independently scratch-trained CPU segmentation models on six untouched images in two frozen groups. The models returned 12 and 46 polygons and missed all reference instances at the chosen match threshold. The direct report, exports and two saved runs retained the same result. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv15-model-comparison-actual-instance-masks`)
 - `windows_installed`: Standard-user WebView2 on the clean Windows install from 3c8e2d070. The researcher opened an original from the paired-group disagreement report, exported the results and repeated the saved comparison. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44722744547/job/136258835916` (`rv15-model-comparison-installed-3c8e2d070`)
+- `windows_installed`: The original clean MSI compared two locally trained detectors on untouched held-out fixtures. The saved comparison ran twice in standard-user WebView2. Independent label and performance acceptance remains open. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44748544977/job/136346825319` (`rv15-paired-clean-research-b846f57e9`)
 - `physical_hardware`: The packaged RTX 3090 ran both registered segmentation checkpoints on the same six held-out fixture images in two groups with twelve reference masks. Two saved executions reproduced artifact SHA-256 74edffb4568870ecee97e0a7401e8f55d04d50844ba8fa2c26686ba2619c7958. The redacted physical receipt has SHA-256 82a6f7a7ee1f6c39e37abac9f01cf2f8715193c9046ea189838dbf5fea04cc7e. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv15-model-comparison-native-mask-pairs-3c8e2d070`)
+- `physical_hardware`: On b846f57e9 a physical RTX 3090 ran three generated-fixture source checks with CUDA 12.1. Direct native ReefPose evaluation, a queued two-model comparison and offline training through registration and inference passed. The comparison report had SHA-256 965d4d6907496f326147a814e484356221575592304d6288f5da840dc57b11e4. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/97` (`rv15-model-comparison-source-cuda-b846f57e9`)
 - `representative_data`: none recorded
 
 ### rv15-provider-foundations: Early local provider and plugin foundations
@@ -1067,7 +1077,9 @@ Evidence:
 
 - `source`: Research export combines the frozen design, sealed independent review, paired model comparison, model hashes, methods, environment and exclusions with a native project archive. Tests cover repeated restore, weights and media omissions, aliased field originals, and rejection of inconsistent reports before import. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/d126bff406518811490c4abdb177aa73d45c2c15` (`rv15-reproducibility-package-offline-research-archive`)
 - `browser`: Six ordinary project journeys completed. The 64,711-byte Research ZIP contained none of the omitted checkpoint bytes in any of its 112 native archive members. Two original saved graph runs and a third after import returned the same payload SHA-256 fdfcb169edd1a8e6c67aaddcbb979e01470286afd53a07e2b8901bca62e9d84a. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/74645f2dff3e369f9d05152e0b7841e0afc65f8d` (`rv15-reproducibility-package-download-inspect-reopen`)
+- `browser`: The source desktop at b846f57e9 completed all six Research and ten preserved generated-fixture journeys on the first try. The package kept one original archive member. Two local saved runs and the restored graph produced the same SHA-256 60bacecfac281aeaf5aa2efdb6d7595864eabb0400d88054ee59dcf531836e0f. The restored project carried no reviewer credential. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/97` (`rv15-research-package-restored-replay-b846f57e9`)
 - `windows_installed`: Standard-user WebView2 on the clean Windows install from 3c8e2d070. The downloaded Research package bound design, role-attributed reviews and model results. Two saved runs and a restored run reproduced the proof. A shared original occupied one native archive member. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44722744547/job/136258835916` (`rv15-reproducibility-package-installed-3c8e2d070`)
+- `windows_installed`: The original installed Research workspace exported and reimported a package containing the study, reviewer and model receipts. Its restored graph completed through the ordinary application. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44748544977/job/136346825319` (`rv15-package-clean-research-b846f57e9`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -1090,6 +1102,7 @@ Evidence:
 - `source`: Separate reviewer roles submitted independent decisions, followed by attributed adjudication and an immutable agreement report. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/ac87ce0aca0766686af72be34be6c3d71ee196ef` (`rv15-reviewer-lab-blinded-ledger`)
 - `browser`: Two blinded fixture roles agreed on one of two images. Cohen's kappa was zero. Two saved replays preserved the sealed result. Receipt SHA-256 71f638f5ed0ddbf28c99b3292d55a8f8fc1b065c55b5fc6b54c4d59ce809f0ed. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/95` (`rv15-reviewer-lab-role-replay`)
 - `windows_installed`: Standard-user WebView2 on the clean Windows install from 3c8e2d070. The reviewer workspace retained independent signed decisions and adjudication, then reopened its agreement report. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44722744547/job/136258835916` (`rv15-reviewer-lab-installed-3c8e2d070`)
+- `windows_installed`: The ordinary Research workspace assigned blinded observations on a generated sample, recorded disagreement and adjudication and replayed the sealed agreement on the original installer. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44748544977/job/136346825319` (`rv15-review-clean-research-b846f57e9`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -1107,8 +1120,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Thirty-five backend checks cover class use, archived classes, reassignment and protected historical records. — `docs/validation/research-workflows-1-6.json` (`rv16-class-safe-writes`)
+- `browser`: Classes retained the frozen manifest and exported YOLO mapping after a reviewed reassignment and reopen. Polygon and image-level references prevented deletion. — `docs/validation/research-workflows-1-6.json` (`rv16-class-frozen-export`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1127,8 +1140,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: 175 video tests exercised draft and persisted editing. A source-built WebView2 journey preserved a hidden mask and untouched keyframe and rejected a stale revision. — `docs/validation/research-workflows-1-6.json` (`rv16-video-edits-source`)
+- `browser`: On 5,000 decoded fixture images, 24 cards appeared in 106.6 ms and the first thumbnail in 143.1 ms. The 1,500-box editor supported selection, hide, solo, undo, redo and reopen. — `docs/validation/research-workflows-1-6.json` (`rv16-gallery-canvas`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1147,7 +1160,7 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
+- `source`: Six populated profiles from original scientific, QC and 1.5 software retained all original columns, rows, file hashes and foreign keys across migration and two opens. Seventy migration, backup and compatibility tests passed. — `docs/validation/research-workflows-1-6.json` (`rv16-independent-0038-families`)
 - `browser`: none recorded
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
@@ -1168,7 +1181,7 @@ Acceptance checks:
 Evidence:
 
 - `source`: none recorded
-- `browser`: none recorded
+- `browser`: At 960 by 640 CSS pixels and 150% scale, a new researcher used the keyboard to create a project, imported an original, annotated, undid and redid, reviewed, reopened and downloaded YOLO. No external HTTP attempts were recorded. — `docs/validation/research-workflows-1-6.json` (`rv16-first-use-compact`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1187,8 +1200,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Seven Project Exchange tests verified stable retry identity, source ownership, damaged data refusal, and two saved frozen QC runs in each of two generations of imported projects. — `docs/validation/research-workflows-1-6.json` (`rv16-frozen-qc-exchange`)
+- `browser`: The ordinary Review workspace froze evidence, assigned and annotated items, bulk-started reviews and replayed the guided graph twice. A retry in a new backend process changed zero records. — `docs/validation/research-workflows-1-6.json` (`rv16-frozen-qc-review`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded

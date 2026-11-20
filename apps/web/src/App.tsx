@@ -58,6 +58,7 @@ import {
   LoadingState,
 } from "./components/ui/AsyncState";
 import { StatusBadge } from "./components/ui/StatusBadge";
+import { useActionConfirmation } from "./components/ui/ActionConfirmation";
 import { KeyboardShortcutsDialog } from "./components/ui/KeyboardShortcutsDialog";
 import { ProjectLauncher } from "./components/layout/ProjectLauncher";
 import { ProjectImportDialog } from "./components/layout/ProjectImportDialog";
@@ -118,7 +119,7 @@ type ProjectView =
   | "workflows"
   | "system";
 
-const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.5.0";
+const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.6.0";
 
 type ProjectTab = Exclude<ProjectView, "system">;
 
@@ -296,6 +297,7 @@ const PROJECT_NAV_GROUPS: Array<{
 ];
 
 function ReefVisionMainApp() {
+  const { confirm, confirmationDialog } = useActionConfirmation();
   const queryClient = useQueryClient();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     null,
@@ -330,6 +332,9 @@ function ReefVisionMainApp() {
   const [projectName, setProjectName] = useState("");
   const [description, setDescription] = useState("");
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [focusLauncherAfterWelcome, setFocusLauncherAfterWelcome] =
+    useState(false);
+  const mainContentRef = useRef<HTMLElement>(null);
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
   const keyboardShortcutsButtonRef = useRef<HTMLButtonElement | null>(null);
   const [workspacePresetId, setWorkspacePresetId] =
@@ -343,6 +348,29 @@ function ReefVisionMainApp() {
   const [selectedReviewQueueId, setSelectedReviewQueueId] = useState<
     string | null
   >(null);
+  const [workflowQueue, setWorkflowQueue] = useState<{
+    projectId: string;
+    queueId: string;
+    datasetVersionId?: string;
+  } | null>(null);
+  const [qcCoordinationOpen, setQcCoordinationOpen] = useState(false);
+  const [qcNavigationBlocked, setQcNavigationBlocked] = useState(false);
+  const handleQcCoordinationChange = useCallback((open: boolean) => {
+    setQcCoordinationOpen(open);
+    if (!open) setQcNavigationBlocked(false);
+  }, []);
+  const preventQcNavigation = useCallback(() => {
+    if (activeView !== "review_queue" || !qcCoordinationOpen) return false;
+    setQcNavigationBlocked(true);
+    return true;
+  }, [activeView, qcCoordinationOpen]);
+  const navigateToView = useCallback(
+    (view: ProjectView) => {
+      if (view !== activeView && preventQcNavigation()) return;
+      setActiveView(view);
+    },
+    [activeView, preventQcNavigation],
+  );
   const [videoWorkspaceContext, setVideoWorkspaceContext] =
     useState<VideoWorkspaceContext | null>(null);
   const [videoWorkspaceCommand, setVideoWorkspaceCommand] =
@@ -408,9 +436,40 @@ function ReefVisionMainApp() {
   }, []);
 
   useEffect(() => {
+    if (!focusLauncherAfterWelcome || showOnboarding) return;
+    if (showCreate || selectedProjectId || activeView !== "gallery") {
+      setFocusLauncherAfterWelcome(false);
+      return;
+    }
+    if (projectSummaries.isPending || projectSummaries.isFetching) return;
+    // Preserve focus when the researcher moved while summaries were loading.
+    if (document.activeElement === document.body) {
+      const launcher = mainContentRef.current;
+      const action =
+        launcher?.querySelector<HTMLButtonElement>(
+          ".rv-project-launcher-open",
+        ) ??
+        launcher?.querySelector<HTMLButtonElement>(
+          ".rv-launcher-actions button",
+        );
+      action?.focus();
+    }
+    setFocusLauncherAfterWelcome(false);
+  }, [
+    activeView,
+    focusLauncherAfterWelcome,
+    projectSummaries.isFetching,
+    projectSummaries.isPending,
+    selectedProjectId,
+    showCreate,
+    showOnboarding,
+  ]);
+
+  useEffect(() => {
     setInferenceSelectedImageIds([]);
     setFocusedGalleryImageId(null);
     setSelectedReviewQueueId(null);
+    setWorkflowQueue(null);
     setVideoWorkspaceContext(null);
     setVideoWorkspaceCommand(null);
 
@@ -444,15 +503,19 @@ function ReefVisionMainApp() {
     [],
   );
 
-  const handleOpenReviewItem = useCallback((item: ReviewQueueItem) => {
-    setEditorLaunch({
-      imageId: item.image_id,
-      returnLabel: "Back to Review Queue",
-      contextTitle: `Review score ${item.score.toFixed(2)}`,
-      contextDescription:
-        item.reason_summary ?? "This image was ranked for human review.",
-    });
-  }, []);
+  const handleOpenReviewItem = useCallback(
+    (item: ReviewQueueItem) => {
+      if (preventQcNavigation()) return;
+      setEditorLaunch({
+        imageId: item.image_id,
+        returnLabel: "Back to Review Queue",
+        contextTitle: `Review score ${item.score.toFixed(2)}`,
+        contextDescription:
+          item.reason_summary ?? "This image was ranked for human review.",
+      });
+    },
+    [preventQcNavigation],
+  );
 
   const handleVideoWorkspaceContextChange = useCallback(
     (context: VideoWorkspaceContext | null) => {
@@ -508,6 +571,7 @@ function ReefVisionMainApp() {
   );
 
   function selectWorkspacePreset(presetId: WorkspacePresetId): void {
+    if (preventQcNavigation()) return;
     const preset = workspacePreset(presetId);
     setWorkspacePresetId(preset.id);
     if (selectedProjectId) {
@@ -671,11 +735,13 @@ function ReefVisionMainApp() {
 
       switch (command.type) {
         case "navigate":
+          if (command.view !== activeView && preventQcNavigation()) break;
           setEditorLaunch(null);
           setActiveView(command.view);
           break;
 
         case "open_measurements":
+          if (preventQcNavigation()) break;
           setEditorLaunch({
             imageId: command.imageId,
             returnLabel: "Back to morphometrics",
@@ -720,11 +786,14 @@ function ReefVisionMainApp() {
     handleVideoFrameChange,
     handleVideoSelect,
     handleVideoTrackChange,
+    activeView,
+    preventQcNavigation,
     selectedProject,
   ]);
 
   return (
     <main className="app-shell">
+      {confirmationDialog}
       <a className="rv-skip-link" href="#reefvision-main-content">
         Skip to main content
       </a>
@@ -750,6 +819,7 @@ function ReefVisionMainApp() {
               type="button"
               className="secondary"
               onClick={() => {
+                if (preventQcNavigation()) return;
                 setSelectedProjectId(null);
                 setEditorLaunch(null);
                 setActiveView("gallery");
@@ -777,6 +847,7 @@ function ReefVisionMainApp() {
             type="button"
             className="secondary"
             onClick={() => {
+              if (preventQcNavigation()) return;
               setSelectedProjectId(null);
               setEditorLaunch(null);
               setActiveView("system");
@@ -789,7 +860,7 @@ function ReefVisionMainApp() {
             <ReefVisionAssistant
               project={selectedProject}
               activeView={activeView}
-              onNavigate={(view) => setActiveView(view as ProjectView)}
+              onNavigate={(view) => navigateToView(view as ProjectView)}
             />
           )}
           <div className="api-status" aria-live="polite">
@@ -815,6 +886,7 @@ function ReefVisionMainApp() {
 
       <section
         id="reefvision-main-content"
+        ref={mainContentRef}
         className="rv-phase12-surface"
         tabIndex={-1}
       >
@@ -896,20 +968,26 @@ function ReefVisionMainApp() {
             activePreset={workspacePresetId}
             onPresetChange={selectWorkspacePreset}
             onHome={() => {
+              if (preventQcNavigation()) return;
               setSelectedProjectId(null);
               setEditorLaunch(null);
               setActiveView("gallery");
             }}
             onSystem={() => {
+              if (preventQcNavigation()) return;
               setSelectedProjectId(null);
               setEditorLaunch(null);
               setActiveView("system");
             }}
-            onArchive={() => {
+            onArchive={async () => {
+              if (preventQcNavigation()) return;
               if (
-                window.confirm(
-                  `Archive “${selectedProject.name}”? It will be hidden from the project launcher. Its files and research records will be retained.`,
-                )
+                await confirm({
+                  title: "Archive project?",
+                  message: `Hide “${selectedProject.name}” from the project launcher? Its files and research records will be retained.`,
+                  confirmLabel: "Archive project",
+                  destructive: true,
+                })
               ) {
                 archiveMutation.mutate(selectedProject.id);
               }
@@ -932,7 +1010,8 @@ function ReefVisionMainApp() {
                 onVideoSelect={handleVideoSelect}
                 onVideoFrameChange={handleVideoFrameChange}
                 onVideoTrackChange={handleVideoTrackChange}
-                onOpenMeasurements={(imageId) =>
+                onOpenMeasurements={(imageId) => {
+                  if (preventQcNavigation()) return;
                   setEditorLaunch({
                     imageId,
                     returnLabel: "Back to morphometrics",
@@ -940,9 +1019,10 @@ function ReefVisionMainApp() {
                     contextDescription:
                       "Review masks, calibration, measurements, and skeleton-derived morphology.",
                     initialWorkspace: "masks",
-                  })
-                }
+                  });
+                }}
                 onNavigate={(view) => {
+                  if (view !== activeView && preventQcNavigation()) return;
                   setEditorLaunch(null);
                   setActiveView(view);
                 }}
@@ -966,7 +1046,7 @@ function ReefVisionMainApp() {
                         tabIndex={selected ? 0 : -1}
                         className={selected ? "active" : ""}
                         title={group.description}
-                        onClick={() => setActiveView(group.items[0].id)}
+                        onClick={() => navigateToView(group.items[0].id)}
                         onKeyDown={(event) =>
                           handleTabKeys(
                             event,
@@ -976,7 +1056,7 @@ function ReefVisionMainApp() {
                               const next = PROJECT_NAV_GROUPS.find(
                                 (value) => value.id === groupId,
                               );
-                              if (next) setActiveView(next.items[0].id);
+                              if (next) navigateToView(next.items[0].id);
                             },
                           )
                         }
@@ -1000,13 +1080,13 @@ function ReefVisionMainApp() {
                               tabIndex={activeView === item.id ? 0 : -1}
                               className={activeView === item.id ? "active" : ""}
                               title={item.description}
-                              onClick={() => setActiveView(item.id)}
+                              onClick={() => navigateToView(item.id)}
                               onKeyDown={(event) =>
                                 handleTabKeys(
                                   event,
                                   group.items.map((value) => value.id),
                                   activeView as ProjectTab,
-                                  setActiveView,
+                                  navigateToView,
                                 )
                               }
                             >
@@ -1142,6 +1222,14 @@ function ReefVisionMainApp() {
                     : undefined
                 }
                 onOpenScience={setActiveView}
+                onOpenReviewQueue={(queueId, datasetVersionId) => {
+                  setWorkflowQueue({
+                    projectId: selectedProject.id,
+                    queueId,
+                    datasetVersionId,
+                  });
+                  setActiveView("review_queue");
+                }}
               />
             )}
             {activeView === "video" && (
@@ -1254,11 +1342,25 @@ function ReefVisionMainApp() {
               />
             )}
             {activeView === "review_queue" && (
-              <ReviewQueueDashboard
-                project={selectedProject}
-                onOpenImage={handleOpenReviewItem}
-                onSelectedQueueChange={handleSelectedReviewQueueChange}
-              />
+              <>
+                {qcNavigationBlocked && (
+                  <p role="alert" className="form-error">
+                    Resolve any uncertain audit request and close reviewer
+                    coordination before leaving the review queue.
+                  </p>
+                )}
+                <ReviewQueueDashboard
+                  project={selectedProject}
+                  initialQueue={
+                    workflowQueue?.projectId === selectedProject.id
+                      ? workflowQueue
+                      : undefined
+                  }
+                  onOpenImage={handleOpenReviewItem}
+                  onSelectedQueueChange={handleSelectedReviewQueueChange}
+                  onCoordinationOpenChange={handleQcCoordinationChange}
+                />
+              </>
             )}
             {activeView === "classes" && (
               <ClassManagerPanel project={selectedProject} />
@@ -1344,6 +1446,18 @@ function ReefVisionMainApp() {
       {showOnboarding && (
         <OnboardingModal
           version={health.data?.version ?? applicationVersion}
+          hasProject={Boolean(selectedProjectId)}
+          onStartProject={(action) => {
+            if (preventQcNavigation()) return;
+            setSelectedProjectId(null);
+            setEditorLaunch(null);
+            setActiveView("gallery");
+            if (action === "create") {
+              setShowCreate(true);
+            } else {
+              setFocusLauncherAfterWelcome(true);
+            }
+          }}
           onClose={() => setShowOnboarding(false)}
           onDismissPermanently={dismissOnboardingPermanently}
         />

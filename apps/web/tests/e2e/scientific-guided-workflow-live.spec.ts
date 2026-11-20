@@ -27,7 +27,7 @@ test("configures, runs, edits and replays acquisition QC through the visual work
   );
   expect(imported.ok(), await imported.text()).toBeTruthy();
   await page.addInitScript(() =>
-    localStorage.setItem("reefvision.onboarding.dismissed.1.5.0", "true"),
+    localStorage.setItem("reefvision.onboarding.dismissed.1.6.0", "true"),
   );
   const open = async () => {
     await page.goto(web!);

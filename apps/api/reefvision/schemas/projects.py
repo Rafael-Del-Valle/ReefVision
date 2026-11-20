@@ -133,6 +133,8 @@ class LabelClassCreate(BaseModel):
 
 
 class LabelClassUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     display_order: int | None = Field(default=None, ge=0)
     name: str | None = Field(default=None, min_length=1, max_length=200)
     scientific_name: str | None = Field(default=None, max_length=200)
@@ -161,6 +163,7 @@ class LabelClassUsageResponse(BaseModel):
     class_id: str
     project_id: str
     class_name: str
+    reference_fingerprint: str
     is_active: bool
     archived_at: datetime | None
     total_references: int
@@ -172,8 +175,25 @@ class LabelClassUsageResponse(BaseModel):
     counts: list[LabelClassUsageCountResponse]
 
 
+class LabelClassMergeTargetIdentity(BaseModel):
+    """Reviewed biological identity for class merge approval, excluding cosmetic styling."""
+
+    name: str
+    class_index: int
+    scientific_name: str | None
+    state_name: str | None
+
+
 class LabelClassMergeRequest(BaseModel):
     target_class_id: str = Field(min_length=1, max_length=36)
+    # The current desktop supplies the reviewed counts and exact reference fingerprint.
+    expected_usage_counts: dict[str, int] | None = None
+    # Optional for legacy callers; the reviewed GUI supplies the identity-set hash.
+    expected_usage_fingerprint: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    # Optional for legacy clients; the GUI binds approval to target semantics.
+    expected_target_identity: LabelClassMergeTargetIdentity | None = None
+    # Optional for legacy clients; GUI approval also binds source semantics.
+    expected_source_identity: LabelClassMergeTargetIdentity | None = None
 
 
 class LabelClassMergeCountResponse(BaseModel):

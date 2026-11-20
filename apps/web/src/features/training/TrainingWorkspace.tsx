@@ -30,6 +30,7 @@ import {
   updateTrainingDraft,
 } from "../../api/client";
 import { TaskCapabilityMatrix } from "./TaskCapabilityMatrix";
+import { useActionConfirmation } from "../../components/ui/ActionConfirmation";
 import { SegmentationEvaluationPanel } from "./SegmentationEvaluationPanel";
 import { TrainingRunDetail } from "./TrainingRunDetail";
 import { trainingRunsContainActive } from "./trainingRunState";
@@ -275,6 +276,7 @@ export function TrainingWorkspace({
   onCatalogSelectionConsumed?: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { confirm, confirmationDialog } = useActionConfirmation();
   const [activeSection, setActiveSection] =
     useState<TrainingSection>("new_run");
   const [selectedDraftId, setSelectedDraftId] = useState<string>("");
@@ -930,6 +932,7 @@ export function TrainingWorkspace({
 
   return (
     <section className="gallery-panel training-panel">
+      {confirmationDialog}
       <div className="section-heading gallery-heading">
         <div>
           <p className="eyebrow">Pinned-provider workflow</p>
@@ -2115,13 +2118,17 @@ export function TrainingWorkspace({
                         registerRunModelMutation.variables?.runId ===
                           selectedRun.id
                       }
-                      onCancel={() => {
+                      onCancel={async () => {
                         if (
-                          window.confirm(
-                            `Cancel training run ${selectedRun.run_name}? Safely written artifacts will be retained.`,
-                          )
-                        )
+                          await confirm({
+                            title: "Cancel training run?",
+                            message: `Stop “${selectedRun.run_name}”? Safely written artifacts will be retained.`,
+                            confirmLabel: "Cancel training run",
+                            destructive: true,
+                          })
+                        ) {
                           cancelRunMutation.mutate(selectedRun.id);
+                        }
                       }}
                       onRegister={() =>
                         registerRunModelMutation.mutate({

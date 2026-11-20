@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 ClassOperationType = Literal["reassign", "reassign_delete"]
 ClassOperationStatus = Literal[
@@ -80,6 +80,15 @@ class ClassOperationResponse(BaseModel):
     updated_at: datetime
     started_at: datetime | None
     completed_at: datetime | None
+
+    @field_validator("created_at", "updated_at", "started_at", "completed_at")
+    @classmethod
+    def restore_timestamp_timezone(cls, value: datetime | None) -> datetime | None:
+        # SQLite reads UTC values without a timezone. Return the same audit
+        # timestamps both immediately after commit and on an idempotent retry.
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value
 
 
 class ClassOperationPreviewRequest(BaseModel):

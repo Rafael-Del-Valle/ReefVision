@@ -10,7 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import (
+    DatasetVersion,
     Job,
+    ReviewQueue,
     WorkflowArtifact,
     WorkflowGraphRecord,
     WorkflowNodeRun,
@@ -34,6 +36,7 @@ from reefvision.services.workflow_provenance import (
     build_workflow_run_provenance,
     verify_succeeded_node_artifacts,
 )
+from reefvision.services.workflow_review_queue_integrity import queue_reference_payload
 from reefvision.services.workflow_reviewer_lab_v15 import NODE_TYPE as REVIEWER_LAB_TYPE
 from reefvision.storage.datasets import canonical_json_sha256
 
@@ -241,6 +244,19 @@ def restore_workflow_provenance(
                 original = artifacts[artifact.id]
                 if artifact.data_type in HISTORICAL_ARTIFACT_TYPES:
                     artifact.payload_json = deepcopy(original["payload_json"])
+                elif artifact.data_type == "review_queue_reference":
+                    source_queue = original["payload_json"]["queue_id"]
+                    queue = session.get(ReviewQueue, id_map[source_queue])
+                    if queue is None or queue.created_by != f"workflow:{run.id}:{node.id}":
+                        raise ValidationError("Imported QC workflow lost its queue producer")
+                    dataset = (
+                        session.get(DatasetVersion, queue.dataset_version_id)
+                        if queue.dataset_version_id
+                        else None
+                    )
+                    artifact.payload_json = queue_reference_payload(
+                        queue, run.id, node.id, dataset.manifest_sha256 if dataset else None
+                    )
                 elif artifact.data_type == "mesh_measurement_preview":
                     artifact.payload_json = restore_mesh_measurement(
                         original["payload_json"], id_map

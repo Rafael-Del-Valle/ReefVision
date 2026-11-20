@@ -1,0 +1,411 @@
+"""Workflow Builder adapter for persistent, human-reviewable QC queues.
+
+Queues rank review effort; they never establish verified biological truth.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+from collections import Counter
+from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.orm import Session
+
+from reefvision.config import Settings
+from reefvision.db.models import (
+    DatasetVersion,
+    DatasetVersionItem,
+    ReviewQueue,
+    WorkflowArtifact,
+    WorkflowNodeRun,
+    WorkflowRun,
+)
+from reefvision.domain.errors import ValidationError
+from reefvision.schemas.review_queues import (
+    ReviewQueueCreateRequest,
+    parse_workflow_review_weights,
+)
+from reefvision.services.frozen_dataset_integrity_16 import validate_frozen_dataset_manifest
+from reefvision.services.review_queues import ReviewQueueService
+from reefvision.services.workflow_review_queue_integrity import (
+    queue_reference_payload,
+    validate_saved_queue_snapshot,
+)
+from reefvision.storage.datasets import canonical_json_sha256
+
+
+def _is_sqlite_writer_contention(exc: OperationalError) -> bool:
+    """Recognize SQLite busy/locked errors, not arbitrary database failures."""
+    if not isinstance(exc.orig, sqlite3.OperationalError):
+        return False
+    code = getattr(exc.orig, "sqlite_errorcode", None)
+    return isinstance(code, int) and (code & 0xFF) in {
+        sqlite3.SQLITE_BUSY,
+        sqlite3.SQLITE_LOCKED,
+    }
+
+
+def _is_sqlite_queue_identity_collision(exc: IntegrityError) -> bool:
+    """Match only the deterministic review-queue primary-key collision.
+
+    An unrelated constraint failure is not a safe retry signal: it may
+    indicate broken scientific lineage or another database integrity defect.
+    """
+    if not isinstance(exc.orig, sqlite3.IntegrityError):
+        return False
+    return (
+        getattr(exc.orig, "sqlite_errorcode", None) == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY
+        and str(exc.orig) == "UNIQUE constraint failed: review_queues.id"
+    )
+
+
+def create_review_queue_workflow_artifact(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    """Generate once per workflow node, reusing persisted output on interrupted retries."""
+    sources = inputs.get("project", [])
+    if len(sources) != 1 or sources[0].data_type != "project_reference":
+        raise ValidationError("QC Review Queue requires exactly one project reference")
+    # A saved Workflow Builder retry must not trust a source reference whose
+    # persisted JSON was altered after its checksum was recorded. Verify this
+    # before queue creation or reuse; no research data is rewritten on failure.
+    source_payload = sources[0].payload_json
+    if not isinstance(source_payload, dict) or sources[0].payload_sha256 != canonical_json_sha256(
+        source_payload
+    ):
+        raise ValidationError("QC Review Queue source artifact failed integrity validation")
+    if source_payload.get("project_id") != project_id:
+        raise ValidationError("QC Review Queue received a foreign project reference")
+
+    run_id = str(parameters.get("__workflow_run_id") or "")
+    node_run_id = str(parameters.get("__workflow_node_run_id") or "")
+    run = session.get(WorkflowRun, run_id) if run_id else None
+    node = session.get(WorkflowNodeRun, node_run_id) if node_run_id else None
+    if (
+        run is None
+        or run.project_id != project_id
+        or node is None
+        or node.workflow_run_id != run_id
+        or node.node_type != "qc_review_queue"
+        or sources[0].workflow_run_id != run_id
+    ):
+        raise ValidationError("QC Review Queue requires valid persisted workflow provenance")
+
+    # A matching project ID and payload digest are not sufficient provenance:
+    # bind the input to its completed project-source node, output port and
+    # the producer's persisted output artifact and the exact consumer input
+    # binding. Otherwise a valid-looking substitute could be injected on retry.
+    source = sources[0]
+    producer = session.get(WorkflowNodeRun, source.producer_node_run_id)
+    if (
+        source.producer_port_id != "project"
+        or producer is None
+        or producer.workflow_run_id != run_id
+        or producer.node_type != "project_source"
+        or producer.status != "succeeded"
+        or producer.output_artifact_ids_json != [source.id]
+        or not isinstance(node.input_artifact_ids_json, list)
+        or source.id not in node.input_artifact_ids_json
+    ):
+        raise ValidationError("QC Review Queue source has invalid producer or binding provenance")
+
+    # A version-scoped queue must consume a real typed, checksummed output of
+    # the saved dataset-version source. Never infer a frozen study from a live
+    # project ID or accept a split-filtered source as a full-version queue.
+    dataset_inputs = inputs.get("dataset", [])
+    if len(dataset_inputs) > 1:
+        raise ValidationError("QC Review Queue accepts at most one frozen dataset version")
+    dataset_version_id: str | None = None
+    dataset_version: DatasetVersion | None = None
+    expected_input_ids = [source.id]
+    frozen_split_by_image_id: dict[str, str] = {}
+    if dataset_inputs:
+        dataset_source = dataset_inputs[0]
+        dataset_payload = dataset_source.payload_json
+        if (
+            dataset_source.data_type != "dataset_version"
+            or not isinstance(dataset_payload, dict)
+            or dataset_source.payload_sha256 != canonical_json_sha256(dataset_payload)
+        ):
+            raise ValidationError("QC Review Queue dataset artifact failed integrity validation")
+        if (
+            dataset_payload.get("project_id") != project_id
+            or dataset_payload.get("split") is not None
+        ):
+            raise ValidationError("QC Review Queue requires an unfiltered same-project dataset")
+        candidate_id = dataset_payload.get("dataset_version_id")
+        if type(candidate_id) is not str or not candidate_id:
+            raise ValidationError("QC Review Queue requires a valid dataset version ID")
+        dataset_version = session.get(DatasetVersion, candidate_id)
+        if (
+            dataset_version is None
+            or dataset_version.project_id != project_id
+            or dataset_version.status != "complete"
+            or dataset_payload.get("manifest_sha256") != dataset_version.manifest_sha256
+        ):
+            raise ValidationError("QC Review Queue dataset version or manifest does not match")
+        dataset_producer = session.get(WorkflowNodeRun, dataset_source.producer_node_run_id)
+        # The source emits dataset metadata AND its typed image collection.
+        # Validate both persisted outputs, not an impossible one-output subset.
+        producer_outputs = (
+            dataset_producer.output_artifact_ids_json if dataset_producer is not None else None
+        )
+        images_artifact = (
+            session.get(WorkflowArtifact, producer_outputs[1])
+            if isinstance(producer_outputs, list)
+            and len(producer_outputs) == 2
+            and producer_outputs[0] == dataset_source.id
+            and type(producer_outputs[1]) is str
+            else None
+        )
+        images_payload = images_artifact.payload_json if images_artifact is not None else None
+        # Both typed outputs must describe the same frozen dataset. A
+        # checksummed/re-signed dataset reference is not authoritative for
+        # scientific counts, split allocation or version metadata.
+        frozen_items = session.scalars(
+            select(DatasetVersionItem)
+            .where(DatasetVersionItem.dataset_version_id == candidate_id)
+            .order_by(DatasetVersionItem.id)
+        ).all()
+        # A checksummed producer and matching aggregate counts cannot detect
+        # changed individual coral geometry, per-class counts or split labels.
+        # Validate the original item SHA and checksummed manifest before replaying
+        # an existing review queue or producing a new one.
+        validate_frozen_dataset_manifest(dataset_version, frozen_items)
+        expected_image_ids = [item.image_id for item in frozen_items]
+        frozen_split_by_image_id = {item.image_id: item.split for item in frozen_items}
+        expected_split_counts = dict(Counter(str(item.split) for item in frozen_items))
+        if (
+            dataset_source.workflow_run_id != run_id
+            or dataset_source.producer_port_id != "dataset"
+            or dataset_producer is None
+            or dataset_producer.workflow_run_id != run_id
+            or dataset_producer.node_type != "dataset_version_source"
+            or dataset_producer.status != "succeeded"
+            or not isinstance(dataset_producer.parameters_json, dict)
+            or dataset_producer.parameters_json.get("dataset_version_id") != candidate_id
+            or dataset_producer.parameters_json.get("split") is not None
+            or dataset_producer.input_artifact_ids_json != [source.id]
+            or type(dataset_payload.get("version_number")) is not int
+            or dataset_payload["version_number"] != dataset_version.version_number
+            or dataset_payload.get("split_method") != dataset_version.resolved_split_method
+            or not isinstance(dataset_payload.get("split_counts"), dict)
+            or any(
+                type(count) is not int or count < 0
+                for count in dataset_payload["split_counts"].values()
+            )
+            or dataset_payload["split_counts"] != expected_split_counts
+            or type(dataset_payload.get("image_count")) is not int
+            or dataset_payload["image_count"] != dataset_version.image_count
+            or type(dataset_payload.get("annotation_count")) is not int
+            or dataset_payload["annotation_count"] != dataset_version.annotation_count
+            or type(dataset_payload.get("mask_annotation_count")) is not int
+            or dataset_payload["mask_annotation_count"] != dataset_version.mask_annotation_count
+            # The producer metadata and version row can both be re-signed
+            # while contradicting the immutable per-image scientific records.
+            # Check the original manifest digest and independently reconcile
+            # frozen image/annotation counts before replaying researcher QC.
+            or not isinstance(dataset_version.manifest_json, dict)
+            or canonical_json_sha256(dataset_version.manifest_json)
+            != dataset_version.manifest_sha256
+            or not isinstance(dataset_version.manifest_json.get("summary"), dict)
+            or dataset_version.manifest_json["summary"].get("image_count")
+            != dataset_version.image_count
+            or dataset_version.manifest_json["summary"].get("annotation_count")
+            != dataset_version.annotation_count
+            or dataset_version.image_count != len(frozen_items)
+            or dataset_version.annotation_count
+            != sum(item.annotation_count for item in frozen_items)
+            or dataset_version.mask_annotation_count
+            != sum(item.mask_annotation_count for item in frozen_items)
+            or any(
+                not isinstance(item.annotation_snapshot_json, list)
+                or not isinstance(item.mask_annotation_snapshot_json, list)
+                or item.annotation_count != len(item.annotation_snapshot_json)
+                or item.mask_annotation_count != len(item.mask_annotation_snapshot_json)
+                for item in frozen_items
+            )
+            or images_artifact is None
+            or images_artifact.workflow_run_id != run_id
+            or images_artifact.producer_node_run_id != dataset_producer.id
+            or images_artifact.producer_port_id != "images"
+            or images_artifact.data_type != "image_collection"
+            or not isinstance(images_payload, dict)
+            or images_artifact.payload_sha256 != canonical_json_sha256(images_payload)
+            or images_payload.get("project_id") != project_id
+            or images_payload.get("dataset_version_id") != candidate_id
+            or images_payload.get("dataset_manifest_sha256") != dataset_version.manifest_sha256
+            or images_payload.get("split") is not None
+            or not isinstance(images_payload.get("image_ids"), list)
+            or any(type(image_id) is not str for image_id in images_payload["image_ids"])
+            or images_payload["image_ids"] != expected_image_ids
+            or type(images_payload.get("count")) is not int
+            or images_payload["count"] != len(expected_image_ids)
+        ):
+            raise ValidationError("QC Review Queue dataset producer provenance is invalid")
+        dataset_version_id = candidate_id
+        expected_input_ids.append(dataset_source.id)
+    if (
+        not isinstance(node.input_artifact_ids_json, list)
+        or len(node.input_artifact_ids_json) != len(expected_input_ids)
+        or set(node.input_artifact_ids_json) != set(expected_input_ids)
+    ):
+        raise ValidationError("QC Review Queue saved input bindings are invalid")
+
+    # The saved node is the authoritative execution contract. An interrupted
+    # retry must not silently change its source QC run or review threshold,
+    # including explicit None versus an omitted value. Ignore only runtime
+    # identifiers injected by WorkflowExecutionService.
+    saved_parameters = dict(node.parameters_json or {})
+    supplied_parameters = {
+        key: value
+        for key, value in parameters.items()
+        if key not in {"__workflow_run_id", "__workflow_node_run_id"}
+    }
+    # Older saved nodes predate the optional weights parameter. Preserve their
+    # default replay contract while rejecting any non-default substitution.
+    if (
+        "signal_weights" not in saved_parameters
+        and supplied_parameters.get("signal_weights") is None
+    ):
+        supplied_parameters.pop("signal_weights", None)
+    if supplied_parameters != saved_parameters:
+        raise ValidationError("QC review-queue retry parameters changed from saved node")
+    try:
+        weights = parse_workflow_review_weights(parameters.get("signal_weights"))
+    except ValueError as exc:
+        raise ValidationError("QC Review Queue has invalid signal_weights") from exc
+
+    request = ReviewQueueCreateRequest(
+        source_quality_control_run_id=parameters.get("source_quality_control_run_id"),
+        review_below_confidence=parameters.get("review_below_confidence"),
+        signal_weights=weights,
+        created_by=f"workflow:{run_id}:{node_run_id}",
+    )
+    service = ReviewQueueService(session, settings)
+    # A saved node owns at most one immutable QC evidence snapshot. A
+    # corrupted or previously raced database may contain two queues with the
+    # same workflow owner. Never select an arbitrary first queue: that could
+    # replay a different scientific snapshot and conceal reviewer history.
+    # Preserve both records for explicit researcher-led reconciliation.
+    matching_queues = session.scalars(
+        select(ReviewQueue)
+        .where(
+            ReviewQueue.project_id == project_id,
+            ReviewQueue.created_by == request.created_by,
+        )
+        .limit(2)
+    ).all()
+    if len(matching_queues) > 1:
+        raise ValidationError(
+            "QC review-queue retry has ambiguous duplicate workflow-owned queues; "
+            "preserve both records for manual reconciliation"
+        )
+    existing = matching_queues[0] if matching_queues else None
+    # A completed node has a persisted output contract. If its queue was
+    # deleted, reassigned, or replaced, never silently create a new queue or
+    # reuse another queue with the same owner. This protects researcher audit
+    # history even if an attacker re-signs a substituted artifact payload.
+    saved_outputs = node.output_artifact_ids_json
+    # A completed node cannot lose either its output binding OR its owned
+    # queue. If both disappear, an empty output list otherwise bypasses
+    # validation and silently creates replacement scientific evidence.
+    # Incomplete nodes still use the existing deterministic retry path.
+    if node.status == "succeeded" and (existing is None or not saved_outputs):
+        raise ValidationError(
+            "QC review-queue completed node is missing saved output binding or queue"
+        )
+    if saved_outputs and (
+        not isinstance(saved_outputs, list)
+        or len(saved_outputs) != 1
+        or type(saved_outputs[0]) is not str
+        or existing is None
+    ):
+        raise ValidationError("QC review-queue saved output binding is invalid")
+    expected_scope_type = "dataset_version" if dataset_version_id else "project"
+    if existing is not None:
+        config = dict(existing.configuration_json or {})
+        if (
+            existing.status != "complete"
+            or existing.dataset_version_id != dataset_version_id
+            or existing.scope_type != expected_scope_type
+            or config.get("review_below_confidence") != request.review_below_confidence
+            or config.get("weights") != weights.model_dump(mode="json")
+            or (
+                request.source_quality_control_run_id is not None
+                and config.get("source_quality_control_run_id")
+                != request.source_quality_control_run_id
+            )
+        ):
+            raise ValidationError("QC review-queue retry parameters changed or queue incomplete")
+        validate_saved_queue_snapshot(existing, existing.items)
+        # A re-signed queue digest can still relabel an image's frozen split
+        # or substitute an image absent from the original dataset version.
+        # Bind every persisted QC item to its immutable version membership;
+        # confidence-filtered queues may legitimately contain only a subset.
+        if dataset_version_id is not None and any(
+            item.image_id not in frozen_split_by_image_id
+            or item.split != frozen_split_by_image_id[item.image_id]
+            for item in existing.items
+        ):
+            raise ValidationError(
+                "QC review-queue frozen dataset item membership or split does not match"
+            )
+        queue = service.get_queue(existing.id)
+    else:
+        try:
+            queue = (
+                service.create_queue_for_dataset_version(dataset_version_id, request)
+                if dataset_version_id is not None
+                else service.create_queue_for_project(project_id, request)
+            )
+        except IntegrityError as exc:
+            # Only the stable review-queue primary-key collision means another
+            # writer owns this workflow's identity. Unrelated constraint
+            # failures must surface instead of being mislabeled retryable.
+            if (
+                session.get_bind().dialect.name != "sqlite"
+                or not _is_sqlite_queue_identity_collision(exc)
+            ):
+                raise
+            session.rollback()
+            raise ValidationError(
+                "Concurrent QC review-queue creation detected; retry the saved workflow node"
+            ) from exc
+        except OperationalError as exc:
+            # A second local SQLite writer may hold a RESERVED/EXCLUSIVE lock
+            # before our stable primary-key insert is attempted. This raises
+            # SQLITE_BUSY/LOCKED rather than IntegrityError. Fail closed and
+            # permit an explicit saved-node retry after the writer releases it.
+            # Do not mask unrelated I/O, schema or database errors.
+            if session.get_bind().dialect.name != "sqlite" or not _is_sqlite_writer_contention(exc):
+                raise
+            session.rollback()
+            raise ValidationError(
+                "SQLite QC review-queue writer contention; retry the saved workflow node"
+            ) from exc
+
+    payload = queue_reference_payload(
+        queue, run_id, node_run_id, dataset_version.manifest_sha256 if dataset_version else None
+    )
+    if saved_outputs:
+        saved_output = session.get(WorkflowArtifact, saved_outputs[0])
+        if (
+            saved_output is None
+            or saved_output.workflow_run_id != run_id
+            or saved_output.producer_node_run_id != node_run_id
+            or saved_output.producer_port_id != "queue"
+            or saved_output.data_type != "review_queue_reference"
+            or not isinstance(saved_output.payload_json, dict)
+            or saved_output.payload_sha256 != canonical_json_sha256(saved_output.payload_json)
+            or saved_output.payload_json != payload
+        ):
+            raise ValidationError("QC review-queue saved output no longer matches its queue")
+
+    return [{"port_id": "queue", "data_type": "review_queue_reference", "payload": payload}]

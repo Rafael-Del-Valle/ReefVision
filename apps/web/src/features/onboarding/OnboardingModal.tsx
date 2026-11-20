@@ -1,26 +1,78 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type KeyboardEvent } from "react";
 
 interface OnboardingModalProps {
   version: string;
+  hasProject: boolean;
+  onStartProject: (action: "create" | "choose") => void;
   onClose: () => void;
   onDismissPermanently: () => void;
 }
 
 export function OnboardingModal({
   version,
+  hasProject,
+  onStartProject,
   onClose,
   onDismissPermanently,
 }: OnboardingModalProps) {
   const dialog = useRef<HTMLElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
+  const handingOff = useRef(false);
 
   useEffect(() => {
     const previous = document.activeElement;
     closeButton.current?.focus();
+    function keepFocusInDialog(event: FocusEvent) {
+      if (
+        !handingOff.current &&
+        dialog.current &&
+        event.target instanceof Node &&
+        !dialog.current.contains(event.target)
+      ) {
+        closeButton.current?.focus();
+      }
+    }
+    document.addEventListener("focusin", keepFocusInDialog);
     return () => {
-      if (previous instanceof HTMLElement) previous.focus();
+      document.removeEventListener("focusin", keepFocusInDialog);
+      if (
+        !handingOff.current &&
+        previous instanceof HTMLElement &&
+        previous.isConnected
+      ) {
+        previous.focus();
+      }
     };
   }, []);
+
+  function startProject(action: "create" | "choose") {
+    handingOff.current = true;
+    onStartProject(action);
+    onClose();
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const buttons = dialog.current?.querySelectorAll<HTMLButtonElement>(
+      "button:not([disabled])",
+    );
+    if (!buttons?.length) return;
+    const first = buttons[0];
+    const last = buttons[buttons.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
 
   return (
     <div className="modal-backdrop" role="presentation">
@@ -30,23 +82,7 @@ export function OnboardingModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="onboarding-title"
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.stopPropagation();
-            onClose();
-          } else if (event.key === "Tab") {
-            const buttons = dialog.current?.querySelectorAll("button");
-            const first = buttons?.[0];
-            const last = buttons?.[buttons.length - 1];
-            if (event.shiftKey && event.target === first) {
-              event.preventDefault();
-              last?.focus();
-            } else if (!event.shiftKey && event.target === last) {
-              event.preventDefault();
-              first?.focus();
-            }
-          }
-        }}
+        onKeyDown={handleKeyDown}
       >
         <div className="section-heading">
           <div>
@@ -69,6 +105,20 @@ export function OnboardingModal({
               Create or open a project on Home. In Images &amp; annotation,
               import files or a folder and open an image from the gallery.
             </p>
+            {!hasProject && (
+              <div className="onboarding-card-actions">
+                <button type="button" onClick={() => startProject("create")}>
+                  Create a project
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => startProject("choose")}
+                >
+                  Choose an existing project
+                </button>
+              </div>
+            )}
           </article>
           <article className="onboarding-card">
             <h3>Annotate and review</h3>

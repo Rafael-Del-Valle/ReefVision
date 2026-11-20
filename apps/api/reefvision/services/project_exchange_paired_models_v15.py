@@ -543,7 +543,7 @@ def _dataset_for_restore(
 ) -> None:
     version = session.get(DatasetVersion, mapping[dataset["id"]])
     if version is None or version.project_id != project.id:
-        raise ValidationError("Restored paired model dataset is missing")
+        raise ValidationError("Restored frozen dataset is missing")
     manifest = deepcopy(dataset["manifest_json"])
     manifest["project"]["id"] = project.id
     _mapped_key(manifest["dataset_version"], "id", mapping)
@@ -576,6 +576,7 @@ def _dataset_for_restore(
                 }
         old_sha = snapshot.pop("snapshot_sha256")
         item = local_items[snapshot["image_id"]]
+        item.original_filename = snapshot["original_filename"]
         item.annotation_snapshot_json = snapshot["annotations"]
         item.mask_annotation_snapshot_json = snapshot.get("mask_annotations", [])
         item.group_key = snapshot.get("group_key")
@@ -589,7 +590,7 @@ def _dataset_for_restore(
     digests[dataset["manifest_sha256"]] = version.manifest_sha256
 
 
-def restore_paired_model_comparisons(
+def restore_frozen_dataset_and_model_lineage(
     session: Session,
     project_id: str,
     sections: Sections,
@@ -597,17 +598,22 @@ def restore_paired_model_comparisons(
     digest_map: dict[str, str],
     *,
     source_storage_root: str = "",
+    linked_dataset_ids: frozenset[str] = frozenset(),
 ) -> None:
-    """Restore current pointers after datasets and scientific video jobs have been imported."""
+    """Restore typed snapshot IDs, literal labels and verified comparison and model links."""
     completed = _completed(sections)
-    if not completed:
+    if not completed and not linked_dataset_ids:
         return
     project = session.get(Project, project_id)
     if project is None:
         raise ValidationError("Restored comparison project is missing")
     datasets_by_old_id = {row["id"]: row for row in sections.get("dataset_versions", [])}
-    dataset_ids: set[str] = set()
-    relevant_model_ids: set[str] = set()
+    dataset_ids = set(linked_dataset_ids)
+    relevant_model_ids = {
+        row["id"]
+        for row in sections.get("models", [])
+        if (row.get("metadata_json") or {}).get("source_dataset_version_id") in linked_dataset_ids
+    }
     children: set[str] = set()
     for row in completed:
         receipt = row["result_json"]

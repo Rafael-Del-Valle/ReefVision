@@ -10,13 +10,13 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 _BUILD_JOB = "build-windows-installer"
 _CLEAN_JOB = "windows-clean-install-acceptance"
 _UPGRADE_JOB = "windows-upgrade-acceptance"
 _VALIDATED_14_UPGRADE_JOB = "windows-validated-14-upgrade-acceptance"
-_VALIDATED_14_COMMIT = "fb2276c87e1c17393200984d804f54b6c0f21dbf"
-_VALIDATED_14_MANIFEST_SHA256 = "86a17ecd0f6a84e9f4811795210b0ea3389b88eab02a2e87d0d1a7f735a819d0"
+_VALIDATED_15_UPGRADE_JOB = "windows-validated-15-upgrade-acceptance"
 _BASELINE_VERSION = "1.0.3"
 _BASELINE_REPOSITORY = "Rafael-Del-Valle/ReefVision"
 _BASELINE_COMMIT = "e94dad6a3bece7b776bf45776bc5d06cfbc2c0dc"
@@ -25,6 +25,41 @@ _PREFLIGHT = "run: python scripts/check-windows-installer-acceptance-version.py"
 _VERIFIER = "./scripts/verify-windows-installer-payload.ps1"
 _SOURCE_COMMIT = "${{ github.event.pull_request.head.sha || github.sha }}"
 _ROOT = Path(__file__).resolve().parents[1]
+
+
+class _ValidatedBaseline(NamedTuple):
+    version: str
+    run: str
+    source: str
+    manifest_sha256: str
+    revision: str
+    cabinets: int
+
+
+_VALIDATED_BASELINES = {
+    _VALIDATED_14_UPGRADE_JOB: _ValidatedBaseline(
+        "1.4.0",
+        "44697377337",
+        "fb2276c87e1c17393200984d804f54b6c0f21dbf",
+        "86a17ecd0f6a84e9f4811795210b0ea3389b88eab02a2e87d0d1a7f735a819d0",
+        "b14_condition_0041",
+        6,
+    ),
+    _VALIDATED_15_UPGRADE_JOB: _ValidatedBaseline(
+        "1.5.0",
+        "44748544977",
+        "b846f57e916ef53abc9a2d25ece9927eb9dfb582",
+        "152d0f93c35b2bcd9440e569a5d2afba4bd00849935a7c4c3961c83c43e49bbb",
+        "b15_integrated_0002",
+        5,
+    ),
+}
+
+_VALIDATED_UPGRADE_JOBS = {
+    "1.5.0": (_VALIDATED_14_UPGRADE_JOB,),
+    "1.6.0": (_VALIDATED_14_UPGRADE_JOB, _VALIDATED_15_UPGRADE_JOB),
+}
+_CANDIDATE_REVISION = {"1.5.0": "b15_integrated_0002", "1.6.0": "b16_integrated_0001"}
 
 
 def _job(workflow: str, name: str) -> str:
@@ -52,56 +87,75 @@ def _check_preflight_order(build_job: str, packaging: str) -> list[str]:
     return []
 
 
-def _check_validated_14_upgrade(workflow: str, verified_candidate: str) -> list[str]:
-    name = _VALIDATED_14_UPGRADE_JOB
+def _check_validated_upgrade(
+    workflow: str, name: str, version: str, verified_candidate: str
+) -> list[str]:
     job = _job(workflow, name)
     if not job:
-        return [f"Expected exactly one {name} job for the 1.5 candidate"]
-    baseline = (
-        f"{_VERIFIER} -InstallerDirectory $previous -Version '1.4.0' "
-        "-ExpectedFilename 'ReefVision_1.4.0_x64_en-US.msi' "
-        "-SourceCommit $env:REEFVISION_1_4_SOURCE -RequireProvenance"
+        return [f"Expected exactly one {name} job for the {version} candidate"]
+    previous = _VALIDATED_BASELINES[name]
+    previous_series = previous.version.removesuffix(".0")
+    previous_series_slug = previous_series.replace(".", "-")
+    env = f"REEFVISION_{previous_series.replace('.', '_')}"
+    candidate_slug = version.replace(".", "-")
+    previous_slug = previous.version.replace(".", "-")
+    verified_previous = (
+        f"{_VERIFIER} -InstallerDirectory $previous -Version '{previous.version}' "
+        f"-ExpectedFilename 'ReefVision_{previous.version}_x64_en-US.msi' "
+        f"-SourceCommit $env:{env}_SOURCE -RequireProvenance"
     )
-    digest_check = "$digest -cne $env:REEFVISION_1_4_PROVENANCE_SHA256"
+    digest_check = f"$digest -cne $env:{env}_PROVENANCE_SHA256"
     harness = "& ./scripts/acceptance-windows-clean-install.ps1"
+    payload_report = f".artifacts/{name.removesuffix('-acceptance')}-payload.json"
     errors = _missing(
         job,
         (
             f"needs: {_BUILD_JOB}",
             f"ref: {_SOURCE_COMMIT}",
             f"SOURCE_COMMIT: {_SOURCE_COMMIT}",
-            'REEFVISION_1_4_RUN: "44697377337"',
-            f"REEFVISION_1_4_SOURCE: {_VALIDATED_14_COMMIT}",
-            f"REEFVISION_1_4_PROVENANCE_SHA256: {_VALIDATED_14_MANIFEST_SHA256}",
-            "$run.headSha -cne $env:REEFVISION_1_4_SOURCE",
+            f'{env}_RUN: "{previous.run}"',
+            f"{env}_SOURCE: {previous.source}",
+            f"{env}_PROVENANCE_SHA256: {previous.manifest_sha256}",
+            f"$run.headSha -cne $env:{env}_SOURCE",
             "$run.conclusion -ne 'success'",
             "foreach ($part in 1..2)",
-            f"gh run download $env:REEFVISION_1_4_RUN --repo {_BASELINE_REPOSITORY} "
-            '--name "ReefVision-1.4.0-RC-Installer-Part-$part" --dir $previous',
+            f"gh run download $env:{env}_RUN --repo {_BASELINE_REPOSITORY} "
+            f'--name "ReefVision-{previous.version}-RC-Installer-Part-$part" --dir $previous',
             verified_candidate,
             "Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256",
             digest_check,
-            baseline,
-            "@($baseline.media | Where-Object { $_.cabinet -and -not $_.embedded }).Count -ne 6",
+            verified_previous,
+            "@($baseline.media | Where-Object { $_.cabinet -and -not $_.embedded }).Count "
+            f"-ne {previous.cabinets}",
             harness,
             "$msi = Join-Path $env:RUNNER_TEMP "
-            r"'reefvision-1-5-0-installer\ReefVision_1.5.0_x64_en-US.msi'",
+            rf"'reefvision-{candidate_slug}-installer\ReefVision_{version}_x64_en-US.msi'",
             "$previousMsi = Join-Path $env:RUNNER_TEMP "
-            r"'reefvision-1-4-0-installer\ReefVision_1.4.0_x64_en-US.msi'",
+            rf"'reefvision-{previous_slug}-installer\ReefVision_{previous.version}_x64_en-US.msi'",
             "-InstallerPath $msi",
             "-PreviousInstallerPath $previousMsi -PreviousInstallerSupportsIsolatedAcceptance",
-            "-ExpectedVersion '1.5.0' -ExpectedSchemaRevision 'b15_integrated_0002'",
-            "-ExpectedInitialSchemaRevision 'b14_condition_0041'",
-            r"-AcceptanceRoot 'C:\reefvision-1-5-0-upgrade-validated-1-4'",
+            f"-ExpectedVersion '{version}' "
+            f"-ExpectedSchemaRevision '{_CANDIDATE_REVISION[version]}'",
+            f"-ExpectedInitialSchemaRevision '{previous.revision}'",
+            rf"-AcceptanceRoot 'C:\reefvision-{candidate_slug}-"
+            f"upgrade-validated-{previous_series_slug}'",
             "-DisposableTest -KeepArtifacts",
-            "name: ReefVision-1.5.0-RC-Windows-Validated-1.4.0-Upgrade-Evidence",
-            ".artifacts/windows-validated-14-upgrade-payload.json",
+            f"name: ReefVision-{version}-RC-Windows-Validated-{previous.version}-Upgrade-Evidence",
+            payload_report,
         ),
-        f"{name} is missing the verified 1.4 to 1.5 upgrade contract",
+        f"{name} is missing the verified {previous.version} to {version} upgrade contract",
     )
+    if name == _VALIDATED_15_UPGRADE_JOB:
+        errors.extend(
+            _missing(
+                job,
+                ("-VerifyPreviousInstallerRejectsUpgradedProfile",),
+                f"{name} requires an independent predecessor rollback check",
+            )
+        )
     if not errors and not (
         job.index(verified_candidate) < job.index(harness)
-        and job.index(digest_check) < job.index(baseline) < job.index(harness)
+        and job.index(digest_check) < job.index(verified_previous) < job.index(harness)
         and job.count(harness) == 1
     ):
         errors.append(f"{name} must verify both installers before exercising the upgrade")
@@ -115,7 +169,7 @@ def _check_validated_14_upgrade(workflow: str, verified_candidate: str) -> list[
     ]
     if upload_paths != [
         {
-            ".artifacts/windows-validated-14-upgrade-payload.json",
+            payload_report,
             ".artifacts/windows-clean-acceptance-*/report.json",
             ".artifacts/windows-clean-acceptance-*/*.log",
         }
@@ -138,8 +192,31 @@ def _check_split_workflow(workflow: str, version: str) -> list[str]:
         f"-ExpectedFilename '{msi}' -SourceCommit $env:SOURCE_COMMIT -RequireProvenance"
     )
     errors = _check_preflight_order(build, f"- name: Build weight-free {version} desktop installer")
-    if version == "1.5.0":
-        errors.extend(_check_validated_14_upgrade(workflow, verified_candidate))
+    for name in _VALIDATED_UPGRADE_JOBS.get(version, ()):
+        errors.extend(_check_validated_upgrade(workflow, name, version, verified_candidate))
+    if version == "1.6.0":
+        errors.extend(
+            _missing(
+                clean,
+                (
+                    "-HostedStandardUserWebView2 -FirstUseAcceptance -ResearchWorkflowAcceptance",
+                    ".artifacts/windows-clean-acceptance-*/first-use-playwright.json",
+                    ".artifacts/windows-clean-acceptance-*/first-use-playwright/**/*-evidence.json",
+                ),
+                "Clean-install job is missing installed first-use acceptance",
+            )
+        )
+        errors.extend(
+            _missing(
+                clean,
+                (
+                    "-WorkspaceWorkflowAcceptance",
+                    ".artifacts/windows-clean-acceptance-*/workspace-evidence.json",
+                    ".artifacts/windows-clean-acceptance-*/workspace-playwright.json",
+                ),
+                "Clean-install job is missing installed workspace acceptance",
+            )
+        )
     for name, job in ((_BUILD_JOB, build), (_CLEAN_JOB, clean), (_UPGRADE_JOB, upgrade)):
         errors.extend(
             _missing(
@@ -393,9 +470,7 @@ def _check_split_cab_partition(workflow: str, version: str, verifier: str) -> li
     download_path = (
         "path: ${{ runner.temp }}" + f"/reefvision-{version.replace('.', '-')}-installer"
     )
-    install_jobs = (_CLEAN_JOB, _UPGRADE_JOB)
-    if version == "1.5.0":
-        install_jobs += (_VALIDATED_14_UPGRADE_JOB,)
+    install_jobs = (_CLEAN_JOB, _UPGRADE_JOB, *_VALIDATED_UPGRADE_JOBS.get(version, ()))
     for name in install_jobs:
         job = _job(workflow, name)
         downloads = [
