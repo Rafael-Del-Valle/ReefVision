@@ -20,8 +20,10 @@ RoleFixtures = dict[str, tuple[dict[str, Any], dict[str, str]]]
 
 def role_fixture(
     client: TestClient,
-) -> tuple[str, str, dict[str, tuple[dict[str, Any], dict[str, str]]]]:
-    project_id = create_project(client, "Independent acquisition review")["id"]
+    project_id: str | None = None,
+) -> tuple[str, str, RoleFixtures]:
+    if project_id is None:
+        project_id = create_project(client, "Independent acquisition review")["id"]
     lab = f"/api/v1/projects/{project_id}/reviewer-lab"
     roles: RoleFixtures = {}
     for name, kind in (

@@ -10,6 +10,7 @@ export type WorkspaceInspectorView =
   | "scientific_heatmaps"
   | "ecology"
   | "study_design"
+  | "reproducibility"
   | "models"
   | "model_comparison"
   | "training"
@@ -55,6 +56,7 @@ export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "scientific_heatmaps",
   "ecology",
   "study_design",
+  "reproducibility",
   "models",
   "model_comparison",
   "training",
@@ -85,6 +87,31 @@ const WORKSPACE_INSPECTORS: Record<
         label: "Model Hub",
         target: "models",
         description: "Review model and runtime compatibility.",
+      },
+    ],
+  },
+  reproducibility: {
+    title: "Research reproducibility package",
+    summary:
+      "Export or verify frozen study, review and model evidence with source checksums.",
+    boundary: "record",
+    recordPolicy:
+      "Imports create an independent project and retain the original proof.",
+    actions: [
+      {
+        label: "Study design",
+        target: "study_design",
+        description: "Open frozen design revisions.",
+      },
+      {
+        label: "Reviewer lab",
+        target: "reviewer_lab",
+        description: "Open sealed agreement reports.",
+      },
+      {
+        label: "Model comparison",
+        target: "model_comparison",
+        description: "Open paired comparisons.",
       },
     ],
   },

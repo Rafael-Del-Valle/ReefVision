@@ -38,6 +38,7 @@ from reefvision.services.workflow_field_capture import execute_field_capture_rec
 from reefvision.services.workflow_paired_growth_contrast import execute_paired_growth_contrast
 from reefvision.services.workflow_paired_models_v15 import execute_paired_models
 from reefvision.services.workflow_prompt_assist import create_prompt_assist_mask_proposals
+from reefvision.services.workflow_reproducibility_v15 import execute_reproducibility
 from reefvision.services.workflow_research_reports import execute_research_report
 from reefvision.services.workflow_review import WorkflowReviewRequired
 from reefvision.services.workflow_study_design import execute_reviewed_study_design
@@ -64,6 +65,7 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "paired_growth_contrast",
     "reviewed_study_design",
     "paired_model_comparison",
+    "research_reproducibility_package",
     "ecology_event_summary",
     "research_publication_figure",
     "image_acquisition_quality",
@@ -1154,6 +1156,7 @@ _ADAPTERS = {
     "paired_growth_contrast": execute_paired_growth_contrast,
     "reviewed_study_design": execute_reviewed_study_design,
     "paired_model_comparison": execute_paired_models,
+    "research_reproducibility_package": execute_reproducibility,
     "field_capture_reconcile": execute_field_capture_reconcile,
     "ecology_event_summary": execute_event_summary,
     "research_publication_figure": execute_research_report,

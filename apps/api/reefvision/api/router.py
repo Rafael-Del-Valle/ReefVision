@@ -71,6 +71,7 @@ from reefvision.api.routes.projects import router as projects_router
 from reefvision.api.routes.quality_control import router as quality_control_router
 from reefvision.api.routes.raster_edits import router as raster_edits_router
 from reefvision.api.routes.reefpose_validation import router as reefpose_validation_router
+from reefvision.api.routes.reproducibility_v15 import router as reproducibility_router
 from reefvision.api.routes.research_reports import router as research_reports_router
 from reefvision.api.routes.review_queues import router as review_queues_router
 from reefvision.api.routes.reviewer_lab_v15 import router as reviewer_lab_router
@@ -167,6 +168,7 @@ api_router.include_router(workflow_graphs_router)
 api_router.include_router(spatial_source_assets_router)
 api_router.include_router(spatial_condition_router)
 api_router.include_router(reviewer_lab_router)
+api_router.include_router(reproducibility_router)
 api_router.include_router(learning_evaluation_router)
 api_router.include_router(longitudinal_monitoring_router)
 api_router.include_router(ecology_identity_router)

@@ -71,6 +71,7 @@ from reefvision.db.models.pose_training_dataset import (
     PoseTrainingDatasetItem,
 )
 from reefvision.domain.errors import ValidationError
+from reefvision.domain.reproducibility_v15 import HISTORICAL_PROOFS
 from reefvision.schemas.project_exchange import ProjectExchangePackageResponse
 from reefvision.services.project_exchange import MANIFEST_NAME, ProjectExchangeService, _row
 from reefvision.services.project_exchange_field_v15 import (
@@ -92,6 +93,7 @@ from reefvision.services.project_exchange_paired_models_v15 import paired_compar
 from reefvision.services.project_exchange_v15 import FORMAT_VERSION as RESEARCH_FORMAT_VERSION
 from reefvision.services.project_exchange_v15 import INTEGRATED_FORMATS, has_v15_records
 from reefvision.services.project_exchange_workflows import is_spatial_workflow_graph
+from reefvision.services.reproducibility_lineage_v15 import project_proofs
 from reefvision.services.spatial_source_assets_v14 import SpatialSourceAssetService
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
@@ -838,6 +840,10 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                 }
                 if package.format_version == FIELD_EXCHANGE_FORMAT and source.get(FIELD_ORIGIN):
                     manifest[FIELD_ORIGIN] = source[FIELD_ORIGIN]
+
+        proofs = project_proofs(self.session, project.id)
+        if proofs:
+            manifest[HISTORICAL_PROOFS] = [proof.model_dump(mode="json") for proof in proofs]
 
         archive_path = resolve_managed_project_path(self.settings, package.archive_path)
         temporary = archive_path.with_suffix(archive_path.suffix + ".manifest.part")

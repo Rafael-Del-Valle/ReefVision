@@ -15,6 +15,7 @@ import type { EventSummary } from "../ecology/EventSummaryPanel";
 import type { PoseLink } from "../ecology/poseOrganismLinksApi";
 import { ModelSelectionField } from "../models/ReviewedModelRuntime";
 import { listStudyDesigns } from "../ecology/studyDesignApi";
+import { listResearchProofs } from "../reproducibility/reproducibilityApi";
 import {
   AcquisitionQualityControls,
   defaultAcquisitionThresholds,
@@ -40,6 +41,7 @@ const scientificNodes = new Set([
   "paired_growth_contrast",
   "reviewed_study_design",
   "paired_model_comparison",
+  "research_reproducibility_package",
   "mesh_surface_preview",
   "point_cloud_preview",
   "mesh_longitudinal_comparison",
@@ -134,6 +136,12 @@ export function scientificConfigurationIssue(
   parameters: Parameters,
 ): string | undefined {
   const config = object(parameters.configuration);
+  if (
+    nodeType === "research_reproducibility_package" &&
+    !/^[0-9a-f]{64}$/.test(string(parameters.proof_sha256))
+  ) {
+    return "Choose a verified research package proof.";
+  }
   if (
     nodeType === "paired_model_comparison" &&
     (!string(parameters.comparison_id) ||
@@ -1892,6 +1900,29 @@ export function ScientificNodeControls({
       <ProviderManifestSnapshotFields
         parameters={parameters}
         onChange={onChange}
+      />
+    );
+  if (nodeType === "research_reproducibility_package")
+    return (
+      <Records
+        queryKey={[base, "saved", "reproducibility-proofs"]}
+        load={async (offset, signal) => {
+          const proofs = await listResearchProofs(projectId, signal);
+          return proofs.slice(offset, offset + PAGE).map((proof) => ({
+            id: proof.proof_sha256,
+            label: "Verified proof · " + proof.proof_sha256.slice(0, 12),
+          }));
+        }}
+        render={(options) => (
+          <SourceSelect
+            label="Pinned proof"
+            value={string(parameters.proof_sha256)}
+            options={options}
+            onChange={(proof_sha256) =>
+              onChange({ ...parameters, proof_sha256 })
+            }
+          />
+        )}
       />
     );
   if (nodeType === "paired_model_comparison")
