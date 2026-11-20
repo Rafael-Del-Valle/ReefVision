@@ -27,6 +27,9 @@ from reefvision.services.scientific_data import content_hash
 
 SOURCE_URL = "https://data.marine.copernicus.eu/"
 MAX_SAMPLES = 5000
+# Dataset attributes are copied into every persisted scientific record. Bound
+# provider-supplied provenance before it can multiply across a 5,000-cell grid.
+MAX_PROVIDER_METADATA_BYTES = 16_384
 
 
 def fetch_copernicus(request: CopernicusRequest, settings: Settings) -> dict[str, Any]:
@@ -132,10 +135,47 @@ def parse_copernicus(
     coordinate_resolution = raw.get("coordinate_resolution", {})
     if not isinstance(dataset_metadata, dict) or not isinstance(coordinate_resolution, dict):
         raise ValidationError("Copernicus provider metadata must be JSON objects")
+    # Provider attrs can contain large nested metadata which is duplicated into
+    # every scientific record. Validate the complete provenance block before
+    # persisting anything; reject non-JSON/nonfinite values without truncation.
+    try:
+        metadata_json = json.dumps(
+            {
+                "dataset_metadata": dataset_metadata,
+                "coordinate_resolution": coordinate_resolution,
+                "toolbox_version": raw.get("toolbox_version"),
+            },
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        )
+        metadata_size_bytes = len(metadata_json.encode("utf-8"))
+    except (TypeError, ValueError, OverflowError, RecursionError, UnicodeError) as exc:
+        raise ValidationError("Copernicus provider metadata must be finite UTF-8 JSON") from exc
+    if metadata_size_bytes > MAX_PROVIDER_METADATA_BYTES:
+        raise ValidationError("Copernicus provider metadata exceeds the 16 KiB provenance budget")
+    # The Toolbox worker identifies its software version as text. Accept a
+    # missing legacy version, but never persist provider-controlled structured
+    # objects that could be mistaken for a trustworthy software identifier.
+    toolbox_version = raw.get("toolbox_version")
+    if toolbox_version is not None and not isinstance(toolbox_version, str):
+        raise ValidationError("Copernicus provider metadata requires a textual Toolbox version")
+    # Resolution is scientific provenance, not arbitrary provider decoration.
+    # A zero, negative, nonfinite or coerced string/bool axis spacing would
+    # fabricate grid sampling precision or an invalid temporal resolution.
+    supported_axes = {"time", "depth", "latitude", "longitude"}
+    if set(coordinate_resolution) - supported_axes or any(
+        not _finite_number(value) or value <= 0 for value in coordinate_resolution.values()
+    ):
+        raise ValidationError(
+            "Copernicus coordinate resolutions require positive finite numeric known axes"
+        )
     records = []
     missing = 0
     seen = set()
-    # Explicit nulls retain the grid position without creating a scientific record.
+    # Every requested variable must cover the same coordinate cells. Missing
+    # ocean values are represented by explicit nulls, not silently omitted
+    # grid positions that would bias current/temperature comparisons.
     grid_cells: dict[str, set[tuple[datetime, float, float, float]]] = {}
     for sample in samples:
         try:

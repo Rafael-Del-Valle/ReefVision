@@ -38,10 +38,13 @@ def read_dataset(request: dict[str, Any], username: str, password: str) -> dict[
         if sum(dataset[name].size for name in variables) > MAX_SAMPLES:
             raise ValueError("Subset exceeds 5000 samples; narrow the request")
         # Check shape before materializing remote arrays. Never fetch an unbounded cube.
-        dataset = dataset[variables].load()
+        # Keep the provider-owned dataset handle: selecting variables returns a
+        # new xarray Dataset whose close callback need not close the original
+        # remote backend. The finally block must release the original handle.
+        subset = dataset[variables].load()
         samples = []
         for name in variables:
-            array = dataset[name]
+            array = subset[name]
             for coordinate, value in (
                 array.transpose("time", "depth", "latitude", "longitude").to_series().items()
             ):
@@ -66,7 +69,7 @@ def read_dataset(request: dict[str, Any], username: str, password: str) -> dict[
                 )
         resolution: dict[str, float] = {}
         for name in required:
-            coordinates = dataset[name].values
+            coordinates = subset[name].values
             if len(coordinates) > 1:
                 deltas = [
                     abs(float((b - a) / numpy.timedelta64(1, "s")))
