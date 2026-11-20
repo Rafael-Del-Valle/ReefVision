@@ -50,6 +50,7 @@ HISTORICAL_ARTIFACT_TYPES = frozenset(
         "mesh_longitudinal_comparison",
         "study_design_report",
         "paired_model_report",
+        "research_reproducibility_proof",
         PAIRED_GROWTH_TYPE,
         REVIEWER_LAB_TYPE,
     }

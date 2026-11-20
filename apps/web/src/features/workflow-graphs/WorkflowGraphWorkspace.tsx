@@ -34,6 +34,7 @@ import { scientificConfigurationIssue } from "./ScientificNodeControls";
 interface WorkflowGraphWorkspaceProps {
   project: Project;
   initialPoseArchitecture?: string | null;
+  initialGraph?: Record<string, unknown>;
   onOpenScience?: (
     view: "ecology" | "models" | "quality_control" | "video",
   ) => void;
@@ -50,6 +51,16 @@ function ScienceArtifact({
 }) {
   const data = artifact.payload_json;
   const api = `${getApiBaseUrl()}/projects/${projectId}`;
+  if (
+    artifact.data_type === "research_reproducibility_proof" &&
+    typeof data.proof_sha256 === "string"
+  ) {
+    return (
+      <p>
+        Verified research proof · SHA-256 <code>{data.proof_sha256}</code>
+      </p>
+    );
+  }
   if (
     artifact.data_type === "study_design_report" &&
     typeof data.content_sha256 === "string"
@@ -230,14 +241,16 @@ function safeParseGraph(value: string): Record<string, unknown> | null {
 export function WorkflowGraphWorkspace({
   project,
   initialPoseArchitecture,
+  initialGraph,
   onOpenScience,
 }: WorkflowGraphWorkspaceProps) {
   const queryClient = useQueryClient();
   const [graphJson, setGraphJson] = useState(() =>
     JSON.stringify(
-      initialPoseArchitecture
-        ? createPoseArchitectureWorkflow(initialPoseArchitecture)
-        : (workflowTemplates[0]?.graph ?? {}),
+      initialGraph ??
+        (initialPoseArchitecture
+          ? createPoseArchitectureWorkflow(initialPoseArchitecture)
+          : (workflowTemplates[0]?.graph ?? {})),
       null,
       2,
     ),

@@ -43,6 +43,7 @@ WorkflowDataType = Literal[
     "paired_growth_contrast",
     "study_design_report",
     "paired_model_report",
+    "research_reproducibility_proof",
     "reviewed_ecology_event_summary",
     "research_report_figure",
     "acquisition_quality_result",
