@@ -48,6 +48,7 @@ from reefvision.jobs.training import (
 )
 from reefvision.services.workflow_pose_training import (
     _optional_payload,
+    _reject_symlinked_training_path,
     _shared_pose_source_videos,
     _single_payload,
     create_pose_workflow_training_result,
@@ -1133,6 +1134,10 @@ def test_pose_run_output_rejects_windows_junction_into_another_run(tmp_path: Pat
         relative = "projects/p1/training/current-run/runs/pose"
         with pytest.raises(ValidationError, match="output path contains a Windows junction"):
             _resolve_unlinked_pose_run_path(settings, relative)
+        # The service-layer checkpoint and seed-model guard must reject the
+        # same junction on replay, even when its final target is managed.
+        with pytest.raises(ValidationError, match="artifact path contains a Windows junction"):
+            _reject_symlinked_training_path(settings, relative)
         assert checkpoint.read_bytes() == b"preserve-registered-pose-weights"
     finally:
         junction.rmdir()
