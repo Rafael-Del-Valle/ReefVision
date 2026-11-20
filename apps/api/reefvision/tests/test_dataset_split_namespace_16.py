@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from reefvision.db.models import DatasetVersionItem, ImageAsset
+from reefvision.db.models import DatasetVersion, DatasetVersionItem, ImageAsset
 from reefvision.schemas.dataset_versions import DatasetVersionPreviewRequest
 from reefvision.services.dataset_versions import CandidateImage, DatasetVersionService
 from reefvision.tests.test_annotations import create_project, import_one
@@ -450,9 +450,7 @@ def test_parent_reuse_refuses_modified_frozen_holdout_and_preserves_saved_qc(
     )
     assert lineage_child.status_code == 201, lineage_child.text
     assert lineage_child.json()["parent_version_id"] == parent_id
-    independent_items = client.get(
-        f"/api/v1/dataset-versions/{lineage_child.json()['id']}/items"
-    )
+    independent_items = client.get(f"/api/v1/dataset-versions/{lineage_child.json()['id']}/items")
     assert independent_items.status_code == 200, independent_items.text
     assert independent_items.json()[0]["split"] == "unassigned"
     second_run, second_output = _run_frozen_graph(client, project_id, saved.json()["id"])
@@ -474,3 +472,100 @@ def test_parent_reuse_refuses_modified_frozen_holdout_and_preserves_saved_qc(
         assert queued.status_code == 200, queued.text
         assert queued.json()["total"] == 1
         assert queued.json()["items"][0]["review_state"] == "pending"
+
+
+def test_transitive_parent_lineage_rejects_corrupt_and_incomplete_ancestors(
+    client: TestClient,
+) -> None:
+    """A valid intermediate study must never launder damaged frozen ancestry."""
+    project_id, image_id, root_id, _ = _study(client)
+    preview_url = f"/api/v1/projects/{project_id}/dataset-version-previews"
+    versions_url = f"/api/v1/projects/{project_id}/dataset-versions"
+    lineage_request = {
+        "parent_version_id": root_id,
+        "reuse_parent_assignments": False,
+        "eligible_annotation_statuses": ["reviewed"],
+        "split_method": "manual",
+    }
+    child = client.post(versions_url, json={**lineage_request, "name": "Verified intermediate"})
+    assert child.status_code == 201, child.text
+    child_id = child.json()["id"]
+    grandchild_request = {**lineage_request, "parent_version_id": child_id}
+    assert client.post(preview_url, json=grandchild_request).status_code == 200
+
+    standalone = client.post(f"/api/v1/dataset-versions/{child_id}/review-queues", json={})
+    assert standalone.status_code == 201, standalone.text
+    graph = _frozen_graph(child_id)
+    planned = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert planned.status_code == 200, planned.text
+    assert planned.json()["valid"] and planned.json()["executable"]
+    saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    first_run, first_output = _run_frozen_graph(client, project_id, saved.json()["id"])
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        item = session.scalar(
+            select(DatasetVersionItem).where(
+                DatasetVersionItem.dataset_version_id == root_id,
+                DatasetVersionItem.image_id == image_id,
+            )
+        )
+        assert item is not None
+        original_split = item.split
+        item.split = "test" if original_split != "test" else "train"
+        session.commit()
+
+    for endpoint, payload in (
+        (preview_url, grandchild_request),
+        (versions_url, {**grandchild_request, "name": "Reject changed ancestor"}),
+    ):
+        refused = client.post(endpoint, json=payload)
+        assert refused.status_code == 400, refused.text
+        assert "original manifest" in refused.json()["detail"]
+    assert {version["id"] for version in client.get(versions_url).json()} == {
+        root_id,
+        child_id,
+    }
+
+    with app.state.session_factory() as session:
+        item = session.scalar(
+            select(DatasetVersionItem).where(
+                DatasetVersionItem.dataset_version_id == root_id,
+                DatasetVersionItem.image_id == image_id,
+            )
+        )
+        assert item is not None
+        item.split = original_split
+        ancestor = session.get(DatasetVersion, root_id)
+        assert ancestor is not None
+        ancestor.status = "creating"
+        session.commit()
+
+    refused = client.post(preview_url, json=grandchild_request)
+    assert refused.status_code == 400, refused.text
+    assert "Only complete dataset versions" in refused.json()["detail"]
+    with app.state.session_factory() as session:
+        ancestor = session.get(DatasetVersion, root_id)
+        assert ancestor is not None
+        ancestor.status = "complete"
+        session.commit()
+
+    assert client.post(preview_url, json=grandchild_request).status_code == 200
+    grandchild = client.post(
+        versions_url, json={**grandchild_request, "name": "Verified transitive lineage"}
+    )
+    assert grandchild.status_code == 201, grandchild.text
+    assert grandchild.json()["parent_version_id"] == child_id
+    second_run, second_output = _run_frozen_graph(client, project_id, saved.json()["id"])
+    assert first_run != second_run
+    for output in (first_output, second_output):
+        assert output["dataset_version_id"] == child_id
+        assert output["dataset_manifest_sha256"] == child.json()["manifest_sha256"]
+        assert output["priority_score_unit"] == "dimensionless"
+        assert output["review_status"] == "requires_researcher_review"
+    for queue_id in (standalone.json()["id"], first_output["queue_id"], second_output["queue_id"]):
+        queue_items = client.get(f"/api/v1/review-queues/{queue_id}/items")
+        assert queue_items.status_code == 200, queue_items.text
+        assert queue_items.json()["total"] == 1
+        assert queue_items.json()["items"][0]["review_state"] == "pending"

@@ -278,15 +278,25 @@ class DatasetVersionService:
         if parent_version_id is None:
             return None
         parent = self._version(parent_version_id)
-        if parent.project_id != project_id:
-            raise ValidationError("Parent dataset version must belong to the same project")
-        # A selected parent is scientific provenance even when split assignments
-        # are not reused. A "complete" status alone does not authenticate its
-        # historical biological observations or train/test split evidence.
-        if parent.status == "complete":
+        # Full lineage is scientific provenance even when assignments are not
+        # reused: an intact child cannot authenticate a corrupted grandparent.
+        # Validate the original frozen contracts without rewriting evidence.
+        ancestor = parent
+        seen_ids: set[str] = set()
+        while True:
+            if ancestor.id in seen_ids:
+                raise ValidationError("Dataset parent lineage contains a cycle")
+            seen_ids.add(ancestor.id)
+            if ancestor.project_id != project_id:
+                raise ValidationError("Parent dataset version must belong to the same project")
+            if ancestor.status != "complete":
+                raise ValidationError("Only complete dataset versions may be used as parents")
             validate_frozen_dataset_manifest(
-                parent, self.versions.items_for_version(parent.id)
+                ancestor, self.versions.items_for_version(ancestor.id)
             )
+            if ancestor.parent_version_id is None:
+                break
+            ancestor = self._version(ancestor.parent_version_id)
         return parent
 
     def _parent_items(
