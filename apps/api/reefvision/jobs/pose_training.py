@@ -333,6 +333,21 @@ def _reject_overlapping_pose_validation_frames(
 def _materialized_pose_dataset_files(destination: Path) -> list[dict[str, str]]:
     """Hash each local pose input and record its portable relative path."""
 
+    # A saved training run can be redirected after materialization by swapping
+    # its dataset root or an ancestor for a link. Member-only checks miss it.
+    for component in (destination, *destination.parents):
+        if component.is_symlink():
+            raise ValidationError("Pose dataset path contains a symbolic link")
+        if sys.platform == "win32":
+            try:
+                attributes = getattr(component.lstat(), "st_file_attributes", 0)
+            except (FileNotFoundError, NotADirectoryError) as exc:
+                raise ValidationError("Pose dataset path is unavailable") from exc
+            if attributes & 0x400:
+                raise ValidationError("Pose dataset path contains a Windows junction")
+    if not destination.is_dir():
+        raise ValidationError("Pose dataset root is not a directory")
+
     files: list[dict[str, str]] = []
     # Path ordering differs between Windows and POSIX for mixed-case names.
     members = sorted(
