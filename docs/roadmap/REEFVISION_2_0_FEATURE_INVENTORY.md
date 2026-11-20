@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T19:36:09Z`
+Updated: `2026-11-20T19:37:36Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1015,6 +1015,7 @@ Evidence:
 - `windows_installed`: Standard-user WebView2 on the clean Windows install from 3c8e2d070. The researcher inspected and approved a local runtime configuration, ran direct inference and repeated the selection in a saved graph. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44722744547/job/136258835916` (`rv15-model-catalog-runtime-installed-3c8e2d070`)
 - `physical_hardware`: Packaged CUDA on the physical RTX 3090. Direct inference and two saved runs agreed on 9 proposals, with SHA-256 4428cc1865bc9b57380597ea920b021630cd0640dbca579c5db107d58b31e812. Official MSI SHA-256 c6e92040617eb055c4ee62afcca86af709ebe73d02602165d474e1259582e05e. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv15-model-catalog-runtime-physical-3c8e2d070`)
 - `physical_hardware`: The original installer payload opened Models on the physical RTX 3090. A reviewed locally trained detector completed direct inference and two saved graph runs, each with nine matched proposals. Both saved digests were b0dc4cea1b7b7cfaab2329547230f56107a9ee2c8224f79ff37c508730f52f48. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/97` (`rv15-runtime-original-msi-rtx-b846f57e9`)
+- `physical_hardware`: In the packaged Workflow Builder two saved CPU runs used the reviewed checkpoint and only the two frozen validation images, excluded four training images and returned the same 15 proposals with independent IDs. — `docs/validation/restored-projects-3a9ce1622.json` (`rv15-frozen-detector-runtime-3a9`)
 - `representative_data`: none recorded
 
 ### rv15-model-comparison: Unified detector, mask, pose, tracking, and event comparison
