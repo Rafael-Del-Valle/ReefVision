@@ -18,24 +18,29 @@ from reefvision.tests.test_scientific_project_exchange import (
 )
 
 
-def _study(client: TestClient) -> tuple[str, str, dict[str, Any], dict[str, str]]:
+def _study(
+    client: TestClient, unit_type: str = "tank"
+) -> tuple[str, str, dict[str, Any], dict[str, str]]:
     project = create_project(client, "Paired calibrated study")
     project_id = str(project["id"])
     ecology = f"/api/v1/projects/{project_id}/ecology"
+    first_unit, second_unit, third_unit, excluded_unit = [
+        f"{unit_type.title()}-{index}" for index in range(1, 5)
+    ]
     roster = {
-        "Tank-1": ["a-left", "a-right", "b"],
-        "Tank-2": ["c"],
-        "Tank-3": ["d"],
-        "Tank-4": ["e", "f"],
+        first_unit: ["a-left", "a-right", "b"],
+        second_unit: ["c"],
+        third_unit: ["d"],
+        excluded_unit: ["e", "f"],
     }
 
-    def register(organism: str, tank: str, kind: str, parent: str | None = None) -> None:
+    def register(organism: str, unit: str, kind: str, parent: str | None = None) -> None:
         response = client.post(
             f"{ecology}/organisms",
             json={
                 "organism_key": organism,
-                "experimental_unit_type": "tank",
-                "experimental_unit_id": tank,
+                "experimental_unit_type": unit_type,
+                "experimental_unit_id": unit,
                 "kind": kind,
                 "parent_colony_key": parent,
                 "reason": "Reviewed fixture sampling roster",
@@ -43,13 +48,20 @@ def _study(client: TestClient) -> tuple[str, str, dict[str, Any], dict[str, str]
         )
         assert response.status_code == 201, response.text
 
-    register("a", "Tank-1", "colony")
-    for tank, organisms in roster.items():
+    for unit, organisms in roster.items():
+        parents = set()
         for organism in organisms:
-            parent = "a" if organism.startswith("a-") else f"parent-{organism}"
-            if parent != "a":
-                register(parent, tank, "colony")
-            register(organism, tank, "fragment", parent)
+            parent = (
+                f"parent-{unit.casefold()}"
+                if unit_type == "colony"
+                else "a"
+                if organism.startswith("a-")
+                else f"parent-{organism}"
+            )
+            if parent not in parents:
+                register(parent, unit, "colony")
+                parents.add(parent)
+            register(organism, unit, "fragment", parent)
 
     widths = {
         "a-left": [(1, 10), (2, 14)],
@@ -75,11 +87,11 @@ def _study(client: TestClient) -> tuple[str, str, dict[str, Any], dict[str, str]
                 "sources": sources,
                 "sampling_plan": [
                     {
-                        "experimental_unit_id": tank,
+                        "experimental_unit_id": unit,
                         "organism_keys": organisms,
                         "dates": ["2026-11-01", "2026-11-02", "2026-11-03"],
                     }
-                    for tank, organisms in roster.items()
+                    for unit, organisms in roster.items()
                 ],
             },
             "reviewed_by": "Fixture reviewer",
@@ -89,6 +101,7 @@ def _study(client: TestClient) -> tuple[str, str, dict[str, Any], dict[str, str]
     )
     assert response.status_code == 201, response.text
     analysis = response.json()
+    unit_label = "colonies" if unit_type == "colony" else f"{unit_type}s"
     return (
         project_id,
         f"{path}/{analysis['id']}/paired-contrast",
@@ -97,8 +110,10 @@ def _study(client: TestClient) -> tuple[str, str, dict[str, Any], dict[str, str]
             "source_sha256": analysis["content_sha256"],
             "baseline_date": "2026-11-01",
             "followup_date": "2026-11-02",
-            "experimental_unit_type": "tank",
-            "estimand": "Mean change in the declared independent tanks with both visits complete.",
+            "experimental_unit_type": unit_type,
+            "estimand": (
+                f"Mean change in the declared independent {unit_label} with both visits complete."
+            ),
             "missingness_policy": "complete_unit",
         },
     )
@@ -194,6 +209,43 @@ def test_paired_growth_known_answer_and_two_saved_replays(client: TestClient) ->
             "payload_json"
         ]
         == report
+    )
+
+
+@pytest.mark.parametrize(("unit_type", "first_difference"), [("site", 3.0), ("colony", 8 / 3)])
+def test_paired_growth_uses_declared_site_or_colony_units(
+    client: TestClient, unit_type: str, first_difference: float
+) -> None:
+    _, url, analysis, design = _study(client, unit_type)
+    response = client.post(url, json=design)
+    assert response.status_code == 200, response.text
+    report = response.json()
+    assert report["analysis_id"] == analysis["id"]
+    assert report["source_sha256"] == analysis["content_sha256"]
+    assert report["design"]["experimental_unit_type"] == unit_type
+    assert report["unit"] == "mm"
+    assert report["planned_unit_count"] == 4
+    assert report["included_unit_count"] == 3
+    assert report["degrees_of_freedom"] == 2
+    assert report["mean_difference"] == pytest.approx((first_difference + 5 + 7) / 3)
+    assert [row["difference"] for row in report["units"][:3]] == pytest.approx(
+        [first_difference, 5, 7]
+    )
+    first = report["units"][0]
+    assert len({row["parent_colony_id"] for row in first["organisms"]}) == (
+        1 if unit_type == "colony" else 2
+    )
+    assert [row["difference"] for row in first["organisms"]] == [1, 3, 4]
+    excluded = report["units"][-1]
+    assert excluded["experimental_unit_id"] == f"{unit_type.title()}-4"
+    assert excluded["status"] == "excluded"
+    assert excluded["difference"] is None
+    assert {row["reason"] for row in excluded["organisms"]} == {
+        "missing_followup",
+        "missing_both_visits",
+    }
+    assert any(
+        row["reason"] == "Glare obscured follow-up boundary" for row in report["source_exclusions"]
     )
 
 
