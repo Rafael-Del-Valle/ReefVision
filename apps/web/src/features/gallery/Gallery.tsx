@@ -891,16 +891,32 @@ function GalleryContent({
     // the strip itself so the focused image stays reachable in WebView2.
     // Older test DOMs may not implement ResizeObserver; window resize remains
     // a safe fallback in those environments.
-    const observer =
-      typeof ResizeObserver === "undefined"
-        ? null
-        : new ResizeObserver(alignFocusedThumbnail);
-    observer?.observe(filmstrip);
-    const thumbnail = activeThumbnail.current;
-    if (thumbnail) observer?.observe(thumbnail);
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver === "function") {
+      try {
+        observer = new ResizeObserver(alignFocusedThumbnail);
+        observer.observe(filmstrip);
+        const thumbnail = activeThumbnail.current;
+        if (thumbnail) observer.observe(thumbnail);
+      } catch {
+        // WebView2 may expose an unusable observer, or throw while observing
+        // the active thumbnail. Disconnect partial registrations and preserve
+        // the window-resize fallback rather than crashing gallery startup.
+        try {
+          observer?.disconnect();
+        } catch {
+          // Cleanup failure must not prevent the fallback from registering.
+        }
+        observer = null;
+      }
+    }
     window.addEventListener("resize", alignFocusedThumbnail);
     return () => {
-      observer?.disconnect();
+      try {
+        observer?.disconnect();
+      } catch {
+        // Broken embedded observer cleanup must not crash gallery teardown.
+      }
       window.removeEventListener("resize", alignFocusedThumbnail);
     };
   }, [focusedImage?.id]);
