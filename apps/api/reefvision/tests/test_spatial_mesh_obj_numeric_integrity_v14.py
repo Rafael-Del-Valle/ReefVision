@@ -8,9 +8,11 @@ from typing import cast
 
 import pytest
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.main import _safe_validation_error_detail
 from reefvision.services.spatial_mesh_obj_v14 import parse_obj_triangles
 from reefvision.tests.test_annotations import create_project
 
@@ -482,6 +484,25 @@ def test_unpaired_obj_unicode_surrogates_fail_closed(client: TestClient, obj_tex
         assert "\\ud" in detail[0]["input"]
     else:
         assert "unpaired Unicode surrogate" in detail
+
+
+def test_validation_error_escaped_surrogate_is_utf8_safe_independently_of_pydantic() -> None:
+    """The HTTP 422 serializer must work even if Pydantic rejects before parsing."""
+    errors = [
+        {
+            "type": "string_unicode",
+            "loc": ["body", "obj_text"],
+            "input": "coral-\ud800",
+            "msg": "invalid source \U0001f419",
+        }
+    ]
+    detail = _safe_validation_error_detail(errors)
+    assert detail[0]["input"] == r"coral-\ud800"
+    assert detail[0]["msg"] == "invalid source \U0001f419"
+    response = JSONResponse(status_code=422, content={"detail": detail})
+    assert response.status_code == 422
+    assert b"coral-" in response.body
+    assert response.body.decode("utf-8")
 
 
 def test_obj_non_bmp_unicode_comment_remains_supported_in_saved_graph(
