@@ -533,6 +533,7 @@ def test_representable_subnormal_volume_replays_saved_graph(
     assert len(hashes[0]) == 64
     assert hashes[0] == hashes[1]
 
+
 @pytest.mark.parametrize("reverse_winding", [False, True])
 def test_source_volume_below_binary64_recovers_after_large_calibration(
     client: TestClient, reverse_winding: bool
@@ -580,6 +581,85 @@ def test_source_volume_below_binary64_recovers_after_large_calibration(
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
             {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifacts = [
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        ]
+        assert len(artifacts) == 1
+        assert artifacts[0]["payload_json"] == payload
+        hashes.append(artifacts[0]["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
+
+
+@pytest.mark.parametrize("reverse_winding", [False, True])
+def test_large_source_translation_preserves_volume_and_saved_workflow(
+    client: TestClient, reverse_winding: bool
+) -> None:
+    """A large coordinate origin must not change a tetrahedron's provisional volume."""
+    offset = 100_000_000.0
+    vertices = [[offset + coordinate for coordinate in point] for point in TETRA_VERTICES]
+    faces = [list(reversed(face)) for face in TETRA_FACES] if reverse_winding else TETRA_FACES
+    signed = signed_enclosed_volume_mesh_units(
+        [tuple(vertex) for vertex in vertices], faces
+    )
+    assert signed == pytest.approx((-1 if reverse_winding else 1) / 6)
+
+    parameters = _params(vertices=vertices, faces=faces)
+    expected_volume_m3 = 0.01**3 / 6
+    direct = measure_mesh_preview(**parameters)
+    assert direct["enclosed_volume_m3"] == pytest.approx(expected_volume_m3)
+    assert direct["edge_connected_patch_enclosed_volumes_m3"] == pytest.approx(
+        [expected_volume_m3]
+    )
+
+    parameters["specimen_id"] = "synthetic-translated-unverified"
+    project_id = str(create_project(client, "Source translation volume integrity")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/mesh-preview", json=parameters)
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["enclosed_volume_m3"] == pytest.approx(expected_volume_m3)
+    assert "enclosed_volume_zero_or_underflow" not in payload["qc_warnings"]
+    assert payload["measurement_status"] == "caller_supplied_unverified"
+    assert payload["provenance"]["calibration_verified"] is False
+    assert payload["provenance"]["specimen_identity_verified"] is False
+
+    graph = {
+        "graph_id": f"mesh-large-origin-volume-{reverse_winding}",
+        "name": "Unverified translated source volume",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "mesh",
+                "node_type": "mesh_surface_preview",
+                "parameters": parameters,
+            },
         ],
         "edges": [
             {
