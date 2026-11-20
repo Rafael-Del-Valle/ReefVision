@@ -51,7 +51,7 @@ def _safe_original_filename(name: str | None) -> bool:
         and Path(name).name == name
         and "\\" not in name
         and not any(
-            ord(character) < 32 or ord(character) == 127 or category(character) == "Cf"
+            ord(character) < 32 or ord(character) == 127 or category(character) in {"Cf", "Cs"}
             for character in name
         )
     )
