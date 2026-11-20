@@ -59,6 +59,14 @@ def _create_scientific(db: sqlite3.Connection, variant: str) -> None:
         "'PRIVATE_CORAL_NOTE', 'digest', '2026-11-16'"
     )
     db.execute(f"INSERT INTO scientific_records ({columns}) VALUES ({values})")
+    if variant == "unexpected_trigger":
+        # This would rewrite a future observed value, even though the base
+        # table's columns, keys and current rows look migration-compatible.
+        db.execute(
+            "CREATE TRIGGER research_mutation AFTER INSERT ON scientific_records "
+            "BEGIN UPDATE scientific_records SET variable = 'PRIVATE_TRIGGER_BODY' "
+            "WHERE id = NEW.id; END"
+        )
 
 
 def _create_qc(db: sqlite3.Connection, variant: str) -> None:
@@ -98,6 +106,13 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
         "VALUES ('event1', 'queue1', 'item1', 'p1', "
         "'request1', 'comment', 'local scientist', 'PRIVATE_CORAL_NOTE', '2026-11-16')"
     )
+    if variant == "unexpected_trigger":
+        # A future review insertion would be silently rewritten.
+        db.execute(
+            "CREATE TRIGGER review_mutation AFTER INSERT ON review_queue_item_events "
+            "BEGIN UPDATE review_queue_item_events "
+            "SET comment = 'PRIVATE_TRIGGER_BODY' WHERE id = NEW.id; END"
+        )
 
 
 @pytest.mark.parametrize(
@@ -108,11 +123,13 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
         ("scientific", "wrong_fk"),
         ("scientific", "missing_index"),
         ("scientific", "hidden_column"),
+        ("scientific", "unexpected_trigger"),
         ("qc", "valid"),
         ("qc", "wrong_fk"),
         ("qc", "nullable_actor"),
         ("qc", "missing_unique"),
         ("qc", "missing_index"),
+        ("qc", "unexpected_trigger"),
     ],
 )
 def test_read_only_structural_contract_catches_colliding_0038_shape(
@@ -182,4 +199,50 @@ def test_strict_structural_audit_rejects_forged_scientific_0038(
     assert report["structural_contracts"]["scientific_records"] == "mismatch"
     assert "lineage_table_contract_mismatch_scientific_records" in report["warnings"]
     assert "PRIVATE_CORAL_NOTE" not in completed.stdout
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("family", ["scientific", "qc"])
+def test_strict_0038_trigger_drift_is_redacted_and_read_only(
+    tmp_path: Path, family: str
+) -> None:
+    path = tmp_path / "triggered-lineage-copy.sqlite"
+    with sqlite3.connect(path) as db:
+        db.executescript(
+            "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY);"
+            "INSERT INTO alembic_version VALUES ('0038');"
+            "CREATE TABLE projects (id VARCHAR(36) PRIMARY KEY);"
+            "CREATE TABLE review_queues (id VARCHAR(36) PRIMARY KEY);"
+            "CREATE TABLE review_queue_items (id VARCHAR(36) PRIMARY KEY);"
+            "INSERT INTO projects VALUES ('p1');"
+            "INSERT INTO review_queues VALUES ('queue1');"
+            "INSERT INTO review_queue_items VALUES ('item1');"
+        )
+        if family == "scientific":
+            _create_scientific(db, "unexpected_trigger")
+        else:
+            _create_qc(db, "unexpected_trigger")
+        db.commit()
+
+    before = path.read_bytes()
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            str(path),
+            "--verify-structural-contracts",
+            "--fail-on-warning",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    target = "scientific_records" if family == "scientific" else "review_queue_item_events"
+    assert completed.returncode == 2
+    report = json.loads(completed.stdout)
+    assert report["structural_contracts"][target] == "mismatch"
+    assert f"lineage_table_contract_mismatch_{target}" in report["warnings"]
+    assert report["upgrade_authorized"] is False
+    assert "PRIVATE_CORAL_NOTE" not in completed.stdout
+    assert "PRIVATE_TRIGGER_BODY" not in completed.stdout
     assert path.read_bytes() == before

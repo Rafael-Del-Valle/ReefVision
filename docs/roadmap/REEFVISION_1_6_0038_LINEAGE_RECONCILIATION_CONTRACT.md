@@ -127,3 +127,26 @@ read-only runs and unchanged database bytes. This is **diagnostic evidence**
 only. Matching shapes do not prove migration provenance or authorize upgrade.
 An approved integrated migration, representative biology and saved-workflow
 acceptance, and installed Windows MSI/GUI upgrade and rollback remain blocked.
+
+
+## Unexpected research-table triggers (2026-11-20, Track D)
+
+Both independently audited revision-0038 sources create ordinary SQLite tables
+and indexes, **not triggers**. The optional read-only structural preflight now
+treats a trigger attached to any protected `scientific_records`,
+`environmental_cache_entries`, or `review_queue_item_events` table as a
+contract mismatch. A restored trigger could silently rewrite future biological
+observations or reviewer histories even when stored rows and column/index/FK
+contracts currently match. The query checks trigger presence only; it never
+executes or reports trigger SQL, private field values, names or reviewer notes.
+
+New disposable populated-DB variants for scientific and QC records, plus
+strict CLI subprocess checks, require fail-closed mismatch diagnostics,
+redaction of private trigger bodies and unchanged on-disk database bytes.
+Without the opt-in flag, the existing historical inspector behavior remains
+unchanged. This does not detect triggers on *other* tables with indirect
+side effects; it is not complete schema provenance, an authorized migration,
+or proof of 1.1/1.6 Alembic-0038 reconciliation. Original databases and saved
+typed Workflow Builder QC graphs, provenance, retries and human-review gates
+remain untouched. CI, representative saved-workflow execution and genuine
+Windows MSI/installed-GUI acceptance are still required for release.

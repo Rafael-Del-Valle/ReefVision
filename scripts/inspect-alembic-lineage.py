@@ -210,6 +210,16 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
     and data-preserving migration acceptance can resolve the revision conflict.
     """
     contract = _POST_0037_TABLE_CONTRACTS[table]
+    # Neither verified revision-0038 source migration declares table triggers.
+    # Extra AFTER/BEFORE/INSTEAD OF triggers can change future scientific
+    # records or reviewer events while every column, FK and index still
+    # matches. Fail closed without reading/reporting potentially private SQL.
+    if db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'trigger' "
+        "AND tbl_name = ? COLLATE NOCASE LIMIT 1",
+        (table,),
+    ).fetchone() is not None:
+        return False
     quoted = '"' + table.replace('"', '""') + '"'
     columns = list(db.execute(f"PRAGMA table_xinfo({quoted})"))
     by_name = {row[1]: row for row in columns}
