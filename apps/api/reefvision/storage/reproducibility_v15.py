@@ -1,6 +1,7 @@
 """Write and verify managed research ZIPs and their native Project Exchange contents."""
 
 import json
+from collections import defaultdict
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -108,16 +109,35 @@ def _omissions(
 
 
 def _validate_native_inventory(archive: ZipFile, manifest: dict[str, Any]) -> None:
+    # The native inspector has already checked ownership and byte integrity. A
+    # reconciled field observation may reference the canonical image/video member.
+    media: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for descriptor in manifest.get("media", []):
+        media[descriptor["path"]].append(descriptor)
+    for references in media.values():
+        if len(references) == 1:
+            continue
+        kinds = {entry["kind"] for entry in references}
+        checksum = {(entry["sha256"], entry["size_bytes"]) for entry in references}
+        if (
+            len(references) != 2
+            or kinds not in ({"field_source", "image"}, {"field_source", "video"})
+            or len(checksum) != 1
+        ):
+            raise ValueError("Nested Project Exchange has inconsistent shared media members")
+
     descriptors = (
         *manifest["sections"].values(),
-        *manifest.get("media", []),
         *manifest.get("telemetry_sidecars", []),
         *manifest.get("generated_artifacts", []),
     )
     paths = [item["path"] for item in descriptors]
+    required = {_NATIVE_MANIFEST, *paths, *media}
+    names = archive.namelist()
     if (
-        len(paths) != len(set(paths))
-        or set(archive.namelist()) != {_NATIVE_MANIFEST, *paths}
+        len(required) != 1 + len(paths) + len(media)
+        or len(names) != len(required)
+        or set(names) != required
         or any(name.startswith("reviewer_lab_credentials") for name in manifest["sections"])
     ):
         raise ValueError(
@@ -173,7 +193,7 @@ def _repro_manifest(
         exchange_manifest_sha256=canonical_json_sha256(native.manifest),
         entries=entries,
         omitted_sources=native.omitted,
-        included_media_count=native.inspection.included_media_count,
+        included_media_count=len({entry["path"] for entry in native.manifest["media"]}),
     )
 
 

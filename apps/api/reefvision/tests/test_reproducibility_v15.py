@@ -303,7 +303,8 @@ def test_real_evidence_reopens_in_two_copies_and_tampering_is_preflighted(
     assert verified["compatible"], verified
     assert verified["manifest_sha256"] == canonical_json_sha256(package["manifest"])
     assert len(verified["manifest"]["omitted_sources"]) == 2
-    omitted_zip = _zip_body(_zip_body(raw)["project.reefvision.zip"])
+    omitted_zip_source = _zip_body(raw)["project.reefvision.zip"]
+    omitted_zip = _zip_body(omitted_zip_source)
     assert not any(name.endswith(".pt") for name in omitted_zip)
     assert b"Unselected checkpoint bytes" not in omitted_zip.values()
     assert all(
@@ -322,6 +323,21 @@ def test_real_evidence_reopens_in_two_copies_and_tampering_is_preflighted(
         rejected = client.post(f"{REPRO}/import", files=_upload(damaged))
         assert rejected.status_code == 400 and diagnostic in rejected.json()["detail"]
         assert client.get("/api/v1/projects").json() == before
+
+    # A bare native Exchange restore has no outer ZIP metadata to fall back on.
+    native_only = successful(
+        client.post(
+            "/api/v1/exchange-packages/import",
+            files={"file": ("project.reefvision.zip", omitted_zip_source, "application/zip")},
+        ),
+        201,
+    )
+    leaf_project = native_only["project_id"]
+    leaf_graph = native_only["package"]["options_json"]["origin_id_map"][graph]
+    leaf_root = f"/api/v1/projects/{leaf_project}"
+    assert client.get(f"{leaf_root}/reproducibility-packages").json() == []
+    assert client.get(f"{leaf_root}/reproducibility-proofs").json() == [proof]
+    assert _replay(client, leaf_project, leaf_graph, proof) == artifact_sha
 
     for copy in range(2):
         restored = successful(client.post(f"{REPRO}/import", files=_upload(raw)), 201)
@@ -348,3 +364,75 @@ def test_real_evidence_reopens_in_two_copies_and_tampering_is_preflighted(
             assert package["proof_sha256"] == proof_digest
             omissions = package["manifest"]["omitted_sources"]
             assert {entry["kind"] for entry in omissions} == {"image", "model"}
+
+
+def test_mixed_research_archive_keeps_aliased_field_png_and_staged_original(
+    client: TestClient,
+    reviewed_runtime: None,
+) -> None:
+    from reefvision.tests.test_field_capture_v15 import (
+        _batch,
+        _capture,
+        _image,
+        _metadata,
+        _reconcile,
+        _root,
+        _seal,
+    )
+
+    project, selection, _ = _fixture(client)
+    field = _root(project)
+    reconciled_batch = _batch(client, field, "Packaged field visit")
+    reconciled_bytes = _image()
+    reconciled = _capture(
+        client,
+        field,
+        reconciled_batch,
+        "visit.png",
+        reconciled_bytes,
+        _metadata(),
+    )
+    receipt = _reconcile(client, field, _seal(client, field, reconciled_batch))
+    canonical_image = receipt["rows"][0]["asset_id"]
+    assert canonical_image
+
+    staged_batch = _batch(client, field, "Packaged staged field visit")
+    staged_bytes = _image((211, 44, 91))
+    staged = _capture(
+        client,
+        field,
+        staged_batch,
+        "staged.png",
+        staged_bytes,
+        _metadata(key="staged"),
+    )
+    package, raw = _export(client, project, selection, with_weights=False, with_media=True)
+    inspected = successful(client.post(f"{REPRO}/inspect", files=_upload(raw)))
+    assert inspected["compatible"], inspected
+    field_digest = sha256(reconciled_bytes).hexdigest()
+    native = _zip_body(_zip_body(raw)["project.reefvision.zip"])
+    entries = json.loads(native["reefvision-exchange-manifest.json"])["media"]
+    same_bytes = [entry for entry in entries if entry["sha256"] == field_digest]
+    assert {entry["kind"] for entry in same_bytes} == {"image", "field_source"}
+    assert len({entry["path"] for entry in same_bytes}) == 1
+    assert package["manifest"]["included_media_count"] == len({item["path"] for item in entries})
+    assert native[same_bytes[0]["path"]] == reconciled_bytes
+
+    restored = successful(client.post(f"{REPRO}/import", files=_upload(raw)), 201)
+    assert restored["proof_sha256"] == package["proof_sha256"]
+    local = restored["package"]["options_json"]["origin_id_map"]
+    copied_base = _root(restored["project_id"])
+    for batch_id, observation, content in (
+        (reconciled_batch, reconciled, reconciled_bytes),
+        (staged_batch, staged, staged_bytes),
+    ):
+        path = f"{copied_base}/batches/{local[batch_id]}"
+        raw_media = client.get(f"{path}/observations/{local[observation['id']]}/content")
+        assert raw_media.status_code == 200, raw_media.text
+        assert raw_media.content == content
+    copied_reconcile = successful(
+        client.get(f"{copied_base}/batches/{local[reconciled_batch]}/reconciliation")
+    )
+    assert copied_reconcile["rows"][0]["asset_id"] == local[canonical_image]
+    staged_copy = successful(client.get(f"{copied_base}/batches/{local[staged_batch]}"))
+    assert staged_copy["manifest_sha256"] is None
