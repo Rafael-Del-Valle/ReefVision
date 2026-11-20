@@ -348,9 +348,7 @@ def test_nonzero_volume_lost_to_float_cancellation_replays_saved_graph(
     app = cast(FastAPI, client.app)
     hashes: list[str] = []
     for _ in range(2):
-        run = client.post(
-            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-        )
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
         assert process_workflow_run_job(
             app.state.settings, app.state.session_factory, str(run.json()["job_id"])
@@ -438,9 +436,7 @@ def test_unrepresentable_positive_volume_fails_standalone_and_saved_graph(
     assert saved.status_code == 201, saved.text
     app = cast(FastAPI, client.app)
     for _ in range(2):
-        run = client.post(
-            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-        )
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
         assert not process_workflow_run_job(
             app.state.settings, app.state.session_factory, str(run.json()["job_id"])
@@ -518,9 +514,89 @@ def test_representable_subnormal_volume_replays_saved_graph(
     app = cast(FastAPI, client.app)
     hashes: list[str] = []
     for _ in range(2):
-        run = client.post(
-            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
         )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifacts = [
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        ]
+        assert len(artifacts) == 1
+        assert artifacts[0]["payload_json"] == payload
+        hashes.append(artifacts[0]["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
+
+@pytest.mark.parametrize("reverse_winding", [False, True])
+def test_source_volume_below_binary64_recovers_after_large_calibration(
+    client: TestClient, reverse_winding: bool
+) -> None:
+    """A provisional scale can recover a real but unrepresentable source volume."""
+    edge = 1e-110
+    scale = 1_000_000.0
+    vertices = [
+        [0.0, 0.0, 0.0],
+        [edge, 0.0, 0.0],
+        [0.0, edge, 0.0],
+        [0.0, 0.0, edge],
+    ]
+    faces = [list(reversed(face)) for face in TETRA_FACES] if reverse_winding else TETRA_FACES
+    with pytest.raises(ValueError, match="volume underflowed numeric precision"):
+        signed_enclosed_volume_mesh_units([tuple(vertex) for vertex in vertices], faces)
+
+    expected_volume = float(Fraction(edge) ** 3 * 1_000_000**3 / 6)
+    assert expected_volume > 0
+    params = _params(vertices=vertices, faces=faces)
+    params["meters_per_unit"] = scale
+    params["specimen_id"] = "synthetic-recovered-volume-unverified"
+    direct = measure_mesh_preview(**_params(vertices=vertices, faces=faces, uncertainty=0.1))
+    assert direct["enclosed_volume_m3"] is None
+
+    project_id = str(create_project(client, "Recovered calibrated volume QC")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    payload = standalone.json()
+    assert payload["enclosed_volume_m3"] == pytest.approx(expected_volume, rel=1e-8, abs=0)
+    assert payload["edge_connected_patch_enclosed_volumes_m3"] == pytest.approx(
+        [expected_volume], rel=1e-8, abs=0
+    )
+    assert "enclosed_volume_source_unit_numeric_recovery" in payload["qc_warnings"]
+    assert "enclosed_volume_numeric_overflow" not in payload["qc_warnings"]
+    assert payload["enclosed_volume_scale_interval_m3"] is not None
+    assert payload["measurement_status"] == "caller_supplied_unverified"
+    assert payload["provenance"]["calibration_verified"] is False
+    assert payload["provenance"]["specimen_identity_verified"] is False
+
+    graph = {
+        "graph_id": "mesh-source-volume-calibration-recovery-v14",
+        "name": "Provisional source-volume underflow recovery",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
         assert process_workflow_run_job(
             app.state.settings, app.state.session_factory, str(run.json()["job_id"])
