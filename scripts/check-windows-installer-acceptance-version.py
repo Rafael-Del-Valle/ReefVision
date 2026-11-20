@@ -145,6 +145,14 @@ def _check_validated_upgrade(
         ),
         f"{name} is missing the verified {previous.version} to {version} upgrade contract",
     )
+    if name == _VALIDATED_15_UPGRADE_JOB:
+        errors.extend(
+            _missing(
+                job,
+                ("-VerifyPreviousInstallerRejectsUpgradedProfile",),
+                f"{name} requires an independent predecessor rollback check",
+            )
+        )
     if not errors and not (
         job.index(verified_candidate) < job.index(harness)
         and job.index(digest_check) < job.index(verified_previous) < job.index(harness)
