@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fractions import Fraction
+from hashlib import sha256
 from math import sqrt
 from typing import cast
 
@@ -10,6 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from reefvision.jobs.spatial_source_parse_v14 import process_spatial_source_parse_job
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
 from reefvision.services.spatial_mesh_volume_v14 import (
@@ -285,6 +287,24 @@ def test_nonzero_volume_lost_to_float_cancellation_replays_saved_graph(
         [list(reversed(face)) for face in expected_faces],
     )
     assert inward == pytest.approx(expected_volume, rel=1e-12, abs=0)
+    # Select each of the four *distinct vertex origins*. Cyclically rotating
+    # a triangle preserves its winding but changes the first-face origin.
+    for source_origin in range(len(vertices)):
+        for reversed_winding in (False, True):
+            ordered_faces = [
+                list(reversed(face)) if reversed_winding else list(face) for face in expected_faces
+            ]
+            root_face_index = next(
+                index for index, face in enumerate(ordered_faces) if source_origin in face
+            )
+            first_face = ordered_faces.pop(root_face_index)
+            first_offset = first_face.index(source_origin)
+            first_face = first_face[first_offset:] + first_face[:first_offset]
+            oriented_faces = [first_face, *ordered_faces]
+            expected_signed = expected_volume if reversed_winding else -expected_volume
+            assert signed_enclosed_volume_mesh_units(
+                [tuple(vertex) for vertex in vertices], oriented_faces
+            ) == pytest.approx(expected_signed, rel=1e-12, abs=0)
     # Exactly planar, nondegenerate coordinates must not invent an enclosed volume.
     assert (
         signed_enclosed_volume_mesh_units(
@@ -299,7 +319,10 @@ def test_nonzero_volume_lost_to_float_cancellation_replays_saved_graph(
         == 0.0
     )
 
-    parameters = _params(vertices=vertices)
+    # The cyclic vertex order of the first OBJ face selects origin 0. It
+    # previously yielded a nonzero but incorrect volume in this winding.
+    faces = [[0, 1, 2], [3, 1, 0], [2, 3, 0], [3, 2, 1]]
+    parameters = _params(vertices=vertices, faces=faces)
     parameters["meters_per_unit"] = 1.0
     direct = measure_mesh_preview(**parameters)
     assert direct["enclosed_volume_m3"] == pytest.approx(expected_volume, rel=1e-12, abs=0)
@@ -312,8 +335,24 @@ def test_nonzero_volume_lost_to_float_cancellation_replays_saved_graph(
 
     project_id = str(create_project(client, "Cancellation-stable volume QC")["id"])
     base = f"/api/v1/projects/{project_id}"
+    obj_lines = ["v " + " ".join(map(repr, vertex)) for vertex in vertices]
+    obj_lines.extend("f " + " ".join(str(index + 1) for index in face) for face in faces)
+    original = ("\n".join(obj_lines) + "\n").encode()
+    uploaded = client.post(f"{base}/spatial/assets", files={"file": ("nonzero.obj", original)})
+    assert uploaded.status_code == 201, uploaded.text
+    asset = uploaded.json()
+    assert asset["sha256"] == sha256(original).hexdigest()
+    state = cast(FastAPI, client.app).state
+    assert process_spatial_source_parse_job(
+        state.settings, state.session_factory, asset["parse_job_id"]
+    )
     request = {
-        **parameters,
+        "asset_id": asset["id"],
+        "expected_source_payload_sha256": asset["sha256"],
+        "meters_per_unit": 1.0,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic scale",
+        "relative_scale_uncertainty": 0.1,
         "specimen_id": "cancellation-synthetic-unverified",
         "observation_id": "synthetic-not-field-validation",
     }
@@ -321,6 +360,9 @@ def test_nonzero_volume_lost_to_float_cancellation_replays_saved_graph(
     assert standalone.status_code == 200, standalone.text
     payload = standalone.json()
     assert payload["enclosed_volume_m3"] == pytest.approx(expected_volume, rel=1e-12, abs=0)
+    assert payload["enclosed_volume_scale_interval_m3"] == pytest.approx(
+        [expected_volume * 0.9**3, expected_volume * 1.1**3], rel=1e-12, abs=0
+    )
     assert payload["provenance"]["specimen_identity_verified"] is False
 
     graph = {
@@ -367,6 +409,7 @@ def test_nonzero_volume_lost_to_float_cancellation_replays_saved_graph(
         hashes.append(artifacts[0]["payload_sha256"])
     assert len(hashes[0]) == 64
     assert hashes[0] == hashes[1]
+    assert client.get(f"{base}/spatial/assets/{asset['id']}/content").content == original
 
 
 @pytest.mark.parametrize("reverse_winding", [False, True])
