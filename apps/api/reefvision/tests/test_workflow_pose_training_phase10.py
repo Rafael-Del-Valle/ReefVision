@@ -628,13 +628,13 @@ def test_pose_materialized_dataset_rejects_unhashed_filesystem_member(tmp_path: 
 
 
 @pytest.mark.parametrize("blocked_area", ("dataset", "validation_stage"))
-def test_pose_materialization_fails_closed_when_prior_cleanup_is_blocked(
+def test_pose_materialization_preserves_prior_scientific_data(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     blocked_area: str,
 ) -> None:
-    # A locked prior run must not leave scientifically stale frames in a newly
-    # materialized training or independent validation dataset.
+    # Interrupted training/holdout exports can contain reviewed images or model
+    # evidence. Never delete them when retrying a saved Workflow Builder run.
     destination = tmp_path / "pose-dataset"
     blocked_path = (
         destination if blocked_area == "dataset" else tmp_path / ".pose-dataset-validation"
@@ -642,15 +642,12 @@ def test_pose_materialization_fails_closed_when_prior_cleanup_is_blocked(
     blocked_path.mkdir(parents=True)
     previous = blocked_path / "prior-science.txt"
     previous.write_bytes(b"preserve-previous-run")
-    original_rmtree = shutil.rmtree
 
-    def blocked_rmtree(path: Path, *args: Any, **kwargs: Any) -> None:
-        if Path(path) == blocked_path:
-            raise OSError("prior pose data is locked")
-        original_rmtree(path, *args, **kwargs)
+    def forbidden_cleanup(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("Existing scientific pose data must not be deleted")
 
-    monkeypatch.setattr(shutil, "rmtree", blocked_rmtree)
-    with pytest.raises(OSError, match="prior pose data is locked"):
+    monkeypatch.setattr(shutil, "rmtree", forbidden_cleanup)
+    with pytest.raises(ValidationError, match="refusing to overwrite prior scientific data"):
         materialize_pose_training_exports(
             training_content=_pose_export_zip(b"new-training"),
             validation_content=(
@@ -660,11 +657,8 @@ def test_pose_materialization_fails_closed_when_prior_cleanup_is_blocked(
         )
 
     assert previous.read_bytes() == b"preserve-previous-run"
-    if blocked_area == "dataset":
-        assert not (destination / "data.yaml").exists()
-    else:
-        assert not (destination / "images" / "val").exists()
-
+    assert not (destination / "data.yaml").exists()
+    assert not (destination / "images").exists()
 
 def test_pose_materialization_rejects_failed_final_holdout_cleanup(
     tmp_path: Path,

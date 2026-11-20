@@ -529,9 +529,8 @@ def materialize_pose_training_exports(
 ) -> dict[str, object]:
     """Materialize immutable pose exports without reusing train frames as validation."""
 
-    # The destination is deleted and rebuilt on each training run. A symlink
-    # here (or in an ancestor) could redirect exported scientific data outside
-    # the managed run; a pre-existing validation-stage symlink is just as unsafe.
+    # A symlink here (or in an ancestor) could redirect frozen scientific data
+    # outside the managed run; the holdout staging path requires its own guard.
     if destination.is_symlink() or any(parent.is_symlink() for parent in destination.parents):
         raise ValidationError("Pose training export destination contains a symbolic link")
     validation_stage = destination.parent / f".{destination.name}-validation"
@@ -551,9 +550,16 @@ def materialize_pose_training_exports(
             if attributes & 0x400:
                 raise ValidationError("Pose training export path contains a Windows junction")
 
-    # A failed cleanup must not mix stale scientific frames into a new training run.
+    # Never delete an existing materialization, even when an interrupted job
+    # left a partial export. The same run ID may still own reviewed inputs.
     if destination.exists():
-        shutil.rmtree(destination)
+        raise ValidationError(
+            "Pose training export destination already exists; refusing to overwrite prior scientific data"
+        )
+    if validation_content is not None and validation_stage.exists():
+        raise ValidationError(
+            "Pose training validation stage already exists; refusing to overwrite prior scientific data"
+        )
 
     _safe_extract_zip(
         training_content,
@@ -621,12 +627,7 @@ def materialize_pose_training_exports(
     validation_mode = "none"
 
     if validation_content is not None:
-        validation_stage = destination.parent / f".{destination.name}-validation"
-
-        # An interrupted prior holdout export must not contaminate this split.
-        if validation_stage.exists():
-            shutil.rmtree(validation_stage)
-
+        # The staging location was checked before extracting any training files.
         try:
             _safe_extract_zip(
                 validation_content,
