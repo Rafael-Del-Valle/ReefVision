@@ -284,6 +284,20 @@ def test_nonzero_volume_lost_to_float_cancellation_replays_saved_graph(
         [list(reversed(face)) for face in expected_faces],
     )
     assert inward == pytest.approx(expected_volume, rel=1e-12, abs=0)
+    # The origin is taken from the first face. Rotating face order changes that
+    # origin, so the exact fallback must keep its sign and magnitude invariant.
+    for face_offset in range(len(expected_faces)):
+        ordered_faces = expected_faces[face_offset:] + expected_faces[:face_offset]
+        for reversed_winding in (False, True):
+            oriented_faces = (
+                [list(reversed(face)) for face in ordered_faces]
+                if reversed_winding
+                else ordered_faces
+            )
+            expected_signed = expected_volume if reversed_winding else -expected_volume
+            assert signed_enclosed_volume_mesh_units(
+                [tuple(vertex) for vertex in vertices], oriented_faces
+            ) == pytest.approx(expected_signed, rel=1e-12, abs=0)
     # Exactly planar, nondegenerate coordinates must not invent an enclosed volume.
     assert (
         signed_enclosed_volume_mesh_units(
