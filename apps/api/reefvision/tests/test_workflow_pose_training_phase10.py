@@ -1177,7 +1177,9 @@ def test_pose_run_output_rejects_windows_junction_into_another_run(tmp_path: Pat
             )
         # Fingerprinting must also reject a junction swapped in at the root,
         # not only junctions discovered underneath the dataset directory.
-        with pytest.raises(ValidationError, match="dataset path contains a Windows junction"):
+        with pytest.raises(
+            ValidationError, match="dataset path contains a Windows junction"
+        ):
             _materialized_pose_dataset_sha256(junction)
         assert checkpoint.read_bytes() == b"preserve-registered-pose-weights"
     finally:
