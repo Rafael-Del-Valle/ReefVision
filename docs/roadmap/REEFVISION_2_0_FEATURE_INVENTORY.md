@@ -2,17 +2,17 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T21:41:39Z`
+Updated: `2026-11-20T22:13:19Z`
 Candidate target: `2.0`
 
 ## Status summary
 
 | Status | Count |
 | --- | ---: |
-| blocked | 17 |
+| blocked | 18 |
 | explicitly_deferred | 4 |
-| in_progress | 20 |
-| verified | 36 |
+| in_progress | 18 |
+| verified | 37 |
 
 ## Features
 
@@ -69,10 +69,10 @@ Candidate target: `2.0`
 | 1.6 | Independent migration-lineage 0038 reconciliation | verified | Applied migration IDs are never edited. |
 | 1.6 | First-run onboarding and Windows usability acceptance | verified | Installed first launch → Create or open project |
 | 1.6 | Prioritized QC queues, reviewer assignment, bulk actions, and idempotent retry | verified | Review → QC queues |
-| 1.7 | Local cross-project monitoring summaries | in_progress | Research → Monitoring → Project summaries |
+| 1.7 | Local cross-project monitoring summaries | verified | Research → Monitoring → Project summaries |
 | 1.7 | Recorded, simulated, and physical acquisition sources | in_progress | Project → Acquisition sources |
 | 1.7 | Durable recurring acquisition, inference, QC, and report schedules | verified | Video & automation → Schedules |
-| 1.7 | Environmental and biological monitoring with reviewed anomaly proposals | in_progress | Research → Monitoring |
+| 1.7 | Environmental and biological monitoring with reviewed anomaly proposals | blocked | Research → Monitoring |
 | 1.8 | Bioacoustics import, annotation, review, and aligned analysis | in_progress | Project assets → Import audio → Review |
 | 1.8 | Domain-shift and group-aware performance comparison | in_progress | Models & AI → Model comparison → Domain shift |
 | 1.8 | Multispectral import, calibration, visualization, and analysis | in_progress | Project assets → Import multispectral image |
@@ -1229,19 +1229,19 @@ Evidence:
 ### rv17-cross-project-monitoring: Local cross-project monitoring summaries
 
 - Target: `1.7`
-- Status: `in_progress`
+- Status: `verified`
 - Dependencies: `rv17-monitoring-alerts`
 - Entry point: Research → Monitoring → Project summaries
 - Workflow Builder: `required`
 
 Acceptance checks:
 
-- **in_progress** — Compare compatible local projects without merging identities, schemas, units, or scientific review state. (`rv17-cross-project-monitoring-check`)
+- **verified** — Compare compatible local projects without merging identities, schemas, units, or scientific review state. (`rv17-cross-project-monitoring-check`)
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: A frozen comparison survived two separate Project Exchange imports. Its original project identities, decisions and canonical bytes stayed intact; the imported graph resolved its local owning row. Independent projects sharing the same original were excluded symmetrically. — `docs/validation/monitoring-76731aa95.json` (`rv17-cross-project-monitoring-exchange-76731aa95`)
+- `browser`: Research → Monitoring → Project summaries displayed three local projects. Two comparable sites had 4/5 and 5/5 accepted slots, and a third window was excluded. A new review preserved the earlier exported snapshot and two replay artifacts matched. — `docs/validation/monitoring-76731aa95.json` (`rv17-cross-project-monitoring-comparison-76731aa95`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1260,8 +1260,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: The source worker recovered keyed captures after interruption. Two Project Exchange generations preserved recording clocks and original bytes, rebound saved acquisition pins and removed physical consent on the new installations. — `docs/validation/monitoring-76731aa95.json` (`rv17-device-sources-exchange-76731aa95`)
+- `browser`: Project → Video & automation → Acquisition sources captured two sealed observations around a real read failure and explicit reconnect. A simulated scheduled capture and two saved receipt runs preserved its digest. The ordinary UI required consent before physical access. — `docs/validation/monitoring-76731aa95.json` (`rv17-device-sources-capture-76731aa95`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1292,19 +1292,20 @@ Evidence:
 ### rv17-monitoring-alerts: Environmental and biological monitoring with reviewed anomaly proposals
 
 - Target: `1.7`
-- Status: `in_progress`
+- Status: `blocked`
 - Dependencies: `rv17-durable-schedules`, `rv11-environmental-context`, `rv13-event-summaries`
 - Entry point: Research → Monitoring
 - Workflow Builder: `required`
+- Missing input: Authorized field logger or dated video observations with independently reviewed anomaly intervals, observation effort, clock references, review authority and prespecified acceptance thresholds. Import through Research → Monitoring, compare false and missed alerts and reviewer decisions against the independent reference.
 
 Acceptance checks:
 
-- **in_progress** — Detect data drift/drop/delay and proposed biological/environmental anomalies, link evidence, and require review before scientific use. (`rv17-monitoring-alerts-check`)
+- **blocked** — Detect data drift/drop/delay and proposed biological/environmental anomalies, link evidence, and require review before scientific use. (`rv17-monitoring-alerts-check`)
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: The services assessed declared UTC windows and persisted attributed reviews. A missing biological date or unassessed sensor reading withheld its estimate. Two archive generations retained immutable decisions and rebound reviewed biological source records. — `docs/validation/monitoring-76731aa95.json` (`rv17-monitoring-alerts-reviews-76731aa95`)
+- `browser`: The researcher reviewed four proposed environmental findings and exported a dated biological assessment with one confirmed event across 4.7 seconds. Two saved replays matched. All inputs are documented fixtures. — `docs/validation/monitoring-76731aa95.json` (`rv17-monitoring-alerts-proposals-76731aa95`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded

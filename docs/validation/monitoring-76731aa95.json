@@ -1,0 +1,231 @@
+{
+  "product_version": "1.7.0",
+  "schema": "b17_monitor_0003",
+  "source_desktop_commit": "76731aa951ceb44cae4036bc375bc8ebc8c61298",
+  "exchange_product_commit": "391ea825fdeec22dc6ba33d814adc7c7bc7e99a6",
+  "sources": "Generated disposable project data, sealed local recordings and a seeded simulation.",
+  "acquisition": {
+    "feature": "rv17-device-sources",
+    "project_id": "2a300619-d6ce-4cc5-bed8-a0564d6b1308",
+    "recorded_clocks": [
+      {
+        "origin": "field_source",
+        "clock": {
+          "state": "known_offset",
+          "wall_time": "2025-08-02T18:05:06",
+          "utc_offset_minutes": -240,
+          "evidence": "Declared recording clock and offset"
+        },
+        "captured_at_utc": "2025-08-02T22:05:06Z",
+        "uncertainty_seconds": null,
+        "host_received_at_utc": null,
+        "host_read_elapsed_seconds": null
+      },
+      {
+        "origin": "field_source",
+        "clock": {
+          "state": "unknown",
+          "wall_time": null,
+          "utc_offset_minutes": null,
+          "evidence": "The recording has no second-frame clock offset"
+        },
+        "captured_at_utc": null,
+        "uncertainty_seconds": null,
+        "host_received_at_utc": null,
+        "host_read_elapsed_seconds": null
+      }
+    ],
+    "disconnected_cursor": 1,
+    "capture_artifact_id": "2eaa0e0f-8b8c-4dba-9881-66d38aa3faed",
+    "occurrence_id": "7f8d0f50-9ebe-4b1a-a1f3-1d598974cac7",
+    "replay_digests": [
+      "a6c15bf28d99281107ec602789f3ea5f53262f927d43cb7cb12df85407a51aab",
+      "a6c15bf28d99281107ec602789f3ea5f53262f927d43cb7cb12df85407a51aab"
+    ],
+    "camera_consent_cancelled_without_capture": true,
+    "raw_sha256": "a437ecd6721206599c13347dc0a61662ec0d36ce369741dbadc173fdc0b4ee6e"
+  },
+  "monitoring": {
+    "feature": "rv17-monitoring-alerts",
+    "test_only_commits": [
+      "cabc773a6133ea3413d84ff6784b30d570902544",
+      "ba5f3ef28778628a65d1ba874645136f6f47c48f"
+    ],
+    "environmental_findings": [
+      {
+        "id": "05845c58-1238-4337-9d15-46dd9333a50d",
+        "kind": "upper_limit",
+        "proposal_sha256": "54b5ddc011ba2dc9329c7c609553d416ca1dd48ce62df0b5c47d8684631c7739"
+      },
+      {
+        "id": "347b07a7-4e9b-4e7a-b700-4b7ae0255d0c",
+        "kind": "delay",
+        "proposal_sha256": "5479769e5a24647de5cd5ad04422f82087baff13bb49a229d63ebab13b6db4c4"
+      },
+      {
+        "id": "37e26a12-6ed8-41a3-a9b2-837df09a6ef3",
+        "kind": "drop",
+        "proposal_sha256": "636b77092c711c07a1b1f51eedb7a40716b5c969b18f1d65c8790dd9a9b7305c"
+      },
+      {
+        "id": "e8c5c3e9-a6cb-46a3-bcda-6af092699bd1",
+        "kind": "drift",
+        "proposal_sha256": "f5cd3973cbebc2963baaa3eaab3a2e7ae5a275c5f7ccce3059917a3d179b196e"
+      }
+    ],
+    "attributed_reviews": {
+      "dismissed": 3,
+      "confirmed": 1
+    },
+    "replays": [
+      {
+        "id": "5119ede2-2474-4224-abb2-f53cad096929",
+        "payloadSha256": "4f7df68a2494a69989bcbf157b2f0a98203c4e145e342c1096c008e8844b890d"
+      },
+      {
+        "id": "b33e3856-8f45-42fb-831a-d9698770c1ba",
+        "payloadSha256": "4f7df68a2494a69989bcbf157b2f0a98203c4e145e342c1096c008e8844b890d"
+      }
+    ],
+    "biological": {
+      "assessment_id": "848f2276-b308-4f4a-9bbe-dde01472dfbf",
+      "summary_id": "3ddb752d-04ca-4a7e-b0bd-14868908d0de",
+      "result_sha256": "8fd3ea4506b49c0e448fe6238fa81f2549696e456d7282d457b7ccead0c76920",
+      "evidence_sha256": "c6eb79d9f5124e7742f3e0fcf7fba3fd4002e7d5c2dda81ce16b06d24eb3c262",
+      "protocol_sha256": "10e28b858b7814021fb45e863251803726c58527d4474aec812c4dc0acf6e355",
+      "estimate": 12.76595744680851,
+      "unit": "events/min",
+      "effort": {
+        "expected_slots": null,
+        "observed_slots": null,
+        "accepted_observations": null,
+        "coverage_fraction": null,
+        "accepted_fraction": null,
+        "valid_duration_s": 4.7,
+        "confirmed_event_count": 1,
+        "accepted_sessions": 1
+      },
+      "video_sha256": "d6e4d6c7103ef3838d7c13531498d853d0ace6d2d8868812f1ad16c50614e482"
+    },
+    "raw_sha256": {
+      "environmental-raw.json": "b812bdcd9d055b67fdcd051130936327a6c6065187a6a8dd11d8a61c66febab1",
+      "biological-raw.json": "c8630a7cd8a6b0b258c01bfb8c6f21329aa81433347437c3a849d8cc43a73cdd",
+      "predecessor-fixtures.json": "18c4b1de8be8b9324468fadc2fc8c4eab3277cfd01ee269ac8ae7be82a6a0bcf"
+    }
+  },
+  "comparison": {
+    "feature": "rv17-cross-project-monitoring",
+    "rows": [
+      {
+        "project_id": "02f8c0e6-12f0-4255-a5ec-c3696689a146",
+        "assessment_id": "80268f24-0f17-4d34-9fa7-23ac1b5e0464",
+        "status": "included",
+        "reasons": [],
+        "window_start": "2026-11-19T13:00:00Z",
+        "window_end": "2026-11-19T13:05:00Z",
+        "method": "qc_accepted_single_source_cadence_slots_v1",
+        "metric": "water_temperature",
+        "estimate": 20.5,
+        "unit": "degC",
+        "effort": {
+          "expected_slots": 5,
+          "observed_slots": 4,
+          "accepted_observations": 4,
+          "coverage_fraction": 0.8,
+          "accepted_fraction": 0.8,
+          "valid_duration_s": null,
+          "confirmed_event_count": null,
+          "accepted_sessions": null
+        },
+        "result_sha256": "ae74545aef85ddc9838f41a10219574445cee917c7a43b2edf79873237208707",
+        "evidence_sha256": "982900e777060f9e74c7784ddb33e5f1519f3c892966e9feaf6b986f8b11271e"
+      },
+      {
+        "project_id": "b3f376df-16c1-4105-9682-3add1abd9914",
+        "assessment_id": "cb2b91e1-0235-4de5-ad57-c4b923a03314",
+        "status": "included",
+        "reasons": [],
+        "window_start": "2026-11-19T13:00:00Z",
+        "window_end": "2026-11-19T13:05:00Z",
+        "method": "qc_accepted_single_source_cadence_slots_v1",
+        "metric": "water_temperature",
+        "estimate": 20.0,
+        "unit": "degC",
+        "effort": {
+          "expected_slots": 5,
+          "observed_slots": 5,
+          "accepted_observations": 5,
+          "coverage_fraction": 1.0,
+          "accepted_fraction": 1.0,
+          "valid_duration_s": null,
+          "confirmed_event_count": null,
+          "accepted_sessions": null
+        },
+        "result_sha256": "0ad80548bf6b81f21f91353ad39ad83e397549e1c7e3cbe681b6c24b4fd876a1",
+        "evidence_sha256": "00d5d6a6138b0583499d4cf841d231a214b711e599b700b3327c36da3563bf0c"
+      },
+      {
+        "project_id": "f65cbb59-9814-4ea4-b971-16023ebeb081",
+        "assessment_id": "85968d46-b396-47ad-bbd8-0c3dd16fd7b1",
+        "status": "excluded",
+        "reasons": [
+          "The UTC observation windows differ."
+        ],
+        "window_start": "2026-11-19T13:00:00Z",
+        "window_end": "2026-11-19T13:04:00Z",
+        "method": "qc_accepted_single_source_cadence_slots_v1",
+        "metric": "water_temperature",
+        "estimate": 20.0,
+        "unit": "degC",
+        "effort": {
+          "expected_slots": 4,
+          "observed_slots": 4,
+          "accepted_observations": 4,
+          "coverage_fraction": 1.0,
+          "accepted_fraction": 1.0,
+          "valid_duration_s": null,
+          "confirmed_event_count": null,
+          "accepted_sessions": null
+        },
+        "result_sha256": "e5cd5d9cba409449dfa2985b8c9105aa28572c4465fb84d3db3a9f35fe30c3bd",
+        "evidence_sha256": "0ba5f820e941c37d33fc060795e880ce181395895a5794f6fab82fa10653a306"
+      }
+    ],
+    "summary_id": "4c5e67ea-f121-46b6-8bb6-41cade4a102e",
+    "snapshot_sha256": "91384f957293b388a9e71ed3fb6a7ac5ce758efa337348c95fe8df61e06a674e",
+    "export_file_sha256": "de33bc5402e4953c2c44434d3a18ad5a4f9a2fa8be08e8ec6da17ee364b09faf",
+    "saved_replays": [
+      {
+        "id": "9451a851-4004-43d9-a3c2-9c75fac78834",
+        "payloadSha256": "de33bc5402e4953c2c44434d3a18ad5a4f9a2fa8be08e8ec6da17ee364b09faf"
+      },
+      {
+        "id": "3bcc255e-6707-4f8d-8dd9-3af957b4a160",
+        "payloadSha256": "de33bc5402e4953c2c44434d3a18ad5a4f9a2fa8be08e8ec6da17ee364b09faf"
+      }
+    ]
+  },
+  "next_external_inputs": {
+    "rv17-device-sources": "Approved attached camera or documented sensor protocol, a prepared scene, permission to record, device identifier, independent clock reference and a witnessed outage/reconnection.",
+    "rv17-monitoring-alerts": "Authorized field recordings or logger observations with declared effort and clock, reviewer-labeled anomaly intervals, prespecified thresholds and review authority."
+  },
+  "evidence_directory": "candidate-review/1.7/checkpoints/76731aa95/source",
+  "files_sha256": {
+    "monitoring-summary.json": "7d0712ffdab9a8919110baf186a06060fbdc6d6629e04e7e95b4e490af9d6648",
+    "acquisition-receipt.json": "a437ecd6721206599c13347dc0a61662ec0d36ce369741dbadc173fdc0b4ee6e",
+    "acquisition-playwright.json": "68fbbc2553b2241ecd3ae461771bb00b2e6846b028974143522e2a5140b0cb4c",
+    "acquisition-closure.json": "dcc6d52d40793d31a31252cd6669d2790f07ffc60c471cc13b213b95f3b32b1d",
+    "environmental-raw.json": "b812bdcd9d055b67fdcd051130936327a6c6065187a6a8dd11d8a61c66febab1",
+    "environmental-playwright.json": "f4eccfdba9791084c920d24e31904db5db322018d8446318f5469414a36ba24c",
+    "environmental-closure.json": "0cfa61f185dda6d94b6474e6b8c9e1d4799654338768559a6d7a4aaa7fededad",
+    "biological-raw.json": "c8630a7cd8a6b0b258c01bfb8c6f21329aa81433347437c3a849d8cc43a73cdd",
+    "biological-playwright.json": "c848cff5a475b2339875610d57a7a1b1dfb63e367accc8d27e686e1c2d214f25",
+    "biological-closure.json": "92abe1c7d80f02a24fb76691476162091df16204779111cbeb5d66c437a383d7",
+    "predecessor-fixtures.json": "18c4b1de8be8b9324468fadc2fc8c4eab3277cfd01ee269ac8ae7be82a6a0bcf",
+    "combined-pose-summary.xml": "8b88c10eb362b895edf92118d8cfbff005c7ecd6ef69478290d5eb85f3cccfa8",
+    "summary-transfer.xml": "af0daa20d515c763760c8c30ef51c618423619614fc7bda306566f80b5caba0d",
+    "historical-migrations.xml": "2964cd52e02e06eee667c7922a4be8b2a13d2039ad320546f9fb629083af42a3",
+    "monitoring-web.xml": "2e0c1140cc66cd519f46fdde787504840f5d9fa9e66901f73a92ceea7212b6e2",
+    "monitoring-api.xml": "e9981444a05014a99771f9cd57bef6612864c2194dcd5c44e06b82e3fefa500d"
+  }
+}
