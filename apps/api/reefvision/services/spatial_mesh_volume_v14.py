@@ -7,7 +7,16 @@ biological completeness, or verify calibration.
 
 from __future__ import annotations
 
+from fractions import Fraction
 from math import fsum, isfinite
+
+
+class EnclosedVolumeUnderflowError(ValueError):
+    """A nonzero signed source volume that rounds to zero in binary64."""
+
+    def __init__(self, signed_volume: Fraction) -> None:
+        super().__init__("Enclosed mesh volume underflowed numeric precision")
+        self.signed_volume = signed_volume
 
 
 def signed_enclosed_volume_mesh_units(
@@ -33,4 +42,31 @@ def signed_enclosed_volume_mesh_units(
     volume = fsum(contributions)
     if not isfinite(volume):
         raise ValueError("Enclosed mesh volume overflowed")
+    if volume == 0.0:
+        # A nonzero determinant may be lost to cancellation in binary64 even
+        # when its final signed volume is representable. Re-evaluate only this
+        # ambiguous case using exact values of the imported float coordinates.
+        # This is numeric recovery, not verified calibration or coral volume.
+        origin_exact = tuple(Fraction(value) for value in origin)
+        exact_six_volume = Fraction(0)
+        for a, b, c in faces:
+            exact_u = [Fraction(points[a][axis]) - origin_exact[axis] for axis in range(3)]
+            exact_v = [Fraction(points[b][axis]) - origin_exact[axis] for axis in range(3)]
+            exact_w = [Fraction(points[c][axis]) - origin_exact[axis] for axis in range(3)]
+            exact_six_volume += (
+                exact_u[0] * (exact_v[1] * exact_w[2] - exact_v[2] * exact_w[1])
+                + exact_u[1] * (exact_v[2] * exact_w[0] - exact_v[0] * exact_w[2])
+                + exact_u[2] * (exact_v[0] * exact_w[1] - exact_v[1] * exact_w[0])
+            )
+        if exact_six_volume:
+            exact_volume = exact_six_volume / 6
+            try:
+                recovered = float(exact_volume)
+            except OverflowError as exc:
+                raise ValueError("Enclosed mesh volume overflowed") from exc
+            if not isfinite(recovered):
+                raise ValueError("Enclosed mesh volume overflowed")
+            if recovered == 0.0:
+                raise EnclosedVolumeUnderflowError(exact_volume)
+            return recovered
     return volume

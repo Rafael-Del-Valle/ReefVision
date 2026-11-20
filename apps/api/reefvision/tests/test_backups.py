@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, cast
 
@@ -9,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from reefvision.config import Settings
 from reefvision.jobs.backups import process_backup_job
+from reefvision.jobs.restores import process_restore_job
 from reefvision.jobs.worker import process_thumbnail_job
 
 from .test_images import create_project, import_one
@@ -69,6 +72,87 @@ def test_backup_job_creates_verified_managed_backup(
     assert verification["completion_marker_present"] is True
     assert not verification["errors"]
     assert not verification["checksum_failures"]
+
+
+def test_backup_preserves_deep_live_training_asset_in_portable_inventory(
+    client: TestClient, test_settings: Settings
+) -> None:
+    project = create_project(client, "Deep training archive")
+    root = test_settings.resolved_data_dir
+    relative = Path("projects") / project["id"] / "training" / project["id"] / "dataset"
+    while len(str(root / relative / "images" / "train" / "frame.png")) <= 265:
+        relative /= "frozen-recording-2026"
+    relative = relative / "images" / "train" / "frame.png"
+    fixture_root = root
+    if os.name == "nt":
+        # Seed the full NTFS name independently of the application's storage code.
+        name = root.as_posix()
+        fixture_root = Path("//?/UNC/" + name[2:] if name.startswith("//") else "//?/" + name)
+    member = fixture_root / relative
+    member.parent.mkdir(parents=True)
+    content = b"original offline training member"
+    member.write_bytes(content)
+    _, backup = create_completed_backup(client, test_settings)
+    manifest = json.loads((root / backup["manifest_path"]).read_bytes())
+    asset_name = "data/" + relative.as_posix()
+    rows = [entry for entry in manifest["file_inventory"] if entry["path"] == asset_name]
+    assert len(rows) == 1
+    assert rows[0]["sha256"] == sha256(content).hexdigest()
+    assert rows[0]["size_bytes"] == len(content)
+    assert "data/test.db" not in {entry["path"] for entry in manifest["file_inventory"]}
+    verification = client.post(f"/api/v1/backups/{backup['id']}/verify")
+    assert verification.status_code == 200
+    assert verification.json()["status"] == "valid"
+    assert member.read_bytes() == content
+
+
+def test_backup_after_restore_keeps_live_assets_without_recapturing_recoveries(
+    client: TestClient, test_settings: Settings
+) -> None:
+    root = test_settings.resolved_data_dir
+    project = create_project(client, "Archive scope")
+    nested = root / "projects" / project["id"] / "recoveries" / "observations.csv"
+    nested.parent.mkdir(parents=True)
+    nested.write_bytes(b"specimen,date\nA,2026-11-20\n")
+    _, original = create_completed_backup(client, test_settings)
+    factory = cast(FastAPI, client.app).state.session_factory
+    original_manifest = (root / original["manifest_path"]).read_bytes()
+    first_assets = {
+        row["path"]: row["sha256"]
+        for row in json.loads(original_manifest)["file_inventory"]
+        if row["path"].startswith("data/")
+    }
+    assert f"data/{nested.relative_to(root).as_posix()}" in first_assets
+
+    restore = client.post(
+        f"/api/v1/backups/{original['id']}/restore", json={"destination_name": "first-copy"}
+    )
+    assert restore.status_code == 200, restore.text
+    assert process_restore_job(test_settings, factory, restore.json()["job"]["id"])
+    recovered = root / restore.json()["destination_path"] / nested.relative_to(root)
+    assert recovered.read_bytes() == nested.read_bytes()
+    staging = root / ".t" / "other-active-job" / "unfinished.png"
+    staging.parent.mkdir(parents=True)
+    staging.write_bytes(b"active restoration")
+
+    reply = client.post("/api/v1/backups", json={"include_exports": False, "include_logs": False})
+    assert reply.status_code == 201, reply.text
+    assert process_backup_job(test_settings, factory, reply.json()["job"]["id"])
+    later = reply.json()["backup"]
+    manifest = json.loads((root / later["manifest_path"]).read_bytes())
+    assert {
+        row["path"]: row["sha256"]
+        for row in manifest["file_inventory"]
+        if row["path"].startswith("data/")
+    } == first_assets
+    assert "recoveries" in manifest["excluded_sections"]
+    for backup in (original, later):
+        verification = client.post(f"/api/v1/backups/{backup['id']}/verify")
+        assert verification.status_code == 200
+        assert verification.json()["status"] == "valid"
+    assert (root / original["manifest_path"]).read_bytes() == original_manifest
+    assert recovered.read_bytes() == nested.read_bytes()
+    assert staging.read_bytes() == b"active restoration"
 
 
 def test_backup_verification_rejects_missing_completion_marker(
