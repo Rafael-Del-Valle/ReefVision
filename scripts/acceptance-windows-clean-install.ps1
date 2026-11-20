@@ -478,7 +478,7 @@ try {
             if ($statusCode -notin @(500, 502, 503, 504)) { throw }
             $job = $null
             $pollServerErrors++
-            $lastPollError = "HTTP $statusCode: $($_.Exception.Message)"
+            $lastPollError = "HTTP ${statusCode}: $($_.Exception.Message)"
             Write-Warning "Project Exchange status poll $pollServerErrors failed ($lastPollError); retrying within 60-second deadline."
         }
     } while (($null -eq $job -or $job.status -in @('queued','running')) -and [DateTime]::UtcNow -lt $deadline)
