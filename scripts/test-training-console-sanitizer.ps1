@@ -43,6 +43,23 @@ $scientific = 'train/box_loss=0.25; scale=10 µm; temp=24 °C'
 if ((Format-SafeText $scientific) -cne $scientific) {
   throw 'Scientific units or loss values were altered.'
 }
+# Terminal edits *inside* a numeric loss or metric key must not silently join
+# two visible fragments into a measurement never recorded by the trainer.
+# The monitor may suppress an untrusted rendered field, but it must never
+# rewrite the original job log or fabricate 0.25 from 0.2 + an edit + 5.
+$splicedFields = @(
+  ('train/box_loss=0.2' + [char]0x001B + ']0;forged title' + [char]0x0007 + '5'),
+  ('train/cls_loss=0.3' + [char]0x001B + '[0m' + '0'),
+  ('train/dfl_loss=0.1' + [char]0x200B + '0'),
+  ('train/box_loss=0.2' + [char]0x0008 + '5'),
+  ('train/cls_loss=0.3' + [char]0x0090 + 'forged payload' + [char]0x009C + '0'),
+  ('train/box' + [char]0x001B + ']0;forged title' + [char]0x0007 + '_loss=0.25')
+)
+foreach ($field in $splicedFields) {
+  if ((Format-SafeText $field) -cne '[terminal-edited field omitted]') {
+    throw 'Untrusted terminal edits fabricated a scientific loss or metric label.'
+  }
+}
 # Worker output may end mid-ANSI sequence. Its numeric parameters must never
 # be appended to genuine box/cls/dfl losses in the external console.
 $incompleteEscCsi = 'train/box_loss=0.25' + [char]0x001B + '[31'
