@@ -11,7 +11,8 @@ from tempfile import SpooledTemporaryFile
 from typing import IO, Any, BinaryIO, cast
 from zipfile import ZIP_DEFLATED, ZIP_STORED, BadZipFile, ZipFile
 
-from reefvision.domain.errors import ValidationError
+from reefvision.config import Settings
+from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.domain.reproducibility_v15 import (
     EVIDENCE_SECTIONS,
     ReproducibilityEvidence,
@@ -26,6 +27,7 @@ from reefvision.schemas.reproducibility_v15 import (
     SourceOmission,
 )
 from reefvision.storage.datasets import canonical_json_bytes, canonical_json_sha256
+from reefvision.storage.projects import resolve_managed_project_path
 
 MANIFEST = "manifest.json"
 NATIVE_PACKAGE = "project.reefvision.zip"
@@ -197,7 +199,7 @@ def _repro_manifest(
     )
 
 
-def write_bundle(
+def _write_bundle(
     source: BinaryIO,
     destination: Path,
     selection: ReproducibilitySelection,
@@ -296,3 +298,27 @@ def copy_uploaded_bundle(source: BinaryIO, destination: Path) -> None:
     source.seek(0)
     with destination.open("xb") as target:
         _transfer(source, target)
+
+
+def archive_location(settings: Settings, exchange_path: str, package_id: str) -> Path:
+    return resolve_managed_project_path(settings, exchange_path).with_name(
+        f"{package_id}.reproducibility.zip"
+    )
+
+
+def existing_bundle(settings: Settings, exchange_path: str, package_id: str) -> Path:
+    path = archive_location(settings, exchange_path, package_id)
+    if not path.is_file():
+        raise NotFoundError("Reproducibility archive is unavailable")
+    return path
+
+
+def build_bundle(
+    settings: Settings,
+    exchange_path: str,
+    package_id: str,
+    selection: ReproducibilitySelection,
+) -> ReproducibilityManifest:
+    destination = archive_location(settings, exchange_path, package_id)
+    with resolve_managed_project_path(settings, exchange_path).open("rb") as source:
+        return _write_bundle(source, destination, selection)
