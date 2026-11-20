@@ -54,11 +54,9 @@ def signed_enclosed_volume_mesh_units(
     # volume cancels to a finite value. The normalized cancellation check
     # still routes ambiguous residuals to the exact source-coordinate path.
     maximum_contribution = max((abs(term) for term in contributions), default=0.0)
-    normalized_contributions = (
-        [term / maximum_contribution for term in contributions]
-        if maximum_contribution
-        else []
-    )
+    normalized_contributions: list[float] = []
+    if maximum_contribution:
+        normalized_contributions = [term / maximum_contribution for term in contributions]
     normalized_sum = fsum(normalized_contributions)
     volume = normalized_sum * maximum_contribution
     if not isfinite(volume):
@@ -69,8 +67,7 @@ def signed_enclosed_volume_mesh_units(
     # individual face volumes. This is numeric QC, not biological validation.
     normalized_magnitude = fsum(abs(term) for term in normalized_contributions)
     aggregate_cancellation_risk = (
-        normalized_magnitude > 0
-        and abs(normalized_sum) <= roundoff_guard * normalized_magnitude
+        normalized_magnitude > 0 and abs(normalized_sum) <= roundoff_guard * normalized_magnitude
     )
     if volume == 0.0 or cancellation_risk or aggregate_cancellation_risk:
         # An exact zero or ill-conditioned nonzero determinant may be due to
