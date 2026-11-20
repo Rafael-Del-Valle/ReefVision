@@ -191,5 +191,98 @@
     },
     "receipt_sha256": "c845d7f00f25b13262d6587514864ef0d9f22458ef1e8bc06b09ceccd7f04508"
   },
-  "limits": "Independent field measurements, representative animal labels and physical acquisition have separate acceptance records."
+  "limits": "Independent field measurements, representative animal labels and physical acquisition have separate acceptance records.",
+  "administrative_msi_webview2": {
+    "native_scheduler_receipt_sha256": "0bafb93b50653fa7e492de198784fd1cb8b110b39cc33bd5a3fb9d704f80c7e6",
+    "direct_rich_rollback_receipt_sha256": "22d3ffe36b2280e7e8a8b8cf1818aafdb815c488663aa09cbb6f53117ec4ac58",
+    "source_commit": "e60ed5503451991316b831aab7a3841afa8705f7",
+    "msi_sha256": "08943cf4ebfcbdce51bef5d81810a278a21173ec24ac22f38bcf72d13e64a162",
+    "desktop_sha256": "8c46d61f4d41771e8bc0a2d1c44917b36a03a9301ed6a992e650cbd8c156d0cc",
+    "sidecar_sha256": "701258eaee3a2356a5419241b2d076291211d7a4d0f2f4f4de74ba1b9ce9b50c",
+    "version": "1.7.0",
+    "schema": "b17_workflows_0001",
+    "verified_external_cabinet_count": 5,
+    "observed_total_downtime_seconds": 54.672369,
+    "original_late_departure_margin_seconds": 23.159284,
+    "before_after_playwright_duration_s": [
+      16.454871,
+      7.030912
+    ],
+    "native_occurrence_ids": [
+      "04445a4f-1ff0-47f5-8389-e8fd1736e4fc",
+      "fc33e9d8-d6a8-449d-94d5-54f1c349e812"
+    ],
+    "missed_intervals": 1,
+    "receipt_sha256": "118606f407e4bd23f02252e0dd7c36a66a01ad5a05445c23f1c6b57313c9c40a",
+    "receipt_replays": [
+      {
+        "id": "69ea8644-1794-46ce-b64b-c8badbb8a1a4",
+        "payloadSha256": "da542cd054b410dbc58f434359809bc9e0189991316a1f6008c93f4d2b86e780"
+      },
+      {
+        "id": "145fc43c-fa34-4448-816d-e3325d397ba0",
+        "payloadSha256": "da542cd054b410dbc58f434359809bc9e0189991316a1f6008c93f4d2b86e780"
+      }
+    ],
+    "old_package_sha256": "3b596ee3ba5e9188776cd3208245c277a72013877677c9a16e359ee6da04c3be",
+    "old_package_no_write_refusal_sha256": "d00fc3dd76157e9e68216fe91a6578d8afdbdb8be9c7a3c0a4b167a4823eab35",
+    "rollback_schema": "b16_integrated_0001",
+    "retained_prior_tables": 109,
+    "retained_prior_project_files": 31,
+    "retained_prior_projects": 7,
+    "product_registry_preserved": true,
+    "summary_sha256": "f44ccbfd1a25b92df3f69b26f8d953c5f6d1749d840502705ccc9e4008011aec"
+  },
+  "additional_project_navigation": {
+    "source": "e60ed5503451991316b831aab7a3841afa8705f7",
+    "surface": "source-browser",
+    "cases": [
+      {
+        "purpose": "acquisition",
+        "project_id": "87b4b09b-bf8e-4081-a75c-9dbeb830b0af",
+        "graph_id": "6962aa0a-2638-4225-9644-cbcd25e41ed0",
+        "graph_sha256": "dff954d573ceb76dae83341c172b9abee9e8c50272be8958b25700f0c2a1d67d",
+        "inputs_sha256": "02b1c5f4cfa69a0132ba2173991ac57663056a0dc629c4441487a5b4de75def9",
+        "schedule_id": "05b9d78f-9c83-4571-ba9e-f0bde8681a4f",
+        "job_id": "83541399-7d6b-4dfd-ba51-60d5c362a1d5",
+        "run_id": "4a54a4e9-595e-497c-8b3c-2e2cbef7b447",
+        "occurrence_id": "8bedb3e6-253b-4252-9ee8-d98805418a39",
+        "typed_output": "field_capture_reconciliation",
+        "output_sha256": "1369097ecd21cd672cf66b5dc8a947efa6ff7ea5c7bfc0d8a0e343216531c125",
+        "navigation_sha256": "6678924d4d269247f1277a05cd704b06cb88331ae9c2a0f407805cb4c6b1084a",
+        "verified_scientific_readback_sha256": "4f81d7e7372fa3abe043ac4bca5af723d5425c4c90cc7e6fd208889a7af2f8f1"
+      },
+      {
+        "purpose": "inference",
+        "project_id": "01f78c86-5b4b-4416-9ff5-a6fa99bd9412",
+        "graph_id": "bdb73034-51d8-4602-8aa6-ff462a5dced6",
+        "graph_sha256": "948a8e192919102a4168a3eb1a5f0b4bc525fb68a23ab7a1479bb62ea43af987",
+        "inputs_sha256": "81746ec9abdbbf9cd096cdd90a693028535c923a248d6ea7227fc850528a2001",
+        "schedule_id": "5a4c25d2-1161-4ca5-bc07-7ddc8f582c49",
+        "job_id": "4ca50227-d27c-4302-b0a9-47a1b60f29ec",
+        "run_id": "1ceb89ab-a6f4-4153-bf50-2a7bc5d2987e",
+        "occurrence_id": "3dbbde6e-e41b-4f6f-86c9-b96769ccb06d",
+        "typed_output": "detection_proposals",
+        "output_sha256": "2b0e7cfed6561462ff878b8b7bd24f5f343f6e5eafaff915c83d621e2bebc2a4",
+        "navigation_sha256": "87dd7a6f00c6242aebe6f9d052950e170c3455530d19e09893bf60961d774b45",
+        "verified_scientific_readback_sha256": "6800ca6c3f809127957de51f33d9341ea96bf6f834d407e045efb9d22fbdd24e"
+      },
+      {
+        "purpose": "report",
+        "project_id": "01abdfab-3bb7-4338-8729-096f0397308b",
+        "graph_id": "69c76eca-617c-4a3e-9512-ead9d1ba093f",
+        "graph_sha256": "9675c56e94123d634039942a5f8da44a52eee3dcd8a6efa4d783c78c600310e7",
+        "inputs_sha256": "0ac7a46333d2a9f045d86f38585166b41072ffc8b5f8f8784bf0a76f68742d33",
+        "schedule_id": "4cd0aa4b-d674-41bf-99de-837f25261c65",
+        "job_id": "899f54e8-cb1f-4b38-b91d-b528a3ec1873",
+        "run_id": "6dbb0366-4c22-4a78-b04e-b3735c9d9d96",
+        "occurrence_id": "91da5993-bc71-45e2-b07a-0e0c992e7b94",
+        "typed_output": "reviewed_ecology_event_summary",
+        "output_sha256": "cecf535332a6bbdc733ed14979346dbbe51a72594d0dd3343aec53a136a62155",
+        "navigation_sha256": "1a695ffd65eb1f395165c18e0a1b4ee71677f95f114d70e9c3c201f65f7b6fae",
+        "verified_scientific_readback_sha256": "09f16548f4951fec5b19be624ee4ace673f1a1e6bf107f1bdede1915994343bc"
+      }
+    ],
+    "result": "From each project, created a paused schedule, resumed it, inspected its real job and typed output, then confirmed one occurrence and unchanged fixture source bytes."
+  }
 }
