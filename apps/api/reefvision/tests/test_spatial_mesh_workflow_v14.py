@@ -144,9 +144,7 @@ def test_mesh_shape_ratio_unavailable_in_saved_workflow(
     app = cast(FastAPI, client.app)
     artifact_hashes: list[str] = []
     for _ in range(2):
-        run = client.post(
-            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-        )
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
         completed = process_workflow_run_job(
             app.state.settings, app.state.session_factory, str(run.json()["job_id"])
@@ -171,8 +169,9 @@ def test_mesh_shape_ratio_unavailable_in_saved_workflow(
         assert artifact["surface_area_to_bounding_diagonal_squared_ratio"] is None
         assert diagnostic in artifact["qc_warnings"]
         assert artifact["provenance"]["calibration_verified"] is False
-        assert artifact["provenance"]["geometry_sha256"] == (
-            measurement["provenance"]["geometry_sha256"]
+        assert (
+            artifact["provenance"]["geometry_sha256"]
+            == (measurement["provenance"]["geometry_sha256"])
         )
         assert artifact["surface_area_m2"] == measurement["surface_area_m2"]
         artifact_hashes.append(mesh_artifacts[0]["payload_sha256"])
