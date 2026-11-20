@@ -1,0 +1,114 @@
+diff --git a/scripts/acceptance_windows_qc_history.py b/scripts/acceptance_windows_qc_history.py
+index f7bcf1c44e8f9414a2083585b1d74ac84714e752..e40a5f85df682686d9086211e88e70cb22953c5d 100644
+--- a/scripts/acceptance_windows_qc_history.py
++++ b/scripts/acceptance_windows_qc_history.py
+@@ -17,0 +18 @@ import httpx
++import psutil
+@@ -188,16 +189,15 @@ def validate_listener_owner(port: int, process: subprocess.Popen) -> None:
+-    powershell = Path(os.environ["SYSTEMROOT"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+-    source = (
+-        "$listeners = @(Get-NetTCPConnection -LocalAddress 127.0.0.1 "
+-        f"-LocalPort {port} -State Listen); "
+-        "if ($listeners.Count -ne 1) { exit 1 }; "
+-        "$owner = $listeners[0].OwningProcess; "
+-        f"if ($owner -eq {process.pid}) {{ exit 0 }}; "
+-        "$observed = Get-CimInstance Win32_Process -Filter ('ProcessId={0}' -f $owner); "
+-        f"if ($observed.ParentProcessId -ne {process.pid}) {{ exit 1 }}"
+-    )
+-    subprocess.run(
+-        [str(powershell), "-NoProfile", "-NonInteractive", "-Command", source],
+-        check=True,
+-        timeout=12,
+-        creationflags=subprocess.CREATE_NO_WINDOW,
+-    )
++    listeners = [
++        row.pid
++        for row in psutil.net_connections(kind="tcp4")
++        if row.status == psutil.CONN_LISTEN and row.laddr == ("127.0.0.1", port)
++    ]
++    if len(listeners) != 1 or (owner := listeners[0]) is None:
++        raise RuntimeError(f"Expected one loopback listener with a known owner on 127.0.0.1:{port}")
++    try:
++        parent = psutil.Process(owner).ppid() if owner != process.pid else process.pid
++    except (psutil.NoSuchProcess, psutil.AccessDenied) as error:
++        raise RuntimeError(f"Could not verify PID {owner} owning 127.0.0.1:{port}") from error
++    if process.poll() is not None or parent != process.pid:
++        raise RuntimeError(
++            f"127.0.0.1:{port} does not belong to the launched sidecar PID {process.pid}"
++        )
+diff --git a/scripts/test_windows_qc_listener.py b/scripts/test_windows_qc_listener.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..2880ba8bc39fb99feb0b519c4bece8f491596c0c
+--- /dev/null
++++ b/scripts/test_windows_qc_listener.py
+@@ -0,0 +1,70 @@
++"""Live Windows loopback controls for the historical acceptance driver."""
++
++from __future__ import annotations
++
++import subprocess
++import sys
++import unittest
++from collections.abc import Iterator
++from contextlib import contextmanager
++from unittest.mock import patch
++
++from acceptance_windows_qc_history import validate_listener_owner
++
++FIXTURE = """
++import socket
++import sys
++
++with socket.socket() as listener:
++    listener.bind((sys.argv[1], 0))
++    listener.listen()
++    print(listener.getsockname()[1], flush=True)
++    sys.stdin.read()
++"""
++
++
++@contextmanager
++def fixture_listener(address: str = "127.0.0.1") -> Iterator[tuple[subprocess.Popen[str], int]]:
++    with subprocess.Popen(
++        [sys.executable, "-c", FIXTURE, address],
++        stdin=subprocess.PIPE,
++        stdout=subprocess.PIPE,
++        text=True,
++    ) as process:
++        assert process.stdout is not None and process.stdin is not None
++        try:
++            port = int(process.stdout.readline())
++            yield process, port
++        finally:
++            process.stdin.close()
++            process.wait(timeout=10)
++
++
++@unittest.skipUnless(sys.platform == "win32", "validates the Windows TCP owner table")
++class ListenerOwnershipTests(unittest.TestCase):
++    def test_live_owner_is_verified_even_when_powershell_times_out(self) -> None:
++        shell_timeout = subprocess.TimeoutExpired("powershell", 12)
++        with (
++            fixture_listener() as (owner, port),
++            patch.object(subprocess, "run", side_effect=shell_timeout),
++        ):
++            validate_listener_owner(port, owner)
++
++    def test_unrelated_disposable_listener_is_rejected(self) -> None:
++        with (
++            fixture_listener() as (first, _),
++            fixture_listener() as (_, foreign_port),
++            self.assertRaisesRegex(RuntimeError, "does not belong to"),
++        ):
++            validate_listener_owner(foreign_port, first)
++
++    def test_wildcard_listener_is_rejected_even_when_owned(self) -> None:
++        with (
++            fixture_listener("0.0.0.0") as (owner, port),
++            self.assertRaisesRegex(RuntimeError, "loopback listener"),
++        ):
++            validate_listener_owner(port, owner)
++
++
++if __name__ == "__main__":
++    unittest.main()
