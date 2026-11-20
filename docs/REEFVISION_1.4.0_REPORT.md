@@ -614,3 +614,26 @@ reported hunks were corrected in this iteration.
 identity, calibrated organism surface area or branch length from points,
 independent coral validation, physical GPU testing, or an installed Windows
 MSI/CAB/GUI acceptance result. ReefVision 1.5 remains isolated and unchanged.
+
+## Track C: malformed JSON Unicode 422 serialization (2026-11-19)
+
+Exact-head CI for predecessor `4997d4bc` reported one failed `CI / backend`
+job (five failed cases; 5,169 passed, ten skipped). The five failures were
+three OBJ and two ASCII PLY malformed-source API tests. Pydantic rejected
+escaped unpaired UTF-16 surrogates *before* the mesh/point-cloud endpoint;
+FastAPI's default 422 response then echoed the invalid input and raised
+`UnicodeEncodeError` while encoding JSON, rather than returning a controlled
+client error. This is distinct from the already-tested direct parser rejection.
+
+The API application now preserves FastAPI's normal 422 `detail` structure but
+renders invalid surrogate code points as printable backslash escapes within
+validation details, keeping the response UTF-8 serializable without changing
+valid Unicode text or inferring any geometry. The OBJ and PLY regressions now
+require the `string_unicode` 422 result and safe escaped input, while the
+existing valid-Unicode OBJ and persisted typed Workflow Builder parity tests
+remain intact. No imported scientific measurement or local checkpoint is
+modified by this HTTP boundary fix.
+
+These edits and final-head CI remain **unverified pending Actions**. Synthetic
+tests do not establish calibration, specimen reidentification, anatomical
+branch length, or field validation. **RELEASE HOLD: 1.4 and 1.5.**
