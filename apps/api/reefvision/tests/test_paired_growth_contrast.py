@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from importlib.util import find_spec
 from typing import Any, cast
 
@@ -19,7 +20,11 @@ from reefvision.tests.test_scientific_project_exchange import (
 
 
 def _study(
-    client: TestClient, unit_type: str = "tank"
+    client: TestClient,
+    unit_type: str = "tank",
+    *,
+    reviewed_assignments: bool = False,
+    before_observations: Callable[[str], None] | None = None,
 ) -> tuple[str, str, dict[str, Any], dict[str, str]]:
     project = create_project(client, "Paired calibrated study")
     project_id = str(project["id"])
@@ -44,6 +49,20 @@ def _study(
                 "kind": kind,
                 "parent_colony_key": parent,
                 "reason": "Reviewed fixture sampling roster",
+                **(
+                    {
+                        "study_assignment": {
+                            "tank_code": unit if unit_type == "tank" else None,
+                            "treatment_code": "reference"
+                            if unit in (first_unit, third_unit)
+                            else "comparison",
+                            "reviewer": "Fixture assignment reviewer",
+                            "confirm_review": True,
+                        }
+                    }
+                    if reviewed_assignments
+                    else {}
+                ),
             },
         )
         assert response.status_code == 201, response.text
@@ -62,6 +81,9 @@ def _study(
                 register(parent, unit, "colony")
                 parents.add(parent)
             register(organism, unit, "fragment", parent)
+
+    if before_observations:
+        before_observations(project_id)
 
     widths = {
         "a-left": [(1, 10), (2, 14)],

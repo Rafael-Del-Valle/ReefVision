@@ -37,6 +37,7 @@ from reefvision.services.workflow_paired_growth_contrast import execute_paired_g
 from reefvision.services.workflow_prompt_assist import create_prompt_assist_mask_proposals
 from reefvision.services.workflow_research_reports import execute_research_report
 from reefvision.services.workflow_review import WorkflowReviewRequired
+from reefvision.services.workflow_study_design import execute_reviewed_study_design
 from reefvision.services.workflow_vlm import VlmClassDefinition, run_vlm_detection
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -58,6 +59,7 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "ecology_coral_growth",
     "ecology_verified_analysis",
     "paired_growth_contrast",
+    "reviewed_study_design",
     "ecology_event_summary",
     "research_publication_figure",
     "image_acquisition_quality",
@@ -1143,6 +1145,7 @@ _ADAPTERS = {
     "ecology_coral_skeleton": execute_coral_skeleton,
     "ecology_verified_analysis": execute_verified_ecology_analysis,
     "paired_growth_contrast": execute_paired_growth_contrast,
+    "reviewed_study_design": execute_reviewed_study_design,
     "ecology_event_summary": execute_event_summary,
     "research_publication_figure": execute_research_report,
     "image_acquisition_quality": execute_acquisition_quality,

@@ -40,6 +40,7 @@ WorkflowDataType = Literal[
     "coral_branch_growth",
     "verified_ecology_analysis",
     "paired_growth_contrast",
+    "study_design_report",
     "reviewed_ecology_event_summary",
     "research_report_figure",
     "acquisition_quality_result",

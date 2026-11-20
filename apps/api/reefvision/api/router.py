@@ -89,6 +89,7 @@ from reefvision.api.routes.spatial_source_assets_v14 import (
     router as spatial_source_assets_router,
 )
 from reefvision.api.routes.static_comparison import router as static_comparison_router
+from reefvision.api.routes.study_design import router as study_design_router
 from reefvision.api.routes.system import router as system_router
 from reefvision.api.routes.temporal_reefpose import router as temporal_reefpose_router
 from reefvision.api.routes.training import router as training_router
@@ -163,6 +164,7 @@ api_router.include_router(longitudinal_monitoring_router)
 api_router.include_router(ecology_identity_router)
 api_router.include_router(coral_graph_router)
 api_router.include_router(ecology_analysis_router)
+api_router.include_router(study_design_router)
 api_router.include_router(ecology_event_summary_router)
 api_router.include_router(scientific_comparison_router)
 api_router.include_router(static_comparison_router)
