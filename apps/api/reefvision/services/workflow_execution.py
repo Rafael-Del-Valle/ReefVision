@@ -79,6 +79,7 @@ from reefvision.services.workflow_classification import (
 from reefvision.services.workflow_consensus import build_detection_consensus
 from reefvision.services.workflow_datasets import create_workflow_dataset_version
 from reefvision.services.workflow_graphs import WorkflowGraphService
+from reefvision.services.workflow_image_adjustment_v18 import adjusted_workflow_binding
 from reefvision.services.workflow_runtime_adapters import (
     RUNTIME_ADAPTER_NODE_TYPES,
     execute_runtime_adapter,
@@ -1217,6 +1218,14 @@ class WorkflowExecutionService:
                 "device": str(parameters.get("device", "auto")),
                 "model_task": "detect",
                 **workflow_runtime_settings(model_payload),
+                **adjusted_workflow_binding(
+                    self.session,
+                    self._required_settings(),
+                    project_id,
+                    image_ids,
+                    inputs["images"][0],
+                    model,
+                ),
                 "created_by_workflow": True,
                 "workflow_run_id": run_id,
                 "workflow_node_run_id": node_run.id,

@@ -40,6 +40,10 @@ from reefvision.services.workflow_depth import create_depth_map_artifacts
 from reefvision.services.workflow_ecology_analysis import execute_verified_ecology_analysis
 from reefvision.services.workflow_ecology_event_summary import execute_event_summary
 from reefvision.services.workflow_field_capture import execute_field_capture_reconcile
+from reefvision.services.workflow_image_adjustment_v18 import (
+    adjusted_workflow_binding,
+    execute_underwater_adjustment,
+)
 from reefvision.services.workflow_monitoring import execute_monitoring_assessment
 from reefvision.services.workflow_monitoring_summary import execute_monitoring_summary
 from reefvision.services.workflow_multispectral import execute_multispectral
@@ -57,6 +61,7 @@ from reefvision.services.workflow_vlm import VlmClassDefinition, run_vlm_detecti
 from reefvision.storage.projects import resolve_managed_project_path
 
 RUNTIME_ADAPTER_NODE_TYPES = {
+    "underwater_adjustment",
     "segmentation_inference",
     "classification_inference",
     "vlm_detection",
@@ -143,7 +148,8 @@ def _segmentation_inference(
     parameters: dict[str, Any],
     inputs: dict[str, list[WorkflowArtifact]],
 ) -> list[dict[str, Any]]:
-    image_payload = _single_payload(inputs, "images")
+    image_artifact = _single_artifact(inputs, "images")
+    image_payload = image_artifact.payload_json
     model_payload = _single_payload(inputs, "model")
     if image_payload.get("project_id") != project_id:
         raise ValidationError("Segmentation inference received a foreign image collection")
@@ -173,6 +179,9 @@ def _segmentation_inference(
                 "device": str(parameters.get("device", "auto")),
                 "model_task": model.task,
                 **workflow_runtime_settings(model_payload),
+                **adjusted_workflow_binding(
+                    session, settings, project_id, image_ids, image_artifact, model
+                ),
                 "created_by_workflow": True,
             },
             result_json={"stage": "queued", "created_by_workflow": True},
@@ -1157,6 +1166,7 @@ def _ecology_paired_count_csv_export(
 
 
 _ADAPTERS = {
+    "underwater_adjustment": execute_underwater_adjustment,
     "segmentation_inference": _segmentation_inference,
     "classification_inference": _classification_inference,
     "vlm_detection": _vlm_detection,

@@ -211,6 +211,7 @@ _ACTIONS: dict[str, str] = {
     "multispectral_index": "Verify original bands and recompute the saved reflectance index.",
     "detectability_assessment": "Read a frozen detectability estimate and its reviewed evidence.",
     "workflow_schedule_receipt": "Verify one completed schedule occurrence and its artifacts.",
+    "underwater_adjustment": "Verify and replay the original and output of one saved adjustment.",
     "temporal_reefpose_dataset": "Freeze or load a recording-group-split temporal pose dataset.",
     "temporal_reefpose_training": "Train or replay a native temporal pose checkpoint.",
     "temporal_reefpose_inference": "Refine video pose observations for explicit review.",

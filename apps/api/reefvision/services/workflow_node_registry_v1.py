@@ -18,6 +18,7 @@ from reefvision.services.workflow_depth_3d import register_video_depth_3d_adapte
 from reefvision.services.workflow_ecology_analysis import verified_ecology_analysis_node
 from reefvision.services.workflow_ecology_event_summary import event_summary_workflow_node
 from reefvision.services.workflow_field_capture import field_capture_reconcile_node
+from reefvision.services.workflow_image_adjustment_v18 import add_underwater_adjustment
 from reefvision.services.workflow_metric_depth_3d import (
     register_video_metric_depth_3d_adapter,
 )
@@ -962,6 +963,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
     registry["ecology_event_summary"] = event_summary_workflow_node()
     registry["research_publication_figure"] = research_report_node()
     registry["image_acquisition_quality"] = acquisition_quality_node()
+    add_underwater_adjustment(registry)
     registry.update(register_scientific_comparison_nodes())
     registry.update(register_temporal_reefpose_nodes())
 
