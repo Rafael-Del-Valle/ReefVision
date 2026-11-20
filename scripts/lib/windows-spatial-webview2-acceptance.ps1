@@ -230,10 +230,11 @@ function Invoke-ReefVisionInstalledPlaywrightSuite {
         [Parameter(Mandatory)][string]$Api,
         [Parameter(Mandatory)][int]$DebugPort,
         [Parameter(Mandatory)][int]$DesktopProcessId,
-        [Parameter(Mandatory)][ValidateSet('first-use', 'workspace')][string]$Suite,
+        [Parameter(Mandatory)][ValidateSet('first-use', 'workspace', 'schedule-before', 'schedule-after')][string]$Suite,
         [Parameter(Mandatory)][string[]]$Specs,
         [string]$ExpectedBrowserSid,
-        [string]$BrowserArtifactsDirectory
+        [string]$BrowserArtifactsDirectory,
+        [hashtable]$AdditionalEnvironment = @{}
     )
     $endpoint = Wait-ReefVisionWebView2DebugEndpoint -Port $DebugPort -DesktopProcessId $DesktopProcessId `
         -ExpectedBrowserSid $ExpectedBrowserSid -FailureEvidencePath (Join-Path $EvidenceRoot "$Suite-webview2-startup.log") `
@@ -247,6 +248,10 @@ function Invoke-ReefVisionInstalledPlaywrightSuite {
         REEFVISION_SPATIAL_WEBVIEW2_ARTIFACTS_DIR = $BrowserArtifactsDirectory
         REEFVISION_FIRST_USE_ACCEPTANCE = if ($Suite -eq 'first-use') { '1' } else { '0' }
         PLAYWRIGHT_JSON_OUTPUT_FILE = $report
+    }
+    foreach ($key in $AdditionalEnvironment.Keys) {
+        if ($variables.ContainsKey($key)) { throw "Cannot override installed Playwright binding $key." }
+        $variables[$key] = $AdditionalEnvironment[$key]
     }
     $previous = @{}
     Push-Location -LiteralPath (Join-Path $RepositoryRoot 'apps/web')

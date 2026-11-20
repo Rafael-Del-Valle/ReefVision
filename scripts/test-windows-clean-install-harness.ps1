@@ -5,6 +5,7 @@ $Root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'lib\windows-clean-acceptance.ps1')
 . (Join-Path $PSScriptRoot 'lib\windows-spatial-webview2-acceptance.ps1')
 . (Join-Path $PSScriptRoot 'lib\windows-standard-user-webview2.ps1')
+. (Join-Path $PSScriptRoot 'lib\windows-scheduler-webview2-acceptance.ps1')
 
 $passed = 0
 function Assert-True([bool]$Condition, [string]$Message) {
@@ -16,6 +17,76 @@ function Assert-Throws([scriptblock]$Action, [string]$Message) {
         if ($_.Exception.Message -like 'Expected failure:*') { throw }
     }
     $script:passed++
+}
+
+$slot = [datetimeoffset]'2026-11-20T15:00:10Z'
+$clockWitness = @{ schedule = @{ next_due_at = $slot.ToString('o'); interval_seconds = 20 } }
+$restart = Get-ReefVisionScheduleRestartTime $clockWitness $slot.AddSeconds(-5)
+Assert-True ($restart -eq $slot.AddMilliseconds(21500)) 'Scheduler restart must cross the next slot, its interval and a timing margin.'
+Assert-Throws { Get-ReefVisionScheduleRestartTime $clockWitness $slot } 'A desktop that closes at its next due slot cannot prove a missed interval.'
+Assert-Throws { Get-ReefVisionScheduleRestartTime $clockWitness $slot.AddSeconds(-60) } 'A witness for a different future interval cannot extend a stopped run indefinitely.'
+
+& {
+    function Get-NetTCPConnection {
+        [CmdletBinding()]
+        param($LocalPort, $State)
+        [pscustomobject]@{ LocalAddress='127.0.0.1'; OwningProcess=4321 }
+    }
+    function Get-CimInstance($ClassName, $Filter) {
+        if ($Filter -ne 'ProcessId = 4321') { throw 'Unexpected fixture process lookup.' }
+        [pscustomobject]@{ ExecutablePath='C:\unexpected\reefvision-api.exe'; ParentProcessId=1200 }
+    }
+    function Invoke-RestMethod { $script:unexpectedScheduleApiCall = $true }
+    $script:unexpectedScheduleApiCall = $false
+    Assert-Throws {
+        Get-ReefVisionInstalledScheduleBackend -Port 9876 -DesktopProcessId 1200 `
+            -BrowserSid 'fixture-sid' -BackendExecutable 'C:\installed\reefvision-api.exe' `
+            -Profile 'C:\isolated\scheduled' -Version '1.7.0' -Revision 'b17_workflows_0001'
+    } 'An unrelated loopback listener cannot enter the scheduler fixture.'
+    Assert-True (-not $script:unexpectedScheduleApiCall) 'The unrelated scheduler listener received a probe before being bound to the MSI.'
+}
+
+& {
+    $expectedExe = 'C:\installed\reefvision-api.exe'
+    $expectedProfile = 'C:\isolated\scheduled'
+    $observedProfile = $expectedProfile
+    $expectedVersion = '1.7.0'
+    function Get-NetTCPConnection {
+        [CmdletBinding()]
+        param($LocalPort, $State)
+        [pscustomobject]@{ LocalAddress='127.0.0.1'; OwningProcess=4321 }
+    }
+    function Get-CimInstance($ClassName, $Filter) {
+        if ($Filter -ne 'ProcessId = 4321') { throw 'Unexpected fixture process lookup.' }
+        [pscustomobject]@{ ExecutablePath=$expectedExe; ParentProcessId=1200 }
+    }
+    function Invoke-CimMethod { [pscustomobject]@{ ReturnValue=0; Sid='fixture-sid' } }
+    function Get-ReefVisionProcessIntegrity { 8192 }
+    function Get-Process { [pscustomobject]@{ Id=4321 } }
+    function Get-FileHash { [pscustomobject]@{ Hash=('a' * 64) } }
+    function Invoke-RestMethod($Uri, [switch]$NoProxy, $TimeoutSec) {
+        if ($Uri -like '*/system/version') {
+            return [pscustomobject]@{
+                application_version=$expectedVersion; current_schema_revision='b17_workflows_0001'
+                data_dir=$observedProfile; database_path=(Join-Path $observedProfile 'reefvision.db')
+            }
+        }
+        if ($Uri -like '*/system/migrations/status') {
+            return [pscustomobject]@{ schema_status='up_to_date';current_schema_revision='b17_workflows_0001' }
+        }
+        throw 'Unexpected schedule identity probe.'
+    }
+    $pins = @{
+        Port=9876; DesktopProcessId=1200; BrowserSid='fixture-sid'; BackendExecutable=$expectedExe
+        Profile=$expectedProfile; Version='1.7.0'; Revision='b17_workflows_0001'
+    }
+    $observed = Get-ReefVisionInstalledScheduleBackend @pins
+    Assert-True ($observed.exact_profile_verified -and $observed.pid -eq 4321) 'Schedule backend must verify both process and marked profile before use.'
+    $observedProfile = 'C:\unrelated\scheduled'
+    Assert-Throws { Get-ReefVisionInstalledScheduleBackend @pins } 'A scheduler profile mismatch must stop before Playwright seeds the project.'
+    $observedProfile = $expectedProfile
+    $expectedVersion = '1.6.0'
+    Assert-Throws { Get-ReefVisionInstalledScheduleBackend @pins } 'A stale installed version must stop before Playwright seeds the project.'
 }
 
 & {

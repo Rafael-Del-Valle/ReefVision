@@ -235,6 +235,7 @@ jobs:
             -ExpectedVersion '1.7.0' -ExpectedSchemaRevision 'b17_workflows_0001' `
             -AcceptanceRoot 'C:\reefvision-1-7-0-disposable-acceptance' `
             -SpatialWorkflowNodePath $playwrightNode -HostedStandardUserWebView2 -FirstUseAcceptance -ResearchWorkflowAcceptance -WorkspaceWorkflowAcceptance `
+            -ScheduleWorkflowAcceptance `
             -SkipUpgrade -DisposableTest -KeepArtifacts
 
       - name: Upload isolated Windows acceptance report and MSI logs
@@ -251,6 +252,9 @@ jobs:
             .artifacts/windows-clean-acceptance-*/first-use-playwright/**/*-evidence.json
             .artifacts/windows-clean-acceptance-*/workspace-evidence.json
             .artifacts/windows-clean-acceptance-*/workspace-playwright.json
+            .artifacts/windows-clean-acceptance-*/schedule-restart-evidence.json
+            .artifacts/windows-clean-acceptance-*/schedule-*-playwright.json
+            .artifacts/windows-clean-acceptance-*/schedule-*-playwright/**/schedule-proof.json
             .artifacts/windows-clean-acceptance-*/research-evidence.json
             .artifacts/windows-clean-acceptance-*/research-playwright.json
             .artifacts/windows-clean-acceptance-*/research-playwright/**/*-evidence.json

@@ -163,3 +163,10 @@ def test_clean_install_requires_the_first_use_journey() -> None:
 def test_clean_install_requires_the_workspace_journeys() -> None:
     changed = WORKFLOW.replace("-WorkspaceWorkflowAcceptance ", "")
     assert any("workspace" in error for error in PREFLIGHT.check_workflow(changed, VERSION))
+
+
+def test_clean_install_requires_the_standard_account_schedule_restart() -> None:
+    flag = "-ScheduleWorkflowAcceptance"
+    assert flag in PREFLIGHT._job(WORKFLOW, "windows-clean-install-acceptance")
+    changed = WORKFLOW.replace(flag, "")
+    assert any("schedule" in error for error in PREFLIGHT.check_workflow(changed, VERSION))

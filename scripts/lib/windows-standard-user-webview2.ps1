@@ -141,7 +141,8 @@ function Start-ReefVisionHostedGui {
         [Parameter(Mandatory)][string]$Executable,
         [Parameter(Mandatory)][string]$Profile,
         [Parameter(Mandatory)][int]$DebugPort,
-        [Parameter(Mandatory)][string]$EvidenceRoot
+        [Parameter(Mandatory)][string]$EvidenceRoot,
+        [ValidatePattern('^[a-z][a-z-]{0,29}$')][string]$LaunchLabel = 'spatial'
     )
     Assert-ReefVisionHostedStandardUserMode
     $installerDirectory = Split-Path -Parent $Executable
@@ -152,9 +153,17 @@ function Start-ReefVisionHostedGui {
     }
     Assert-ReefVisionNoReparseAncestors -Path $Executable
     Assert-ReefVisionNoReparseAncestors -Path $Profile
+    if (($Account.desktop -and -not $Account.desktop.HasExited) -or
+        ($Account.launcher -and -not $Account.launcher.HasExited)) {
+        throw 'The previous desktop and its standard-user launcher must close before another launch.'
+    }
+    $Account.desktop = $null
+    $Account.launcher = $null
     $Account.executable = $Executable
-    $browserData = Join-Path $Account.run_root ((Split-Path -Leaf $Profile) + '-webview2')
-    $bootstrap = Join-Path $Account.run_root 'ordinary-user-launch'
+    $browserName = if ($LaunchLabel -eq 'spatial') { (Split-Path -Leaf $Profile) + '-webview2' } else { "$LaunchLabel-webview2" }
+    $bootstrapName = if ($LaunchLabel -eq 'spatial') { 'ordinary-user-launch' } else { "$LaunchLabel-launch" }
+    $browserData = Join-Path $Account.run_root $browserName
+    $bootstrap = Join-Path $Account.run_root $bootstrapName
     $handshake = Join-Path $bootstrap 'handshake'
     $Account.browser_artifacts = Join-Path $bootstrap 'browser-artifacts'
     New-Item -ItemType Directory -Path $browserData,$handshake,$Account.browser_artifacts | Out-Null
@@ -215,11 +224,11 @@ function Start-ReefVisionHostedGui {
         desktop_owner_sid=$owner.Sid; desktop_integrity=$integrity; driver_integrity=Get-ReefVisionProcessIntegrity $hostProcess
         desktop_sha256=(Get-FileHash -LiteralPath $Executable).Hash.ToLowerInvariant()
         desktop_windows_user_profile=$launch.windows_user_profile
-    } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'spatial-standard-user-identity.log')
+    } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $EvidenceRoot "$LaunchLabel-standard-user-identity.log")
     return $desktop
 }
 
-function Remove-ReefVisionHostedGuiAccount($Account,[string]$EvidenceRoot) {
+function Remove-ReefVisionHostedGuiAccount($Account,[string]$EvidenceRoot,[string]$Label = 'spatial') {
     Assert-ReefVisionHostedStandardUserMode
     $cleanup = [ordered]@{desktop_closed=$false; launch_process_closed=$false; profile_removed=$false; account_removed=$false}
     try {
@@ -255,9 +264,9 @@ function Remove-ReefVisionHostedGuiAccount($Account,[string]$EvidenceRoot) {
         Remove-LocalUser -SID $Account.sid
         $cleanup.account_removed = -not (Get-LocalUser -Name $Account.name -ErrorAction SilentlyContinue)
         if ($Account.launcher_errors -and (Test-Path -LiteralPath $Account.launcher_errors -PathType Leaf)) {
-            Get-Content -LiteralPath $Account.launcher_errors -Tail 25 | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'spatial-standard-user-launch.log')
+            Get-Content -LiteralPath $Account.launcher_errors -Tail 25 | Set-Content -LiteralPath (Join-Path $EvidenceRoot "$Label-standard-user-launch.log")
         }
-        $cleanup | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'spatial-standard-user-cleanup.log')
+        $cleanup | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $EvidenceRoot "$Label-standard-user-cleanup.log")
     }
     if ($cleanup.Values -contains $false) { throw 'Could not verify temporary WebView2 process and account cleanup.' }
 }

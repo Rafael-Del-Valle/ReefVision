@@ -13,6 +13,7 @@ param(
     [switch]$FirstUseAcceptance,
     [switch]$ResearchWorkflowAcceptance,
     [switch]$WorkspaceWorkflowAcceptance,
+    [switch]$ScheduleWorkflowAcceptance,
     [switch]$HostedStandardUserWebView2,
     [switch]$VerifyPreviousInstallerRejectsUpgradedProfile,
     [switch]$PreviousInstallerSupportsIsolatedAcceptance,
@@ -31,6 +32,7 @@ $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'lib\windows-spatial-webview2-acceptance.ps1')
 . (Join-Path $PSScriptRoot 'lib\windows-research-webview2-acceptance.ps1')
 . (Join-Path $PSScriptRoot 'lib\windows-standard-user-webview2.ps1')
+. (Join-Path $PSScriptRoot 'lib\windows-scheduler-webview2-acceptance.ps1')
 
 if (-not $DisposableTest -and -not $PlanOnly) {
     throw 'Refusing destructive MSI acceptance. Supply -DisposableTest on a disposable Windows VM/machine, or use -PlanOnly.'
@@ -44,6 +46,10 @@ if ($FirstUseAcceptance -and (-not $SpatialWorkflowNodePath -or -not $SkipUpgrad
 }
 if ($WorkspaceWorkflowAcceptance -and (-not $SpatialWorkflowNodePath -or -not $SkipUpgrade)) {
     throw 'Installed workspace journeys require the packaged WebView2 driver and a fresh candidate install.'
+}
+if ($ScheduleWorkflowAcceptance -and (-not $HostedStandardUserWebView2 -or -not $SkipUpgrade -or
+    -not $ExpectedVersion -or -not $ExpectedSchemaRevision)) {
+    throw 'Installed schedule restart acceptance requires a fresh hosted standard-user install with an expected version and schema.'
 }
 if ($HostedStandardUserWebView2) {
     if (-not $DisposableTest -or -not $SpatialWorkflowNodePath) {
@@ -106,6 +112,7 @@ $InstallRoot = Join-Path $RunRoot 'install'
 $DataRoot = Join-Path $RunRoot 'data'
 $RestoreDataRoot = Join-Path $RunRoot 'restore-data'
 $SpatialDataRoot = Join-Path $RunRoot 'spatial-data'
+$ScheduleDataRoot = Join-Path $RunRoot 'schedule-data'
 $EvidenceRoot = Join-Path $RepositoryRoot ".artifacts\windows-clean-acceptance-$Token"
 $ReportPath = Join-Path $EvidenceRoot 'report.json'
 $InstallerHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash
@@ -157,6 +164,7 @@ $report = [ordered]@{
     webview2 = New-ReefVisionEvidenceResult
     first_use_workflow = if ($FirstUseAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Installed first-use acceptance not requested' }
     workspace_workflow = if ($WorkspaceWorkflowAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Installed workspace acceptance not requested' }
+    schedule_workflow = if ($ScheduleWorkflowAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Installed scheduler restart acceptance not requested' }
     spatial_workflow = if ($SpatialWorkflowNodePath) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Packaged spatial WebView2 acceptance not requested' }
     research_workflow = if ($ResearchWorkflowAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Packaged research WebView2 acceptance not requested' }
     schema_migration = New-ReefVisionEvidenceResult
@@ -709,6 +717,21 @@ try {
         Save-Report
     }
 
+    if ($ScheduleWorkflowAcceptance) {
+        try {
+            $scheduler = Invoke-ReefVisionInstalledScheduleAcceptance -NodePath $SpatialWorkflowNodePath `
+                -RepositoryRoot $RepositoryRoot -EvidenceRoot $EvidenceRoot -RunRoot $RunRoot `
+                -Executable (Join-Path $InstallRoot 'ReefVision.exe') -Profile $ScheduleDataRoot -Marker $Token `
+                -Version $ProductVersion -Revision $ExpectedSchemaRevision -InstallerSha256 ($InstallerHash.ToLowerInvariant())
+            $first = $scheduler.phases.before.result.occurrence
+            $resumed = $scheduler.phases.after.result.occurrence
+            $report.schedule_workflow = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed schedule ran $($first.workflow_run_id), closed before its next due slot, and completed distinct catch-up $($resumed.workflow_run_id) after $($resumed.missed_intervals) missed interval(s)."
+        } catch {
+            $report.schedule_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $_.Exception.Message
+        }
+        Save-Report
+    }
+
     $desktop = Start-AcceptanceDesktop
     $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $api = "http://127.0.0.1:$port/api/v1"
@@ -1185,6 +1208,9 @@ try {
     if ($report.workspace_workflow.status -eq 'FAIL') {
         throw $report.workspace_workflow.detail
     }
+    if ($report.schedule_workflow.status -eq 'FAIL') {
+        throw $report.schedule_workflow.detail
+    }
     if ($report.research_workflow.status -eq 'FAIL') {
         throw $report.research_workflow.detail
     }
@@ -1202,6 +1228,7 @@ try {
     foreach ($profileLogs in @(
         [pscustomobject]@{root=$DataRoot;prefix='live'},
         [pscustomobject]@{root=$SpatialDataRoot;prefix='spatial'},
+        [pscustomobject]@{root=$ScheduleDataRoot;prefix='schedule'},
         [pscustomobject]@{root=$RestoreDataRoot;prefix='restore'}
     )) {
         foreach ($logName in @('backend.log', 'api.log', 'api.log.1', 'api.log.2')) {
