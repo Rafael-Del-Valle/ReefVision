@@ -43,6 +43,7 @@ from reefvision.api.routes.georeferenced_observations import (
     router as georeferenced_observations_router,
 )
 from reefvision.api.routes.health import router as health_router
+from reefvision.api.routes.image_adjustments_v18 import router as image_adjustments_router
 from reefvision.api.routes.images import router as images_router
 from reefvision.api.routes.jobs import router as jobs_router
 from reefvision.api.routes.learning_evaluation import router as learning_evaluation_router
@@ -147,6 +148,7 @@ api_router.include_router(project_exchange_router)
 api_router.include_router(class_operations_router)
 api_router.include_router(class_visibility_router)
 api_router.include_router(images_router)
+api_router.include_router(image_adjustments_router)
 api_router.include_router(annotation_imports_router)
 api_router.include_router(annotations_router)
 api_router.include_router(annotation_aggregates_router)
