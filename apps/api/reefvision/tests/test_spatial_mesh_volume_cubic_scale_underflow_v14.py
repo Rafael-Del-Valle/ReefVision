@@ -443,7 +443,11 @@ def test_cubic_volume_subresolution_scale_qc_standalone_and_saved_graph(
         assert alternate_response.status_code == 200, alternate_response.text
         alternate = alternate_response.json()
         assert alternate["provenance"][field] == alternate_label
-        for unchanged_field in ("specimen_id", "observation_id", "coordinate_frame_id"):
+        for unchanged_field in (
+            "specimen_id",
+            "observation_id",
+            "coordinate_frame_id",
+        ):
             if unchanged_field != field:
                 assert alternate["provenance"][unchanged_field] == params[unchanged_field]
         for verified_flag in (
@@ -452,7 +456,8 @@ def test_cubic_volume_subresolution_scale_qc_standalone_and_saved_graph(
             "coordinate_registration_verified",
         ):
             assert alternate["provenance"][verified_flag] is False
-        assert alternate["provenance"]["geometry_sha256"] == standalone["provenance"]["geometry_sha256"]
+        alternate_digest = alternate["provenance"]["geometry_sha256"]
+        assert alternate_digest == standalone["provenance"]["geometry_sha256"]
         for geometry_field in (
             "surface_area_m2",
             "enclosed_volume_m3",
