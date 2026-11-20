@@ -90,7 +90,17 @@ def test_non_ascii_point_cloud_ply_fails_cleanly_at_parser_and_api(
         headers={"content-type": "application/json"},
     )
     assert response.status_code in (400, 422), response.text
-    if response.status_code == 400:
+    if response.status_code == 422:
+        # Some Pydantic versions reject escaped UTF-16 before the PLY parser.
+        # A 422 must remain encodable as UTF-8 instead of crashing.
+        assert any(0xD800 <= ord(char) <= 0xDFFF for char in invalid)
+        detail = response.json()["detail"]
+        assert detail[0]["type"] == "string_unicode"
+        assert detail[0]["input"].isascii()
+        assert "\\ud" in detail[0]["input"]
+    else:
+        # Other versions pass surrogates through; the ASCII parser rejects
+        # those together with all well-formed non-ASCII source characters.
         assert response.json()["detail"] == "Point-cloud PLY must contain ASCII text only"
 
 
