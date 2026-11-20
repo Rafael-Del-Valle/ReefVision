@@ -1140,7 +1140,9 @@ def test_pose_run_output_rejects_windows_junction_into_another_run(tmp_path: Pat
             _reject_symlinked_training_path(settings, relative)
         # Even an alias resolving to the expected run must not pass the
         # trainer's post-fit checkpoint provenance check.
-        with pytest.raises(ValidationError, match="trainer output path contains a Windows junction"):
+        with pytest.raises(
+            ValidationError, match="trainer output path contains a Windows junction"
+        ):
             _verified_pose_trainer_save_dir(junction, prior_output)
         assert checkpoint.read_bytes() == b"preserve-registered-pose-weights"
     finally:
