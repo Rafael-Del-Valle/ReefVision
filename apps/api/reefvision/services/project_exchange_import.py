@@ -82,6 +82,16 @@ from reefvision.services.project_exchange_environmental_analysis import (
     validate_environmental_analysis_exchange,
 )
 from reefvision.services.project_exchange_event_summary import remap_event_summary_archive_job
+from reefvision.services.project_exchange_field_v15 import (
+    FIELD_EXCHANGE_FORMAT,
+    FIELD_MEDIA_KIND,
+    FIELD_ORIGIN,
+    restore_field_media,
+    restore_field_origin,
+    restore_field_row,
+    validate_field_exchange,
+    validate_field_origin,
+)
 from reefvision.services.project_exchange_inspection import (
     MANIFEST_NAME,
     inspect_project_exchange,
@@ -441,6 +451,7 @@ def import_project_exchange(
             if isinstance(member, str):
                 section_rows[section_name] = _read_jsonl(archive, member)
 
+        field_format = inspection.format_version == FIELD_EXCHANGE_FORMAT
         integrated = integrated_models() if inspection.format_version in INTEGRATED_FORMATS else {}
         models = {**SECTION_MODELS, **integrated}
         order = [*SECTION_ORDER, *integrated]
@@ -450,6 +461,14 @@ def import_project_exchange(
         validate_computed_exchange_records(old_project_id, section_rows)
         validate_environmental_analysis_exchange(old_project_id, section_rows)
         validate_spatial_exchange_records(old_project_id, section_rows)
+        if field_format:
+            validate_field_exchange(
+                old_project_id,
+                source_storage_root,
+                section_rows,
+                list(_media_inventory(manifest).values()),
+            )
+            validate_field_origin(section_rows, manifest.get(FIELD_ORIGIN), manifest.get("origin"))
         _validate_heatmap_artifacts(old_project_id, section_rows)
         restores_workflow_provenance = bool(integrated) or has_spatial_workflow_history(
             section_rows
@@ -542,6 +561,12 @@ def import_project_exchange(
                 if row["result_kind"] == "mask_coverage"
             }
             media = _media_inventory(manifest)
+            field_media = {
+                descriptor["sha256"]: descriptor
+                for (kind, _), descriptor in media.items()
+                if kind == FIELD_MEDIA_KIND
+            }
+            field_destinations: dict[str, str] = {}
             warnings = list(inspection.warnings)
             imported_counts: dict[str, int] = {}
             copied_media_count = 0
@@ -592,6 +617,8 @@ def import_project_exchange(
                         values = _coerce_row(model, mapped_ecology[section_name][row_index], {})
                     else:
                         values = _coerce_row(model, row, id_map)
+                    if field_format:
+                        restore_field_row(section_name, row, values, id_map)
                     if integrated and section_name in integrated:
                         # Literal text may happen to equal a UUID. Physical
                         # lineage keys remap independently of investigator text.
@@ -787,7 +814,15 @@ def import_project_exchange(
                         )
 
                     media_kind = MEDIA_KIND_BY_SECTION.get(section_name)
-                    if media_kind is not None and isinstance(old_id, str):
+                    if field_format and section_name == "field_capture_observations":
+                        digest = row["sha256"]
+                        if digest not in field_destinations:
+                            field_destinations[digest] = restore_field_media(
+                                archive, settings, project.storage_root, row, field_media
+                            )
+                            copied_media_count += 1
+                        values["managed_path"] = field_destinations[digest]
+                    elif media_kind is not None and isinstance(old_id, str):
                         descriptor = media.get((media_kind, old_id))
                         if descriptor is not None:
                             values["managed_path"] = _copy_packaged_media(
@@ -854,6 +889,11 @@ def import_project_exchange(
             manifest_sha256 = canonical_json_sha256(manifest)
             origin = (manifest.get("origin") or {}) if restores_workflow_provenance else {}
             origin_ids = map_origin_ids(origin, id_map)
+            field_origin = (
+                restore_field_origin(section_rows, manifest.get(FIELD_ORIGIN) or {}, id_map)
+                if field_format
+                else {}
+            )
             package = ProjectExchangePackage(
                 id=package_id,
                 project_id=project.id,
@@ -874,6 +914,7 @@ def import_project_exchange(
                         else {}
                     ),
                     "copied_media_count": copied_media_count,
+                    **({FIELD_ORIGIN: field_origin} if field_origin else {}),
                 },
                 completed_at=datetime.now(UTC),
             )

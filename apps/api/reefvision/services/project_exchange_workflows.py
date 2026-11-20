@@ -18,6 +18,7 @@ from reefvision.db.models import (
 )
 from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.services.project_exchange_comparison import restore_comparison_artifact
+from reefvision.services.project_exchange_field_v15 import FIELD_DATA_TYPE
 from reefvision.services.project_exchange_mesh_v14 import (
     MESH_NODE_TYPES,
     restore_mesh_measurement,
@@ -225,8 +226,8 @@ def restore_workflow_provenance(
                     artifact.payload_json = restore_mesh_measurement(
                         original["payload_json"], id_map
                     )
-                elif artifact.data_type != "spatial_condition_report":
-                    # Condition artifacts already use a typed remap during row import.
+                elif artifact.data_type not in {"spatial_condition_report", FIELD_DATA_TYPE}:
+                    # Condition and field receipts already use typed remapping during row import.
                     artifact.payload_json = map_values(artifact.payload_json, digest_map)
                     if artifact.data_type == "reefpose_validation_report":
                         artifact.payload_json = _restore_report_link(

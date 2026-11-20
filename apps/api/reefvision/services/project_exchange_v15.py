@@ -38,7 +38,7 @@ def model_source_ids(receipt: RuntimeReceipt) -> set[str]:
 def validate_v15_exchange(
     version: str, project_id: str, sections: dict[str, list[dict[str, Any]]], origin: Any
 ) -> None:
-    present = any(sections.get(name) for name in SECTIONS)
+    present = any(sections.get(name) for name in (*SECTIONS, "field_capture_batches"))
     if (version == FORMAT_VERSION) != present:
         raise ValidationError(
             "The exchange format does not match the included 1.5 research records"
