@@ -1,0 +1,291 @@
+{
+  "source": "8821ed9a1b71aff8e99751b0c6d66def06028970",
+  "draft": "https://github.com/Rafael-Del-Valle/ReefVision/pull/104",
+  "predecessor_1_4_review": "53dba20360efad21ef2c92c71c3fd807ff98439b",
+  "fixture": "Generated near-planar tetrahedron and coplanar control. Caller-declared scale and 2% scale uncertainty in the desktop.",
+  "exact_unsigned_volume_m3": "390625/105553116266496",
+  "before_and_after_source": {
+    "original-red": {
+      "source": "a580042e84c4d2fa0a646fbf8ec5a3dc90657fa8",
+      "receipt_sha256": "df3cc59e9beb21420ec35abab979b38071237b877ee1254631e6399e870ba2e9",
+      "offending_upload_sha256": "cb82b2ae03b7d1e680ee39f6918e5c010d2d273a79e012943820559a0cf58f6b",
+      "observed_provisional_volume_m3": 4.967053731282552e-09,
+      "test_stats": {
+        "startTime": "2026-11-20T18:08:22.658Z",
+        "duration": 15060.074,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      }
+    },
+    "corrected": {
+      "source": "8821ed9a1b71aff8e99751b0c6d66def06028970",
+      "receipt_sha256": "974f400abfacecb6b2834d247d5a1bded3bcade3d25746c612e4a89886bd4724",
+      "offending_upload_sha256": "cb82b2ae03b7d1e680ee39f6918e5c010d2d273a79e012943820559a0cf58f6b",
+      "observed_provisional_volume_m3": 3.7007434154171883e-09,
+      "test_stats": {
+        "startTime": "2026-11-20T18:10:59.652Z",
+        "duration": 14116.903999999999,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      }
+    }
+  },
+  "mathematical_controls": {
+    "implementation_blob": "9c5dbcf5a4ef5a121056d19f3ac07a11700b4780",
+    "implementation_sha256": "a586388792be79fcbdaccf0ca9731dc897a64e7dcb8d9025ed874a1f085c768a",
+    "synthetic_tetrahedra": 56,
+    "independent_exact_comparisons": 448,
+    "original_near_planar_tetrahedron": [
+      {
+        "origin": 0,
+        "reversed": false,
+        "signed_volume": -3.7007434154171883e-09
+      },
+      {
+        "origin": 1,
+        "reversed": false,
+        "signed_volume": -3.7007434154171883e-09
+      },
+      {
+        "origin": 2,
+        "reversed": false,
+        "signed_volume": -3.7007434154171883e-09
+      },
+      {
+        "origin": 3,
+        "reversed": false,
+        "signed_volume": -3.7007434154171883e-09
+      },
+      {
+        "origin": 0,
+        "reversed": true,
+        "signed_volume": 3.7007434154171883e-09
+      },
+      {
+        "origin": 1,
+        "reversed": true,
+        "signed_volume": 3.7007434154171883e-09
+      },
+      {
+        "origin": 2,
+        "reversed": true,
+        "signed_volume": 3.7007434154171883e-09
+      },
+      {
+        "origin": 3,
+        "reversed": true,
+        "signed_volume": 3.7007434154171883e-09
+      }
+    ],
+    "bounded_bipyramid": {
+      "vertices": 2000,
+      "faces": 3996,
+      "expected": 3.1415874755286244,
+      "actual": 3.1415874755286244,
+      "kernel_ms": 3.7795999960508198
+    }
+  },
+  "independent_review_digest": "93afeb8eeccabc7a225ee74a13ae7187c75cab15edec4b2b0ad604fd0f77d276",
+  "desktop": {
+    "source": {
+      "surface": "source FastAPI and Vite in Chromium on physical Windows",
+      "receipt_sha256": "974f400abfacecb6b2834d247d5a1bded3bcade3d25746c612e4a89886bd4724",
+      "project_id": "8a047380-bb17-4d10-955e-fde12329bffb",
+      "inputs": [
+        {
+          "filename": "near-forward.obj",
+          "original_sha256": "8894c3787a455879679dc767d547763e54ae67a8941074aba0446273fb225a28",
+          "geometry_sha256": "9ee21530a0d8adcdc11bfb868cb035b9112321398781ba4b036ab2ba4a20cf1a",
+          "volume_m3": 3.7007434154171883e-09,
+          "scale_interval_m3": [
+            3.483110096643334e-09,
+            3.927258518388044e-09
+          ],
+          "calibration_verified": false,
+          "measurement_status": "caller_supplied_unverified"
+        },
+        {
+          "filename": "near-offending-inward.obj",
+          "original_sha256": "cb82b2ae03b7d1e680ee39f6918e5c010d2d273a79e012943820559a0cf58f6b",
+          "geometry_sha256": "22d19d00686798a102155132defd31b79ca1287703670eccec6b2ac4902dc0a6",
+          "volume_m3": 3.7007434154171883e-09,
+          "scale_interval_m3": [
+            3.483110096643334e-09,
+            3.927258518388044e-09
+          ],
+          "calibration_verified": false,
+          "measurement_status": "caller_supplied_unverified"
+        },
+        {
+          "filename": "flat-control.obj",
+          "original_sha256": "00b4b598bb9c21452d4521ec2b969c96fe912afb811d14267e27ece789d024e9",
+          "geometry_sha256": "5b4d889d2f3cccf0302d1a291fcdf865e9875e1e406eed4ced30e28874d4f93b",
+          "volume_m3": null,
+          "scale_interval_m3": null,
+          "calibration_verified": false,
+          "measurement_status": "caller_supplied_unverified"
+        }
+      ],
+      "reopened_graph_runs": [
+        {
+          "run": "bf48475e-d3b9-4748-acdf-03562468ea8c",
+          "workflow_graph_id": "74167387-68bf-4687-aa5b-0c8446977c79",
+          "graph_sha256": "f164914b9cf6413a5baa65ddf728f09104e09f55c2a1a668fac02cac5721d0b2",
+          "artifacts": [
+            "ef35e55ea4dda25707ba8c13564860e6dfb0e62b98f2bcb43fc48a94946b6d74",
+            "f40bed35fbd52d7c5e36a491bc79cb22d9790923d8371a414dae0fd2d28c77c2",
+            "6ddf132cd62fa959ecab5aedcf2a976f760198866ee91a46c147f7ec9b9c1ff7"
+          ]
+        },
+        {
+          "run": "dadc76d6-1d71-4e9d-8e15-3f6d949e2cc9",
+          "workflow_graph_id": "74167387-68bf-4687-aa5b-0c8446977c79",
+          "graph_sha256": "f164914b9cf6413a5baa65ddf728f09104e09f55c2a1a668fac02cac5721d0b2",
+          "artifacts": [
+            "ef35e55ea4dda25707ba8c13564860e6dfb0e62b98f2bcb43fc48a94946b6d74",
+            "f40bed35fbd52d7c5e36a491bc79cb22d9790923d8371a414dae0fd2d28c77c2",
+            "6ddf132cd62fa959ecab5aedcf2a976f760198866ee91a46c147f7ec9b9c1ff7"
+          ]
+        }
+      ],
+      "export": {
+        "package_id": "dd0429e0-15d1-43b6-827c-722d944dd0b9",
+        "sha256": "a44c93d45eb804309e747a6bf3e96e5fbd35c7bb59fe6bb9295e98db3e567abb",
+        "verified_sections": 63,
+        "identical_originals": 3,
+        "verified_replay_artifacts": 6
+      },
+      "test": {
+        "startTime": "2026-11-20T18:10:59.652Z",
+        "duration": 14116.903999999999,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "shutdown": {
+        "backend_source_port_closed": true,
+        "vite_port_closed": true,
+        "backend_process_exited": true,
+        "backend_reported_graceful_shutdown": false
+      }
+    },
+    "local-production": {
+      "surface": "Tauri WebView2 from the hash-bound administrative MSI extraction on physical Windows",
+      "receipt_sha256": "f507150b820d9ca5b11c72a18173054aea563b1dd7c0c64e38b057b18122bd48",
+      "project_id": "72c4cce5-76f6-4f5f-854f-572548266b3e",
+      "inputs": [
+        {
+          "filename": "near-forward.obj",
+          "original_sha256": "8894c3787a455879679dc767d547763e54ae67a8941074aba0446273fb225a28",
+          "geometry_sha256": "9ee21530a0d8adcdc11bfb868cb035b9112321398781ba4b036ab2ba4a20cf1a",
+          "volume_m3": 3.7007434154171883e-09,
+          "scale_interval_m3": [
+            3.483110096643334e-09,
+            3.927258518388044e-09
+          ],
+          "calibration_verified": false,
+          "measurement_status": "caller_supplied_unverified"
+        },
+        {
+          "filename": "near-offending-inward.obj",
+          "original_sha256": "cb82b2ae03b7d1e680ee39f6918e5c010d2d273a79e012943820559a0cf58f6b",
+          "geometry_sha256": "22d19d00686798a102155132defd31b79ca1287703670eccec6b2ac4902dc0a6",
+          "volume_m3": 3.7007434154171883e-09,
+          "scale_interval_m3": [
+            3.483110096643334e-09,
+            3.927258518388044e-09
+          ],
+          "calibration_verified": false,
+          "measurement_status": "caller_supplied_unverified"
+        },
+        {
+          "filename": "flat-control.obj",
+          "original_sha256": "00b4b598bb9c21452d4521ec2b969c96fe912afb811d14267e27ece789d024e9",
+          "geometry_sha256": "5b4d889d2f3cccf0302d1a291fcdf865e9875e1e406eed4ced30e28874d4f93b",
+          "volume_m3": null,
+          "scale_interval_m3": null,
+          "calibration_verified": false,
+          "measurement_status": "caller_supplied_unverified"
+        }
+      ],
+      "reopened_graph_runs": [
+        {
+          "run": "9f8c15a6-4766-4470-a94f-48f3a18e700a",
+          "workflow_graph_id": "eb1501f6-fd4a-4826-b2fb-ed986ab4456b",
+          "graph_sha256": "7d0a3fc8f10d559da580a020fc9182c197a68031b9e863eaeadd488f726a0c06",
+          "artifacts": [
+            "a29b84798bd30bb83504e62cc34e22e6ea0fab09b45c1bc0dfa0741e056f0852",
+            "bc3ce4a44571509151d07387eea9fa4afec247a7847b8abf75c9b2d72cf9ba29",
+            "8da3cb8857588778cd946501185ce2ca7c577fc3723a94e9394ebbd16da9f137"
+          ]
+        },
+        {
+          "run": "509b2786-681e-4b29-996d-077b5acbe0e2",
+          "workflow_graph_id": "eb1501f6-fd4a-4826-b2fb-ed986ab4456b",
+          "graph_sha256": "7d0a3fc8f10d559da580a020fc9182c197a68031b9e863eaeadd488f726a0c06",
+          "artifacts": [
+            "a29b84798bd30bb83504e62cc34e22e6ea0fab09b45c1bc0dfa0741e056f0852",
+            "bc3ce4a44571509151d07387eea9fa4afec247a7847b8abf75c9b2d72cf9ba29",
+            "8da3cb8857588778cd946501185ce2ca7c577fc3723a94e9394ebbd16da9f137"
+          ]
+        }
+      ],
+      "export": {
+        "package_id": "26cb7386-7f6f-4ba9-be99-f439d7d16919",
+        "sha256": "851e61b2b652c7acd066187caa9a230b56f47163b36482872f7e8ad7305ed811",
+        "verified_sections": 63,
+        "identical_originals": 3,
+        "verified_replay_artifacts": 6
+      },
+      "test": {
+        "startTime": "2026-11-20T18:27:26.952Z",
+        "duration": 11726.816,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "build": {
+        "version": "1.6.0",
+        "msi_sha256": "07d37bb2fa4426a6831bf776d650b90fc5516b55e68a8ab56e12a9e96ff401cc",
+        "external_cabs": 5,
+        "total_payload_bytes": 2979591283,
+        "checksums_sha256": "39ce1dfb68f44dbb9003a6286c7235fefce0f897e244473bd9ad35ff6f6ab3a5"
+      },
+      "process_and_listeners_closed": true
+    }
+  },
+  "spatial_tests": {
+    "implementation_blob": "9c5dbcf5a4ef5a121056d19f3ac07a11700b4780",
+    "implementation_commit": "8821ed9a1b71aff8e99751b0c6d66def06028970",
+    "selection": "64 test_spatial_mesh*.py modules",
+    "collection_note": "The wider run collected the ported winding regression before its OBJ upload assertions were expanded. The final committed import, two-run replay and raw-byte assertions then passed separately on the same implementation.",
+    "suites": {
+      "all_mesh": {
+        "stats": {
+          "tests": 1634,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        "duration_s": 1568.776,
+        "xml_sha256": "0c66c7969121c585469e13cd58a66600c068dfc96470a9e910da523892d8a661"
+      },
+      "final_import_replay": {
+        "stats": {
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        "duration_s": 5.931,
+        "xml_sha256": "8c1edff7e9667ab374610679dbc3fd6ad06e628023472f314ecdd78f23fffcb0"
+      }
+    }
+  }
+}
