@@ -105,6 +105,7 @@ from reefvision.api.routes.workflow_graphs import router as workflow_graphs_rout
 from reefvision.api.routes.workflow_schedule_receipts import (
     router as workflow_schedule_receipt_router,
 )
+from reefvision.api.routes.workflow_schedules import router as workflow_schedules_router
 from reefvision.services.workflow_v1_install import install_workflow_v1_extensions
 
 install_workflow_v1_extensions()
@@ -171,6 +172,7 @@ api_router.include_router(advanced_providers_router)
 api_router.include_router(advanced_provider_execution_router)
 api_router.include_router(workflow_graphs_router)
 api_router.include_router(workflow_schedule_receipt_router)
+api_router.include_router(workflow_schedules_router)
 api_router.include_router(spatial_source_assets_router)
 api_router.include_router(spatial_condition_router)
 api_router.include_router(reviewer_lab_router)

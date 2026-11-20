@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
@@ -25,6 +25,7 @@ from reefvision.services.workflow_provenance import (
     verify_workflow_artifact,
 )
 from reefvision.services.workflow_review import WorkflowReviewRequired
+from reefvision.services.workflow_schedule_graphs import verify_scheduled_run
 from reefvision.storage.datasets import canonical_json_sha256
 
 
@@ -244,10 +245,19 @@ def process_workflow_run_job(
             session.commit()
             return False
         now = _now()
-        job.status = "running"
-        job.started_at = job.started_at or now
-        job.error_message = None
-        job.result_json = {"stage": "running", "workflow_run_id": run.id}
+        # A scheduler/worker restart or competing processor must not execute this run twice.
+        claimed = session.execute(
+            update(Job)
+            .where(Job.id == job.id, Job.status == "queued")
+            .values(
+                status="running",
+                started_at=job.started_at or now,
+                error_message=None,
+                result_json={"stage": "running", "workflow_run_id": run.id},
+            )
+        )
+        if getattr(claimed, "rowcount", 0) != 1:
+            return False
         run.status = "running"
         run.started_at = run.started_at or now
         run.error_message = None
@@ -269,6 +279,8 @@ def process_workflow_run_job(
 
     completed_nodes = 0
     try:
+        with factory() as session:
+            verify_scheduled_run(session, settings, run, plan)
         for step in plan.steps:
             if _cancel_requested(factory, job_id):
                 _cancel_remaining_nodes(factory, run_id)
