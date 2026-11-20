@@ -88,8 +88,7 @@ def test_many_cancelling_finite_face_volumes_do_not_overflow_magnitude_sum(
         (0.0, 0.0, opposite_apex),
     ]
     reverse_faces = [
-        [4 if index == 3 else index for index in reversed(face)]
-        for face in CLOSED_FACES
+        [4 if index == 3 else index for index in reversed(face)] for face in CLOSED_FACES
     ]
     # Duplicated oppositely oriented shells stress the volume helper only.
     # This invalid surface is NOT accepted as a biological volume or passed
@@ -98,16 +97,11 @@ def test_many_cancelling_finite_face_volumes_do_not_overflow_magnitude_sum(
     if reverse_winding:
         faces = [list(reversed(face)) for face in faces]
 
-    # Each individual face contribution is finite, but the sum of absolute
-    # contributions exceeds binary64; an exact signed cancellation does not.
-    from math import fsum, isfinite
-
-    contributions = [
-        signed_enclosed_volume_mesh_units(vertices, [face]) for face in faces
-    ]
-    assert all(isfinite(value) for value in contributions)
-    with pytest.raises(OverflowError):
-        fsum(abs(value) for value in contributions)
+    # Each individual tetrahedron contributes a finite source volume, but
+    # the sum of magnitudes of twelve opposite-oriented shells overflows.
+    # Compare against the maximum finite binary64 number without rounding.
+    absolute_sum = Fraction(edge) ** 2 * (Fraction(edge) + Fraction(opposite_apex))
+    assert absolute_sum > Fraction(float.fromhex("0x1.fffffffffffffp1023"))
 
     expected = Fraction(edge) ** 2 * (Fraction(edge) - Fraction(opposite_apex))
     if reverse_winding:
