@@ -521,3 +521,21 @@ calibration, segmentation, or specimen identity.
 **RELEASE HOLD:** This head still requires complete backend/frontend/E2E and
 migration CI, scientific review with representative observations, and real
 installed Windows MSI/CAB/GUI and GPU gates before any release-ready claim.
+
+## Track C: identity-label invariance for subresolution cubic scale (2026-11-19)
+
+A synthetic closed-mesh regression now verifies that changing only a caller
+supplied specimen label preserves the source geometry hash, nominal enclosed
+volume, inverse-length area/volume ratio, and numeric-resolution QC. Both
+labels remain **unverified biological assertions**, not 3D specimen matches.
+The original specimen/observation/frame labels and supplied calibration
+evidence remain present in the standalone scientific provenance and in the
+twice-executed persisted typed Workflow Builder artifacts. Independent
+identity adjudication, calibrated real-coral repeat scans, and longitudinal
+matching remain blocked by the 1.4 acceptance matrix.
+
+The predecessor exact-head run finished 20 successes and three backend
+failures, all caused by Ruff formatting in the inverse-scale precision gate
+and its new test. These formatting hunks have been corrected separately;
+this iteration's new test and exact-head Actions must still pass before
+any verification claim. **RELEASE HOLD for 1.4 and 1.5** remains mandatory.
