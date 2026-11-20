@@ -8,6 +8,11 @@ from pydantic import BaseModel, Field
 
 WorkflowDataType = Literal[
     "project_reference",
+    "scientific_record_collection",
+    "computed_metric_result",
+    "environmental_threshold_samples",
+    "environmental_analysis_result",
+    "scientific_heatmap",
     "image_collection",
     "dataset_version",
     "classification_dataset",

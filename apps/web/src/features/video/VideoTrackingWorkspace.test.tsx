@@ -342,6 +342,15 @@ describe("VideoTrackingWorkspace", () => {
       target: { files: [srt] },
     });
     fireEvent.change(
+      await screen.findByLabelText(
+        "SRT wall-clock UTC offset (minutes, optional)",
+      ),
+      { target: { value: "-300" } },
+    );
+    fireEvent.change(screen.getByLabelText("SRT timezone evidence"), {
+      target: { value: "field log confirms EST" },
+    });
+    fireEvent.change(
       screen.getByLabelText("AirData CSV telemetry (optional)"),
       {
         target: { files: [airdata] },
@@ -362,6 +371,8 @@ describe("VideoTrackingWorkspace", () => {
     await waitFor(() =>
       expect(api.importVideo).toHaveBeenCalledWith(project.id, video, {
         telemetryFile: srt,
+        telemetryUtcOffsetMinutes: -300,
+        telemetryUtcOffsetEvidence: "field log confirms EST",
         airdataFile: airdata,
         airdataTimeOffsetSeconds: 6.19,
         airdataTimeOffsetEvidence: "source-only SRT/AirData alignment",
@@ -812,25 +823,31 @@ describe("VideoTrackingWorkspace", () => {
     const poseFile = new File(["pose"], "external.slp", {
       type: "application/octet-stream",
     });
-    fireEvent.change(
-      screen.getByLabelText("Pose interoperability import file"),
-      {
-        target: { files: [poseFile] },
-      },
-    );
-    fireEvent.click(
-      screen.getByRole("checkbox", {
-        name: /I confirm external frame indices correspond to this video/,
-      }),
-    );
-    const importButton = screen.getByRole("button", { name: "Import pose" });
-    await waitFor(() => expect(importButton).toBeEnabled());
-    expect(
-      screen.getByRole("checkbox", {
-        name: /I confirm external frame indices correspond to this video/,
-      }),
-    ).toBeChecked();
-    fireEvent.click(importButton);
+    const poseImportButton = screen.getByRole("button", {
+      name: "Import pose",
+    });
+    expect(poseImportButton).toBeDisabled();
+
+    const fileInput = screen.getByLabelText(
+      "Pose interoperability import file",
+    ) as HTMLInputElement;
+    const frameMappingConfirmation = screen.getByRole("checkbox", {
+      name: /I confirm external frame indices correspond to this video/,
+    });
+
+    fireEvent.change(fileInput, { target: { files: [poseFile] } });
+    fireEvent.click(frameMappingConfirmation);
+
+    // Auto-selecting the video clears pending import state. Wait for the
+    // selected-video transition and both controlled form fields to settle
+    // before submitting so this test exercises the actual import path.
+    await waitFor(() => {
+      expect(screen.getByLabelText("Video")).toHaveValue("video-1");
+      expect(fileInput.files?.[0]).toBe(poseFile);
+      expect(frameMappingConfirmation).toBeChecked();
+      expect(poseImportButton).toBeEnabled();
+    });
+    fireEvent.click(poseImportButton);
 
     await waitFor(() =>
       expect(poseInteropApi.importPoseInteroperability).toHaveBeenCalledWith(
@@ -959,6 +976,7 @@ describe("VideoTrackingWorkspace", () => {
           end_location: location,
           distance_m: 5,
           speed_m_s: 5,
+          initial_bearing_deg: null,
           cumulative_distance_m: 5,
           speed_valid: true,
           invalid_reason: null,

@@ -24,10 +24,11 @@ def test_cab_upload_partitions_are_complete_and_bounded() -> None:
     build_job = workflow.split("  build-windows-installer:", 1)[1].split(
         "  windows-clean-install-acceptance:", 1
     )[0]
-    assert "$actual.Count -notin @(5, 6)" in build_job
-    assert '$expected = @(1..$actual.Count | ForEach-Object { "rv$_.cab" })' in build_job
-    assert "if ($bytes -ge 2GB)" in build_job
-    assert "MSI before artifact upload" in build_job
+    assert "foreach ($entry in $payload.files)" in build_job
+    assert "if ($entry.size_bytes -ge 2GB)" in build_job
+    assert "if ($partBytes + $entry.size_bytes -ge 2GB)" in build_job
+    assert "if ($parts.Count -gt 4)" in build_job
+    assert build_job.count("RC-Installer-Part-") == 4
     assert MODULE.check_cab_artifact_partition(workflow) == []
 
 
@@ -40,21 +41,26 @@ def test_repository_workflow_matches_tauri_version() -> None:
     assert MODULE.check_workflow(workflow, str(config["version"])) == []
 
 
-def test_repository_workflow_runs_provenance_verified_102_upgrade() -> None:
+def test_repository_workflow_runs_provenance_verified_103_upgrade() -> None:
     workflow = (ROOT / ".github" / "workflows" / "build-desktop.yml").read_text(encoding="utf-8")
-    clean_job = workflow.split("  windows-clean-install-acceptance:", 1)[1]
+    clean_job = workflow.split("  windows-clean-install-acceptance:", 1)[1].split(
+        "  windows-upgrade-acceptance:", 1
+    )[0]
+    upgrade_job = workflow.split("  windows-upgrade-acceptance:", 1)[1]
 
-    assert 'REEFVISION_PREVIOUS_RELEASE_VERSION: "1.0.2"' in clean_job
-    assert "REEFVISION_PREVIOUS_PROVENANCE_SHA256" in clean_job
-    assert 'gh release download "v$previousVersion"' in clean_job
-    assert "$previousProvenance.version -ne $previousVersion" in clean_job
-    assert "$previousActualHash -ne $previousExpectedHash" in clean_job
-    assert "-PreviousInstallerPath $previousMsi" in clean_job
-    assert "-PreviousInstallerSupportsIsolatedAcceptance" in clean_job
+    assert "Upgrade 1.0.3 to 1.1.0" in upgrade_job
+    assert "gh release download v1.0.3" in upgrade_job
+    assert "Published 1.0.3 manifest does not match the pinned SHA-256" in upgrade_job
+    assert "fc5dfd8ce3fd8e4d1ea9d3040d139aff1304c472b42d671262ef0077c119505d" in upgrade_job
+    assert "$manifest.version -ne '1.0.3'" in upgrade_job
+    assert "$manifest.source_commit -ne 'e94dad6a3bece7b776bf45776bc5d06cfbc2c0dc'" in upgrade_job
+    assert "Compare-Object $expected $actual" in upgrade_job
+    assert "-PreviousInstallerPath $previousMsi" in upgrade_job
+    assert "-PreviousInstallerSupportsIsolatedAcceptance" in upgrade_job
     assert clean_job.count("-SkipUpgrade") == 1
-    assert clean_job.count("-InstallerPath $msi") == 2
-    assert '"C:\\reefvision-$releaseSlug-fresh-install-acceptance"' in clean_job
-    assert '"C:\\reefvision-$releaseSlug-upgrade-acceptance"' in clean_job
+    assert upgrade_job.count("-SkipUpgrade") == 0
+    assert "-DisposableTest -KeepArtifacts" in clean_job
+    assert "-DisposableTest -KeepArtifacts" in upgrade_job
 
 
 def valid_workflow() -> str:
@@ -249,19 +255,15 @@ def test_missing_provenance_guard_is_rejected(required_fragment: str) -> None:
 CAB_WORKFLOW = (ROOT / ".github/workflows/build-desktop.yml").read_text(encoding="utf-8")
 
 
-def test_windows_cab_guard_accepts_five_or_six_contiguous_cabinets() -> None:
-    """CAB counts vary with payload size; the MSI Media table remains authoritative."""
-    assert "$actual.Count -notin @(5, 6)" in CAB_WORKFLOW
-    assert '$expected = @(1..$actual.Count | ForEach-Object { "rv$_.cab" })' in CAB_WORKFLOW
-    assert "MSI-declared cabinet payload" in CAB_WORKFLOW
+def test_windows_cab_guard_partitions_every_verified_payload_file() -> None:
+    """Transport partitions derive from the verified MSI and external CAB inventory."""
+    assert "foreach ($entry in $payload.files)" in CAB_WORKFLOW
+    assert "if ($entry.size_bytes -ge 2GB)" in CAB_WORKFLOW
+    assert "if ($parts.Count -gt 4)" in CAB_WORKFLOW
 
-    modified = CAB_WORKFLOW.replace(
-        "$lastPartitionCabs = @($actual | Where-Object { $_ -in @('rv5.cab', 'rv6.cab') })",
-        "$lastPartitionCabs = @('rv5.cab', 'rv6.cab')",
-        1,
-    )
+    modified = CAB_WORKFLOW.replace("foreach ($entry in $payload.files)", "# removed", 1)
     assert any(
-        "derive its final size-check partition" in error
+        "partition every verified payload file" in error
         for error in MODULE.check_cab_artifact_partition(modified)
     )
 
@@ -273,12 +275,15 @@ def test_windows_cab_artifact_manifest_preflight_matches_real_workflow() -> None
 @pytest.mark.parametrize(
     ("original", "replacement"),
     [
-        ("msi/rv4.cab", "msi/rv3.cab"),
-        ("msi/rv6.cab", "msi/rv7.cab"),
-        ("name: ReefVision-Windows-Installer-Part-3", "name: ReefVision-Windows-Installer-Part-2"),
-        ("pattern: ReefVision-Windows-Installer-Part-*", "pattern: unrelated-*"),
+        ("if ($parts.Count -gt 4)", "if ($parts.Count -gt 5)"),
+        ("foreach ($entry in $payload.files)", "foreach ($entry in @())"),
+        (
+            "name: ReefVision-1.1.0-RC-Installer-Part-4",
+            "name: ReefVision-1.1.0-RC-Installer-Part-3",
+        ),
+        ("pattern: ReefVision-1.1.0-RC-Installer-Part-*", "pattern: unrelated-*"),
         ("merge-multiple: true", "merge-multiple: false"),
-        ("msi/*.msi", "msi/incorrect.msi"),
+        ("path: ${{ steps.payload.outputs.part2 }}", "path: ${{ steps.payload.outputs.part1 }}"),
     ],
 )
 def test_windows_cab_preflight_rejects_missing_or_duplicated_artifacts(
@@ -298,15 +303,21 @@ def test_windows_cab_preflight_requires_missing_file_upload_failure() -> None:
     )
 
 
-def test_windows_cab_preflight_rejects_removed_msi_media_verification() -> None:
-    for required in (
-        "$database.OpenView('SELECT `Cabinet` FROM `Media`')",
-        "$missing = @($requiredCabs | Where-Object { $_ -notin $actualCabs })",
-        "$unexpected = @($actualCabs | Where-Object { $_ -notin $requiredCabs })",
+def test_windows_cab_preflight_rejects_removed_payload_verification() -> None:
+    for job_name, next_job in (
+        ("windows-clean-install-acceptance", "windows-upgrade-acceptance"),
+        ("windows-upgrade-acceptance", None),
     ):
-        assert required in CAB_WORKFLOW
-        modified = CAB_WORKFLOW.replace(required, "# removed", 1)
+        prefix, job = CAB_WORKFLOW.split(f"  {job_name}:", 1)
+        if next_job is not None:
+            job, suffix = job.split(f"  {next_job}:", 1)
+            suffix = f"  {next_job}:" + suffix
+        else:
+            suffix = ""
+        required = "./scripts/verify-windows-installer-payload.ps1"
+        assert required in job
+        modified = prefix + f"  {job_name}:" + job.replace(required, "# removed", 1) + suffix
         assert any(
-            "must verify MSI Media table" in error
+            "must verify MSI Media, provenance, and every external CAB" in error
             for error in MODULE.check_cab_artifact_partition(modified)
         )

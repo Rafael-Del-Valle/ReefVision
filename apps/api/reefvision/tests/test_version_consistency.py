@@ -7,7 +7,7 @@ from pathlib import Path
 
 from reefvision import __version__
 
-EXPECTED_VERSION = "1.0.3"
+EXPECTED_VERSION = "1.1.0"
 
 
 def test_authoritative_version_sources_match_release_line() -> None:
@@ -67,20 +67,32 @@ def test_authoritative_version_sources_match_release_line() -> None:
     assert set(authoritative_versions.values()) == {EXPECTED_VERSION}
 
 
-def test_desktop_staging_paths_match_tauri_version() -> None:
-    """Prevent Windows build scripts from staging resources for an older release."""
+def test_desktop_build_and_rust_guard_stage_the_candidate_version() -> None:
     root = Path(__file__).resolve().parents[4]
-    tauri_config = json.loads(
-        (root / "apps" / "web" / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
-    )
-    expected_stage = f"release-{tauri_config['version']}"
-    resources = tauri_config["bundle"]["resources"]
-    assert resources, "The packaged Windows backend resources must be declared"
-    assert all(expected_stage in path for path in resources)
+    tauri_dir = root / "apps" / "web" / "src-tauri"
+    config = json.loads((tauri_dir / "tauri.conf.json").read_text(encoding="utf-8"))
+    version = config["version"]
+    staging = f"release-{version}"
+    assert config["bundle"]["resources"] == {
+        f"../../../.desktop/{staging}/backend/": "backend/",
+        f"../../../.desktop/{staging}/bundled-models/": "bundled-models/",
+    }
+    for path in (
+        tauri_dir / "build.rs",
+        root / "scripts" / "build-desktop.ps1",
+        root / "scripts" / "build-desktop-backend.ps1",
+    ):
+        release_paths = re.findall(r"release-\d+\.\d+\.\d+", path.read_text(encoding="utf-8"))
+        assert set(release_paths) == {staging}, path
 
-    for script_name in ("build-desktop.ps1", "build-desktop-backend.ps1"):
-        script = (root / "scripts" / script_name).read_text(encoding="utf-8")
-        stages = set(re.findall(r"release-\d+\.\d+\.\d+", script))
-        assert stages == {expected_stage}, (
-            f"{script_name} stages {sorted(stages)!r}; expected {expected_stage}"
-        )
+
+def test_web_tooling_supports_only_the_verified_node_lts_range() -> None:
+    root = Path(__file__).resolve().parents[4]
+    web_package = json.loads((root / "apps" / "web" / "package.json").read_text(encoding="utf-8"))
+    node_tools = (root / "scripts" / "lib" / "node-tools.ps1").read_text(encoding="utf-8")
+    workflow = (root / ".github" / "workflows" / "build-desktop.yml").read_text(encoding="utf-8")
+
+    assert web_package["engines"]["node"] == ">=22 <25"
+    assert "[int]$MaximumNodeMajor = 24" in node_tools
+    assert "$nodeMajor -gt $MaximumNodeMajor" in node_tools
+    assert 'node-version: "22"' in workflow

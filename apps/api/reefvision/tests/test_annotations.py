@@ -180,13 +180,17 @@ def test_annotation_batch_save_persists_counts_status_and_events(client: TestCli
 
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
-        events = (
-            session.query(AnnotationEvent)
-            .filter_by(image_id=image_id)
-            .order_by(AnnotationEvent.created_at, AnnotationEvent.id)
-            .all()
-        )
-        assert [event.event_type for event in events] == ["created", "class_changed"]
+        events = session.query(AnnotationEvent).filter_by(image_id=image_id).all()
+        assert {event.event_type for event in events} == {"created", "class_changed"}
+        assert {
+            (
+                event.event_type,
+                (event.before_json or {}).get("revision"),
+                (event.after_json or {}).get("revision"),
+            )
+            for event in events
+            if event.before_json is not None
+        } == {("class_changed", 1, 2)}
 
 
 def test_annotation_save_is_transactional_and_rejects_invalid_boxes(client: TestClient) -> None:
@@ -362,13 +366,20 @@ def test_annotation_delete_and_restore_record_events(client: TestClient) -> None
         annotation = session.get(Annotation, annotation_id)
         assert annotation is not None
         assert annotation.deleted_at is None
-        event_types = [
-            event.event_type
-            for event in session.query(AnnotationEvent)
-            .filter_by(annotation_id=annotation_id)
-            .order_by(AnnotationEvent.created_at, AnnotationEvent.id)
-        ]
-        assert event_types == ["created", "deleted", "restored"]
+        events = session.query(AnnotationEvent).filter_by(annotation_id=annotation_id).all()
+        assert {event.event_type for event in events} == {"created", "deleted", "restored"}
+        assert {
+            (
+                event.event_type,
+                (event.before_json or {}).get("revision"),
+                (event.after_json or {}).get("revision"),
+            )
+            for event in events
+            if event.before_json is not None
+        } == {
+            ("deleted", 1, 2),
+            ("restored", 2, 3),
+        }
 
 
 def test_annotation_id_cannot_be_reused_across_images(client: TestClient) -> None:
