@@ -244,3 +244,22 @@ passed backend and Windows preservation but failed frontend Prettier before
 TypeScript/Vitest. Its exact single-file formatter diff is corrected here.
 Full new-head frontend/E2E, real installed Windows pen/touch and MSI upgrade/
 rollback, representative biology and owner approval are still required.
+
+## Full-editor pan and wheel continuity (Track D)
+
+The full annotation editor used to calculate each pointer-move displacement
+against the viewport transform captured when panning started. If a researcher
+zoomed while keeping an Alt/middle/pan-tool drag active, the next pointer move
+restored that stale scale and offset, making dense coral overlays jump. The
+editor now applies incremental displacement to the latest zoomed viewport and
+tracks the active pointer's previous client position. A secondary pointer still
+cannot move or complete that gesture. The existing class-visibility, QC and
+saved typed Workflow Builder paths are unchanged: this is purely a rendering
+interaction, not a scientific transform or a new analysis node.
+
+A React regression checks pan → wheel zoom → continued pan, zoom persistence,
+secondary-pointer isolation, cancellation at pointer release and unchanged
+source-pixel annotation geometry. The preceding exact-head frontend CI
+identified Prettier differences in the two pointer-identity tests; the same
+increment formats those tests. Acceptance still requires full exact-head
+frontend/backend/E2E CI and genuine installed-Windows pen/touch/mouse testing.
