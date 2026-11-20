@@ -10,7 +10,7 @@ function Set-ProbeRestrictedPath {
 }
 
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or
-    $env:GITHUB_REF_NAME -ne 'codex/reefvision-webview2-host-probe-20261120') {
+    $env:GITHUB_REF_NAME -ne 'codex/reefvision-webview2-host-probe-native-env') {
     throw 'The temporary Windows test account is available only in its designated GitHub-hosted diagnostic job.'
 }
 
