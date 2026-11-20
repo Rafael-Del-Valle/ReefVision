@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T07:04:00Z`
+Updated: `2026-11-20T07:29:00Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -136,7 +136,7 @@ Evidence:
 - `source`: Standalone and saved RK4 reject unsupported longitude extents and mixed acquisitions. Reordering a compatible grid preserves its input hash. Unassessed sources retain their QC status and uncertainty disclosure when the result is saved. — `apps/api/reefvision/tests/test_workflow_current_streamline.py` (`rv11-current-shared-evidence`)
 - `browser`: A generated 2 by 2 cache supplied four current vectors. The desktop exported signed values, calculated four streamlines, reopened the saved analysis and retained its unassessed input QC and uncertainty notes. — `docs/REEFVISION_1.4.0_REPORT.md#offline-currents-and-mesh-precision` (`rv11-current-offline-reopen`)
 - `windows_installed`: none recorded
-- `physical_hardware`: none recorded
+- `physical_hardware`: The actual dd29e0088 Windows desktop opened an offline fixture, exported four signed CSV rows, reopened the map with identical file bytes, and displayed the saved Current streamlines result with unassessed QC. The MSI and its six cabinets were locally built and administratively extracted. — `docs/REEFVISION_1.4.0_REPORT.md#ordinary-windows-account-and-delivered-downloads` (`rv11-current-packaged-offline`)
 - `representative_data`: none recorded
 
 ### rv11-environmental-context: Offline-pinned NOAA/Copernicus and tidal/lunar context
@@ -787,6 +787,7 @@ Evidence:
 - `windows_installed`: Installed candidate 72254d9a0 passed the published 1.0.3 upgrade, both historical numeric profile fixtures, and rollback using the genuine f44053a90 1.3 installer. The old reader preserved the upgraded database digest and reopened its separately restored pre-upgrade backup. The richer 1.3 fixture also showed that the packaged product Restore action still required the later resource-path fix. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44677664711` (`rv14-exact-87-installed`)
 - `windows_installed`: The local MSI built from 92e355b6a restored a verified backup created by the accepted f44053a90 executable through the production Restore action. IDs, source bytes, scientific records and checkpoint survived upgrade and Project Exchange. The old executable refused the newer database unchanged and wrote successfully in the recovered 1.3 profile. The material was a generated fixture. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/92#issuecomment-7032104053` (`rv14-rich-87-restore`)
 - `windows_installed`: On a disposable profile, the official 1b0f29cff sidecar migrated the accepted 1.3 fixture, exchanged its reviewed data and model hash, and returned HTTP 200 for managed restore. The original 1.3 binary preserved the upgraded database on refusal and wrote successfully after recovery. All five authenticated backup entries were rehashed. — `docs/REEFVISION_1.4.0_REPORT.md#official-windows-build-and-recovery-at-1b0f29cff` (`rv14-official-f440-rich-restore`)
+- `windows_installed`: The official 1b0f29cff six-CAB MSI passed ten GUI journeys and all fourteen exercised install, restart, Exchange, uninstall and retention stages using its ordinary Windows profile. Byte-verified native downloads succeeded with the default inspector open. The four predecessor upgrades passed separately. Representative prior-user profiles remain open. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44693974894` (`rv14-ordinary-profile-installed-ten`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 

@@ -64,11 +64,44 @@ were rehashed. The separately built local MSI with five cabinets, SHA-256
 `f30c6ced8c1ee2c2f57ddffb399c7f20ca915a7ddf8b49c403f24a629d2ff73a`,
 also passed these generated-profile recovery and physical training checks.
 Authorized prior-user profiles and enforcement-enabled Windows 11 hardware
-remain open. The hosted fresh install passed launch, restart, persistence,
-Exchange, uninstall and retention. Two browser journeys passed and eight
-failed when the driver reported a canceled download. A disposable ordinary
-Windows account is being used to verify delivery to its actual Downloads
-folder. [Draft #92](https://github.com/Rafael-Del-Valle/ReefVision/pull/92).
+remain open. In the first hosted fresh install, two browser journeys passed
+and eight failed when the driver reported canceled downloads. The same MSI
+subsequently passed all ten with the ordinary user's Windows profile.
+[Original Windows run](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44687304789),
+[corrected ordinary-account run](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44693974894).
+
+## Ordinary Windows account and delivered downloads
+
+When the elevated installer started the desktop using different credentials,
+Windows loaded the disposable account but PowerShell passed through the
+parent process environment. A focused test resolved the ordinary user's
+Downloads folder, clicked the real dataset link and verified all 2,522
+received bytes against the exporter's SHA-256. The harness now requests
+the designated account's OS environment when starting the credentialed
+process and verifies that its profile matches the account Windows loaded.
+[Focused download](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44693135959).
+
+The corrected ordinary-account job installed the original official six-CAB
+`1b0f29cff` package on Windows Server 2022. The desktop ran at medium
+integrity, and its WebView2 process owned the loopback listener. An
+elevated test driver exercised the unchanged file downloads with the
+inspector open. All ten desktop journeys passed in 142.34 seconds with
+zero skips or retries. All 14 exercised lifecycle stages passed, including
+project persistence, restart, Exchange, uninstall and data retention.
+The temporary account and its profile were removed. The original four
+upgrade jobs also passed for published 1.0.3, validated 1.3, and the
+historical 0038 and 0039 schemas.
+[Retained MSI acceptance](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44693974894),
+[original upgrades](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44687304789).
+
+The subsequent `dd29e0088` production package exercised the new
+environmental changes on the physical Windows desktop. A generated offline
+cache yielded four signed CSV rows, and reopening the map reproduced SHA-256
+`b8fc128d8c58bba1d2607b348eeda01f9e79a563279fcb45908e5d86d6777edd`.
+The saved Current streamlines result retained its unassessed QC. This local
+MSI, SHA-256 `f6dce6a35c9218d16f4d39d3f6741f42d4a1041228fc8f2595759db64da3f140`,
+and its six cabinets passed payload and retirement verification. Both
+administrative extractions preserved Windows product registration.
 
 The complete Windows source backend collection at `1b0f29cff` contained
 5,245 distinct tests. Of those, 5,234 passed and 11 skipped. Three skipped
@@ -103,7 +136,10 @@ and zero-area result for a noncollinear triangle with edges of length
 saved graph, which writes no measurement artifact. A representable reference
 area of `5e-201` passed with zero absolute tolerance and the two saved
 executions had the same scientific output digest. All 377 affected geometry
-and registration tests passed. [Concurrent 1.4 work](https://github.com/Rafael-Del-Valle/ReefVision/pull/79).
+and registration tests passed. The later #79 revision `1ce444409` adds
+both triangle windings in three coordinate planes and runs the same failing
+saved graph twice to check that neither execution records a measurement.
+[Concurrent 1.4 work](https://github.com/Rafael-Del-Valle/ReefVision/pull/79).
 
 ## Feature-by-feature result
 

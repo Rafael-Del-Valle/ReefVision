@@ -59,6 +59,18 @@ def test_tiny_nondegenerate_triangle_never_becomes_zero_area() -> None:
     assert small == pytest.approx(5e-201, abs=0.0)
 
 
+def test_triangle_area_underflow_is_orientation_and_axis_invariant() -> None:
+    origin = (0.0, 0.0, 0.0)
+    for second, third in (
+        ((1e-200, 0.0, 0.0), (0.0, 1e-200, 0.0)),
+        ((0.0, 1e-200, 0.0), (0.0, 0.0, 1e-200)),
+        ((0.0, 0.0, 1e-200), (1e-200, 0.0, 0.0)),
+    ):
+        for first_vertex, last_vertex in ((second, third), (third, second)):
+            with pytest.raises(ValueError, match="area underflowed numeric precision"):
+                triangle_area(origin, first_vertex, last_vertex)
+
+
 def test_underflow_fails_standalone_and_persisted_graph_without_artifact(
     client: TestClient,
 ) -> None:
@@ -71,19 +83,20 @@ def test_underflow_fails_standalone_and_persisted_graph_without_artifact(
 
     saved = client.post(f"{base}/workflow-graphs", json={"graph": _saved_graph(params)})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
-    assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
-    assert not process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
-    )
-    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
-    assert detail.status_code == 200, detail.text
-    assert detail.json()["run"]["status"] == "failed"
-    assert not any(
-        artifact["data_type"] == "mesh_measurement_preview"
-        for artifact in detail.json()["artifacts"]
-    )
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert not process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "failed"
+        assert not any(
+            artifact["data_type"] == "mesh_measurement_preview"
+            for artifact in detail.json()["artifacts"]
+        )
 
 
 def test_representable_tiny_area_replays_in_saved_typed_graph(
