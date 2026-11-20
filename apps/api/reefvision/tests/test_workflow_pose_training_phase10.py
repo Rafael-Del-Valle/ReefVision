@@ -38,6 +38,7 @@ from reefvision.jobs.pose_training import (
     _materialized_pose_dataset_sha256,
     _prepare_clean_pose_training_output,
     _require_empty_pose_gpu_output,
+    _require_trusted_pose_checkpoints,
     _resolve_unlinked_pose_run_path,
     _verified_pose_trainer_save_dir,
     _verify_postlaunch_pose_dataset,
@@ -1105,6 +1106,41 @@ def test_pose_materialization_rejects_special_archive_members(
         )
 
     assert not (destination / "images" / "train" / "frame_00000001.png").exists()
+
+
+def test_pose_training_completion_rejects_missing_or_redirected_checkpoints(
+    tmp_path: Path,
+) -> None:
+    # The worker must not mark a trained pose model successful without a
+    # locally produced checkpoint; older registered model bytes are protected.
+    output = tmp_path / "run" / "runs" / "pose"
+    weights = output / "weights"
+    weights.mkdir(parents=True)
+    with pytest.raises(ValidationError, match="no usable checkpoints"):
+        _require_trusted_pose_checkpoints(output)
+
+    best = weights / "best.pt"
+    best.write_bytes(b"")
+    with pytest.raises(ValidationError, match="checkpoint is empty or redirected"):
+        _require_trusted_pose_checkpoints(output)
+
+    best.write_bytes(b"new-run-pose-checkpoint")
+    _require_trusted_pose_checkpoints(output)
+    best.unlink()
+    last = weights / "last.pt"
+    last.write_bytes(b"new-run-last-checkpoint")
+    _require_trusted_pose_checkpoints(output)
+    last.unlink()
+
+    prior = tmp_path / "registered-model.pt"
+    prior.write_bytes(b"preserve-existing-registered-weights")
+    try:
+        best.symlink_to(prior)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"Checkpoint symlink creation unavailable: {exc}")
+    with pytest.raises(ValidationError, match="checkpoint is empty or redirected"):
+        _require_trusted_pose_checkpoints(output)
+    assert prior.read_bytes() == b"preserve-existing-registered-weights"
 
 
 @pytest.mark.parametrize("output_name", ("pose-dataset", "ultralytics", "runs", "runs/pose"))
