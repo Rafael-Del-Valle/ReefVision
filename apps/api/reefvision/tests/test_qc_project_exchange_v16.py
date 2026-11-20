@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import json
 from io import BytesIO
-from uuid import uuid4
+from typing import cast
+from uuid import UUID, uuid4
 from zipfile import ZipFile
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.config import Settings
+from reefvision.db.models import ReviewQueueItemEvent
 from reefvision.tests.test_review_queue_bulk_16 import _queue_with_two_images
 from reefvision.tests.test_scientific_project_exchange import (
     MANIFEST,
@@ -90,6 +93,46 @@ def test_reimported_qc_preserves_history_free_text_and_retry_identity(
         assert client.get(url).json()["total"] == 3
         if index == 0:
             raw = export_archive(client, test_settings, local)
+
+
+def test_exchange_preserves_last_assignment_when_clocks_tie_and_ids_sort_backwards(
+    client: TestClient, test_settings: Settings
+) -> None:
+    queue, items = _queue_with_two_images(client)
+    project = client.get(f"/api/v1/review-queues/{queue}").json()["project_id"]
+    path = f"/api/v1/review-queues/{queue}/items/{items[0]}/events"
+    for kind in ("assign", "unassign"):
+        response = client.post(
+            path,
+            json={
+                "client_request_id": str(uuid4()),
+                "actor": "curator",
+                "event_type": kind,
+                **({"assignee": "observer"} if kind == "assign" else {}),
+            },
+        )
+        assert response.is_success, response.text
+    history = client.get(path).json()["items"]
+    with cast(FastAPI, client.app).state.session_factory() as session:
+        first, last = (session.get(ReviewQueueItemEvent, entry["id"]) for entry in history)
+        assert first is not None and last is not None
+        first.id, last.id = str(UUID(int=2)), str(UUID(int=1))
+        last.created_at = first.created_at
+        session.commit()
+    raw = export_archive(client, test_settings, project)
+    for _ in range(2):
+        with ZipFile(BytesIO(raw)) as archive:
+            events = archive.read("records/review_queue_item_events.jsonl").splitlines()
+            assert [json.loads(row)["event_type"] for row in events] == ["assign", "unassign"]
+        result = import_archive(client, raw)
+        assert result.is_success, result.text
+        mapping = result.json()["package"]["options_json"]["origin_id_map"]
+        copied = client.get(
+            f"/api/v1/review-queues/{mapping[queue]}/items/{mapping[items[0]]}/events"
+        )
+        assert copied.json()["current_assignee"] is None
+        assert [row["event_type"] for row in copied.json()["items"]] == ["assign", "unassign"]
+        raw = export_archive(client, test_settings, mapping[project])
 
 
 @pytest.mark.parametrize(

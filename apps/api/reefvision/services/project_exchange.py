@@ -57,6 +57,7 @@ from reefvision.schemas.project_exchange import (
     ProjectExchangeInspectionResponse,
     ProjectExchangePackageResponse,
 )
+from reefvision.services.project_exchange_qc_v16 import EVENTS as QC_EVENTS
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -381,7 +382,13 @@ class ProjectExchangeService:
         try:
             with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED) as archive:
                 for section_name, records in sections.items():
-                    ordered = sorted(records, key=lambda item: str(getattr(item, "id", "")))
+                    # The QC ledger's append order determines its current reviewer, including
+                    # when the desktop clock repeats or moves backwards between assignments.
+                    ordered = (
+                        records
+                        if section_name == QC_EVENTS
+                        else sorted(records, key=lambda item: str(getattr(item, "id", "")))
+                    )
                     payload = _jsonl_bytes(self._export_row(item) for item in ordered)
                     member = f"records/{section_name}.jsonl"
                     archive.writestr(member, payload)
