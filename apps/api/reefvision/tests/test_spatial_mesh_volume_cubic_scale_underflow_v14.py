@@ -48,7 +48,9 @@ def test_representable_tiny_volume_preserves_exact_cubic_scale_bounds() -> None:
         [expected * 0.9**3, expected * 1.1**3], rel=1e-12, abs=0
     )
     patch_interval = result["edge_connected_patch_enclosed_volume_scale_intervals_m3"][0]
-    assert patch_interval == pytest.approx([expected * 0.9**3, expected * 1.1**3], rel=1e-12, abs=0)
+    assert patch_interval == pytest.approx(
+        [expected * 0.9**3, expected * 1.1**3], rel=1e-12, abs=0
+    )
     assert result["surface_to_enclosed_volume_ratio_per_m"] is not None
     assert "enclosed_volume_zero_or_underflow" not in result["qc_warnings"]
     assert result["measurement_status"] == "caller_supplied_unverified"
@@ -333,7 +335,7 @@ def test_unrepresentable_volume_after_large_scale_fails_closed_in_saved_graph(
     """Never downgrade known positive volume underflow to an absent measurement."""
     extent = 1e-120
     faces = [[a, c, b] for a, b, c in CLOSED_FACES] if reverse_winding else CLOSED_FACES
-    params = {
+    direct_params = {
         **_params(1e6),
         "vertices": [
             [0.0, 0.0, 0.0],
@@ -342,6 +344,9 @@ def test_unrepresentable_volume_after_large_scale_fails_closed_in_saved_graph(
             [0.0, 0.0, extent],
         ],
         "faces": faces,
+    }
+    params = {
+        **direct_params,
         "specimen_id": "synthetic-unverified-underflow",
         "observation_id": "still-unrepresentable-after-scale",
         "coordinate_frame_id": "unregistered-source-frame",
@@ -349,7 +354,7 @@ def test_unrepresentable_volume_after_large_scale_fails_closed_in_saved_graph(
     # Source volume (edge 1e-120) and calibrated volume (edge 1e-114)
     # are both strictly positive but below binary64 representation.
     with pytest.raises(ValueError, match="Enclosed mesh volume underflowed numeric precision"):
-        measure_mesh_preview(**params)
+        measure_mesh_preview(**direct_params)
 
     project_id = str(create_project(client, "Underflowed cubic volume review")["id"])
     base = f"/api/v1/projects/{project_id}"
