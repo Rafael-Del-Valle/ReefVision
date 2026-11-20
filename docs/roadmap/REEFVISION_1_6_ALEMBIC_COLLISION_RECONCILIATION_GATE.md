@@ -76,3 +76,30 @@ validation remain required before release.
 The optional `--verify-structural-contracts` read-only inspector now verifies **both** sides of each original column nullability contract, not only originally required columns. An unexpected `NOT NULL` on an originally optional image/video link or reviewer comment can suppress valid future observations even with unchanged historical rows. A new SQLite column `DEFAULT` can fabricate future scientific source values or reviewer attribution despite identical existing row contents. Neither independently authored 0038 source table declares a column default, so the inspector rejects all unexpected defaults. These deviations report the existing redacted `lineage_table_contract_mismatch_*` warning and retain `upgrade_authorized=false`; no data or schema is altered.
 
 Four synthetic populated-table regressions cover optional `NOT NULL` and injected defaults in both scientific and QC families; two strict CLI cases verify nonzero exits, redaction and byte preservation. Existing valid-contract controls stay green. This check does **not** validate cross-branch migration ancestry, automatically approve a database, or replace representative biological, saved-workflow, and genuine installed-Windows MSI/GUI acceptance. Revision-0038 reconciliation and explicit researcher approval remain required before release.
+
+## 2026-11-20 — Original QC CHECK vocabulary and nonindexed-column semantics
+
+The isolated 1.6 migration `0038_review_queue_item_events.py` defines a named
+`ck_review_queue_item_event_type` CHECK allowing exactly `comment`, `assign`
+and `unassign`. Revisions 0039 and 0040 deliberately extend that list for
+`triage_start`, `triage_skip`, `triage_return` and `triage_complete`.
+SQLite PRAGMA column/index/FK introspection cannot reveal whether this CHECK
+was removed, broadened to an unapproved review action, silently narrowed, or
+supplemented with a second CHECK that rejects otherwise-valid researcher events.
+The optional read-only structural auditor now recognizes **only** those three
+historical, explicitly named CHECK expressions, rejects missing, renamed,
+modified and additional CHECKs, and rejects unexpected CHECKs on the protected
+1.1 scientific 0038 tables. It lexes string literals, quoted identifiers and
+SQL comments separately, avoiding false positives from a comment containing
+`CHECK`. It also rejects unexpected table-column `COLLATE` and SQLite
+`ON CONFLICT` clauses that can alter identity comparisons or silently ignore
+invalid future records despite unchanged existing rows.
+
+Synthetic populated scientific/QC SQLite regressions exercise malformed and
+historically valid constraints, source-value and event-type collations, extra
+conflict policies, comment decoys, strict CLI redaction, and preservation of
+original database bytes. The CHECK vocabulary recognition is intentionally
+**not proof that a claimed revision stage was applied**; migration history,
+complete biological/review events, on-disk backups, typed saved Workflow Builder
+QC approval and Windows MSI/CAB installer validation still require separate
+review. The independent 1.1/1.6 Alembic 0038 collision remains a release HOLD.
