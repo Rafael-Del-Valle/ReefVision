@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T12:27:39Z`
+Updated: `2026-11-20T12:38:04Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -11,8 +11,8 @@ Candidate target: `2.0`
 | --- | ---: |
 | blocked | 17 |
 | explicitly_deferred | 4 |
-| in_progress | 27 |
-| verified | 29 |
+| in_progress | 26 |
+| verified | 30 |
 
 ## Features
 
@@ -49,7 +49,7 @@ Candidate target: `2.0`
 | 1.4 | Reviewed 3D organism matching across acquisitions | blocked | 3D scientific task → Organism correspondence |
 | 1.4 | Anatomical coral branch-length measurement | blocked | Home → project → Video & automation → Workflow builder → select project mesh → Anatomical branch length |
 | 1.4 | Reviewed biological-condition measurements | blocked | Home → project → Video & automation → Workflow builder → select project original → Condition review |
-| 1.4 | Reviewed extents, dimensions, area, surface paths, and conditional volume | in_progress | 3D scientific task → Measurements |
+| 1.4 | Reviewed extents, dimensions, area, surface paths, and conditional volume | verified | 3D scientific task → Measurements |
 | 1.4 | Validated 1.3 to 1.4 ancestry, migration, exchange, and rollback | blocked | Installed upgrade and Project menu → Backup / Exchange |
 | 1.4 | Reviewed longitudinal 3D change | blocked | 3D scientific task → Longitudinal comparison |
 | 1.4 | Reviewed 3D registration transforms and calibration evidence | blocked | 3D scientific task → Registration review |
@@ -744,7 +744,7 @@ Evidence:
 ### rv14-geometric-measurements: Reviewed extents, dimensions, area, surface paths, and conditional volume
 
 - Target: `1.4`
-- Status: `in_progress`
+- Status: `verified`
 - Dependencies: `rv14-versioned-spatial-assets`
 - Entry point: 3D scientific task → Measurements
 - Workflow Builder: `required`
@@ -752,7 +752,7 @@ Evidence:
 Acceptance checks:
 
 - **verified** — Match known geometry and scale exponents, report topology/QC/uncertainty, and withhold invalid area or volume claims. (`rv14-geometric-measurements-check`)
-- **in_progress** — Keep exact planar zero distinct from a true positive volume below source-unit precision. Preserve a representable calibrated volume and give an actionable failure when calibration cannot recover it in standalone and saved workflows. (`rv14-mesh-coplanar-scale-recovery`)
+- **verified** — Keep exact planar zero distinct from a true positive volume below source-unit precision. Preserve a representable calibrated volume and give an actionable failure when calibration cannot recover it in standalone and saved workflows. (`rv14-mesh-coplanar-scale-recovery`)
 
 Evidence:
 
@@ -760,8 +760,11 @@ Evidence:
 - `source`: Calibration review and source bindings reject stale, mismatched, self-reviewed, or altered measurement evidence while preserving unverified status. — `apps/api/reefvision/tests/test_spatial_mesh_calibration_review_v14.py` (`rv14-geometric-review-binding`)
 - `source`: A noncollinear triangle whose area underflows is rejected by the standalone API and saved graph. A representable reference of 5e-201 is reproduced using zero absolute tolerance, and two saved executions retain the same scientific payload digest. — `apps/api/reefvision/tests/test_spatial_mesh_area_underflow_v14.py` (`rv14-mesh-area-representability`)
 - `source`: The previous desktop returned zero for a closed nearly planar tetrahedron with nonzero volume within the floating-point range. Both windings now agree with an independent exact rational oracle, the exactly planar control remains zero, and standalone plus two saved workflow runs preserve the provisional measure and its source. — `apps/api/reefvision/tests/test_spatial_mesh_enclosed_volume_v14.py` (`rv14-geometric-measurements-recover-volume-cancellation`)
+- `source`: The project API regression imports the tiny closed OBJ, verifies its structural receipt and original, rejects a still-unrepresentable unit-scale measurement and returns the independently calculated positive value at scale 1,000,000. Forty-nine focused backend cases passed. — `https://github.com/Rafael-Del-Valle/ReefVision/blob/1d3942662ba2c4a75c30c59acf37851be51ce3e1/apps/api/reefvision/tests/test_spatial_asset_parse_jobs_v14.py` (`rv14-geometry-import-and-calibration-1d3942662`)
 - `browser`: Workflow Builder exposes a project-owned original picker, scale, calibration evidence, uncertainty, specimen/observation/frame context, and an explicit warning that geometric routes are not anatomical branch lengths. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-geometric-guided-ui`)
+- `browser`: The ordinary source desktop imported all three generated OBJs, exercised four calibrated previews, reopened both saved graphs, repeated each and downloaded the Exchange package. All three originals and six typed artifacts verified against the source-browser receipt with SHA-256 c46681c4df9075abb7bbdb17c228b05107fce72174eb236c16255428542ef388. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv14-geometry-project-replay-1d3942662`)
 - `windows_installed`: The shipped #96 sidecar and two saved runs reported 170.66666666666666 cubic metres for four exactly coplanar source vertices at the supported scale of 999,998.1 metres per unit. Both downloaded artifacts had SHA-256 c4c7af4515773c08a00abc067dee820fe78eb53e80db7722cc719f6ff732351b. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv14-mesh-coplanar-calibration-3c8e2d070`)
+- `windows_installed`: On the physical Windows host, the MSI-extracted desktop and sidecar reproduced the four previews and both saved graphs. The locally built MSI had SHA-256 5d1f9def34983f23b1d0755a0df549d2cb44148f52b21a0d77a85cc686cc59c7. Its exported ZIP contained 63 verified sections, three originals and six result artifacts, and retained both controlled failures without measurement artifacts. — `docs/validation/spatial-calibration-1d3942662.json` (`rv14-geometry-package-replay-1d3942662`)
 - `physical_hardware`: In the packaged 1.5 WebView2, both OBJ windings and a double-precision PLY yielded 3.7007434154171883e-9 cubic metres at fixture scale. The planar control withheld the value. An actual reopen reproduced all four artifact checksums. Physical receipt SHA-256 91cc3210fe28a508a20cea48fb60ffdb988648389071357938184997870c54b7. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv14-physical-volume-3c8e2d070`)
 - `representative_data`: none recorded
 

@@ -1,0 +1,148 @@
+{
+  "package": {
+    "source": "1d3942662ba2c4a75c30c59acf37851be51ce3e1",
+    "build_surface": "local-production",
+    "extraction_receipt_sha256": "86262f6eab9a8f65c061a63599b994fab4ec066d3c3700a21d63beee0a2aaf5b",
+    "test_driver_sha256": "fa2ff90909263b50b2ac0fc00e310c3eeec97e0dd835512e896e92aebaab1a19",
+    "msi_sha256": "5d1f9def34983f23b1d0755a0df549d2cb44148f52b21a0d77a85cc686cc59c7",
+    "desktop_sha256": "7a45048fe5fb0f927673ff29dd37c81d0261a7377eba34274d6fa12671612ed9",
+    "sidecar_sha256": "de4ac0475ef53f8e7769538249293510f7bc487fd008e420c3af2ccdbb2bd418"
+  },
+  "runtime_surface": "administratively_extracted_windows_msi_webview2",
+  "fixture_kind": "generated_synthetic_OBJ_meshes",
+  "raw_native_evidence_sha256": "3ebaa10c796e26599bade4a191a59e57d217a6c104b87e6959c613637fc78184",
+  "runtime_version": "1.5.0",
+  "schema": "b15_integrated_0002",
+  "safe_mode": false,
+  "isolated_desktop_and_loopback_listeners_closed": true,
+  "outcome": "four_preview_cases_saved_replay_and_export_verified",
+  "originals": [
+    {
+      "filename": "near-planar.obj",
+      "sha256": "8894c3787a455879679dc767d547763e54ae67a8941074aba0446273fb225a28",
+      "source_format": "obj"
+    },
+    {
+      "filename": "exactly-planar.obj",
+      "sha256": "654accc4579485374ec6dd2b7602154007d968bf81917b207ee2d4fc50f8e75e",
+      "source_format": "obj"
+    },
+    {
+      "filename": "tiny-tetrahedron.obj",
+      "sha256": "bb77b50acb3af2ab5a56be6e3c348b2b9f26b596722e1cb7be8d0bdb43d78d8e",
+      "source_format": "obj"
+    }
+  ],
+  "previews": [
+    {
+      "label": "near-planar",
+      "assetIndex": 0,
+      "scale": "1",
+      "expected": 3.7007434154171883e-09,
+      "warning": null,
+      "status": 200,
+      "volume_m3": 3.7007434154171883e-09,
+      "qc": [
+        "project_source_original_unreviewed"
+      ],
+      "error": null
+    },
+    {
+      "label": "tilted-planar",
+      "assetIndex": 1,
+      "scale": "999998.1",
+      "expected": null,
+      "warning": "enclosed_volume_zero_or_underflow",
+      "status": 200,
+      "volume_m3": null,
+      "qc": [
+        "enclosed_volume_zero_or_underflow",
+        "project_source_original_unreviewed"
+      ],
+      "error": null
+    },
+    {
+      "label": "calibrated-subnormal",
+      "assetIndex": 2,
+      "scale": "1000000",
+      "expected": 1.6666666667e-313,
+      "warning": "enclosed_volume_source_unit_numeric_recovery",
+      "status": 200,
+      "volume_m3": 1.6666666667e-313,
+      "qc": [
+        "enclosed_volume_source_unit_numeric_recovery",
+        "project_source_original_unreviewed"
+      ],
+      "error": null
+    },
+    {
+      "label": "unrepresentable",
+      "assetIndex": 2,
+      "scale": "1",
+      "expected": null,
+      "warning": null,
+      "status": 400,
+      "volume_m3": null,
+      "qc": [],
+      "error": "Invalid project mesh preview: Enclosed mesh volume underflowed numeric precision after calibration"
+    }
+  ],
+  "saved_runs": [
+    {
+      "graph": "c6c05db1-56fb-4f5c-94ee-b670c67b07b6",
+      "first": {
+        "id": "efef7da9-b3d5-456d-9e15-e044b220ae1f",
+        "graph_id": "c6c05db1-56fb-4f5c-94ee-b670c67b07b6",
+        "status": "succeeded",
+        "graph_sha256": "7dd7af2dcfcc5f21deeb84daded13883a772b5dcb053aacc0e597ebadff5fd75",
+        "artifacts": {
+          "near-planar": "ac6512f8fee8ab0640ea629bf44dba7890f146252efbda3da41ee72e56ef019b",
+          "tilted-planar": "d86b21ca5a99c09eb1c565c13b05c08c0b7181be85be0714a90319cead12d3ee",
+          "calibrated-subnormal": "788445576d631666259d7f54cf7e9b1ac95571ea36d879a4644be57f016d6452"
+        },
+        "error": null
+      },
+      "second": {
+        "id": "95fac0c2-00a5-4774-a4d9-db13b7817ee0",
+        "graph_id": "c6c05db1-56fb-4f5c-94ee-b670c67b07b6",
+        "status": "succeeded",
+        "graph_sha256": "7dd7af2dcfcc5f21deeb84daded13883a772b5dcb053aacc0e597ebadff5fd75",
+        "artifacts": {
+          "near-planar": "ac6512f8fee8ab0640ea629bf44dba7890f146252efbda3da41ee72e56ef019b",
+          "tilted-planar": "d86b21ca5a99c09eb1c565c13b05c08c0b7181be85be0714a90319cead12d3ee",
+          "calibrated-subnormal": "788445576d631666259d7f54cf7e9b1ac95571ea36d879a4644be57f016d6452"
+        },
+        "error": null
+      }
+    },
+    {
+      "graph": "1e6b9108-5890-43d7-915a-48183ce3f49d",
+      "first": {
+        "id": "571cfdeb-61ce-4c84-9989-6006bfd598b6",
+        "graph_id": "1e6b9108-5890-43d7-915a-48183ce3f49d",
+        "status": "failed",
+        "graph_sha256": "a8322465f04f362b18371c0eb6619dd8e9c79483ed9430c0bbc6e63fadf56fd5",
+        "artifacts": {},
+        "error": "Invalid project mesh preview: Enclosed mesh volume underflowed numeric precision after calibration"
+      },
+      "second": {
+        "id": "8b901dad-2466-48d2-82bc-83c9165c569d",
+        "graph_id": "1e6b9108-5890-43d7-915a-48183ce3f49d",
+        "status": "failed",
+        "graph_sha256": "a8322465f04f362b18371c0eb6619dd8e9c79483ed9430c0bbc6e63fadf56fd5",
+        "artifacts": {},
+        "error": "Invalid project mesh preview: Enclosed mesh volume underflowed numeric precision after calibration"
+      }
+    }
+  ],
+  "exchange": {
+    "source": "1d3942662ba2c4a75c30c59acf37851be51ce3e1",
+    "surface": "tauri-webview2",
+    "exchange_sha256": "0384bce37e46622b0abf2e1ab0af6e5c86db20727e54b2d24f7786b6db1e01ab",
+    "originals_verified": 3,
+    "verified_record_sections": 63,
+    "verified_mesh_artifacts": 6,
+    "successful_runs": 2,
+    "failed_runs_without_mesh_artifacts": 2
+  }
+}

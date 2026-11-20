@@ -2,11 +2,20 @@
 
 ## Current release state
 
-The 1.5.0 engineering candidate builds on the validated 1.4.0 installer at `fb2276c87`. Draft #95 integrates the local provider catalog from #88 with the six project workflows below. Source and desktop results use generated research fixtures. Representative studies and release approval remain open. [Candidate and current Windows checks](https://github.com/Rafael-Del-Valle/ReefVision/pull/95)
+The 1.5.0 candidate at `1d3942662` builds on the validated 1.4.0 installer at `fb2276c87`, the local provider catalog from #88 and the six project workflows integrated in #95. The corrected 1.5 package imported original spatial assets normally and carried the calibrated results through save, reopen and export. The 1.6 class-management work has a reproduced deletion defect on this predecessor. Deleting a class used by a polygon and an image-level label returned success, cleared the polygon assignment and left an invalid label reference. Archive and Restore preserved the records. These observations use generated fixtures. Representative studies and release approval remain open. [Draft #96](https://github.com/Rafael-Del-Valle/ReefVision/pull/96) · [Windows candidate checks](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44734856995).
 
-## Known geometry limitation of the #96 installer
+## Enclosed volume in the project desktop
 
-Four source points `(0,0,0)`, `(1,2,3)`, `(3,1,4)` and `(4,3,7)` all lie exactly on `z = x + y`. The #96 packaged preview and two saved runs reported `170.66666666666666 m³` at a supported scale of 999,998.1 metres per source unit. The standalone calculation also returned a nonzero volume at 1.1 metres per unit. Rounding each scaled coordinate during numerical recovery introduced the false volume. The saved artifacts both had digest `c4c7af4515773c08a00abc067dee820fe78eb53e80db7722cc719f6ff732351b`. The geometric-measurements row is open until an integrated build with the correction reproduces exact planar zero and preserves representable positive volume. [Affected binary and evidence](https://github.com/Rafael-Del-Valle/ReefVision/pull/96)
+Four source points `(0,0,0)`, `(1,2,3)`, `(3,1,4)` and `(4,3,7)` lie exactly on `z = x + y`. At `3c8e2d070`, the packaged preview and two saved runs incorrectly reported `170.66666666666666 m³` at 999,998.1 metres per source unit. The next build, `9645531ea`, corrected the scaled arithmetic but marked a tiny valid OBJ unavailable in the saved-graph selector before the researcher could set its calibration. The first build's two false-volume artifacts had digest `c4c7af4515773c08a00abc067dee820fe78eb53e80db7722cc719f6ff732351b`. [Arithmetic correction](https://github.com/Rafael-Del-Valle/ReefVision/commit/11073ca10f5a9a82a8c54c43180ac35c09597a87) · [Structural import correction](https://github.com/Rafael-Del-Valle/ReefVision/commit/1d3942662ba2c4a75c30c59acf37851be51ce3e1).
+
+| Imported OBJ and metres per source unit | Preview and saved result on `1d3942662` |
+| --- | --- |
+| Finite near-planar tetrahedron, 1 | `3.7007434154171883e-9 m³` |
+| Exactly coplanar, 999,998.1 | Volume withheld with the recorded zero-volume warning |
+| Tiny tetrahedron, 1,000,000 | `1.6666666667e-313 m³`, with the recorded source-unit numerical recovery |
+| Same tiny tetrahedron, 1 | Preview returned HTTP 400. Both saved runs recorded failure with no measurement artifact. |
+
+The Chromium source journey and the WebView2 desktop from the locally built MSI both imported the original OBJs, ran four previews, reopened both saved graphs and executed each twice. The source-browser receipt had SHA-256 `c46681c4df9075abb7bbdb17c228b05107fce72174eb236c16255428542ef388`. Independent inspection of the native Exchange download verified 63 sections, all three original assets and six successful result artifacts. The local MSI and six cabinets totaled 2,978,306,224 bytes. The MSI SHA-256 was `5d1f9def34983f23b1d0755a0df549d2cb44148f52b21a0d77a85cc686cc59c7`. [Redacted native package, workflow and export receipt](validation/spatial-calibration-1d3942662.json).
 
 ## Implemented provider foundation
 
