@@ -11,11 +11,14 @@ $repoPath = Split-Path -Parent $PSScriptRoot
 $passed = 0
 
 function Invoke-StartCommand {
-    param([string]$ExtraOptions)
+    param([string]$ExtraOptions, [switch]$NoConfigure)
     $stdoutPath = Join-Path $root ('stdout-' + [guid]::NewGuid().ToString('N') + '.txt')
     $stderrPath = Join-Path $root ('stderr-' + [guid]::NewGuid().ToString('N') + '.txt')
-    $args = '-NoLogo -NoProfile -ExecutionPolicy Bypass -File "' + $startScript +
-        '" --configure-repo "' + $repoPath + '" ' + $ExtraOptions
+    $args = '-NoLogo -NoProfile -ExecutionPolicy Bypass -File "' + $startScript + '"'
+    if (-not $NoConfigure) {
+        $args += ' --configure-repo "' + $repoPath + '"'
+    }
+    $args += ' ' + $ExtraOptions
     $child = Start-Process -FilePath 'powershell.exe' -ArgumentList $args -PassThru -Wait `
         -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
     return [pscustomobject]@{
@@ -47,6 +50,31 @@ try {
         }
         if ((Get-FileHash -LiteralPath $configPath -Algorithm SHA256).Hash -ne $originalHash) {
             throw "Rejected start-command invocation changed persistent settings: $($case.Options)"
+        }
+        $passed++
+    }
+
+    # No repository-configuration option: these combinations previously
+    # reported success while ignoring restart, a read-only request, or
+    # the installed-launcher switches. Check the same disposable config bytes
+    # and require failure before any process or API action can be taken.
+    foreach ($case in @(
+        @{ Options = '--status --restart'; Expected = 'Choose only one start-reefvision action' },
+        @{ Options = '--logs --diagnostics'; Expected = 'Choose only one start-reefvision action' },
+        @{ Options = '--status --logs'; Expected = 'Choose only one start-reefvision action' },
+        @{ Options = '--status --dev'; Expected = 'Choose only one start-reefvision action' },
+        @{ Options = '--api-only --restart'; Expected = 'Choose only one start-reefvision action' },
+        @{ Options = '--web-dev --no-wait'; Expected = 'apply only to the installed desktop launcher' },
+        @{ Options = '--api-only --safe-mode'; Expected = 'apply only to the installed desktop launcher' },
+        @{ Options = '--status --no-wait'; Expected = 'cannot be combined with status' },
+        @{ Options = '--diagnostics --safe-mode'; Expected = 'cannot be combined with status' }
+    )) {
+        $result = Invoke-StartCommand -ExtraOptions $case.Options -NoConfigure
+        if ($result.ExitCode -eq 0 -or -not $result.Output.Contains($case.Expected)) {
+            throw "Unexpected mixed start action for $($case.Options): exit=$($result.ExitCode); $($result.Output)"
+        }
+        if ((Get-FileHash -LiteralPath $configPath -Algorithm SHA256).Hash -ne $originalHash) {
+            throw "Mixed start action modified saved configuration: $($case.Options)"
         }
         $passed++
     }

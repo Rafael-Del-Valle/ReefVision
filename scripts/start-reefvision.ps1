@@ -83,15 +83,35 @@ if ($showHelp) {
 # Validate every action before Set-ReefVisionRepoPath writes persistent state.
 # Previously --configure-repo --restart (and several other actions) silently
 # saved the repository and returned 0 without performing the requested action.
-$selectedDevModes = @($devMode, $webDevMode, $apiOnly) | Where-Object { $_ }
-if (@($selectedDevModes).Count -gt 1) {
+# Count boolean modes explicitly. @($null).Count is one in Windows
+# PowerShell, so an empty pipeline result is not a safe "zero modes" test.
+$selectedDevModeCount = [int]$devMode + [int]$webDevMode + [int]$apiOnly
+if ($selectedDevModeCount -gt 1) {
     throw "Choose only one development mode at a time."
 }
 if ($configureRepoPath -and ($restart -or $safeMode -or $showLogs -or $runDiagnostics -or $noWait)) {
     throw "--configure-repo cannot be combined with start, restart, log, or diagnostic options."
 }
-if ($configureRepoPath -and $showStatus -and @($selectedDevModes).Count -gt 0) {
+if ($configureRepoPath -and $showStatus -and $selectedDevModeCount -gt 0) {
     throw "--status cannot be combined with a development mode when configuring a repository."
+}
+
+# An apparent success must never silently discard a requested action. Status,
+# logs and diagnostics only read state; restart and development modes act on
+# processes. Reject ambiguous combinations before changing saved command
+# configuration, starting processes, or contacting the local API.
+$actionCount = [int]$showStatus + [int]$showLogs + [int]$runDiagnostics + [int]$restart
+if ($selectedDevModeCount -gt 0) {
+    $actionCount += 1
+}
+if ($actionCount -gt 1) {
+    throw "Choose only one start-reefvision action: status, logs, diagnostics, restart, or development mode."
+}
+if ($selectedDevModeCount -gt 0 -and ($safeMode -or $noWait)) {
+    throw "--safe-mode and --no-wait apply only to the installed desktop launcher."
+}
+if (($showStatus -or $showLogs -or $runDiagnostics) -and ($safeMode -or $noWait)) {
+    throw "--safe-mode and --no-wait cannot be combined with status, logs, or diagnostics."
 }
 
 if ($configureRepoPath) {

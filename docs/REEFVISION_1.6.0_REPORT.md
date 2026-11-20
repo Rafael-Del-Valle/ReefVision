@@ -237,3 +237,29 @@ backend pytest; that exact import ordering was corrected in the same commit.
 Full backend/frontend/E2E/native-Windows and real installed MSI/GUI acceptance
 must still be verified on the resulting head. The independent 1.1/1.6
 Alembic-0038 collision and explicit researcher release approval remain HOLD.
+
+
+## 2026-11-20 — Reject ambiguous installed launcher actions (Track D)
+
+Audited the existing 1.6 managed start/update command preflights, class visibility,
+review QC and executable saved Workflow Builder against the 1.0–1.5 scope.
+The installed `start-reefvision` launcher previously accepted combinations such as
+`--status --restart` or `--status --dev` and returned successfully after
+performing only the first matching action; `--no-wait` and `--safe-mode`
+were similarly ignored in development/read-only modes. The start preflight now
+rejects ambiguous action combinations **before** process launch, API access,
+or saved repository configuration. Explicit `--configure-repo PATH --status`,
+a single development mode, safe-mode/restart and normal read-only invocations
+remain supported. Boolean-mode counts do not use PowerShell's ambiguous
+`@($null).Count` semantics.
+
+Nine new Windows child-PowerShell regressions use isolated `LOCALAPPDATA`,
+require nonzero exit and appropriate diagnostics, and verify that the prior
+configuration hash remains identical after rejection. Existing valid-config
+and `--help` cases remain in place. The suite is already registered in the
+Windows CI preservation job. No scientific data, model weights, migrations,
+or installed binaries are modified. This command-only preflight is not a new
+scientific Workflow Builder operation: existing typed executable QC, persisted
+runs, provenance, retries and researcher approval remain unchanged. CI on
+this exact head, genuine installed MSI/GUI testing, 1.1/1.6 Alembic-0038
+reconciliation and release approval remain required.
