@@ -63,6 +63,66 @@ const ids = (value: unknown) =>
 const finiteNumber = (value: unknown, fallback: number) =>
   typeof value === "number" && Number.isFinite(value) ? value : fallback;
 
+const registrationErrorBounds = [
+  [
+    "source_centroid_position_error_bound_m",
+    "Earlier centroid error bound (meters)",
+  ],
+  [
+    "target_centroid_position_error_bound_m",
+    "Later centroid error bound (meters)",
+  ],
+  ["registration_alignment_error_bound_m", "Alignment error bound (meters)"],
+] as const;
+
+function parseRegistrationMatrix(text: string): unknown {
+  if (!text.trim()) return null;
+  try {
+    const value: unknown = JSON.parse(text);
+    if (Array.isArray(value)) return value;
+  } catch {
+    // Keep invalid text editable while preventing a preview or run.
+  }
+  return text;
+}
+
+function registrationTransformIssue(
+  registration: Parameters,
+): string | undefined {
+  const matrix = registration.source_to_target_transform_m;
+  if (
+    matrix != null &&
+    (!Array.isArray(matrix) ||
+      matrix.length !== 4 ||
+      matrix.some(
+        (row) =>
+          !Array.isArray(row) ||
+          row.length !== 4 ||
+          row.some(
+            (value) => typeof value !== "number" || !Number.isFinite(value),
+          ),
+      ))
+  ) {
+    return "Enter a 4 × 4 registration matrix with finite numbers.";
+  }
+  const supplied = registrationErrorBounds
+    .map(([field]) => registration[field])
+    .filter((value) => value != null);
+  if (
+    supplied.length &&
+    (matrix == null || supplied.length !== registrationErrorBounds.length)
+  )
+    return "Enter a rigid transform and all three error bounds to calculate a separation interval.";
+  if (
+    supplied.some((value) => {
+      const bound = finiteNumber(value, -1);
+      return bound < 0 || bound > 1_000_000;
+    })
+  ) {
+    return "Registration error bounds must be between 0 and 1,000,000 meters.";
+  }
+}
+
 export function scientificConfigurationIssue(
   nodeType: string,
   parameters: Parameters,
@@ -146,6 +206,7 @@ export function scientificConfigurationIssue(
         count > 1_000_000
       )
         return "Enter the measured registration RMS residual and the count of correspondences (at least 3).";
+      return registrationTransformIssue(registration);
     }
   }
   if (nodeType === "image_acquisition_quality") {
@@ -1348,6 +1409,7 @@ function SpatialLongitudinalFields({
 }) {
   const registration = object(parameters.registration_evidence);
   const correspondence = object(parameters.reidentification_evidence);
+  const matrix = registration.source_to_target_transform_m;
   const updateRegistration = (delta: Parameters) =>
     onChange({
       ...parameters,
@@ -1523,6 +1585,61 @@ function SpatialLongitudinalFields({
             updateRegistration({ independent_reviewed_at_utc })
           }
         />
+        <details className="advanced-disclosure">
+          <summary>Rigid transform and error bounds</summary>
+          <p>
+            Enter the matrix that maps the earlier calibrated frame into the
+            later calibrated frame. Translation and error bounds use meters.
+          </p>
+          <label>
+            Earlier-to-later rigid transform (4 × 4)
+            <textarea
+              rows={5}
+              value={
+                typeof matrix === "string"
+                  ? matrix
+                  : matrix == null
+                    ? ""
+                    : JSON.stringify(matrix)
+              }
+              onChange={(event) =>
+                updateRegistration({
+                  source_to_target_transform_m: parseRegistrationMatrix(
+                    event.target.value,
+                  ),
+                })
+              }
+              spellCheck={false}
+            />
+          </label>
+          <p>
+            Supply all three absolute error bounds for a separation interval.
+          </p>
+          {registrationErrorBounds.map(([field, label]) => (
+            <label key={field}>
+              {label}
+              <input
+                type="number"
+                min={0}
+                step="any"
+                max={1_000_000}
+                value={
+                  typeof registration[field] === "number"
+                    ? registration[field]
+                    : ""
+                }
+                onChange={(event) =>
+                  updateRegistration({
+                    [field]:
+                      event.currentTarget.value === ""
+                        ? null
+                        : event.currentTarget.valueAsNumber,
+                  })
+                }
+              />
+            </label>
+          ))}
+        </details>
       </fieldset>
       <fieldset>
         <legend>Organism correspondence</legend>
@@ -1629,8 +1746,7 @@ function SpatialLongitudinalFields({
       <p className="annotation-helper">
         Supporting review is durable audit evidence in the saved workflow. It
         does not authenticate reviewer authority or turn geometric change into a
-        biological condition claim. Use Advanced parameter JSON for exact
-        transforms, source hashes, and uncertainty bounds.
+        biological condition claim.
       </p>
     </fieldset>
   );
