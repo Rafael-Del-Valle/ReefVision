@@ -18,12 +18,22 @@ import {
   type EnvironmentalAnalysisSingle,
 } from "./environmentalAnalysisApi";
 
-const KIND_LABELS: Record<EnvironmentalAnalysisKind, string> = {
+type FormAnalysisKind = Exclude<
+  EnvironmentalAnalysisKind,
+  "current_streamline"
+>;
+
+const FORM_KIND_LABELS: Record<FormAnalysisKind, string> = {
   lunar_context: "Lunar context",
   tidal_context: "Tidal context",
   event_window: "Event window",
   observation_environment_join: "Observation–environment join",
   lagged_comparison: "Lagged comparison",
+};
+
+const KIND_LABELS: Record<EnvironmentalAnalysisKind, string> = {
+  ...FORM_KIND_LABELS,
+  current_streamline: "Current streamlines",
 };
 
 const CACHE_LABELS = {
@@ -147,7 +157,7 @@ export function EnvironmentalAnalysisWorkspace({
 }) {
   const [stationId, setStationId] = useState("");
   const [datum, setDatum] = useState("MLLW");
-  const [kind, setKind] = useState<EnvironmentalAnalysisKind>("lunar_context");
+  const [kind, setKind] = useState<FormAnalysisKind>("lunar_context");
   const [name, setName] = useState("");
   const [observedAt, setObservedAt] = useState("");
   const [latitude, setLatitude] = useState("");
@@ -269,11 +279,11 @@ export function EnvironmentalAnalysisWorkspace({
             value={kind}
             disabled={analysis.isPending}
             onChange={(event) => {
-              setKind(event.target.value as EnvironmentalAnalysisKind);
+              setKind(event.target.value as FormAnalysisKind);
               analysis.reset();
             }}
           >
-            {Object.entries(KIND_LABELS).map(([value, label]) => (
+            {Object.entries(FORM_KIND_LABELS).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
               </option>
