@@ -2,6 +2,7 @@ import type { WorkspacePresetId } from "./workspacePresets";
 
 export type WorkspaceInspectorView =
   | "gallery"
+  | "field_capture"
   | "versions"
   | "interoperability"
   | "environmental_context"
@@ -43,6 +44,7 @@ export interface WorkspacePresetInspectorGuidance {
 
 export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "gallery",
+  "field_capture",
   "versions",
   "interoperability",
   "environmental_context",
@@ -65,6 +67,26 @@ const WORKSPACE_INSPECTORS: Record<
   WorkspaceInspectorView,
   WorkspaceInspectorDefinition
 > = {
+  field_capture: {
+    title: "Field evidence",
+    summary:
+      "Keep local observations with the original media and documented source clock.",
+    boundary: "review",
+    recordPolicy:
+      "Reconciliation preserves conflicting observations for an attributed decision.",
+    actions: [
+      {
+        label: "Quality control",
+        target: "quality_control",
+        description: "Review acquisition quality on imported project media.",
+      },
+      {
+        label: "Workflow builder",
+        target: "workflows",
+        description: "Run a saved, sealed field batch reconciliation.",
+      },
+    ],
+  },
   ecology: {
     title: "Organisms & ecology",
     summary:

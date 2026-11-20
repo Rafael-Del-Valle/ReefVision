@@ -25,6 +25,7 @@ import { LocalMeshPreview } from "./LocalMeshPreview";
 import { LocalPointCloudPreview } from "./LocalPointCloudPreview";
 import { ProjectSpatialAssetPreview } from "./ProjectSpatialAssetPreview";
 import { downloadPairedReport } from "../ecology/pairedGrowthContrastApi";
+import { downloadFieldReconciliation } from "../field-capture/fieldCaptureApi";
 import { MeshArtifactViewer } from "./MeshArtifactViewer";
 import { PointCloudArtifactViewer } from "./PointCloudArtifactViewer";
 import { WorkflowVisualEditor } from "./WorkflowVisualEditor";
@@ -49,6 +50,20 @@ function ScienceArtifact({
 }) {
   const data = artifact.payload_json;
   const api = `${getApiBaseUrl()}/projects/${projectId}`;
+  if (
+    artifact.data_type === "field_capture_reconciliation" &&
+    typeof data.report_sha256 === "string"
+  ) {
+    const digest = data.report_sha256;
+    return (
+      <button
+        type="button"
+        onClick={() => downloadFieldReconciliation(data, digest)}
+      >
+        Download field reconciliation JSON
+      </button>
+    );
+  }
   if (
     artifact.data_type === "paired_growth_contrast" &&
     typeof data.report_sha256 === "string"
