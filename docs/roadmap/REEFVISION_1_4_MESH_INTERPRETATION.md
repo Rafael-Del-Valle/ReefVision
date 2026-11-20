@@ -792,6 +792,12 @@ Workflow Builder graphs preserve the same null value and QC code. The field
 does not acquire a separate scale-only uncertainty interval because the
 common scale factor cancels algebraically.
 
+A collinear face with distinct vertices at 0, 1e-200 and 2e-200 source
+units has exactly zero area and a nonzero extent whose square rounds to zero.
+Its preview preserves the measured extent and withholds the shape ratio.
+If a noncollinear face has a positive area that rounds to zero, the mesh
+measurement fails before it can publish a shape descriptor.
+
 This is a **provisional reconstruction shape descriptor**, not a coral health,
 biomass, branch length, growth, or species classification. It changes with
 source-axis rotation, reconstruction completeness, mesh tessellation, and

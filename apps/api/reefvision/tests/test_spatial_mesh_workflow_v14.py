@@ -81,22 +81,26 @@ def test_mesh_shape_ratio_withholds_zero_diagonal(client: TestClient) -> None:
 
 
 @pytest.mark.parametrize(
-    ("obj_text", "warning"),
+    ("obj_text", "warning", "expected_diagonal_m"),
     [
         pytest.param(
-            "v 0 0 0\nv 1e-200 0 0\nv 0 1e-200 0\nf 1 2 3\n",
+            # Collinearity isolates denominator underflow from the separate
+            # rejection of genuinely positive triangle areas rounded to zero.
+            "v 0 0 0\nv 1e-200 0 0\nv 2e-200 0 0\nf 1 2 3\n",
             "mesh_shape_ratio_unavailable_numeric_underflow",
+            2e-202,
             id="underflow",
         ),
         pytest.param(
             "v 0 0 0\nv 0 0 0\nv 0 0 0\nf 1 2 3\n",
             "mesh_shape_ratio_unavailable_zero_extent",
+            0.0,
             id="zero-extent",
         ),
     ],
 )
 def test_mesh_shape_ratio_unavailable_in_saved_workflow(
-    client: TestClient, obj_text: str, warning: str
+    client: TestClient, obj_text: str, warning: str, expected_diagonal_m: float
 ) -> None:
     project_id = str(create_project(client, "Tiny mesh shape ratio")["id"])
     base = f"/api/v1/projects/{project_id}"
@@ -107,6 +111,11 @@ def test_mesh_shape_ratio_unavailable_in_saved_workflow(
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 200, standalone.text
     measurement = standalone.json()
+    assert measurement["surface_area_m2"] == 0.0
+    assert measurement["degenerate_face_count"] == 1
+    assert measurement["axis_aligned_bounding_box_diagonal_m"] == pytest.approx(
+        expected_diagonal_m, abs=0.0
+    )
     assert measurement["surface_area_to_bounding_diagonal_squared_ratio"] is None
     assert warning in measurement["qc_warnings"]
     assert measurement["provenance"]["calibration_verified"] is False
@@ -149,6 +158,10 @@ def test_mesh_shape_ratio_unavailable_in_saved_workflow(
         if item["data_type"] == "mesh_measurement_preview"
     )
     assert artifact["surface_area_to_bounding_diagonal_squared_ratio"] is None
+    assert (
+        artifact["axis_aligned_bounding_box_diagonal_m"]
+        == measurement["axis_aligned_bounding_box_diagonal_m"]
+    )
     assert warning in artifact["qc_warnings"]
     expected_sha = measurement["provenance"]["geometry_sha256"]
     assert artifact["provenance"]["geometry_sha256"] == expected_sha
