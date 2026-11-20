@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fractions import Fraction
+from math import nextafter
 from typing import cast
 
 import pytest
@@ -69,6 +70,55 @@ def test_volume_sum_across_faces_uses_exact_oracle_when_nearly_cancelling(
     else:
         assert exact_volume == 0
         assert recovered == 0.0
+
+
+@pytest.mark.parametrize("reverse_winding", [False, True], ids=["forward", "reversed"])
+@pytest.mark.parametrize("perturbed_apex", [False, True], ids=["exact-zero", "finite-residual"])
+def test_many_cancelling_finite_face_volumes_do_not_overflow_magnitude_sum(
+    reverse_winding: bool, perturbed_apex: bool
+) -> None:
+    """A large absolute contribution sum is not an overflowing signed volume."""
+    edge = 5e102
+    opposite_apex = nextafter(edge, 0.0) if perturbed_apex else edge
+    vertices = [
+        (0.0, 0.0, 0.0),
+        (edge, 0.0, 0.0),
+        (0.0, edge, 0.0),
+        (0.0, 0.0, edge),
+        (0.0, 0.0, opposite_apex),
+    ]
+    reverse_faces = [
+        [4 if index == 3 else index for index in reversed(face)]
+        for face in CLOSED_FACES
+    ]
+    # Duplicated oppositely oriented shells stress the volume helper only.
+    # This invalid surface is NOT accepted as a biological volume or passed
+    # to the validated standalone/Workflow Builder measurement interface.
+    faces = CLOSED_FACES * 6 + reverse_faces * 6
+    if reverse_winding:
+        faces = [list(reversed(face)) for face in faces]
+
+    # Each individual face contribution is finite, but the sum of absolute
+    # contributions exceeds binary64; an exact signed cancellation does not.
+    from math import fsum, isfinite
+
+    contributions = [
+        signed_enclosed_volume_mesh_units(vertices, [face]) for face in faces
+    ]
+    assert all(isfinite(value) for value in contributions)
+    with pytest.raises(OverflowError):
+        fsum(abs(value) for value in contributions)
+
+    expected = Fraction(edge) ** 2 * (Fraction(edge) - Fraction(opposite_apex))
+    if reverse_winding:
+        expected = -expected
+    actual = signed_enclosed_volume_mesh_units(vertices, faces)
+    if perturbed_apex:
+        assert expected != 0
+        assert actual == pytest.approx(float(expected), rel=1e-15, abs=0)
+    else:
+        assert expected == 0
+        assert actual == 0.0
 
 
 def test_representable_tiny_volume_preserves_exact_cubic_scale_bounds() -> None:
