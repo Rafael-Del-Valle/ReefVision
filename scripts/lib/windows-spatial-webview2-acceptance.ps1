@@ -230,7 +230,7 @@ function Invoke-ReefVisionInstalledPlaywrightSuite {
         [Parameter(Mandatory)][string]$Api,
         [Parameter(Mandatory)][int]$DebugPort,
         [Parameter(Mandatory)][int]$DesktopProcessId,
-        [Parameter(Mandatory)][ValidateSet('first-use', 'workspace', 'schedule-before', 'schedule-after')][string]$Suite,
+        [Parameter(Mandatory)][ValidateSet('first-use', 'workspace', 'schedule-before', 'schedule-after', 'monitoring')][string]$Suite,
         [Parameter(Mandatory)][string[]]$Specs,
         [string]$ExpectedBrowserSid,
         [string]$BrowserArtifactsDirectory,
