@@ -7,6 +7,7 @@ import json
 import os
 import platform
 import sqlite3
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -78,6 +79,18 @@ def backup_root_path(settings: Settings, relative_path: str) -> Path:
     return resolve_managed_project_path(settings, relative_path)
 
 
+def _live_profile_entries(data_root: Path) -> Iterator[Path]:
+    # Recovery copies and in-flight restores have their own database and files.
+    # Prune at the profile root so a project asset with the same name is preserved.
+    for entry in data_root.iterdir():
+        if os.path.normcase(entry.name) in {BACKUP_DIRECTORY, "backups", "recoveries", ".t"}:
+            continue
+        if entry.is_dir() and not entry.is_symlink():
+            yield from entry.rglob("*")
+        else:
+            yield entry
+
+
 def build_backup_plan(
     settings: Settings,
     *,
@@ -91,7 +104,7 @@ def build_backup_plan(
     data_root = settings.resolved_data_dir
     data_files: list[BackupFileCandidate] = []
     included_sections = ["database", "projects", "thumbnails", "models"]
-    excluded_sections = ["backups", "transient staging directories"]
+    excluded_sections = ["backups", "recoveries", "transient staging directories"]
     if include_logs:
         included_sections.append("logs")
     else:
@@ -101,7 +114,7 @@ def build_backup_plan(
     else:
         excluded_sections.append("exports")
 
-    for path in sorted(data_root.rglob("*")):
+    for path in _live_profile_entries(data_root):
         if not path.is_file():
             continue
         resolved = path.resolve()
@@ -380,8 +393,6 @@ def _should_exclude(
     parts = relative_path.parts
     if not parts:
         return False
-    if parts[0] in {BACKUP_DIRECTORY, "backups"}:
-        return True
     if parts[0] == "logs" and not include_logs:
         return True
     if ".imports" in parts or ".model-imports" in parts:
