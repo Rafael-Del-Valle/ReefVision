@@ -1,4 +1,5 @@
 import { request } from "../../api/client";
+import { getApiBaseUrl } from "../../runtime";
 
 export type MonitoringKind = "environmental" | "biological";
 export type MonitoringSourceKind =
@@ -374,14 +375,27 @@ export async function downloadMonitoringSummary(
   projectId: string,
   summary: MonitoringSummary,
 ) {
-  const exported = await request<object>(
-    `${summaries(projectId)}/${encodeURIComponent(summary.id)}/export`,
+  const response = await fetch(
+    `${getApiBaseUrl()}${summaries(projectId)}/${encodeURIComponent(summary.id)}/export`,
+    { signal: AbortSignal.timeout(30_000) },
   );
-  const url = URL.createObjectURL(
-    new Blob([`${JSON.stringify(exported, null, 2)}\n`], {
-      type: "application/json",
-    }),
-  );
+  if (!response.ok) {
+    throw new Error(
+      `Could not download this monitoring summary (HTTP ${response.status}).`,
+    );
+  }
+  const bytes = await response.blob();
+  const exported = JSON.parse(await bytes.text()) as MonitoringSummary;
+  if (
+    exported.id !== summary.id ||
+    exported.project_id !== projectId ||
+    exported.content_sha256 !== summary.content_sha256
+  ) {
+    throw new Error(
+      "The downloaded summary does not match the saved evidence.",
+    );
+  }
+  const url = URL.createObjectURL(bytes);
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = `monitoring-project-summary-${summary.content_sha256}.json`;
