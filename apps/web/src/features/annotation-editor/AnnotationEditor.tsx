@@ -2313,10 +2313,44 @@ export function AnnotationEditor({
         setInteraction(null);
         return;
       }
-      if (currentInteraction.type === "drawing") {
+      // The final pointer release may have moved since the last dispatched
+      // pointermove (or arrive before React flushes it). Commit from the
+      // initiating pointer's release coordinates, never a stale preview.
+      // Invalid release coordinates cancel rather than corrupt observations.
+      let releasePoint: Point | null = null;
+      if (currentInteraction.type !== "panning") {
+        const svg = svgRef.current;
+        const activeView = viewRef.current;
+        if (
+          svg &&
+          activeView &&
+          Number.isFinite(event.clientX) &&
+          Number.isFinite(event.clientY) &&
+          Number.isFinite(activeView.scale) &&
+          activeView.scale > 0 &&
+          Number.isFinite(activeView.offsetX) &&
+          Number.isFinite(activeView.offsetY)
+        ) {
+          const point = clientPointInSvg(
+            svg,
+            event.clientX,
+            event.clientY,
+            activeView,
+          );
+          if (Number.isFinite(point.x) && Number.isFinite(point.y)) {
+            releasePoint = point;
+          }
+        }
+        if (!releasePoint) {
+          panPreviousPointRef.current = null;
+          setInteraction(null);
+          return;
+        }
+      }
+      if (currentInteraction.type === "drawing" && releasePoint) {
         const box = createBoxFromPoints(
           currentInteraction.start,
-          currentInteraction.current,
+          releasePoint,
           imageSize,
         );
         if (samPromptArmed) {
@@ -2343,12 +2377,12 @@ export function AnnotationEditor({
         }
       }
 
-      if (currentInteraction.type === "moving") {
+      if (currentInteraction.type === "moving" && releasePoint) {
         const moved = translateAnnotations(
           Object.values(currentInteraction.snapshot),
           {
-            x: currentInteraction.current.x - currentInteraction.origin.x,
-            y: currentInteraction.current.y - currentInteraction.origin.y,
+            x: releasePoint.x - currentInteraction.origin.x,
+            y: releasePoint.y - currentInteraction.origin.y,
           },
           imageSize,
         );
@@ -2358,11 +2392,11 @@ export function AnnotationEditor({
         );
       }
 
-      if (currentInteraction.type === "resizing") {
+      if (currentInteraction.type === "resizing" && releasePoint) {
         const resized = resizeAnnotation(
           currentInteraction.snapshot,
           currentInteraction.handle,
-          currentInteraction.current,
+          releasePoint,
           imageSize,
         );
         commitDocument(replaceAnnotations(currentState.document, [resized]), [
