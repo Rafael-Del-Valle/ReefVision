@@ -40,6 +40,7 @@ import {
   type Project,
 } from "../../api/client";
 import { resolveClassVisibilityState } from "../annotation-editor/classVisibility";
+import { useActionConfirmation } from "../../components/ui/ActionConfirmation";
 import { PoseAnnotationEditor } from "../pose/PoseAnnotationEditor";
 import { AnatomySkeletonDesigner } from "../pose/AnatomySkeletonDesigner";
 import type { AnatomySchemaRevision } from "../pose/anatomyApi";
@@ -201,6 +202,7 @@ export function VideoTrackingWorkspace({
     frameIndex: number;
   } | null>(null);
   const queryClient = useQueryClient();
+  const { confirm, confirmationDialog } = useActionConfirmation();
   const desktopMode =
     typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -908,30 +910,32 @@ export function VideoTrackingWorkspace({
     },
   });
   const deleteMachineTracksMutation = useMutation({
-    mutationFn: () => {
-      if (!selectedVideoId) throw new Error("Select a video first");
-      return deleteVideoTracks(selectedVideoId, true);
-    },
-    onSuccess: async () => {
-      setSelectedTrackId("");
-      trackDraft.reset();
+    mutationFn: ({
+      videoId,
+    }: {
+      videoId: string;
+      context: string;
+      selectedIsMachine: boolean;
+    }) => deleteVideoTracks(videoId, true),
+    onSuccess: async (_, { videoId, context, selectedIsMachine }) => {
+      if (selectedIsMachine && draftContextRef.current === context) {
+        setSelectedTrackId("");
+        trackDraft.reset();
+      }
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: ["video-tracks", selectedVideoId],
+          queryKey: ["video-tracks", videoId],
         }),
         queryClient.invalidateQueries({
-          queryKey: ["video-frame-spatial-metrics", selectedVideoId],
+          queryKey: ["video-frame-spatial-metrics", videoId],
         }),
       ]);
     },
   });
   const deleteModelMutation = useMutation({
-    mutationFn: () => {
-      if (!trackingModelId) throw new Error("Select a model first");
-      return deleteTrackingModel(trackingModelId);
-    },
-    onSuccess: async () => {
-      setTrackingModelId("");
+    mutationFn: (modelId: string) => deleteTrackingModel(modelId),
+    onSuccess: async (_, modelId) => {
+      setTrackingModelId((current) => (current === modelId ? "" : current));
       await queryClient.invalidateQueries({
         queryKey: ["video-tracking-models", project.id],
       });
@@ -1551,6 +1555,7 @@ export function VideoTrackingWorkspace({
         geographicMovementAnalyticsState.trackId ?? ""
       }
     >
+      {confirmationDialog}
       <section className="management-card workspace-guide-card">
         <div>
           <p className="eyebrow">Video &amp; tracking</p>
@@ -2767,13 +2772,21 @@ export function VideoTrackingWorkspace({
                 deleteMachineTracksMutation.isPending ||
                 !(tracksQuery.data ?? []).some((track) => track.source_job_id)
               }
-              onClick={() => {
-                if (
-                  window.confirm(
+              onClick={async () => {
+                if (!selectedVideoId) return;
+                const accepted = await confirm({
+                  title: "Remove machine tracks?",
+                  message:
                     "Remove all machine-generated tracks for this video? Manual tracks are preserved.",
-                  )
-                ) {
-                  deleteMachineTracksMutation.mutate();
+                  confirmLabel: "Remove machine tracks",
+                  destructive: true,
+                });
+                if (accepted && draftContextRef.current === draftContext) {
+                  deleteMachineTracksMutation.mutate({
+                    videoId: selectedVideoId,
+                    context: draftContext,
+                    selectedIsMachine: !!selectedTrack?.source_job_id,
+                  });
                 }
               }}
             >
@@ -2983,16 +2996,20 @@ export function VideoTrackingWorkspace({
             type="button"
             className="danger-ghost"
             disabled={!trackingModelId || deleteModelMutation.isPending}
-            onClick={() => {
+            onClick={async () => {
+              if (!trackingModelId) return;
               const model = (modelsQuery.data ?? []).find(
                 (item) => item.id === trackingModelId,
               );
               if (
-                window.confirm(
-                  `Remove model "${model?.display_name ?? trackingModelId}" from this project?`,
-                )
+                await confirm({
+                  title: "Remove tracking model?",
+                  message: `Remove model "${model?.display_name ?? trackingModelId}" from this project?`,
+                  confirmLabel: "Remove model",
+                  destructive: true,
+                })
               ) {
-                deleteModelMutation.mutate();
+                deleteModelMutation.mutate(trackingModelId);
               }
             }}
           >

@@ -1451,9 +1451,11 @@ describe("AnnotationEditor", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("allows returning to the gallery after a failed save when edits are discarded", async () => {
+  it("keeps edits and undo on Escape and leaves after an explicit discard", async () => {
     const onClose = vi.fn();
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const nativeConfirm = vi
+      .spyOn(window, "confirm")
+      .mockImplementation(() => Promise.resolve(false) as unknown as boolean);
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (
@@ -1484,14 +1486,93 @@ describe("AnnotationEditor", () => {
       screen.getByLabelText("Annotation status"),
       "reviewed",
     );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Back to gallery" }),
-    );
+    const back = screen.getByRole("button", { name: "Back to gallery" });
+    await userEvent.click(back);
+    let confirmation = await screen.findByRole("alertdialog", {
+      name: "Discard annotation edits?",
+    });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(
+      within(confirmation).getByRole("button", { name: "Cancel" }),
+    ).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(back).toHaveFocus();
+    expect(screen.getByLabelText("Annotation status")).toHaveValue("reviewed");
+    expect(screen.getByRole("button", { name: /Undo/ })).toBeEnabled();
 
-    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-    expect(window.confirm).toHaveBeenCalledWith(
-      "Saving failed. Discard unsaved local annotation edits and return to the gallery?",
+    await userEvent.click(back);
+    confirmation = await screen.findByRole("alertdialog", {
+      name: "Discard annotation edits?",
+    });
+    await userEvent.click(
+      within(confirmation).getByRole("button", { name: "Discard edits" }),
     );
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(nativeConfirm).not.toHaveBeenCalled();
+  });
+
+  it("only replaces a conflicted draft after an approved successful same-image reload", async () => {
+    let getCount = 0;
+    let serverAvailable = false;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith(`/images/${session.image.id}/annotations`)) {
+        if (init?.method === "PUT") {
+          return jsonResponse({ detail: "Annotation revision conflict" }, 409);
+        }
+        getCount++;
+        if (getCount === 1) return jsonResponse(session);
+        if (!serverAvailable)
+          return jsonResponse({ detail: "Unavailable" }, 503);
+        return jsonResponse({
+          ...session,
+          image: { ...session.image, annotation_revision: 3 },
+          annotations: [{ ...session.annotations[0], x_min: 45 }],
+        });
+      }
+      const shared = handleDefaultEditorRequests(url, init);
+      if (shared) return shared;
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+    renderEditor();
+    const status = await screen.findByLabelText("Annotation status");
+    await userEvent.selectOptions(status, "reviewed");
+    await userEvent.click(screen.getByRole("button", { name: "Save now" }));
+    const reload = await screen.findByRole("button", { name: "Reload latest" });
+    const openConfirmation = async () => {
+      await userEvent.click(reload);
+      return screen.findByRole("alertdialog", {
+        name: "Reload the saved revision?",
+      });
+    };
+    let dialog = await openConfirmation();
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Cancel" }),
+    );
+    expect(getCount).toBe(1);
+    expect(status).toHaveValue("reviewed");
+    dialog = await openConfirmation();
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Discard and reload" }),
+    );
+    await waitFor(() => expect(getCount).toBe(2));
+    expect(status).toHaveValue("reviewed");
+
+    serverAvailable = true;
+    dialog = await openConfirmation();
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Discard and reload" }),
+    );
+    await waitFor(() => expect(status).toHaveValue("in_progress"));
+    expect(screen.getByTestId("annotation-annotation-1")).toHaveAttribute(
+      "x",
+      "45",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Reload latest" }),
+    ).not.toBeInTheDocument();
   });
 
   it.each([false, true])(

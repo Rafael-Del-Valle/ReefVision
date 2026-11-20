@@ -31,6 +31,7 @@ import {
 } from "./annotationClipboard";
 import { CenterlineMeasurementLayer } from "./CenterlineMeasurementLayer";
 import { shouldIgnoreShortcutTarget } from "../../components/ui/keyboardShortcuts";
+import { useActionConfirmation } from "../../components/ui/ActionConfirmation";
 import {
   addMaskAnnotation,
   changeMaskAnnotationClass,
@@ -81,6 +82,7 @@ export function MaskAnnotationWorkspace({
   onClose,
 }: MaskAnnotationWorkspaceProps) {
   const queryClient = useQueryClient();
+  const { confirm, confirmationDialog } = useActionConfirmation();
   const [centerlineEditing, setCenterlineEditing] = useState(false);
   const [skeletonOverlay, setSkeletonOverlay] =
     useState<SkeletonOverlayModel | null>(null);
@@ -96,10 +98,13 @@ export function MaskAnnotationWorkspace({
   const stateRef = useRef(state);
   const savePromiseRef = useRef<Promise<boolean> | null>(null);
   const loadedImageIdRef = useRef<string | null>(null);
+  const imageContext = `${project.id}:${imageId}`;
+  const imageContextRef = useRef(imageContext);
 
   useLayoutEffect(() => {
     stateRef.current = state;
-  }, [state]);
+    imageContextRef.current = imageContext;
+  }, [imageContext, state]);
 
   useEffect(() => {
     onToolChange?.(state.tool);
@@ -542,16 +547,28 @@ export function MaskAnnotationWorkspace({
   }, [imageId, project.id, queryClient, sessionQuery]);
 
   async function leaveWorkspace(destination: "boxes" | "close" | "brush") {
+    const saved = await saveNow();
+    if (imageContextRef.current !== imageContext) return;
+    if (
+      !saved &&
+      !(await confirm({
+        title: "Discard mask edits?",
+        message:
+          "The masks could not be saved. Discard the unsaved mask edits and leave this tool?",
+        confirmLabel: "Discard mask edits",
+        destructive: true,
+      }))
+    ) {
+      return;
+    }
+    if (imageContextRef.current !== imageContext) return;
     fillRequestRef.current?.abort();
     fillRequestRef.current = null;
     setFillPending(false);
-    const saved = await saveNow();
-    if (!saved && !window.confirm("Discard unsaved mask edits?")) {
-      return;
-    }
     await queryClient.invalidateQueries({
       queryKey: ["annotation-session", imageId],
     });
+    if (imageContextRef.current !== imageContext) return;
     if (destination === "brush") {
       onOpenBrush?.();
     } else if (destination === "boxes") {
@@ -617,6 +634,7 @@ export function MaskAnnotationWorkspace({
       data-testid="mask-workspace"
       data-active-tool={state.tool}
     >
+      {confirmationDialog}
       <header className="annotation-editor-topbar">
         <div>
           <p className="eyebrow">Editable segmentation workspace</p>
