@@ -11,11 +11,12 @@ from typing import Any, ClassVar, cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 import reefvision.jobs.video_tracking as tracking_job_module
 import reefvision.ml.provider_hub as provider_hub_module
 import reefvision.ml.video_tracking as video_tracking_module
-from reefvision.db.models import ModelRegistration
+from reefvision.db.models import Job, ModelRegistration, WorkflowArtifact
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.video_tracking import _keyframes
 from reefvision.ml.provider_adapters.ultralytics_multitask import (
@@ -36,6 +37,7 @@ from reefvision.ml.video_tracking import (
     VideoTrackingProgressCallback,
 )
 from reefvision.services import video_assets as video_assets_module
+from reefvision.services.workflow_pose import execute_pose_inference_adapter
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project
 
@@ -612,6 +614,52 @@ def _pose_model(
         )
         assert bound.status_code == 200, bound.text
     return model_id
+
+
+@pytest.mark.parametrize("standalone", [False, True])
+def test_retired_pose_video_never_creates_tracking_work(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, standalone: bool
+) -> None:
+    project = create_project(client, "Preserved video pose history")
+    project_id = str(project["id"])
+    video = _import_pose_video(client, project_id, monkeypatch)
+    app = cast(FastAPI, client.app)
+    model_id = _pose_model(client, project, app, with_schema=True)
+    with app.state.session_factory() as session:
+        model = session.get(ModelRegistration, model_id)
+        assert model is not None
+        model.provider_name = "sleap_nn"
+        model.provider_version = "0.3.3"
+        model.framework = "sleap_nn"
+        session.commit()
+
+    model_path = f"/api/v1/models/{model_id}"
+    historical_model = client.get(model_path).json()
+    if standalone:
+        result = client.post(
+            f"/api/v1/videos/{video['id']}/tracking-jobs",
+            json={"model_id": model_id, "tracking_mode": "auto", "device": "cpu"},
+        )
+        assert result.status_code == 400, (result.status_code, result.json().get("status"))
+        assert "retired" in result.json()["detail"]
+    else:
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="retired"),
+        ):
+            execute_pose_inference_adapter(
+                session,
+                app.state.settings,
+                project_id,
+                {"device": "cpu"},
+                {
+                    "video": [WorkflowArtifact(payload_json={"video_id": video["id"]})],
+                    "model": [WorkflowArtifact(payload_json={"model_id": model_id})],
+                },
+            )
+    with app.state.session_factory() as session:
+        assert session.scalar(select(Job).where(Job.job_type == "video_tracking")) is None
+    assert client.get(model_path).json() == historical_model
 
 
 def test_pose_video_job_fails_closed_without_canonical_landmark_schema(

@@ -27,6 +27,7 @@ from reefvision.domain.errors import ValidationError
 from reefvision.jobs.pose_biological_measurement import process_pose_biological_measurement_job
 from reefvision.jobs.pose_identity_tracking import process_pose_identity_tracking_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
+from reefvision.ml.sleap_nn_provider import SLEAP_NN_ACTIONABLE_RETIREMENT, SLEAP_NN_PROVIDER_ID
 from reefvision.schemas.behavior_dynamics import BehaviorDynamicsRequest
 from reefvision.schemas.pose_active_learning import (
     PoseActiveLearningRoundCreateRequest,
@@ -261,6 +262,9 @@ def execute_pose_inference_adapter(
 
     if model is None or model.project_id != project_id:
         raise ValidationError("Pose Inference requires a model from this project")
+
+    if model.provider_name.strip().casefold() == SLEAP_NN_PROVIDER_ID:
+        raise ValidationError(SLEAP_NN_ACTIONABLE_RETIREMENT)
 
     # Pose registrations currently use detector as the broad model
     # purpose while task='pose' distinguishes the scientific operation.
