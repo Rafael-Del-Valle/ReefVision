@@ -132,10 +132,11 @@ describe("ImageViewport", () => {
       clientY: 150,
     });
     expect(transform.style.transform).toBe(afterPrimaryMove);
-    expect(screen.getByLabelText("Retained biological annotation").querySelector("rect")).toHaveAttribute(
-      "x",
-      "10",
-    );
+    expect(
+      screen
+        .getByLabelText("Retained biological annotation")
+        .querySelector("rect"),
+    ).toHaveAttribute("x", "10");
   });
 
   it("ignores foreign pointer cancellation but cancels on active pointer or window blur", () => {
