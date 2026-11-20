@@ -74,7 +74,7 @@ function previewFromBackup(backup: BackupRecord): {
   };
 }
 
-function JobStatusCard({
+export function JobStatusCard({
   title,
   job,
   onCancel,
