@@ -472,6 +472,7 @@ def test_unpaired_obj_unicode_surrogates_fail_closed(client: TestClient, obj_tex
         headers={"content-type": "application/json"},
     )
     assert response.status_code in (400, 422), response.text
+    assert "unicode" in response.text.lower()
 
 
 def test_obj_non_bmp_unicode_comment_remains_supported_in_saved_graph(
