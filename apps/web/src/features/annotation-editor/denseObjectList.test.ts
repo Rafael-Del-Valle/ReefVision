@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { boundedDenseObjectRows } from "./denseObjectList";
+import {
+  boundedDenseObjectRows,
+  selectedDenseObjectRowIds,
+} from "./denseObjectList";
 
 describe("dense object-browser window", () => {
   it("bounds DOM candidates without changing or dropping saved scientific records", () => {
@@ -377,4 +380,59 @@ describe("dense object-browser window", () => {
     expect(rows[0].position).toBe(400);
     expect(rows[19].position).toBe(419);
   });
+
+  it("keeps selected and pinned row IDs distinct between annotations and masks", () => {
+    const annotations = [{ id: "same" }, { id: "box-1" }, { id: "box-2" }];
+    const masks = [{ id: "same" }, { id: "mask-1" }];
+    const selectedBoxes = ["box-2", "same", "missing"];
+    const selectedMasks = ["same", "missing"];
+    const rows = boundedDenseObjectRows(
+      annotations,
+      masks,
+      1,
+      selectedBoxes,
+      selectedMasks,
+    );
+    const selected = selectedDenseObjectRowIds(rows, selectedBoxes, selectedMasks);
+    expect([...selected.annotationIds].sort()).toEqual(["box-2", "same"]);
+    expect([...selected.maskIds]).toEqual(["same"]);
+    expect(selected.annotationIds.has("mask-1")).toBe(false);
+    expect(selectedBoxes).toEqual(["box-2", "same", "missing"]);
+    expect(selectedMasks).toEqual(["same", "missing"]);
+  });
+
+  it("reads a 50,000-ID range selection at most once, even for 400 mounted rows", () => {
+    const annotations = Array.from({ length: 50_000 }, (_, index) => ({
+      id: "box-" + index,
+    }));
+    const selection = annotations.map((annotation) => annotation.id);
+    const rows = boundedDenseObjectRows(annotations, [], 200, selection, []);
+    let reads = 0;
+    const trackedSelection = new Proxy(selection, {
+      get(target, key, receiver) {
+        if (typeof key === "string" && /^\d+$/.test(key)) reads += 1;
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    const selected = selectedDenseObjectRowIds(rows, trackedSelection, []);
+    expect(rows).toHaveLength(400);
+    expect(selected.annotationIds.size).toBe(400);
+    expect(selected.annotationIds.has("box-0")).toBe(true);
+    expect(selected.annotationIds.has("box-49999")).toBe(true);
+    expect(reads).toBeLessThanOrEqual(selection.length);
+    expect(annotations).toHaveLength(50_000);
+  });
+
+  it("does not scan large selections when no rows are mounted", () => {
+    const selection = new Proxy(["box-1"], {
+      get(target, key, receiver) {
+        if (key === "0") throw new Error("Unexpected selection scan");
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    const selected = selectedDenseObjectRowIds([], selection, selection);
+    expect(selected.annotationIds.size).toBe(0);
+    expect(selected.maskIds.size).toBe(0);
+  });
+
 });

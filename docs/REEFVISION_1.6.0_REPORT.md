@@ -350,3 +350,18 @@ the annotation-to-mask boundary, pinned selections, unchanged source arrays
 and an intentional near-end jump. Full frontend/E2E CI and real installed
 Windows usability validation remain required; version 1.6 remains on release
 HOLD for the unrelated Alembic-0038 collision and scientific/packaging gates.
+
+## 2026-11-20 — Linear-time dense-object selection row rendering (Track D)
+
+The 1.6 browser already bounds its regular document window and pins at most
+200 off-window annotations and 200 masks. Each rendered row still called
+Array.includes on a potentially 50,000-object scientific range selection,
+repeatedly scanning that selection. The new display-only helper collects
+mounted IDs and scans each selection array at most once, storing only IDs of
+selected mounted rows; box and mask ID namespaces remain separate. Vitest
+regressions cover selected pins, mixed types with identical IDs, 50,000-object
+selection read bounds, and an empty-row short circuit. This is not a new
+scientific operation: stored observations, selection arrays, typed executable
+and saved QC workflows, units, provenance, retries and human-review gates are
+unchanged. Full exact-head CI and installed-Windows GUI responsiveness remain
+unverified; Alembic-0038 lineage and explicit approval remain release HOLD.

@@ -62,7 +62,10 @@ import {
   writeInternalAnnotationClipboard,
 } from "./annotationClipboard";
 import { deleteMaskAnnotations } from "./maskDocumentOperations";
-import { boundedDenseObjectRows } from "./denseObjectList";
+import {
+  boundedDenseObjectRows,
+  selectedDenseObjectRowIds,
+} from "./denseObjectList";
 import {
   cullViewportItems,
   cullViewportMasks,
@@ -773,6 +776,15 @@ export function AnnotationEditor({
       state.selectedIds,
       state.selectedMaskIds,
     ],
+  );
+  const selectedDenseRows = useMemo(
+    () =>
+      selectedDenseObjectRowIds(
+        denseObjectRows,
+        state.selectedIds,
+        state.selectedMaskIds,
+      ),
+    [denseObjectRows, state.selectedIds, state.selectedMaskIds],
   );
   const allClassIds = useMemo(
     () => labelClasses.map((labelClass) => labelClass.id),
@@ -3912,7 +3924,7 @@ export function AnnotationEditor({
                   const labelClass = labelClassesById.get(
                     annotation.label_class_id,
                   );
-                  const selected = state.selectedIds.includes(annotation.id);
+                  const selected = selectedDenseRows.annotationIds.has(annotation.id);
                   return (
                     <button
                       key={`annotation-${annotation.id}`}
@@ -3950,7 +3962,7 @@ export function AnnotationEditor({
                 const labelClass = mask.label_class_id
                   ? labelClassesById.get(mask.label_class_id)
                   : null;
-                const selected = state.selectedMaskIds.includes(mask.id);
+                const selected = selectedDenseRows.maskIds.has(mask.id);
                 const kindLabel =
                   mask.geometry_kind === "raster_mask"
                     ? "Brush mask"

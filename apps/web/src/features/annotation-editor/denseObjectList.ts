@@ -127,3 +127,40 @@ export function boundedDenseObjectRows<
   rows.sort((left, right) => left.position - right.position);
   return rows;
 }
+
+/** Resolve selected mounted rows with bounded memory and linear selection scans.
+ * Dense range selections must not trigger an Array.includes scan per DOM row.
+ */
+export function selectedDenseObjectRowIds<
+  A extends { id: string },
+  M extends { id: string },
+>(
+  rows: readonly DenseObjectListRow<A, M>[],
+  selectedAnnotationIds: readonly string[],
+  selectedMaskIds: readonly string[],
+): { annotationIds: ReadonlySet<string>; maskIds: ReadonlySet<string> } {
+  const candidateAnnotations = new Set<string>();
+  const candidateMasks = new Set<string>();
+  for (const row of rows) {
+    if (row.kind === "annotation") {
+      candidateAnnotations.add(row.item.id);
+    } else {
+      candidateMasks.add(row.item.id);
+    }
+  }
+  const annotationIds = new Set<string>();
+  const maskIds = new Set<string>();
+  if (candidateAnnotations.size > 0) {
+    for (const id of selectedAnnotationIds) {
+      if (candidateAnnotations.has(id)) annotationIds.add(id);
+      if (annotationIds.size === candidateAnnotations.size) break;
+    }
+  }
+  if (candidateMasks.size > 0) {
+    for (const id of selectedMaskIds) {
+      if (candidateMasks.has(id)) maskIds.add(id);
+      if (maskIds.size === candidateMasks.size) break;
+    }
+  }
+  return { annotationIds, maskIds };
+}
