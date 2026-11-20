@@ -86,3 +86,28 @@ draft-1.4 profiles upgraded by a final-candidate installer, including exchange
 and verified pre-upgrade-backup restore. Representative scientific and physical
 hardware evidence is separately blocked; neither omission is hidden by the
 successful broad gates.
+
+## November 19 project comparison checkpoint
+
+The integration branch `codex/reefvision-1.4-spatial-candidate` targets
+the existing 1.4 draft. `9e4adcf62` merged #79 at `bf727f458` with the
+Windows lineage work at `36c80224a`. Both parents contain the validated
+1.3 commit `f44053a90` and 1.2 commit `14eb83eb2`. The single Alembic
+head at this checkpoint was `b14_spatial_0040`. [Candidate draft](https://github.com/Rafael-Del-Valle/ReefVision/pull/90)
+
+| User workflow | Observed result | Remaining acceptance |
+| --- | --- | --- |
+| Home → open project → Video & automation → Workflow builder → import two originals → Compare two acquisitions | Source commit `3e0928fed`. The live API and Chromium withheld change for a disputed synthetic identity. The supported fixture correspondence gave a 0.5 m² difference and a scale-only interval of 0.205–0.805 m². | Independently acquired, calibrated paired scans with identified specimens, survey controls, reviewer authority and prespecified tolerances. |
+| Save comparison workflow → reopen from Home → run saved revision twice → download JSON | Saved graph `02ec61af-c7b6-495e-8a10-a62f474f3ccd` ran under `f0f50780-8d0e-4c47-8857-366361d86223` and `17635288-f4ca-479d-9fd4-290946659fee`. Both exports matched the standalone payload exactly, with SHA-256 `b76761113933607cc9c2cd22430288cb6bdd4886ca65a125d6b778f5b456b11b`. | Repeat this journey from the packaged Windows WebView2 on the integrated candidate. |
+| Draft Windows profile upgrades, Project Exchange and backup recovery | Local tests covering the historical matrix, migration reconciliation, point clouds and inventory passed 74/74. The #89 installer run passed fresh install, published 1.0.3 upgrade and three disposable profile upgrades. The historical 1.3 executable rejected the upgraded DB and preserved its hash. [Installed reports](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396) | Authorized copies of real validated-1.3 and legacy draft-1.4 profiles, with verified backups. Smart App Control enforcement requires a suitable disposable Windows 11 device. |
+| 1.1 environmental refresh → offline reread | The #71 missing-cell repair was reproduced on #79 and integrated from `ab0d2afb5`. Incomplete provider responses retained the cached scientific records. | Live provider acceptance requires an authorized account and input. Projective density and repeated-measures decisions remain in the inventory. |
+| Frozen temporal corpus → CUDA training → reviewed comparison | A physical RTX 3090 ran the synthetic three-clip exercise. For 24 coordinates in 12 held-out frames from one group, frame and temporal mean localization errors were 46.243 and 45.861 px. Both missed the one complete reference event. | Representative held-out animal recordings, independent landmarks/events, a compatible registered checkpoint, error criteria and timing/count references. |
+
+All named meshes, study identities, reviews and video clips in these local
+checks are engineering fixtures. The two live spatial tests use a disposable
+API profile and the production React application. Set
+`REEFVISION_GUIDED_TEST_WEB` and `REEFVISION_GUIDED_TEST_API` to the local
+frontend and API and run the two Playwright specs
+`project-spatial-comparison-live.spec.ts` and `spatial-guided-workflow-live.spec.ts`.
+Each comparison export contains its asset IDs, original byte hashes, calibration
+evidence and local review attribution.

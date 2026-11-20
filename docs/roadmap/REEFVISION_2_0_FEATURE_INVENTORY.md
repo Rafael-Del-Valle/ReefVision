@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T02:45:28Z`
+Updated: `2026-11-20T02:54:15Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -588,7 +588,7 @@ Evidence:
 - Dependencies: `rv13-heldout-agreement`
 - Entry point: Not user-facing
 - Workflow Builder: `not_applicable`
-- Missing input: Representative held-out recordings with independent landmark/event labels, the same compatible upstream ReefPose checkpoint, an operational target GPU environment, and preregistered landmark/event/timing/count thresholds.
+- Missing input: Representative held-out recordings with independent landmark/event labels, the same compatible registered upstream ReefPose checkpoint, and preregistered landmark/event/timing/count thresholds.
 
 Acceptance checks:
 
@@ -674,10 +674,12 @@ Evidence:
 Acceptance checks:
 
 - **blocked** — Review accepted, rejected, disputed, and unresolved specimen correspondences before longitudinal comparison. (`rv14-3d-organism-matching-check`)
+- **verified** — Record provisional identity review against dated project originals. A disputed match withholds change and reopening preserves the supplied decision and both source digests. (`rv14-correspondence-project-replay-check`)
 
 Evidence:
 
 - `source`: Synthetic correspondence tests bind project, specimen, observations, times, original assets, source bytes and parsed geometry; they enforce independent reviewers, chronology, and supporting/disputing/inconclusive outcomes. — `apps/api/reefvision/tests/test_spatial_mesh_reidentification_geometry_binding_v14.py` (`rv14-matching-binding-source`)
+- `browser`: Record provisional identity review against dated project originals. A disputed match withholds change and reopening preserves the supplied decision and both source digests. — `apps/web/tests/e2e/project-spatial-comparison-live.spec.ts` (`rv14-correspondence-project-replay`)
 - `browser`: Workflow Builder exposes observation-pair evidence, method, observer, accepted/rejected/disputed/unresolved outcomes, and separate independent-review attribution. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-matching-guided-ui`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
@@ -782,10 +784,12 @@ Evidence:
 Acceptance checks:
 
 - **blocked** — Report change only for reviewed correspondence, compatible frames/units, and pinned measurement revisions with propagated uncertainty. (`rv14-longitudinal-3d-change-check`)
+- **verified** — Enter from Home, import two dated project meshes, compare calibrated geometry, review, save, reopen, run the identical revision twice and export the result with matching source and artifact hashes. (`rv14-longitudinal-project-replay-check`)
 
 Evidence:
 
 - `source`: Deterministic comparisons enforce observation chronology, source and calibration fingerprints, frame and registration evidence, specimen correspondence, conservative scale-uncertainty intervals, topology QC, and stale review-bundle rejection. — `apps/api/reefvision/tests/test_spatial_mesh_longitudinal_v14.py` (`rv14-longitudinal-source`)
+- `browser`: Enter from Home, import two dated project meshes, compare calibrated geometry, review, save, reopen, run the identical revision twice and export the result with matching source and artifact hashes. — `apps/web/tests/e2e/project-spatial-comparison-live.spec.ts` (`rv14-longitudinal-project-replay`)
 - `browser`: Saved Workflow Builder graphs provide contextual registration and organism-correspondence controls while preserving exact transforms, hashes, times and uncertainty in the same node's advanced controls. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-longitudinal-guided-ui`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
@@ -803,10 +807,12 @@ Evidence:
 Acceptance checks:
 
 - **blocked** — Review transform direction, frame, units, residuals, correspondences, uncertainty, and reject stale or incompatible evidence. (`rv14-registration-transforms-check`)
+- **verified** — Save both dated surveys, their source hashes, measured registration residual, correspondence count and local review in a graph and export the resulting evidence on replay. (`rv14-registration-project-replay-check`)
 
 Evidence:
 
 - `source`: Synthetic registration tests validate rigid source-to-target transforms, residual and correspondence metadata, calibration/source/geometry bindings, review independence and chronology, uncertainty bounds, and stale-evidence rejection. — `apps/api/reefvision/tests/test_spatial_mesh_registration_geometry_binding_v14.py` (`rv14-registration-binding-source`)
+- `browser`: Save both dated surveys, their source hashes, measured registration residual, correspondence count and local review in a graph and export the resulting evidence on replay. — `apps/web/tests/e2e/spatial-guided-workflow-live.spec.ts` (`rv14-registration-project-replay`)
 - `browser`: Workflow Builder exposes frames, method, residual, correspondence count, evidence note, and accepted/rejected/disputed/unresolved review states with separate operator and reviewer attribution. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-registration-guided-ui`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
