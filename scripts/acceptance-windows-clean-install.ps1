@@ -9,6 +9,7 @@ param(
     [string]$LineageProfile = '',
     [string]$LineageVerificationPath = '',
     [string]$ExpectedInitialSchemaRevision = '',
+    [string]$SpatialWorkflowNodePath = '',
     [switch]$VerifyPreviousInstallerRejectsUpgradedProfile,
     [switch]$PreviousInstallerSupportsIsolatedAcceptance,
     [switch]$DisposableTest,
@@ -23,6 +24,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'lib\windows-clean-acceptance.ps1')
+. (Join-Path $PSScriptRoot 'lib\windows-spatial-webview2-acceptance.ps1')
 
 if (-not $DisposableTest -and -not $PlanOnly) {
     throw 'Refusing destructive MSI acceptance. Supply -DisposableTest on a disposable Windows VM/machine, or use -PlanOnly.'
@@ -63,6 +65,15 @@ if ($CameraFixturePath) {
         throw 'CameraFixturePath must identify an existing file.'
     }
 }
+if ($SpatialWorkflowNodePath) {
+    if ($PreviousInstallerPath) { throw 'Packaged spatial WebView2 acceptance requires a clean candidate installation.' }
+    $SpatialWorkflowNodePath = (Resolve-Path -LiteralPath $SpatialWorkflowNodePath).Path
+    if ((Split-Path -Leaf $SpatialWorkflowNodePath) -ine 'node.exe' -or
+        -not (Test-Path -LiteralPath $SpatialWorkflowNodePath -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $RepositoryRoot 'apps\web\node_modules\@playwright\test\cli.js') -PathType Leaf)) {
+        throw 'Spatial WebView2 acceptance requires the Node executable and repository Playwright dependencies.'
+    }
+}
 if ($PreviousInstallerPath -and -not $PreviousInstallerSupportsIsolatedAcceptance) {
     throw 'A previous MSI may be exercised only when -PreviousInstallerSupportsIsolatedAcceptance confirms that it honors the marker-gated acceptance data root. This prevents an older desktop from touching normal ReefVision user data.'
 }
@@ -73,6 +84,7 @@ $RunRoot = Join-Path $AcceptanceRoot "reefvision-clean-$Token"
 $InstallRoot = Join-Path $RunRoot 'install'
 $DataRoot = Join-Path $RunRoot 'data'
 $RestoreDataRoot = Join-Path $RunRoot 'restore-data'
+$SpatialDataRoot = Join-Path $RunRoot 'spatial-data'
 $EvidenceRoot = Join-Path $RepositoryRoot ".artifacts\windows-clean-acceptance-$Token"
 $ReportPath = Join-Path $EvidenceRoot 'report.json'
 $InstallerHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash
@@ -122,6 +134,7 @@ $report = [ordered]@{
     first_launch = New-ReefVisionEvidenceResult
     frontend_backend_connectivity = New-ReefVisionEvidenceResult
     webview2 = New-ReefVisionEvidenceResult
+    spatial_workflow = if ($SpatialWorkflowNodePath) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Packaged spatial WebView2 acceptance not requested' }
     schema_migration = New-ReefVisionEvidenceResult
     model_policy = New-ReefVisionEvidenceResult
     sam2_live = if ($LiveSam2Acceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real SAM 2.1 packaged runtime acceptance not requested' }
@@ -203,12 +216,16 @@ function Wait-BackendPort(
     }
     throw "Backend did not publish its port within $Seconds seconds: $Path"
 }
-function Start-AcceptanceDesktop([string]$ProfileDataRoot = $DataRoot) {
+function Start-AcceptanceDesktop([string]$ProfileDataRoot = $DataRoot, [int]$WebViewDebugPort = 0) {
     $BackendPortPath = Join-Path $ProfileDataRoot 'runtime\backend-port.txt'
     Remove-Item -LiteralPath $BackendPortPath -Force -ErrorAction SilentlyContinue
     $isolatedOverrides = @{
         REEFVISION_WINDOWS_ACCEPTANCE = '1'
         REEFVISION_ACCEPTANCE_DATA_DIR = $ProfileDataRoot
+        WEBVIEW2_USER_DATA_FOLDER = (Join-Path $ProfileDataRoot 'webview2')
+    }
+    if ($WebViewDebugPort) {
+        $isolatedOverrides['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = "--remote-debugging-address=127.0.0.1 --remote-debugging-port=$WebViewDebugPort"
     }
     if ($LiveSam2Acceptance) {
         # The default clean-install acceptance deliberately forbids network
@@ -545,6 +562,37 @@ try {
     $shortcuts = @($shortcutCandidates | Where-Object { Test-Path -LiteralPath $_ })
     $report.shortcuts = if ($shortcuts.Count) { New-ReefVisionEvidenceResult -Status 'PASS' -Detail ($shortcuts -join '; ') } else { New-ReefVisionEvidenceResult -Status 'FAIL' -Detail 'No ReefVision desktop or Start menu shortcut was found.' }
     if (-not $shortcuts.Count) { throw 'The MSI installed no discoverable ReefVision shortcut.' }
+
+    if ($SpatialWorkflowNodePath) {
+        try {
+            New-Item -ItemType Directory -Path $SpatialDataRoot | Out-Null
+            Set-Content -LiteralPath (Join-Path $SpatialDataRoot '.reefvision-clean-install-acceptance') -Value $Token
+            $debugPort = Get-ReefVisionLoopbackDebugPort
+            $spatialDesktop = Start-AcceptanceDesktop -ProfileDataRoot $SpatialDataRoot -WebViewDebugPort $debugPort
+            try {
+                $spatialPort = Wait-BackendPort -Path (Join-Path $SpatialDataRoot 'runtime\backend-port.txt') -DesktopProcess $spatialDesktop -BackendLogPath (Join-Path $SpatialDataRoot 'logs\backend.log')
+                $spatialApi = "http://127.0.0.1:$spatialPort/api/v1"
+                $null = Assert-AcceptancePackagedBackend -Api $spatialApi -ExpectedAppVersion $ProductVersion -ExpectedRevision $ExpectedSchemaRevision
+                $result = Invoke-ReefVisionSpatialWebView2Acceptance -NodePath $SpatialWorkflowNodePath -RepositoryRoot $RepositoryRoot -EvidenceRoot $EvidenceRoot -Api $spatialApi -DebugPort $debugPort -DesktopProcessId $spatialDesktop.Id
+            } finally {
+                try {
+                    $spatialDesktop.Refresh()
+                    Stop-AcceptanceDesktop $spatialDesktop
+                } catch {
+                    if (-not $spatialDesktop.HasExited) {
+                        $spatialDesktop.Kill($true)
+                        $null = $spatialDesktop.WaitForExit(15000)
+                    }
+                    throw
+                }
+                Wait-ReefVisionWebView2DebugClosure -Port $debugPort
+            }
+            $report.spatial_workflow = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed WebView2 imported two synthetic originals, recorded provisional review, replayed graph $($result.graph_record_id) as $($result.first_run_id) and $($result.replay_run_id), and downloaded comparison SHA-256 $($result.artifact.payload_sha256)."
+        } catch {
+            $report.spatial_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $_.Exception.Message
+            throw
+        }
+    }
 
     $desktop = Start-AcceptanceDesktop
     $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
@@ -959,6 +1007,7 @@ try {
     # files: SAM2 stage timings and inference exceptions land in api.log.
     foreach ($profileLogs in @(
         [pscustomobject]@{root=$DataRoot;prefix='live'},
+        [pscustomobject]@{root=$SpatialDataRoot;prefix='spatial'},
         [pscustomobject]@{root=$RestoreDataRoot;prefix='restore'}
     )) {
         foreach ($logName in @('backend.log', 'api.log', 'api.log.1', 'api.log.2')) {

@@ -199,11 +199,22 @@ jobs:
           $payload = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $folder -Version '1.4.0' -ExpectedFilename 'ReefVision_1.4.0_x64_en-US.msi' -SourceCommit $env:SOURCE_COMMIT -RequireProvenance
           $payload | ConvertTo-Json -Depth 8
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install the Playwright driver for the installed WebView2
+        working-directory: apps/web
+        run: npm ci --no-audit --no-fund
+
       - name: Test isolated MSI installation without developer runtimes on PATH
         shell: pwsh
         run: |
           $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-4-0-installer'
           $msi = Join-Path $folder 'ReefVision_1.4.0_x64_en-US.msi'
+          $playwrightNode = (Get-Command node -CommandType Application).Source
           $env:PATH = @(
             (Join-Path $env:SystemRoot 'System32'),
             $env:SystemRoot,
@@ -220,7 +231,7 @@ jobs:
             -InstallerPath $msi `
             -ExpectedVersion '1.4.0' -ExpectedSchemaRevision 'b14_spatial_0040' `
             -AcceptanceRoot 'C:\reefvision-1-4-0-disposable-acceptance' `
-            -SkipUpgrade -DisposableTest -KeepArtifacts
+            -SpatialWorkflowNodePath $playwrightNode -SkipUpgrade -DisposableTest -KeepArtifacts
 
       - name: Upload isolated Windows acceptance report and MSI logs
         if: always()
@@ -230,6 +241,8 @@ jobs:
           path: |
             .artifacts/windows-clean-acceptance-*/report.json
             .artifacts/windows-clean-acceptance-*/*.log
+            .artifacts/windows-clean-acceptance-*/spatial-playwright.json
+            .artifacts/windows-clean-acceptance-*/spatial-playwright/**
           if-no-files-found: warn
           include-hidden-files: true
           retention-days: 14

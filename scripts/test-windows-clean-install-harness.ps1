@@ -3,6 +3,7 @@ Set-StrictMode -Version Latest
 
 $Root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'lib\windows-clean-acceptance.ps1')
+. (Join-Path $PSScriptRoot 'lib\windows-spatial-webview2-acceptance.ps1')
 
 $passed = 0
 function Assert-True([bool]$Condition, [string]$Message) {
@@ -30,6 +31,26 @@ try {
 } finally {
     if ($HadConfig) { $env:REEFVISION_CONFIG_DIR = $OldConfig } else { Remove-Item Env:REEFVISION_CONFIG_DIR -ErrorAction SilentlyContinue }
 }
+$browserArgumentsName = 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'
+$originalBrowserArguments = [Environment]::GetEnvironmentVariable($browserArgumentsName, 'Process')
+try {
+    [Environment]::SetEnvironmentVariable($browserArgumentsName, '--remote-debugging-port=9222', 'Process')
+    Invoke-ReefVisionIsolatedEnvironment -DataRoot 'C:\isolated-acceptance' -Action {
+        Assert-True (-not (Test-Path Env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS)) 'Inherited WebView2 debugging leaked into ordinary acceptance.'
+    }
+    Assert-True ($env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS -eq '--remote-debugging-port=9222') 'Caller WebView2 arguments were not restored.'
+} finally {
+    [Environment]::SetEnvironmentVariable($browserArgumentsName, $originalBrowserArguments, 'Process')
+}
+
+$foreignListener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+try {
+    $foreignListener.Start()
+    Assert-Throws { Wait-ReefVisionWebView2DebugEndpoint -Port $foreignListener.LocalEndpoint.Port -DesktopProcessId $PID } 'An unrelated loopback listener was accepted as WebView2.'
+} finally {
+    $foreignListener.Stop()
+}
+
 $safeRoot = Join-Path $env:SystemDrive 'reefvision-clean-acceptance-tests'
 Assert-True ((Assert-ReefVisionSafeAcceptanceRoot -Path $safeRoot -RepositoryRoot $Root -DefaultDataRoot $defaultData) -eq (Resolve-ReefVisionAcceptancePath $safeRoot)) 'Safe temp root was rejected.'
 # A disposable directory under C:\ must be allowed, but C:\ itself and

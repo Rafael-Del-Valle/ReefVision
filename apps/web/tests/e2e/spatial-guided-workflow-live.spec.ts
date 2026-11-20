@@ -1,20 +1,74 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { createHash, randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import type {
   WorkflowArtifact,
   WorkflowRunDetail,
 } from "../../src/features/workflow-graphs/workflowGraphApi";
 
 test("replays and exports a two-acquisition mesh comparison with review evidence", async ({
-  page,
+  playwright,
 }, info) => {
   const web = process.env.REEFVISION_GUIDED_TEST_WEB;
   const api = process.env.REEFVISION_GUIDED_TEST_API;
-  test.skip(!web || !api, "Requires an isolated local ReefVision API and Vite");
-  test.setTimeout(60_000);
-  page.setDefaultTimeout(7000);
+  const endpoint = process.env.REEFVISION_SPATIAL_WEBVIEW2_ENDPOINT;
+  test.skip(
+    !api || (!web && !endpoint),
+    "Requires an isolated ReefVision API and browser or WebView2",
+  );
+  test.setTimeout(120_000);
 
+  if (
+    endpoint &&
+    !/^ws:\/\/127\.0\.0\.1:\d+\/devtools\/browser\/[a-z0-9-]+$/i.test(endpoint)
+  ) {
+    throw new Error(
+      "Spatial WebView2 acceptance requires a loopback CDP endpoint.",
+    );
+  }
+
+  const browser = endpoint
+    ? await playwright.chromium.connectOverCDP(endpoint, { isLocal: true })
+    : await playwright.chromium.launch(info.project.use.launchOptions);
+  try {
+    if (endpoint) {
+      const pages = browser.contexts().flatMap((context) => context.pages());
+      const page = pages.find((candidate) =>
+        /^https?:\/\/tauri\.localhost(?:\/|$)/.test(candidate.url()),
+      );
+      expect(page, "Packaged ReefVision WebView2 target").toBeDefined();
+      await expect
+        .poll(() => page!.evaluate(() => "__TAURI_INTERNALS__" in window))
+        .toBe(true);
+      await runSpatialWorkflow(
+        page!,
+        new URL("/", page!.url()).href,
+        api!,
+        info,
+        "tauri-webview2",
+      );
+    } else {
+      await runSpatialWorkflow(
+        await browser.newPage(),
+        web!,
+        api!,
+        info,
+        "source-browser",
+      );
+    }
+  } finally {
+    await browser.close();
+  }
+});
+
+async function runSpatialWorkflow(
+  page: Page,
+  web: string,
+  api: string,
+  info: TestInfo,
+  surface: "tauri-webview2" | "source-browser",
+): Promise<void> {
+  page.setDefaultTimeout(12_000);
   const name = `Synthetic spatial workflow ${randomUUID().slice(0, 8)}`;
   const created = await page.request.post(`${api}/projects`, {
     data: { name },
@@ -45,7 +99,7 @@ test("replays and exports a two-acquisition mesh comparison with review evidence
     localStorage.setItem("reefvision.onboarding.dismissed.1.4.0", "true"),
   );
   const openWorkflow = async () => {
-    await page.goto(web!);
+    await page.goto(web);
     await page
       .getByRole("button", { name: `Open ${name}`, exact: true })
       .click();
@@ -324,10 +378,12 @@ test("replays and exports a two-acquisition mesh comparison with review evidence
     await readFile((await download.path())!, "utf-8"),
   ) as WorkflowArtifact;
   expect(exported).toEqual(replay.result);
-  await info.attach("two-acquisition-spatial-replay", {
-    contentType: "application/json",
-    body: JSON.stringify(
+  const evidencePath = info.outputPath("spatial-workflow.json");
+  await writeFile(
+    evidencePath,
+    JSON.stringify(
       {
+        surface,
         graph_record_id: first.run.workflow_graph_record_id,
         graph_sha256: first.run.graph_sha256,
         first_run_id: first.run.id,
@@ -337,5 +393,9 @@ test("replays and exports a two-acquisition mesh comparison with review evidence
       null,
       2,
     ),
+  );
+  await info.attach("two-acquisition-spatial-replay", {
+    contentType: "application/json",
+    path: evidencePath,
   });
-});
+}

@@ -36,7 +36,7 @@ function Invoke-ReefVisionIsolatedEnvironment {
         }
     }
     foreach ($Name in $Isolated.Keys) { [void]$Names.Add([string]$Name) }
-    foreach ($Name in @('PYTHONPATH', 'PYTHONHOME', 'TRANSFORMERS_CACHE')) {
+    foreach ($Name in @('PYTHONPATH', 'PYTHONHOME', 'TRANSFORMERS_CACHE', 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS', 'WEBVIEW2_PIPE_FOR_SCRIPT_DEBUGGER')) {
         [void]$Names.Add($Name)
     }
 
