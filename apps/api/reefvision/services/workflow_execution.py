@@ -52,7 +52,11 @@ from reefvision.schemas.workflow_execution import (
     WorkflowRunDetailResponse,
     WorkflowRunResponse,
 )
-from reefvision.schemas.workflow_graphs import WorkflowGraphRequest, WorkflowPlanStep
+from reefvision.schemas.workflow_graphs import (
+    WorkflowGraphPlanResponse,
+    WorkflowGraphRequest,
+    WorkflowPlanStep,
+)
 from reefvision.services.annotation_comparison import (
     BOX_FORMULA_VERSION,
     MASK_FORMULA_VERSION,
@@ -247,8 +251,18 @@ class WorkflowExecutionService:
         project_id: str,
         request: WorkflowRunCreateRequest,
     ) -> WorkflowRunResponse:
+        record, plan = self.prepare_run(project_id, request.graph_record_id)
+        run = self.stage_run(record, plan, request.inputs)
+        self.session.commit()
+        self.session.refresh(run)
+        return WorkflowRunResponse.model_validate(run)
+
+    def prepare_run(
+        self, project_id: str, graph_record_id: str
+    ) -> tuple[WorkflowGraphRecord, WorkflowGraphPlanResponse]:
+        """Resolve the same executable saved revision for manual and local dispatch."""
         self._project(project_id)
-        record = self._graph_record(request.graph_record_id)
+        record = self._graph_record(graph_record_id)
         if record.project_id != project_id:
             raise ValidationError("Workflow graph revision does not belong to this project")
         graph = WorkflowGraphRequest.model_validate(record.graph_json)
@@ -267,12 +281,22 @@ class WorkflowExecutionService:
                 + ", ".join(sorted(set(unsupported)))
             )
 
+        return record, plan
+
+    def stage_run(
+        self,
+        record: WorkflowGraphRecord,
+        plan: WorkflowGraphPlanResponse,
+        inputs: dict[str, Any],
+    ) -> WorkflowRun:
+        """Stage the ordinary run and job without committing the caller's transaction."""
+        project_id = record.project_id
         run = WorkflowRun(
             project_id=project_id,
             workflow_graph_record_id=record.id,
             status="queued",
             graph_sha256=record.graph_sha256,
-            input_json=dict(request.inputs),
+            input_json=dict(inputs),
             result_json={"stage": "queued", "completed_nodes": 0},
         )
         self.session.add(run)
@@ -303,9 +327,7 @@ class WorkflowExecutionService:
         self.session.add(job)
         self.session.flush()
         run.job_id = job.id
-        self.session.commit()
-        self.session.refresh(run)
-        return WorkflowRunResponse.model_validate(run)
+        return run
 
     def execute_node(
         self,
