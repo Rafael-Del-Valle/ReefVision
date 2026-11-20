@@ -59,12 +59,23 @@ Add-Type -TypeDefinition @'
 using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Text;
 public static class ReefVisionProbeProcessToken {
     [DllImport("advapi32", SetLastError=true)] static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
     [DllImport("advapi32", SetLastError=true)] static extern bool GetTokenInformation(IntPtr token, int kind, IntPtr data, int size, out int required);
     [DllImport("advapi32")] static extern IntPtr GetSidSubAuthorityCount(IntPtr sid);
     [DllImport("advapi32")] static extern IntPtr GetSidSubAuthority(IntPtr sid, uint index);
     [DllImport("kernel32")] static extern bool CloseHandle(IntPtr handle);
+    [DllImport("user32")] static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+    [DllImport("user32")] static extern IntPtr GetThreadDesktop(uint thread);
+    [DllImport("user32", CharSet=CharSet.Unicode)] static extern bool GetUserObjectInformation(IntPtr handle, int kind, StringBuilder value, uint length, out uint needed);
+    public static string DesktopName(IntPtr window) {
+        uint pid, needed;
+        uint thread = GetWindowThreadProcessId(window, out pid);
+        var name = new StringBuilder(256);
+        IntPtr desktop = GetThreadDesktop(thread);
+        return desktop != IntPtr.Zero && GetUserObjectInformation(desktop, 2, name, 512, out needed) ? name.ToString() : null;
+    }
     public static int Integrity(IntPtr process) {
         const uint query = 8;
         const int tokenIntegrityLevel = 25;
@@ -106,6 +117,53 @@ function Wait-ProbeFile([string]$Path, [int]$Seconds) {
         Start-Sleep -Milliseconds 250
     }
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "Missing probe completion file: $(Split-Path -Leaf $Path)." }
+}
+function Read-ProbeBrowserContext([int]$DesktopProcessId,[int]$DebugPort,[string]$UserSid,[string]$BrowserData) {
+    $shell = Get-Process -Id $DesktopProcessId -ErrorAction Stop
+    $browsers = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $DesktopProcessId AND Name = 'msedgewebview2.exe'")
+    $rendererTypes = @('renderer','gpu-process','utility','other')
+    $processes = @(foreach ($browser in $browsers) {
+        $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $($browser.ProcessId) AND Name = 'msedgewebview2.exe'")
+        $typed = @($children | ForEach-Object {
+            $kind = if ($_.CommandLine -match '(?:^|\s)--type=(renderer|gpu-process|utility)(?=$|\s)') { $Matches[1] } else { 'other' }
+            [pscustomobject]@{kind=$kind;id=$_.ProcessId}
+        })
+        $counts = [ordered]@{}
+        foreach ($kind in $rendererTypes) { $counts[$kind] = @($typed | Where-Object kind -EQ $kind).Count }
+        [ordered]@{
+            browser_pid=$browser.ProcessId; browser_path=$browser.ExecutablePath
+            uses_isolated_user_data=$browser.CommandLine -match [regex]::Escape($BrowserData)
+            arguments=Get-ReefVisionWebView2DiagnosticArguments $browser.CommandLine
+            child_process_counts=$counts
+        }
+    })
+    $policy = @(foreach ($base in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge', "Registry::HKEY_USERS\$UserSid\Software\Policies\Microsoft\Edge")) {
+        foreach ($scope in @($base,(Join-Path $base 'WebView2'))) {
+            $settings = Get-ItemProperty -LiteralPath $scope -ErrorAction SilentlyContinue
+            $presence = [ordered]@{}
+            foreach ($name in 'DeveloperToolsAvailability','RemoteDebuggingAllowed') {
+                $value = if ($settings) { $settings.PSObject.Properties[$name] } else { $null }
+                $presence[$name] = if ($value -and $value.Value -is [int]) { $value.Value } else { $null }
+            }
+            $overrides = [ordered]@{}
+            foreach ($name in 'AdditionalBrowserArguments','UserDataFolder','BrowserExecutableFolder') {
+                $key = Get-Item -LiteralPath (Join-Path $scope $name) -ErrorAction SilentlyContinue
+                $overrides[$name] = if ($key) { @($key.GetValueNames() | Where-Object { $_ -in @('*','ReefVision.exe') }) } else { @() }
+            }
+            [ordered]@{scope=$scope;settings=$presence;application_or_global_override_names=$overrides}
+        }
+    })
+    $tcp = [System.Net.Sockets.TcpClient]::new()
+    $tcpConnected = $false
+    try { $tcpConnected = $tcp.ConnectAsync('127.0.0.1',$DebugPort).Wait(1500) -and $tcp.Connected } catch {} finally { $tcp.Dispose() }
+    $netstat = & (Join-Path $env:SystemRoot 'System32/netstat.exe') -ano -p tcp
+    return [ordered]@{
+        runner_image=$env:ImageOS; runner_image_version=$env:ImageVersion
+        desktop_session=$shell.SessionId; local_thread_desktop=[ReefVisionProbeProcessToken]::DesktopName($shell.MainWindowHandle)
+        hosted_browser_processes=$processes; read_only_browser_policy=$policy
+        independent_loopback_connection=$tcpConnected
+        netstat_expected_loopback_rows=@($netstat | Where-Object { $_ -match "^\s*TCP\s+127[.]0[.]0[.]1:${DebugPort}\s" })
+    }
 }
 
 $expectedCommit='72254d9a021e31f02329146a949f3b5958ec7cdc'
@@ -201,7 +259,17 @@ try {
         throw 'The exact packaged sidecar did not bind to the designated test profile.'
     }
     $env:REEFVISION_GUIDED_TEST_API = $api
-    $env:REEFVISION_SPATIAL_WEBVIEW2_ENDPOINT = Wait-ReefVisionWebView2DebugEndpoint -Port $debugPort -DesktopProcessId $desktop.Id -FailureEvidencePath (Join-Path $EvidenceRoot 'spatial-webview2-startup.log')
+    try {
+        $env:REEFVISION_SPATIAL_WEBVIEW2_ENDPOINT = Wait-ReefVisionWebView2DebugEndpoint -Port $debugPort -DesktopProcessId $desktop.Id -FailureEvidencePath (Join-Path $EvidenceRoot 'spatial-webview2-startup.log')
+    } catch {
+        Write-Probe 'browser-context.json' (Read-ProbeBrowserContext -DesktopProcessId $desktop.Id -DebugPort $debugPort -UserSid $sid -BrowserData $webview2)
+        $uiaLog = Join-Path $EvidenceRoot 'uia.log'
+        $uiaOutput = Join-Path $EvidenceRoot 'uia-output.json'
+        $uiaArgs = '-NoProfile -NonInteractive -STA -File "{0}" -DesktopProcessId {1} -Api "{2}" -Evidence "{3}" -Name "{4}"' -f (Join-Path $PSScriptRoot 'probe-hosted-webview2-uia.ps1'),$desktop.Id,$api,$uiaOutput,("Ordinary native UI $token")
+        $uia = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe') -ArgumentList $uiaArgs -PassThru -WindowStyle Hidden -RedirectStandardOutput $uiaLog -RedirectStandardError (Join-Path $EvidenceRoot 'uia-error.log')
+        if (-not $uia.WaitForExit(40000)) { $uia.Kill(); $null=$uia.WaitForExit(10000) }
+        throw
+    }
     $listener = Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort $debugPort -State Listen
     $browser = Get-CimInstance Win32_Process -Filter "ProcessId = $($listener.OwningProcess)"
     $browserOwner = Invoke-CimMethod -InputObject $browser -MethodName GetOwnerSid
