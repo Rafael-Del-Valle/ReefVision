@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from io import BytesIO
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 from PIL import Image
@@ -54,7 +54,7 @@ class SourceExhausted(RuntimeError):
     """The sealed source has no next entry."""
 
 
-_CONFIG = TypeAdapter(SourceConfiguration)
+_CONFIG = TypeAdapter[SourceConfiguration](cast(Any, SourceConfiguration))
 _CAMERA_CONSENT = timedelta(minutes=15)
 _RETRY_DELAY = timedelta(seconds=5)
 

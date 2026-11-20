@@ -26,6 +26,7 @@ from reefvision.domain.errors import ConflictError, NotFoundError, ValidationErr
 from reefvision.schemas.workflow_graphs import WorkflowGraphPlanResponse, WorkflowPlanStep
 from reefvision.services.acquisition_sources import verify_scheduled_source
 from reefvision.services.ecology_event_summary import EVENT_SUMMARY_JOB
+from reefvision.services.workflow_monitoring import verify_scheduled_monitoring_rule
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.storage.results_packages import sha256_file
@@ -185,8 +186,8 @@ def _source_reference(
                 raise ValidationError(str(exc)) from exc
             return _reference(node, identifier, source.source_sha256)
         case "monitoring_assessment":
-            identifier = _identifier(parameters, "rule_id")
-            return _reference(node, identifier, parameters.get("rule_sha256"))
+            rule = verify_scheduled_monitoring_rule(session, project_id, parameters)
+            return _reference(node, str(rule.id), rule.rule_sha256)
         case _:
             return None
 
