@@ -144,7 +144,9 @@ def test_mesh_shape_ratio_unavailable_in_saved_workflow(
     app = cast(FastAPI, client.app)
     artifact_hashes: list[str] = []
     for _ in range(2):
-        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        run = client.post(
+            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+        )
         assert run.status_code == 202, run.text
         completed = process_workflow_run_job(
             app.state.settings, app.state.session_factory, str(run.json()["job_id"])
@@ -178,6 +180,7 @@ def test_mesh_shape_ratio_unavailable_in_saved_workflow(
         assert len(artifact_hashes) == 2
         assert len(artifact_hashes[0]) == 64
         assert artifact_hashes[0] == artifact_hashes[1]
+
 
 @pytest.mark.parametrize(
     "obj_text",
