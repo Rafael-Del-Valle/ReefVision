@@ -240,25 +240,33 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
     foreign_keys = {(row[3], row[2], row[4], row[6].upper()) for row in foreign_key_rows}
     if foreign_keys != contract["foreign_keys"]:
         return False
+    # The source migrations do not declare ON UPDATE actions. CASCADE or
+    # SET NULL could silently alter biological links or reviewer ownership
+    # after a parent ID changes, even when ON DELETE and FK targets match.
+    if any(row[5].upper() != "NO ACTION" for row in foreign_key_rows):
+        return False
 
-    indexes = set()
+    canonical_indexes = set()
     nonprimary_unique_indexes = set()
     has_partial_unique = False
     has_noncanonical_unique_keys = False
     for index in db.execute(f"PRAGMA index_list({quoted})"):
         index_name = '"' + index[1].replace('"', '""') + '"'
         columns_in_index = tuple(row[2] for row in db.execute(f"PRAGMA index_info({index_name})"))
-        indexes.add((columns_in_index, bool(index[2])))
-        if index[2]:
-            # index_info omits collation and DESC flags. A forged request-key
-            # UNIQUE constraint using NOCASE may merge distinct reviewer
-            # idempotency tokens while still passing a column-only inventory.
-            # The original migrations use ordinary ascending BINARY keys.
-            key_rows = [row for row in db.execute(f"PRAGMA index_xinfo({index_name})") if row[5]]
-            if len(key_rows) != len(columns_in_index) or any(
-                row[3] != 0 or row[4] != "BINARY" for row in key_rows
-            ):
-                has_noncanonical_unique_keys = True
+        # SQLite's index_info hides sort order and collation, while
+        # index_list reports partial indexes separately. All required source
+        # indexes (including non-UNIQUE time lookups) are full, ascending and
+        # BINARY. A partial or NOCASE lookup with the right column names is
+        # not migration-equivalent, and may omit or reorder observations.
+        key_rows = [row for row in db.execute(f"PRAGMA index_xinfo({index_name})") if row[5]]
+        canonical_keys = len(key_rows) == len(columns_in_index) and all(
+            row[3] == 0 and row[4] == "BINARY" for row in key_rows
+        )
+        if canonical_keys and not index[4]:
+            canonical_indexes.add((columns_in_index, bool(index[2])))
+        if index[2] and not canonical_keys:
+            # A forged UNIQUE key may collapse distinct researcher request IDs.
+            has_noncanonical_unique_keys = True
         if index[2] and index[3] != "pk":
             # A partial replacement of the QC idempotency constraint can
             # admit duplicate review requests for excluded researchers.
@@ -268,7 +276,7 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
             has_partial_unique |= bool(index[4])
     required_unique_indexes = {columns for columns, unique in contract["indexes"] if unique}
     return (
-        contract["indexes"] <= indexes
+        contract["indexes"] <= canonical_indexes
         and not has_partial_unique
         and not has_noncanonical_unique_keys
         and nonprimary_unique_indexes == required_unique_indexes
