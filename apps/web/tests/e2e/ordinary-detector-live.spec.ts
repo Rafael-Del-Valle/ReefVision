@@ -465,10 +465,21 @@ test("runs the ordinary local detector from grouped stills through reviewed resu
         ).filter((x) => x.image_id === imageId);
         expect(detections.length).toBe(direct.length);
         const sortKey = (x: {
+          predicted_label: string;
           confidence: number;
           x_min: number;
           y_min: number;
-        }) => [x.confidence, x.x_min, x.y_min].join("/");
+          x_max: number;
+          y_max: number;
+        }) =>
+          [
+            x.predicted_label,
+            x.confidence,
+            x.x_min,
+            x.y_min,
+            x.x_max,
+            x.y_max,
+          ].join("/");
         const sortedDirect = [...direct].sort((a, b) =>
           sortKey(a).localeCompare(sortKey(b)),
         );

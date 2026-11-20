@@ -949,6 +949,18 @@ def import_project_exchange(
                     if lock is not None:
                         lock.protocol_sha256 = protocol
                 restore_pose_comparisons(session, project.id, digests)
+                from reefvision.services.project_exchange_paired_models_v15 import (
+                    restore_paired_model_comparisons,
+                )
+
+                restore_paired_model_comparisons(
+                    session,
+                    project.id,
+                    section_rows,
+                    id_map,
+                    digests,
+                    source_storage_root=source_storage_root,
+                )
                 restore_comparison_jobs(session, project.id, section_rows, id_map, digests)
             if restores_workflow_provenance:
                 restore_workflow_provenance(
