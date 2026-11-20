@@ -817,6 +817,69 @@ describe("AnnotationEditor", () => {
     expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
   });
 
+  it("commits the initiating pointer release location even without a move event", async () => {
+    mockBasicEditorRequests();
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    stubCanvasRect();
+    await userEvent.click(screen.getByRole("button", { name: "Box tool" }));
+    await userEvent.click(screen.getByTestId("class-tool-1"));
+    const canvas = screen.getByTestId("annotation-canvas");
+    const objects = screen.getByRole("listbox", { name: "Objects" });
+    expect(within(objects).getAllByRole("option")).toHaveLength(1);
+
+    fireEvent.pointerDown(canvas, {
+      pointerId: 51,
+      button: 0,
+      clientX: 150,
+      clientY: 150,
+    });
+    // A second contact cannot finish an annotation for the first contact.
+    fireEvent.pointerUp(window, {
+      pointerId: 52,
+      clientX: 700,
+      clientY: 700,
+    });
+    expect(within(objects).getAllByRole("option")).toHaveLength(1);
+
+    // No pointermove has occurred: the release itself supplies the final box.
+    fireEvent.pointerUp(window, {
+      pointerId: 51,
+      clientX: 280,
+      clientY: 280,
+    });
+    expect(within(objects).getAllByRole("option")).toHaveLength(2);
+    expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
+  });
+
+  it("discards an invalid primary release without adding a coral annotation", async () => {
+    mockBasicEditorRequests();
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    stubCanvasRect();
+    await userEvent.click(screen.getByRole("button", { name: "Box tool" }));
+    await userEvent.click(screen.getByTestId("class-tool-1"));
+    const canvas = screen.getByTestId("annotation-canvas");
+    const objects = screen.getByRole("listbox", { name: "Objects" });
+    fireEvent.pointerDown(canvas, {
+      pointerId: 53,
+      button: 0,
+      clientX: 150,
+      clientY: 150,
+    });
+    fireEvent.pointerUp(window, {
+      pointerId: 53,
+      clientX: Infinity,
+      clientY: 200,
+    });
+    expect(within(objects).getAllByRole("option")).toHaveLength(1);
+    expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
+  });
+
   it("does not finish a coral box annotation on a secondary pointer release", async () => {
     mockBasicEditorRequests();
     renderEditor();
