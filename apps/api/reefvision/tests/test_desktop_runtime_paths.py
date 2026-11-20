@@ -30,7 +30,7 @@ def _stamp_database(settings: Settings, revision: str) -> Path:
         connection.execute(
             """
             CREATE TABLE alembic_version (
-                version_num VARCHAR(32) NOT NULL
+                version_num VARCHAR(32) NOT NULL PRIMARY KEY
             )
             """
         )

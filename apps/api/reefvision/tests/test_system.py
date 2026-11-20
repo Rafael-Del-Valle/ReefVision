@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from reefvision import __version__
 from reefvision.config import Settings
+from reefvision.main import create_app
 from reefvision.services.system import SystemService
 from reefvision.storage.backups import BACKUP_FORMAT_VERSION
 
@@ -21,7 +22,10 @@ from reefvision.storage.backups import BACKUP_FORMAT_VERSION
 def set_alembic_revision(database_path: Path, revision: str) -> None:
     connection = sqlite3.connect(database_path)
     try:
-        connection.execute("CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32))")
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS alembic_version "
+            "(version_num VARCHAR(32) NOT NULL PRIMARY KEY)"
+        )
         connection.execute("DELETE FROM alembic_version")
         connection.execute("INSERT INTO alembic_version(version_num) VALUES (?)", (revision,))
         connection.commit()
@@ -79,8 +83,15 @@ def test_system_service_uses_resolved_alembic_paths(
     assert script.get_current_head() == current_head_revision()
 
 
-def test_system_compatibility_reports_pending_migrations_for_blank_db(client: TestClient) -> None:
-    response = client.get("/api/v1/system/compatibility")
+def test_system_compatibility_reports_pending_migrations_for_blank_db(
+    test_settings: Settings,
+) -> None:
+    app = create_app(test_settings)
+    try:
+        with TestClient(app) as client:
+            response = client.get("/api/v1/system/compatibility")
+    finally:
+        app.state.engine.dispose()
 
     assert response.status_code == 200
     payload = response.json()
