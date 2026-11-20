@@ -87,9 +87,6 @@ from reefvision.services.project_exchange_inspection import (
     inspect_project_exchange,
 )
 from reefvision.services.project_exchange_integrated import (
-    FORMAT_VERSION as INTEGRATED_FORMAT_VERSION,
-)
-from reefvision.services.project_exchange_integrated import (
     heldout_scope_mappings,
     integrated_models,
     map_origin_ids,
@@ -118,6 +115,7 @@ from reefvision.services.project_exchange_temporal_reefpose import (
     remap_temporal_exchange_row,
     restore_temporal_links,
 )
+from reefvision.services.project_exchange_v15 import INTEGRATED_FORMATS, restore_v15_row
 from reefvision.services.project_exchange_workflows import (
     has_spatial_workflow_history,
     restore_workflow_provenance,
@@ -443,9 +441,7 @@ def import_project_exchange(
             if isinstance(member, str):
                 section_rows[section_name] = _read_jsonl(archive, member)
 
-        integrated = (
-            integrated_models() if inspection.format_version == INTEGRATED_FORMAT_VERSION else {}
-        )
+        integrated = integrated_models() if inspection.format_version in INTEGRATED_FORMATS else {}
         models = {**SECTION_MODELS, **integrated}
         order = [*SECTION_ORDER, *integrated]
         validate_exchange_records(old_project_id, section_rows, models)
@@ -635,6 +631,7 @@ def import_project_exchange(
                         remap_reviewed_snapshot(
                             section_name, row, values, by_section, id_map, digests
                         )
+                        restore_v15_row(section_name, row, values, id_map)
                         remap_temporal_exchange_row(
                             section_name, row, values, id_map, digests, track_digests
                         )

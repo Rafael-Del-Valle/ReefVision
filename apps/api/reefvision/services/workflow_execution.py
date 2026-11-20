@@ -64,6 +64,7 @@ from reefvision.services.computed_metrics import ComputedMetricService
 from reefvision.services.environmental_analysis import EnvironmentalAnalysisService
 from reefvision.services.environmental_context import EnvironmentalContextService
 from reefvision.services.geographic_pairwise import GeographicPairwiseService
+from reefvision.services.model_runtime import workflow_runtime_settings
 from reefvision.services.project_exchange import FORMAT_VERSION, ProjectExchangeService
 from reefvision.services.scientific_data import ScientificDataService
 from reefvision.services.scientific_heatmaps import ScientificHeatmapService
@@ -1189,6 +1190,7 @@ class WorkflowExecutionService:
                 "iou_threshold": float(parameters.get("iou", 0.5)),
                 "device": str(parameters.get("device", "auto")),
                 "model_task": "detect",
+                **workflow_runtime_settings(model_payload),
                 "created_by_workflow": True,
                 "workflow_run_id": run_id,
                 "workflow_node_run_id": node_run.id,

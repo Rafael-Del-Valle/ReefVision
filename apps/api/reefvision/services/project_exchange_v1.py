@@ -79,6 +79,8 @@ from reefvision.services.project_exchange_integrated import (
     has_integrated_records,
     integrated_records,
 )
+from reefvision.services.project_exchange_v15 import FORMAT_VERSION as RESEARCH_FORMAT_VERSION
+from reefvision.services.project_exchange_v15 import INTEGRATED_FORMATS, has_v15_records
 from reefvision.services.project_exchange_workflows import is_spatial_workflow_graph
 from reefvision.services.spatial_source_assets_v14 import SpatialSourceAssetService
 from reefvision.storage.datasets import canonical_json_sha256
@@ -146,6 +148,8 @@ class ProjectExchangeV1Service(ProjectExchangeService):
     """Project exchange service with executable-workflow provenance included."""
 
     def _format_version(self, project_id: str) -> str:
+        if has_v15_records(self.session, project_id):
+            return RESEARCH_FORMAT_VERSION
         if has_integrated_records(self.session, project_id):
             return INTEGRATED_FORMAT_VERSION
         return super()._format_version(project_id)
@@ -751,7 +755,7 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             "existing_projects_must_not_be_overwritten": True,
             "source_ids_are_preserved_in_import_provenance": True,
         }
-        if package.format_version == INTEGRATED_FORMAT_VERSION or any(
+        if package.format_version in INTEGRATED_FORMATS or any(
             is_spatial_workflow_graph(graph.graph_json)
             for graph in cast(Sequence[WorkflowGraphRecord], records["workflow_graphs"])
         ):

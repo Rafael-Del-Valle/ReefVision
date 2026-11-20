@@ -27,6 +27,7 @@ from reefvision.jobs.classification_inference import process_classification_infe
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.services.mask_measurements import MaskMeasurementService
+from reefvision.services.model_runtime import workflow_runtime_settings
 from reefvision.services.workflow_acquisition_quality import execute_acquisition_quality
 from reefvision.services.workflow_coral_growth import execute_coral_growth
 from reefvision.services.workflow_coral_skeleton import execute_coral_skeleton
@@ -143,6 +144,7 @@ def _segmentation_inference(
                 "iou_threshold": float(parameters.get("iou", 0.5)),
                 "device": str(parameters.get("device", "auto")),
                 "model_task": model.task,
+                **workflow_runtime_settings(model_payload),
                 "created_by_workflow": True,
             },
             result_json={"stage": "queued", "created_by_workflow": True},
@@ -762,6 +764,7 @@ def _video_tracking(
                 "iou": float(parameters.get("iou", 0.5)),
                 "minimum_track_frames": int(parameters.get("minimum_track_frames", 2)),
                 "device": str(parameters.get("device", "auto")),
+                **workflow_runtime_settings(model_payload, video=True),
                 "created_by_workflow": True,
             },
             result_json={"stage": "queued", "created_by_workflow": True},

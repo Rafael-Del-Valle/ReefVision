@@ -232,7 +232,7 @@ jobs:
           }
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
-            -ExpectedVersion '1.5.0' -ExpectedSchemaRevision 'b14_condition_0041' `
+            -ExpectedVersion '1.5.0' -ExpectedSchemaRevision 'b15_model_0001' `
             -AcceptanceRoot 'C:\reefvision-1-5-0-disposable-acceptance' `
             -SpatialWorkflowNodePath $playwrightNode -HostedStandardUserWebView2 -SkipUpgrade -DisposableTest -KeepArtifacts
 
@@ -310,7 +310,7 @@ jobs:
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
             -PreviousInstallerPath $previousMsi -PreviousInstallerSupportsIsolatedAcceptance `
-            -ExpectedVersion '1.5.0' -ExpectedSchemaRevision 'b14_condition_0041' `
+            -ExpectedVersion '1.5.0' -ExpectedSchemaRevision 'b15_model_0001' `
             -AcceptanceRoot 'C:\reefvision-1-5-0-upgrade-acceptance' `
             -DisposableTest -KeepArtifacts
 
@@ -413,7 +413,7 @@ jobs:
           $arguments = @{
             InstallerPath = $candidate
             ExpectedVersion = '1.5.0'
-            ExpectedSchemaRevision = 'b14_condition_0041'
+            ExpectedSchemaRevision = 'b15_model_0001'
             ExpectedInitialSchemaRevision = '${{ matrix.initial_revision }}'
             AcceptanceRoot = 'C:\reefvision-lineage-${{ matrix.acceptance_slug }}'
             LineageManifestPath = (Join-Path $fixtureRoot 'manifest.json')

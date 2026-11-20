@@ -13,6 +13,7 @@ import {
 } from "../ecology/PairedGrowthFields";
 import type { EventSummary } from "../ecology/EventSummaryPanel";
 import type { PoseLink } from "../ecology/poseOrganismLinksApi";
+import { ModelSelectionField } from "../models/ReviewedModelRuntime";
 import {
   AcquisitionQualityControls,
   defaultAcquisitionThresholds,
@@ -40,6 +41,7 @@ const scientificNodes = new Set([
   "point_cloud_preview",
   "mesh_longitudinal_comparison",
   "provider_manifest_snapshot",
+  "reviewed_model_runtime",
 ]);
 
 export const hasScientificNodeControls = (nodeType: string) =>
@@ -129,6 +131,12 @@ export function scientificConfigurationIssue(
   parameters: Parameters,
 ): string | undefined {
   const config = object(parameters.configuration);
+  if (
+    nodeType === "reviewed_model_runtime" &&
+    (!string(parameters.selection_id) ||
+      !/^[0-9a-f]{64}$/.test(string(parameters.selection_sha256)))
+  )
+    return "Choose a reviewed project model configuration.";
   if (
     nodeType === "paired_growth_contrast" &&
     (!string(parameters.analysis_id) ||
@@ -1848,6 +1856,20 @@ export function ScientificNodeControls({
   onChange: (value: Parameters) => void;
 }) {
   const base = `/projects/${projectId}`;
+  if (nodeType === "reviewed_model_runtime")
+    return (
+      <ModelSelectionField
+        projectId={projectId}
+        value={string(parameters.selection_id)}
+        onChange={(selection) =>
+          onChange({
+            ...parameters,
+            selection_id: selection?.id ?? "",
+            selection_sha256: selection?.content_sha256 ?? "",
+          })
+        }
+      />
+    );
   if (nodeType === "provider_manifest_snapshot")
     return (
       <ProviderManifestSnapshotFields

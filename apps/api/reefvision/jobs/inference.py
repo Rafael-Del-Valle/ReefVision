@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import ImageAsset, Job, ModelRegistration, PredictionProposal, Project
-from reefvision.domain.errors import ValidationError
+from reefvision.domain.errors import ReefVisionError, ValidationError
 from reefvision.ml.provider_hub import detection_provider_for_name
 from reefvision.ml.providers import (
     DetectionPrediction,
@@ -39,6 +39,7 @@ from reefvision.ml.sleap_nn_provider import SLEAP_NN_ACTIONABLE_RETIREMENT, SLEA
 from reefvision.repositories.images import ImageRepository
 from reefvision.repositories.models import ModelRepository
 from reefvision.services.annotations import _polygon_area, _polygon_self_intersects
+from reefvision.services.model_runtime import verify_queued_selection
 from reefvision.storage.projects import resolve_managed_project_path
 
 
@@ -339,6 +340,14 @@ def process_inference_job(
         session.commit()
         request = dict(job.request_json)
         model = _model(session, str(request["model_id"]))
+        try:
+            verify_queued_selection(session, settings, model.project_id, request)
+        except ReefVisionError as exc:
+            job.status = "failed"
+            job.error_message = str(exc)
+            job.completed_at = _utc_now()
+            session.commit()
+            return False
         if model.provider_name.strip().casefold() == SLEAP_NN_PROVIDER_ID:
             job.status = "failed"
             job.error_message = SLEAP_NN_ACTIONABLE_RETIREMENT
@@ -527,6 +536,13 @@ def process_inference_job(
                                 },
                             )
                         )
+                if "runtime_selection_id" in request:
+                    for proposal in proposals:
+                        proposal.provenance_json = {
+                            **(proposal.provenance_json or {}),
+                            "runtime_selection_id": request["runtime_selection_id"],
+                            "runtime_selection_sha256": request["runtime_selection_sha256"],
+                        }
                 session.add_all(proposals)
                 job.progress_current = index
                 previous = dict(job.result_json or {})

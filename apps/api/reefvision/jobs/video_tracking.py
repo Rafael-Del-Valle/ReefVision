@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import Job, ModelRegistration, VideoAsset, VideoTrack
-from reefvision.domain.errors import ValidationError
+from reefvision.domain.errors import ReefVisionError, ValidationError
 from reefvision.ml.video_tracking import (
     TrackObservation,
     VideoTrackingCancelled,
@@ -25,6 +25,7 @@ from reefvision.ml.video_tracking_fusion import fuse_tracked_models
 from reefvision.schemas.georeferenced_observation import BoundingBoxPixels
 from reefvision.schemas.pose_tracking import PoseTemporalAssociationBuildRequest
 from reefvision.services.georeferenced_observations import GeoReferencedObservationService
+from reefvision.services.model_runtime import verify_queued_selection
 from reefvision.services.pose_temporal_tracking import PoseTemporalTrackingService
 from reefvision.services.video_georeferencing import VideoGeoreferencingService
 from reefvision.services.video_georeferencing_readiness import VideoGeoreferencingReadinessService
@@ -303,6 +304,15 @@ def process_video_tracking_job(
         if video is None or model is None or video.project_id != model.project_id:
             job.status = "failed"
             job.error_message = "Video or detector model was not found in the selected project"
+            job.completed_at = datetime.now(UTC)
+            session.commit()
+            return False
+
+        try:
+            verify_queued_selection(session, settings, video.project_id, request)
+        except ReefVisionError as exc:
+            job.status = "failed"
+            job.error_message = str(exc)
             job.completed_at = datetime.now(UTC)
             session.commit()
             return False

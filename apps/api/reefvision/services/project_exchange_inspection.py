@@ -14,6 +14,7 @@ from reefvision.schemas.project_exchange import (
     ProjectExchangeInspectionResponse,
     ProjectExchangeUnavailableAsset,
 )
+from reefvision.services.project_exchange_v15 import INTEGRATED_FORMATS, validate_v15_exchange
 from reefvision.services.static_comparison import STATIC_COMPARISON_JOB
 from reefvision.storage.datasets import canonical_json_sha256
 
@@ -181,7 +182,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
             if manifest.get("format_name") != FORMAT_NAME:
                 errors.append("Archive is not a ReefVision project exchange package")
             version = str(manifest.get("format_version", ""))
-            if version not in {"1.0", "1.1", "1.2"}:
+            if version not in {"1.0", "1.1", *INTEGRATED_FORMATS}:
                 errors.append("Unsupported exchange format version")
 
             excluded = manifest.get("excluded_record_groups", [])
@@ -237,6 +238,9 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                     errors.append("Exchange archive source project ID is invalid")
                 else:
                     try:
+                        validate_v15_exchange(
+                            version, project_id, section_rows, manifest.get("origin")
+                        )
                         validate_spatial_exchange_records(project_id, section_rows)
                         validate_paired_growth_exchange(
                             project_id, section_rows, manifest.get("origin")
@@ -253,7 +257,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                                 validate_origin(manifest["origin"])
                     except ValidationError as exc:
                         errors.append(str(exc))
-            if version == "1.2" and not errors:
+            if version in INTEGRATED_FORMATS and not errors:
                 from reefvision.services.project_exchange_import import SECTION_MODELS
                 from reefvision.services.project_exchange_import_v1 import register_v1_sections
                 from reefvision.services.project_exchange_integrated import (
@@ -295,7 +299,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                 descriptors=manifest.get("media", []),
                 label="media",
                 require_source_relative_path=False,
-                require_integrity=version == "1.2",
+                require_integrity=version in INTEGRATED_FORMATS,
                 errors=errors,
             )
             included_media_count = len(media)
@@ -305,7 +309,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                 except ValidationError as exc:
                     errors.append(str(exc))
                 else:
-                    if version == "1.2":
+                    if version in INTEGRATED_FORMATS:
                         unavailable_assets = media_gaps
                     missing_spatial = [item for item in media_gaps if item.kind == "spatial_source"]
                     if missing_spatial:
@@ -328,7 +332,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                 ),
                 label="telemetry sidecar",
                 require_source_relative_path=True,
-                require_integrity=version == "1.2",
+                require_integrity=version in INTEGRATED_FORMATS,
                 errors=errors,
             )
 
@@ -358,11 +362,11 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                 descriptors=manifest.get("generated_artifacts", []),
                 label="generated artifact",
                 require_source_relative_path=True,
-                require_integrity=version == "1.2",
+                require_integrity=version in INTEGRATED_FORMATS,
                 errors=errors,
             )
             included_generated_artifact_count = len(generated)
-            if version == "1.2" and not errors:
+            if version in INTEGRATED_FORMATS and not errors:
                 paths = [
                     str(item["source_relative_path"]).replace("\\", "/").casefold()
                     for item in generated

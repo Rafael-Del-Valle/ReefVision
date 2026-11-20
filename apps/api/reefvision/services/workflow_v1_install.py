@@ -9,6 +9,10 @@ from reefvision.services.workflow_condition_v14 import (
 )
 from reefvision.services.workflow_graphs import install_workflow_node_registry
 from reefvision.services.workflow_mesh_v14 import extend_mesh_registry, register_mesh_adapter
+from reefvision.services.workflow_model_runtime_v15 import (
+    extend_model_runtime_registry,
+    register_model_runtime_adapter,
+)
 from reefvision.services.workflow_node_registry_v1 import workflow_node_registry
 from reefvision.services.workflow_provider_manifests_v15 import (
     extend_provider_manifest_registry,
@@ -22,10 +26,16 @@ def install_workflow_v1_extensions() -> None:
     register_mesh_adapter()
     register_condition_adapter()
     register_provider_manifest_adapter()
+    register_model_runtime_adapter()
     install_workflow_node_registry(
-        extend_provider_manifest_registry(
-            extend_condition_registry(extend_mesh_registry(workflow_node_registry))
+        extend_model_runtime_registry(
+            extend_provider_manifest_registry(
+                extend_condition_registry(extend_mesh_registry(workflow_node_registry))
+            )
         )
+    )
+    workflow_graphs._ACTIONS["reviewed_model_runtime"] = (
+        "Verify and use a reviewed local model configuration."
     )
     workflow_graphs._ACTIONS["spatial_condition_report"] = (
         "Replay a pinned biological condition review report."

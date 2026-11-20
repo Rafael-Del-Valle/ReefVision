@@ -53,6 +53,7 @@ from reefvision.schemas.pose_training_datasets import (
 )
 from reefvision.services import workflow_runtime_adapters as runtime_adapters
 from reefvision.services.behavior_dynamics import BehaviorDynamicsService
+from reefvision.services.model_runtime import workflow_runtime_settings
 from reefvision.services.pose_active_learning import PoseActiveLearningService
 from reefvision.services.pose_biological_measurement import PoseBiologicalMeasurementService
 from reefvision.services.pose_identity_tracking import PoseIdentityTrackingService
@@ -331,6 +332,7 @@ def execute_pose_inference_adapter(
                         )
                     ),
                     "link_detections": True,
+                    **workflow_runtime_settings(model_payload, video=True),
                     # Critical Phase 10 separation:
                     # normal video-pose jobs retain their existing automatic
                     # temporal association behavior. Workflow pose inference

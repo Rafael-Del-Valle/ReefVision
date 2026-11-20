@@ -69,6 +69,7 @@ class PoseLandmarkSchemaUpdateRequest(BaseModel):
 
 class InferenceJobCreateRequest(BaseModel):
     model_id: str = Field(min_length=1, max_length=36)
+    runtime_selection_id: str | None = Field(default=None, min_length=36, max_length=36)
     image_ids: list[str] = Field(min_length=1)
     confidence_threshold: FiniteFloat | None = Field(default=None, ge=0, le=1)
     iou_threshold: FiniteFloat | None = Field(default=None, ge=0, le=1)

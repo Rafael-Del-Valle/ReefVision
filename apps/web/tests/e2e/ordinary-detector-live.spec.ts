@@ -292,6 +292,215 @@ test("runs the ordinary local detector from grouped stills through reviewed resu
       return { model, run };
     });
 
+  const reviewedRuntime =
+    await test.step("Confirm a Model Hub runtime, infer and reopen the same saved workflow", async () => {
+      const openHub = async () => {
+        await openProject();
+        await page
+          .getByRole("tab", { name: "Models & AI", exact: true })
+          .click();
+        await page.getByRole("tab", { name: "Model Hub", exact: true }).click();
+      };
+      await openHub();
+      const hub = page.getByRole("region", { name: "Local model runtime" });
+      await hub.getByLabel("Registered checkpoint").selectOption(model.id);
+      const device =
+        process.env.REEFVISION_REVIEWED_RUNTIME_DEVICE === "cuda"
+          ? "cuda"
+          : "cpu";
+      await hub.getByLabel("Inference device").selectOption(device);
+      await hub
+        .getByLabel("Configuration request (optional)")
+        .fill("confidence 0, iou 0.45");
+      await hub
+        .getByRole("button", { name: "Preview local configuration" })
+        .click();
+      await expect(hub.getByText(model.sha256, { exact: true })).toBeVisible();
+      const saving = writing(page, root + "/model-runtime-selections");
+      await hub
+        .getByRole("button", { name: "Confirm reviewed configuration" })
+        .click();
+      const selection = await json<{
+        id: string;
+        content_sha256: string;
+        snapshot: { settings: Record<string, unknown> };
+      }>(await saving);
+      expect(selection.snapshot.settings).toEqual({
+        confidence_threshold: 0,
+        iou_threshold: 0.45,
+        device,
+      });
+      await openHub();
+      await hub
+        .getByLabel("Reviewed model configuration")
+        .selectOption(selection.id);
+      const imageId = frozenItems.find(
+        (item) => item.split === "validation",
+      )!.image_id;
+      await hub.getByLabel("Inference image").selectOption(imageId);
+      const queue = writing(page, root + "/inference-jobs");
+      await hub.getByRole("button", { name: "Run reviewed inference" }).click();
+      const queued = await json<JobRecord>(await queue);
+      const job = await completed(
+        () => get<JobRecord>(api + "/jobs/" + queued.id),
+        "succeeded",
+      );
+      expect(job.request_json).toMatchObject({
+        runtime_selection_id: selection.id,
+        runtime_selection_sha256: selection.content_sha256,
+        device,
+        model_id: model.id,
+      });
+      await expect(
+        hub.getByRole("button", { name: "Review image predictions" }),
+      ).toBeVisible();
+      const openWorkflow = async () => {
+        await openProject();
+        await page
+          .getByRole("tab", { name: "Video & automation", exact: true })
+          .click();
+        await page
+          .getByRole("tab", { name: "Workflow builder", exact: true })
+          .click();
+      };
+      await openWorkflow();
+      await page
+        .getByRole("combobox")
+        .filter({
+          has: page.getByRole("option", {
+            name: "Project images",
+            exact: true,
+          }),
+        })
+        .selectOption("project-images");
+      await page.getByLabel("Add node").selectOption("reviewed_model_runtime");
+      const node = page.locator("[data-node-id^='reviewed_model_runtime-']");
+      await node
+        .getByRole("button", { name: "Configure", exact: true })
+        .click();
+      await page
+        .getByLabel("Reviewed model configuration")
+        .selectOption(selection.id);
+      await page
+        .locator("[data-node-id='project']")
+        .getByRole("button", { name: /Project.*▶/i })
+        .click();
+      await node.getByRole("button", { name: /◀.*Project/i }).click();
+      await page.getByLabel("Add node").selectOption("detection_inference");
+      const inferNode = page.locator("[data-node-id^='detection_inference-']");
+      await page
+        .locator("[data-node-id='images']")
+        .getByRole("button", { name: /Images.*▶/i })
+        .click();
+      await inferNode.getByRole("button", { name: /◀.*Images/i }).click();
+      await node.getByRole("button", { name: /Reviewed model.*▶/i }).click();
+      await inferNode.getByRole("button", { name: /◀.*Detector/i }).click();
+      const proposalPage = await get<{ items: PredictionProposal[] }>(
+        api + "/images/" + imageId + "/prediction-proposals",
+      );
+      const direct = proposalPage.items.filter(
+        (row) => row.inference_job_id === job.id,
+      );
+      expect(direct.length).toBeGreaterThan(0);
+      const runs: {
+        id: string;
+        digest: string;
+        child_job_id: string;
+        matched_proposals: number;
+      }[] = [];
+      for (let i = 0; i < 2; i++) {
+        if (i) {
+          await openWorkflow();
+          await page
+            .getByRole("button", { name: "Load", exact: true })
+            .first()
+            .click();
+        }
+        const queueRun = writing(page, root + "/workflow-runs");
+        await page
+          .getByRole("button", { name: "Save & run", exact: true })
+          .click();
+        const queuedRun = await json<{ id: string }>(await queueRun);
+        type Detail = {
+          run: { status: string; error_message?: string };
+          artifacts: {
+            data_type: string;
+            payload_sha256: string;
+            payload_json: Record<string, unknown>;
+          }[];
+        };
+        const detailUrl = api + "/workflow-runs/" + queuedRun.id;
+        await completed(
+          async () => (await get<Detail>(detailUrl)).run,
+          "succeeded",
+        );
+        const artifacts = (await get<Detail>(detailUrl)).artifacts;
+        const artifact = artifacts.find(
+          (x) => x.data_type === "reviewed_model_reference",
+        )!;
+        expect(artifact.payload_json).toMatchObject({
+          runtime_selection_sha256: selection.content_sha256,
+          model_sha256: model.sha256,
+          device,
+        });
+        const output = artifacts.find(
+          (x) => x.data_type === "detection_proposals",
+        )!.payload_json;
+        const child = await get<JobRecord>(
+          api + "/jobs/" + String(output.inference_job_id),
+        );
+        expect(child.request_json).toMatchObject({
+          runtime_selection_sha256: selection.content_sha256,
+          device,
+          confidence_threshold: 0,
+          iou_threshold: 0.45,
+        });
+        const detections = (
+          output.detections as Array<{
+            image_id: string;
+            predicted_label: string;
+            confidence: number;
+            box: { x_min: number; y_min: number; x_max: number; y_max: number };
+          }>
+        ).filter((x) => x.image_id === imageId);
+        expect(detections.length).toBe(direct.length);
+        const sortKey = (x: {
+          confidence: number;
+          x_min: number;
+          y_min: number;
+        }) => [x.confidence, x.x_min, x.y_min].join("/");
+        const sortedDirect = [...direct].sort((a, b) =>
+          sortKey(a).localeCompare(sortKey(b)),
+        );
+        const sortedGraph = detections
+          .map((x) => ({
+            ...x.box,
+            confidence: x.confidence,
+            predicted_label: x.predicted_label,
+          }))
+          .sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+        for (const [i, row] of sortedGraph.entries()) {
+          expect(row.predicted_label).toBe(sortedDirect[i].predicted_label);
+          for (const key of [
+            "confidence",
+            "x_min",
+            "y_min",
+            "x_max",
+            "y_max",
+          ] as const)
+            expect(row[key]).toBeCloseTo(sortedDirect[i][key], 6);
+        }
+        runs.push({
+          id: queuedRun.id,
+          digest: artifact.payload_sha256,
+          child_job_id: child.id,
+          matched_proposals: direct.length,
+        });
+      }
+      expect(runs[0].digest).toBe(runs[1].digest);
+      return { selection, job_id: job.id, image_id: imageId, runs };
+    });
+
   const still =
     await test.step("Run the detector on a held-out still and reopen a corrected review", async () => {
       await openProject();
@@ -589,6 +798,7 @@ test("runs the ordinary local detector from grouped stills through reviewed resu
         model_id: model.id,
         checkpoint_sha256: model.sha256,
         validation_metrics: run.metrics,
+        reviewed_runtime: reviewedRuntime,
         still,
         video: videoEvidence,
         yolo,

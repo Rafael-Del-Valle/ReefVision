@@ -29,6 +29,7 @@ import {
   type PoseTrainingDataset,
 } from "../video/poseActiveLearningApi";
 import { PoseEvaluationComparisonPanel } from "./PoseEvaluationComparisonPanel";
+import { ReviewedModelRuntime } from "./ReviewedModelRuntime";
 import { ReefPoseValidationPanel } from "../video/ReefPoseValidationPanel";
 import { StaticComparisonPanel } from "../video/StaticComparisonPanel";
 
@@ -1160,6 +1161,12 @@ export function ModelManager({
         </div>
       </section>
 
+      <ReviewedModelRuntime
+        key={"runtime-" + project.id}
+        projectId={project.id}
+        models={models}
+        openImage={onOpenComparisonImage}
+      />
       <section id="model-ai-project-models" className="gallery-panel">
         <div className="section-heading gallery-heading">
           <div>
