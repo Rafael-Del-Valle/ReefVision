@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T17:13:52Z`
+Updated: `2026-11-20T17:18:31Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -11,8 +11,8 @@ Candidate target: `2.0`
 | --- | ---: |
 | blocked | 17 |
 | explicitly_deferred | 4 |
-| in_progress | 26 |
-| verified | 30 |
+| in_progress | 23 |
+| verified | 33 |
 
 ## Features
 
@@ -64,9 +64,9 @@ Candidate target: `2.0`
 | 1.5 | Early local provider and plugin foundations | verified | Models & AI → Providers |
 | 1.5 | Complete research reproducibility package | verified | Research → Export reproducibility package |
 | 1.5 | Reviewer roles, independent queues, adjudication, and agreement | blocked | Review → Reviewer lab |
-| 1.6 | Safe class management after use | in_progress | Annotate → Classes |
-| 1.6 | Class visibility, dense annotation editing, and large-gallery performance | in_progress | Annotate → View controls and gallery |
-| 1.6 | Independent migration-lineage 0038 reconciliation | in_progress | Applied migration IDs are never edited. |
+| 1.6 | Safe class management after use | verified | Annotate → Classes |
+| 1.6 | Class visibility, dense annotation editing, and large-gallery performance | verified | Annotate → View controls and gallery |
+| 1.6 | Independent migration-lineage 0038 reconciliation | verified | Applied migration IDs are never edited. |
 | 1.6 | First-run onboarding and Windows usability acceptance | in_progress | Installed first launch → Create or open project |
 | 1.6 | Prioritized QC queues, reviewer assignment, bulk actions, and idempotent retry | in_progress | Review → QC queues |
 | 1.7 | Local cross-project monitoring summaries | in_progress | Research → Monitoring → Project summaries |
@@ -1110,60 +1110,61 @@ Evidence:
 ### rv16-class-management: Safe class management after use
 
 - Target: `1.6`
-- Status: `in_progress`
+- Status: `verified`
 - Dependencies: `rv15-reproducibility-package`
 - Entry point: Annotate → Classes
 - Workflow Builder: `not_applicable`
 
 Acceptance checks:
 
-- **in_progress** — Rename, retire, reorder safely, and prevent silent class-index changes in annotations, datasets, checkpoints, and exports. (`rv16-class-management-check`)
+- **verified** — Rename, retire, reorder safely, and prevent silent class-index changes in annotations, datasets, checkpoints, and exports. (`rv16-class-management-check`)
 
 Evidence:
 
 - `source`: Thirty-five backend checks cover class use, archived classes, reassignment and protected historical records. — `docs/validation/research-workflows-1-6.json` (`rv16-class-safe-writes`)
 - `browser`: Classes retained the frozen manifest and exported YOLO mapping after a reviewed reassignment and reopen. Polygon and image-level references prevented deletion. — `docs/validation/research-workflows-1-6.json` (`rv16-class-frozen-export`)
-- `windows_installed`: none recorded
+- `windows_installed`: On the original 1.6 MSI under an ordinary Windows account, the class lifecycle test passed. The researcher reviewed the reassignment, reopened the project and verified the earlier frozen export. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44768324452/job/136420579045` (`rv16-class-management-original-msi-used-classes`)
 - `physical_hardware`: In native Classes, confirmed reassignment advanced the live annotation from revision 2 to 3. Mask and image-classification references remained protected. The frozen dataset manifest and YOLO mapping survived reopening. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-class-management-physical-83b0`)
 - `representative_data`: none recorded
 
 ### rv16-class-visibility-dense-editing: Class visibility, dense annotation editing, and large-gallery performance
 
 - Target: `1.6`
-- Status: `in_progress`
+- Status: `verified`
 - Dependencies: `rv16-class-management`
 - Entry point: Annotate → View controls and gallery
 - Workflow Builder: `not_applicable`
 
 Acceptance checks:
 
-- **in_progress** — Filter/solo classes, preserve hidden geometry, and meet declared interaction budgets on dense images and large galleries. (`rv16-class-visibility-dense-editing-check`)
+- **verified** — Filter/solo classes, preserve hidden geometry, and meet declared interaction budgets on dense images and large galleries. (`rv16-class-visibility-dense-editing-check`)
 
 Evidence:
 
 - `source`: 175 video tests exercised draft and persisted editing. A source-built WebView2 journey preserved a hidden mask and untouched keyframe and rejected a stale revision. — `docs/validation/research-workflows-1-6.json` (`rv16-video-edits-source`)
 - `browser`: On 5,000 decoded fixture images, 24 cards appeared in 106.6 ms and the first thumbnail in 143.1 ms. The 1,500-box editor supported selection, hide, solo, undo, redo and reopen. — `docs/validation/research-workflows-1-6.json` (`rv16-gallery-canvas`)
-- `windows_installed`: none recorded
+- `windows_installed`: The standard-user 1.6 installation passed the dense image, native decision and reversible video tests with hidden geometry preserved. A physical MSI run on the same source preserved 1,500 boxes including 750 hidden boxes in the 5,000-image fixture. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44768324452/job/136420579045` (`rv16-class-visibility-dense-editing-original-msi-dense-image-video`)
 - `physical_hardware`: Physical WebView2 opened 24 of 5,000 gallery images in 75.8 ms. The focused image and filmstrip decoded in 207.9 ms. A new annotation survived save and reopen with 1,500 prior boxes and 750 hidden boxes preserved. The separate image, mask and video editing trials produced explicit 409 conflicts and preserved drafts on Cancel. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-class-visibility-dense-editing-physical-83b0`)
 - `representative_data`: none recorded
 
 ### rv16-lineage-reconciliation: Independent migration-lineage 0038 reconciliation
 
 - Target: `1.6`
-- Status: `in_progress`
+- Status: `verified`
 - Dependencies: `rv14-lineage-upgrade`
 - Entry point: Not user-facing
 - Workflow Builder: `not_applicable`
 
 Acceptance checks:
 
-- **in_progress** — Diagnose both 0038 histories from schema/content, preserve rows/indexes/IDs/assets, and reject unknown or inconsistent databases without mutation. (`rv16-lineage-reconciliation-check`)
+- **verified** — Diagnose both 0038 histories from schema/content, preserve rows/indexes/IDs/assets, and reject unknown or inconsistent databases without mutation. (`rv16-lineage-reconciliation-check`)
 
 Evidence:
 
 - `source`: Six populated profiles from original scientific, QC and 1.5 software retained all original columns, rows, file hashes and foreign keys across migration and two opens. Seventy migration, backup and compatibility tests passed. — `docs/validation/research-workflows-1-6.json` (`rv16-independent-0038-families`)
 - `browser`: none recorded
 - `windows_installed`: Original 1.6 and 1.5 MSI payloads preserved both historical 0038 schemas and QC 0039 through 0041, with separate old-reader restore and an unchanged mixed-history refusal. — `docs/validation/compact-windows-review-a580042e8.json` (`rv16-lineage-reconciliation-historical-original-83b0a98b2`)
+- `windows_installed`: The unchanged original Windows verifier migrated each historical 0038 family and QC 0039–0041. Five separate restores reopened in the matching original reader, preserving the prior rows and files. The ambiguous profile was refused with unchanged bytes. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44768324452/job/136432743297` (`rv16-lineage-reconciliation-original-five-schema-recovery`)
 - `physical_hardware`: Both 0038 database histories and QC revisions 0039 through 0041 retained all prior table fingerprints, ID bindings and managed files. Five verified backup restorations rehashed 42 files. The older native readers reopened the backups. A mixed profile refused startup byte-identically. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-lineage-reconciliation-physical-83b0`)
 - `representative_data`: none recorded
 
