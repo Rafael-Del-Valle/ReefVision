@@ -6,7 +6,8 @@ export type EnvironmentalAnalysisKind =
   | "tidal_context"
   | "event_window"
   | "observation_environment_join"
-  | "lagged_comparison";
+  | "lagged_comparison"
+  | "current_streamline";
 
 export interface EnvironmentalAnalysisDefinition {
   id: string;

@@ -119,7 +119,7 @@ function New-ReefVisionHostedGuiAccount([string]$RunRoot) {
         return [pscustomobject]@{
             name=$name; sid=$user.SID; run_root=$RunRoot
             credential=[System.Management.Automation.PSCredential]::new("$env:COMPUTERNAME\$name",$password)
-            launcher=$null; desktop=$null; executable=$null; launcher_errors=$null
+            launcher=$null; desktop=$null; executable=$null; launcher_errors=$null; browser_artifacts=''
         }
     } catch {
         Remove-LocalUser -SID $user.SID
@@ -153,13 +153,14 @@ function Start-ReefVisionHostedGui {
     $browserData = Join-Path $Account.run_root ((Split-Path -Leaf $Profile) + '-webview2')
     $bootstrap = Join-Path $Account.run_root 'ordinary-user-launch'
     $handshake = Join-Path $bootstrap 'handshake'
-    New-Item -ItemType Directory -Path $browserData,$handshake | Out-Null
+    $Account.browser_artifacts = Join-Path $bootstrap 'browser-artifacts'
+    New-Item -ItemType Directory -Path $browserData,$handshake,$Account.browser_artifacts | Out-Null
     $launcherSource = Join-Path $bootstrap 'launch.ps1'
     Copy-Item -LiteralPath $PSCommandPath -Destination $launcherSource
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'windows-clean-acceptance.ps1') -Destination $bootstrap
     Grant-ReefVisionHostedGuiAccess -Path $Account.run_root -Sid $Account.sid -Rights 'RX'
     Grant-ReefVisionHostedGuiAccess -Path $installerDirectory -Sid $Account.sid -Rights 'RX'
-    foreach ($path in @($Profile,$browserData,$handshake)) {
+    foreach ($path in @($Profile,$browserData,$handshake,$Account.browser_artifacts)) {
         Grant-ReefVisionHostedGuiAccess -Path $path -Sid $Account.sid -Rights 'M'
     }
 

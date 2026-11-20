@@ -35,6 +35,10 @@ class CurrentFieldService:
             provenance.source,
             provenance.dataset_id,
             provenance.model_version,
+            provenance.method,
+            content_hash(provenance.processing_parameters),
+            provenance.spatial_resolution_m,
+            provenance.temporal_resolution_s,
             record.environmental_cache_key,
         )
 
@@ -58,7 +62,8 @@ class CurrentFieldService:
         if len({self._identity(record) for record in records}) != 1:
             raise ValidationError(
                 "Current components must share UTC, depth, source, dataset, "
-                "model, and cache identity"
+                "model, method, processing parameters, spatial/temporal resolution, "
+                "and cache identity"
             )
         if any(record.variable not in {EAST, NORTH} for record in records):
             raise ValidationError(
@@ -77,6 +82,15 @@ class CurrentFieldService:
         longitudes = sorted({record.location.longitude for record in records if record.location})
         if len(latitudes) < 2 or len(longitudes) < 2:
             raise ValidationError("Current field requires at least a 2 by 2 paired component grid")
+        # Checking only adjacent gaps misses a wide grid such as
+        # [-170, 0, 170]: neither step exceeds 180 degrees, but the field
+        # spans 340 degrees and crosses the antimeridian. Cartesian
+        # interpolation on that grid would invent unmeasured ocean currents.
+        if longitudes[-1] - longitudes[0] > 180.0:
+            raise ValidationError(
+                "Current longitude extent exceeds 180 degrees; "
+                "antimeridian-spanning grids require regridding before integration"
+            )
         indexed: dict[tuple[float, float, str], ScientificRecordResponse] = {}
         for record in records:
             assert record.location is not None
@@ -121,8 +135,28 @@ class CurrentFieldService:
                     length_m=line.length_m,
                 )
             )
-        snapshot = [record.model_dump(mode="json") for record in records]
+        # The current grid is defined by its paired coordinates, not by the
+        # order in which a caller lists its source records. Hash a canonical
+        # record set so reordering the same immutable evidence cannot change
+        # its scientific input fingerprint or invalidate reproducibility.
+        snapshot = [
+            record.model_dump(mode="json")
+            for record in sorted(records, key=lambda record: str(record.id))
+        ]
         first = records[0]
+        methodological_notes = [
+            "Streamlines describe a frozen Eulerian current field; "
+            "they are not organism trajectories.",
+            "Bilinear interpolation requires four QC-compatible corners and never extrapolates.",
+            "All source records share one UTC, depth, dataset/model, and cache identity.",
+            "Input velocity uncertainty is not propagated into streamline position "
+            "or length; outputs are deterministic estimates, not uncertainty bounds.",
+        ]
+        if any(record.qc == "unassessed" for record in records):
+            methodological_notes.append(
+                "At least one input current record has unassessed QC; "
+                "this streamline is exploratory and not QC-validated."
+            )
         return CurrentFieldStreamlineResponse(
             algorithm_version=ALGORITHM_VERSION,
             project_id=project_id,
@@ -136,11 +170,5 @@ class CurrentFieldService:
             longitudes=longitudes,
             input_sha256=content_hash(snapshot),
             streamlines=streamlines,
-            methodological_notes=[
-                "Streamlines describe a frozen Eulerian current field; "
-                "they are not organism trajectories.",
-                "Bilinear interpolation requires four QC-compatible corners "
-                "and never extrapolates.",
-                "All source records share one UTC, depth, dataset/model, and cache identity.",
-            ],
+            methodological_notes=methodological_notes,
         )

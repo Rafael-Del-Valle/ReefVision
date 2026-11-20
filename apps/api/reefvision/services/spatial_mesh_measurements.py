@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from fractions import Fraction
 from math import hypot, isfinite
 
 
@@ -36,4 +37,18 @@ def triangle_area(
         raise ValueError("3D triangle area overflowed") from exc
     if not isfinite(area):
         raise ValueError("3D triangle area overflowed")
+    if area == 0.0:
+        # A tiny but genuinely non-collinear source triangle can lose its
+        # cross product (or half its norm) to binary64 underflow. Returning
+        # zero would misclassify reconstructed surface as degenerate tissue.
+        # Exact rational predicates are needed only on the zero-area path.
+        u_exact = [Fraction(b[i]) - Fraction(a[i]) for i in range(3)]
+        v_exact = [Fraction(c[i]) - Fraction(a[i]) for i in range(3)]
+        cross_exact = (
+            u_exact[1] * v_exact[2] - u_exact[2] * v_exact[1],
+            u_exact[2] * v_exact[0] - u_exact[0] * v_exact[2],
+            u_exact[0] * v_exact[1] - u_exact[1] * v_exact[0],
+        )
+        if any(cross_exact):
+            raise ValueError("3D triangle area underflowed numeric precision")
     return area

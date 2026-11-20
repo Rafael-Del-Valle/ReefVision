@@ -504,6 +504,33 @@ it("neutralizes spreadsheet formulas in imported provenance without changing num
   expect(csv).toContain('"-79.5"');
 });
 
+it.each([
+  ["zero-width space", "\u200B=1+1"],
+  ["bidirectional isolate", "\u2066+SUM(1,1)"],
+  ["UTF-8 BOM", "\uFEFF@SUM(1,1)"],
+  ["embedded NUL prefix", "\u0000-1+2"],
+])("neutralizes %s before CSV formula", (_label, source) => {
+  const east = component("current_eastward_velocity", -2, {
+    provenance: { ...component("x", 0).provenance, source },
+  });
+  const north = component("current_northward_velocity", 0, {
+    provenance: { ...component("x", 0).provenance, source },
+  });
+  const vectors = currentVectors([east, north]);
+  expect(vectors).toHaveLength(1);
+  const csv = currentVectorsCsv(vectors, {
+    cacheKey: "\u200B=unsafe-cache-name",
+    cacheStatus: "fresh",
+    fetchedAt: "2026-04-04T00:00:00Z",
+    expiresAt: "2026-04-05T00:00:00Z",
+  });
+  expect(csv).toContain(`"'${source}"`);
+  expect(csv).toContain(`"'\u200B=unsafe-cache-name"`);
+  expect(csv).toContain('"-2"');
+  expect(csv).toContain('"-79.5"');
+  expect(east.provenance.source).toBe(source);
+});
+
 it("preserves the depth datum and each component QC in exported vectors", () => {
   const east = component("current_eastward_velocity", 1, {
     depth_reference: "mean_sea_level",

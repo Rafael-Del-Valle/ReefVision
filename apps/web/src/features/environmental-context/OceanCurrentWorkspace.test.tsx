@@ -123,7 +123,11 @@ function setup(datasetRows = rows) {
                     length_m: 100,
                   },
                 ],
-                methodological_notes: [],
+                methodological_notes: [
+                  "Streamlines describe a frozen current field, not organism trajectories.",
+                  "Input velocity uncertainty is not propagated into streamline position or length.",
+                  "At least one input current record has unassessed QC.",
+                ],
               },
             },
           }),
@@ -237,9 +241,12 @@ it("calculates and labels bounded current streamlines for a complete grid", asyn
   });
   expect(button).toBeEnabled();
   fireEvent.click(button);
-  expect(
-    await screen.findByRole("region", { name: "Current streamline result" }),
-  ).toHaveTextContent("not organism trajectories");
+  const result = await screen.findByRole("region", {
+    name: "Current streamline result",
+  });
+  expect(result).toHaveTextContent("not organism trajectories");
+  expect(result).toHaveTextContent("unassessed QC");
+  expect(result).toHaveTextContent("uncertainty is not propagated");
   const call = fetch.mock.calls.find(([input]) =>
     String(input).includes("environment/analyses/current-streamline"),
   );

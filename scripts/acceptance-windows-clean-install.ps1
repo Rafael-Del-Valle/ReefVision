@@ -581,12 +581,14 @@ try {
             $spatialDesktop = $null
             $ordinaryUser = $null
             $browserSid = ''
+            $browserArtifacts = ''
             try {
                 if ($HostedStandardUserWebView2) {
                     $ordinaryUser = New-ReefVisionHostedGuiAccount -RunRoot $RunRoot
                     $browserSid = $ordinaryUser.sid.Value
                     $spatialDesktop = Start-ReefVisionHostedGui -Account $ordinaryUser -Executable (Join-Path $InstallRoot 'ReefVision.exe') `
                         -Profile $SpatialDataRoot -DebugPort $debugPort -EvidenceRoot $EvidenceRoot
+                    $browserArtifacts = $ordinaryUser.browser_artifacts
                 } else {
                     $spatialDesktop = Start-AcceptanceDesktop -ProfileDataRoot $SpatialDataRoot -WebViewDebugPort $debugPort
                 }
@@ -594,7 +596,8 @@ try {
                 $spatialApi = "http://127.0.0.1:$spatialPort/api/v1"
                 $null = Assert-AcceptancePackagedBackend -Api $spatialApi -ExpectedAppVersion $ProductVersion -ExpectedRevision $ExpectedSchemaRevision
                 Invoke-ReefVisionSpatialWebView2Acceptance -NodePath $SpatialWorkflowNodePath -RepositoryRoot $RepositoryRoot `
-                    -EvidenceRoot $EvidenceRoot -Api $spatialApi -DebugPort $debugPort -DesktopProcessId $spatialDesktop.Id -ExpectedBrowserSid $browserSid
+                    -EvidenceRoot $EvidenceRoot -Api $spatialApi -DebugPort $debugPort -DesktopProcessId $spatialDesktop.Id `
+                    -ExpectedBrowserSid $browserSid -BrowserArtifactsDirectory $browserArtifacts
             } finally {
                 try {
                     if ($ordinaryUser) {

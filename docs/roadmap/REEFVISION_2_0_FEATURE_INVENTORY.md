@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T06:18:00Z`
+Updated: `2026-11-20T07:04:00Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -19,7 +19,7 @@ Candidate target: `2.0`
 | Version | Feature | Status | Entry point or boundary |
 | --- | --- | --- | --- |
 | 1.1 | Reviewed annotation and model-source comparison | verified | Research → Comparisons → Annotation sources |
-| 1.1 | Current-field interpolation, streamlines, and trajectory context | verified | Research → Environmental context → Currents |
+| 1.1 | Current-field interpolation, streamlines, and trajectory context | verified | Project → Data & annotation → Environmental Context → Analyses → Ocean current map |
 | 1.1 | Offline-pinned NOAA/Copernicus and tidal/lunar context | verified | Project → Data & annotation → Environmental Context |
 | 1.1 | Project Exchange, backup, upgrade, and rollback integrity | verified | Project menu → Project Exchange / Backup |
 | 1.1 | Projective density on a declared surveyed reference plane | blocked | Project → Data & annotation → Computed Metrics → Open verified mask coverage |
@@ -123,7 +123,7 @@ Evidence:
 - Target: `1.1`
 - Status: `verified`
 - Dependencies: `rv11-environmental-context`
-- Entry point: Research → Environmental context → Currents
+- Entry point: Project → Data & annotation → Environmental Context → Analyses → Ocean current map
 - Workflow Builder: `required`
 
 Acceptance checks:
@@ -133,7 +133,8 @@ Acceptance checks:
 Evidence:
 
 - `source`: Reference-field interpolation, termination, and overlay tests. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/71` (`rv11-current-src`)
-- `browser`: none recorded
+- `source`: Standalone and saved RK4 reject unsupported longitude extents and mixed acquisitions. Reordering a compatible grid preserves its input hash. Unassessed sources retain their QC status and uncertainty disclosure when the result is saved. — `apps/api/reefvision/tests/test_workflow_current_streamline.py` (`rv11-current-shared-evidence`)
+- `browser`: A generated 2 by 2 cache supplied four current vectors. The desktop exported signed values, calculated four streamlines, reopened the saved analysis and retained its unassessed input QC and uncertainty notes. — `docs/REEFVISION_1.4.0_REPORT.md#offline-currents-and-mesh-precision` (`rv11-current-offline-reopen`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -153,6 +154,7 @@ Acceptance checks:
 Evidence:
 
 - `source`: Deterministic offline/cache fixtures and provenance tests. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/71` (`rv11-env-src`)
+- `source`: Rejected duplicate UTC timestamps and invalid refresh provenance preserve the previous offline cache and associated scientific records. Both NOAA observations and predictions were exercised with controlled provider responses. — `docs/REEFVISION_1.4.0_REPORT.md#offline-currents-and-mesh-precision` (`rv11-cache-rejected-refresh`)
 - `browser`: The normal Environmental Context workspace downloaded 240 temperature observations from NOAA Key West station 8724580 on 2024-06-01 UTC. Offline import after reopening returned the identical records, units, acquisition time, source and content hashes. — `docs/roadmap/REEFVISION_1_4_INTEGRATION_AUDIT.md` (`rv11-noaa-public-cache`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
@@ -645,7 +647,7 @@ Evidence:
 - `source`: Sequence grouping, causal isolation, training, checkpoint reload, cancel/resume tests. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/87` (`rv13-temporal-train-src`)
 - `browser`: none recorded
 - `windows_installed`: none recorded
-- `physical_hardware`: none recorded
+- `physical_hardware`: On the official Windows 1b0f29cff package, two real training jobs on the RTX 3090 registered the same immutable checkpoint. Project Exchange recovered both training histories, their metrics, the original producing run and the identical checkpoint bytes. — `docs/REEFVISION_1.4.0_REPORT.md#official-windows-build-and-recovery-at-1b0f29cff` (`rv13-packaged-repeat-exchange`)
 - `representative_data`: none recorded
 
 ### rv13-temporal-refinement-review: Temporal ReefPose refinement and explicit frame review
@@ -753,6 +755,7 @@ Evidence:
 
 - `source`: Deterministic mesh fixtures cover calibrated scale exponents, extents, surface area, topology, conditional enclosed volume, uncertainty intervals, paths, numerical integrity, and explicit withhold reasons. — `apps/api/reefvision/tests/test_spatial_mesh_primitives_v14.py` (`rv14-geometric-known-fixtures`)
 - `source`: Calibration review and source bindings reject stale, mismatched, self-reviewed, or altered measurement evidence while preserving unverified status. — `apps/api/reefvision/tests/test_spatial_mesh_calibration_review_v14.py` (`rv14-geometric-review-binding`)
+- `source`: A noncollinear triangle whose area underflows is rejected by the standalone API and saved graph. A representable reference of 5e-201 is reproduced using zero absolute tolerance, and two saved executions retain the same scientific payload digest. — `apps/api/reefvision/tests/test_spatial_mesh_area_underflow_v14.py` (`rv14-mesh-area-representability`)
 - `browser`: Workflow Builder exposes a project-owned original picker, scale, calibration evidence, uncertainty, specimen/observation/frame context, and an explicit warning that geometric routes are not anatomical branch lengths. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-geometric-guided-ui`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
@@ -783,6 +786,7 @@ Evidence:
 - `windows_installed`: Exact-head source 36c80224a passed all three installed synthetic profiles. Verified 1.3 MSI upgrade, 0038 and 0039 profile migration, evidence preservation, exchange round trips, and backup restoration. The historical 1.3 build rejected the upgraded schema and the upgraded database hash remained unchanged. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396` (`rv14-lineage-win-synthetic`)
 - `windows_installed`: Installed candidate 72254d9a0 passed the published 1.0.3 upgrade, both historical numeric profile fixtures, and rollback using the genuine f44053a90 1.3 installer. The old reader preserved the upgraded database digest and reopened its separately restored pre-upgrade backup. The richer 1.3 fixture also showed that the packaged product Restore action still required the later resource-path fix. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44677664711` (`rv14-exact-87-installed`)
 - `windows_installed`: The local MSI built from 92e355b6a restored a verified backup created by the accepted f44053a90 executable through the production Restore action. IDs, source bytes, scientific records and checkpoint survived upgrade and Project Exchange. The old executable refused the newer database unchanged and wrote successfully in the recovered 1.3 profile. The material was a generated fixture. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/92#issuecomment-7032104053` (`rv14-rich-87-restore`)
+- `windows_installed`: On a disposable profile, the official 1b0f29cff sidecar migrated the accepted 1.3 fixture, exchanged its reviewed data and model hash, and returned HTTP 200 for managed restore. The original 1.3 binary preserved the upgraded database on refusal and wrote successfully after recovery. All five authenticated backup entries were rehashed. — `docs/REEFVISION_1.4.0_REPORT.md#official-windows-build-and-recovery-at-1b0f29cff` (`rv14-official-f440-rich-restore`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -1661,7 +1665,7 @@ Evidence:
 
 - `source`: Retired models are unavailable to new evaluation, image, video and saved pose workflow jobs while their histories remain readable. Native COCO, DeepLabCut CSV and Ultralytics exchange passed without the optional codec. The pinned optional NWB round trip and historical-file checks ran in the 41-test integration suite. — `docs/THIRD_PARTY_SLEAP_AUDIT.md` (`scope-sleap-source-retirement`)
 - `browser`: none recorded
-- `windows_installed`: none recorded
+- `windows_installed`: The official six-CAB 1b0f29cff build had zero retired-runtime findings across 19,133 payload files and 11,984 frozen Python modules. A separate five-CAB build from the optional development environment passed across 19,186 files and 12,296 modules. The final 2.0 payload audit remains open. — `docs/REEFVISION_1.4.0_REPORT.md#official-windows-build-and-recovery-at-1b0f29cff` (`scope-sleap-1b0-package-audit`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 

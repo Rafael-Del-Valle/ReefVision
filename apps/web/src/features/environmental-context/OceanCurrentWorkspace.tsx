@@ -397,9 +397,15 @@ export function OceanCurrentWorkspace({
                   <p>
                     Immutable result ID: {streamlineMutation.data.result_id}
                   </p>
+                  <ul>
+                    {streamlineMutation.data.methodological_notes.map(
+                      (note) => (
+                        <li key={note}>{note}</li>
+                      ),
+                    )}
+                  </ul>
                   <p>
-                    Frozen-field flow geometry only; these are not organism
-                    trajectories and do not imply environmental causation.
+                    Current streamlines do not imply environmental causation.
                   </p>
                 </section>
               )}

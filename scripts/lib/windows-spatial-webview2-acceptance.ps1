@@ -226,7 +226,8 @@ function Invoke-ReefVisionSpatialWebView2Acceptance {
         [Parameter(Mandatory = $true)][string]$Api,
         [Parameter(Mandatory = $true)][int]$DebugPort,
         [Parameter(Mandatory = $true)][int]$DesktopProcessId,
-        [string]$ExpectedBrowserSid
+        [string]$ExpectedBrowserSid,
+        [string]$BrowserArtifactsDirectory
     )
 
     $endpoint = Wait-ReefVisionWebView2DebugEndpoint -Port $DebugPort -DesktopProcessId $DesktopProcessId `
@@ -240,6 +241,8 @@ function Invoke-ReefVisionSpatialWebView2Acceptance {
     $variables = @{
         REEFVISION_GUIDED_TEST_API = $Api
         REEFVISION_SPATIAL_WEBVIEW2_ENDPOINT = $endpoint
+        # Share only CDP browser artifacts. Keep the driver's temporary files private.
+        REEFVISION_SPATIAL_WEBVIEW2_ARTIFACTS_DIR = $BrowserArtifactsDirectory
         REEFVISION_ORDINARY_DETECTOR_ACCEPTANCE = '1'
         PLAYWRIGHT_JSON_OUTPUT_FILE = $report
     }

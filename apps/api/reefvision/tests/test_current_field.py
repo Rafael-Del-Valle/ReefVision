@@ -133,3 +133,76 @@ def test_polar_limit_is_explicit_and_invalid_seed_rejected():
     assert integrate_streamline(field, 85.0, 0.0).termination == "polar_limit"
     with pytest.raises(ValueError):
         integrate_streamline(field, math.nan, 0.0)
+
+
+@pytest.mark.parametrize("longitudes", [(-179.0, 179.0), (179.0, -179.0)])
+def test_dateline_grid_rejected_before_false_global_interpolation(longitudes):
+    # A local current slice straddling 180 degrees cannot be interpolated
+    # across 358 degrees while longitude unwrapping remains unsupported.
+    with pytest.raises(ValueError, match="longitude gap exceeds 180 degrees"):
+        CurrentField(
+            latitudes=(-1.0, 1.0),
+            longitudes=longitudes,
+            east=((1.0, 1.0), (1.0, 1.0)),
+            north=((0.0, 0.0), (0.0, 0.0)),
+        )
+
+
+@pytest.mark.parametrize(
+    "longitudes",
+    [(-170.0, 0.0, 170.0), (170.0, 0.0, -170.0)],
+)
+def test_domain_rejects_wide_multicolumn_current_field_without_adjacent_gap(longitudes):
+    """Direct domain callers must not interpolate a false 340-degree ocean cell.
+
+    Every adjacent spacing is only 170 degrees, so checking gaps alone misses
+    this scientifically invalid domain. The service also guards this case,
+    but the public interpolation kernel must independently refuse it.
+    """
+    with pytest.raises(ValueError, match="longitude extent exceeds 180 degrees"):
+        CurrentField(
+            latitudes=(-1.0, 1.0),
+            longitudes=longitudes,
+            east=((1.0, 1.0, 1.0), (1.0, 1.0, 1.0)),
+            north=((0.0, 0.0, 0.0), (0.0, 0.0, 0.0)),
+        )
+
+
+@pytest.mark.parametrize("invalid", ["1.0", None, 1j, 10**500])
+def test_untrusted_numeric_inputs_fail_scientific_qc_without_runtime_type_errors(invalid):
+    """Malformed saved graphs must fail closed, not crash numeric validation.
+
+    This rejects strings, complex scalars and overflowing integers while
+    preserving explicit missing (None) current components as masked cells.
+    """
+    with pytest.raises(ValueError, match="Axes require"):
+        CurrentField(
+            latitudes=(0.0, invalid),
+            longitudes=(0.0, 1.0),
+            east=((1.0, 1.0), (1.0, 1.0)),
+            north=((0.0, 0.0), (0.0, 0.0)),
+        )
+    components = ((invalid, 1.0), (1.0, 1.0))
+    if invalid is None:
+        # Explicit None is a documented missing-current mask, not a numeric
+        # measurement. No velocity may be fabricated from the other corners.
+        field = CurrentField(
+            latitudes=(0.0, 1.0),
+            longitudes=(0.0, 1.0),
+            east=components,
+            north=((0.0, 0.0), (0.0, 0.0)),
+        )
+        assert field.sample(0.0, 0.0) is None
+        assert integrate_streamline(field, 0.0, 0.0).termination == "missing_cell"
+    else:
+        with pytest.raises(ValueError, match="Component values must be finite"):
+            CurrentField(
+                latitudes=(0.0, 1.0),
+                longitudes=(0.0, 1.0),
+                east=components,
+                north=((0.0, 0.0), (0.0, 0.0)),
+            )
+    with pytest.raises(ValueError, match="Seed must be finite"):
+        integrate_streamline(uniform(), invalid, 0.0)
+    with pytest.raises(ValueError, match="Integration limits must be finite"):
+        integrate_streamline(uniform(), 0.0, 0.0, step_seconds=invalid)
