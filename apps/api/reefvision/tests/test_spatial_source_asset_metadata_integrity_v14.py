@@ -61,6 +61,7 @@ OBJ = b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
         "original_filename_empty",
         "original_filename_control",
         "original_filename_bidi",
+        "original_filename_surrogate",
     ],
 )
 def test_corrupt_imported_source_metadata_fails_standalone_and_saved_workflow(
@@ -123,6 +124,8 @@ def test_corrupt_imported_source_metadata_fails_standalone_and_saved_workflow(
             record.original_filename = f"coral\\nrelabelled.{filename.rsplit('.', 1)[-1]}"
         elif corrupt_field == "original_filename_bidi":
             record.original_filename = f"coral\u202erelabelled.{filename.rsplit('.', 1)[-1]}"
+        elif corrupt_field == "original_filename_surrogate":
+            record.original_filename = f"coral\ud800relabeled.{filename.rsplit('.', 1)[-1]}"
         else:
             record.original_filename = ""
         session.commit()
@@ -146,3 +149,11 @@ def test_corrupt_imported_source_metadata_fails_standalone_and_saved_workflow(
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "failed"
     assert not any(item["data_type"] == artifact_type for item in detail.json()["artifacts"])
+
+def test_surrogate_filename_rejected_before_import_or_replay() -> None:
+    """Unpaired UTF-16 surrogates are not valid portable source identities."""
+    from reefvision.services.spatial_source_assets_v14 import _safe_original_filename
+
+    assert not _safe_original_filename("coral\\ud800.obj")
+    assert not _safe_original_filename("coral\\udfff.ply")
+    assert _safe_original_filename("coral_🐠.obj")
