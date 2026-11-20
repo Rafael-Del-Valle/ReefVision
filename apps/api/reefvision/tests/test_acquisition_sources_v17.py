@@ -7,6 +7,7 @@ from io import BytesIO
 from json import dumps
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 from sqlalchemy import select
@@ -14,6 +15,7 @@ from sqlalchemy import select
 from reefvision.db.models.field_capture import FieldCaptureObservation
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.jobs.workflow_schedules import dispatch_due_schedules
+from reefvision.ml import acquisition_camera
 from reefvision.ml.acquisition_camera import CameraUnavailable, LocalCameraFrame
 from reefvision.services import acquisition_sources
 from reefvision.storage.projects import resolve_managed_project_path
@@ -340,3 +342,40 @@ def test_scheduled_source_and_two_historical_replays_use_only_its_pinned_receipt
     assert len(set(runs)) == 2
     assert check(client.get(route), 200)["cursor"] == 1
     assert check(client.get(f"{route}/captures"), 200)["total"] == 1
+
+
+def test_blocked_camera_reader_is_terminated_without_opening_hardware(tmp_path, monkeypatch):
+    joins: list[float] = []
+    actions: list[str] = []
+
+    class BlockedReader:
+        pid = 123
+
+        def start(self):
+            actions.append("started")
+
+        def join(self, timeout):
+            joins.append(timeout)
+
+        def is_alive(self):
+            return "killed" not in actions
+
+        def kill(self):
+            actions.append("killed")
+
+        def close(self):
+            actions.append("closed")
+
+    class ReaderContext:
+        def Process(self, *, target, args):
+            assert target is acquisition_camera._grab_once
+            assert args == (7, tmp_path)
+            return BlockedReader()
+
+    monkeypatch.setattr(acquisition_camera, "get_context", lambda _: ReaderContext())
+    with pytest.raises(CameraUnavailable, match="timed out"):
+        acquisition_camera.capture_local_camera(7, tmp_path)
+    assert actions == ["started", "killed", "closed"]
+    assert 0 < joins[0] <= acquisition_camera.CAMERA_TIMEOUT_SECONDS
+    assert joins[1:] == [1]
+    assert not list(tmp_path.iterdir())
