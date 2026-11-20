@@ -39,7 +39,13 @@ def _inverse_scale_interval_per_m(
     if ratio_per_m is None or uncertainty is None or uncertainty >= 1:
         return None
     bounds = [ratio_per_m / (1 + uncertainty), ratio_per_m / (1 - uncertainty)]
-    return bounds if all(isfinite(bound) for bound in bounds) else None
+    if not all(isfinite(bound) for bound in bounds):
+        return None
+    # Positive but sub-resolution calibration error can round both bounds to
+    # the same inverse-length value. Never represent that as exact precision.
+    if uncertainty > 0 and bounds[0] >= bounds[1]:
+        return None
+    return bounds
 
 
 def _cubic_volume_scale_interval_m3(
@@ -751,6 +757,35 @@ def measure_mesh_preview(
         )
     ):
         volume_qc_warnings.add("enclosed_volume_scale_interval_numeric_unrepresentable")
+    ratio_scale_interval_per_m = _inverse_scale_interval_per_m(
+        surface_volume_ratio_per_m, relative_scale_uncertainty
+    )
+    patch_ratio_scale_intervals_per_m = (
+        [
+            _inverse_scale_interval_per_m(ratio, relative_scale_uncertainty)
+            for ratio in patch_surface_volume_ratios_per_m
+        ]
+        if relative_scale_uncertainty is not None
+        else None
+    )
+    # An absent interval at 100% is a mathematically unbounded upper limit,
+    # not a floating-point error. Unknown error and rejected volumes are
+    # likewise not numeric interval failures.
+    if relative_scale_uncertainty is not None and 0 < relative_scale_uncertainty < 1 and (
+        (surface_volume_ratio_per_m is not None and ratio_scale_interval_per_m is None)
+        or (
+            patch_ratio_scale_intervals_per_m is not None
+            and any(
+                ratio is not None and interval is None
+                for ratio, interval in zip(
+                    patch_surface_volume_ratios_per_m,
+                    patch_ratio_scale_intervals_per_m,
+                    strict=True,
+                )
+            )
+        )
+    ):
+        volume_qc_warnings.add("surface_volume_ratio_scale_interval_numeric_unrepresentable")
     return {
         "schema_version": "mesh-preview-0001",
         "surface_area_m2": area_m2,
@@ -763,19 +798,12 @@ def measure_mesh_preview(
         ),
         "enclosed_volume_is_provisional": True,
         "surface_to_enclosed_volume_ratio_per_m": surface_volume_ratio_per_m,
-        "surface_to_enclosed_volume_ratio_scale_interval_per_m": _inverse_scale_interval_per_m(
-            surface_volume_ratio_per_m, relative_scale_uncertainty
-        ),
+        "surface_to_enclosed_volume_ratio_scale_interval_per_m": ratio_scale_interval_per_m,
         "edge_connected_patch_surface_to_enclosed_volume_ratios_per_m": (
             patch_surface_volume_ratios_per_m
         ),
         "edge_connected_patch_surface_to_enclosed_volume_ratio_scale_intervals_per_m": (
-            [
-                _inverse_scale_interval_per_m(ratio, relative_scale_uncertainty)
-                for ratio in patch_surface_volume_ratios_per_m
-            ]
-            if relative_scale_uncertainty is not None
-            else None
+            patch_ratio_scale_intervals_per_m
         ),
         "axis_aligned_dimensions_m": dimensions,
         "axis_aligned_dimension_scale_intervals_m": (
