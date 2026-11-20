@@ -42,13 +42,16 @@ def signed_enclosed_volume_mesh_units(
         origin_exact = tuple(Fraction(value) for value in origin)
         exact_six_volume = Fraction(0)
         for a, b, c in faces:
-            u = [Fraction(points[a][axis]) - origin_exact[axis] for axis in range(3)]
-            v = [Fraction(points[b][axis]) - origin_exact[axis] for axis in range(3)]
-            w = [Fraction(points[c][axis]) - origin_exact[axis] for axis in range(3)]
-            exact_six_volume += (
-                u[0] * (v[1] * w[2] - v[2] * w[1])
-                + u[1] * (v[2] * w[0] - v[0] * w[2])
-                + u[2] * (v[0] * w[1] - v[1] * w[0])
+            # Distinct names keep the exact rational path separate from the
+            # floating-point vectors above for strict static type checking.
+            u_exact = [Fraction(points[a][axis]) - origin_exact[axis] for axis in range(3)]
+            v_exact = [Fraction(points[b][axis]) - origin_exact[axis] for axis in range(3)]
+            w_exact = [Fraction(points[c][axis]) - origin_exact[axis] for axis in range(3)]
+            exact_six_volume = Fraction(
+                exact_six_volume
+                + u_exact[0] * (v_exact[1] * w_exact[2] - v_exact[2] * w_exact[1])
+                + u_exact[1] * (v_exact[2] * w_exact[0] - v_exact[0] * w_exact[2])
+                + u_exact[2] * (v_exact[0] * w_exact[1] - v_exact[1] * w_exact[0])
             )
         if exact_six_volume:
             try:
