@@ -72,11 +72,11 @@ def test_underflow_fails_standalone_and_persisted_graph_without_artifact(
     assert response.status_code == 400, response.text
     assert "area underflowed numeric precision" in response.text
 
-    saved = client.post(
-        f"{base}/workflow-graphs", json={"graph": _saved_graph(params)}
-    )
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": _saved_graph(params)})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    run = client.post(
+        f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+    )
     assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
     assert not process_workflow_run_job(
@@ -105,13 +105,13 @@ def test_representable_tiny_area_replays_in_saved_typed_graph(
     assert expected["provenance"]["calibration_verified"] is False
     assert expected["confidence_interval"] is None
 
-    saved = client.post(
-        f"{base}/workflow-graphs", json={"graph": _saved_graph(params)}
-    )
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": _saved_graph(params)})
     assert saved.status_code == 201, saved.text
     hashes: list[str] = []
     for _ in range(2):
-        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        run = client.post(
+            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+        )
         assert run.status_code == 202, run.text
         app = cast(FastAPI, client.app)
         assert process_workflow_run_job(
