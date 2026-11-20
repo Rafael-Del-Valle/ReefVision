@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 from hashlib import sha256
+from io import BytesIO
 from pathlib import Path
 from typing import BinaryIO
 from uuid import UUID
@@ -154,6 +155,90 @@ def test_interrupted_fallback_copy_does_not_publish_partial_camera_original(
 
     assert not destination.exists()
     assert staged.read_bytes() == original
+
+
+def test_interrupted_camera_upload_preserves_read_error_when_windows_locks_cleanup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An antivirus lock must not conceal the original card read failure."""
+    partial = tmp_path / "locked-camera.part"
+    source_bytes = b"camera card bytes before a transient read failure"
+
+    class InterruptedCameraStream(BytesIO):
+        def __init__(self) -> None:
+            super().__init__(source_bytes)
+            self.read_calls = 0
+
+        def read(self, size: int = -1) -> bytes:
+            self.read_calls += 1
+            if self.read_calls > 1:
+                raise OSError(errno.EIO, "camera card disconnected during upload")
+            return super().read(size)
+
+    original_unlink = Path.unlink
+
+    def locked_partial_unlink(path: Path, *args: object, **kwargs: object) -> None:
+        if path == partial:
+            raise PermissionError("Windows scanner temporarily holds partial staging file")
+        original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", locked_partial_unlink)
+    with pytest.raises(OSError, match="camera card disconnected during upload"):
+        image_storage.stream_to_staging(InterruptedCameraStream(), partial)
+
+    # The partial staging file is never registered as a scientific original.
+    # Preserve the underlying read failure so the operator can troubleshoot.
+    assert partial.read_bytes() == source_bytes
+    assert "Could not remove incomplete camera import artifact" in caplog.text
+
+    # A fresh retry uses a new exclusive staging name, never the orphan.
+    retried = tmp_path / "camera-retry.part"
+    digest, size = image_storage.stream_to_staging(BytesIO(source_bytes), retried)
+    assert (digest, size) == (sha256(source_bytes).hexdigest(), len(source_bytes))
+    assert retried.read_bytes() == source_bytes
+    assert partial.read_bytes() == source_bytes
+
+
+def test_removable_camera_copy_preserves_io_error_when_partial_original_is_locked(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failed exFAT copy must not be mistaken for a cleanup permission error."""
+    staged = tmp_path / "staging.part"
+    destination = tmp_path / "camera-original.jpeg"
+    staged_bytes = b"staged immutable camera bytes"
+    staged.write_bytes(staged_bytes)
+
+    def unsupported_hardlink(_source: Path, _target: Path) -> None:
+        raise OSError(errno.EOPNOTSUPP, "exFAT cannot create hard links")
+
+    def disconnected_copy(_source: BinaryIO, output: BinaryIO, *, length: int) -> None:
+        assert length == 1024 * 1024
+        output.write(b"incomplete")
+        raise OSError(errno.EIO, "camera volume disconnected mid-copy")
+
+    original_unlink = Path.unlink
+
+    def locked_destination_unlink(path: Path, *args: object, **kwargs: object) -> None:
+        if path == destination:
+            raise PermissionError("Windows scanner temporarily holds incomplete copy")
+        original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(image_storage.os, "link", unsupported_hardlink)
+    monkeypatch.setattr(image_storage.shutil, "copyfileobj", disconnected_copy)
+    monkeypatch.setattr(Path, "unlink", locked_destination_unlink)
+
+    with pytest.raises(OSError, match="camera volume disconnected mid-copy"):
+        image_storage.commit_staged_image(staged, destination)
+
+    assert staged.read_bytes() == staged_bytes
+    # The unreferenced partial may remain until the Windows handle is
+    # released, but the failed publication must not report success.
+    assert destination.read_bytes() == b"incomplete"
+    assert "Could not remove incomplete camera import artifact" in caplog.text
 
 
 @pytest.mark.parametrize("damage", ["same_size", "truncated"])

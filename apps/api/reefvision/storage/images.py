@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import errno
 import hashlib
+import logging
 import math
 import os
 import re
@@ -22,6 +23,8 @@ from PIL import ExifTags, Image, UnidentifiedImageError
 from reefvision.config import Settings
 from reefvision.domain.errors import ValidationError
 from reefvision.storage.projects import resolve_managed_project_path
+
+LOGGER = logging.getLogger(__name__)
 
 # Bound each decoded vendor EXIF container before JSON conversion. Camera files
 # remain immutable; oversized advisory fields are unknown, not partial metadata.
@@ -102,6 +105,24 @@ def ensure_supported_extension(filename: str) -> None:
         raise UnsupportedImageError("Supported image types are JPEG, PNG, TIFF, WebP, BMP, and GIF")
 
 
+def _cleanup_incomplete_import(path: Path) -> None:
+    """Keep the source I/O failure visible if Windows locks a partial artifact.
+
+    Only call this on a file created by the current operation; never remove
+    an existing original or replace the underlying card/volume error.
+    """
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        # A scanner, renderer, or disconnected removable volume may prevent
+        # cleanup. The incomplete file is unreferenced by any image record.
+        LOGGER.warning(
+            "Could not remove incomplete camera import artifact %s",
+            path,
+            exc_info=True,
+        )
+
+
 def stream_to_staging(source: BinaryIO, destination: Path) -> tuple[str, int]:
     """Write a staged file completely, fsync it, and return checksum and byte count."""
 
@@ -122,7 +143,7 @@ def stream_to_staging(source: BinaryIO, destination: Path) -> tuple[str, int]:
         # Exclusive creation may fail because another upload already owns
         # this UUID path. Never delete a file that this call did not create.
         if created:
-            destination.unlink(missing_ok=True)
+            _cleanup_incomplete_import(destination)
         raise
     return digest.hexdigest(), total
 
@@ -629,7 +650,7 @@ def commit_staged_image(staged_path: Path, destination: Path) -> None:
             raise ValidationError("Managed image destination already exists") from collision
         except Exception:
             if created:
-                destination.unlink(missing_ok=True)
+                _cleanup_incomplete_import(destination)
             raise
     # The original has already been published. A transient failure to remove
     # its staging link must not turn a valid import into an orphaned original
