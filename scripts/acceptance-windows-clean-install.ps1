@@ -170,6 +170,7 @@ $report = [ordered]@{
     lineage_exchange_roundtrip = if ($LineageFixture) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Lineage fixture not supplied' }
     lineage_restore = if ($LineageFixture) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Lineage fixture not supplied' }
     historical_schema_rejection = if ($VerifyPreviousInstallerRejectsUpgradedProfile) { New-ReefVisionEvidenceResult } elseif ($LineageFixture -and -not $PreviousInstallerPath) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'No historical installer supplied for this lineage profile' } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Historical schema rejection not requested' }
+    historical_backup_reopen = if ($VerifyPreviousInstallerRejectsUpgradedProfile -and -not $LineageFixture) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Independent ordinary pre-upgrade recovery not requested' }
     upgrade = if ($SkipUpgrade) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'SkipUpgrade requested' } elseif (-not $PreviousInstallerPath) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'previous installer not supplied' } else { New-ReefVisionEvidenceResult }
     uninstall = if ($SkipUninstall) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'SkipUninstall requested' } else { New-ReefVisionEvidenceResult }
     data_retention = New-ReefVisionEvidenceResult
@@ -953,6 +954,15 @@ try {
         $report.confidence_review = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Packaged API included pending SAM prediction at confidence cutoff 1.0, excluded it after explicit acceptance; queue $($reviewQueue.id)."
         $report.sam2_live = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed app's backend downloaded SAM 2.1 Tiny, verified revision $($samReady[0].revision) and SHA256 $($samReady[0].weight_sha256), inferred image $samImageId (area $($samInference.result.area_pixels)), persisted pending proposal $samProposalId and accepted verified mask $samAcceptedMaskId; GUI hotkeys not exercised."
     }
+    $preUpgradeRecovery = $null
+    if ($VerifyPreviousInstallerRejectsUpgradedProfile -and -not $LineageFixture) {
+        $preUpgradeRecovery = New-ReefVisionAcceptancePreUpgradeRecovery -Api $api -DataRoot $DataRoot -InitialRevision $migrationPayload.current_schema_revision
+        $RestoreDataRoot = $preUpgradeRecovery.copy
+        $restoreMarker = Join-Path $RestoreDataRoot '.reefvision-clean-install-acceptance'
+        if (-not (Test-Path -LiteralPath $restoreMarker -PathType Leaf)) {
+            Set-Content -LiteralPath $restoreMarker -Value $Token
+        }
+    }
     Stop-AcceptanceDesktop $desktop
     $projectChecksum = (Get-FileHash -LiteralPath (Join-Path $DataRoot 'reefvision.db') -Algorithm SHA256).Hash
 
@@ -1074,39 +1084,62 @@ try {
     if ($LineageFixture) {
         New-Item -ItemType Directory -Path $RestoreDataRoot -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $RestoreDataRoot '.reefvision-clean-install-acceptance') -Value $Token
-        $restoredLineage = Copy-ReefVisionLineageProfile -Fixture $LineageFixture -DataRoot $RestoreDataRoot -UseBackup
-        if ($VerifyPreviousInstallerRejectsUpgradedProfile) {
-            $upgradedDatabase = Join-Path $DataRoot 'reefvision.db'
-            $upgradedHashBefore = (Get-FileHash -LiteralPath $upgradedDatabase -Algorithm SHA256).Hash.ToLowerInvariant()
-            $candidateProductCode = Get-AcceptanceMsiProperty -Path $InstallerPath -Name 'ProductCode'
-            Run-Msi -Action Uninstall -PackageOrProduct $candidateProductCode -LogName 'candidate-before-historical-rejection-uninstall.log' | Out-Null
-            Run-Msi -Action Install -PackageOrProduct $PreviousInstallerPath -LogName 'historical-rejection-install.log' -TargetRoot $InstallRoot | Out-Null
-            $rejectionDetail = Assert-HistoricalDesktopRejectsProfile -ProfileDataRoot $DataRoot -RejectedRevision $ExpectedSchemaRevision
-            $upgradedHashAfter = (Get-FileHash -LiteralPath $upgradedDatabase -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($upgradedHashAfter -cne $upgradedHashBefore) {
-                throw 'Historical build changed the upgraded database while rejecting it.'
-            }
-            $report.historical_schema_rejection = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Historical $initialVersion rejected schema $ExpectedSchemaRevision ($rejectionDetail); database SHA-256 remained $upgradedHashAfter."
+        $null = Copy-ReefVisionLineageProfile -Fixture $LineageFixture -DataRoot $RestoreDataRoot -UseBackup
+    }
+    if ($VerifyPreviousInstallerRejectsUpgradedProfile) {
+        $upgradedDatabase = Join-Path $DataRoot 'reefvision.db'
+        $upgradedHashBefore = (Get-FileHash -LiteralPath $upgradedDatabase -Algorithm SHA256).Hash.ToLowerInvariant()
+        $candidateProductCode = Get-AcceptanceMsiProperty -Path $InstallerPath -Name 'ProductCode'
+        Run-Msi -Action Uninstall -PackageOrProduct $candidateProductCode -LogName 'candidate-before-historical-rejection-uninstall.log' | Out-Null
+        Run-Msi -Action Install -PackageOrProduct $PreviousInstallerPath -LogName 'historical-rejection-install.log' -TargetRoot $InstallRoot | Out-Null
+        $rejectionDetail = Assert-HistoricalDesktopRejectsProfile -ProfileDataRoot $DataRoot -RejectedRevision $ExpectedSchemaRevision
+        Assert-ReefVisionLineageHash -Path $upgradedDatabase -ExpectedSha256 $upgradedHashBefore -Label 'Upgraded database during historical rejection'
+        $report.historical_schema_rejection = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Historical $initialVersion rejected schema $ExpectedSchemaRevision ($rejectionDetail); database SHA-256 remained $upgradedHashBefore."
 
-            $restoreDesktop = Start-AcceptanceDesktop -ProfileDataRoot $RestoreDataRoot
+        $restoreDesktop = Start-AcceptanceDesktop -ProfileDataRoot $RestoreDataRoot
+        try {
             $restorePort = Wait-BackendPort -Path (Join-Path $RestoreDataRoot 'runtime\backend-port.txt') -DesktopProcess $restoreDesktop -BackendLogPath (Join-Path $RestoreDataRoot 'logs\backend.log')
             $restoreApi = "http://127.0.0.1:$restorePort/api/v1"
-            $null = Assert-AcceptancePackagedBackend -Api $restoreApi -ExpectedAppVersion $initialVersion -ExpectedRevision $LineageFixture.revision
-            $restoredEvidence = Assert-AcceptanceLineageEvidence -Api $restoreApi -Fixture $LineageFixture -ProjectId $LineageFixture.project_id
+            $null = Assert-AcceptancePackagedBackend -Api $restoreApi -ExpectedAppVersion $initialVersion -ExpectedRevision $initialRevision
+            if ($LineageFixture) {
+                $restoredEvidence = Assert-AcceptanceLineageEvidence -Api $restoreApi -Fixture $LineageFixture -ProjectId $LineageFixture.project_id
+                $report.lineage_restore = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Historical $initialVersion opened the separate verified backup at $($LineageFixture.revision) and preserved $(@($restoredEvidence).Count) declared evidence records; live upgraded profile was not replaced."
+            } else {
+                $null = Wait-AcceptanceWebView2 -DesktopProcessId $restoreDesktop.Id
+                $restoredProject = Invoke-RestMethod -Uri "$restoreApi/projects/$projectId" -NoProxy -TimeoutSec 10
+                $restoredSession = Invoke-RestMethod -Uri "$restoreApi/images/$imageId/annotations" -NoProxy -TimeoutSec 10
+                $restoredAnnotation = @($restoredSession.annotations | Where-Object id -eq $annotationId)
+                $restoredImageHash = Get-AcceptanceContentSha256 "$restoreApi/images/$imageId/content"
+                if ($restoredProject.id -ne $projectId -or $restoredAnnotation.Count -ne 1 -or
+                    $restoredSession.image.sha256 -cne $saved.image.sha256 -or $restoredImageHash -cne $saved.image.sha256) {
+                    throw 'The historical desktop could not reopen the original project, image and annotation in the independent recovery.'
+                }
+                foreach ($field in 'id', 'label_class_id', 'x_min', 'y_min', 'x_max', 'y_max', 'revision') {
+                    if ($restoredAnnotation[0].$field -cne $saved.annotations[0].$field) {
+                        throw "The historical recovery changed annotation field $field."
+                    }
+                }
+                Assert-ReefVisionLineageHash -Path $preUpgradeRecovery.manifest_path -ExpectedSha256 $preUpgradeRecovery.manifest_sha256 -Label 'Original pre-upgrade backup manifest'
+                $report.historical_backup_reopen = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Historical $initialVersion reopened a separate $initialRevision recovery of $($preUpgradeRecovery.verified_files) verified files; project, original SHA-256 $restoredImageHash and annotation coordinates matched. Backup manifest SHA-256 $($preUpgradeRecovery.manifest_sha256)."
+            }
+        } finally {
             Stop-AcceptanceDesktop $restoreDesktop
-            $report.lineage_restore = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Historical $initialVersion opened the separate verified backup at $($LineageFixture.revision) and preserved $(@($restoredEvidence).Count) declared evidence records; live upgraded profile was not replaced."
-            $previousProductCode = Get-AcceptanceMsiProperty -Path $PreviousInstallerPath -Name 'ProductCode'
-            Run-Msi -Action Uninstall -PackageOrProduct $previousProductCode -LogName 'historical-final-uninstall.log' | Out-Null
-            $acceptanceAlreadyUninstalled = $true
-        } else {
-            $restoreDesktop = Start-AcceptanceDesktop -ProfileDataRoot $RestoreDataRoot
+        }
+        Assert-ReefVisionLineageHash -Path $upgradedDatabase -ExpectedSha256 $upgradedHashBefore -Label 'Upgraded database after independent historical reopen'
+        $previousProductCode = Get-AcceptanceMsiProperty -Path $PreviousInstallerPath -Name 'ProductCode'
+        Run-Msi -Action Uninstall -PackageOrProduct $previousProductCode -LogName 'historical-final-uninstall.log' | Out-Null
+        $acceptanceAlreadyUninstalled = $true
+    } elseif ($LineageFixture) {
+        $restoreDesktop = Start-AcceptanceDesktop -ProfileDataRoot $RestoreDataRoot
+        try {
             $restorePort = Wait-BackendPort -Path (Join-Path $RestoreDataRoot 'runtime\backend-port.txt') -DesktopProcess $restoreDesktop -BackendLogPath (Join-Path $RestoreDataRoot 'logs\backend.log')
             $restoreApi = "http://127.0.0.1:$restorePort/api/v1"
             $restoreMigration = Assert-AcceptancePackagedBackend -Api $restoreApi -ExpectedAppVersion $ProductVersion -ExpectedRevision $ExpectedSchemaRevision
             $restoredEvidence = Assert-AcceptanceLineageEvidence -Api $restoreApi -Fixture $LineageFixture -ProjectId $LineageFixture.project_id
+        } finally {
             Stop-AcceptanceDesktop $restoreDesktop
-            $report.lineage_restore = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Candidate $ProductVersion opened the separate verified $($LineageFixture.revision) backup, migrated it to $($restoreMigration.current_schema_revision), and preserved $(@($restoredEvidence).Count) declared evidence records; live upgraded profile was not replaced."
         }
+        $report.lineage_restore = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Candidate $ProductVersion opened the separate verified $($LineageFixture.revision) backup, migrated it to $($restoreMigration.current_schema_revision), and preserved $(@($restoredEvidence).Count) declared evidence records; live upgraded profile was not replaced."
     }
 
     if (-not $SkipUninstall) {

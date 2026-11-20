@@ -498,7 +498,7 @@ jobs:
           }
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
-            -PreviousInstallerPath $previousMsi -PreviousInstallerSupportsIsolatedAcceptance `
+            -PreviousInstallerPath $previousMsi -PreviousInstallerSupportsIsolatedAcceptance -VerifyPreviousInstallerRejectsUpgradedProfile `
             -ExpectedVersion '1.6.0' -ExpectedSchemaRevision 'b16_integrated_0001' `
             -ExpectedInitialSchemaRevision 'b15_integrated_0002' `
             -AcceptanceRoot 'C:\reefvision-1-6-0-upgrade-validated-1-5' `

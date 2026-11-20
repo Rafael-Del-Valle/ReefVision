@@ -305,6 +305,88 @@ function Write-ReefVisionEvidenceReport {
     $Report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $Path -Encoding UTF8
 }
 
+function Wait-ReefVisionAcceptanceJob {
+    param(
+        [Parameter(Mandatory)][string]$Api,
+        [Parameter(Mandatory)][guid]$JobId,
+        [Parameter(Mandatory)][string]$Operation
+    )
+    $deadline = [datetime]::UtcNow.AddMinutes(3)
+    do {
+        $job = Invoke-RestMethod -Uri "$Api/jobs/$JobId" -NoProxy -TimeoutSec 10
+        if ($job.status -eq 'succeeded') { return $job }
+        if ($job.status -notin @('queued', 'running')) {
+            throw "$Operation job $JobId ended as $($job.status): $($job.error_message)"
+        }
+        Start-Sleep -Milliseconds 250
+    } while ([datetime]::UtcNow -lt $deadline)
+    throw "$Operation job $JobId did not complete before the acceptance deadline."
+}
+
+function New-ReefVisionAcceptancePreUpgradeRecovery {
+    param(
+        [Parameter(Mandatory)][string]$Api,
+        [Parameter(Mandatory)][string]$DataRoot,
+        [Parameter(Mandatory)][string]$InitialRevision
+    )
+    if ($Api -notmatch '^http://127\.0\.0\.1:[1-9][0-9]{0,4}/api/v1$' -or
+        -not (Test-Path -LiteralPath (Join-Path $DataRoot '.reefvision-clean-install-acceptance') -PathType Leaf)) {
+        throw 'An acceptance recovery requires a marked disposable profile and its loopback API.'
+    }
+    Assert-ReefVisionNoReparseAncestors -Path $DataRoot
+    $version = Invoke-RestMethod -Uri "$Api/system/version" -NoProxy -TimeoutSec 5
+    if ((Resolve-ReefVisionAcceptancePath $version.data_dir) -ine (Resolve-ReefVisionAcceptancePath $DataRoot) -or
+        $version.current_schema_revision -ne $InitialRevision -or $version.safe_mode) {
+        throw 'The predecessor API does not own the expected disposable pre-upgrade profile.'
+    }
+    $created = Invoke-RestMethod -Uri "$Api/backups" -Method Post -ContentType 'application/json' `
+        -Body '{"notes":"Disposable pre-upgrade rollback witness"}' -NoProxy -TimeoutSec 10
+    $backupJob = Wait-ReefVisionAcceptanceJob -Api $Api -JobId $created.job.id -Operation 'Pre-upgrade backup'
+    $verify = Invoke-RestMethod -Uri "$Api/backups/$($created.backup.id)/verify" -Method Post -NoProxy -TimeoutSec 60
+    if ($verify.status -ne 'valid' -or -not $verify.completion_marker_present -or
+        $verify.current_schema_revision -ne $InitialRevision -or $verify.file_count -lt 2) {
+        throw 'The predecessor did not verify a complete pre-upgrade backup.'
+    }
+    $manifestPath = Resolve-ReefVisionLineageFile -Root $DataRoot -RelativePath $created.backup.manifest_path -Label 'Pre-upgrade backup manifest'
+    Assert-ReefVisionLineageHash -Path $manifestPath -ExpectedSha256 $backupJob.result_json.manifest_sha256 -Label 'Pre-upgrade backup manifest'
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    if (@($manifest.file_inventory).Count -ne $verify.file_count -or $manifest.backup_id -cne $created.backup.id) {
+        throw 'The pre-upgrade backup manifest does not identify the verified archive.'
+    }
+    $restore = Invoke-RestMethod -Uri "$Api/backups/$($created.backup.id)/restore" -Method Post -ContentType 'application/json' `
+        -Body '{"destination_name":"pre-upgrade-copy","overwrite_existing":false}' -NoProxy -TimeoutSec 60
+    if ($restore.verification_status -ne 'valid' -or $restore.destination_path -cne 'recoveries/pre-upgrade-copy') {
+        throw 'The predecessor did not schedule an independent verified restore.'
+    }
+    $restoreJob = Wait-ReefVisionAcceptanceJob -Api $Api -JobId $restore.job.id -Operation 'Pre-upgrade restore'
+    if ($restoreJob.result_json.restored_file_count -ne $verify.file_count -or
+        $restoreJob.result_json.destination_path -cne $restore.destination_path) {
+        throw 'The rollback copy did not publish the full verified backup.'
+    }
+    $copy = Join-Path $DataRoot $restore.destination_path
+    Assert-ReefVisionNoReparseAncestors -Path $copy
+    foreach ($entry in $manifest.file_inventory) {
+        $relative = if ($entry.path -ceq "database/$($manifest.database_filename)") {
+            $manifest.database_filename
+        } elseif ($entry.path.StartsWith('data/')) {
+            $entry.path.Substring(5)
+        } else {
+            throw 'A pre-upgrade manifest member could not be mapped to its restored location.'
+        }
+        $file = Resolve-ReefVisionLineageFile -Root $copy -RelativePath $relative -Label 'Restored pre-upgrade member'
+        if ((Get-Item -LiteralPath $file).Length -ne $entry.size_bytes) {
+            throw 'A pre-upgrade restored member has a different size.'
+        }
+        Assert-ReefVisionLineageHash -Path $file -ExpectedSha256 $entry.sha256 -Label 'Restored pre-upgrade member'
+    }
+    return [pscustomobject]@{
+        copy = $copy
+        verified_files = $verify.file_count
+        manifest_path = $manifestPath
+        manifest_sha256 = $backupJob.result_json.manifest_sha256
+    }
+}
+
 # Decode actual camera bytes rather than accepting a nonempty display response.
 # Scientific annotation coordinates remain in the original camera raster frame.
 function Assert-ReefVisionCameraRaster {
