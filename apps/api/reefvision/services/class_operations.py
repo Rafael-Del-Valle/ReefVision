@@ -6,9 +6,10 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
@@ -22,6 +23,7 @@ from reefvision.db.models import (
     PredictionProposal,
     Project,
     QualityControlIssue,
+    ReviewQueue,
     ReviewQueueItem,
 )
 from reefvision.db.models.class_operation import ClassOperation
@@ -40,6 +42,7 @@ from reefvision.schemas.class_operations import (
 from reefvision.schemas.projects import LabelClassUsageResponse
 from reefvision.services.annotations import annotation_snapshot
 from reefvision.services.projects import (
+    UNHANDLED_CLASS_REFERENCE_CATEGORIES,
     USAGE_CATEGORY_META,
     ProjectService,
 )
@@ -88,6 +91,19 @@ def _label_class_snapshot(label_class: LabelClass) -> dict[str, Any]:
     }
 
 
+def _class_biological_identity(label_class: LabelClass) -> dict[str, Any]:
+    """Reviewed source/target semantics that must stay stable until execution."""
+    return {
+        "id": label_class.id,
+        "name": label_class.name,
+        "class_index": label_class.class_index,
+        "scientific_name": label_class.scientific_name,
+        "state_name": label_class.state_name,
+        "is_active": label_class.is_active,
+        "archived_at": label_class.archived_at.isoformat() if label_class.archived_at else None,
+    }
+
+
 @dataclass(slots=True)
 class OperationPlan:
     mutable_records: list[ClassOperationRecordGroupResponse]
@@ -96,6 +112,13 @@ class OperationPlan:
     compatibility_impacts: list[ClassOperationCompatibilityImpactResponse]
     warnings: list[str]
     blockers: list[str]
+    # Bind approval to the actual class memberships and mutable review state,
+    # not just to the unchanged IDs of QC and review-queue records.
+    review_reference_evidence: dict[str, list[dict[str, Any]]]
+    observation_reference_evidence: dict[str, list[dict[str, Any]]]
+    # Immutable dataset and local model compatibility evidence must not drift.
+    compatibility_reference_evidence: dict[str, list[dict[str, Any]]]
+    class_reference_fingerprint: str
 
 
 class ClassOperationsService:
@@ -185,6 +208,7 @@ class ClassOperationsService:
         source_class: LabelClass,
         target_class: LabelClass,
     ) -> OperationPlan:
+        source_usage = self.project_service._usage_snapshot(source_class)
         annotations = list(
             self.session.scalars(
                 select(Annotation).where(Annotation.label_class_id == source_class.id)
@@ -250,41 +274,70 @@ class ClassOperationsService:
                 select(ReviewQueueItem).where(ReviewQueueItem.project_id == source_class.project_id)
             )
         )
+        # The saved Workflow Builder snapshot is scientific input evidence,
+        # including items that are still pending researcher review. Ownership
+        # must be checked by persisted queue creator, not by mutable item state.
+        queue_creator_by_id = {
+            queue.id: queue.created_by
+            for queue in self.session.scalars(
+                select(ReviewQueue).where(ReviewQueue.project_id == source_class.project_id)
+            )
+        }
+        workflow_owned_queue_ids = {
+            queue_id
+            for queue_id, creator in queue_creator_by_id.items()
+            if isinstance(creator, str) and creator.startswith("workflow:")
+        }
+        workflow_protected_item_ids = sorted(
+            item.id
+            for item in review_queue_items
+            if source_class.id in item.label_class_ids_json
+            and item.review_queue_id in workflow_owned_queue_ids
+        )
         mutable_review_queue_ids = sorted(
             item.id
             for item in review_queue_items
             if source_class.id in item.label_class_ids_json
             and item.review_state in MUTABLE_REVIEW_STATES
+            and item.review_queue_id not in workflow_owned_queue_ids
         )
         protected_review_queue_ids = sorted(
             item.id
             for item in review_queue_items
             if source_class.id in item.label_class_ids_json
-            and item.review_state not in MUTABLE_REVIEW_STATES
-        )
-
-        dataset_version_ids = sorted(
-            version.id
-            for version in self.session.scalars(
-                select(DatasetVersion).where(DatasetVersion.project_id == source_class.project_id)
+            and (
+                item.review_state not in MUTABLE_REVIEW_STATES
+                or item.review_queue_id in workflow_owned_queue_ids
             )
-            if any(entry.get("id") == source_class.id for entry in version.class_map_json)
         )
 
-        model_registration_ids = sorted(
-            model.id
-            for model in self.session.scalars(
-                select(ModelRegistration).where(
-                    ModelRegistration.project_id == source_class.project_id
+        dataset_versions = sorted(
+            (
+                version
+                for version in self.session.scalars(
+                    select(DatasetVersion).where(
+                        DatasetVersion.project_id == source_class.project_id
+                    )
                 )
-            )
-            if source_class.id
-            in {
-                value
-                for value in (model.class_map_json.get("mapping") or {}).values()
-                if isinstance(value, str)
-            }
+                if any(entry.get("id") == source_class.id for entry in version.class_map_json)
+            ),
+            key=lambda version: version.id,
         )
+        dataset_version_ids = [version.id for version in dataset_versions]
+
+        model_registrations = sorted(
+            (
+                model
+                for model in self.session.scalars(
+                    select(ModelRegistration).where(
+                        ModelRegistration.project_id == source_class.project_id
+                    )
+                )
+                if model.id in source_usage.reference_ids["model_registrations"]
+            ),
+            key=lambda model: model.id,
+        )
+        model_registration_ids = [model.id for model in model_registrations]
 
         mutable_records = [
             self._group("annotations_active", "Active annotations", active_annotation_ids),
@@ -330,6 +383,22 @@ class ClassOperationsService:
             ),
         ]
 
+        unsupported_groups = [
+            self._group(key, USAGE_CATEGORY_META[key][0], source_usage.reference_ids[key])
+            for key in UNHANDLED_CLASS_REFERENCE_CATEGORIES
+            if source_usage.counts[key]
+        ]
+        protected_records.extend(unsupported_groups)
+        runtime_selection_ids = source_usage.reference_ids["model_runtime_selections"]
+        if runtime_selection_ids:
+            protected_records.append(
+                self._group(
+                    "model_runtime_selections",
+                    "Frozen model runtime selections",
+                    runtime_selection_ids,
+                )
+            )
+
         warnings: list[str] = []
         blockers: list[str] = []
         blocking_records: list[ClassOperationRecordGroupResponse] = []
@@ -354,33 +423,40 @@ class ClassOperationsService:
             warnings.append(
                 "Registered model class maps remain unchanged and may need explicit remapping."
             )
+        if runtime_selection_ids:
+            warnings.append("Reviewed model runtime selections keep their signed class mapping.")
         if annotation_event_ids:
             warnings.append("Historical annotation events remain unchanged for auditability.")
+        if workflow_protected_item_ids:
+            warnings.append(
+                "Saved Workflow Builder QC queue class evidence remains immutable, "
+                "including pending or in-progress researcher reviews."
+            )
+        for group in unsupported_groups:
+            blockers.append(
+                f"{group.label} ({group.count}) cannot be safely reassigned in bulk. "
+                "Keep this class or relabel the originals in their own workspace."
+            )
+            blocking_records.append(group)
 
         if operation_type == "reassign_delete":
-            if deleted_annotation_ids:
-                blockers.append(
-                    "Deleted annotations still reference this class and would be "
-                    "removed by a hard delete."
-                )
+            blocking_records.extend(
+                group
+                for group in protected_records
+                if group.count and group not in blocking_records
+            )
+            if active_annotation_ids:
                 blocking_records.append(
                     self._group(
-                        "annotations_deleted",
-                        "Deleted annotations block physical deletion",
-                        deleted_annotation_ids,
+                        "annotations_active",
+                        "Annotations require retained class history",
+                        active_annotation_ids,
                     )
                 )
-            if protected_prediction_ids:
+            if blocking_records:
                 blockers.append(
-                    "Historical prediction proposals still reference this class and "
-                    "would lose their class link if the source class were deleted."
-                )
-                blocking_records.append(
-                    self._group(
-                        "prediction_proposals_historical",
-                        "Historical prediction proposals block physical deletion",
-                        protected_prediction_ids,
-                    )
+                    "Physical deletion would remove a class referenced by scientific records. "
+                    "Use reviewed reassignment and archive to keep class history."
                 )
 
         return OperationPlan(
@@ -390,6 +466,95 @@ class ClassOperationsService:
             compatibility_impacts=compatibility_impacts,
             warnings=warnings,
             blockers=blockers,
+            class_reference_fingerprint=source_usage.reference_fingerprint,
+            observation_reference_evidence={
+                "annotations": [
+                    {
+                        "id": annotation.id,
+                        "image_id": annotation.image_id,
+                        "revision": annotation.revision,
+                        "bounds_px": [
+                            annotation.x_min,
+                            annotation.y_min,
+                            annotation.x_max,
+                            annotation.y_max,
+                        ],
+                    }
+                    for annotation in sorted(annotations, key=lambda item: item.id)
+                ],
+                "prediction_proposals": [
+                    {
+                        "id": proposal.id,
+                        "image_id": proposal.image_id,
+                        "model_id": proposal.model_id,
+                        "model_checksum": proposal.model_checksum,
+                        "review_status": proposal.review_status,
+                        "predicted_label": proposal.predicted_label,
+                        "predicted_index": proposal.predicted_index,
+                        "confidence": proposal.confidence,
+                        "geometry_kind": proposal.geometry_kind,
+                        "bounds_px": [
+                            proposal.x_min,
+                            proposal.y_min,
+                            proposal.x_max,
+                            proposal.y_max,
+                        ],
+                        "polygon_sha256": (
+                            hashlib.sha256(
+                                json.dumps(
+                                    proposal.polygon_json,
+                                    sort_keys=True,
+                                    separators=(",", ":"),
+                                ).encode("utf-8")
+                            ).hexdigest()
+                            if proposal.polygon_json is not None
+                            else None
+                        ),
+                        "mask_content_sha256": proposal.mask_content_sha256,
+                    }
+                    for proposal in sorted(prediction_proposals, key=lambda item: item.id)
+                ],
+            },
+            compatibility_reference_evidence={
+                "dataset_versions": [
+                    {
+                        "id": version.id,
+                        "class_map": version.class_map_json,
+                        "manifest_sha256": version.manifest_sha256,
+                    }
+                    for version in dataset_versions
+                ],
+                "model_registrations": [
+                    {
+                        "id": model.id,
+                        "class_map": model.class_map_json,
+                        "weights_sha256": model.sha256,
+                    }
+                    for model in model_registrations
+                ],
+            },
+            review_reference_evidence={
+                "quality_control_issues": [
+                    {
+                        "id": issue.id,
+                        "status": issue.status,
+                        "class_ids": list(issue.class_ids_json),
+                    }
+                    for issue in sorted(quality_control_issues, key=lambda item: item.id)
+                    if source_class.id in issue.class_ids_json
+                ],
+                "review_queue_items": [
+                    {
+                        "id": item.id,
+                        "state": item.review_state,
+                        "queue_id": item.review_queue_id,
+                        "queue_created_by": queue_creator_by_id.get(item.review_queue_id),
+                        "class_ids": list(item.label_class_ids_json),
+                    }
+                    for item in sorted(review_queue_items, key=lambda item: item.id)
+                    if source_class.id in item.label_class_ids_json
+                ],
+            },
         )
 
     def _plan_checksum(
@@ -405,6 +570,9 @@ class ClassOperationsService:
             "project_id": source_class.project_id,
             "source_class_id": source_class.id,
             "target_class_id": target_class.id,
+            # Counts and reference IDs alone cannot preserve biological meaning.
+            "source_class_biological_identity": _class_biological_identity(source_class),
+            "target_class_biological_identity": _class_biological_identity(target_class),
             "mutable_records": [
                 {"key": item.key, "record_ids": item.record_ids} for item in plan.mutable_records
             ],
@@ -424,6 +592,10 @@ class ClassOperationsService:
             ],
             "warnings": plan.warnings,
             "blockers": plan.blockers,
+            "review_reference_evidence": plan.review_reference_evidence,
+            "observation_reference_evidence": plan.observation_reference_evidence,
+            "compatibility_reference_evidence": plan.compatibility_reference_evidence,
+            "class_reference_fingerprint": plan.class_reference_fingerprint,
         }
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
@@ -562,6 +734,17 @@ class ClassOperationsService:
             raise ConflictError("Use the matching execution endpoint for this preview")
         if operation.preview_checksum != payload.preview_checksum:
             raise ConflictError("The preview checksum does not match the stored operation plan")
+        # The checksum approves the plan, not a transfer of researcher authority.
+        # A changed local identity must produce a fresh reviewed preview.
+        if operation.requested_by_identity != get_local_user_identity(self.settings):
+            raise ConflictError(
+                "Only the local researcher who created this preview can execute it. "
+                "Generate a new preview under the current local identity."
+            )
+        if operation.status == "completed" and (
+            payload.notes is None or payload.notes == operation.notes
+        ):
+            return self._response(operation)
         if operation.status != "previewed":
             raise ConflictError("Only previewed class operations can be executed")
         if operation.target_class_id is None:
@@ -569,6 +752,32 @@ class ClassOperationsService:
 
         source_class = self._class(project_id, class_id)
         target_class = self._class(project_id, operation.target_class_id)
+
+        # Claim this approved preview with a conditional write BEFORE rebuilding
+        # its evidence. SQLite holds the writer lock until our final commit, so
+        # no other local editor can change the evidence after validation or
+        # execute the same preview concurrently. The previous early "running"
+        # commit released that lock and exposed partial operation state.
+        claim = self.session.execute(
+            update(ClassOperation)
+            .where(
+                ClassOperation.id == operation.id,
+                ClassOperation.status == "previewed",
+            )
+            .values(status="running")
+        )
+        if cast(CursorResult[Any], claim).rowcount != 1:
+            self.session.rollback()
+            current = self._operation(payload.operation_id)
+            if current.status == "completed" and (
+                payload.notes is None or payload.notes == current.notes
+            ):
+                return self._response(current)
+            raise ConflictError("This class operation was already claimed. Reload its status.")
+        # The earlier class reads happened before the write lock. Force fresh
+        # evidence reads under the claimed SQLite transaction.
+        self.session.expire(source_class)
+        self.session.expire(target_class)
         current_plan = self._plan(
             operation_type=operation_type,
             source_class=source_class,
@@ -608,12 +817,16 @@ class ClassOperationsService:
             self.session.commit()
             raise ConflictError("This class operation is blocked. Review the blocking records.")
 
-        operation.status = "running"
-        operation.started_at = _utc_now()
         if payload.notes is not None:
             operation.notes = payload.notes
-        self.session.commit()
 
+        # A preflight rejection is not an attempted scientific execution.
+        # Record the start only after the locked evidence/review gate passes.
+        started_at = _utc_now()
+        operation.started_at = started_at
+
+        # Status, biological record updates, append-only events, and deletion
+        # (when approved) commit atomically; no intermediate "running" commit.
         try:
             affected_counts: dict[str, int] = {}
 
@@ -647,6 +860,12 @@ class ClassOperationsService:
                 )
                 affected_counts["annotations_active"] = (
                     affected_counts.get("annotations_active", 0) + 1
+                )
+            if annotations:
+                self.session.execute(
+                    update(ImageAsset)
+                    .where(ImageAsset.id.in_({item.image_id for item in annotations}))
+                    .values(annotation_revision=ImageAsset.annotation_revision + 1)
                 )
 
             mutable_predictions = list(
@@ -683,10 +902,20 @@ class ClassOperationsService:
                     affected_counts.get("quality_control_issues_open", 0) + 1
                 )
 
+            # Use only record IDs approved by the fresh, locked plan. In
+            # particular, never mutate a pending saved-workflow QC snapshot:
+            # doing so breaks its persisted biological evidence checksum.
+            approved_review_ids = {
+                record_id
+                for group in current_plan.mutable_records
+                if group.key == "review_queue_items_open"
+                for record_id in group.record_ids
+            }
             mutable_review_queue_items = list(
                 self.session.scalars(
                     select(ReviewQueueItem).where(
                         ReviewQueueItem.project_id == source_class.project_id,
+                        ReviewQueueItem.id.in_(approved_review_ids),
                         ReviewQueueItem.review_state.in_(tuple(MUTABLE_REVIEW_STATES)),
                     )
                 )
@@ -703,23 +932,10 @@ class ClassOperationsService:
 
             if operation_type == "reassign_delete":
                 self.session.flush()
-                remaining_annotations = list(
-                    self.session.scalars(
-                        select(Annotation).where(Annotation.label_class_id == source_class.id)
-                    )
-                )
-                remaining_historical_predictions = list(
-                    self.session.scalars(
-                        select(PredictionProposal).where(
-                            PredictionProposal.project_id == source_class.project_id,
-                            PredictionProposal.label_class_id == source_class.id,
-                        )
-                    )
-                )
-                if remaining_annotations or remaining_historical_predictions:
+                if not self.project_service._usage_snapshot(source_class).can_delete:
                     raise ConflictError(
-                        "The source class still has protected references and cannot be "
-                        "deleted safely."
+                        "The source class still has protected references "
+                        "and cannot be deleted safely."
                     )
                 self.session.delete(source_class)
                 final_state = "reassigned_and_deleted"
@@ -752,13 +968,28 @@ class ClassOperationsService:
             self.session.commit()
         except Exception as exc:
             self.session.rollback()
-            operation = self._operation(payload.operation_id)
-            operation.status = "rolled_back"
-            operation.completed_at = _utc_now()
-            operation.failures_json = [str(exc)]
-            operation.rollback_result_json = {"rolled_back": True}
-            operation.final_state = "rolled_back"
-            self.session.commit()
+            # Rolling back releases the SQLite writer lock. A second local
+            # executor may claim and complete this preview before we publish
+            # the failure. Never overwrite its successful scientific result.
+            rollback_claim = self.session.execute(
+                update(ClassOperation)
+                .where(
+                    ClassOperation.id == payload.operation_id,
+                    ClassOperation.status == "previewed",
+                )
+                .values(
+                    status="rolled_back",
+                    started_at=started_at,
+                    completed_at=_utc_now(),
+                    failures_json=[str(exc)],
+                    rollback_result_json={"rolled_back": True},
+                    final_state="rolled_back",
+                )
+            )
+            if cast(CursorResult[Any], rollback_claim).rowcount == 1:
+                self.session.commit()
+            else:
+                self.session.rollback()
             if isinstance(exc, ConflictError):
                 raise
             raise

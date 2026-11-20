@@ -102,6 +102,7 @@ export interface LabelClassUsage {
   class_id: string;
   project_id: string;
   class_name: string;
+  reference_fingerprint?: string;
   is_active: boolean;
   archived_at: string | null;
   total_references: number;
@@ -1898,7 +1899,19 @@ export async function deleteLabelClass(classId: string): Promise<void> {
 
 export async function mergeLabelClass(
   classId: string,
-  payload: { target_class_id: string },
+  payload: {
+    target_class_id: string;
+    expected_usage_counts?: Record<string, number>;
+    expected_usage_fingerprint?: string;
+    expected_source_identity?: Pick<
+      LabelClass,
+      "name" | "class_index" | "scientific_name" | "state_name"
+    >;
+    expected_target_identity?: Pick<
+      LabelClass,
+      "name" | "class_index" | "scientific_name" | "state_name"
+    >;
+  },
 ): Promise<LabelClassMergeResponse> {
   return request<LabelClassMergeResponse>(`/classes/${classId}/merge`, {
     method: "POST",

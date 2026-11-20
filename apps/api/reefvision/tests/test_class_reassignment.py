@@ -536,8 +536,8 @@ def test_reassign_delete_reports_blocking_historical_references(client: TestClie
     assert "blocked" in execute.json()["detail"].lower()
 
 
-def test_reassign_delete_deletes_source_after_safe_reassignment(client: TestClient) -> None:
-    project = create_project(client, name="Delete Success")
+def test_reassign_delete_protects_source_in_frozen_references(client: TestClient) -> None:
+    project = create_project(client, name="Protect frozen history")
     source_class = create_label_class(
         client,
         project["id"],
@@ -563,11 +563,12 @@ def test_reassign_delete_deletes_source_after_safe_reassignment(client: TestClie
 
     preview = client.post(
         f"/api/v1/projects/{project['id']}/classes/{source_class['id']}/reassign-delete/preview",
-        json={"target_class_id": target_class["id"], "notes": "Safe delete"},
+        json={"target_class_id": target_class["id"], "notes": "Attempt physical deletion"},
     )
     assert preview.status_code == 201, preview.text
     preview_payload = preview.json()
-    assert preview_payload["plan"]["blockers"] == []
+    groups = {group["key"] for group in preview_payload["plan"]["blocking_records"]}
+    assert {"dataset_versions", "model_registrations", "annotation_history"} <= groups
 
     execute = client.post(
         f"/api/v1/projects/{project['id']}/classes/{source_class['id']}/reassign-delete",
@@ -576,14 +577,10 @@ def test_reassign_delete_deletes_source_after_safe_reassignment(client: TestClie
             "preview_checksum": preview_payload["preview_checksum"],
         },
     )
-    assert execute.status_code == 200, execute.text
-    execute_payload = execute.json()
-    assert execute_payload["status"] == "completed"
-    assert execute_payload["final_state"] == "reassigned_and_deleted"
-    assert execute_payload["source_class"]["name"] == source_class["name"]
+    assert execute.status_code == 409, execute.text
 
     with Session(cast(FastAPI, client.app).state.engine) as session:
-        assert session.get(LabelClass, source_class["id"]) is None
+        assert session.get(LabelClass, source_class["id"]) is not None
         active_annotation = session.get(Annotation, "annotation-active")
         pending_proposal = session.get(PredictionProposal, "proposal-pending")
         open_issue = session.get(QualityControlIssue, "qc-issue-open")
@@ -599,10 +596,10 @@ def test_reassign_delete_deletes_source_after_safe_reassignment(client: TestClie
         assert dataset_version is not None
         assert model is not None
         assert operation is not None
-        assert active_annotation.label_class_id == target_class["id"]
-        assert pending_proposal.label_class_id == target_class["id"]
-        assert open_issue.class_ids_json == [target_class["id"]]
-        assert pending_item.label_class_ids_json == [target_class["id"]]
+        assert active_annotation.label_class_id == source_class["id"]
+        assert pending_proposal.label_class_id == source_class["id"]
+        assert open_issue.class_ids_json == [source_class["id"]]
+        assert pending_item.label_class_ids_json == [source_class["id"]]
         assert dataset_version.class_map_json[0]["id"] == source_class["id"]
         assert model.class_map_json["mapping"][source_class["name"]] == source_class["id"]
-        assert operation.status == "completed"
+        assert operation.status == "failed"
