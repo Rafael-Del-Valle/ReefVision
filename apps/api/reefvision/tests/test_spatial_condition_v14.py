@@ -1,11 +1,18 @@
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.jobs.project_exchange import process_project_exchange_export_job
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project
+from reefvision.tests.test_scientific_project_exchange import (
+    export_archive,
+    import_archive,
+    rewrite,
+)
 
 _RUBRIC = {
     "rubric_id": "condition-fixture",
@@ -256,3 +263,149 @@ def test_project_exchange_preserves_condition_chain_and_literal_reference(
     assert reopened_review["previous_revision_id"] == reopened_observation["id"]
     assert reopened_review["decision"] == accepted.json()["decision"]
     assert reopened_review["resolved_label"] == "fixture-alpha"
+
+
+@pytest.mark.parametrize("inconsistent_report", [False, True])
+def test_exchange_binds_historical_workflow_report_to_condition_ledger(
+    client: TestClient, test_settings, inconsistent_report: bool
+) -> None:
+    project_id, asset_path, asset = _asset(client)
+    scope = f"{asset_path}/condition-observations"
+    before = client.post(scope, json=_observation(asset, reference_evidence=asset["id"]))
+    assert before.status_code == 201, before.text
+    reviewed = client.post(
+        f"{scope}/{before.json()['id']}/decisions", json=_decision(decision="agree", label=None)
+    )
+    assert reviewed.status_code == 201, reviewed.text
+    revision_id = reviewed.json()["id"]
+    graph = {
+        "graph_id": "pinned-condition-exchange",
+        "name": "Portable condition receipt",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "condition",
+                "node_type": "spatial_condition_report",
+                "parameters": {"asset_id": asset["id"], "revision_id": revision_id},
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "condition-source",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "condition",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    base = f"/api/v1/projects/{project_id}"
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    queued = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert queued.status_code == 202, queued.text
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, queued.json()["job_id"]
+    )
+    workflow_path = f"/api/v1/workflow-runs/{queued.json()['id']}"
+    original_run = client.get(workflow_path).json()
+    assert original_run["run"]["status"] == "succeeded"
+    [original_artifact] = [
+        item
+        for item in original_run["artifacts"]
+        if item["data_type"] == "spatial_condition_report"
+    ]
+
+    metadata = client.post(
+        f"{asset_path}/metadata-revisions",
+        json={"coordinate_unit": "unitless", "created_by_identity": "fixture-operator"},
+    )
+    assert metadata.status_code == 201, metadata.text
+    report_url = f"{scope}/{revision_id}/report"
+    original_report = client.get(report_url).json()
+    assert all(item["stale_source_metadata"] for item in original_report["revisions"])
+    assert not any(
+        item["stale_source_metadata"] for item in original_artifact["payload_json"]["revisions"]
+    )
+    raw = export_archive(client, test_settings, project_id)
+
+    if inconsistent_report:
+
+        def change(_manifest, sections) -> None:
+            [artifact] = [
+                item
+                for item in sections["workflow_artifacts"]
+                if item["data_type"] == "spatial_condition_report"
+            ]
+            artifact["payload_json"]["revisions"][-1]["resolved_label"] = "fixture-beta"
+            artifact["payload_sha256"] = canonical_json_sha256(artifact["payload_json"])
+            producer = next(
+                row
+                for row in sections["workflow_node_runs"]
+                if row["id"] == artifact["producer_node_run_id"]
+            )
+            for output in producer["result_json"]["outputs"]:
+                if output["artifact_id"] == artifact["id"]:
+                    output["payload_sha256"] = artifact["payload_sha256"]
+
+        projects_before = client.get("/api/v1/projects").json()
+        dirs_before = set((test_settings.resolved_data_dir / "projects").iterdir())
+        refused = import_archive(client, rewrite(raw, change))
+        assert refused.status_code == 400, refused.text
+        assert "Condition workflow report" in refused.json()["detail"]
+        assert client.get("/api/v1/projects").json() == projects_before
+        assert set((test_settings.resolved_data_dir / "projects").iterdir()) == dirs_before
+        assert client.get(report_url).json() == original_report
+        assert client.get(workflow_path).json() == original_run
+        return
+
+    restored = import_archive(client, raw)
+    assert restored.status_code == 201, restored.text
+    restored_base = f"/api/v1/projects/{restored.json()['project_id']}"
+    [local_asset] = client.get(f"{restored_base}/spatial/assets").json()
+    assert local_asset["id"] != asset["id"]
+    assert local_asset["sha256"] == asset["sha256"]
+    provenance = restored.json()["package"]["options_json"]
+    assert provenance["source_project_id"] == project_id
+    assert provenance["id_map"][asset["id"]] == local_asset["id"]
+    local_scope = f"{restored_base}/spatial/assets/{local_asset['id']}/condition-observations"
+    _, local_review = client.get(local_scope).json()
+    [local_run] = client.get(f"{restored_base}/workflow-runs").json()
+    detail = client.get(f"/api/v1/workflow-runs/{local_run['id']}").json()
+    [local_artifact] = [
+        item for item in detail["artifacts"] if item["data_type"] == "spatial_condition_report"
+    ]
+    snapshot = local_artifact["payload_json"]
+    assert snapshot["revision_id"] == local_review["id"]
+    assert local_review["stale_source_metadata"] is True
+    assert snapshot["revisions"][-1]["stale_source_metadata"] is False
+    assert snapshot["revisions"][-1]["asset_id"] == local_asset["id"]
+    assert snapshot["revisions"][-1]["resolved_label"] == "fixture-alpha"
+    assert snapshot["revisions"][-1]["observation"]["reference_evidence"] == asset["id"]
+    assert client.get(f"{restored_base}/spatial/assets/{asset['id']}").status_code == 404
+    assert client.get(report_url).json() == original_report
+
+
+def test_exchange_restores_multiple_condition_rubric_versions(
+    client: TestClient, test_settings
+) -> None:
+    project_id, asset_path, asset = _asset(client)
+    scope = f"{asset_path}/condition-observations"
+    original = client.post(scope, json=_observation(asset))
+    assert original.status_code == 201, original.text
+    disputed = client.post(f"{scope}/{original.json()['id']}/decisions", json=_decision())
+    assert disputed.status_code == 201, disputed.text
+    replacement = _RUBRIC | {"version": "fixture-v2", "reference": "Revised fixture protocol"}
+    second = client.post(scope, json=_observation(asset, rubric=replacement))
+    assert second.status_code == 201, second.text
+
+    restored = import_archive(client, export_archive(client, test_settings, project_id))
+    assert restored.status_code == 201, restored.json().get("detail")
+    local_scope = f"/api/v1/projects/{restored.json()['project_id']}/spatial/assets"
+    [local_asset] = client.get(local_scope).json()
+    rows = client.get(f"{local_scope}/{local_asset['id']}/condition-observations").json()
+    assert [item["observation"]["rubric"] for item in rows] == [_RUBRIC, _RUBRIC, replacement]
+    assert rows[1]["previous_revision_id"] == rows[0]["id"]
+    assert rows[1]["decision"] == disputed.json()["decision"]
+    assert rows[1]["resolved_label"] is None
