@@ -337,12 +337,14 @@ function Invoke-ReefVisionWorkspaceAcceptance {
     }
     $sha = '^[a-f0-9]{64}$'
     $classes = $result.class_lifecycle
-    if ($classes.frozen.archive_sha256 -notmatch $sha -or $classes.frozen.manifest_sha256 -notmatch $sha -or
+    if ($classes.explicit_confirmation -ne $true -or $classes.frozen.archive_sha256 -notmatch $sha -or
+        $classes.frozen.manifest_sha256 -notmatch $sha -or
         $classes.original_sha256 -notmatch $sha -or $classes.reassign.final_revision -le $classes.reassign.original_revision) {
         throw 'Class lifecycle receipt lacks the verified original, revised annotation or frozen export.'
     }
     $qc = $result.quality_control
-    if ($qc.dataset_manifest_sha256 -notmatch $sha -or $qc.graph_sha256 -notmatch $sha -or
+    if ($qc.explicit_completion_confirmed -ne $true -or
+        $qc.dataset_manifest_sha256 -notmatch $sha -or $qc.graph_sha256 -notmatch $sha -or
         @($qc.runs).Count -ne 2 -or $qc.runs[0].id -eq $qc.runs[1].id -or
         $qc.runs[0].payload_sha256 -notmatch $sha -or $qc.runs[1].payload_sha256 -notmatch $sha) {
         throw 'QC receipt lacks the frozen dataset or both saved ranked review runs.'

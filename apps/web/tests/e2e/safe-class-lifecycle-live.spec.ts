@@ -122,7 +122,6 @@ test("reviews class edits and preserves frozen exports after reopening", async (
     });
   const button = (classRow: Locator, label: string) =>
     classRow.getByRole("button", { name: label, exact: true });
-  const confirm = () => page.once("dialog", (dialog) => dialog.accept());
 
   await openClasses();
   const protectedRow = row(protectedLabel.name);
@@ -168,15 +167,48 @@ test("reviews class edits and preserves frozen exports after reopening", async (
   await expect(button(renamed, "Run reassign")).toBeEnabled();
   await renamed.getByText("Records in this preview", { exact: true }).click();
   await expect(renamed.getByText(box.id, { exact: true })).toBeVisible();
-  confirm();
-  await button(renamed, "Run reassign").click();
+  const reassign = button(renamed, "Run reassign");
+  await reassign.click();
+  const reassignConfirmation = page.getByRole("alertdialog", {
+    name: "Reassign class",
+  });
+  await expect(
+    reassignConfirmation.getByRole("button", { name: "Cancel" }),
+  ).toBeFocused();
+  expect((await get(annotation)).image.annotation_revision).toBe(
+    before.image.annotation_revision,
+  );
+  await page.keyboard.press("Escape");
+  await expect(reassignConfirmation).toHaveCount(0);
+  await expect(reassign).toBeFocused();
+  expect((await get(annotation)).image.annotation_revision).toBe(
+    before.image.annotation_revision,
+  );
+  await reassign.click();
+  await reassignConfirmation
+    .getByRole("button", { name: "Run reassign" })
+    .click();
   await expect(
     renamed.getByText("Latest operation", { exact: true }),
   ).toBeVisible();
   await button(unused, "Usage").click();
   await expect(button(unused, "Delete unused")).toBeEnabled();
-  confirm();
   await button(unused, "Delete unused").click();
+  const deleteConfirmation = page.getByRole("alertdialog", {
+    name: "Delete unused class",
+  });
+  await expect(deleteConfirmation).toBeVisible();
+  await deleteConfirmation.getByRole("button", { name: "Cancel" }).click();
+  await expect(unused).toBeVisible();
+  expect(
+    (await get(`${root}/classes`)).some(
+      (value: { id: string }) => value.id === empty.id,
+    ),
+  ).toBe(true);
+  await button(unused, "Delete unused").click();
+  await deleteConfirmation
+    .getByRole("button", { name: "Delete unused class" })
+    .click();
   await expect(unused).toHaveCount(0);
 
   await openClasses();
@@ -245,6 +277,7 @@ test("reviews class edits and preserves frozen exports after reopening", async (
         surface: desktop.surface,
         project_id: project.id,
         original_sha256: digest(image),
+        explicit_confirmation: true,
         reassign: {
           annotation_id: box.id,
           from: source.id,

@@ -17,6 +17,7 @@ import {
   type LabelClass,
   type Project,
 } from "../../api/client";
+import { useActionConfirmation } from "../../components/ui/ActionConfirmation";
 
 type ClassPreviewSelection = {
   targetClassId: string;
@@ -303,6 +304,7 @@ function ClassRow({
   const [color, setColor] = useState(labelClass.display_color);
   const [description, setDescription] = useState(labelClass.description ?? "");
   const [showUsage, setShowUsage] = useState(false);
+  const { confirm, confirmationDialog } = useActionConfirmation();
   const [reassignNotes, setReassignNotes] = useState("");
   // An edit invalidates prior researcher approval, even after value reversion.
   const [previewEpoch, setPreviewEpoch] = useState(0);
@@ -553,6 +555,7 @@ function ClassRow({
 
   return (
     <li className={`class-row ${labelClass.is_active ? "" : "inactive"}`}>
+      {confirmationDialog}
       <div className="class-row-header">
         <span className="class-index">{labelClass.class_index}</span>
         <div className="class-row-title">
@@ -634,11 +637,14 @@ function ClassRow({
           type="button"
           className="danger-ghost"
           disabled={!canDelete || deleteUnused.isPending}
-          onClick={() => {
+          onClick={async () => {
             if (
-              window.confirm(
-                `Delete unused class "${labelClass.name}"? This cannot be undone.`,
-              )
+              await confirm({
+                title: "Delete unused class",
+                message: `Delete "${labelClass.name}" permanently?`,
+                confirmLabel: "Delete unused class",
+                destructive: true,
+              })
             ) {
               deleteUnused.mutate();
             }
@@ -698,15 +704,18 @@ function ClassRow({
           type="button"
           className="secondary"
           disabled={!canMerge}
-          onClick={() => {
+          onClick={async () => {
             if (
               selectedMergeTarget !== undefined &&
               mergeUsageCounts !== null &&
               typeof mergeUsageFingerprint === "string" &&
               /^[0-9a-f]{64}$/.test(mergeUsageFingerprint) &&
-              window.confirm(
-                `Merge source "${labelClass.name}" (class ${labelClass.class_index}; scientific name ${labelClass.scientific_name ?? "unspecified"}; state ${labelClass.state_name ?? "unspecified"}) into target "${selectedMergeTarget.name}" (class ${selectedMergeTarget.class_index}; scientific name ${selectedMergeTarget.scientific_name ?? "unspecified"}; state ${selectedMergeTarget.state_name ?? "unspecified"})? ${usage.data?.total_references ?? 0} reviewed class references include ${usage.data?.immutable_reference_count ?? 0} immutable references. Mutable references will be reassigned, historical records kept, and the source archived. Confirm only after inspecting Usage and the target identity.`,
-              )
+              (await confirm({
+                title: "Merge classes",
+                message: `Merge "${labelClass.name}" (class ${labelClass.class_index}, scientific name ${labelClass.scientific_name ?? "unspecified"}, state ${labelClass.state_name ?? "unspecified"}) into "${selectedMergeTarget.name}" (class ${selectedMergeTarget.class_index}, scientific name ${selectedMergeTarget.scientific_name ?? "unspecified"}, state ${selectedMergeTarget.state_name ?? "unspecified"})? The reviewed ${usage.data?.total_references ?? 0} references include ${usage.data?.immutable_reference_count ?? 0} immutable references. ReefVision will reassign mutable records, preserve historical records, and archive the source class.`,
+                confirmLabel: "Merge class",
+                destructive: true,
+              }))
             ) {
               merge.mutate({
                 targetClassId: selectedMergeTarget.id,
@@ -806,11 +815,13 @@ function ClassRow({
               runReassign.isPending ||
               runReassignDelete.isPending
             }
-            onClick={() => {
+            onClick={async () => {
               if (
-                window.confirm(
-                  `Run a class reassignment from "${labelClass.name}" into the selected target class?`,
-                )
+                await confirm({
+                  title: "Reassign class",
+                  message: `Run the previewed reassignment from "${labelClass.name}" into the selected class?`,
+                  confirmLabel: "Run reassign",
+                })
               ) {
                 runReassign.mutate();
               }
@@ -848,11 +859,14 @@ function ClassRow({
               runReassign.isPending ||
               runReassignDelete.isPending
             }
-            onClick={() => {
+            onClick={async () => {
               if (
-                window.confirm(
-                  `Run Reassign and Delete for "${labelClass.name}"? ReefVision will only delete the class after all safe mutable reassignment work completes.`,
-                )
+                await confirm({
+                  title: "Reassign and delete class",
+                  message: `ReefVision will reassign the reviewed records and permanently delete "${labelClass.name}" only after the reassignment succeeds.`,
+                  confirmLabel: "Run Reassign and Delete",
+                  destructive: true,
+                })
               ) {
                 runReassignDelete.mutate();
               }

@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -26,6 +27,14 @@ import {
 } from "../../api/client";
 import { ReviewQueueDashboard } from "./ReviewQueueDashboard";
 import { reviewQueuesQueryKey } from "./reviewQueueState";
+
+function approveCompletion() {
+  fireEvent.click(
+    within(
+      screen.getByRole("alertdialog", { name: "Complete QC review" }),
+    ).getByRole("button", { name: "Complete review" }),
+  );
+}
 
 vi.mock("../../api/client", () => ({
   completeReviewQueueItem: vi.fn(),
@@ -849,45 +858,73 @@ describe("ReviewQueueDashboard scope isolation", () => {
     vi.mocked(startReviewQueueItem).mockResolvedValue(
       {} as Awaited<ReturnType<typeof startReviewQueueItem>>,
     );
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
-    try {
-      mount();
-      const complete = await screen.findByRole("button", {
-        name: "Mark complete",
-      });
-      const start = screen.getByRole("button", { name: "Start review" });
-      expect(complete.hasAttribute("disabled")).toBe(true);
-      expect(start.hasAttribute("disabled")).toBe(true);
-      fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
-        target: { value: "  reef-scientist  " },
-      });
-      expect(complete.hasAttribute("disabled")).toBe(false);
-      fireEvent.click(complete);
-      expect(confirm).toHaveBeenCalledTimes(1);
-      expect(completeReviewQueueItem).not.toHaveBeenCalled();
+    mount();
+    const complete = await screen.findByRole("button", {
+      name: "Mark complete",
+    });
+    const start = screen.getByRole("button", { name: "Start review" });
+    expect(complete.hasAttribute("disabled")).toBe(true);
+    expect(start.hasAttribute("disabled")).toBe(true);
+    fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
+      target: { value: "  reef-scientist  " },
+    });
+    expect(complete.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(complete);
+    const confirmation = await screen.findByRole("alertdialog", {
+      name: "Complete QC review",
+    });
+    expect(confirmation).toHaveTextContent(/does not verify model predictions/);
+    expect(completeReviewQueueItem).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(confirmation).getByRole("button", { name: "Cancel" }),
+    );
+    expect(completeReviewQueueItem).not.toHaveBeenCalled();
 
-      confirm.mockReturnValue(true);
-      fireEvent.click(complete);
-      await waitFor(() =>
-        expect(completeReviewQueueItem).toHaveBeenCalledWith(
-          "item-1",
-          "reef-scientist",
-          true,
-        ),
-      );
-      expect(confirm.mock.calls[0][0]).toMatch(
-        /does not verify model predictions/,
-      );
-      fireEvent.click(start);
-      await waitFor(() =>
-        expect(startReviewQueueItem).toHaveBeenCalledWith(
-          "item-1",
-          "reef-scientist",
-        ),
-      );
-    } finally {
-      confirm.mockRestore();
-    }
+    fireEvent.click(complete);
+    approveCompletion();
+    await waitFor(() =>
+      expect(completeReviewQueueItem).toHaveBeenCalledWith(
+        "item-1",
+        "reef-scientist",
+        true,
+      ),
+    );
+    fireEvent.click(start);
+    await waitFor(() =>
+      expect(startReviewQueueItem).toHaveBeenCalledWith(
+        "item-1",
+        "reef-scientist",
+      ),
+    );
+  });
+
+  it("ignores a delayed confirmation from another project", async () => {
+    vi.mocked(getReviewQueueItems).mockImplementation(async (id) => ({
+      items: [reviewItem(id === "queue-a" ? "item-a" : "item-b", "image-1")],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      pages: 1,
+    }));
+    const { rerender, view } = mount();
+    const complete = await screen.findByRole("button", {
+      name: "Mark complete",
+    });
+    fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
+      target: { value: "Old project reviewer" },
+    });
+    fireEvent.click(complete);
+    expect(screen.getByRole("alertdialog")).toBeVisible();
+    rerender(view("project-b"));
+    await waitFor(() =>
+      expect(getReviewQueueItems).toHaveBeenCalledWith(
+        "queue-b",
+        expect.any(Object),
+        expect.anything(),
+      ),
+    );
+    await act(async () => approveCompletion());
+    expect(completeReviewQueueItem).not.toHaveBeenCalled();
   });
 
   it("keeps a failed quick-modal QC completion visible for researcher verification", async () => {
@@ -901,37 +938,33 @@ describe("ReviewQueueDashboard scope isolation", () => {
     vi.mocked(completeReviewQueueItem).mockRejectedValueOnce(
       new Error("Audit event conflict"),
     );
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-    try {
-      mount();
-      fireEvent.click(
-        await screen.findByRole("button", { name: "Quick review" }),
-      );
-      fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
-        target: { value: "reef-scientist" },
-      });
-      fireEvent.click(
-        screen.getByRole("button", { name: "Quick modal complete" }),
-      );
-      await waitFor(() =>
-        expect(
-          screen
-            .getAllByRole("alert")
-            .some((alert) => alert.textContent === "Audit event conflict"),
-        ).toBe(true),
-      );
+    mount();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Quick review" }),
+    );
+    fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
+      target: { value: "reef-scientist" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Quick modal complete" }),
+    );
+    approveCompletion();
+    await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "Quick modal complete" }),
-      ).toBeTruthy();
-      expect(screen.getByText("pending")).toBeTruthy();
-      expect(completeReviewQueueItem).toHaveBeenCalledWith(
-        "item-quick",
-        "reef-scientist",
-        true,
-      );
-    } finally {
-      confirm.mockRestore();
-    }
+        screen
+          .getAllByRole("alert")
+          .some((alert) => alert.textContent === "Audit event conflict"),
+      ).toBe(true),
+    );
+    expect(
+      screen.getByRole("button", { name: "Quick modal complete" }),
+    ).toBeTruthy();
+    expect(screen.getByText("pending")).toBeTruthy();
+    expect(completeReviewQueueItem).toHaveBeenCalledWith(
+      "item-quick",
+      "reef-scientist",
+      true,
+    );
   });
 
   it("requires a reviewer label and confirmation from the quick-review modal", async () => {
@@ -945,40 +978,40 @@ describe("ReviewQueueDashboard scope isolation", () => {
     vi.mocked(completeReviewQueueItem).mockResolvedValue(
       {} as Awaited<ReturnType<typeof completeReviewQueueItem>>,
     );
-    const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
-    try {
-      mount();
-      fireEvent.click(
-        await screen.findByRole("button", { name: "Quick review" }),
-      );
-      const quickComplete = await screen.findByRole("button", {
-        name: "Quick modal complete",
-      });
-      fireEvent.click(quickComplete);
-      expect(alert).toHaveBeenCalledTimes(1);
-      expect(completeReviewQueueItem).not.toHaveBeenCalled();
+    mount();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Quick review" }),
+    );
+    const quickComplete = await screen.findByRole("button", {
+      name: "Quick modal complete",
+    });
+    fireEvent.click(quickComplete);
+    expect(
+      screen.getByText(
+        "Enter a reviewer label before completing this QC item.",
+      ),
+    ).toBeInTheDocument();
+    expect(completeReviewQueueItem).not.toHaveBeenCalled();
 
-      fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
-        target: { value: "  coral-reviewer  " },
-      });
-      fireEvent.click(quickComplete);
-      expect(confirm).toHaveBeenCalledTimes(1);
-      expect(completeReviewQueueItem).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
+      target: { value: "  coral-reviewer  " },
+    });
+    fireEvent.click(quickComplete);
+    const confirmation = screen.getByRole("alertdialog", {
+      name: "Complete QC review",
+    });
+    fireEvent.keyDown(confirmation, { key: "Escape" });
+    expect(completeReviewQueueItem).not.toHaveBeenCalled();
 
-      confirm.mockReturnValue(true);
-      fireEvent.click(quickComplete);
-      await waitFor(() =>
-        expect(completeReviewQueueItem).toHaveBeenCalledWith(
-          "item-quick",
-          "coral-reviewer",
-          true,
-        ),
-      );
-    } finally {
-      alert.mockRestore();
-      confirm.mockRestore();
-    }
+    fireEvent.click(quickComplete);
+    approveCompletion();
+    await waitFor(() =>
+      expect(completeReviewQueueItem).toHaveBeenCalledWith(
+        "item-quick",
+        "coral-reviewer",
+        true,
+      ),
+    );
   });
   it.each(["generate", "regenerate"] as const)(
     "does not switch away from protected coral coordination when a pending %s completes",
@@ -1318,50 +1351,46 @@ describe("ReviewQueueDashboard scope isolation", () => {
       page_size: 25,
       pages: 1,
     }));
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-    try {
-      const { rerender, view } = mount();
-      fireEvent.click(
-        await screen.findByRole("button", { name: "Quick review" }),
+    const { rerender, view } = mount();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Quick review" }),
+    );
+    fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
+      target: { value: "reviewer-a" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Quick modal complete" }),
+    );
+    approveCompletion();
+    await waitFor(() =>
+      expect(completeReviewQueueItem).toHaveBeenCalledWith(
+        "item-a",
+        "reviewer-a",
+        true,
+      ),
+    );
+    rerender(view("project-b"));
+    await waitFor(() =>
+      expect(getReviewQueueItems).toHaveBeenCalledWith(
+        "queue-b",
+        expect.any(Object),
+        expect.anything(),
+      ),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Quick review" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Quick modal complete" }),
+    ).toBeTruthy();
+    await act(async () => {
+      resolveComplete(
+        {} as Awaited<ReturnType<typeof completeReviewQueueItem>>,
       );
-      fireEvent.change(screen.getByLabelText("Single-item reviewer label"), {
-        target: { value: "reviewer-a" },
-      });
-      fireEvent.click(
-        screen.getByRole("button", { name: "Quick modal complete" }),
-      );
-      await waitFor(() =>
-        expect(completeReviewQueueItem).toHaveBeenCalledWith(
-          "item-a",
-          "reviewer-a",
-          true,
-        ),
-      );
-      rerender(view("project-b"));
-      await waitFor(() =>
-        expect(getReviewQueueItems).toHaveBeenCalledWith(
-          "queue-b",
-          expect.any(Object),
-          expect.anything(),
-        ),
-      );
-      fireEvent.click(
-        await screen.findByRole("button", { name: "Quick review" }),
-      );
-      expect(
-        screen.getByRole("button", { name: "Quick modal complete" }),
-      ).toBeTruthy();
-      await act(async () => {
-        resolveComplete(
-          {} as Awaited<ReturnType<typeof completeReviewQueueItem>>,
-        );
-        await pendingComplete;
-      });
-      expect(
-        screen.getByRole("button", { name: "Quick modal complete" }),
-      ).toBeTruthy();
-    } finally {
-      confirm.mockRestore();
-    }
+      await pendingComplete;
+    });
+    expect(
+      screen.getByRole("button", { name: "Quick modal complete" }),
+    ).toBeTruthy();
   });
 });

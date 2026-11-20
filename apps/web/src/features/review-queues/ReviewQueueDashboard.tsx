@@ -20,6 +20,7 @@ import {
   type ReviewQueueRecord,
   type ReviewScoreWeights,
 } from "../../api/client";
+import { useActionConfirmation } from "../../components/ui/ActionConfirmation";
 import { QuickConfidenceReviewDialog } from "./QuickConfidenceReviewDialog";
 import { ReviewQueueBulkTriage } from "./ReviewQueueBulkTriage";
 import { ReviewQueueCoordinationPanel } from "./ReviewQueueCoordinationPanel";
@@ -162,6 +163,8 @@ export function ReviewQueueDashboard({
   const [reviewState, setReviewState] = useState("");
   const [modelId, setModelId] = useState("");
   const [singleItemActor, setSingleItemActor] = useState("");
+  const [missingCompletionActor, setMissingCompletionActor] = useState(false);
+  const { confirm, confirmationDialog } = useActionConfirmation();
   // Keep raw numeric inputs: clearing a weight must not silently become zero
   // (Number("") === 0). Explicit zero remains a valid weight.
   const [weightInputs, setWeightInputs] = useState<
@@ -275,6 +278,8 @@ export function ReviewQueueDashboard({
     (scopeProjectId === project.id && protectedQueueId === selectedQueueId
       ? protectedQueueId
       : "");
+  const currentQueueId = useRef(activeQueueId);
+  currentQueueId.current = activeQueueId;
   const items = useQuery({
     queryKey: reviewQueueItemsQueryKey(
       activeQueueId,
@@ -459,6 +464,47 @@ export function ReviewQueueDashboard({
       completeReviewQueueItem(request.itemId, request.actor, true),
     onSuccess: (_, request) => invalidateItemRequest(request),
   });
+  const completionInFlight = useRef(false);
+  async function requestCompletion(itemId: string, closeQuickReview = false) {
+    const request = itemRequest(itemId);
+    if (!request.actor) {
+      setMissingCompletionActor(true);
+      return;
+    }
+    setMissingCompletionActor(false);
+    if (!request.queueId || completionInFlight.current) return;
+    const approved = await confirm({
+      title: "Complete QC review",
+      message:
+        "Confirm that you personally reviewed this queue item. Completion does not verify model predictions or annotations.",
+      confirmLabel: "Complete review",
+    });
+    if (
+      !approved ||
+      completionInFlight.current ||
+      !sameQueueScope(currentScope.current, request) ||
+      currentQueueId.current !== request.queueId
+    ) {
+      return;
+    }
+    completionInFlight.current = true;
+    completeItem.mutate(request, {
+      onSuccess: () => {
+        if (
+          closeQuickReview &&
+          sameQueueScope(currentScope.current, request) &&
+          currentQueueId.current === request.queueId
+        ) {
+          setQuickReviewItemId((current) =>
+            current === request.itemId ? null : current,
+          );
+        }
+      },
+      onSettled: () => {
+        completionInFlight.current = false;
+      },
+    });
+  }
   const skipItem = useMutation({
     mutationFn: async (request: ItemMutationRequest) => {
       const reason = window.prompt("Skip reason");
@@ -964,16 +1010,7 @@ export function ReviewQueueDashboard({
                           !singleItemActor.trim() ||
                           completeItem.isPending
                         }
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              "Confirm you personally reviewed this queue item. " +
-                                "Completing a QC queue item does not verify model predictions or annotations.",
-                            )
-                          ) {
-                            completeItem.mutate(itemRequest(item.id));
-                          }
-                        }}
+                        onClick={() => void requestCompletion(item.id)}
                       >
                         Mark complete
                       </button>
@@ -1067,44 +1104,24 @@ export function ReviewQueueDashboard({
             setQuickReviewItemId(null);
             onOpenImage(quickReviewItem);
           }}
-          onMarkComplete={() => {
-            if (!singleItemActor.trim()) {
-              window.alert(
-                "Enter a reviewer label before completing this QC item.",
-              );
-              return;
-            }
-            if (
-              window.confirm(
-                "Confirm you personally reviewed this queue item. " +
-                  "Completing QC does not verify predictions or annotations.",
-              )
-            ) {
-              const request = itemRequest(quickReviewItem.id);
-              completeItem.mutate(request, {
-                onSuccess: () => {
-                  if (
-                    sameQueueScope(currentScope.current, request) &&
-                    activeQueueId === request.queueId
-                  ) {
-                    setQuickReviewItemId(null);
-                  }
-                },
-              });
-            }
-          }}
+          onMarkComplete={() =>
+            void requestCompletion(quickReviewItem.id, true)
+          }
           markingComplete={completeItem.isPending}
           completionError={
-            completeItem.isError &&
-            completeItem.variables?.itemId === quickReviewItem.id &&
-            completeItem.variables?.queueId === activeQueueId &&
-            completeItem.variables !== undefined &&
-            sameQueueScope(currentScope.current, completeItem.variables)
-              ? completeItem.error.message
-              : null
+            missingCompletionActor && !singleItemActor.trim()
+              ? "Enter a reviewer label before completing this QC item."
+              : completeItem.isError &&
+                  completeItem.variables?.itemId === quickReviewItem.id &&
+                  completeItem.variables?.queueId === activeQueueId &&
+                  completeItem.variables !== undefined &&
+                  sameQueueScope(currentScope.current, completeItem.variables)
+                ? completeItem.error.message
+                : null
           }
         />
       )}
+      {confirmationDialog}
     </section>
   );
 }
