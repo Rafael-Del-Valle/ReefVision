@@ -342,3 +342,99 @@ def test_unrepresentable_volume_after_large_scale_is_still_withheld() -> None:
     assert "enclosed_volume_zero_or_underflow" in result["qc_warnings"]
     assert "enclosed_volume_source_unit_numeric_recovery" not in result["qc_warnings"]
     assert result["provenance"]["calibration_verified"] is False
+
+
+def test_cubic_volume_subresolution_scale_qc_standalone_and_saved_graph(
+    client: TestClient,
+) -> None:
+    """Positive volume with rounded-equal bounds must not appear exact."""
+    params = {
+        **_params(1e-8),
+        "relative_scale_uncertainty": 1e-17,
+        "specimen_id": "synthetic-unverified-cubic-precision",
+        "observation_id": "tiny-relative-uncertainty",
+        "coordinate_frame_id": "source-frame-not-registered",
+    }
+    direct = measure_mesh_preview(**params)
+    nominal = direct["enclosed_volume_m3"]
+    assert nominal == pytest.approx(1 / 6)
+    assert nominal > 0
+    assert (1 - 1e-17) ** 3 == (1 + 1e-17) ** 3
+    assert direct["enclosed_volume_scale_interval_m3"] is None
+    assert direct["edge_connected_patch_enclosed_volume_scale_intervals_m3"] == [None]
+    warning = "enclosed_volume_scale_interval_numeric_unrepresentable"
+    assert warning in direct["qc_warnings"]
+    assert direct["measurement_status"] == "caller_supplied_unverified"
+    assert direct["provenance"]["calibration_verified"] is False
+    assert direct["provenance"]["specimen_identity_verified"] is False
+    assert direct["provenance"]["coordinate_registration_verified"] is False
+
+    # An explicit zero error, an unknown error, and a physically valid 100%
+    # lower bound must remain distinct from rounded-away positive error.
+    exact = measure_mesh_preview(**{**params, "relative_scale_uncertainty": 0.0})
+    assert exact["enclosed_volume_scale_interval_m3"] == [nominal, nominal]
+    assert warning not in exact["qc_warnings"]
+    unknown = measure_mesh_preview(**{**params, "relative_scale_uncertainty": None})
+    assert unknown["enclosed_volume_scale_interval_m3"] is None
+    assert unknown["edge_connected_patch_enclosed_volume_scale_intervals_m3"] is None
+    assert warning not in unknown["qc_warnings"]
+    full = measure_mesh_preview(**{**params, "relative_scale_uncertainty": 1.0})
+    assert full["enclosed_volume_scale_interval_m3"] == [0.0, nominal * 8]
+    assert warning not in full["qc_warnings"]
+
+    project_id = str(create_project(client, "Provisional cubic precision review")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert response.status_code == 200, response.text
+    standalone = response.json()
+    assert standalone["enclosed_volume_m3"] == nominal
+    assert standalone["enclosed_volume_scale_interval_m3"] is None
+    assert standalone["edge_connected_patch_enclosed_volume_scale_intervals_m3"] == [None]
+    assert standalone["qc_warnings"] == direct["qc_warnings"]
+    assert standalone["provenance"]["calibration_verified"] is False
+    assert standalone["provenance"]["specimen_identity_verified"] is False
+    assert standalone["provenance"]["coordinate_registration_verified"] is False
+
+    graph = {
+        "graph_id": "subresolution-cubic-scale-v14",
+        "name": "Review numerically unresolved cubic uncertainty",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifacts = [
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        ]
+        assert len(artifacts) == 1
+        assert artifacts[0]["payload_json"] == standalone
+        hashes.append(artifacts[0]["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
