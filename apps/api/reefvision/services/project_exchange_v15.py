@@ -7,8 +7,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import ModelRuntimeSelection, StudyDesignRevision
+from reefvision.db.models.reviewer_lab_v15 import ReviewerLabMember
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.model_runtime import RuntimeReceipt
+from reefvision.services.project_exchange_reviewer_lab_v15 import (
+    REVIEWER_LAB_SECTIONS,
+    restore_reviewer_lab_row,
+    validate_reviewer_lab_exchange,
+)
 from reefvision.services.project_exchange_study_v15 import (
     restore_study_row,
     validate_study_exchange,
@@ -17,13 +23,13 @@ from reefvision.storage.datasets import canonical_json_sha256
 
 FORMAT_VERSION = "1.5"
 INTEGRATED_FORMATS = {"1.2", FORMAT_VERSION}
-SECTIONS = ("model_runtime_selections", "study_design_revisions")
+SECTIONS = ("model_runtime_selections", "study_design_revisions", *REVIEWER_LAB_SECTIONS)
 
 
 def has_v15_records(session: Session, project_id: str) -> bool:
     return any(
         session.scalar(select(model.id).where(model.project_id == project_id).limit(1)) is not None
-        for model in (ModelRuntimeSelection, StudyDesignRevision)
+        for model in (ModelRuntimeSelection, StudyDesignRevision, ReviewerLabMember)
     )
 
 
@@ -40,6 +46,7 @@ def validate_v15_exchange(
 ) -> None:
     original_to_local = (origin or {}).get("id_map", {}) if isinstance(origin, dict) else {}
     validate_study_exchange(project_id, sections, original_to_local)
+    validate_reviewer_lab_exchange(sections, project_id=project_id, origin_ids=original_to_local)
     present = any(sections.get(name) for name in (*SECTIONS, "field_capture_batches"))
     if (version == FORMAT_VERSION) != present:
         raise ValidationError(
@@ -85,6 +92,7 @@ def restore_v15_row(
     name: str, row: dict[str, Any], values: dict[str, Any], mapping: dict[str, str]
 ) -> None:
     restore_study_row(name, row, values, mapping)
+    restore_reviewer_lab_row(name, row, values, mapping)
     if name == "model_runtime_selections":
         receipt = RuntimeReceipt.model_validate(row["snapshot_json"])
         previous = row["source_id_map_json"]

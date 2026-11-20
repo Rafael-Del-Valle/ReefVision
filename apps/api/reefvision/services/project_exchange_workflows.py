@@ -33,6 +33,7 @@ from reefvision.services.workflow_provenance import (
     build_workflow_run_provenance,
     verify_succeeded_node_artifacts,
 )
+from reefvision.services.workflow_reviewer_lab_v15 import NODE_TYPE as REVIEWER_LAB_TYPE
 from reefvision.storage.datasets import canonical_json_sha256
 
 # These payloads bind nested, historical hashes to source UUIDs. Preserve them
@@ -49,8 +50,8 @@ HISTORICAL_ARTIFACT_TYPES = frozenset(
         "mesh_longitudinal_comparison",
         "study_design_report",
         "paired_model_report",
-        "reviewer_lab_agreement_report",
         PAIRED_GROWTH_TYPE,
+        REVIEWER_LAB_TYPE,
     }
 )
 

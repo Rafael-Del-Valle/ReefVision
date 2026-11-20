@@ -118,13 +118,17 @@ class ReviewerLabRoles:
             raise NotFoundError("Local reviewer role revision not found")
         return self._public(self._member(revision.member_id), revision)
 
+    def has_access(self, role: ReviewerLabRole) -> bool:
+        return role.active and self.session.get(ReviewerLabCredential, role.id) is not None
+
     def list(self) -> list[ReviewerLabRole]:
         members = self.session.scalars(
             select(ReviewerLabMember)
             .where(ReviewerLabMember.project_id == self.project_id)
             .order_by(ReviewerLabMember.name_key)
         )
-        return [self._public(member, self._latest(member.id)) for member in members]
+        roles = [self._public(member, self._latest(member.id)) for member in members]
+        return [role.model_copy(update={"active": self.has_access(role)}) for role in roles]
 
     def _append(
         self,
@@ -175,6 +179,16 @@ class ReviewerLabRoles:
             if actor and actor.member_id == manager.id and manager.name == name:
                 return actor
             raise ConflictError("A local manager has already been established")
+        name_key = name.casefold()
+        if self.session.scalar(
+            select(ReviewerLabMember.id).where(
+                ReviewerLabMember.project_id == self.project_id,
+                ReviewerLabMember.name_key == name_key,
+            )
+        ):
+            raise ConflictError(
+                "That name is already in the project. Use a distinct local manager name."
+            )
         manager = ReviewerLabMember(
             id=self._manager_id(),
             project_id=self.project_id,

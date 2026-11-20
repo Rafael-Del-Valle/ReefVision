@@ -79,6 +79,11 @@ from reefvision.services.pose_training_datasets import (
     PoseTrainingDatasetService,
 )
 from reefvision.services.project_exchange_field_v15 import FIELD_SECTION_MODELS
+from reefvision.services.review_queue_exchange_checksums import (
+    QUEUE_IMPORT_CHECKSUM_SCHEMA,
+    imported_queue_item_checksum,
+    queue_item_snapshot,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -488,33 +493,14 @@ def _refresh_review_queue_checksums(session: Session, project_id: str) -> None:
         source_queue_checksums = dict(queue.input_checksums_json or {})
         configuration = dict(queue.configuration_json or {})
         configuration["exchange_import"] = {
-            "checksum_schema": "review-queue-item-exchange-import-0001",
+            "checksum_schema": QUEUE_IMPORT_CHECKSUM_SCHEMA,
             "source_queue_input_checksums": source_queue_checksums,
             "source_item_checksums_by_imported_item_id": source_item_checksums,
         }
         queue.configuration_json = configuration
 
         for item in queue_items:
-            item.input_checksum = canonical_json_sha256(
-                {
-                    "schema_version": "review-queue-item-exchange-import-0001",
-                    "review_queue_id": item.review_queue_id,
-                    "project_id": item.project_id,
-                    "dataset_version_id": item.dataset_version_id,
-                    "image_id": item.image_id,
-                    "split": item.split,
-                    "score": item.score,
-                    "rank_position": item.rank_position,
-                    "highest_qc_severity": item.highest_qc_severity,
-                    "label_class_ids": item.label_class_ids_json,
-                    "model_ids": item.model_ids_json,
-                    "related_issue_ids": item.related_issue_ids_json,
-                    "signal_values": item.signal_values_json,
-                    "normalized_signals": item.normalized_signals_json,
-                    "weights": item.weights_json,
-                    "score_breakdown": item.score_breakdown_json,
-                }
-            )
+            item.input_checksum = imported_queue_item_checksum(queue_item_snapshot(item))
 
         queue.input_checksums_json = {
             "queue_scope_sha256": canonical_json_sha256(

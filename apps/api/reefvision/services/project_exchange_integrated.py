@@ -28,6 +28,7 @@ from reefvision.services.project_exchange_comparison import validate_comparison_
 from reefvision.services.project_exchange_event_summary import validate_event_summary_exchange
 from reefvision.services.project_exchange_pose import validate_pose_rows
 from reefvision.services.project_exchange_reports import validate_report_exchange
+from reefvision.services.project_exchange_reviewer_lab_v15 import REVIEWER_LAB_PARENTS
 from reefvision.services.project_exchange_temporal_reefpose import validate_temporal_exchange
 from reefvision.services.project_exchange_v15 import SECTIONS as V15_SECTIONS
 from reefvision.services.project_exchange_workflows import validate_workflow_rows
@@ -73,6 +74,7 @@ _NEW_SECTION_NAMES = (
     "ecology_analysis_records",
 )
 _PARENTS = {
+    **REVIEWER_LAB_PARENTS,
     "pose_animal_identities": ("association_run_id", "pose_identity_association_runs"),
     "pose_identity_observations": ("association_run_id", "pose_identity_association_runs"),
     "pose_identity_association_decisions": ("association_run_id", "pose_identity_association_runs"),
