@@ -32,6 +32,10 @@ def save_temporal_checkpoint(
     return hash_model_file(path)
 
 
+def discard_temporal_checkpoint(settings: Settings, relative_path: str) -> None:
+    resolve_managed_project_path(settings, relative_path).unlink(missing_ok=True)
+
+
 def read_temporal_checkpoint(
     settings: Settings, relative_path: str, expected_sha256: str | None = None
 ) -> dict[str, Any] | None:
